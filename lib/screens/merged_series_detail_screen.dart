@@ -1078,7 +1078,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Colors.white,
                 fontSize: t ? 22 : 28,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.5,
@@ -1205,7 +1204,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white,
                   fontSize: _wide ? 34 : 28,
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.5,
@@ -1273,7 +1271,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           child: Text(
             cert,
             style: const TextStyle(
-              color: Colors.white,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -1289,7 +1286,6 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             Text(
               rating.toStringAsFixed(1),
               style: const TextStyle(
-                color: Colors.white,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
               ),
@@ -2094,7 +2090,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       borderRadius: BorderRadius.circular(999),
       border: Border.all(color: _hair),
     ),
-    child: Text(s, style: const TextStyle(color: Colors.white, fontSize: 12)),
+    child: Text(s, style: const TextStyle(fontSize: 12)),
   );
 
   Widget _circleButton(
@@ -2982,7 +2978,6 @@ class _QuickActionsMenu extends StatelessWidget {
                     const Text(
                       'More',
                       style: TextStyle(
-                        color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -0.2,
@@ -3043,7 +3038,6 @@ class _QuickActionsMenu extends StatelessWidget {
                     Text(
                       o.label,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -3114,7 +3108,6 @@ class _TrackerSheetHeader extends StatelessWidget {
                     Text(
                       brand,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 16.5,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.3,
@@ -3219,7 +3212,6 @@ class _SheetSwitchRow extends StatelessWidget {
                     Text(
                       label,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                       ),

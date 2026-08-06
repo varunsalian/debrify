@@ -289,7 +289,6 @@ class _CloudScreenState extends State<CloudScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
               ),
             ),
             const SizedBox(height: 8),
@@ -324,7 +323,6 @@ class _CloudScreenState extends State<CloudScreen> {
                   fontSize: 30,
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.6,
-                  color: Colors.white,
                 ),
               ),
             ),
@@ -441,7 +439,6 @@ class _CloudScreenState extends State<CloudScreen> {
                               fontSize: 16.5,
                               fontWeight: FontWeight.w700,
                               letterSpacing: -0.2,
-                              color: Colors.white,
                             ),
                           ),
                           const SizedBox(height: 2),

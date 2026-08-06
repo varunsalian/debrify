@@ -65,7 +65,6 @@ class LocalBoundSourceService {
                   child: Text(
                     'Local Movie Source',
                     style: TextStyle(
-                      color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),
@@ -398,7 +397,7 @@ class LocalBoundSourceService {
           ),
           title: const Text(
             'Choose the Show Folder',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+            style: TextStyle(fontWeight: FontWeight.w700),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -501,7 +500,6 @@ class LocalBoundSourceService {
                   const Text(
                     'Choose Series Folder',
                     style: TextStyle(
-                      color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),
@@ -531,7 +529,6 @@ class LocalBoundSourceService {
                           ),
                           title: Text(
                             candidate.folderName,
-                            style: const TextStyle(color: Colors.white),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -591,7 +588,6 @@ class LocalBoundSourceService {
                   const Text(
                     'Choose Local File',
                     style: TextStyle(
-                      color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),
@@ -621,7 +617,6 @@ class LocalBoundSourceService {
                           ),
                           title: Text(
                             candidate.fileName,
-                            style: const TextStyle(color: Colors.white),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -912,7 +907,6 @@ class _LocalPickTile extends StatelessWidget {
       title: Text(
         title,
         style: const TextStyle(
-          color: Colors.white,
           fontWeight: FontWeight.w600,
         ),
       ),

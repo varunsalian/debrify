@@ -106,7 +106,6 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
         Text(
           'Stremio Addons',
           style: const TextStyle(
-            color: Colors.white,
             fontSize: 20,
             fontWeight: FontWeight.w600,
           ),
@@ -232,7 +231,6 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
                       Text(
                         addon.name,
                         style: const TextStyle(
-                          color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),

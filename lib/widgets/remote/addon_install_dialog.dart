@@ -163,7 +163,6 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
                         Text(
                           dialogTitle,
                           style: const TextStyle(
-                            color: Colors.white,
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
                           ),
@@ -372,7 +371,6 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
                     Text(
                       title,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                       ),

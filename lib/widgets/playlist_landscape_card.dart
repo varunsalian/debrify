@@ -367,7 +367,6 @@ class _PlaylistLandscapeCardState extends State<PlaylistLandscapeCard> {
                 child: Text(
                   title,
                   style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     height: 1.3,
@@ -694,7 +693,6 @@ class _LandscapeActionSheetState extends State<_LandscapeActionSheet>
                 Text(
                   widget.title,
                   style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                     height: 1.25,

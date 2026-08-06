@@ -357,6 +357,7 @@ class TvTextFieldState extends State<TvTextField> {
       onSystemIme: _switchToSystemIme,
       onVoice: _startVoiceInput,
       onVoiceStop: _stopVoiceInput,
+      onPaste: _pasteFromClipboard,
       voiceAvailable: TvVoiceInput.availableCached ?? false,
       submitLabel: switch (widget.textInputAction) {
         TextInputAction.search => 'Search',
@@ -578,12 +579,7 @@ class TvTextFieldState extends State<TvTextField> {
     _cancelVoiceSession();
     if (!mounted) return;
     _kb?.endListening(notice: notice);
-    if (notice != null) {
-      _noticeTimer?.cancel();
-      _noticeTimer = Timer(const Duration(seconds: 5), () {
-        if (mounted) _kb?.clearNotice();
-      });
-    }
+    if (notice != null) _armNoticeClear();
     if (_editing) _editNode.requestFocus();
   }
 
@@ -666,6 +662,48 @@ class TvTextFieldState extends State<TvTextField> {
       widget.controller.value,
       const TextEditingValue(selection: TextSelection.collapsed(offset: 0)),
     );
+  }
+
+  /// Paste key: the clipboard goes in through the same insert path a keypress
+  /// takes, so inputFormatters, onChanged and the caret all behave identically
+  /// — a paste is just a very long keystroke.
+  Future<void> _pasteFromClipboard() async {
+    ClipboardData? data;
+    try {
+      data = await Clipboard.getData(Clipboard.kTextPlain);
+    } catch (_) {
+      // Some TV builds have no clipboard service at all; a dead key beats a
+      // crashed keyboard.
+      data = null;
+    }
+    // That await crossed a platform channel, so the session may have ended
+    // under it (BACK, submit, a background focus grab) — never write into an
+    // editor that is no longer being edited.
+    if (!mounted || !_editing) return;
+    // Every TvTextField is single-line (the multi-line paste dialogs kept
+    // their plain TextFields), so a URL copied with its trailing newline must
+    // not bring one along.
+    final text = (data?.text ?? '')
+        .replaceAll(RegExp(r'\s*[\r\n]+\s*'), ' ')
+        .trim();
+    if (text.isEmpty) {
+      _showNotice('Nothing to paste', icon: Icons.content_paste_off_rounded);
+      return;
+    }
+    _insertText(text);
+  }
+
+  /// Says one line above the keys, then takes it away again.
+  void _showNotice(String text, {IconData? icon}) {
+    _kb?.showNotice(text, icon: icon);
+    _armNoticeClear();
+  }
+
+  void _armNoticeClear() {
+    _noticeTimer?.cancel();
+    _noticeTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) _kb?.clearNotice();
+    });
   }
 
   void _submitFromKeyboard() {

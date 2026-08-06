@@ -267,7 +267,6 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                     Text(
                       name,
                       style: TextStyle(
-                        color: Colors.white,
                         fontSize: isCompact ? 14 : 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -412,7 +411,6 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                   child: Text(
                     isCompact ? 'Fix Metadata' : 'Fix Metadata - Search TVMaze',
                     style: TextStyle(
-                      color: Colors.white,
                       fontSize: isCompact ? 16 : 20,
                       fontWeight: FontWeight.w600,
                     ),
@@ -435,7 +433,6 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
               controller: _searchController,
               focusNode: _searchFocusNode,
               autofocus: true,
-              style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'Enter show name...',
                 hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),

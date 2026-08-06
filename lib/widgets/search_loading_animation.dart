@@ -336,7 +336,6 @@ class _SearchLoadingAnimationState extends State<SearchLoadingAnimation>
                     style: TextStyle(
                       fontSize: fontSize,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white,
                       letterSpacing: 0.5,
                     ),
                     textAlign: TextAlign.center,

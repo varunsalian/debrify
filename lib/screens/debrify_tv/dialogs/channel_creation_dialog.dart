@@ -95,7 +95,6 @@ class _ChannelCreationDialogState extends State<ChannelCreationDialog> {
             Text(
               'Building "${widget.channelName}"',
               style: const TextStyle(
-                color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
               ),

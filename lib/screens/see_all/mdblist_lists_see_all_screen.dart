@@ -38,7 +38,6 @@ class MdblistListsSeeAllScreen extends StatelessWidget {
         title: Text(
           query.isEmpty ? 'MDBList Lists' : 'Lists matching "$query"',
           style: const TextStyle(
-            color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w700,
           ),

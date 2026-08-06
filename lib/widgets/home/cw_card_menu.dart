@@ -192,7 +192,6 @@ class _CwCardMenuState extends State<_CwCardMenu> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: Colors.white,
                   fontSize: 16.5,
                   fontWeight: FontWeight.w700,
                   height: 1.2,
@@ -323,7 +322,6 @@ class _MenuRowState extends State<_MenuRow> {
                       Text(
                         widget.label,
                         style: const TextStyle(
-                          color: Colors.white,
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
                         ),

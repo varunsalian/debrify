@@ -37,7 +37,6 @@ Future<bool> showNotCachedDialog(
                 'Torrent Not Cached',
                 style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
                 ),
               ),
               const SizedBox(height: 12),

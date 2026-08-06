@@ -157,7 +157,7 @@ Future<_ConflictChoice> _showConflictDialog(
           SizedBox(width: 8),
           Text(
             'Recording conflict',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+            style: TextStyle(fontWeight: FontWeight.w700),
           ),
         ],
       ),

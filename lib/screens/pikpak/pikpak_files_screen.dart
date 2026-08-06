@@ -1258,7 +1258,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Delete $count $itemType',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1841,7 +1841,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
-              style: const TextStyle(color: Colors.white),
               onChanged: _performSearch,
               onSubmitted: (_) => _searchFocusNode.unfocus(),
             ),
@@ -1974,7 +1973,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                     children: [
                       Text(
                         name,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                        style: const TextStyle(fontWeight: FontWeight.w500),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -3115,7 +3114,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Add Link',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -3138,7 +3137,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
               child: TextField(
                 controller: _linkController,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   hintText: 'magnet:?xt=... or https://...',
                   hintStyle: TextStyle(color: Colors.grey[600]),
@@ -3272,7 +3270,6 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             const SizedBox(height: 16),
             const Text(
               'Adding to PikPak...',
-              style: TextStyle(color: Colors.white),
             ),
             const SizedBox(height: 8),
             Text(

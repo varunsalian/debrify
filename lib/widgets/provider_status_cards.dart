@@ -657,7 +657,6 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -814,7 +813,6 @@ class _ProviderStatusCardsState extends State<ProviderStatusCards> {
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.white,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),

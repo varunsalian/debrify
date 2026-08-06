@@ -1,0 +1,758 @@
+<!-- Debrify launch-ident pitch reel, round 2.
+     Each concept is a distinct art direction — own typography, own material,
+     own light — not one lockup with different intros. Single dark world on
+     purpose: splashes are judged on the black they ship on. -->
+<title>Debrify — Launch Idents</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --ink:#05060D; --stage:#020617; --panel:#0C1120;
+    --line:rgba(233,237,255,.08); --text:#E9EDFF; --dim:#8B93B8;
+    --accent:#7B5CFF; --accent2:#818CF8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{color-scheme:dark}
+  body{background:var(--ink);color:var(--text);
+    font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1060px;margin:0 auto;padding:28px 20px 64px}
+  header{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+  header h1{font-size:22px;font-weight:800;letter-spacing:-.02em}
+  header .mono{margin-left:auto}
+  .mono{font:600 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  .sub{color:var(--dim);max-width:66ch;margin-bottom:22px}
+  .sub b{color:var(--text);font-weight:600}
+
+  .stage-shell{position:relative;border-radius:14px;padding:10px;
+    background:linear-gradient(180deg,#10162B,#080B18);
+    border:1px solid var(--line);
+    box-shadow:0 30px 80px -30px rgba(93,76,255,.25)}
+  .stage-shell canvas{display:block;width:100%;aspect-ratio:16/9;
+    border-radius:8px;background:var(--stage);cursor:pointer}
+  .stage-bar{display:flex;align-items:center;gap:14px;padding:12px 6px 2px;flex-wrap:wrap}
+  .stage-bar .name{font-weight:800;font-size:16px;letter-spacing:-.01em}
+  .stage-bar .type{color:var(--dim);font-size:12.5px}
+  .stage-bar .hint{margin-left:auto}
+  .tier{font:700 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;
+    text-transform:uppercase;padding:5px 9px;border-radius:999px;
+    border:1px solid var(--line);color:var(--dim)}
+  .tier.premium{color:#fff;border:none;
+    background:linear-gradient(90deg,#4F74FF,#8A5CFF)}
+  .tier.current{color:var(--accent2);border-color:rgba(129,140,248,.4)}
+
+  .rail{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}
+  @media (max-width:760px){.rail{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:480px){.rail{grid-template-columns:1fr}}
+  .card{text-align:left;border-radius:12px;background:var(--panel);
+    border:1px solid var(--line);padding:0;overflow:hidden;cursor:pointer;
+    color:inherit;font:inherit;transition:border-color .15s,transform .15s}
+  .card:hover{transform:translateY(-2px)}
+  .card:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+  .card[aria-pressed="true"]{border-color:var(--accent)}
+  .card canvas{display:block;width:100%;aspect-ratio:16/9;background:var(--stage)}
+  .card .meta{padding:11px 13px 13px;border-top:1px solid var(--line)}
+  .card .row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+  .card .row .name{font-weight:700;font-size:14px}
+  .card p{color:var(--dim);font-size:12.5px;line-height:1.5}
+  .card .spec{margin-top:7px;font:500 10.5px/1.5 ui-monospace,Menlo,monospace;
+    color:#6E7699;letter-spacing:.02em}
+  .card .spec b{color:var(--accent2);font-weight:700}
+  footer{margin-top:26px;color:#6E7699;font-size:12.5px;max-width:76ch;line-height:1.6}
+  footer b{color:var(--dim)}
+  @media (prefers-reduced-motion: reduce){.card:hover{transform:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Debrify · Launch Idents</h1>
+    <span class="mono">round 2 — seven directions</span>
+  </header>
+  <p class="sub">Round 1 was one lockup with six intros — this round each ident
+  owns its <b>typography, material, and light</b>. All still land on a
+  <b>static final frame</b>, so the hold-for-home loading sweep drops in
+  unchanged (tinted to the ident's accent). Click a card; click the stage to
+  replay.</p>
+
+  <div class="stage-shell">
+    <canvas id="stage" aria-label="Ident stage — click to replay"></canvas>
+    <div class="stage-bar">
+      <span class="name" id="stageName"></span>
+      <span class="tier" id="stageTier"></span>
+      <span class="type" id="stageType"></span>
+      <span class="hint mono" id="stageHint">click to replay</span>
+    </div>
+  </div>
+
+  <div class="rail" id="rail"></div>
+
+  <footer>
+    <b>Feasibility.</b> Everything here is 2-D vector paint — gradients,
+    clips, one bounded mask layer at most (gold sheen, glass letters, chrome
+    sweep = a single saveLayer + blend in Flutter, the same trick ShaderMask
+    uses). No shaders, no assets to decode before first frame. Particles and
+    star counts halve on TV and draw batched; glows use the two-stroke idiom
+    already shipped in the current painter instead of big blurs. The ~300 ms
+    native window before Flutter's first frame stays a static color for all
+    seven.
+  </footer>
+</div>
+
+<script>
+'use strict';
+const WORD='DEBRIFY';
+const REDUCED=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const lerp=(a,b,t)=>a+(b-a)*t;
+const outBack=(t,s=1.7)=>1+(s+1)*Math.pow(t-1,3)+s*Math.pow(t-1,2);
+const outCubic=t=>1-Math.pow(1-t,3);
+const inCubic=t=>t*t*t;
+const ioSine=t=>-(Math.cos(Math.PI*t)-1)/2;
+const fract=x=>x-Math.floor(x);
+const n1=x=>fract(Math.sin(x*127.1)*43758.5453);   /* deterministic noise */
+function outBounce(t){const n=7.5625,d=2.75;
+  if(t<1/d)return n*t*t;
+  if(t<2/d){t-=1.5/d;return n*t*t+.75}
+  if(t<2.5/d){t-=2.25/d;return n*t*t+.9375}
+  t-=2.625/d;return n*t*t+.984375}
+
+/* rounded play triangle centred at origin, inscribed in ±s/2 */
+function playPath(ctx,s){
+  const pts=[[-.30*s,-.40*s],[-.30*s,.40*s],[.43*s,0]],r=.14*s;
+  ctx.beginPath();
+  for(let i=0;i<3;i++){
+    const a=pts[i],b=pts[(i+1)%3],c=pts[(i+2)%3];
+    const v1=[a[0]-b[0],a[1]-b[1]],v2=[c[0]-b[0],c[1]-b[1]];
+    const l1=Math.hypot(...v1)||1,l2=Math.hypot(...v2)||1;
+    const t1=[b[0]+v1[0]*r/l1,b[1]+v1[1]*r/l1],t2=[b[0]+v2[0]*r/l2,b[1]+v2[1]*r/l2];
+    if(i===0)ctx.moveTo(t1[0],t1[1]);else ctx.lineTo(t1[0],t1[1]);
+    ctx.quadraticCurveTo(b[0],b[1],t2[0],t2[1]);
+  }
+  ctx.closePath();
+}
+
+/* ── word machinery: any font, tracking, x-scale ── */
+const meas=document.createElement('canvas').getContext('2d');
+function wordLayout(font,size,tracking,scaleX=1){
+  meas.font=font(size);
+  const widths=WORD.split('').map(ch=>meas.measureText(ch).width*scaleX);
+  const total=widths.reduce((a,b)=>a+b,0)+tracking*(WORD.length-1);
+  return {font,size,tracking,scaleX,widths,total};
+}
+/* size a word layout so total ≤ maxW */
+function fitWord(font,size,trackF,scaleX,maxW){
+  let W=wordLayout(font,size,size*trackF,scaleX);
+  if(W.total>maxW){const s=maxW/W.total;W=wordLayout(font,size*s,size*s*trackF,scaleX)}
+  return W;
+}
+function letterX(W,i,startX){let x=startX;for(let k=0;k<i;k++)x+=W.widths[k]+W.tracking;return x}
+function drawLetter(ctx,W,i,x,y,o={}){
+  const {alpha=1,dx=0,dy=0,scale=1,fill='#E9EDFF',stroke=0,strokeColor='#fff',
+         blur=0,blurColor}=o;
+  if(alpha<=0)return;
+  ctx.save();ctx.globalAlpha=alpha;
+  ctx.font=W.font(W.size);ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  ctx.translate(x+W.widths[i]/2+dx,y+dy);ctx.scale(W.scaleX*scale,scale);
+  if(blur){ctx.shadowColor=blurColor||fill||strokeColor;ctx.shadowBlur=blur}
+  if(fill){ctx.fillStyle=fill;ctx.fillText(WORD[i],0,0)}
+  if(stroke){ctx.strokeStyle=strokeColor;ctx.lineWidth=stroke/scale;ctx.strokeText(WORD[i],0,0)}
+  ctx.restore();
+}
+function off(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c}
+
+/* ═════════════════════════ IDENTS ═════════════════════════ */
+const IDENTS=[
+
+/* ── 1 · CURRENT: Drop & Bounce (reference) ─────────────────────────── */
+{
+  id:'drop',name:'Drop & Bounce',tier:'current',dur:1900,
+  type:'House sans 800 · indigo gradient mark',
+  blurb:'The shipped reveal, here for honest comparison: the mark lands with weight and shakes the letters loose.',
+  spec:'TV: <b>shipped</b> — proven on the box.',
+  init(w,h){
+    const g=Math.min(w*.66,h*1.7)/2.15;
+    const font=s=>`800 ${s}px system-ui,-apple-system,sans-serif`;
+    let W=fitWord(font,g*.60,.11,1,w*.86-g*1.2);
+    const lock=g+g*.20+W.total, startX=w/2-lock/2;
+    return {g,W,glyphX:startX+g/2,wordX:startX+g+g*.20,cy:h/2,baseY:h/2+W.size*.35};
+  },
+  draw(ctx,w,h,t,st){
+    ctx.fillStyle='#020617';ctx.fillRect(0,0,w,h);
+    const rg=ctx.createRadialGradient(w/2,h/2,0,w/2,h/2,Math.max(w,h)*.62);
+    rg.addColorStop(0,'rgba(11,16,38,1)');rg.addColorStop(.9,'rgba(2,6,23,0)');
+    ctx.fillStyle=rg;ctx.fillRect(0,0,w,h);
+    const dt=clamp(t/.52,0,1);
+    const yoff=lerp(-(h*.55+st.g),0,outBounce(dt));
+    let comp=0;
+    for(const[c,m]of[[.363,1],[.727,.5],[.909,.28]])
+      comp+=m*Math.exp(-Math.pow((dt-c)/.045,2));
+    comp=clamp(comp,0,1)*.30;
+    ctx.save();ctx.translate(st.glyphX,st.cy+yoff);ctx.scale(1+comp*.85,1-comp);
+    ctx.shadowColor='rgba(110,120,255,.55)';ctx.shadowBlur=st.g*.1*(0.7+comp);
+    const gr=ctx.createLinearGradient(-st.g/2,0,st.g/2,0);
+    gr.addColorStop(0,'#4F74FF');gr.addColorStop(.5,'#6E6BFF');gr.addColorStop(1,'#8A5CFF');
+    playPath(ctx,st.g);ctx.fillStyle=gr;ctx.fill();
+    ctx.shadowBlur=0;playPath(ctx,st.g*.52);
+    ctx.fillStyle='rgba(223,230,255,.22)';ctx.fill();ctx.restore();
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-(.20+i*.03))/.34,0,1);if(lt<=0)continue;
+      const hop=Math.sin(lt*Math.PI*1.6)*Math.exp(-4*lt);
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.wordX),st.baseY,
+        {dy:-hop*st.g*.16,scale:lerp(.6,1,outBack(clamp(lt*1.4,0,1))),
+         alpha:clamp(lt*1.6,0,1)});
+    }
+  }
+},
+
+/* ── 2 · MARQUEE — gilded serif première ────────────────────────────── */
+{
+  id:'marquee',name:'Marquee',tier:'premium',dur:2600,
+  type:'Didot-class serif · gilded, specular sheen',
+  blurb:'Prestige-drama title card: the name set in gilded serif capitals, a single specular sheen rolling across the gold as hairline flourishes open around the emblem.',
+  spec:'Material: <b>gold</b> #F3E5B0→#96742C on warm black · one sheen mask layer.',
+  init(w,h){
+    const font=s=>`600 ${s}px "Didot","Bodoni 72","Playfair Display",Georgia,serif`;
+    const W=fitWord(font,h*.19,.12,1,w*.64);
+    const startX=w/2-W.total/2, baseY=h*.58;
+    return {W,startX,baseY,g:h*.14,markY:h*.30,
+      o:off(w,h),octx:null};
+  },
+  draw(ctx,w,h,t,st){
+    /* warm black + faint vignette */
+    ctx.fillStyle='#0B0804';ctx.fillRect(0,0,w,h);
+    const v=ctx.createRadialGradient(w/2,h*.45,0,w/2,h*.45,h*.9);
+    v.addColorStop(0,'rgba(38,26,10,.55)');v.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=v;ctx.fillRect(0,0,w,h);
+
+    const gold=(c,y0,y1)=>{const g=c.createLinearGradient(0,y0,0,y1);
+      g.addColorStop(0,'#8A6A28');g.addColorStop(.35,'#F3E5B0');
+      g.addColorStop(.55,'#D9B95C');g.addColorStop(.8,'#96742C');
+      g.addColorStop(1,'#5C4415');return g};
+
+    /* word rendered to an offscreen so the sheen can clip to the glyphs */
+    const o=st.o;if(o.width!==w||o.height!==h){o.width=w;o.height=h}
+    const oc=o.getContext('2d');oc.clearRect(0,0,w,h);
+    const fillG=gold(oc,st.baseY-st.W.size,st.baseY+st.W.size*.15);
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-(.18+i*.045))/.34,0,1);if(lt<=0)continue;
+      const e=outCubic(lt);
+      drawLetter(oc,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:e,dy:(1-e)*st.W.size*.22,fill:fillG});
+    }
+    /* specular sheen — clipped to the gold */
+    const sp=clamp((t-.55)/.4,0,1);
+    if(sp>0&&sp<1){
+      oc.save();oc.globalCompositeOperation='source-atop';
+      const x=lerp(st.startX-140,st.startX+st.W.total+140,ioSine(sp));
+      const sg=oc.createLinearGradient(x-90,0,x+90,0);
+      sg.addColorStop(0,'rgba(255,250,230,0)');
+      sg.addColorStop(.5,'rgba(255,252,238,.85)');
+      sg.addColorStop(1,'rgba(255,250,230,0)');
+      oc.fillStyle=sg;
+      oc.save();oc.translate(x,st.baseY);oc.rotate(-.35);
+      oc.fillRect(-90,-st.W.size*1.4,180,st.W.size*2.2);oc.restore();
+      oc.restore();
+    }
+    ctx.drawImage(o,0,0);
+
+    /* emblem: gold outline draws on, then breathes a soft fill */
+    const dp=outCubic(clamp(t/.4,0,1));
+    ctx.save();ctx.translate(w/2,st.markY);
+    const per=st.g*2.6;
+    ctx.setLineDash([per*dp,per]);ctx.lineWidth=Math.max(1.4,st.g*.03);
+    ctx.strokeStyle=gold(ctx,-st.g/2,st.g/2);
+    ctx.shadowColor='rgba(243,229,176,.35)';ctx.shadowBlur=10*dp;
+    playPath(ctx,st.g);ctx.stroke();
+    const fa=clamp((t-.42)/.3,0,1)*.35;
+    if(fa>0){playPath(ctx,st.g);ctx.fillStyle=`rgba(217,185,92,${fa})`;ctx.fill()}
+    ctx.restore();
+
+    /* hairline flourishes either side of the emblem */
+    const fl=outCubic(clamp((t-.35)/.4,0,1));
+    if(fl>0){
+      const y=st.markY, reach=w*.16*fl, gap=st.g*.85;
+      ctx.strokeStyle='rgba(217,185,92,.55)';ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.moveTo(w/2-gap,y);ctx.lineTo(w/2-gap-reach,y);
+      ctx.moveTo(w/2+gap,y);ctx.lineTo(w/2+gap+reach,y);ctx.stroke();
+      ctx.fillStyle='rgba(243,229,176,.9)';
+      ctx.beginPath();ctx.arc(w/2-gap-reach,y,1.6,0,7);ctx.fill();
+      ctx.beginPath();ctx.arc(w/2+gap+reach,y,1.6,0,7);ctx.fill();
+    }
+  }
+},
+
+/* ── 3 · PRISM — glass ultralight over a live aurora ────────────────── */
+{
+  id:'prism',name:'Prism',tier:'premium',dur:2700,
+  type:'Ultralight sans, wide-tracked · letters cut from light',
+  blurb:'The name set huge and ultralight, cut out of a slow aurora — a hairline glass prism above splits one white ray into a violet-cyan-rose fan as the letters fill with moving light.',
+  spec:'Material: <b>iridescent glass</b> · aurora mask = ShaderMask in Flutter, freezes at rest.',
+  init(w,h){
+    const font=s=>`100 ${s}px -apple-system,"Helvetica Neue",system-ui,sans-serif`;
+    const W=fitWord(font,h*.24,.20,1,w*.84);
+    return {W,startX:w/2-W.total/2,baseY:h*.64,g:h*.17,markY:h*.27,
+      a:off(w,h),m:off(w,h)};
+  },
+  draw(ctx,w,h,t,st){
+    ctx.fillStyle='#03040C';ctx.fillRect(0,0,w,h);
+    /* aurora — three drifting light fields, easing to a stop */
+    const drift=outCubic(clamp(t/.9,0,1));
+    const a=st.a;if(a.width!==w){a.width=w;a.height=h}
+    const ac=a.getContext('2d');ac.clearRect(0,0,w,h);
+    const blob=(x,y,r,c0)=>{const g=ac.createRadialGradient(x,y,0,x,y,r);
+      g.addColorStop(0,c0);g.addColorStop(1,'rgba(0,0,0,0)');
+      ac.fillStyle=g;ac.fillRect(0,0,w,h)};
+    blob(w*(.28+.1*Math.sin(drift*4.2)),h*.75,w*.5,'rgba(123,92,255,.85)');
+    blob(w*(.66+.12*Math.sin(2+drift*3.1)),h*.5,w*.44,'rgba(79,216,255,.6)');
+    blob(w*(.5+.14*Math.sin(5+drift*2.4)),h*.85,w*.4,'rgba(255,111,216,.5)');
+
+    /* faint ambient spill of the aurora on the backdrop */
+    ctx.save();ctx.globalAlpha=.10;ctx.drawImage(a,0,0);ctx.restore();
+
+    /* letters = aurora clipped to type */
+    const m=st.m;if(m.width!==w){m.width=w;m.height=h}
+    const mc=m.getContext('2d');mc.clearRect(0,0,w,h);
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-(.2+i*.05))/.4,0,1);if(lt<=0)continue;
+      drawLetter(mc,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:outCubic(lt),dy:(1-outCubic(lt))*st.W.size*.1,fill:'#fff'});
+    }
+    mc.globalCompositeOperation='source-in';mc.drawImage(a,0,0);
+    mc.globalCompositeOperation='source-over';
+    ctx.drawImage(m,0,0);
+    /* glass edge on each letter */
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-(.2+i*.05))/.4,0,1);if(lt<=0)continue;
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:.28*outCubic(lt),fill:null,stroke:1,strokeColor:'#EAF0FF'});
+    }
+
+    /* the prism */
+    const cx=w/2,cy=st.markY,g=st.g;
+    ctx.save();ctx.translate(cx,cy);
+    ctx.strokeStyle='rgba(234,240,255,.85)';ctx.lineWidth=1.2;
+    ctx.globalAlpha=clamp(t/.25,0,1);
+    playPath(ctx,g);ctx.stroke();
+    ctx.restore();
+    /* incoming ray + refracted fan */
+    const ray=clamp((t-.3)/.45,0,1);
+    if(ray>0){
+      const hit={x:cx-g*.28,y:cy};
+      const from={x:-w*.05,y:cy-h*.34};
+      const p=outCubic(Math.min(ray*1.6,1));
+      ctx.strokeStyle=`rgba(240,244,255,${.75*clamp(ray*2,0,1)})`;
+      ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(from.x,from.y);
+      ctx.lineTo(lerp(from.x,hit.x,p),lerp(from.y,hit.y,p));ctx.stroke();
+      const fan=clamp((ray-.35)/.65,0,1);
+      if(fan>0){
+        const exit={x:cx+g*.40,y:cy};
+        const cols=['rgba(255,111,216,','rgba(123,92,255,','rgba(79,216,255,','rgba(234,240,255,'];
+        cols.forEach((c,i)=>{
+          const ang=(-1.5+i)*0.16, len=w*.34*outCubic(fan);
+          ctx.strokeStyle=c+(.65*fan)+')';ctx.lineWidth=1.2;
+          ctx.beginPath();ctx.moveTo(exit.x,exit.y);
+          ctx.lineTo(exit.x+Math.cos(ang)*len,exit.y+Math.sin(ang)*len);
+          ctx.stroke();
+        });
+      }
+    }
+  }
+},
+
+/* ── 4 · EVENT HORIZON — stars collapse into the mark ───────────────── */
+{
+  id:'horizon',name:'Event Horizon',tier:'premium',dur:3000,
+  type:'Thin sans, vast tracking · pure black + starlight',
+  blurb:'A starfield is pulled into a burning accretion ring; the ring collapses and what is left glowing at the centre is the mark. The name condenses letter by letter, thin and vast, out of the dark.',
+  spec:'Material: <b>starlight</b> · 170 streaks (85 on TV, batched) · no layers.',
+  init(w,h){
+    const cx=w/2,cy=h*.42;
+    const stars=[];const R=Math.hypot(w,h);
+    for(let i=0;i<170;i++)stars.push({
+      a:Math.random()*Math.PI*2, r0:R*(.14+Math.random()*.5),
+      d:Math.random()*.28, sz:.5+Math.random()*1.3, spin:.6+Math.random()*1.4});
+    const font=s=>`200 ${s}px system-ui,-apple-system,"Helvetica Neue",sans-serif`;
+    const W=fitWord(font,h*.085,.85,1,w*.6);
+    return {stars,cx,cy,g:h*.20,W,startX:w/2-W.total/2,baseY:h*.76};
+  },
+  draw(ctx,w,h,t,st){
+    ctx.fillStyle='#000005';ctx.fillRect(0,0,w,h);
+    const neb=ctx.createRadialGradient(st.cx,st.cy,0,st.cx,st.cy,h*.7);
+    neb.addColorStop(0,'rgba(60,50,140,.14)');neb.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=neb;ctx.fillRect(0,0,w,h);
+
+    const COLLAPSE=.58, ringR=st.g*.85;
+    /* stars spiral in */
+    for(const s of st.stars){
+      const pt=clamp((t-s.d)/(COLLAPSE-s.d),0,1);
+      const e=inCubic(pt);
+      const r=lerp(s.r0,ringR,e);
+      const a=s.a+e*s.spin*2.2;
+      const x=st.cx+Math.cos(a)*r, y=st.cy+Math.sin(a)*r*.62; /* perspective */
+      const gone=t>COLLAPSE?clamp((t-COLLAPSE)/.08,0,1):0;
+      const bright=(.25+.75*e)*(1-gone);
+      if(bright<=0)continue;
+      /* tangential streak, longer the faster it falls */
+      const sl=2+e*14;
+      const tx=Math.cos(a+Math.PI/2)*sl, ty=Math.sin(a+Math.PI/2)*sl*.62;
+      ctx.strokeStyle=`rgba(200,205,255,${bright})`;
+      ctx.lineWidth=s.sz;
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-tx,y-ty);ctx.stroke();
+    }
+    /* accretion ring + black disc */
+    const rlife=clamp(t/COLLAPSE,0,1);
+    const shrink=clamp((t-COLLAPSE)/.14,0,1);
+    if(shrink<1){
+      const rr=lerp(ringR,0,outCubic(shrink));
+      const glow=.25+.75*rlife;
+      ctx.save();ctx.translate(st.cx,st.cy);ctx.scale(1,.62);
+      ctx.strokeStyle=`rgba(233,237,255,${.9*glow*(1-shrink)})`;
+      ctx.lineWidth=2+3*rlife;
+      ctx.shadowColor='rgba(129,140,248,.9)';ctx.shadowBlur=18*glow;
+      ctx.beginPath();ctx.arc(0,0,rr,0,7);ctx.stroke();
+      ctx.fillStyle='#000';
+      ctx.beginPath();ctx.arc(0,0,rr*.82,0,7);ctx.fill();
+      ctx.restore();
+    }
+    /* flash at collapse */
+    const ft=clamp((t-COLLAPSE)/.14,0,1);
+    if(ft>0&&ft<1){
+      const g=ctx.createRadialGradient(st.cx,st.cy,0,st.cx,st.cy,st.g*2.6);
+      g.addColorStop(0,`rgba(233,237,255,${.8*(1-ft)})`);
+      g.addColorStop(1,'rgba(129,140,248,0)');
+      ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+    }
+    /* the mark, left glowing at the centre */
+    const ma=clamp((t-COLLAPSE-.05)/.18,0,1);
+    if(ma>0){
+      ctx.save();ctx.translate(st.cx,st.cy);
+      ctx.globalAlpha=ma;
+      ctx.shadowColor='rgba(129,140,248,.8)';ctx.shadowBlur=st.g*.16;
+      const gr=ctx.createLinearGradient(-st.g/2,0,st.g/2,0);
+      gr.addColorStop(0,'#4F74FF');gr.addColorStop(1,'#8A5CFF');
+      playPath(ctx,st.g);ctx.fillStyle=gr;ctx.fill();
+      ctx.shadowBlur=0;playPath(ctx,st.g*.52);
+      ctx.fillStyle='rgba(223,230,255,.20)';ctx.fill();
+      ctx.restore();
+    }
+    /* the name condenses centre-outward */
+    const order=[3,2,4,1,5,0,6];
+    order.forEach((i,k)=>{
+      const lt=clamp((t-(.68+k*.045))/.26,0,1);if(lt<=0)return;
+      const e=outCubic(lt);
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:e,blur:(1-e)*10,blurColor:'#AAB4FF',fill:'#D9DEFF'});
+    });
+  }
+},
+
+/* ── 5 · NEON NOIR — the sign flickers on ───────────────────────────── */
+{
+  id:'neon',name:'Neon Noir',tier:'premium',dur:2800,
+  type:'Condensed caps as neon tube · wet-street reflection',
+  blurb:'A dead sign in the rain. The mark stutters twice, catches, and burns violet; the letters buzz on one by one and the whole thing hums in a puddle-black reflection.',
+  spec:'Material: <b>neon tube</b> — two-stroke glow (house TV idiom), ≤40 rain streaks.',
+  init(w,h){
+    const font=s=>`700 ${s}px "Avenir Next Condensed","Arial Narrow",system-ui,sans-serif`;
+    const W=fitWord(font,h*.17,.16,1,w*.52);
+    const g=h*.15;
+    const lock=g+g*.35+W.total, startX=w/2-lock/2;
+    const rain=[];for(let i=0;i<38;i++)rain.push({x:Math.random(),y:Math.random(),s:.5+Math.random()});
+    return {W,g,rain,glyphX:startX+g/2,wordX:startX+g+g*.35,
+      baseY:h*.44,signY:h*.40};
+  },
+  draw(ctx,w,h,t,st){
+    ctx.fillStyle='#060310';ctx.fillRect(0,0,w,h);
+    /* haze */
+    const hz=ctx.createRadialGradient(w*.7,h*.15,0,w*.7,h*.15,w*.6);
+    hz.addColorStop(0,'rgba(80,40,120,.14)');hz.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=hz;ctx.fillRect(0,0,w,h);
+    /* rain */
+    ctx.strokeStyle='rgba(160,170,220,.10)';ctx.lineWidth=1;
+    for(const r of st.rain){
+      const y=fract(r.y+t*1.4*r.s)*h;
+      const x=r.x*w - y*.08;
+      ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-3,y+14*r.s);ctx.stroke();
+    }
+    /* flicker envelopes */
+    const buzz=x=>.93+.07*n1(Math.floor(t*90)+x);
+    const markOn = t>.42 ? buzz(1)
+      : (t>.12&&t<.155)?.6 : (t>.24&&t<.31)?(.4+.5*Math.abs(Math.sin(t*90)))*1 : 0;
+    const letOn=i=>{const s0=.52+i*.05;
+      return t>s0+.04 ? buzz(i*7) : (t>s0&&n1(i*13+Math.floor(t*70))>.4)?.5:0};
+
+    const neonStroke=(draw,color,glowR)=>{ /* two-pass tube */
+      ctx.save();
+      ctx.shadowColor=color;ctx.shadowBlur=glowR;ctx.strokeStyle=color;
+      ctx.lineWidth=4.2;ctx.lineJoin='round';draw();ctx.stroke();
+      ctx.shadowBlur=0;ctx.strokeStyle='#FFFFFF';ctx.lineWidth=1.5;draw();ctx.stroke();
+      ctx.restore();
+    };
+    const drawSign=(alphaScale)=>{
+      /* mark tube */
+      if(markOn>0){
+        ctx.save();ctx.globalAlpha=markOn*alphaScale;
+        ctx.translate(st.glyphX,st.signY);
+        neonStroke(()=>playPath(ctx,st.g),'rgba(208,108,255,.95)',18);
+        ctx.restore();
+      }else if(alphaScale===1){ /* dead tube ghost */
+        ctx.save();ctx.globalAlpha=.10;ctx.translate(st.glyphX,st.signY);
+        ctx.strokeStyle='#5A4A78';ctx.lineWidth=3;playPath(ctx,st.g);ctx.stroke();
+        ctx.restore();
+      }
+      /* letter tubes */
+      for(let i=0;i<WORD.length;i++){
+        const on=letOn(i);
+        const x=letterX(st.W,i,st.wordX);
+        if(on>0){
+          ctx.save();ctx.globalAlpha=on*alphaScale;
+          drawLetter(ctx,st.W,i,x,st.baseY,
+            {fill:null,stroke:3.4,strokeColor:'rgba(177,140,255,.95)',
+             blur:16,blurColor:'rgba(177,140,255,.9)'});
+          drawLetter(ctx,st.W,i,x,st.baseY,
+            {fill:null,stroke:1.2,strokeColor:'#FFFFFF'});
+          ctx.restore();
+        }else if(alphaScale===1){
+          drawLetter(ctx,st.W,i,x,st.baseY,
+            {alpha:.10,fill:null,stroke:2.4,strokeColor:'#5A4A78'});
+        }
+      }
+    };
+    drawSign(1);
+    /* wet-floor reflection */
+    const floorY=h*.62;
+    const fg=ctx.createLinearGradient(0,floorY,0,h);
+    fg.addColorStop(0,'#0A0616');fg.addColorStop(1,'#03020A');
+    ctx.fillStyle=fg;ctx.fillRect(0,floorY,w,h-floorY);
+    ctx.save();
+    ctx.translate(0,floorY*2+8);ctx.scale(1,-.55);
+    ctx.globalAlpha=.16;
+    drawSign(1);
+    ctx.restore();
+    /* reflection shimmer lines */
+    ctx.strokeStyle='rgba(177,140,255,.06)';ctx.lineWidth=1;
+    for(let i=0;i<5;i++){
+      const y=floorY+10+i*14+Math.sin(t*6+i)*1.5;
+      ctx.beginPath();ctx.moveTo(w*.2,y);ctx.lineTo(w*.8,y);ctx.stroke();
+    }
+  }
+},
+
+/* ── 6 · LIQUID CHROME — the heavyweight slam ───────────────────────── */
+{
+  id:'chrome',name:'Liquid Chrome',tier:'premium',dur:2400,
+  type:'Black-weight extended caps · mirror-chrome, horizon cut',
+  blurb:'AAA title energy: the name slams in at full weight in mirrored chrome with a hard horizon cut, the camera kicks on impact, and one white shine rolls off the metal.',
+  spec:'Material: <b>chrome</b> — banded gradient + keyline · one sweep mask layer.',
+  init(w,h){
+    const font=s=>`900 ${s}px system-ui,-apple-system,"Segoe UI",sans-serif`;
+    const W=fitWord(font,h*.20,.03,1.10,w*.76);
+    return {W,startX:w/2-W.total/2,baseY:h*.56,g:h*.11,o:off(w,h)};
+  },
+  draw(ctx,w,h,t,st){
+    /* studio backdrop with a floor */
+    const bg=ctx.createLinearGradient(0,0,0,h);
+    bg.addColorStop(0,'#0D1220');bg.addColorStop(.72,'#05070E');
+    bg.addColorStop(.721,'#0A0E1A');bg.addColorStop(1,'#04050B');
+    ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
+
+    const chrome=(c,y0,y1)=>{const g=c.createLinearGradient(0,y0,0,y1);
+      g.addColorStop(0,'#F4F8FF');g.addColorStop(.42,'#C7D2E8');
+      g.addColorStop(.46,'#56627E');g.addColorStop(.50,'#232B3E');
+      g.addColorStop(.56,'#8A96B4');g.addColorStop(1,'#E6ECFA');return g};
+
+    const imp=clamp(t/.22,0,1);
+    const scale=lerp(2.1,1,inCubic(imp));
+    const alpha=clamp(imp*1.8,0,1);
+    /* impact shake */
+    const sh=t>.22&&t<.36?(1-(t-.22)/.14)*4:0;
+    const shx=(n1(Math.floor(t*120))-.5)*2*sh, shy=(n1(Math.floor(t*120)+9)-.5)*2*sh;
+
+    const o=st.o;if(o.width!==w){o.width=w;o.height=h}
+    const oc=o.getContext('2d');oc.clearRect(0,0,w,h);
+    const fillG=chrome(oc,st.baseY-st.W.size*.9,st.baseY+st.W.size*.12);
+    oc.save();oc.translate(w/2,st.baseY-st.W.size*.35);
+    oc.scale(scale,scale);oc.translate(-w/2,-(st.baseY-st.W.size*.35));
+    for(let i=0;i<WORD.length;i++){
+      drawLetter(oc,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha,fill:fillG,stroke:1.4,strokeColor:'#070B16'});
+    }
+    oc.restore();
+    /* rolling shine, clipped to the metal */
+    const sp=clamp((t-.46)/.3,0,1);
+    if(sp>0&&sp<1){
+      oc.save();oc.globalCompositeOperation='source-atop';
+      const x=lerp(st.startX-120,st.startX+st.W.total+120,ioSine(sp));
+      const sg=oc.createLinearGradient(x-70,0,x+70,0);
+      sg.addColorStop(0,'rgba(255,255,255,0)');
+      sg.addColorStop(.5,'rgba(255,255,255,.9)');
+      sg.addColorStop(1,'rgba(255,255,255,0)');
+      oc.fillStyle=sg;
+      oc.save();oc.translate(x,st.baseY);oc.rotate(-.5);
+      oc.fillRect(-70,-st.W.size*1.5,140,st.W.size*2.4);oc.restore();
+      oc.restore();
+    }
+    ctx.save();ctx.translate(shx,shy);
+    ctx.drawImage(o,0,0);
+    /* floor reflection of the word */
+    ctx.save();ctx.globalAlpha=.10;
+    ctx.translate(0,(st.baseY+st.W.size*.14)*2);ctx.scale(1,-.5);
+    ctx.drawImage(o,0,0);ctx.restore();
+
+    /* chrome mark docks in above the word, left-aligned to the D */
+    const mk=outCubic(clamp((t-.26)/.24,0,1));
+    if(mk>0){
+      ctx.save();ctx.globalAlpha=mk;
+      ctx.translate(st.startX+st.g*.5+(1-mk)*-60, st.baseY-st.W.size-st.g*.35);
+      playPath(ctx,st.g);
+      ctx.fillStyle=chrome(ctx,-st.g/2,st.g/2);ctx.fill();
+      ctx.strokeStyle='#070B16';ctx.lineWidth=1.4;playPath(ctx,st.g);ctx.stroke();
+      ctx.restore();
+    }
+    /* glint star on the Y at the end */
+    const gl=clamp((t-.78)/.2,0,1);
+    if(gl>0&&gl<1){
+      const s=Math.sin(gl*Math.PI);
+      const gx=st.startX+st.W.total-st.W.widths[6]*.2, gy=st.baseY-st.W.size*.82;
+      ctx.save();ctx.translate(gx,gy);ctx.rotate(gl*.6);
+      ctx.strokeStyle=`rgba(255,255,255,${.9*s})`;ctx.lineWidth=1.4;
+      const R=14*s;
+      ctx.beginPath();
+      ctx.moveTo(-R,0);ctx.lineTo(R,0);ctx.moveTo(0,-R);ctx.lineTo(0,R);
+      ctx.moveTo(-R*.4,-R*.4);ctx.lineTo(R*.4,R*.4);
+      ctx.moveTo(R*.4,-R*.4);ctx.lineTo(-R*.4,R*.4);
+      ctx.stroke();ctx.restore();
+    }
+    ctx.restore();
+  }
+},
+
+/* ── 7 · MONOGRAM — watch-face restraint ────────────────────────────── */
+{
+  id:'monogram',name:'Monogram',tier:'premium',dur:2200,
+  type:'Hairline ring + small caps, vast tracking · A24 restraint',
+  blurb:'The opposite bet: a single hairline ring draws itself closed around a small, perfect mark — then the name appears underneath in quiet, wide-tracked capitals. Confidence by subtraction.',
+  spec:'Material: <b>hairline</b> — one arc, one dot, type. The cheapest wow on the card.',
+  init(w,h){
+    const font=s=>`500 ${s}px system-ui,-apple-system,"Helvetica Neue",sans-serif`;
+    const W=fitWord(font,h*.052,1.1,1,w*.42);
+    const r=Math.min(w,h)*.17;
+    return {W,r,cx:w/2,cy:h*.42,startX:w/2-W.total/2};
+  },
+  draw(ctx,w,h,t,st){
+    ctx.fillStyle='#030309';ctx.fillRect(0,0,w,h);
+    const {cx,cy,r}=st;
+    /* ring draws on from the top, clockwise */
+    const sweep=ioSine(clamp(t/.55,0,1));
+    ctx.strokeStyle='rgba(233,237,255,.8)';ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+sweep*Math.PI*2);
+    ctx.stroke();
+    /* the travelling point of light leading the draw */
+    if(sweep<1){
+      const a=-Math.PI/2+sweep*Math.PI*2;
+      ctx.save();
+      ctx.fillStyle='#E9EDFF';
+      ctx.shadowColor='rgba(129,140,248,.9)';ctx.shadowBlur=10;
+      ctx.beginPath();ctx.arc(cx+Math.cos(a)*r,cy+Math.sin(a)*r,1.8,0,7);ctx.fill();
+      ctx.restore();
+    }
+    /* small mark breathes in at centre */
+    const mk=outCubic(clamp((t-.34)/.34,0,1));
+    if(mk>0){
+      ctx.save();ctx.translate(cx,cy);ctx.globalAlpha=mk;
+      const s=r*.74*lerp(.92,1,mk);
+      const gr=ctx.createLinearGradient(-s/2,0,s/2,0);
+      gr.addColorStop(0,'#4F74FF');gr.addColorStop(1,'#8A5CFF');
+      playPath(ctx,s);ctx.fillStyle=gr;ctx.fill();
+      playPath(ctx,s*.52);ctx.fillStyle='rgba(223,230,255,.18)';ctx.fill();
+      ctx.restore();
+    }
+    /* the name, small and wide */
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-(.62+i*.02))/.3,0,1);if(lt<=0)continue;
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),cy+r+40,
+        {alpha:outCubic(lt)*.85,fill:'#AAB1D6'});
+    }
+    /* one accent dot below, the full stop */
+    const dot=clamp((t-.85)/.15,0,1);
+    if(dot>0){
+      ctx.fillStyle=`rgba(129,140,248,${dot})`;
+      ctx.beginPath();ctx.arc(cx,cy+r+62,1.6,0,7);ctx.fill();
+    }
+  }
+},
+];
+
+/* ═════════════════════════ runner ═════════════════════════ */
+const TIER_LABEL={current:'Current default',premium:'Premium'};
+const stage=document.getElementById('stage');
+const sctx=stage.getContext('2d');
+let active=IDENTS.find(i=>i.id==='horizon');
+let runStart=0, runState=null, raf=0;
+
+function fit(canvas){
+  const dpr=Math.min(devicePixelRatio||1,2);
+  const r=canvas.getBoundingClientRect();
+  if(!r.width)return null;
+  const W=Math.round(r.width*dpr),H=Math.round(r.width*9/16*dpr);
+  if(canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H}
+  return {w:W,h:H};
+}
+function play(ident){
+  active=ident;
+  document.getElementById('stageName').textContent=ident.name;
+  document.getElementById('stageType').textContent=ident.type;
+  const tierEl=document.getElementById('stageTier');
+  tierEl.textContent=TIER_LABEL[ident.tier];
+  tierEl.className='tier '+(ident.tier==='premium'?'premium':'current');
+  for(const b of document.querySelectorAll('.card'))
+    b.setAttribute('aria-pressed',b.dataset.id===ident.id?'true':'false');
+  restart();
+}
+function restart(){
+  cancelAnimationFrame(raf);
+  const size=fit(stage);if(!size)return;
+  runState=active.init(size.w,size.h);
+  runStart=performance.now();
+  if(REDUCED){
+    active.draw(sctx,size.w,size.h,1,runState);
+    document.getElementById('stageHint').textContent='reduced motion — end state';
+    return;
+  }
+  const HOLD=1400;
+  const tick=now=>{
+    const el=now-runStart;
+    const t=clamp(el/active.dur,0,1);
+    sctx.clearRect(0,0,size.w,size.h);
+    active.draw(sctx,size.w,size.h,t,runState);
+    if(el>=active.dur+HOLD){runStart=performance.now();runState=active.init(size.w,size.h)}
+    raf=requestAnimationFrame(tick);
+  };
+  raf=requestAnimationFrame(tick);
+}
+stage.addEventListener('click',restart);
+addEventListener('resize',()=>restart());
+
+const rail=document.getElementById('rail');
+for(const c of IDENTS){
+  const btn=document.createElement('button');
+  btn.className='card';btn.dataset.id=c.id;
+  btn.setAttribute('aria-pressed',c===active?'true':'false');
+  btn.innerHTML=`<canvas></canvas><div class="meta">
+    <div class="row"><span class="name">${c.name}</span>
+    <span class="tier ${c.tier==='premium'?'premium':'current'}">${TIER_LABEL[c.tier]}</span></div>
+    <p>${c.blurb}</p><div class="spec">${c.spec}</div></div>`;
+  btn.addEventListener('click',()=>play(c));
+  rail.appendChild(btn);
+  requestAnimationFrame(()=>{
+    const cv=btn.querySelector('canvas');
+    const size=fit(cv);if(!size)return;
+    const ctx=cv.getContext('2d');
+    const st=c.init(size.w,size.h);
+    const sig={drop:.42,marquee:.72,prism:.8,horizon:.5,neon:.62,chrome:.58,monogram:1}[c.id];
+    c.draw(ctx,size.w,size.h,sig,st);
+  });
+}
+play(active);
+</script>

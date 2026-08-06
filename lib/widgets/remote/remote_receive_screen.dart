@@ -121,7 +121,6 @@ class _RemoteReceiveScreenState extends State<RemoteReceiveScreen>
                             Text(
                               connected ? 'Connected' : 'Waiting for sender…',
                               style: const TextStyle(
-                                color: Colors.white,
                                 fontSize: 24,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: -0.4,

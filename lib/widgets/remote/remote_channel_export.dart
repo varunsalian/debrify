@@ -278,7 +278,6 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
         const Text(
           'Debrify TV Channels',
           style: TextStyle(
-            color: Colors.white,
             fontSize: 20,
             fontWeight: FontWeight.w600,
           ),
@@ -504,7 +503,6 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
                     Text(
                       channel.name,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
                       ),

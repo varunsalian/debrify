@@ -236,7 +236,6 @@ class _NeonActionSheet extends StatelessWidget {
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  color: Colors.white,
                                   fontSize: 13.5,
                                   height: 1.3,
                                   fontWeight: FontWeight.w700,

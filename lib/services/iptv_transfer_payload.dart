@@ -81,7 +81,13 @@ abstract final class IptvTransferPayload {
           final playlist = IptvPlaylist.fromJson(
             Map<String, dynamic>.from(raw),
           );
-          if (playlist.isVirtual || playlist.url.trim().isEmpty) {
+          // A url is what makes a non-Xtream provider fetchable, so an entry
+          // without one is junk. An Xtream provider legitimately has none —
+          // it is stored with an empty url and identified by server +
+          // account — so it must not be judged by that rule, or every Xtream
+          // panel is dropped on arrival.
+          if (playlist.isVirtual ||
+              (!playlist.isXtreamCodes && playlist.url.trim().isEmpty)) {
             counts.failed++;
             continue;
           }

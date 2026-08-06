@@ -746,6 +746,72 @@ class StorageService {
     );
   }
 
+  static const String _launchAnimationKey = 'launch_animation';
+  static const Set<String> _launchAnimationValues = {
+    'drop',
+    'marquee',
+    'prism',
+    'horizon',
+    'neon',
+    'chrome',
+    'monogram',
+  };
+
+  /// Which launch ident the splash plays (Appearance → Launch Animation).
+  /// Values are the ids in `widgets/launch/launch_ident.dart`; 'horizon'
+  /// (Event Horizon) is the default, 'drop' is the original splash.
+  ///
+  /// [launchAnimationCached] mirrors it for SYNCHRONOUS reads: AppInitializer
+  /// builds its splash in initState, before any async pref read could land.
+  /// Warmed in main() before runApp and kept in sync by the setter.
+  ///
+  /// Normalizes toward 'horizon' on BOTH sides — an unrecognized value has
+  /// to mean the default for the reader and the writer alike.
+  static String launchAnimationCached = 'horizon';
+
+  static Future<String> getLaunchAnimation() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_launchAnimationKey);
+    launchAnimationCached =
+        _launchAnimationValues.contains(value) ? value! : 'horizon';
+    return launchAnimationCached;
+  }
+
+  static Future<void> setLaunchAnimation(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized =
+        _launchAnimationValues.contains(value) ? value : 'horizon';
+    await prefs.setString(_launchAnimationKey, normalized);
+    launchAnimationCached = normalized;
+  }
+
+  static const String _textBrightnessKey = 'text_brightness';
+  static const Set<String> _textBrightnessValues = {'bright', 'soft', 'dim'};
+
+  /// App-wide text brightness (Appearance → Text Brightness): 'bright' (pure
+  /// white, the default and the app's historical look), 'soft', or 'dim'.
+  /// Consumed as a [TextBrightness] preset by the root theme — see
+  /// `services/text_brightness.dart` for the actual colors. The synchronous
+  /// mirror for first-frame reads is TextBrightnessController's notifier,
+  /// warmed in main() before runApp — no cached copy lives here.
+  ///
+  /// Normalizes toward 'bright' on BOTH sides — an unrecognized value has to
+  /// mean the default for the reader and the writer alike, or writing one
+  /// would silently pin a preset the reader treats as the exception.
+  static Future<String> getTextBrightness() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_textBrightnessKey);
+    return _textBrightnessValues.contains(value) ? value! : 'bright';
+  }
+
+  static Future<void> setTextBrightness(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _textBrightnessKey,
+      _textBrightnessValues.contains(value) ? value : 'bright',
+    );
+  }
+
   static const String _tvSidebarStyleKey = 'tv_sidebar_style';
   static const Set<String> _tvSidebarStyles = {
     'classic',

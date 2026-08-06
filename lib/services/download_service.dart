@@ -959,7 +959,6 @@ class DownloadService {
                                       child: Text(
                                         'Allow background downloads',
                                         style: TextStyle(
-                                          color: Colors.white,
                                           fontSize: 18,
                                           fontWeight: FontWeight.bold,
                                         ),

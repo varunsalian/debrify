@@ -30,7 +30,6 @@ class YoutubeEmptyState extends StatelessWidget {
             const Text(
               'YouTube',
               style: TextStyle(
-                color: Colors.white,
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
               ),

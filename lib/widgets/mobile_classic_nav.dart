@@ -563,7 +563,6 @@ class _RemoteRow extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
               ),
             ),
             const Spacer(),

@@ -133,7 +133,6 @@ class _SeeAllFilterBarState extends State<SeeAllFilterBar> {
                         const Text(
                           'Filters',
                           style: TextStyle(
-                            color: Colors.white,
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                           ),
@@ -298,7 +297,6 @@ class _FiltersButtonState extends State<_FiltersButton> {
               const Text(
                 'Filters',
                 style: TextStyle(
-                  color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                 ),

@@ -613,7 +613,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                                       style: TextStyle(
                                         color: option.destructive
                                             ? const Color(0xFFEF4444)
-                                            : Colors.white,
+                                            : Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -1443,7 +1445,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
-                              color: Colors.white,
                             ),
                           ),
                         ),
@@ -1920,7 +1921,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Delete $count ${count == 1 ? itemType : itemTypePlural}',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Text(
           'Are you sure you want to delete $count selected ${count == 1 ? itemType : itemTypePlural}? This action cannot be undone.',
@@ -1974,7 +1975,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
             title: Text(
               'Deleting ${isTorrents ? 'Torrents' : 'Web Downloads'}',
               style: const TextStyle(
-                color: Colors.white,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -2646,7 +2646,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                                   Text(
                                     selectionSummary,
                                     style: const TextStyle(
-                                      color: Colors.white,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13,
                                     ),
@@ -3149,7 +3148,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
-                              color: Colors.white,
                             ),
                           ),
                         ),
@@ -3255,7 +3253,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -3562,7 +3559,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                               Text(
                                 'Season $seasonNumber',
                                 style: const TextStyle(
-                                  color: Colors.white,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 16,
                                 ),
@@ -3637,7 +3633,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               Text(
                 'Season $currentSeason',
                 style: const TextStyle(
-                  color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -3784,7 +3779,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                                   child: Text(
                                     fileName,
                                     style: const TextStyle(
-                                      color: Colors.white,
                                       fontSize: 15,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -3925,7 +3919,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     return Text(
       title,
       style: const TextStyle(
-        color: Colors.white,
         fontSize: 14,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.2,
@@ -3955,7 +3948,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           const SizedBox(height: 16),
           const Text(
             'No files available yet',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            style: TextStyle(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Text(
@@ -5729,7 +5722,6 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
-              style: const TextStyle(color: Colors.white),
               onChanged: _performSearch,
               onSubmitted: (_) => _searchFocusNode.unfocus(),
             ),
@@ -5849,7 +5841,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                     children: [
                       Text(
                         node.name,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                        style: const TextStyle(fontWeight: FontWeight.w500),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -6481,7 +6473,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               autofocus: true,
               onSubmitted: (_) => _submitTorrentSearch(),
               textInputAction: TextInputAction.search,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
+              style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Search your torrents...',
                 hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),

@@ -734,7 +734,6 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        color: Colors.white,
         fontSize: _wide ? (_tight ? 30 : 44) : 28,
         fontWeight: FontWeight.w900,
         letterSpacing: -1.0,

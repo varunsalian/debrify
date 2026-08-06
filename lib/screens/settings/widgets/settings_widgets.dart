@@ -154,6 +154,18 @@ abstract final class SettingsRows {
     title: 'Sidebar Style',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen brightness) — passed per call site.
+  static const textBrightness = SettingsRowContent(
+    icon: Icons.brightness_6_rounded,
+    title: 'Text Brightness',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (the chosen ident) — passed per call site.
+  static const launchAnimation = SettingsRowContent(
+    icon: Icons.rocket_launch_rounded,
+    title: 'Launch Animation',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen style) — passed per call site.
   static const iptvAppearance = SettingsRowContent(
     icon: Icons.style_rounded,
@@ -264,6 +276,11 @@ ThemeData? _settingsThemeBase;
 ThemeData? _settingsThemeCache;
 
 ThemeData _buildSettingsPageTheme(ThemeData base) {
+  // Primary text follows the BASE theme, not a hardcoded white: the base
+  // carries the Appearance → Text Brightness preset in its onSurface (white
+  // on Bright, so nothing changes there). On-accent colors stay white — a
+  // button label on the purple accent needs its designed contrast.
+  final Color text = base.colorScheme.onSurface;
   final scheme = base.colorScheme.copyWith(
     primary: kSettingsAccent2,
     onPrimary: Colors.white,
@@ -274,7 +291,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base) {
     secondaryContainer: kSettingsPanel2,
     onSecondaryContainer: Colors.white,
     surface: kSettingsBg,
-    onSurface: Colors.white,
+    onSurface: text,
     surfaceContainerHighest: kSettingsPanel,
     surfaceContainerHigh: kSettingsPanel,
     surfaceContainer: kSettingsPanel2,
@@ -292,11 +309,11 @@ ThemeData _buildSettingsPageTheme(ThemeData base) {
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      titleTextStyle: const TextStyle(
+      titleTextStyle: TextStyle(
         fontSize: 17,
         fontWeight: FontWeight.w800,
         letterSpacing: 0.2,
-        color: Colors.white,
+        color: text,
       ),
     ),
     cardTheme: base.cardTheme.copyWith(
@@ -310,7 +327,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base) {
     dividerTheme: DividerThemeData(color: kSettingsLine, thickness: 1),
     listTileTheme: base.listTileTheme.copyWith(
       iconColor: kSettingsDim,
-      textColor: Colors.white,
+      textColor: text,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -435,7 +452,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base) {
     ),
     tabBarTheme: base.tabBarTheme.copyWith(
       indicatorColor: kSettingsAccent,
-      labelColor: Colors.white,
+      labelColor: text,
       unselectedLabelColor: kSettingsDim,
       dividerColor: kSettingsLine,
     ),
@@ -465,7 +482,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base) {
     chipTheme: base.chipTheme.copyWith(
       backgroundColor: Colors.white.withValues(alpha: 0.06),
       selectedColor: kSettingsAccent.withValues(alpha: 0.25),
-      labelStyle: const TextStyle(color: Colors.white, fontSize: 12.5),
+      labelStyle: TextStyle(color: text, fontSize: 12.5),
       side: BorderSide(color: kSettingsLine),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ),
@@ -602,11 +619,12 @@ class SettingsPageHeader extends StatelessWidget {
             children: [
               Text(
                 title,
+                // No color: inherits the ambient bodyMedium color, which is
+                // onSurface — and so follows Appearance → Text Brightness.
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.2,
-                  color: Colors.white,
                 ),
               ),
               const SizedBox(height: 3),
@@ -732,11 +750,12 @@ class SettingsHeader extends StatelessWidget {
       children: [
         const Text(
           'Settings',
+          // No color: inherits onSurface via the ambient DefaultTextStyle,
+          // so it follows Appearance → Text Brightness.
           style: TextStyle(
             fontSize: 26,
             fontWeight: FontWeight.w800,
             letterSpacing: 0.3,
-            color: Colors.white,
           ),
         ),
         const SizedBox(height: 4),
@@ -1256,10 +1275,10 @@ class _ConnectionCardState extends State<ConnectionCard> {
                             info.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                            // No color: inherits onSurface (Text Brightness).
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: Colors.white,
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -1475,7 +1494,7 @@ class _SettingsTileState extends State<SettingsTile> {
                               fontWeight: FontWeight.w700,
                               color: widget.destructive
                                   ? kSettingsRed
-                                  : Colors.white,
+                                  : Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
                         ),
@@ -1615,10 +1634,10 @@ class _SettingsToggleTileState extends State<SettingsToggleTile> {
                   children: [
                     Text(
                       widget.title,
+                      // No color: inherits onSurface (Text Brightness).
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -1730,10 +1749,12 @@ class SettingsSelectDropdown extends StatelessWidget {
           // is carried by the themed focusedBorder instead.
           icon: Icon(Icons.keyboard_arrow_down_rounded, color: kSettingsDim),
           decoration: const InputDecoration(),
-          style: const TextStyle(
+          // Explicit color (not inherit): the dropdown renders its menu items
+          // with this style directly, outside the page's DefaultTextStyle.
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
           // Closed field shows just the title; the subtitle lives below.
           selectedItemBuilder: (context) => [
@@ -1757,7 +1778,7 @@ class SettingsSelectDropdown extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                           color: o.value == value
                               ? kSettingsAccent2
-                              : Colors.white,
+                              : Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
                       if (o.subtitle != null) ...[
@@ -1836,10 +1857,10 @@ class SettingsInfoTile extends StatelessWidget {
           Expanded(
             child: Text(
               title,
+              // No color: inherits onSurface (Text Brightness).
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
               ),
             ),
           ),

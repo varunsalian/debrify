@@ -135,7 +135,6 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
             child: Text(
               'Remote Control',
               style: const TextStyle(
-                color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
               ),
@@ -351,7 +350,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           ),
           title: const Text(
             'Connect by IP',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            style: TextStyle(fontWeight: FontWeight.w600),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -371,7 +370,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                 child: TextFormField(
                   controller: controller,
                   autofocus: true,
-                  style: const TextStyle(color: Colors.white, fontSize: 15),
+                  style: const TextStyle(fontSize: 15),
                   keyboardType: TextInputType.numberWithOptions(decimal: true),
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
@@ -514,7 +513,6 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                       Text(
                         device.deviceName,
                         style: const TextStyle(
-                          color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),
@@ -690,7 +688,6 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     Text(
                       title,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),

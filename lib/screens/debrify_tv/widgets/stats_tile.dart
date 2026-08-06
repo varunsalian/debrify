@@ -48,7 +48,6 @@ class StatsTile extends StatelessWidget {
                 const Text(
                   'Search snapshot',
                   style: TextStyle(
-                    color: Colors.white,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

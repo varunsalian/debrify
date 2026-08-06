@@ -126,7 +126,6 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
                       const Text(
                         'How will this device take part?',
                         style: TextStyle(
-                          color: Colors.white,
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.4,
@@ -345,7 +344,6 @@ class _RoleCardState extends State<_RoleCard> {
                     child: Text(
                       widget.title,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.3,

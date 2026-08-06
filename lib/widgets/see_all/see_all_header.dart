@@ -91,7 +91,6 @@ class SeeAllHeader extends StatelessWidget {
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.4,
-                    color: Colors.white,
                   ),
                 ),
                 Text(

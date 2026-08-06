@@ -204,7 +204,6 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.2,

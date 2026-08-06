@@ -440,7 +440,6 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
             const Text(
               'No videos found',
               style: TextStyle(
-                color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
               ),

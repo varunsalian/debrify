@@ -50,7 +50,6 @@ Future<int?> showTraktRatingDialog(BuildContext context) {
                   Text(
                     'Rate this item',
                     style: TextStyle(
-                      color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
@@ -145,7 +144,6 @@ Future<Map<String, dynamic>?> showTraktCustomListPickerDialog(
                     Text(
                       'Add to List',
                       style: TextStyle(
-                        color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),
@@ -168,7 +166,6 @@ Future<Map<String, dynamic>?> showTraktCustomListPickerDialog(
                         ),
                         title: Text(
                           name,
-                          style: const TextStyle(color: Colors.white),
                         ),
                         subtitle: Text(
                           '$itemCount items',

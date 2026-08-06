@@ -612,7 +612,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
             const CircularProgressIndicator(),
             const SizedBox(width: 16),
             Expanded(
-              child: Text(text, style: const TextStyle(color: Colors.white)),
+              child: Text(text),
             ),
           ],
         ),
@@ -725,7 +725,6 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
         controller: _searchController,
         focusNode: _searchFocusNode,
         textInputAction: TextInputAction.search,
-        style: const TextStyle(color: Colors.white),
         // D-pad exits (formerly a Focus/onKeyEvent wrapper): left to the
         // toolbar leading control, right to the search toggle, down into
         // the results.

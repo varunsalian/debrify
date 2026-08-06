@@ -770,7 +770,6 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                                 ? 'Movie Source'
                                 : 'Series Sources (${sources.length})',
                             style: const TextStyle(
-                              color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1105,7 +1104,6 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
               child: Text(
                 'Select Provider',
                 style: TextStyle(
-                  color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1115,7 +1113,6 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
               leading: const Icon(Icons.cloud, color: Color(0xFF22C55E)),
               title: const Text(
                 'Real-Debrid',
-                style: TextStyle(color: Colors.white),
               ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
@@ -1126,7 +1123,6 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
               leading: const Icon(Icons.cloud, color: Color(0xFF7C3AED)),
               title: const Text(
                 'TorBox',
-                style: TextStyle(color: Colors.white),
               ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
@@ -1212,7 +1208,6 @@ class AggregatedSearchResultsState extends State<AggregatedSearchResults> {
                 Text(
                   source.torrentName,
                   style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),

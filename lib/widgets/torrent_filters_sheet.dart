@@ -247,7 +247,6 @@ class _TorrentFiltersSheetState extends State<TorrentFiltersSheet> {
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white,
                     ),
                   ),
                   Row(

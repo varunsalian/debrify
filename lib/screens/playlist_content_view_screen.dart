@@ -1123,7 +1123,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               SizedBox(width: 16),
               Text(
                 'Preparing playlist…',
-                style: TextStyle(color: Colors.white),
               ),
             ],
           ),
@@ -1284,7 +1283,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   vertical: 12,
                 ),
               ),
-              style: const TextStyle(color: Colors.white),
               onChanged: _performSearch,
               onSubmitted: (_) {
                 // Unfocus TextField when user presses search/enter on TV keyboard
@@ -1421,7 +1419,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         Text(
                           node.name,
                           style: const TextStyle(
-                            color: Colors.white,
                             fontWeight: FontWeight.w500,
                           ),
                           maxLines: 2,
@@ -1669,7 +1666,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                           Text(
                             node.name,
                             style: const TextStyle(
-                              color: Colors.white,
                               fontWeight: FontWeight.w500,
                             ),
                             maxLines: 2,
@@ -2871,7 +2867,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -3025,7 +3020,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -3307,7 +3301,6 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               SizedBox(width: 16),
               Text(
                 'Preparing playlist…',
-                style: TextStyle(color: Colors.white),
               ),
             ],
           ),

@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
+import 'launch/launch_ident.dart';
+import 'launch/loading_sweep.dart';
 import '../services/app_migration_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/remote_control/remote_control_state.dart';
@@ -39,8 +40,11 @@ class _AppInitializerState extends State<AppInitializer>
   // Drives the loading sweep while the splash waits for the Home board.
   late AnimationController _idleController;
   late Animation<double> _exitAnimation;
-  late _DropBouncePainter _revealPainter;
-  late _LoadingSweepPainter _loadingPainter;
+  // The chosen launch ident — its painter, backdrop and sweep accent.
+  // Resolved synchronously from the cache warmed in main().
+  late LaunchIdent _ident;
+  late CustomPainter _revealPainter;
+  late LoadingSweepPainter _loadingPainter;
   Timer? _homeReadyTimeout;
   bool _finishing = false;
 
@@ -48,11 +52,12 @@ class _AppInitializerState extends State<AppInitializer>
   void initState() {
     super.initState();
 
-    // Snappy reveal: the painter is progress-driven, so the same
-    // drop-and-bounce plays at ~1.7x speed. The splash holds only as long as
-    // this animation (plus real init work) — no fixed delays.
+    _ident = launchIdentFor(StorageService.launchAnimationCached);
+
+    // The reveal is progress-driven; the splash holds only as long as the
+    // ident's animation (plus real init work) — no fixed delays.
     _revealController = AnimationController(
-      duration: const Duration(milliseconds: 1100),
+      duration: _ident.revealDuration,
       vsync: this,
     );
 
@@ -68,12 +73,13 @@ class _AppInitializerState extends State<AppInitializer>
 
     // The painters listen to their controllers directly. Keeping one painter
     // instance lets the reveal cache its text layout, paths, and gradient
-    // shader instead of recreating all of them for every frame.
-    _revealPainter = _DropBouncePainter(
+    // shaders instead of recreating all of them for every frame.
+    _revealPainter = _ident.createPainter(
       _revealController,
       isTelevision: () => _isAndroidTv,
     );
-    _loadingPainter = _LoadingSweepPainter(_idleController);
+    _loadingPainter =
+        LoadingSweepPainter(_idleController, colors: _ident.sweepColors);
 
     _exitAnimation = Tween<double>(
       begin: 1.0,
@@ -240,7 +246,7 @@ class _AppInitializerState extends State<AppInitializer>
       // ticker being cancelled mid-flight (widget disposed) so this await can
       // never hang the init flow.
       await _revealController.forward().timeout(
-        const Duration(milliseconds: 1400),
+        _ident.revealDuration + const Duration(milliseconds: 300),
         onTimeout: () {},
       );
     } catch (_) {}
@@ -320,7 +326,7 @@ class _AppInitializerState extends State<AppInitializer>
   Widget build(BuildContext context) {
     if (!_onboardingComplete) {
       return Scaffold(
-        backgroundColor: const Color(0xFF020617),
+        backgroundColor: _ident.baseColor,
         body: _buildSplashBody(),
       );
     }
@@ -349,17 +355,11 @@ class _AppInitializerState extends State<AppInitializer>
 
   Widget _buildSplashBody() {
     final splash = DecoratedBox(
-      // Subtle radial lift in the backdrop reads richer than flat black.
-      // Opaque colors on purpose: as an overlay this must fully cover the
-      // shell until the exit fade runs.
-      decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment.center,
-          radius: 1.1,
-          colors: [Color(0xFF0B1026), Color(0xFF020617)],
-          stops: [0.0, 0.9],
-        ),
-      ),
+      // The ident's STATIC backdrop, outside the painter's RepaintBoundary so
+      // it rasters once while only the animated elements repaint. Opaque on
+      // purpose: as an overlay this must fully cover the shell until the exit
+      // fade runs.
+      decoration: _ident.backdrop,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -395,394 +395,4 @@ class _AppInitializerState extends State<AppInitializer>
     if (_isAndroidTv) return splash;
     return FadeTransition(opacity: _exitAnimation, child: splash);
   }
-}
-
-/// The indeterminate sweep under the lockup while the splash holds for the
-/// Home board: a faint track with a bright accent segment gliding across it.
-/// Small fixed canvas + own RepaintBoundary = a cheap per-frame raster even on
-/// the weakest TV GPUs.
-class _LoadingSweepPainter extends CustomPainter {
-  final Animation<double> animation;
-
-  _LoadingSweepPainter(this.animation) : super(repaint: animation);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final t = animation.value;
-    final track = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, (size.height - 3) / 2, size.width, 3),
-      const Radius.circular(2),
-    );
-    canvas.drawRRect(
-      track,
-      Paint()..color = const Color(0xFFE9EDFF).withValues(alpha: 0.10),
-    );
-
-    final segW = size.width * 0.34;
-    final eased = Curves.easeInOutSine.transform(t);
-    final x = -segW + eased * (size.width + segW);
-    final segRect = Rect.fromLTWH(x, (size.height - 3) / 2, segW, 3);
-    canvas.save();
-    canvas.clipRRect(track);
-    canvas.drawRect(
-      segRect,
-      Paint()
-        ..shader = const LinearGradient(
-          colors: [Color(0xFF7B5CFF), Color(0xFF818CF8)],
-        ).createShader(segRect),
-    );
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _LoadingSweepPainter old) =>
-      old.animation != animation;
-}
-
-// ---------------------------------------------------------------------------
-// Drop & Bounce reveal painter
-// ---------------------------------------------------------------------------
-//
-// Character animation over the old metaball trickery: the play mark drops in
-// from above with real weight (an ease-out bounce), squashing on each contact —
-// and the landing shakes the DEBRIFY letters loose so they pop up one by one.
-// The mark and each letter are drawn as vectors/text so they move
-// independently, and the lockup is sized to ~86% of the frame so it owns the
-// screen on big TVs instead of floating in a void.
-//
-// Timeline (progress 0..1):
-//   0.00 – 0.52   Drop — mark falls and bounces to rest (contacts ~.36/.73/.91)
-//   0.20 – ~0.75  Shake loose — letters pop up on a damped hop, staggered
-//   0.75 – 1.00   Rest
-class _DropBouncePainter extends CustomPainter {
-  final Animation<double> animation;
-  final bool Function() isTelevision;
-
-  Size? _layoutSize;
-  _DropBounceLayout? _cachedLayout;
-
-  _DropBouncePainter(this.animation, {required this.isTelevision})
-    : super(repaint: animation);
-
-  static const String _word = 'DEBRIFY';
-  static const LinearGradient _glyphGradient = LinearGradient(
-    colors: [Color(0xFF4F74FF), Color(0xFF6E6BFF), Color(0xFF8A5CFF)],
-    stops: [0, 0.5, 1],
-  );
-
-  static double _cl(double v, double a, double b) =>
-      v < a ? a : (v > b ? b : v);
-  static double _lp(double a, double b, double t) => a + (b - a) * t;
-  static double _outBack(double t, [double s = 1.7]) =>
-      1 + (s + 1) * pow(t - 1, 3).toDouble() + s * pow(t - 1, 2).toDouble();
-  static double _outBounce(double t) {
-    const n = 7.5625, d = 2.75;
-    if (t < 1 / d) return n * t * t;
-    if (t < 2 / d) {
-      t -= 1.5 / d;
-      return n * t * t + 0.75;
-    }
-    if (t < 2.5 / d) {
-      t -= 2.25 / d;
-      return n * t * t + 0.9375;
-    }
-    t -= 2.625 / d;
-    return n * t * t + 0.984375;
-  }
-
-  // Rounded right-pointing play triangle, centred at the origin, inscribed in ±s/2.
-  void _playPath(Path path, double s) {
-    final pts = [
-      Offset(-0.30 * s, -0.40 * s),
-      Offset(-0.30 * s, 0.40 * s),
-      Offset(0.43 * s, 0),
-    ];
-    final r = 0.14 * s;
-    for (int i = 0; i < 3; i++) {
-      final a = pts[i], b = pts[(i + 1) % 3], c = pts[(i + 2) % 3];
-      final v1 = a - b, v2 = c - b;
-      final l1 = v1.distance == 0 ? 1.0 : v1.distance;
-      final l2 = v2.distance == 0 ? 1.0 : v2.distance;
-      final t1 = b + v1 * (r / l1), t2 = b + v2 * (r / l2);
-      if (i == 0) {
-        path.moveTo(t1.dx, t1.dy);
-      } else {
-        path.lineTo(t1.dx, t1.dy);
-      }
-      path.quadraticBezierTo(b.dx, b.dy, t2.dx, t2.dy);
-    }
-    path.close();
-  }
-
-  List<TextPainter> _layoutLetters(double fontSize) {
-    return _word.split('').map((ch) {
-      final tp = TextPainter(
-        text: TextSpan(
-          text: ch,
-          style: TextStyle(
-            fontSize: fontSize,
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFFE9EDFF),
-            height: 1.0,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      return tp;
-    }).toList();
-  }
-
-  _DropBounceLayout _layoutFor(Size size) {
-    final cached = _cachedLayout;
-    if (cached != null && _layoutSize == size) return cached;
-
-    final w = size.width;
-    final h = size.height;
-    final cx = w / 2;
-    final cy = h / 2;
-
-    final initialBoxHeight = min(w * 0.66, h * 1.7) / 2.15;
-    double glyphSize = initialBoxHeight;
-    double fontSize = initialBoxHeight * 0.60;
-    double letterSpacing = fontSize * 0.11;
-    double gap = glyphSize * 0.20;
-
-    List<TextPainter> letters = _layoutLetters(fontSize);
-    double total = 0;
-    for (int i = 0; i < letters.length; i++) {
-      total += letters[i].width + (i < letters.length - 1 ? letterSpacing : 0);
-    }
-    double lockWidth = glyphSize + gap + total;
-
-    final maxWidth = w * 0.86;
-    if (lockWidth > maxWidth) {
-      final scale = maxWidth / lockWidth;
-      glyphSize *= scale;
-      fontSize *= scale;
-      letterSpacing *= scale;
-      gap = glyphSize * 0.20;
-      letters = _layoutLetters(fontSize);
-      total = 0;
-      for (int i = 0; i < letters.length; i++) {
-        total +=
-            letters[i].width + (i < letters.length - 1 ? letterSpacing : 0);
-      }
-      lockWidth = glyphSize + gap + total;
-    }
-
-    final startX = cx - lockWidth / 2;
-    final wordX = startX + glyphSize + gap;
-    final glyphCenterX = startX + glyphSize / 2;
-    final baseY = cy + fontSize * 0.35;
-
-    final centers = <double>[];
-    final baselines = <double>[];
-    double x = wordX;
-    for (int i = 0; i < letters.length; i++) {
-      centers.add(x + letters[i].width / 2);
-      baselines.add(
-        letters[i].computeDistanceToActualBaseline(TextBaseline.alphabetic),
-      );
-      x += letters[i].width + letterSpacing;
-    }
-
-    final glyphPath = Path();
-    _playPath(glyphPath, glyphSize);
-    final innerPath = Path();
-    _playPath(innerPath, glyphSize * 0.52);
-    final glyphShader = _glyphGradient.createShader(
-      Rect.fromCenter(center: Offset.zero, width: glyphSize, height: glyphSize),
-    );
-
-    final layout = _DropBounceLayout(
-      centerY: cy,
-      glyphCenterX: glyphCenterX,
-      baseY: baseY,
-      glyphSize: glyphSize,
-      fontSize: fontSize,
-      letters: letters,
-      letterCenters: centers,
-      letterBaselines: baselines,
-      glyphPath: glyphPath,
-      innerPath: innerPath,
-      glyphShader: glyphShader,
-    );
-    _layoutSize = size;
-    _cachedLayout = layout;
-    return layout;
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = animation.value;
-    final layout = _layoutFor(size);
-    final lightweight = isTelevision();
-
-    // ---- glyph drop + squash ----
-    final dt = _cl(p / 0.52, 0, 1);
-    final yoff = _lp(
-      -(size.height * 0.55 + layout.glyphSize),
-      0,
-      _outBounce(dt),
-    );
-    double comp = 0;
-    for (final cpair in const [
-      [0.363, 1.0],
-      [0.727, 0.5],
-      [0.909, 0.28],
-    ]) {
-      comp += cpair[1] * exp(-pow((dt - cpair[0]) / 0.045, 2).toDouble());
-    }
-    comp = _cl(comp, 0, 1) * 0.30;
-    _drawGlyph(
-      canvas,
-      layout,
-      layout.centerY + yoff,
-      1 + comp * 0.85,
-      1 - comp,
-      0.7 + comp,
-      lightweight,
-    );
-
-    // ---- letters shaken loose ----
-    for (int i = 0; i < layout.letters.length; i++) {
-      final st = 0.20 + i * 0.03;
-      final lt = _cl((p - st) / 0.34, 0, 1);
-      if (lt <= 0) continue;
-      final hop = sin(lt * pi * 1.6) * exp(-4 * lt);
-      final scale = _lp(0.6, 1, _outBack(_cl(lt * 1.4, 0, 1)));
-      final alpha = _cl(lt * 1.6, 0, 1);
-      // TV avoids seven saveLayer operations per frame. The first few nearly
-      // transparent frames are skipped, then the hop/scale motion carries the
-      // reveal cleanly without an offscreen alpha surface for every letter.
-      if (lightweight && alpha < 0.18) continue;
-      _drawLetter(
-        canvas,
-        layout.letters[i],
-        layout.letterBaselines[i],
-        layout.letterCenters[i],
-        layout.baseY,
-        -hop * layout.glyphSize * 0.16,
-        scale,
-        lightweight ? 1 : alpha,
-        layout.fontSize,
-      );
-    }
-  }
-
-  void _drawGlyph(
-    Canvas canvas,
-    _DropBounceLayout layout,
-    double y,
-    double scaleX,
-    double scaleY,
-    double glow,
-    bool lightweight,
-  ) {
-    final glyphSize = layout.glyphSize;
-    final path = layout.glyphPath;
-    canvas.save();
-    canvas.translate(layout.glyphCenterX, y);
-    canvas.scale(scaleX, scaleY);
-    if (glow > 0) {
-      if (lightweight) {
-        // Two translucent outlines read as a restrained glow without invoking
-        // a large Gaussian blur over a TV-sized glyph.
-        canvas.drawPath(
-          path,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = glyphSize * 0.075
-            ..color = Color.fromRGBO(110, 120, 255, 0.10 * _cl(glow, 0, 1)),
-        );
-        canvas.drawPath(
-          path,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = glyphSize * 0.035
-            ..color = Color.fromRGBO(134, 139, 255, 0.20 * _cl(glow, 0, 1)),
-        );
-      } else {
-        canvas.drawPath(
-          path,
-          Paint()
-            ..color = Color.fromRGBO(110, 120, 255, 0.55 * _cl(glow, 0, 1))
-            ..maskFilter = MaskFilter.blur(
-              BlurStyle.normal,
-              glyphSize * 0.12 * glow,
-            ),
-        );
-      }
-    }
-    canvas.drawPath(path, Paint()..shader = layout.glyphShader);
-    // inner sheen for a touch of depth
-    canvas.drawPath(
-      layout.innerPath,
-      Paint()..color = const Color(0xFFDFE6FF).withValues(alpha: 0.22),
-    );
-    canvas.restore();
-  }
-
-  void _drawLetter(
-    Canvas canvas,
-    TextPainter textPainter,
-    double baseline,
-    double centerX,
-    double baseY,
-    double dy,
-    double scale,
-    double alpha,
-    double fontSize,
-  ) {
-    canvas.save();
-    canvas.translate(centerX, baseY + dy);
-    canvas.scale(scale, scale);
-    final needsLayer = alpha < 0.999;
-    if (needsLayer) {
-      canvas.saveLayer(
-        Rect.fromLTRB(
-          -textPainter.width,
-          -fontSize * 1.6,
-          textPainter.width,
-          fontSize * 1.2,
-        ),
-        Paint()..color = Color.fromRGBO(0, 0, 0, alpha),
-      );
-    }
-    textPainter.paint(canvas, Offset(-textPainter.width / 2, -baseline));
-    if (needsLayer) canvas.restore();
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _DropBouncePainter old) =>
-      old.animation != animation || old.isTelevision != isTelevision;
-}
-
-class _DropBounceLayout {
-  final double centerY;
-  final double glyphCenterX;
-  final double baseY;
-  final double glyphSize;
-  final double fontSize;
-  final List<TextPainter> letters;
-  final List<double> letterCenters;
-  final List<double> letterBaselines;
-  final Path glyphPath;
-  final Path innerPath;
-  final Shader glyphShader;
-
-  const _DropBounceLayout({
-    required this.centerY,
-    required this.glyphCenterX,
-    required this.baseY,
-    required this.glyphSize,
-    required this.fontSize,
-    required this.letters,
-    required this.letterCenters,
-    required this.letterBaselines,
-    required this.glyphPath,
-    required this.innerPath,
-    required this.glyphShader,
-  });
 }

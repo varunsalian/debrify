@@ -75,7 +75,6 @@ Future<void> showChannelCreatedShareDialog(
               child: Text(
                 'Channel "${channel.name}" created',
                 style: const TextStyle(
-                  color: Colors.white,
                   fontWeight: FontWeight.w700,
                   fontSize: 18,
                 ),

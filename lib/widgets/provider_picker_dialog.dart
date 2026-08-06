@@ -73,7 +73,6 @@ class _ProviderPickerDialogState extends State<_ProviderPickerDialog> {
                   child: Text(
                     'Choose provider',
                     style: TextStyle(
-                      color: Colors.white,
                       fontSize: 19,
                       fontWeight: FontWeight.w700,
                     ),
@@ -182,7 +181,6 @@ class _ProviderRowState extends State<_ProviderRow> {
                 child: Text(
                   widget.option.label,
                   style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),

@@ -337,7 +337,6 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                       child: Text(
                         title,
                         style: TextStyle(
-                          color: Colors.white,
                           fontSize: titleFontSize,
                           fontWeight: FontWeight.w600,
                           height: 1.2,
@@ -726,7 +725,6 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
                 Text(
                   widget.title,
                   style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                     height: 1.25,

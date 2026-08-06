@@ -525,7 +525,6 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         const Text(
           'Transfer Everything',
           style: TextStyle(
-            color: Colors.white,
             fontSize: 20,
             fontWeight: FontWeight.w600,
           ),
@@ -718,7 +717,6 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
               controller: _pikpakPasswordController,
               obscureText: !_showPikpakPassword,
               enabled: !_transferring && !_done,
-              style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'Enter password',
                 hintStyle:
@@ -780,7 +778,6 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
               child: Text(
                 item.label,
                 style: const TextStyle(
-                  color: Colors.white,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),

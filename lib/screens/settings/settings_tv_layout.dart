@@ -60,6 +60,10 @@ class SettingsTvLayout extends StatefulWidget {
   final bool tvKeyboardEnabled;
   final ValueChanged<bool> onToggleTvKeyboard;
   // Appearance rows. Labels caption the rows; every picker is its own page.
+  final String textBrightnessLabel;
+  final Future<void> Function() onOpenTextBrightness;
+  final String launchAnimationLabel;
+  final Future<void> Function() onOpenLaunchAnimation;
   // Screen size: percentage of the panel's native density the UI is laid out
   // at — 100 is the panel's own size, and smaller fits more on screen.
   final int tvUiScalePercent;
@@ -111,6 +115,10 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onToggleAutoUpdateChecks,
     required this.tvKeyboardEnabled,
     required this.onToggleTvKeyboard,
+    required this.textBrightnessLabel,
+    required this.onOpenTextBrightness,
+    required this.launchAnimationLabel,
+    required this.onOpenLaunchAnimation,
     required this.tvUiScalePercent,
     required this.onOpenTvScreenSize,
     required this.tvSidebarStyleLabel,
@@ -160,7 +168,7 @@ const List<_Category> _kCategories = [
   _Category(
     Icons.palette_rounded,
     'Appearance',
-    'Home, sidebar, IPTV & player looks',
+    'Text, home, sidebar, IPTV & player looks',
   ),
   _Category(
     Icons.play_circle_outline_rounded,
@@ -193,11 +201,11 @@ const List<_Category> _kCategories = [
 
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
-  /// written out here rather than driven by a provider list (About has up to
-  /// 6 with the conditional donation row; Appearance has exactly 6;
+  /// written out here rather than driven by a provider list (Appearance has
+  /// exactly 8; About up to 6 with the conditional donation row;
   /// Data & Backup up to 5). Connections and Trackers are sized from their
   /// own lists; see the pool computation in [initState].
-  static const int _kMaxCategoryRows = 6;
+  static const int _kMaxCategoryRows = 8;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -454,11 +462,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
               padding: EdgeInsets.only(left: 14, bottom: 18),
               child: Text(
                 'Settings',
+                // No color: inherits onSurface, so it follows Appearance →
+                // Text Brightness.
                 style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.3,
-                  color: Colors.white,
                 ),
               ),
             ),
@@ -504,11 +513,11 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                   padding: const EdgeInsets.only(left: 2, bottom: 18),
                   child: Text(
                     _kCategories[selected].label,
+                    // No color: inherits onSurface (Text Brightness).
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.2,
-                      color: Colors.white,
                     ),
                   ),
                 ),
@@ -571,41 +580,54 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           SettingsSection(
             title: '',
             children: [
+              // App-wide first, then the TV-specific pickers.
+              SettingsTile.spec(
+                SettingsRows.textBrightness,
+                subtitle: widget.textBrightnessLabel,
+                onTap: widget.onOpenTextBrightness,
+                focusNode: _paneNodes[0],
+              ),
+              SettingsTile.spec(
+                SettingsRows.launchAnimation,
+                subtitle: widget.launchAnimationLabel,
+                onTap: widget.onOpenLaunchAnimation,
+                focusNode: _paneNodes[1],
+              ),
               SettingsTile.spec(
                 SettingsRows.tvHomeStyle,
                 subtitle: widget.tvHomeStyleLabel,
                 onTap: widget.onOpenTvHomeStyle,
-                focusNode: _paneNodes[0],
+                focusNode: _paneNodes[2],
               ),
               SettingsTile.spec(
                 SettingsRows.discoverLayout,
                 subtitle: widget.discoverLayoutLabel,
                 onTap: widget.onOpenDiscoverLayout,
-                focusNode: _paneNodes[1],
+                focusNode: _paneNodes[3],
               ),
               SettingsTile.spec(
                 SettingsRows.tvSidebarStyle,
                 subtitle: widget.tvSidebarStyleLabel,
                 onTap: widget.onOpenTvSidebarStyle,
-                focusNode: _paneNodes[2],
+                focusNode: _paneNodes[4],
               ),
               SettingsTile.spec(
                 SettingsRows.tvScreenSize,
                 subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
                 onTap: widget.onOpenTvScreenSize,
-                focusNode: _paneNodes[3],
+                focusNode: _paneNodes[5],
               ),
               SettingsTile.spec(
                 SettingsRows.iptvAppearance,
                 subtitle: widget.iptvStyleLabel,
                 onTap: widget.onOpenIptvStyle,
-                focusNode: _paneNodes[4],
+                focusNode: _paneNodes[6],
               ),
               SettingsTile.spec(
                 SettingsRows.playerGuideStyle,
                 subtitle: widget.playerGuideStyleLabel,
                 onTap: widget.onOpenPlayerGuideStyle,
-                focusNode: _paneNodes[5],
+                focusNode: _paneNodes[7],
               ),
             ],
           ),
