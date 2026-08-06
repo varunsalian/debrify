@@ -747,6 +747,8 @@ class StorageService {
   }
 
   static const String _launchAnimationKey = 'launch_animation';
+  // MUST stay in step with kLaunchIdents — an id missing here is silently
+  // normalized back to 'horizon', so the picker would appear not to save.
   static const Set<String> _launchAnimationValues = {
     'drop',
     'marquee',
@@ -755,7 +757,22 @@ class StorageService {
     'neon',
     'chrome',
     'monogram',
+    'aperture',
+    'blueprint',
+    'ripple',
+    'ember',
+    'swiss',
+    'origami',
+    'anamorphic',
+    'constellation',
+    'silk',
+    'rackfocus',
   };
+
+  /// Exposed so a test can assert this set and `kLaunchIdents` agree in BOTH
+  /// directions — drift either way silently strands the pref on the default.
+  @visibleForTesting
+  static Set<String> get launchAnimationValues => _launchAnimationValues;
 
   /// Which launch ident the splash plays (Appearance → Launch Animation).
   /// Values are the ids in `widgets/launch/launch_ident.dart`; 'horizon'

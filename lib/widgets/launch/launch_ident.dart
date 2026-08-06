@@ -3,13 +3,23 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import 'anamorphic_ident.dart';
+import 'aperture_ident.dart';
+import 'blueprint_ident.dart';
 import 'chrome_ident.dart';
+import 'constellation_ident.dart';
 import 'drop_bounce_ident.dart';
+import 'ember_ident.dart';
 import 'horizon_ident.dart';
 import 'marquee_ident.dart';
 import 'monogram_ident.dart';
 import 'neon_ident.dart';
+import 'origami_ident.dart';
 import 'prism_ident.dart';
+import 'rack_focus_ident.dart';
+import 'ripple_ident.dart';
+import 'silk_ident.dart';
+import 'swiss_ident.dart';
 
 /// One selectable launch ident: a full art direction for the splash — its own
 /// typography, material and light — not just a motion variant of one lockup.
@@ -49,7 +59,11 @@ abstract class LaunchIdent {
 
   /// The static full-screen backdrop, painted once by a DecoratedBox outside
   /// the painter's RepaintBoundary. Must be fully opaque.
-  BoxDecoration get backdrop => BoxDecoration(color: baseColor);
+  ///
+  /// Typed as [Decoration], not [BoxDecoration], so an ident whose static
+  /// field is more than a colour or gradient (Blueprint's graph paper) can
+  /// still put it here rather than re-stroking it on every reveal tick.
+  Decoration get backdrop => BoxDecoration(color: baseColor);
 
   /// Loading-sweep gradient while holding for the Home board.
   List<Color> get sweepColors;
@@ -70,6 +84,17 @@ const List<LaunchIdent> kLaunchIdents = [
   NeonIdent(),
   ChromeIdent(),
   MonogramIdent(),
+  // Round 3.
+  ApertureIdent(),
+  BlueprintIdent(),
+  RippleIdent(),
+  EmberIdent(),
+  SwissIdent(),
+  OrigamiIdent(),
+  AnamorphicIdent(),
+  ConstellationIdent(),
+  SilkIdent(),
+  RackFocusIdent(),
 ];
 
 LaunchIdent launchIdentFor(String? id) {
@@ -91,8 +116,16 @@ const String kIdentWord = 'DEBRIFY';
 double identClamp(double v, double a, double b) => v < a ? a : (v > b ? b : v);
 double identLerp(double a, double b, double t) => a + (b - a) * t;
 double identOutCubic(double t) => 1 - pow(1 - t, 3).toDouble();
+double identOutQuint(double t) => 1 - pow(1 - t, 5).toDouble();
 double identInCubic(double t) => t * t * t;
 double identIoSine(double t) => -(cos(pi * t) - 1) / 2;
+double identIoCubic(double t) =>
+    t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3).toDouble() / 2;
+
+/// One layout unit: 1/16 of the width on 16:9, dropping to the height on
+/// anything wider. Sizing every ident off this is what lets one composition
+/// hold on a 720p TV box, a portrait phone and a 21:9 panel.
+double identUnit(Size size) => min(size.width / 16, size.height / 9);
 double identOutBack(double t, [double s = 1.7]) =>
     1 + (s + 1) * pow(t - 1, 3).toDouble() + s * pow(t - 1, 2).toDouble();
 double identOutBounce(double t) {
@@ -337,8 +370,12 @@ class IdentAlphaSets {
 }
 
 /// Partial stroke of [path] — the dash-draw idiom (Marquee emblem, ring
-/// draws). Extracted metrics are cached by the caller via [ui.PathMetrics]
-/// being cheap for a single small path.
+/// draws).
+///
+/// NOT for the hot path: [ui.PathMetric.extractPath] mints a fresh native
+/// Path on every call, so driving this straight off progress allocates per
+/// frame. Pre-extract a quantized ladder of prefixes at layout instead (see
+/// Blueprint's `_draw`) and index into it.
 void identDrawPathPartial(
   Canvas canvas,
   Path path,
