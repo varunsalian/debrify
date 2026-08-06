@@ -65,50 +65,112 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
   Widget build(BuildContext context) {
     return SettingsPageScaffold(
       title: 'Launch Animation',
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SettingsPageHeader(
-                  icon: Icons.rocket_launch_rounded,
-                  title: 'Launch Animation',
-                  subtitle: 'The ident Debrify plays while it starts',
-                ),
-                const SizedBox(height: 18),
-                _LaunchPreview(ident: _choice),
-                const SizedBox(height: 18),
-                Focus(
-                  focusNode: _firstCardMarker,
-                  canRequestFocus: false,
-                  skipTraversal: true,
-                  child: SettingsSection(
-                    title: '',
-                    children: [
-                      for (final ident in kLaunchIdents) _optionRow(ident),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'The preview runs the real splash painter on this device\'s '
-                  'quality path. Your pick plays on the next launch.',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.45,
-                    color: kSettingsDim,
-                  ),
-                ),
-              ],
-            ),
+      // The split exists for DPAD: in one column the list scrolls the preview
+      // off the top exactly when you start walking the options, so you choose
+      // an ident you can no longer see. Pinning the preview beside the list
+      // keeps the thing being chosen on screen for the whole walk.
+      //
+      // TV takes it unconditionally — that is the surface with the problem,
+      // and a 720p box reports only ~640 logical px, which no sane width
+      // threshold would catch. Everywhere else it needs room to be worth it:
+      // decisively landscape and wide enough for two usable panes, which
+      // covers desktop and tablet windows and leaves phones stacked.
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final twoPane = PlatformUtil.isAndroidTvCached ||
+              (constraints.maxWidth >= 820 &&
+                  constraints.maxWidth > constraints.maxHeight * 1.2);
+          return twoPane ? _buildTwoPane() : _buildStacked();
+        },
+      ),
+    );
+  }
+
+  Widget _buildStacked() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: kSettingsMaxWidth),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _header(),
+              const SizedBox(height: 18),
+              _LaunchPreview(ident: _choice),
+              const SizedBox(height: 18),
+              _optionsCard(),
+              const SizedBox(height: 14),
+              _footnote(),
+            ],
           ),
         ),
       ),
     );
   }
+
+  Widget _buildTwoPane() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // The only focusable pane. Scrolls on its own, so a longer ident
+          // list never moves the preview.
+          Expanded(
+            flex: 5,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _header(),
+                  const SizedBox(height: 18),
+                  _optionsCard(),
+                  const SizedBox(height: 14),
+                  _footnote(),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 24),
+          // Pinned preview. Nothing here can take focus, so LEFT/RIGHT keep
+          // the DPAD inside the list instead of stranding it on a picture.
+          Expanded(
+            flex: 6,
+            child: Center(child: _LaunchPreview(ident: _choice)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _header() => const SettingsPageHeader(
+        icon: Icons.rocket_launch_rounded,
+        title: 'Launch Animation',
+        subtitle: 'The ident Debrify plays while it starts',
+      );
+
+  Widget _optionsCard() => Focus(
+        focusNode: _firstCardMarker,
+        canRequestFocus: false,
+        skipTraversal: true,
+        child: SettingsSection(
+          title: '',
+          children: [
+            for (final ident in kLaunchIdents) _optionRow(ident),
+          ],
+        ),
+      );
+
+  Widget _footnote() => Text(
+        'The preview runs the real splash painter on this device\'s quality '
+        'path. Your pick plays on the next launch.',
+        style: TextStyle(
+          fontSize: 12.5,
+          height: 1.45,
+          color: kSettingsDim,
+        ),
+      );
 
   /// Radio-style row — a plain [SettingsTile] (the DPAD-proven row) with a
   /// check on the active one.
