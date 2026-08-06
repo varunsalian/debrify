@@ -113,7 +113,6 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
                 child: Text(
                   'TV Keyboard',
                   style: TextStyle(
-                    color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
@@ -153,7 +152,7 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
             controller: _textController,
             focusNode: _focusNode,
             onChanged: _onTextChanged,
-            style: const TextStyle(color: Colors.white, fontSize: 16),
+            style: const TextStyle(fontSize: 16),
             decoration: InputDecoration(
               hintText: 'Start typing...',
               hintStyle: TextStyle(

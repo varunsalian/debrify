@@ -71,7 +71,6 @@ class _SwitchRowState extends State<SwitchRow> {
         child: SwitchListTile(
           title: Text(
             widget.title,
-            style: const TextStyle(color: Colors.white),
           ),
           subtitle: Text(
             widget.subtitle,

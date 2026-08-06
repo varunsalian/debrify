@@ -904,8 +904,11 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                       Expanded(
                         child: Text(
                           addon.name,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          // Explicit color: dropdown menu items render
+                          // outside the page's DefaultTextStyle. onSurface
+                          // follows Appearance → Text Brightness.
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
                             fontSize: 14,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -978,7 +981,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                               ? '${catalog.name} (${catalog.type[0].toUpperCase()}${catalog.type.substring(1)})'
                               : catalog.name,
                           style: const TextStyle(
-                            color: Colors.white,
                             fontSize: 14,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -1053,7 +1055,10 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                     value: genre,
                     child: Text(
                       genre,
-                      style: const TextStyle(color: Colors.white),
+                      // onSurface follows Appearance → Text Brightness.
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                     ),
                   );
                 }),
@@ -1409,7 +1414,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                                 ? 'Movie Source'
                                 : 'Series Sources (${sources.length})',
                             style: const TextStyle(
-                              color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),
@@ -1734,7 +1738,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
               child: Text(
                 'Select Provider',
                 style: TextStyle(
-                  color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1744,7 +1747,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
               leading: const Icon(Icons.cloud, color: Color(0xFF22C55E)),
               title: const Text(
                 'Real-Debrid',
-                style: TextStyle(color: Colors.white),
               ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
@@ -1755,7 +1757,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
               leading: const Icon(Icons.cloud, color: Color(0xFF7C3AED)),
               title: const Text(
                 'TorBox',
-                style: TextStyle(color: Colors.white),
               ),
               onTap: () {
                 Navigator.of(sheetContext).pop();
@@ -1841,7 +1842,6 @@ class CatalogBrowserState extends State<CatalogBrowser> {
                 Text(
                   source.torrentName,
                   style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),

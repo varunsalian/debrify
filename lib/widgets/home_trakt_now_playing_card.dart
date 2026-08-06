@@ -435,7 +435,6 @@ class HomeTraktNowPlayingCardState extends State<HomeTraktNowPlayingCard>
                           Text(
                             data.title,
                             style: TextStyle(
-                              color: Colors.white,
                               fontSize: widget.isTelevision ? 16 : 15,
                               fontWeight: FontWeight.w700,
                               height: 1.1,

@@ -72,7 +72,6 @@ class _BrowseSearchHeaderState extends State<BrowseSearchHeader> {
       child: TvTextField(
         controller: widget.controller,
         focusNode: widget.focusNode,
-        style: const TextStyle(color: Colors.white),
         onChanged: widget.onChanged,
         onSubmitted: widget.onSubmitted,
         onDownArrow: widget.onDownArrow,

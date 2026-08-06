@@ -623,7 +623,6 @@ class TvSidebarNavState extends State<TvSidebarNav>
                     softWrap: false,
                     overflow: TextOverflow.clip,
                     style: TextStyle(
-                      color: Colors.white,
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.3,

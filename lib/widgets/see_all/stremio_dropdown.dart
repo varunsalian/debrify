@@ -275,7 +275,7 @@ class _StremioDropdownState<T extends Object>
                       style: TextStyle(
                         color: o.value == widget.value
                             ? kSeeAllAccent2
-                            : Colors.white,
+                            : Theme.of(context).colorScheme.onSurface,
                         fontSize: 13.5,
                         fontWeight: o.value == widget.value
                             ? FontWeight.w800
@@ -358,7 +358,6 @@ class _StremioDropdownState<T extends Object>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
@@ -650,7 +649,7 @@ class _LazyPickerDialogState<T extends Object>
                   controller: _filterController,
                   autofocus: true,
                   onChanged: _onFilterChanged,
-                  style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                  style: const TextStyle(fontSize: 13.5),
                   decoration: InputDecoration(
                     isDense: true,
                     hintText: 'Filter…',

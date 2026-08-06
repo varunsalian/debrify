@@ -1113,7 +1113,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Add to Premiumize',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1137,7 +1137,6 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
               child: TextField(
                 controller: _linkController,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   hintText: 'magnet:?xt=... or https://...',
                   hintStyle: TextStyle(color: Colors.grey[600]),
@@ -1748,7 +1747,6 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
-              style: const TextStyle(color: Colors.white),
               onChanged: _performSearch,
               onSubmitted: (_) => _searchFocusNode.unfocus(),
             ),

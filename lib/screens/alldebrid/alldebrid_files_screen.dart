@@ -1501,7 +1501,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
               controller: _searchController,
               focusNode: _searchFocusNode,
               textInputAction: TextInputAction.search,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
+              style: const TextStyle(fontSize: 14),
               // D-pad exits (formerly a Focus/onKeyEvent wrapper): up to the
               // toolbar, down into the results, right to the clear button.
               onUpArrow: () =>
@@ -1576,7 +1576,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         controller: _fileSearchController,
         focusNode: _fileSearchFocusNode,
         textInputAction: TextInputAction.search,
-        style: const TextStyle(color: Colors.white, fontSize: 14),
+        style: const TextStyle(fontSize: 14),
         // D-pad exits (formerly a Focus/onKeyEvent wrapper): up to the back
         // button, down into the results.
         onUpArrow: () =>

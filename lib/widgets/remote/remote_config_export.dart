@@ -666,7 +666,6 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         const Text(
           'Send Setup to TV',
           style: TextStyle(
-            color: Colors.white,
             fontSize: 20,
             fontWeight: FontWeight.w600,
           ),
@@ -976,7 +975,6 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                       Text(
                         item.name,
                         style: const TextStyle(
-                          color: Colors.white,
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
                         ),
@@ -1071,7 +1069,6 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                             const Text(
                               'PikPak',
                               style: TextStyle(
-                                color: Colors.white,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -1113,7 +1110,6 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                 child: TextField(
                   controller: _pikpakPasswordController,
                   obscureText: !_showPikpakPassword,
-                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Password',
                     labelStyle: TextStyle(

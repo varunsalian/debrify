@@ -526,7 +526,6 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
           Text(
             monthLabel,
             style: const TextStyle(
-              color: Colors.white,
               fontSize: 20,
               fontWeight: FontWeight.w900,
               height: 1.0,
@@ -612,7 +611,6 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
                   child: Text(
                     summary,
                     style: const TextStyle(
-                      color: Colors.white,
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
@@ -679,7 +677,6 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
           Text(
             monthLabel,
             style: TextStyle(
-              color: Colors.white,
               fontSize: isCompact ? 22 : 30,
               fontWeight: FontWeight.w900,
               height: 1.0,
@@ -829,7 +826,6 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
                     Text(
                       summary,
                       style: TextStyle(
-                        color: Colors.white,
                         fontSize: isCompact ? 11 : 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -946,7 +942,13 @@ class _SelectorField<T> extends StatelessWidget {
         ),
       ),
       iconEnabledColor: Colors.white70,
-      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+      // Explicit color: the dropdown renders its menu with this style,
+      // outside the page's DefaultTextStyle. onSurface follows the
+      // Appearance → Text Brightness preset.
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurface,
+        fontWeight: FontWeight.w700,
+      ),
       borderRadius: BorderRadius.circular(18),
     );
   }
@@ -1088,7 +1090,6 @@ class _AiringDayCard extends StatelessWidget {
                     Text(
                       _formatHeadline(day),
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w900,
                       ),
@@ -1159,7 +1160,6 @@ class _AiringDayCard extends StatelessWidget {
                     Text(
                       _formatHeadline(day),
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 20,
                         fontWeight: FontWeight.w900,
                       ),
@@ -1214,7 +1214,6 @@ class _AiringDayCard extends StatelessWidget {
                     child: Text(
                       _formatHeadline(day),
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.w900,
                       ),
@@ -1334,7 +1333,6 @@ class _DateBadge extends StatelessWidget {
           Text(
             '${day.day}',
             style: TextStyle(
-              color: Colors.white,
               fontSize: dayFontSize,
               fontWeight: FontWeight.w900,
               height: 1.0,
@@ -1425,7 +1423,6 @@ class _EpisodeRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.white,
                       fontWeight: FontWeight.w800,
                       fontSize: 12,
                     ),
@@ -1492,7 +1489,6 @@ class _EpisodeRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white,
                           fontWeight: FontWeight.w800,
                           fontSize: roomy ? 15 : 14,
                         ),
@@ -1750,7 +1746,6 @@ class _EmptyMonthState extends StatelessWidget {
             'Nothing airing in $monthLabel $year',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.white,
               fontSize: compact ? 16 : 24,
               fontWeight: FontWeight.w900,
             ),

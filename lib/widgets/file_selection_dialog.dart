@@ -530,7 +530,6 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
                       title: Text(
                         allItemsSelectedInCurrentFolder ? 'Deselect All' : 'Select All',
                         style: const TextStyle(
-                          color: Colors.white,
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
                         ),
@@ -640,7 +639,7 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
                                   Expanded(
                                     child: Text(
                                       folder.name,
-                                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                                      style: const TextStyle(fontSize: 13),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -739,7 +738,7 @@ class _FileSelectionDialogState extends State<FileSelectionDialog> {
                             onChanged: (_) => _toggleFile(file),
                             title: Text(
                               fileName,
-                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                              style: const TextStyle(fontSize: 13),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),

@@ -60,7 +60,6 @@ Future<void> showAddSourcePickerDialog(
                     Text(
                       'Add Source',
                       style: TextStyle(
-                        color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),

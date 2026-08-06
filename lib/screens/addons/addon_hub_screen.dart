@@ -390,9 +390,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: kSeeAllAccent)),
               const SizedBox(width: 16),
-              Flexible(
-                  child: Text(message,
-                      style: const TextStyle(color: Colors.white))),
+              Flexible(child: Text(message)),
             ],
           ),
         ),
@@ -537,7 +535,6 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         content: TvTextField(
           controller: controller,
           autofocus: true,
-          style: const TextStyle(color: Colors.white),
           cursorColor: kSeeAllAccent,
           decoration: InputDecoration(
             hintText: 'https://…/manifest.json',
@@ -656,7 +653,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
                 style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
             Text(value,
                 style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w700)),
+                    fontWeight: FontWeight.w700)),
           ],
         ),
       );
@@ -866,7 +863,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.6)),
             const SizedBox(height: 2),
-            Text(value, style: const TextStyle(color: Colors.white)),
+            Text(value),
           ],
         ),
       );
@@ -1032,7 +1029,6 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       child: Text(
         'Addons',
         style: TextStyle(
-          color: Colors.white,
           fontSize: 22,
           fontWeight: FontWeight.w800,
           letterSpacing: -0.4,
@@ -1229,7 +1225,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
             child: TvTextField(
               controller: _searchController,
               focusNode: _searchFocus,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: const TextStyle(fontSize: 13),
               cursorColor: kSeeAllAccent,
               decoration: InputDecoration(
                 isDense: true,
@@ -1606,7 +1602,6 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
             const SizedBox(height: 14),
             Text(title,
                 style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
@@ -1843,7 +1838,6 @@ class _AddonTitleLine extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
-            color: Colors.white,
             fontSize: 17,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.2));
@@ -2241,7 +2235,6 @@ class _EngineRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.2)),
@@ -2392,7 +2385,6 @@ class _AddonOptionsSheet extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.w700)),
             ),
@@ -2609,7 +2601,6 @@ class _HubDialog extends StatelessWidget {
           children: [
             Text(title,
                 style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 17,
                     fontWeight: FontWeight.w800)),
             const SizedBox(height: 16),

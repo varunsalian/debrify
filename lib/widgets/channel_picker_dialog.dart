@@ -264,7 +264,6 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
                     Text(
                       'Add to Channel',
                       style: TextStyle(
-                        color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -369,7 +368,6 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
               const Text(
                 'Create Channel',
                 style: TextStyle(
-                  color: Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                 ),
@@ -398,7 +396,6 @@ class _ChannelPickerDialogState extends State<ChannelPickerDialog> {
             child: TvTextField(
             controller: _nameController,
             focusNode: _nameFieldFocusNode,
-            style: const TextStyle(color: Colors.white),
             textInputAction: TextInputAction.done,
             onSubmitted: (_) {
               // Move focus to Confirm button when Enter is pressed
@@ -625,7 +622,6 @@ class _ChannelSelectionTileState extends State<_ChannelSelectionTile> {
                     Text(
                       widget.title,
                       style: TextStyle(
-                        color: Colors.white,
                         fontSize: 14,
                         fontWeight: widget.isCreateNew ? FontWeight.w600 : FontWeight.w500,
                       ),

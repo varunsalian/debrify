@@ -53,7 +53,6 @@ Future<int?> showSimklRatingDialog(BuildContext context) {
                   Text(
                     'Rate this item',
                     style: TextStyle(
-                      color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),

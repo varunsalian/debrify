@@ -259,7 +259,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         ),
         title: const Text(
           'Remove from playlist?',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
         content: Text(
           '"${item['title'] ?? 'This item'}" will be removed from your playlist. You can always add it again later.',
@@ -356,7 +356,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         ),
         title: const Text(
           'Clear watch progress?',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
         content: Text(
           'All watch progress for "${item['title'] ?? 'this playlist'}" will be cleared. This cannot be undone.',
@@ -586,7 +586,6 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       child: TvTextField(
                         controller: _searchController,
                         focusNode: _searchBarFocusNode,
-                        style: const TextStyle(color: Colors.white),
                         onDownArrow: () => _searchFocusNode.requestFocus(),
                         onUpArrow: () {},
                         onLeftArrow: () =>

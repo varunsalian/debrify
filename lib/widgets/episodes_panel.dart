@@ -1189,7 +1189,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
               child: Text(
                 _selectedShow?.name ?? '',
                 style: const TextStyle(
-                  color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1318,7 +1317,13 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                   value: s.number,
                   child: Text(
                     s.displayLabel,
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    // Explicit color: dropdown menu items render outside the
+                    // page's DefaultTextStyle. onSurface follows the
+                    // Appearance → Text Brightness preset.
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontSize: 13,
+                    ),
                   ),
                 );
               }).toList(),
@@ -1350,7 +1355,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             const Text(
               "Couldn't load episodes",
               style: TextStyle(
-                color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
               ),
@@ -1548,7 +1552,6 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                   : Text(
                       current.displayLabel,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1654,7 +1657,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             focusColor: Colors.white.withValues(alpha: 0.12),
             leading: Icon(icon, color: color ?? Colors.white),
             title: Text(label,
-                style: TextStyle(color: color ?? Colors.white)),
+                style: TextStyle(
+                    color: color ??
+                        Theme.of(sheetCtx).colorScheme.onSurface)),
             onTap: () {
               Navigator.of(sheetCtx).pop();
               onTap();
@@ -2128,7 +2133,6 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.white,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                           height: 1.2,

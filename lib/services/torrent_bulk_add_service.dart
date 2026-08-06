@@ -121,7 +121,6 @@ class TorrentBulkAddService {
                   Text(
                     '${items.length} torrents',
                     style: const TextStyle(
-                      color: Colors.white,
                       fontWeight: FontWeight.w700,
                       fontSize: 18,
                     ),
@@ -771,7 +770,6 @@ class TorrentBulkAddService {
                   child: Text(
                     'Premiumize Fair Use',
                     style: TextStyle(
-                      color: Colors.white,
                       fontWeight: FontWeight.w700,
                       fontSize: 18,
                     ),
@@ -1009,7 +1007,6 @@ class TorrentBulkAddService {
                       Text(
                         title,
                         style: const TextStyle(
-                          color: Colors.white,
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
                         ),

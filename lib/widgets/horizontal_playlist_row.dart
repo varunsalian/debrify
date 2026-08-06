@@ -129,7 +129,6 @@ class _HorizontalPlaylistRowState extends State<HorizontalPlaylistRow> {
           Text(
             widget.sectionTitle,
             style: const TextStyle(
-              color: Colors.white,
               fontSize: 22,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.5,

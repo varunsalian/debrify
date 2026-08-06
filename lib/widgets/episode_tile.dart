@@ -366,7 +366,6 @@ class _EpisodeTileState extends State<EpisodeTile> {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.3,

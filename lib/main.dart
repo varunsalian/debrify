@@ -60,6 +60,7 @@ import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
 import 'services/analytics_service.dart';
+import 'services/text_brightness.dart';
 import 'services/support_remote_config_service.dart';
 import 'widgets/auto_launch_overlay.dart';
 import 'widgets/remote/addon_install_dialog.dart';
@@ -188,6 +189,10 @@ Future<void> main() async {
   // Warms playerStartPortraitCached: the player picks its orientation while
   // building, and the IPTV startup channel can open one on the first frame.
   await StorageService.getPlayerStartPortrait();
+  // Warms the Appearance → Text Brightness preset: the root theme is built
+  // synchronously in DebrifyApp.build, so the stored choice must be readable
+  // before the first frame or text would flash bright and then dim.
+  await TextBrightnessController.warm();
   await _capImageCache();
   await _resolveStartupChannel();
   // Discover's remembered Sort per source, warmed before first frame so the
@@ -394,8 +399,33 @@ void _wireDesktopRecordings() {
 // Global navigator key for app navigation (used for remote config restart)
 final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
-class DebrifyApp extends StatelessWidget {
+class DebrifyApp extends StatefulWidget {
   const DebrifyApp({super.key});
+
+  @override
+  State<DebrifyApp> createState() => _DebrifyAppState();
+}
+
+class _DebrifyAppState extends State<DebrifyApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Rebuild the root when the Text Brightness preset changes: a new
+    // ThemeData is an inherited-widget change, so every open screen re-themes
+    // in place — including const subtrees, which a mutable color token could
+    // never reach (same instance → the element short-circuits the rebuild).
+    TextBrightnessController.notifier.addListener(_onTextBrightnessChanged);
+  }
+
+  void _onTextBrightnessChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    TextBrightnessController.notifier.removeListener(_onTextBrightnessChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -481,7 +511,9 @@ class DebrifyApp extends StatelessWidget {
         // Optimize scroll physics for TV
         physics: const ClampingScrollPhysics(),
       ),
-      theme: ThemeData(
+      // Wrapped by the Text Brightness pass; the inner ThemeData stays
+      // byte-for-byte the theme the app has always shipped.
+      theme: _applyTextBrightness(ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
         // TV: fast fade instead of the Material zoom push/pop (see
@@ -640,10 +672,39 @@ class DebrifyApp extends StatelessWidget {
           behavior: SnackBarBehavior.floating,
           elevation: 8,
         ),
-      ),
+      ), TextBrightnessController.current),
       home: const AppInitializer(),
     );
   }
+}
+
+/// Tones the theme's text down per the Appearance → Text Brightness preset.
+///
+/// A POST-transform of the finished theme rather than different construction
+/// inputs, so [TextBrightness.bright] returns [base] untouched — the default
+/// look cannot regress by construction. For soft/dim it retargets only what
+/// text reads: `onSurface` (+ `onSurfaceVariant` where the preset says so),
+/// every `textTheme` color (the theme has merged typography defaults in by
+/// now, so `apply` covers all fifteen styles), the app-bar title and the
+/// snackbar body. Icons, buttons, on-accent text and surfaces are none of
+/// this pass's business.
+ThemeData _applyTextBrightness(ThemeData base, TextBrightness preset) {
+  final Color? text = preset.primary;
+  if (text == null) return base;
+  return base.copyWith(
+    colorScheme: base.colorScheme.copyWith(
+      onSurface: text,
+      onSurfaceVariant: preset.secondary,
+    ),
+    textTheme: base.textTheme.apply(bodyColor: text, displayColor: text),
+    appBarTheme: base.appBarTheme.copyWith(
+      titleTextStyle: base.appBarTheme.titleTextStyle?.copyWith(color: text),
+    ),
+    snackBarTheme: base.snackBarTheme.copyWith(
+      contentTextStyle:
+          base.snackBarTheme.contentTextStyle?.copyWith(color: text),
+    ),
+  );
 }
 
 class MainPage extends StatefulWidget {
@@ -1932,7 +1993,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Added to PikPak',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,

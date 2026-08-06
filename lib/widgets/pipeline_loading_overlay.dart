@@ -365,7 +365,6 @@ class _PlContentState extends State<_PlContent>
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Colors.white,
               fontSize: 21,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.3,
@@ -433,7 +432,6 @@ class _PlContentState extends State<_PlContent>
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: Colors.white,
             fontSize: (tv ? 30 : 24) * scale,
             fontWeight: FontWeight.w800,
             letterSpacing: -0.5,
@@ -538,7 +536,7 @@ class _PlContentState extends State<_PlContent>
           const SizedBox(width: 7),
           Text(
             widget.providerLabel,
-            style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w700),
+            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
           ),
         ],
       ),

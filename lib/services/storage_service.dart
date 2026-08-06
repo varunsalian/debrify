@@ -746,6 +746,33 @@ class StorageService {
     );
   }
 
+  static const String _textBrightnessKey = 'text_brightness';
+  static const Set<String> _textBrightnessValues = {'bright', 'soft', 'dim'};
+
+  /// App-wide text brightness (Appearance → Text Brightness): 'bright' (pure
+  /// white, the default and the app's historical look), 'soft', or 'dim'.
+  /// Consumed as a [TextBrightness] preset by the root theme — see
+  /// `services/text_brightness.dart` for the actual colors. The synchronous
+  /// mirror for first-frame reads is TextBrightnessController's notifier,
+  /// warmed in main() before runApp — no cached copy lives here.
+  ///
+  /// Normalizes toward 'bright' on BOTH sides — an unrecognized value has to
+  /// mean the default for the reader and the writer alike, or writing one
+  /// would silently pin a preset the reader treats as the exception.
+  static Future<String> getTextBrightness() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_textBrightnessKey);
+    return _textBrightnessValues.contains(value) ? value! : 'bright';
+  }
+
+  static Future<void> setTextBrightness(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _textBrightnessKey,
+      _textBrightnessValues.contains(value) ? value : 'bright',
+    );
+  }
+
   static const String _tvSidebarStyleKey = 'tv_sidebar_style';
   static const Set<String> _tvSidebarStyles = {
     'classic',

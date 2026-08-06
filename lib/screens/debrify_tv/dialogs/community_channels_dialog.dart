@@ -607,7 +607,6 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                           style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
                             letterSpacing: 0.3,
                           ),
                         ),

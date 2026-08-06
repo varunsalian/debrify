@@ -820,7 +820,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Delete Torrent',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Text(
           'Are you sure you want to delete "${torrent.filename}" from Real Debrid? This action cannot be undone.',
@@ -854,7 +854,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 SizedBox(width: 16),
                 Text(
                   'Deleting torrent...',
-                  style: TextStyle(color: Colors.white),
                 ),
               ],
             ),
@@ -901,7 +900,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Delete All Torrents',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: const Text(
           'Are you sure you want to delete all torrents from Real Debrid? This action cannot be undone.',
@@ -949,7 +948,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             title: const Text(
               'Deleting All Torrents',
               style: TextStyle(
-                color: Colors.white,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1099,7 +1097,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Delete All Downloads',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: const Text(
           'Are you sure you want to delete all downloads from Real Debrid? This action cannot be undone.',
@@ -1147,7 +1145,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             title: const Text(
               'Deleting All Downloads',
               style: TextStyle(
-                color: Colors.white,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1297,7 +1294,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Delete Download',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Text(
           'Are you sure you want to delete "${download.filename}" from Real Debrid? This action cannot be undone.',
@@ -1331,7 +1328,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 SizedBox(width: 16),
                 Text(
                   'Deleting download...',
-                  style: TextStyle(color: Colors.white),
                 ),
               ],
             ),
@@ -1437,7 +1433,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Delete $count ${count == 1 ? itemType : itemTypePlural}',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Text(
           'Are you sure you want to delete $count selected ${count == 1 ? itemType : itemTypePlural}? This action cannot be undone.',
@@ -1491,7 +1487,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             title: Text(
               'Deleting ${isTorrents ? 'Torrents' : 'Downloads'}',
               style: const TextStyle(
-                color: Colors.white,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1807,7 +1802,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   const Expanded(
                     child: Text(
                       'RAR Archive Detected',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],
@@ -2377,7 +2372,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
-              style: const TextStyle(color: Colors.white),
               onChanged: _performSearch,
               onSubmitted: (_) => _searchFocusNode.unfocus(),
             ),
@@ -2498,7 +2492,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     children: [
                       Text(
                         node.name,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                        style: const TextStyle(fontWeight: FontWeight.w500),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -3225,7 +3219,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 autofocus: true,
                 onSubmitted: (_) => _submitTorrentSearch(),
                 textInputAction: TextInputAction.search,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(fontSize: 14),
                 decoration: InputDecoration(
                   hintText: 'Search your torrents...',
                   hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
@@ -3767,7 +3761,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               SizedBox(width: 16),
               Text(
                 'Preparing playlist…',
-                style: TextStyle(color: Colors.white),
               ),
             ],
           ),
@@ -4078,7 +4071,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   contentPadding: EdgeInsets.all(16),
                 ),
                 maxLines: 3,
-                style: const TextStyle(color: Colors.white),
               ),
             ),
             const SizedBox(height: 20),
@@ -4431,7 +4423,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Add Link',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -4454,7 +4446,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               child: TextField(
                 controller: _linkController,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   hintText: 'https://example.com/file.zip',
                   hintStyle: TextStyle(color: Colors.grey[600]),
@@ -4568,7 +4559,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Unrestricting Link',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -4577,7 +4568,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             const SizedBox(height: 16),
             const Text(
               'Processing link...',
-              style: TextStyle(color: Colors.white),
             ),
             const SizedBox(height: 8),
             Text(
@@ -4974,7 +4964,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                                           style: const TextStyle(
                                             fontSize: 15,
                                             fontWeight: FontWeight.w600,
-                                            color: Colors.white,
                                             height: 1.3,
                                           ),
                                         ),
@@ -5139,7 +5128,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                               label: Text(
                                 isUnrestricting ? 'Working…' : 'Copy',
                                 style: const TextStyle(
-                                  color: Colors.white,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 13,
                                 ),
@@ -5395,7 +5383,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   child: Text(
                     'Season $_currentSeason',
                     style: const TextStyle(
-                      color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
@@ -5575,7 +5562,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     child: Text(
                       'Season $seasonNumber',
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),

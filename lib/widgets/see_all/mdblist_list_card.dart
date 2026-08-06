@@ -76,7 +76,6 @@ class MdblistListCard extends StatelessWidget {
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                color: Colors.white,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
                 height: 1.2,

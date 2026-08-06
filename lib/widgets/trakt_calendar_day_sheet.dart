@@ -35,7 +35,6 @@ class TraktCalendarDaySheet extends StatelessWidget {
               child: Text(
                 _formatFullDate(date),
                 style: const TextStyle(
-                  color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -141,7 +140,6 @@ class _EpisodeRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: Colors.white,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

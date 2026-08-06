@@ -91,7 +91,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
             children: [
               const Icon(Icons.local_movies, color: Colors.white),
               const SizedBox(width: 8),
-              const Text('Movie Files', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
+              const Text('Movie Files', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
               const Spacer(),
               PopupMenuButton<int>(
                 color: const Color(0xFF1A1A1A),
@@ -107,7 +107,6 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                       value: i,
                       child: Text(
                         '${widget.collection.groups[i].name} (${widget.collection.groups[i].fileCount})',
-                        style: const TextStyle(color: Colors.white),
                       ),
                     ),
                 ],
@@ -124,7 +123,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                       const SizedBox(width: 6),
                       Text(
                         '${currentGroup.name} (${currentGroup.fileCount})',
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        style: const TextStyle(fontSize: 12),
                       ),
                       const SizedBox(width: 6),
                       const Icon(Icons.arrow_drop_down, color: Colors.white, size: 18),
@@ -186,7 +185,7 @@ class _MovieCollectionBrowserState extends State<MovieCollectionBrowser> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(e.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                              Text(e.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                               const SizedBox(height: 2),
                               Row(
                                 children: [

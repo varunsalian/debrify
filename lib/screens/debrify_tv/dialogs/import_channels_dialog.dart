@@ -206,7 +206,6 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                                   style: TextStyle(
                                     fontSize: widget.isAndroidTv ? 17 : 16,
                                     fontWeight: FontWeight.w600,
-                                    color: Colors.white,
                                     letterSpacing: 0.2,
                                   ),
                                 ),
@@ -304,7 +303,6 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                     style: TextStyle(
                       fontSize: widget.isAndroidTv ? 22 : 20,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white,
                       letterSpacing: 0.3,
                     ),
                   ),

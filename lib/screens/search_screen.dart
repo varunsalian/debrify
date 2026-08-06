@@ -6010,7 +6010,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               ),
               title: Text(
                 external ? 'Open externally' : 'Play now',
-                style: const TextStyle(color: Colors.white),
               ),
               onTap: () {
                 DialogTapGuard.markKeyAction();
@@ -6030,7 +6029,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               leading: const Icon(Icons.copy_rounded, color: Color(0xFFF59E0B)),
               title: const Text(
                 'Copy URL',
-                style: TextStyle(color: Colors.white),
               ),
               onTap: () async {
                 DialogTapGuard.markKeyAction();
@@ -6051,7 +6049,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               ),
               title: const Text(
                 'Download to device',
-                style: TextStyle(color: Colors.white),
               ),
               onTap: () {
                 DialogTapGuard.markKeyAction();
@@ -7092,7 +7089,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                 ? 'Movie Source'
                                 : 'Series Sources (${sources.length})',
                             style: const TextStyle(
-                              color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),
@@ -7508,7 +7504,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 Text(
                   source.torrentName,
                   style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -13023,7 +13018,6 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
         style: const TextStyle(
           fontSize: 12.5,
           fontWeight: FontWeight.w700,
-          color: Colors.white,
         ),
       ),
     ],
@@ -16569,7 +16563,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 Icons.play_arrow_rounded,
                 color: Colors.white,
               ),
-              title: const Text('Play', style: TextStyle(color: Colors.white)),
+              title: const Text('Play'),
               onTap: () {
                 DialogTapGuard.markKeyAction();
                 Navigator.of(sheetCtx).pop();
@@ -16583,7 +16577,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               ),
               title: Text(
                 bound ? 'Unpin source' : 'Pin as source',
-                style: const TextStyle(color: Colors.white),
               ),
               subtitle: Text(
                 bound
@@ -16626,7 +16619,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               ),
               title: Text(
                 external ? 'Open externally' : 'Play now',
-                style: const TextStyle(color: Colors.white),
               ),
               subtitle: Text(
                 external
@@ -16644,7 +16636,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               leading: const Icon(Icons.copy_rounded, color: Color(0xFFF59E0B)),
               title: const Text(
                 'Copy URL',
-                style: TextStyle(color: Colors.white),
               ),
               onTap: () async {
                 DialogTapGuard.markKeyAction();
@@ -16665,7 +16656,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               ),
               title: const Text(
                 'Download to device',
-                style: TextStyle(color: Colors.white),
               ),
               subtitle: Text(
                 'Save this stream to your device',
@@ -17723,7 +17713,6 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Colors.white,
                         fontSize: 12.5,
                       ),
                     ),
@@ -18069,7 +18058,6 @@ class _SrcDialogShell extends StatelessWidget {
                             Text(
                               title,
                               style: const TextStyle(
-                                color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
                               ),
