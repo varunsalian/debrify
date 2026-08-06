@@ -22,6 +22,8 @@ import '../utils/tv_keys.dart';
 /// [systemIme] hands the session over to the real system keyboard — the only
 /// path that wakes the Google TV phone-remote keyboard and voice input, both
 /// of which only engage while the TV is showing a system IME session.
+/// [paste] drops the clipboard in: the reason people reached for the system
+/// keyboard on a TV in the first place was that it had a paste button.
 enum TvKeyAction {
   insert,
   space,
@@ -32,6 +34,7 @@ enum TvKeyAction {
   submit,
   systemIme,
   voice,
+  paste,
 }
 
 class TvKey {
@@ -89,13 +92,15 @@ final List<List<TvKey>> _symbolPage = [
 /// Bottom action row, shared by both pages. The smartphone key switches this
 /// edit session to the system IME (phone-remote typing); the mic key dictates
 /// in-app and is present ONLY when the device actually has a recognizer (a
-/// dead mic button is worse than no button).
+/// dead mic button is worse than no button). Paste sits beside Clear — both
+/// act on the whole field, unlike everything to their left.
 List<TvKey> _actionRow(int page, String submitLabel, bool voice) => [
   TvKey.action(TvKeyAction.page, label: page == 0 ? '?123' : 'ABC', flex: 3),
   TvKey.action(TvKeyAction.systemIme, icon: Icons.smartphone_rounded, flex: 3),
   if (voice)
     TvKey.action(TvKeyAction.voice, icon: Icons.mic_rounded, flex: 3),
-  TvKey.action(TvKeyAction.space, icon: Icons.space_bar_rounded, flex: voice ? 5 : 6),
+  TvKey.action(TvKeyAction.space, icon: Icons.space_bar_rounded, flex: voice ? 4 : 5),
+  TvKey.action(TvKeyAction.paste, icon: Icons.content_paste_rounded, flex: 3),
   TvKey.action(TvKeyAction.clear, label: 'Clear', flex: 3),
   TvKey.action(TvKeyAction.submit, label: submitLabel, flex: 4),
 ];
@@ -111,6 +116,7 @@ class TvKeyboardController extends ChangeNotifier {
     required this.onSystemIme,
     required this.onVoice,
     required this.onVoiceStop,
+    required this.onPaste,
     this.submitLabel = 'Search',
     bool startShifted = false,
     bool voiceAvailable = false,
@@ -126,6 +132,10 @@ class TvKeyboardController extends ChangeNotifier {
 
   /// OK pressed while listening — "I'm done talking", transcribe it.
   final VoidCallback onVoiceStop;
+
+  /// Paste key. The field reads the clipboard (an async platform call) and
+  /// inserts it; this controller only reports the press.
+  final VoidCallback onPaste;
   final String submitLabel;
 
   // ───────────────────────────────────────────────────────── dictation state
@@ -150,8 +160,21 @@ class TvKeyboardController extends ChangeNotifier {
   String get status => _status ?? 'Listening…';
 
   /// Transient message shown above the keys (a declined permission, a failed
-  /// session). Cleared by the owning field.
+  /// session, an empty clipboard). Cleared by the owning field.
   String? get notice => _notice;
+
+  /// Leads the notice. Dictation failures — the original and still most common
+  /// source — don't pass one, so the mic remains the default.
+  IconData get noticeIcon => _noticeIcon ?? Icons.mic_off_rounded;
+  IconData? _noticeIcon;
+
+  /// Says something above the keys without touching the dictation state — for
+  /// the paste key, which fails on its own terms (nothing on the clipboard).
+  void showNotice(String text, {IconData? icon}) {
+    _notice = text;
+    _noticeIcon = icon;
+    notifyListeners();
+  }
 
   void beginListening() {
     _listening = true;
@@ -159,6 +182,7 @@ class TvKeyboardController extends ChangeNotifier {
     _level = 0;
     _status = 'Starting…';
     _notice = null;
+    _noticeIcon = null;
     notifyListeners();
   }
 
@@ -178,12 +202,14 @@ class TvKeyboardController extends ChangeNotifier {
     _level = 0;
     _status = null;
     _notice = notice;
+    _noticeIcon = null;
     notifyListeners();
   }
 
   void clearNotice() {
     if (_notice == null) return;
     _notice = null;
+    _noticeIcon = null;
     notifyListeners();
   }
 
@@ -288,6 +314,12 @@ class TvKeyboardController extends ChangeNotifier {
       case TvKeyAction.systemIme:
         onSystemIme();
         return; // the field takes the panel down; nothing left to repaint
+      case TvKeyAction.paste:
+        onPaste();
+        // Reading the clipboard crosses a platform channel: the text (or the
+        // "nothing to paste" notice) repaints when it lands, and nothing on
+        // this panel changed in the meantime.
+        return;
       case TvKeyAction.voice:
         onVoice();
         // The field flips this controller into its listening state once the
@@ -333,7 +365,11 @@ class TvKeyboardPanel extends StatelessWidget {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (controller.notice != null) _NoticeBar(text: controller.notice!),
+                if (controller.notice != null)
+                  _NoticeBar(
+                    text: controller.notice!,
+                    icon: controller.noticeIcon,
+                  ),
                 for (var r = 0; r < grid.length; r++)
                   Row(
                     children: [
@@ -454,12 +490,14 @@ class _ListeningView extends StatelessWidget {
   }
 }
 
-/// One-line explanation above the keys after a dictation that couldn't run
-/// (permission declined, recognizer error). The field clears it on a timer.
+/// One-line explanation above the keys after an action that couldn't run — a
+/// dictation with no permission or no recognizer, a paste with an empty
+/// clipboard. The field clears it on a timer.
 class _NoticeBar extends StatelessWidget {
-  const _NoticeBar({required this.text});
+  const _NoticeBar({required this.text, required this.icon});
 
   final String text;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
@@ -473,11 +511,7 @@ class _NoticeBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.mic_off_rounded,
-            size: 15,
-            color: Colors.white.withValues(alpha: 0.75),
-          ),
+          Icon(icon, size: 15, color: Colors.white.withValues(alpha: 0.75)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
