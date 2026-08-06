@@ -901,10 +901,19 @@ class RemoteCommandRouter {
         return;
       }
 
+      // Rejections outrank "nothing new". Reporting `skipped` first meant a
+      // payload whose every new entry was refused still read as a successful
+      // no-op, as long as ONE unrelated entry was already here — which is how
+      // dropped providers looked like an up-to-date TV.
       if (result.added > 0 && result.failed == 0) {
         _showSnackBar(result.summary);
       } else if (result.added > 0) {
         _showSnackBar('${result.summary}, ${result.failed} failed');
+      } else if (result.failed > 0) {
+        _showSnackBar(
+          '$label: ${result.failed} rejected, nothing added',
+          isError: true,
+        );
       } else if (result.skipped > 0) {
         _showSnackBar('$label: already up to date');
       } else {

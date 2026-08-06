@@ -48,7 +48,11 @@ void main() {
     return IptvPlaylist(
       id: id,
       name: name,
-      url: '$server/get.php?username=$user&password=pw&type=m3u_plus',
+      // Empty, exactly as the app stores an Xtream provider: its identity is
+      // server + account, and every request is built from those. A fixture
+      // that invented a get.php url here was more realistic than reality, and
+      // hid an importer that refused every real Xtream entry.
+      url: '',
       serverUrl: server,
       username: user,
       password: 'pw',
@@ -130,6 +134,39 @@ void main() {
           id: 'list_123',
           name: 'Sports',
           url: 'list://list_123',
+          addedAt: DateTime(2026, 1, 1),
+        ).toJson(),
+      ]);
+
+      expect(counts.imported, 0);
+      expect(counts.failed, 1);
+      expect(await StorageService.getIptvPlaylists(), isEmpty);
+    });
+
+    test('an Xtream provider imports despite carrying no url', () async {
+      // The url is the fetchable address of an M3U provider; an Xtream one has
+      // none and is reached through server + account instead. Judging it by the
+      // url dropped every Xtream panel on arrival — over Remote and over a
+      // backup restore — while a single already-present M3U provider made the
+      // TV report "already up to date".
+      final counts = await IptvTransferPayload.applyPlaylists([
+        xtream(id: 'p1', name: 'trex').toJson(),
+      ]);
+
+      expect(counts.imported, 1);
+      expect(counts.failed, 0);
+      final restored = await StorageService.getIptvPlaylists();
+      expect(restored.single.serverUrl, 'http://panel.example:8080');
+      expect(restored.single.username, 'alice');
+      expect(restored.single.password, 'pw');
+    });
+
+    test('an entry with neither a url nor a server is still refused', () async {
+      final counts = await IptvTransferPayload.applyPlaylists([
+        IptvPlaylist(
+          id: 'junk',
+          name: 'Nothing to fetch',
+          url: '   ',
           addedAt: DateTime(2026, 1, 1),
         ).toJson(),
       ]);
