@@ -44,6 +44,8 @@ import 'settings/settings_search.dart';
 import 'settings/discover_layout_page.dart';
 import 'settings/iptv_style_page.dart';
 import 'settings/text_brightness_page.dart';
+import 'settings/launch_animation_page.dart';
+import '../widgets/launch/launch_ident.dart';
 import 'settings/player_guide_style_page.dart';
 import 'settings/tv_home_style_page.dart';
 import 'settings/tv_screen_size_page.dart';
@@ -182,6 +184,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _playerGuideStyle = 'classic';
   String _phoneNavStyle = 'classic';
   String _textBrightness = 'bright';
+  String _launchAnimation = 'horizon';
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
   String _supportSettingsLabel = 'Support Debrify';
@@ -255,6 +258,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getIptvPlayerGuideStyle(),
       StorageService.getPhoneNavStyle(),
       StorageService.getTextBrightness(),
+      StorageService.getLaunchAnimation(),
     ]);
 
     if (!mounted) return;
@@ -286,6 +290,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final playerGuideStyle = results[24] as String;
     final phoneNavStyle = results[25] as String;
     final textBrightness = results[26] as String;
+    final launchAnimation = results[27] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -426,6 +431,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _playerGuideStyle = playerGuideStyle;
     _phoneNavStyle = phoneNavStyle;
     _textBrightness = textBrightness;
+    _launchAnimation = launchAnimation;
 
     setState(() {});
 
@@ -713,6 +719,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onToggleTvKeyboard: _toggleTvKeyboard,
       textBrightnessLabel: textBrightnessLabel(_textBrightness),
       onOpenTextBrightness: _openTextBrightnessPage,
+      launchAnimationLabel: launchIdentLabel(_launchAnimation),
+      onOpenLaunchAnimation: _openLaunchAnimationPage,
       tvUiScalePercent: _tvUiScalePercent,
       onOpenTvScreenSize: _openTvScreenSize,
       tvSidebarStyleLabel: tvSidebarStyleLabel(_tvSidebarStyle),
@@ -789,6 +797,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       showIptvAppearance: _iptvAppearanceSearchable,
       textBrightnessLabel: textBrightnessLabel(_textBrightness),
       onOpenTextBrightness: _openTextBrightnessPage,
+      launchAnimationLabel: launchIdentLabel(_launchAnimation),
+      onOpenLaunchAnimation: _openLaunchAnimationPage,
       iptvStyleLabel: iptvStyleLabel(_iptvStyle),
       onOpenIptvStyle: _openIptvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
@@ -990,6 +1000,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'contrast',
           'glare',
           'display',
+        ],
+      ),
+      // Ungated — every platform plays the splash. Lands on the picker.
+      nav(
+        SettingsRows.launchAnimation,
+        'Appearance',
+        _openLaunchAnimationPage,
+        subtitle: launchIdentLabel(_launchAnimation),
+        keywords: const [
+          'launch',
+          'splash',
+          'intro',
+          'animation',
+          'boot',
+          'start',
+          'startup',
+          'logo',
+          'ident',
+          'opening',
+          'neon',
+          'chrome',
+          'marquee',
+          'prism',
+          'monogram',
         ],
       ),
       // Android TV only — the size factor is applied natively in
@@ -3643,6 +3677,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Same contract as [_openTvHomeStyle], for the launch ident picker.
+  Future<void> _openLaunchAnimationPage() async {
+    await pushSettingsPage(context, const LaunchAnimationPage());
+    if (!mounted) return;
+    final value = await StorageService.getLaunchAnimation();
+    if (!mounted) return;
+    setState(() {
+      _launchAnimation = value;
+    });
+  }
+
   /// The Appearance rows quote live pref labels, but three of those prefs
   /// also have feature-local editors (the Home Screen page's layout row, the
   /// IPTV page's Appearance/Player guide sections). Re-read JUST those after
@@ -3856,6 +3901,8 @@ class _SettingsLayout extends StatelessWidget {
   final bool showIptvAppearance;
   final String textBrightnessLabel;
   final Future<void> Function() onOpenTextBrightness;
+  final String launchAnimationLabel;
+  final Future<void> Function() onOpenLaunchAnimation;
   final String iptvStyleLabel;
   final Future<void> Function() onOpenIptvStyle;
   final String playerGuideStyleLabel;
@@ -3900,6 +3947,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.showIptvAppearance,
     required this.textBrightnessLabel,
     required this.onOpenTextBrightness,
+    required this.launchAnimationLabel,
+    required this.onOpenLaunchAnimation,
     required this.iptvStyleLabel,
     required this.onOpenIptvStyle,
     required this.playerGuideStyleLabel,
@@ -3957,6 +4006,11 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.textBrightness,
                       subtitle: textBrightnessLabel,
                       onTap: onOpenTextBrightness,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.launchAnimation,
+                      subtitle: launchAnimationLabel,
+                      onTap: onOpenLaunchAnimation,
                     ),
                     if (showIptvAppearance)
                       SettingsTile.spec(

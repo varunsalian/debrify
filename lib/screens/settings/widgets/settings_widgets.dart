@@ -160,6 +160,12 @@ abstract final class SettingsRows {
     title: 'Text Brightness',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen ident) — passed per call site.
+  static const launchAnimation = SettingsRowContent(
+    icon: Icons.rocket_launch_rounded,
+    title: 'Launch Animation',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen style) — passed per call site.
   static const iptvAppearance = SettingsRowContent(
     icon: Icons.style_rounded,

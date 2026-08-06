@@ -193,6 +193,12 @@ Future<void> main() async {
   // synchronously in DebrifyApp.build, so the stored choice must be readable
   // before the first frame or text would flash bright and then dim.
   await TextBrightnessController.warm();
+  // Warms the launch-ident choice: AppInitializer builds the splash in its
+  // initState, so an async-only read would flash the default ident's world
+  // for a frame. A cosmetic pref must never block startup.
+  try {
+    await StorageService.getLaunchAnimation();
+  } catch (_) {}
   await _capImageCache();
   await _resolveStartupChannel();
   // Discover's remembered Sort per source, warmed before first frame so the
