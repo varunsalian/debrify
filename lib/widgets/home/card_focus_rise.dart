@@ -29,6 +29,18 @@ class CardFocusRise extends StatelessWidget {
   /// hover elsewhere.
   final Color? ringColor;
 
+  /// Card shape. Defaults to the 2:3 poster every board row uses; the
+  /// Promenade strip and Tonight's queue pass 16/9 for wide stills. Only the
+  /// AspectRatio changes — scale, shadow, ring and timing stay identical, so
+  /// every shape shares one focus feel.
+  final double aspectRatio;
+
+  /// Painted OVER the card's content while it is NOT focused — Promenade's
+  /// strip uses it so the centre cell reads as the lit one. A colour-animated
+  /// rect inside the existing clip: no Opacity, no saveLayer, so dimming a
+  /// whole strip costs one fill per card.
+  final Color? restVeil;
+
   /// The card's content layers, stacked (StackFit.expand) inside the rounded
   /// clip; the selection ring draws above all of them.
   final List<Widget> children;
@@ -38,6 +50,8 @@ class CardFocusRise extends StatelessWidget {
     required this.active,
     required this.isTelevision,
     this.ringColor,
+    this.aspectRatio = 2 / 3,
+    this.restVeil,
     required this.children,
   });
 
@@ -53,7 +67,7 @@ class CardFocusRise extends StatelessWidget {
       // ring the smaller lift reads premium, and neighbours shift less.
       scale: active ? (isTelevision ? 1.045 : 1.05) : 1.0,
       child: AspectRatio(
-        aspectRatio: 2 / 3,
+        aspectRatio: aspectRatio,
         child: AnimatedContainer(
           duration: focusFx,
           curve: Curves.easeOutCubic,
@@ -81,6 +95,19 @@ class CardFocusRise extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 ...children,
+                // Rest veil — dims everything that isn't the focused cell.
+                // A colour tween on a plain fill: no saveLayer, and fully
+                // transparent (so Skia skips it) on the focused card.
+                if (restVeil != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedContainer(
+                        duration: focusFx,
+                        curve: Curves.easeOutCubic,
+                        color: active ? Colors.transparent : restVeil,
+                      ),
+                    ),
+                  ),
                 // Selection ring — accent on TV focus, subtle white on hover.
                 Positioned.fill(
                   child: IgnorePointer(

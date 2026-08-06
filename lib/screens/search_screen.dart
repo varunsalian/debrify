@@ -249,6 +249,104 @@ const double _kCanvasShelfSlack = 10;
 /// Breathing room between the identity block's bottom and the tab row's top.
 const double _kCanvasIdentityGap = 25;
 
+/// Smallest poster art a stage rail will draw before it is simply too small
+/// to recognise — the floor every derived rail box respects.
+const double _kStageMinPosterH = 56;
+
+// TONIGHT metrics. The rail zone is reserved first and the main zone takes
+// what is left, so a short board shrinks the card and drops queue rows rather
+// than overlapping them.
+const double _kTonightPadX = 48;
+const double _kTonightZoneGap = 22;
+const double _kTonightRailTail = 24;
+const double _kTonightTitleSize = 26;
+const double _kTonightHeaderPad = 34;
+const double _kTonightRowGap = 12;
+const double _kTonightRowMaxH = 118;
+const double _kTonightQueueMinW = 260;
+const double _kTonightCardRadius = 14;
+
+/// The most of a queue row's width the still may take. The rest is the title
+/// and episode, which is what the row exists to tell you.
+const double _kTonightThumbShare = 0.40;
+
+// DECK metrics.
+const double _kDeckPanelPad = 48;
+const double _kDeckCardRightPad = 36;
+const double _kDeckCardRadius = 22;
+const double _kDeckRailGap = 18;
+const double _kDeckRailTail = 26;
+
+// MOSAIC metrics. The head band is a FIXED height so the wall below it never
+// shifts when a title's logo is taller than the last one's.
+const double _kMosaicPadX = 48;
+const double _kMosaicGap = 16;
+const double _kMosaicHeadTop = 26;
+/// The identity band's height is DERIVED from the scaled content it holds —
+/// a fixed band clipped the logo and its meta line at large text scales.
+double _mosaicHeadHeight(BuildContext context) {
+  final t = MediaQuery.textScalerOf(context);
+  // A title with no logo art falls back to TEXT, which scales — the band has
+  // to reserve whichever of the two is taller.
+  final titleH = max(_kMosaicLogoH, t.scale(_kStageHeadlineTitleSize) * 1.25);
+  // Facts line, then the genres on their own line beneath it. The right-hand
+  // column (rail label + hold hint) is shorter than that, so the identity
+  // still sets the band's height.
+  return titleH + 10 + t.scale(12.5) * 1.4 + 6 + t.scale(12.5) * 1.4 + 6;
+}
+
+const double _kMosaicLogoH = 52;
+
+/// The headline variant's text fallback is smaller than a stage title — it is
+/// a caption over a wall, not a billboard. Shared with [_mosaicHeadHeight] so
+/// the band that reserves space for it can't drift.
+const double _kStageHeadlineTitleSize = 24;
+const double _kMosaicHeadGap = 18;
+
+// ATRIUM metrics. The wall's height is DERIVED from these (never guessed),
+// so the dossier column beside it can't be crowded by a taller row.
+const double _kAtriumSplit = 0.38;
+const double _kAtriumPanelPad = 48;
+const double _kAtriumWallPad = 40;
+const double _kAtriumLabelFontSize = 12.0;
+const double _kAtriumLabelGap = 10;
+const double _kAtriumRowGap = 18;
+const double _kAtriumWallTail = 26;
+
+/// The share of the board Atrium's two-row wall may occupy. The row box is
+/// derived from what fits inside this, so scaled labels shrink the posters
+/// rather than pushing the wall off the bottom.
+const double _kAtriumWallBudget = 0.64;
+
+double _atriumLabelHeight(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(_kAtriumLabelFontSize) * 1.35;
+
+// Metrics for the PROMENADE bottom column (centred rail label + strip). Same
+// single-source-of-truth contract as the Canvas block above: the widgets and
+// the identity block that must stay clear of them read the same numbers.
+const double _kPromLabelFontSize = 12.0;
+
+/// Gap between the centred rail label and the strip below it.
+const double _kPromLabelGap = 14;
+
+/// Trailing spacer under the strip.
+const double _kPromStripTail = 24;
+
+/// Air between the identity block and the label row under it.
+const double _kPromIdentityGap = 26;
+
+/// Dim painted over every strip cell that isn't focused, so the centre-locked
+/// cell reads as the lit one. A flat fill inside the card's own clip (see
+/// [CardFocusRise.restVeil]) — no Opacity, no saveLayer.
+const Color _kPromRestVeil = Color(0x8C0D0B1A);
+
+/// Height of Promenade's centred label row at the current text scale (the
+/// chevron column is the floor, exactly as in [_canvasTabsHeight]).
+double _promenadeLabelHeight(BuildContext context) => max(
+  _kCanvasTabChevronColumn,
+  MediaQuery.textScalerOf(context).scale(_kPromLabelFontSize) * 1.35,
+);
+
 /// Discover STAGE: the air between the identity block and the shelf column
 /// below it. The block's clearance is [DiscoverShelfMetrics.columnHeight] plus
 /// this — derived from what the shelf actually occupies, never guessed.
@@ -1230,6 +1328,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // _onTakeoverKey.
         _heroTrailerShowing.addListener(_onCanvasTrailerShowingChanged);
         HardwareKeyboard.instance.addHandler(_onCanvasTheaterKey);
+        HardwareKeyboard.instance.addHandler(_onStageHoldKey);
       }
     }
     // Unified (non-TV) layout: drive the catalog Sources bar off search-field
@@ -1468,9 +1567,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
       _heroTrailerShowing.removeListener(_onCanvasTrailerShowingChanged);
       HardwareKeyboard.instance.removeHandler(_onCanvasTheaterKey);
+      HardwareKeyboard.instance.removeHandler(_onStageHoldKey);
     }
     _canvasTheaterTimer?.cancel();
     _canvasFavFocus.dispose();
+    _atriumFocusedRailKey.dispose();
+    _tonightCard.dispose();
+    _stageCol.dispose();
     MainPageBridge.removeTvSidebarFocusListener(_onTvSidebarFocusChanged);
     if (_heroTrailerActive) {
       _heroTrailerTakeover.removeListener(_relayChromeDim);
@@ -1778,8 +1881,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // there would corrupt the search view. They'll reappear on _restoreHome.
         if (_catalogQuery.isEmpty && !_catalogSearching) {
           _appendSections(more);
-          // A DPAD-down past the last row may be waiting on this batch.
+          // A DPAD-down past the last row may be waiting on this batch —
+          // classic's deferred move, and the stage layouts' rail advance.
           _maybeCompleteDeferredDown();
+          _maybeCompleteStageAdvance();
         }
       }
     } finally {
@@ -1857,6 +1962,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         nodes.add(FocusNode(debugLabel: 'search_r${rowIndex}_c${base + i}'));
       }
       setState(() => section.items.addAll(fresh));
+      // A DPAD-right that ran off the end of this row may be waiting on it.
+      _maybeCompleteStageRight();
       unawaited(_refreshBoundSources());
     } catch (_) {
       // Transient fetch failure — leave the row as-is so a later scroll retries.
@@ -3487,6 +3594,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   void _applySections(List<CatalogSection> sections) {
     _boardGen++;
     _boardAppliedAt = DateTime.now();
+    // `sec:<i>` rail keys are POSITIONAL: after a reseed index 3 is a
+    // different catalog, so keeping the key would silently show a rail the
+    // user never chose (and restore a column into it). CW and favourites keys
+    // are content-addressed and stay valid, so only the section keys go.
+    if (_canvasRailKey?.startsWith('sec:') ?? false) _canvasRailKey = null;
+    _canvasCols.removeWhere((key, _) => key.startsWith('sec:'));
+    _pendingStageAdvanceKey = null;
+    _pendingStageAdvanceAt = null;
+    _stageGeneration++;
     _disposeNodes();
     for (final section in sections) {
       _rowNodes.add(
@@ -3765,7 +3881,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // auto-focus all aim at the displayed rail's nearest mounted cell.
     // Canvas renders exactly ONE rail, so aim at its nearest mounted cell;
     // null (rails still loading) falls through to the classic targets.
-    if (_canvasActive) return _canvasFocusTarget();
+    if (_stageActive) return _stageFocusTarget();
     if (_cwVisible) {
       final rows = _cwRows;
       if (rows.isNotEmpty && rows.first.nodes.isNotEmpty) {
@@ -3814,6 +3930,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return;
     if (MainPageBridge.isTvSidebarFocused?.call() ?? false) return;
+
+    // On a stage layout only ONE rail (and, on Tonight, one zone) is mounted,
+    // so the data-order walk below would land wherever the first mounted node
+    // happens to be — a different rail, or the wrong Tonight zone with the
+    // zone flag left lying. Ask the layout where focus belongs first.
+    if (_stageActive) {
+      final target = _stageFocusTarget();
+      if (target != null && (target.context?.mounted ?? false)) {
+        target.requestFocus();
+        return;
+      }
+    }
 
     bool tryRow(List<FocusNode> nodes) {
       for (final n in nodes) {
@@ -4052,17 +4180,196 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// The layout the CURRENT surface should render (guards non-home surfaces).
   String get _homeStyleEffective => _homeBoardMode ? _tvHomeStyle : 'classic';
 
-  /// Whether the CANVAS board is what's actually on screen. Favourites are
-  /// now first-class Canvas rails, so the old favourites-only fallback to
-  /// classic is gone — the pref alone decides. (While everything is still
-  /// loading, Canvas shows the brand stage; the shared empty-state guards
-  /// above the branch handle the truly-nothing case.)
-  bool get _canvasActive => _homeStyleEffective == 'canvas';
+  /// Any of the STAGE layouts (everything except classic). They all share one
+  /// model — a single active rail, identified by key, whose focused cell owns
+  /// a hero stage — so focus routing, rail switching, the favourites override
+  /// and the style-change teardown are common to all of them. Only the
+  /// painting differs, per `_build*Board`.
+  ///
+  /// Favourites are first-class rails on every stage layout, so there is no
+  /// fallback to classic: the pref alone decides. While everything is still
+  /// loading a stage shows the brand stage, and the shared empty-state guards
+  /// above the board branch handle the truly-nothing case.
+  bool get _stageActive => _homeStyleEffective != 'classic';
+
+  /// Whether this layout gives moving picture a place to live: the ambient
+  /// trailer and the IPTV favourite's live preview. Mosaic deliberately opts
+  /// out — it has no stage, only a heavily-veiled art wash behind a grid, so
+  /// a video there would be invisible AND the most expensive thing on screen.
+  bool get _stageWantsAmbient => switch (_homeStyleEffective) {
+    'canvas' || 'promenade' || 'deck' || 'atrium' || 'tonight' => true,
+    _ => false,
+  };
+
+  /// A focused IPTV favourite's LIVE feed is a different question from a
+  /// catalog trailer: it is the only way to see what a channel is actually
+  /// playing, so every stage layout keeps it — Mosaic included, where the
+  /// wall's veil lifts for it. Only the speculative catalog trailer is off
+  /// there (see [_stageWantsAmbient]).
+  bool get _stageWantsLivePreview => _stageActive;
+
+  /// Whether this layout's ground is the title's ART, edge to edge — the only
+  /// case where lighting the app shell behind the ghost rail continues the
+  /// board instead of cutting across it. See [_publishAmbientArt].
+  bool get _stagePublishesShellArt => switch (_homeStyleEffective) {
+    'canvas' || 'promenade' => true,
+    _ => false,
+  };
+
+  /// Theater mode (shelf recedes so the video owns the frame) only makes
+  /// sense where the video IS the frame. Atrium's art is a column, Tonight's
+  /// is a card among panels, and Mosaic has none.
+  bool get _theaterEligible => switch (_homeStyleEffective) {
+    'canvas' || 'promenade' || 'deck' => true,
+    _ => false,
+  };
+
+  /// Bumped by every layout transition and every board reseed. Post-frame
+  /// focus callbacks capture it (with the style) and bail if either moved —
+  /// a callback posted by Canvas must never land focus inside Mosaic.
+  int _stageGeneration = 0;
+
+  /// Deferred stage move: DOWN past the last rail asked for a batch that had
+  /// not arrived. Keyed by the rail the user pressed DOWN on, so a batch that
+  /// lands after they have moved elsewhere is ignored.
+  String? _pendingStageAdvanceKey;
+  DateTime? _pendingStageAdvanceAt;
+
+  /// The node that pressed the key. A deferred move is only ever completed
+  /// while THAT node still holds focus — the rail key alone isn't enough
+  /// (moving LEFT along the same rail, or out to the sidebar, leaves it
+  /// unchanged), and a late batch must never yank the user somewhere else.
+  FocusNode? _pendingStageOrigin;
+
+  /// Atrium-only: the pending move fills the window's EMPTY lower row rather
+  /// than scrolling the window on.
+  bool _pendingStageAdvanceFillsLower = false;
+
+  /// A RIGHT that ran off the END of a rail whose catalog still had pages.
+  /// Mosaic's grid depends on it: DOWN there always leaves for the next rail,
+  /// so RIGHT is the only way through a long catalog and eating the keypress
+  /// would strand the user at the page boundary.
+  String? _pendingStageRightKey;
+  int _pendingStageRightCol = -1;
+  DateTime? _pendingStageRightAt;
+  FocusNode? _pendingStageRightOrigin;
+
+  void _deferStageRight(String railKey, int col) {
+    final origin = FocusManager.instance.primaryFocus;
+    if (origin == null) return;
+    _pendingStageRightKey = railKey;
+    _pendingStageRightCol = col;
+    _pendingStageRightAt = DateTime.now();
+    _pendingStageRightOrigin = origin;
+  }
+
+  /// Record a deferred rail move, anchored to whoever pressed the key.
+  void _deferStageAdvance(String railKey, {bool fillsLower = false}) {
+    final origin = FocusManager.instance.primaryFocus;
+    if (origin == null) return;
+    _pendingStageAdvanceKey = railKey;
+    _pendingStageAdvanceAt = DateTime.now();
+    _pendingStageAdvanceFillsLower = fillsLower;
+    _pendingStageOrigin = origin;
+  }
+
+  /// Shared staleness test for both deferred moves.
+  bool _stageDeferralStillValid(DateTime at, FocusNode? origin) =>
+      _stageActive &&
+      origin != null &&
+      identical(FocusManager.instance.primaryFocus, origin) &&
+      DateTime.now().difference(at) <= _pendingDownMaxAge;
+
+  /// Called when a ROW's next page lands: completes a deferred RIGHT if the
+  /// user is still sitting on the cell they pressed it from.
+  void _maybeCompleteStageRight() {
+    final key = _pendingStageRightKey;
+    final at = _pendingStageRightAt;
+    final col = _pendingStageRightCol;
+    final origin = _pendingStageRightOrigin;
+    if (key == null || at == null) return;
+    _pendingStageRightKey = null;
+    _pendingStageRightAt = null;
+    _pendingStageRightCol = -1;
+    _pendingStageRightOrigin = null;
+    if (_canvasRailKey != key) return;
+    if (!_stageDeferralStillValid(at, origin)) return;
+    _stagePostFrameFocus(() {
+      // Re-check INSIDE the frame: focus can move during the post-frame gap.
+      if (!identical(FocusManager.instance.primaryFocus, origin)) return null;
+      final rails = _stageRails;
+      final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
+      if (i < 0) return null;
+      final nodes = _canvasRailNodes(rails[i]);
+      if (col + 1 >= nodes.length) return null;
+      return (nodes[col + 1].context?.mounted ?? false)
+          ? nodes[col + 1]
+          : null;
+    });
+  }
+
+  /// Every piece of per-layout navigation state, cleared as one. Called on a
+  /// real layout transition (either the picker or the saved pref landing at
+  /// cold start) — never partially, or a layout inherits a rail/zone/column
+  /// that means something else in its own geometry.
+  void _resetStageNavigation() {
+    _canvasFocusSeeded = false;
+    _canvasTheaterTimer?.cancel();
+    _canvasTheater = false;
+    _canvasFavFocus.value = null;
+    _canvasRailKey = null;
+    _canvasCols.clear();
+    _tonightZoneIsQueue = true;
+    _tonightQueueCol = 0;
+    _tonightQueueKey = null;
+    _atriumFocusedRailKey.value = null;
+    _tonightCard.value = null;
+    _stageCol.value = 0;
+    _pendingStageAdvanceKey = null;
+    _pendingStageAdvanceAt = null;
+    _pendingStageAdvanceFillsLower = false;
+    _pendingStageOrigin = null;
+    _pendingStageRightKey = null;
+    _pendingStageRightAt = null;
+    _pendingStageRightCol = -1;
+    _pendingStageRightOrigin = null;
+    _stageHoldLatchedKey = null;
+    _stageGeneration++;
+  }
+
+  /// THE single layout-transition path. Both entry points route here — the
+  /// Settings picker AND the cold-start load, which is also a transition
+  /// (the field starts at the product default, so a saved 'mosaic' relayouts
+  /// a board that may already have a trailer or a live preview running).
+  void _applyStageTransition(String style) {
+    // Tear the live players down BEFORE the relayout: the underlay engine
+    // widget must never be re-parented into a different geometry mid-play.
+    _clearHeroTrailer();
+    _clearHeroLiveIptv();
+    _resetStageNavigation();
+    // The shell's ambient art is per-layout (ink-ground layouts publish
+    // none), so clear it rather than leaving the old layout's lighting in
+    // the strip behind the ghost rail.
+    _ambientArtItemId = null;
+    if (MainPageBridge.tvAmbientArt.value != null) {
+      MainPageBridge.tvAmbientArt.value = null;
+    }
+    setState(() => _tvHomeStyle = style);
+    // …then republish for the layout we just switched TO: Canvas/Promenade
+    // want the shell lit again, and the ink layouts want it to stay dark.
+    // Without this the shell keeps whatever the previous layout left until
+    // some unrelated hero change happens to refresh it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _publishAmbientArt(_heroItem.value, _heroEnriched.value);
+      _publishHeroTintToShell(_heroTint.value);
+    });
+  }
 
   Future<void> _loadTvHomeStyle() async {
     final style = await StorageService.getTvHomeStyle();
     if (!mounted || style == _tvHomeStyle) return;
-    setState(() => _tvHomeStyle = style);
+    _applyStageTransition(style);
   }
 
   /// Settings picker fired: tear down live players BEFORE the relayout, so
@@ -4070,12 +4377,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// the pref and rebuild.
   void _onTvHomeStyleChanged() {
     if (!mounted) return;
-    _clearHeroTrailer();
-    _clearHeroLiveIptv();
-    _canvasFocusSeeded = false;
-    _canvasTheaterTimer?.cancel();
-    _canvasTheater = false;
-    _canvasFavFocus.value = null;
     unawaited(_loadTvHomeStyle());
   }
 
@@ -4086,6 +4387,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// start — and a raw index would silently swap the shelf's content and
   /// teleport focus/hero when that happens. Null = first rail.
   String? _canvasRailKey;
+
+  /// The focused column of the active rail, as a notifier — Deck's peek stack
+  /// has to re-derive "the next two titles" on every horizontal move, and the
+  /// remembered-column MAP is a plain field write that rebuilds nothing.
+  final ValueNotifier<int> _stageCol = ValueNotifier<int>(0);
 
   /// Remembered column per rail key (the Canvas mirror of classic's _rowCol).
   final Map<String, int> _canvasCols = {};
@@ -4112,9 +4418,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     IptvChannel? liveChannel,
   }) {
     _canvasCols[railKey] = col;
+    _stageCol.value = col;
+    // Atrium's two-row window needs to know which row owns focus (favourites
+    // cells don't go through a _BoardCell onFocused), and favourites only
+    // ever live in Tonight's RAIL zone, never its Continue queue.
+    _atriumFocusedRailKey.value = railKey;
+    _tonightZoneIsQueue = false;
     _heroSwapTimer?.cancel();
     _clearHeroTrailer();
-    if (liveChannel != null) {
+    if (liveChannel != null && _stageWantsLivePreview) {
       _setHeroLiveIptv(liveChannel);
     } else {
       _clearHeroLiveIptv();
@@ -4127,8 +4439,22 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// behaviour and open actions), with UP/DOWN rewired to rail switching and
   /// focus driving the Canvas stage override (and the full-bleed live
   /// preview, for IPTV).
-  Widget _canvasFavCell(_FavKind kind, String railKey, int col) {
+  Widget _canvasFavCell(
+    _FavKind kind,
+    String railKey,
+    int col, {
+    VoidCallback? onUp,
+    VoidCallback? onDown,
+    VoidCallback? onLeft,
+    VoidCallback? onRight,
+    VoidCallback? onUpHold,
+    VoidCallback? onDownHold,
+  }) {
     final nodes = _favNodesFor(kind);
+    // Rail switching is the default vertical grammar; Mosaic (grid) and
+    // Tonight (zones) pass their own.
+    final up = onUp ?? () => _stageSwitchRail(-1);
+    final down = onDown ?? () => _stageSwitchRail(1);
     switch (kind) {
       case _FavKind.iptv:
         final channel = _iptvFavChannels[col];
@@ -4136,8 +4462,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           isTelevision: true,
           column: col,
           rowNodes: nodes,
-          onUp: () => _canvasSwitchRail(-1),
-          onDown: () => _canvasSwitchRail(1),
+          onUp: up,
+          onDown: down,
+          onLeft: onLeft,
+          onRight: onRight,
+          onUpHold: onUpHold,
+          onDownHold: onDownHold,
           child: _ArtPoster(
             imageUrl: channel.logoUrl,
             title: channel.name,
@@ -4170,8 +4500,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           isTelevision: true,
           column: col,
           rowNodes: nodes,
-          onUp: () => _canvasSwitchRail(-1),
-          onDown: () => _canvasSwitchRail(1),
+          onUp: up,
+          onDown: down,
+          onLeft: onLeft,
+          onRight: onRight,
+          onUpHold: onUpHold,
+          onDownHold: onDownHold,
           child: _ArtPoster(
             imageUrl: null,
             title: channel.name,
@@ -4198,8 +4532,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           isTelevision: true,
           column: col,
           rowNodes: nodes,
-          onUp: () => _canvasSwitchRail(-1),
-          onDown: () => _canvasSwitchRail(1),
+          onUp: up,
+          onDown: down,
+          onLeft: onLeft,
+          onRight: onRight,
+          onUpHold: onUpHold,
+          onDownHold: onDownHold,
           child: _ArtPoster(
             imageUrl: _firstNonEmpty(item?.poster, item?.background),
             title: channel.displayName,
@@ -4230,8 +4568,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           isTelevision: true,
           column: col,
           rowNodes: nodes,
-          onUp: () => _canvasSwitchRail(-1),
-          onDown: () => _canvasSwitchRail(1),
+          onUp: up,
+          onDown: down,
+          onLeft: onLeft,
+          onRight: onRight,
+          onUpHold: onUpHold,
+          onDownHold: onDownHold,
           child: _ArtPoster(
             imageUrl: posterUrl,
             title: title,
@@ -4266,7 +4608,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   void _onCanvasTrailerShowingChanged() {
     if (!mounted) return;
-    if (!_canvasActive) {
+    if (!_theaterEligible) {
       _canvasTheaterTimer?.cancel();
       if (_canvasTheater) setState(() => _canvasTheater = false);
       return;
@@ -4284,7 +4626,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _canvasTheaterTimer?.cancel();
     _canvasTheaterTimer = Timer(_canvasTheaterDwell, () {
       if (!mounted ||
-          !_canvasActive ||
+          !_theaterEligible ||
           !_heroTrailerShowing.value) {
         return;
       }
@@ -4340,13 +4682,46 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// The displayed Canvas rail's best focus target (sidebar hand-off, tab
   /// re-entry, auto-focus and dead-focus reclaim all route through this via
   /// [_topBoardFocusNode]).
-  FocusNode? _canvasFocusTarget() {
-    final rails = _canvasRails;
+  FocusNode? _stageFocusTarget() {
+    // Tonight parks focus in its vertical queue until the user walks down
+    // into the rail zone; the rail resolution below is only right for the
+    // rail zone.
+    if (_homeStyleEffective == 'tonight' && _tonightZoneIsQueue) {
+      final queue = _tonightQueue;
+      if (queue.isNotEmpty) {
+        final e = queue[_resolveTonightQueueIndex(queue)];
+        return _nearestMountedNode(e.rail.cw!.nodes, e.col);
+      }
+    }
+    final rails = _stageRails;
     if (rails.isEmpty) return null;
-    final rail = rails[_resolveCanvasRailIndex(rails)];
-    return _nearestMountedNode(
+    var index = _resolveCanvasRailIndex(rails);
+    // ATRIUM shows TWO rails at once, and focus may be in the lower one —
+    // which is NOT _canvasRailKey (that identifies the window's top rail).
+    // Sidebar re-entry, auto-focus and dead-focus reclaim all come through
+    // here, so without this they would teleport the user up a row.
+    if (_homeStyleEffective == 'atrium') {
+      final focusedKey = _atriumFocusedRailKey.value;
+      if (focusedKey != null) {
+        final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == focusedKey);
+        // Only honour it while it is still inside the visible window.
+        if (i == index || i == index + 1) index = i;
+      }
+    }
+    final rail = rails[index];
+    final node = _nearestMountedNode(
       _canvasRailNodes(rail),
       _canvasCols[_canvasRailKeyOf(rail)] ?? 0,
+    );
+    if (node != null) return node;
+    // The remembered row may no longer be RENDERED (Atrium drops to a single
+    // row on a short board), so fall back to the active rail rather than
+    // handing back null and leaving the board unfocusable.
+    final active = rails[_resolveCanvasRailIndex(rails)];
+    if (identical(active, rail)) return null;
+    return _nearestMountedNode(
+      _canvasRailNodes(active),
+      _canvasCols[_canvasRailKeyOf(active)] ?? 0,
     );
   }
 
@@ -4377,6 +4752,93 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
     return rails;
   }
+
+  // ── TONIGHT zone state ───────────────────────────────────────────────────
+
+  /// Tonight splits focus into two zones stacked vertically: the Continue
+  /// Watching QUEUE (a vertical list) above, and the usual horizontal rail
+  /// below. UP/DOWN walks the two as one column, so this is simply "which
+  /// zone currently owns focus".
+  bool _tonightZoneIsQueue = true;
+
+  /// A hold-jump fired: swallow the REST OF THAT HOLD. Without it a single
+  /// long press would jump zones and then keep acting on the cell it landed
+  /// on — repeats keep arriving, and the new cell never saw the key-down that
+  /// started them.
+  ///
+  /// Latched to the specific key until its key-up rather than to a timer: a
+  /// timer both let an uninterrupted hold resume once it expired AND ate a
+  /// deliberate tap made inside the window. Other keys are never affected.
+  LogicalKeyboardKey? _stageHoldLatchedKey;
+
+  bool _stageHoldSwallow(LogicalKeyboardKey key) =>
+      _stageHoldLatchedKey == key;
+
+  /// Perform a zone jump and latch the key. [jump] reports whether it
+  /// actually moved focus — a jump that found nothing mounted must NOT latch,
+  /// or the rest of the hold is swallowed for a move that never happened.
+  void _stageHoldJump(LogicalKeyboardKey key, bool Function() jump) {
+    if (_stageHoldSwallow(key)) return;
+    if (jump()) _stageHoldLatchedKey = key;
+  }
+
+  /// Global observer (registered with the theater handler): releases the hold
+  /// latch when the key is let go. Returns false — it never consumes the key.
+  /// A fresh key-DOWN of the same key also clears it, so a dropped key-up
+  /// (focus change, app backgrounded) can't latch it forever.
+  bool _onStageHoldKey(KeyEvent event) {
+    final latched = _stageHoldLatchedKey;
+    if (latched == null) return false;
+    if (event.logicalKey != latched) return false;
+    if (event is KeyUpEvent || event is KeyDownEvent) {
+      _stageHoldLatchedKey = null;
+    }
+    return false;
+  }
+
+  /// Remembered row within the queue — the INDEX is only a fallback. CW rows
+  /// stream in and prepend (Trakt/Simkl land seconds after a cold start), so
+  /// the identity below is what actually restores the user's place.
+  int _tonightQueueCol = 0;
+
+  /// What the big card should say about whatever currently has focus — the
+  /// OK hint in particular, which is 'Resume' only for a part-watched title
+  /// and 'Play'/'Open' otherwise. A notifier, so a focus move repaints the
+  /// caption alone rather than the board.
+  final ValueNotifier<_TonightCardInfo?> _tonightCard =
+      ValueNotifier<_TonightCardInfo?>(null);
+
+  /// Identity of the remembered queue row: '<rail key>#<column>'. Resolved
+  /// against the rebuilt queue every time, exactly like [_canvasRailKey].
+  String? _tonightQueueKey;
+
+  /// The queue: every Continue Watching row flattened to (row, column) pairs
+  /// in board order. Nodes come from the CW rows themselves — which is why
+  /// [_stageRails] drops CW rails on Tonight (a node may be mounted once).
+  List<_TonightQueueEntry> get _tonightQueue {
+    final out = <_TonightQueueEntry>[];
+    if (!_cwVisible) return out;
+    for (final rail in _canvasRails) {
+      final cw = rail.cw;
+      if (cw == null) continue;
+      final n = min(cw.items.length, cw.nodes.length);
+      for (var col = 0; col < n; col++) {
+        out.add(_TonightQueueEntry(rail: rail, col: col));
+      }
+    }
+    return out;
+  }
+
+  /// The rails the ACTIVE layout puts on its rail zone. Identical to
+  /// [_canvasRails] everywhere except Tonight, which lifts the Continue
+  /// Watching rows out into its own vertical queue — leaving them in both
+  /// places would mount the same FocusNodes twice.
+  List<_CanvasRail> get _stageRails => _homeStyleEffective == 'tonight'
+      ? [
+          for (final r in _canvasRails)
+            if (r.cw == null) r,
+        ]
+      : _canvasRails;
 
   int _canvasFavItemCount(_FavKind kind) {
     switch (kind) {
@@ -4422,13 +4884,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// UP/DOWN on the shelf: swap which rail the shelf shows — the screen never
   /// scrolls. DOWN past the last loaded rail pulls the next catalog batch;
   /// the new rail becomes reachable when it lands.
-  void _canvasSwitchRail(int delta) {
-    final rails = _canvasRails;
+  void _stageSwitchRail(int delta) {
+    final rails = _stageRails;
     if (rails.isEmpty) return;
     final current = _resolveCanvasRailIndex(rails);
     final next = (current + delta).clamp(0, rails.length - 1);
     if (next == current) {
-      if (delta > 0 && _boardHasMore) _loadMoreBoard();
+      if (delta > 0 && _boardHasMore) {
+        // Remember the move so it COMPLETES when the batch lands — otherwise
+        // the keypress is silently eaten and the user has to press again.
+        _deferStageAdvance(_canvasRailKeyOf(rails[current]));
+        _loadMoreBoard();
+      }
       return;
     }
     final nextKey = _canvasRailKeyOf(rails[next]);
@@ -4436,11 +4903,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // you came from (classic's carry-over) opened rails mid-list here, which
     // read as broken with a fresh shelf. Revisits still restore the rail's
     // own remembered column (written by onFocused).
-    setState(() => _canvasRailKey = nextKey);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_canvasActive) return;
-      _canvasFocusTarget()?.requestFocus();
+    setState(() {
+      _canvasRailKey = nextKey;
+      // Atrium's window is [active, active+1] and its focused-row marker is
+      // what _stageFocusTarget honours. Moving the window must re-anchor it,
+      // or UP from the top row resolves to the row you just left (it is the
+      // new window's BOTTOM row) and focus appears not to move.
+      if (_homeStyleEffective == 'atrium') {
+        _atriumFocusedRailKey.value = nextKey;
+      }
     });
+    _stagePostFrameFocus(_stageFocusTarget);
   }
 
   /// The CANVAS home: full-bleed stage (idle art → ambient trailer via the
@@ -4448,34 +4921,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// shelf of large posters at the bottom and quiet rail tabs above it. No
   /// vertical scrolling, nothing clips at a fold, no row headers.
   Widget _buildCanvasBoard() {
-    final rails = _canvasRails;
-    if (rails.isEmpty) {
+    final view = _resolveStageRail();
+    if (view == null) {
       // First batch still streaming (or every loaded row is empty) — hold
       // the brand stage rather than an empty black canvas.
       return BrandLoadingStage(isTelevision: widget.isTelevision);
     }
-    final railIndex = _resolveCanvasRailIndex(rails);
-    final rail = rails[railIndex];
-    final railKey = _canvasRailKeyOf(rail);
-    // LOCK ONTO what we actually rendered (plain bookkeeping, no setState):
-    // the first build leaves the key null and a vanished key falls back to
-    // index 0 — in both cases an unpersisted identity would let a CW rail
-    // prepending seconds later silently swap the shelf under the user.
-    _canvasRailKey = railKey;
+    final rails = view.rails;
+    final railIndex = view.index;
+    final rail = view.rail;
+    final railKey = view.key;
     final bool favRail = rail.favKind != null;
-    final items = favRail ? const <StremioMeta>[] : _canvasRailItems(rail);
-    final nodes = _canvasRailNodes(rail);
+    final items = view.items;
+    final nodes = view.nodes;
 
-    if (!_canvasFocusSeeded) {
-      _canvasFocusSeeded = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_canvasActive) return;
-        // Don't yank if focus already landed somewhere real (sidebar, etc).
-        final primary = FocusManager.instance.primaryFocus;
-        if (primary != null && primary is! FocusScopeNode) return;
-        _canvasFocusTarget()?.requestFocus();
-      });
-    }
+    _seedStageFocusOnce();
 
     return LayoutBuilder(
       builder: (context, cons) {
@@ -4578,42 +5038,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                       child: ValueListenableBuilder<_CanvasFavFocus?>(
                         valueListenable: _canvasFavFocus,
                         builder: (context, fav, _) => fav != null
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    fav.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: -0.4,
-                                      height: 1.1,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black54,
-                                          blurRadius: 14,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    fav.subtitle,
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.6,
-                                      ),
-                                      fontSize: 12.5,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.4,
-                                    ),
-                                  ),
-                                ],
-                              )
+                            ? _StageFavIdentity(fav: fav)
                             : _CanvasIdentity(
                                 item: _heroItem,
                                 enriched: _heroEnriched,
@@ -4747,8 +5172,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                     _setHero(item);
                                     _canvasCols[railKey] = col;
                                   },
-                                  onUp: () => _canvasSwitchRail(-1),
-                                  onDown: () => _canvasSwitchRail(1),
+                                  onUp: () => _stageSwitchRail(-1),
+                                  onDown: () => _stageSwitchRail(1),
                                   onOpen: () {
                                     if (rail.cw != null) {
                                       rail.cw!.onOpen(item);
@@ -4783,6 +5208,2241 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
+  /// A post-frame focus request that is only honoured if BOTH the layout and
+  /// the stage generation are unchanged when the frame lands. Without this a
+  /// callback posted by one layout can grab focus inside the next one (style
+  /// switches and board reseeds both bump the generation).
+  void _stagePostFrameFocus(FocusNode? Function() resolve) {
+    final style = _homeStyleEffective;
+    final gen = _stageGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_homeStyleEffective != style || _stageGeneration != gen) return;
+      resolve()?.requestFocus();
+    });
+  }
+
+  /// A DOWN that ran off the end of the rail list asked for another batch.
+  /// Called when one lands: completes the move only if the user is STILL on
+  /// the rail they pressed DOWN from, and the request hasn't gone stale — a
+  /// late batch must never yank focus out of wherever they went instead.
+  void _maybeCompleteStageAdvance() {
+    final key = _pendingStageAdvanceKey;
+    final at = _pendingStageAdvanceAt;
+    final fillLower = _pendingStageAdvanceFillsLower;
+    final origin = _pendingStageOrigin;
+    if (key == null || at == null) return;
+    _pendingStageAdvanceKey = null;
+    _pendingStageAdvanceAt = null;
+    _pendingStageAdvanceFillsLower = false;
+    _pendingStageOrigin = null;
+    if (!_stageDeferralStillValid(at, origin)) return;
+    final rails = _stageRails;
+    final i = rails.indexWhere((r) => _canvasRailKeyOf(r) == key);
+    if (i < 0 || i + 1 >= rails.length) return;
+    // Still where the key was pressed? On Atrium that means the focused ROW,
+    // everywhere else the active rail.
+    final whereNow = _homeStyleEffective == 'atrium'
+        ? (_atriumFocusedRailKey.value ?? _canvasRailKey)
+        : _canvasRailKey;
+    if (whereNow != key) return;
+    if (fillLower) {
+      // Atrium had only a top row: the window stays put and focus drops into
+      // the row that just landed beneath it.
+      _stagePostFrameFocus(() {
+        if (!identical(FocusManager.instance.primaryFocus, origin)) return null;
+        final now = _stageRails;
+        final at = now.indexWhere((r) => _canvasRailKeyOf(r) == key);
+        if (at < 0 || at + 1 >= now.length) return null;
+        final rail = now[at + 1];
+        _atriumFocusedRailKey.value = _canvasRailKeyOf(rail);
+        return _nearestMountedNode(
+          _canvasRailNodes(rail),
+          _canvasCols[_canvasRailKeyOf(rail)] ?? 0,
+        );
+      });
+      return;
+    }
+    if (_homeStyleEffective == 'atrium') {
+      // Atrium pressed DOWN from the window's BOTTOM row; its own advance
+      // re-resolves the window and lands focus on the new bottom row.
+      _atriumAdvance(origin: origin);
+      return;
+    }
+    setState(() => _canvasRailKey = _canvasRailKeyOf(rails[i + 1]));
+    _stagePostFrameFocus(
+      () => identical(FocusManager.instance.primaryFocus, origin)
+          ? _stageFocusTarget()
+          : null,
+    );
+  }
+
+  /// A rail strip reserves ONE box height for every rail kind (invariant: a
+  /// per-kind height bounces the layout on every fav↔catalog switch). The two
+  /// kinds FILL it differently rather than one wasting the other's space: a
+  /// catalog poster is the full box, a favourite's poster is the box minus its
+  /// caption band, so both end exactly on the box's bottom edge.
+  double _stagePosterW(double boxH) => boxH * 2 / 3;
+
+  double _stageFavW(BuildContext context, double boxH) {
+    // Poster + caption must equal the box EXACTLY. A width floor here would
+    // make the poster taller than the space left by a scaled caption and
+    // overflow the row — so the art simply gets whatever is left (never
+    // below a hairline, so the cell is still hit-testable).
+    final art = boxH - _artPosterCaptionBand(context);
+    return (art < 16 ? 16.0 : art) * 2 / 3;
+  }
+
+  /// The box height a rail strip may actually use: the layout's preference,
+  /// but never less than a favourite cell needs at the CURRENT text scale
+  /// (its two-line caption grows with accessibility settings, and a fixed box
+  /// would clip it), and never more than [maxH].
+  double _stageRailBoxH(
+    BuildContext context,
+    double preferred, {
+    required double maxH,
+  }) {
+    final floor = _artPosterCaptionBand(context) + _kStageMinPosterH;
+    final lo = min(floor, maxH);
+    return preferred.clamp(lo, max(lo, maxH));
+  }
+
+  /// One-shot: hand entry focus to the active rail the first time a stage
+  /// board builds. Shared by every stage layout — the target resolution
+  /// ([_stageFocusTarget]) already knows which zone owns focus.
+  void _seedStageFocusOnce() {
+    if (_canvasFocusSeeded) return;
+    _canvasFocusSeeded = true;
+    _stagePostFrameFocus(() {
+      // Don't yank if focus already landed somewhere real (sidebar, etc).
+      final primary = FocusManager.instance.primaryFocus;
+      if (primary != null && primary is! FocusScopeNode) return null;
+      return _stageFocusTarget();
+    });
+  }
+
+  /// Every stage board resolves the same four things before painting: the
+  /// rails, which one is active, its identity key (persisted so a rail
+  /// streaming in above it can't swap the content under the user) and its
+  /// nodes. Null means "nothing to show yet" — the caller holds the brand
+  /// stage.
+  _StageRailView? _resolveStageRail() {
+    final rails = _stageRails;
+    if (rails.isEmpty) return null;
+    final index = _resolveCanvasRailIndex(rails);
+    final rail = rails[index];
+    final key = _canvasRailKeyOf(rail);
+    // LOCK ONTO what we actually rendered (plain bookkeeping, no setState):
+    // the first build leaves the key null and a vanished key falls back to
+    // index 0 — in both cases an unpersisted identity would let a CW rail
+    // prepending seconds later silently swap the shelf under the user.
+    _canvasRailKey = key;
+    return _StageRailView(
+      rails: rails,
+      index: index,
+      rail: rail,
+      key: key,
+      items: rail.favKind != null
+          ? const <StremioMeta>[]
+          : _canvasRailItems(rail),
+      nodes: _canvasRailNodes(rail),
+    );
+  }
+
+  // ── PROMENADE view ───────────────────────────────────────────────────────
+
+  /// PROMENADE: Canvas's stage, symmetric. The identity sits centred in the
+  /// lower third and the rail becomes a CENTRE-LOCKED strip — the focused
+  /// cell is pinned to the middle of the board and the strip travels under
+  /// it. Centre-lock is free: board cards already
+  /// `ensureVisible(alignment: 0.5)`; the half-viewport pads below simply let
+  /// the FIRST and LAST cell reach the middle too, which a plain list can't.
+  Widget _buildPromenadeBoard() {
+    final view = _resolveStageRail();
+    if (view == null) {
+      return BrandLoadingStage(isTelevision: widget.isTelevision);
+    }
+    final rail = view.rail;
+    final railKey = view.key;
+    final favRail = rail.favKind != null;
+    final items = view.items;
+    final nodes = view.nodes;
+    _seedStageFocusOnce();
+
+    return LayoutBuilder(
+      builder: (context, cons) {
+        final boardH = cons.maxHeight;
+        final boardW = cons.maxWidth;
+        // ONE box height for every rail kind; the kinds fill it differently
+        // (see [_stageFavW]) so neither wastes the other's space.
+        final double stripBoxH = _stageRailBoxH(
+          context,
+          boardH * 0.27,
+          maxH: boardH * 0.42,
+        );
+        final double cellW = favRail
+            ? _stageFavW(context, stripBoxH)
+            : stripBoxH * 16 / 9;
+        // Measured bottom-up, exactly like Canvas's shelfColumnH, so the
+        // identity's clearance is DERIVED and can never drift into the strip.
+        final columnH =
+            _kPromStripTail +
+            stripBoxH +
+            _kPromLabelGap +
+            _promenadeLabelHeight(context);
+        // Half-viewport pads: without them the list clamps at its ends and
+        // the first/last cell can never reach the centre lock.
+        final double sidePad = ((boardW - cellW) / 2).clamp(0.0, boardW / 2);
+        final itemCount = favRail
+            ? _canvasFavItemCount(rail.favKind!)
+            : items.length;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // Stage floor + full-bleed key art, BELOW the punch hole so the
+            // video replaces it in place when the trailer starts.
+            _CanvasArtLayer(
+              item: _heroItem,
+              enriched: _heroEnriched,
+              fav: _canvasFavFocus,
+            ),
+            if (_heroTrailerActive)
+              _HeroTrailerLayer(
+                trailer: _heroTrailer,
+                heroHeight: boardH,
+                fullBleed: true,
+                volume: _heroTrailerVolume,
+                loading: _heroTrailerLoading,
+                onPlayingChanged: _onHeroTrailerPlaying,
+                takeover: _heroTrailerTakeover,
+              ),
+            if (_heroTrailerActive)
+              _HeroLiveLayer(
+                channel: _heroLiveChannel,
+                streamUrl: _heroLiveUrl,
+                heroHeight: boardH,
+                fullBleed: true,
+                volume: _heroTrailerVolume,
+                onPlayingChanged: _onHeroTrailerPlaying,
+                onPlaybackFailed: _onHeroLivePlaybackFailed,
+              ),
+            IgnorePointer(
+              child: _CanvasScrims(
+                theater: _canvasTheater,
+                variant: _StageScrimVariant.centered,
+              ),
+            ),
+            // Centred identity — which glides to the TOP-LEFT in theater, the
+            // Netflix billboard move Canvas already makes. A logo parked in
+            // the middle of a clean full-screen trailer reads as something
+            // left behind; in the corner it reads as a signature. Meta and
+            // synopsis have already faded by then (they go with
+            // trailerShowing, before the dwell), so what travels is the logo.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedPadding(
+                  padding: EdgeInsets.only(
+                    left: 48,
+                    right: 48,
+                    top: _canvasTheater ? 36 : 0,
+                    bottom: _canvasTheater ? 0 : columnH + _kPromIdentityGap,
+                  ),
+                  duration: _canvasTheater
+                      ? const Duration(milliseconds: 900)
+                      : const Duration(milliseconds: 250),
+                  curve: Curves.easeInOutCubic,
+                  child: AnimatedAlign(
+                    alignment: _canvasTheater
+                        ? Alignment.topLeft
+                        : Alignment.bottomCenter,
+                    duration: _canvasTheater
+                        ? const Duration(milliseconds: 900)
+                        : const Duration(milliseconds: 250),
+                    curve: Curves.easeInOutCubic,
+                    child: AnimatedScale(
+                      scale: _canvasTheater ? 0.7 : 1.0,
+                      alignment: Alignment.topLeft,
+                      duration: _canvasTheater
+                          ? const Duration(milliseconds: 900)
+                          : const Duration(milliseconds: 250),
+                      curve: Curves.easeInOutCubic,
+                      child: ValueListenableBuilder<_CanvasFavFocus?>(
+                        valueListenable: _canvasFavFocus,
+                        builder: (context, fav, _) => fav != null
+                            ? _StageFavIdentity(fav: fav, centered: true)
+                            : _CanvasIdentity(
+                                item: _heroItem,
+                                enriched: _heroEnriched,
+                                trailerShowing: _heroTrailerShowing,
+                                variant: _StageIdentityVariant.centered,
+                                maxWidth: boardW - 96,
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Rail label + the strip. Theater recede: slide + fade, cells stay
+            // MOUNTED so focus survives and the wake keypress still moves.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: AnimatedSlide(
+                offset: _canvasTheater ? const Offset(0, 0.12) : Offset.zero,
+                duration: _canvasTheater
+                    ? const Duration(milliseconds: 900)
+                    : const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                child: AnimatedOpacity(
+                  opacity: _canvasTheater ? 0.0 : 1.0,
+                  duration: _canvasTheater
+                      ? const Duration(milliseconds: 900)
+                      : const Duration(milliseconds: 250),
+                  curve: Curves.easeOut,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          left: 48,
+                          right: 48,
+                          bottom: _kPromLabelGap,
+                        ),
+                        child: _promenadeLabel(view),
+                      ),
+                      SizedBox(
+                        height: stripBoxH,
+                        child: ListView.builder(
+                          // Keyed by rail IDENTITY: insertions above the
+                          // active rail must never read as a content swap.
+                          key: ValueKey('prom-rail-$railKey'),
+                          scrollDirection: Axis.horizontal,
+                          clipBehavior: Clip.hardEdge,
+                          cacheExtent: 400,
+                          padding: EdgeInsets.symmetric(horizontal: sidePad),
+                          itemCount: itemCount,
+                          itemBuilder: (context, col) => Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 7),
+                            child: Center(
+                              child: SizedBox(
+                                width: cellW,
+                                child: favRail
+                                    ? _canvasFavCell(
+                                        rail.favKind!,
+                                        railKey,
+                                        col,
+                                      )
+                                    : SizedBox(
+                                        height: stripBoxH,
+                                        child: _promenadeCell(
+                                          rail,
+                                          railKey,
+                                          items,
+                                          nodes,
+                                          col,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: _kPromStripTail),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// One wide strip cell — the SAME [_BoardCell] every board uses, in a 16:9
+  /// box with derived landscape art, so hold-OK menus, quick-play, paging and
+  /// the focus grammar are identical to Canvas's shelf.
+  Widget _promenadeCell(
+    _CanvasRail rail,
+    String railKey,
+    List<StremioMeta> items,
+    List<FocusNode> nodes,
+    int col,
+  ) {
+    final item = items[col];
+    return _BoardCell(
+      item: item,
+      isTelevision: true,
+      focusNode: nodes[col],
+      column: col,
+      rowNodes: nodes,
+      hasBoundSource: _isBound(item),
+      ringColor: Colors.white,
+      aspectRatio: 16 / 9,
+      artUrl: _wideArtUrl(item),
+      restVeil: _kPromRestVeil,
+      progress: rail.cw?.progressOf(item),
+      episodeLabel: rail.cw?.episodeOf(item),
+      onQuickPlay: rail.cw != null || _pikpakOnly
+          ? null
+          : () => _onCatalogPlay(item, _sections[rail.sectionIndex!].addon),
+      onLongPress: rail.cw == null
+          ? null
+          : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
+      onFocused: () {
+        _setHero(item);
+        _canvasCols[railKey] = col;
+      },
+      onUp: () => _stageSwitchRail(-1),
+      onDown: () => _stageSwitchRail(1),
+      onOpen: () {
+        if (rail.cw != null) {
+          rail.cw!.onOpen(item);
+        } else {
+          _openItem(item, _sections[rail.sectionIndex!].addon);
+        }
+      },
+      onNearEnd: rail.sectionIndex == null
+          ? null
+          : () => _loadMoreRow(rail.sectionIndex!),
+    );
+  }
+
+  /// Promenade's centred rail label. The stacked chevron pair is the same
+  /// affordance Canvas's tabs carry, and for the same reason: UP/DOWN is what
+  /// changes rails, and nothing else on this screen says so.
+  Widget _promenadeLabel(
+    _StageRailView view, {
+    MainAxisAlignment align = MainAxisAlignment.center,
+  }) {
+    final title = _canvasTabTitle(view.rails, view.index);
+    return Row(
+      mainAxisAlignment: align,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.keyboard_arrow_up_rounded,
+              size: 13,
+              color: Colors.white.withValues(alpha: 0.45),
+            ),
+            Transform.translate(
+              offset: const Offset(0, -5),
+              child: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 13,
+                color: Colors.white.withValues(alpha: 0.45),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            title.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: _kPromLabelFontSize,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2.4,
+              color: Colors.white.withValues(alpha: 0.82),
+            ),
+          ),
+        ),
+        if (view.rails.length > 1) ...[
+          const SizedBox(width: 14),
+          // Flexible as well as the title: on a narrow header (Mosaic shares
+          // its row with the identity) a rigid counter is what tips the Row
+          // into an overflow.
+          Flexible(
+            child: Text(
+            '${view.index + 1}/${view.rails.length}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: _kPromLabelFontSize,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: Colors.white.withValues(alpha: 0.32),
+            ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ── ATRIUM view ──────────────────────────────────────────────────────────
+
+  /// Which rail currently owns focus in Atrium's two-row wall — drives the
+  /// eyebrow above the identity only, so it is a notifier rather than
+  /// setState: crossing between the rows must not rebuild the board.
+  final ValueNotifier<String?> _atriumFocusedRailKey = ValueNotifier<String?>(
+    null,
+  );
+
+  /// Focus the nearest mounted cell of the rail at [index] (its own remembered
+  /// column). Both wall rows are mounted, so this always has a target.
+  void _atriumFocusRail(int index) {
+    final rails = _stageRails;
+    if (index < 0 || index >= rails.length) return;
+    final rail = rails[index];
+    _nearestMountedNode(
+      _canvasRailNodes(rail),
+      _canvasCols[_canvasRailKeyOf(rail)] ?? 0,
+    )?.requestFocus();
+  }
+
+  /// DOWN from the BOTTOM row: scroll the two-row window on by one, so the
+  /// row you were on becomes the top row and focus lands on the rail below
+  /// it. (Plain [_stageSwitchRail] would focus the rail you are already on.)
+  void _atriumAdvance({FocusNode? origin}) {
+    final rails = _stageRails;
+    final cur = _resolveCanvasRailIndex(rails);
+    if (cur + 2 >= rails.length) {
+      // Nothing below the bottom row yet — pull the next catalog batch and
+      // remember the move so it completes when the rail lands.
+      if (_boardHasMore) {
+        _deferStageAdvance(
+          _canvasRailKeyOf(rails[min(cur + 1, rails.length - 1)]),
+        );
+        _loadMoreBoard();
+      }
+      return;
+    }
+    setState(() => _canvasRailKey = _canvasRailKeyOf(rails[cur + 1]));
+    _stagePostFrameFocus(() {
+      if (_homeStyleEffective != 'atrium') return null;
+      // Deferred completions pass the node that pressed DOWN; focus can move
+      // during the frame gap, and a late batch must not yank it back.
+      if (origin != null &&
+          !identical(FocusManager.instance.primaryFocus, origin)) {
+        return null;
+      }
+      // After the shift the window is [cur+1, cur+2]; land on its bottom row.
+      final rails = _stageRails;
+      final i = _resolveCanvasRailIndex(rails) + 1;
+      if (i >= rails.length) return null;
+      final rail = rails[i];
+      _atriumFocusedRailKey.value = _canvasRailKeyOf(rail);
+      return _nearestMountedNode(
+        _canvasRailNodes(rail),
+        _canvasCols[_canvasRailKeyOf(rail)] ?? 0,
+      );
+    });
+  }
+
+  /// ATRIUM: a hard vertical cut. Left is a flat ink column carrying the
+  /// title's dossier and never taking focus; right is the art (and the
+  /// trailer, in the same rect — the hole simply follows the layer's box)
+  /// with a two-row poster wall standing on its lower half.
+  Widget _buildAtriumBoard() {
+    final view = _resolveStageRail();
+    if (view == null) {
+      return BrandLoadingStage(isTelevision: widget.isTelevision);
+    }
+    _seedStageFocusOnce();
+    final rails = view.rails;
+    final active = view.index;
+    final hasSecondRow = active + 1 < rails.length;
+
+    return LayoutBuilder(
+      builder: (context, cons) {
+        final boardH = cons.maxHeight;
+        final boardW = cons.maxWidth;
+        final double splitX = boardW * _kAtriumSplit;
+        // ONE row height for every rail kind, filled two ways — reserving the
+        // caption band on catalog rows too would cost 45px PER ROW here and
+        // push the wall over three quarters of the art.
+        //
+        // The wall gets a BUDGET (a share of the board) and the row box is
+        // derived from what fits inside it, so two scaled labels and a large
+        // text scale can shrink the rows instead of running off the board.
+        final labelH = _atriumLabelHeight(context);
+        // The wall gets a BUDGET. If two rows at the accessibility floor
+        // (scaled caption + a recognisable poster) don't fit inside it, show
+        // ONE row rather than two clipped ones — the second rail is still one
+        // DOWN away.
+        final floorH = _artPosterCaptionBand(context) + _kStageMinPosterH;
+        double chromeFor(int rows) =>
+            rows * (labelH + _kAtriumLabelGap) +
+            (rows - 1) * _kAtriumRowGap +
+            _kAtriumWallTail;
+        final wallBudget = boardH * _kAtriumWallBudget;
+        final twoRowsFit =
+            hasSecondRow && wallBudget - chromeFor(2) >= floorH * 2;
+        final showSecondRow = hasSecondRow && twoRowsFit;
+        final rows = showSecondRow ? 2 : 1;
+        final budget = wallBudget - chromeFor(rows);
+        final rowBoxH = _stageRailBoxH(
+          context,
+          min(boardH * 0.22, budget / rows),
+          maxH: max(budget / rows, floorH),
+        );
+        final rowUnit = labelH + _kAtriumLabelGap + rowBoxH;
+        final wallH =
+            (showSecondRow ? rowUnit * 2 + _kAtriumRowGap : rowUnit) +
+            _kAtriumWallTail;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // ART COLUMN — the right side only. The trailer layer is laid out
+            // in the same rect, so the punch hole is exactly this box and the
+            // video replaces the art in place with no geometry jump.
+            Positioned(
+              left: splitX,
+              top: 0,
+              right: 0,
+              bottom: 0,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _CanvasArtLayer(
+                    item: _heroItem,
+                    enriched: _heroEnriched,
+                    fav: _canvasFavFocus,
+                  ),
+                  if (_heroTrailerActive)
+                    _HeroTrailerLayer(
+                      trailer: _heroTrailer,
+                      heroHeight: boardH,
+                      fullBleed: true,
+                      volume: _heroTrailerVolume,
+                      loading: _heroTrailerLoading,
+                      onPlayingChanged: _onHeroTrailerPlaying,
+                      takeover: _heroTrailerTakeover,
+                    ),
+                  if (_heroTrailerActive)
+                    _HeroLiveLayer(
+                      channel: _heroLiveChannel,
+                      streamUrl: _heroLiveUrl,
+                      heroHeight: boardH,
+                      fullBleed: true,
+                      volume: _heroTrailerVolume,
+                      onPlayingChanged: _onHeroTrailerPlaying,
+                      onPlaybackFailed: _onHeroLivePlaybackFailed,
+                    ),
+                  const IgnorePointer(
+                    child: _CanvasScrims(variant: _StageScrimVariant.seam),
+                  ),
+                ],
+              ),
+            ),
+            // THE INK PANEL. Opaque: the board's own scaffold turns
+            // transparent while a trailer plays (the shell glass stage), so
+            // the column has to carry its own ground.
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: splitX,
+              child: const ColoredBox(color: kStremioBg),
+            ),
+            // The seam itself — one hairline, so the cut reads as deliberate.
+            Positioned(
+              left: splitX,
+              top: 0,
+              bottom: 0,
+              width: 1,
+              child: ColoredBox(color: Colors.white.withValues(alpha: 0.09)),
+            ),
+            // THE DOSSIER. Never focusable; vertically centred in the column.
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: splitX,
+              child: IgnorePointer(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: _kAtriumPanelPad,
+                    vertical: 32,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ValueListenableBuilder<String?>(
+                        valueListenable: _atriumFocusedRailKey,
+                        builder: (context, key, _) {
+                          final i = key == null
+                              ? active
+                              : rails.indexWhere(
+                                  (r) => _canvasRailKeyOf(r) == key,
+                                );
+                          final title = _canvasTabTitle(
+                            rails,
+                            i < 0 ? active : i,
+                          );
+                          return Text(
+                            title.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2.6,
+                              color: kCardFocusRing,
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 22),
+                      ValueListenableBuilder<_CanvasFavFocus?>(
+                        valueListenable: _canvasFavFocus,
+                        builder: (context, fav, _) => fav != null
+                            ? _StageFavIdentity(fav: fav)
+                            : _CanvasIdentity(
+                                item: _heroItem,
+                                enriched: _heroEnriched,
+                                trailerShowing: _heroTrailerShowing,
+                                // Drop the synopsis rather than clip it when
+                                // the column is short (small board / large
+                                // text scale).
+                                variant:
+                                    boardH - 64 >=
+                                        _stageNarrowIdentityH(context) + 90
+                                    ? _StageIdentityVariant.narrow
+                                    : _StageIdentityVariant.headline,
+                                maxWidth: (splitX - _kAtriumPanelPad * 2).clamp(
+                                  120.0,
+                                  520.0,
+                                ),
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // THE WALL — two rails, stacked, over the art's lower half.
+            Positioned(
+              left: splitX + _kAtriumWallPad,
+              right: _kAtriumWallPad,
+              bottom: 0,
+              height: wallH,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _atriumRow(
+                    rails,
+                    active,
+                    rowBoxH,
+                    isTopRow: true,
+                    hasRowBelow: showSecondRow,
+                  ),
+                  if (showSecondRow) ...[
+                    const SizedBox(height: _kAtriumRowGap),
+                    _atriumRow(
+                      rails,
+                      active + 1,
+                      rowBoxH,
+                      isTopRow: false,
+                      hasRowBelow: false,
+                    ),
+                  ],
+                  const SizedBox(height: _kAtriumWallTail),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// One row of Atrium's wall: a quiet rail label over a horizontal strip of
+  /// the SAME cells every other board uses.
+  Widget _atriumRow(
+    List<_CanvasRail> rails,
+    int index,
+    double rowBoxH, {
+    required bool isTopRow,
+    required bool hasRowBelow,
+  }) {
+    final rail = rails[index];
+    final railKey = _canvasRailKeyOf(rail);
+    final favRail = rail.favKind != null;
+    final items = favRail ? const <StremioMeta>[] : _canvasRailItems(rail);
+    final nodes = _canvasRailNodes(rail);
+    final cardW = favRail
+        ? _stageFavW(context, rowBoxH)
+        : _stagePosterW(rowBoxH);
+    final count = favRail ? _canvasFavItemCount(rail.favKind!) : items.length;
+
+    // The window is [active, active+1]. From the top row UP leaves the
+    // window; from the bottom row DOWN scrolls it on. Crossing between them
+    // is a plain focus request.
+    final onUp = isTopRow
+        ? () => _stageSwitchRail(-1)
+        : () => _atriumFocusRail(index - 1);
+    final onDown = isTopRow
+        ? (hasRowBelow
+              ? () => _atriumFocusRail(index + 1)
+              : (rails.length > index + 1
+                    // Only one row is drawn: DOWN scrolls the window on.
+                    ? () => _stageSwitchRail(1)
+                    : () {
+                  // No lower row YET — remember the move so focus drops into
+                  // it when the batch lands, instead of eating the keypress.
+                        if (_boardHasMore) {
+                          _deferStageAdvance(railKey, fillsLower: true);
+                          _loadMoreBoard();
+                        }
+                      }))
+        : _atriumAdvance;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _canvasTabTitle(rails, index).toUpperCase(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: _kAtriumLabelFontSize,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.6,
+            color: Colors.white.withValues(alpha: 0.86),
+            shadows: const [Shadow(color: Color(0x99000000), blurRadius: 6)],
+          ),
+        ),
+        const SizedBox(height: _kAtriumLabelGap),
+        SizedBox(
+          height: rowBoxH,
+          child: ListView.builder(
+            // Keyed by rail IDENTITY, never index.
+            key: ValueKey('atrium-rail-$railKey'),
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.hardEdge,
+            cacheExtent: 400,
+            itemCount: count,
+            itemBuilder: (context, col) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+              child: Center(
+                child: SizedBox(
+                  width: cardW,
+                  child: favRail
+                      ? _canvasFavCell(
+                          rail.favKind!,
+                          railKey,
+                          col,
+                          onUp: () {
+                            _atriumFocusedRailKey.value = railKey;
+                            onUp();
+                          },
+                          onDown: () {
+                            _atriumFocusedRailKey.value = railKey;
+                            onDown();
+                          },
+                        )
+                      : SizedBox(
+                          height: rowBoxH,
+                          child: _BoardCell(
+                            item: items[col],
+                            isTelevision: true,
+                            focusNode: nodes[col],
+                            column: col,
+                            rowNodes: nodes,
+                            hasBoundSource: _isBound(items[col]),
+                            ringColor: Colors.white,
+                            progress: rail.cw?.progressOf(items[col]),
+                            episodeLabel: rail.cw?.episodeOf(items[col]),
+                            onQuickPlay: rail.cw != null || _pikpakOnly
+                                ? null
+                                : () => _onCatalogPlay(
+                                    items[col],
+                                    _sections[rail.sectionIndex!].addon,
+                                  ),
+                            onLongPress: rail.cw == null
+                                ? null
+                                : () => _openCwCardMenu(
+                                    rail.cw!,
+                                    items[col],
+                                    rail.cwIndex,
+                                    col,
+                                  ),
+                            onFocused: () {
+                              _setHero(items[col]);
+                              _canvasCols[railKey] = col;
+                              _atriumFocusedRailKey.value = railKey;
+                            },
+                            onUp: onUp,
+                            onDown: onDown,
+                            onOpen: () {
+                              if (rail.cw != null) {
+                                rail.cw!.onOpen(items[col]);
+                              } else {
+                                _openItem(
+                                  items[col],
+                                  _sections[rail.sectionIndex!].addon,
+                                );
+                              }
+                            },
+                            onNearEnd: rail.sectionIndex == null
+                                ? null
+                                : () => _loadMoreRow(rail.sectionIndex!),
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── MOSAIC view ──────────────────────────────────────────────────────────
+
+  /// MOSAIC: no hero at all. The active rail becomes a WALL of posters on a
+  /// heavily veiled wash of the focused title's art, with the identity moved
+  /// to a fixed top band. The cheapest layout on the list: one image, one
+  /// flat veil, one grid — and no ambient video (see [_stageWantsAmbient]),
+  /// which is why it stays smooth on weak TV hardware.
+  Widget _buildMosaicBoard() {
+    final view = _resolveStageRail();
+    if (view == null) {
+      return BrandLoadingStage(isTelevision: widget.isTelevision);
+    }
+    _seedStageFocusOnce();
+    final rail = view.rail;
+    final railKey = view.key;
+    final favRail = rail.favKind != null;
+    final items = view.items;
+    final nodes = view.nodes;
+    final count = favRail ? _canvasFavItemCount(rail.favKind!) : items.length;
+
+    return LayoutBuilder(
+      builder: (context, cons) {
+        final boardW = cons.maxWidth;
+        final boardH = cons.maxHeight;
+        // Never negative: a board narrower than its own padding would make
+        // every derived width negative and trip a layout assertion.
+        final gridW = max(1.0, boardW - _kMosaicPadX * 2);
+        // Aim for a poster about a third of the board's height, then take
+        // whatever whole number of columns actually FITS — as few as one.
+        final targetW = max(1.0, (boardH * 0.30) * 2 / 3);
+        final perRow = (gridW / (targetW + _kMosaicGap)).floor().clamp(1, 8);
+        final cellW = max(1.0, (gridW - (perRow - 1) * _kMosaicGap) / perRow);
+        // A grid only ever shows ONE rail, and a rail is homogeneous — so the
+        // extent is exactly what that kind needs: a poster, plus the caption
+        // band only when the cells actually carry one.
+        final extent =
+            cellW * 3 / 2 + (favRail ? _artPosterCaptionBand(context) : 0);
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            _CanvasArtLayer(
+              item: _heroItem,
+              enriched: _heroEnriched,
+              fav: _canvasFavFocus,
+            ),
+            // Constant veil. It SNAPS (no tween): a full-screen gradient
+            // tween is the single most expensive thing this board could do.
+            // While a favourite CHANNEL is previewing, the veil lifts so the
+            // live picture is actually visible behind the wall.
+            ValueListenableBuilder<IptvChannel?>(
+              valueListenable: _heroLiveChannel,
+              builder: (context, live, _) => IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: live == null
+                        ? const Color(0xDE0D0B1A)
+                        : const Color(0x9E0D0B1A),
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
+            // The live feed sits ABOVE the veil (a veiled video is a waste of
+            // a decoder) with its own lighter scrim for the grid's sake.
+            if (_heroTrailerActive)
+              _HeroLiveLayer(
+                channel: _heroLiveChannel,
+                streamUrl: _heroLiveUrl,
+                heroHeight: boardH,
+                fullBleed: true,
+                volume: _heroTrailerVolume,
+                onPlayingChanged: _onHeroTrailerPlaying,
+                onPlaybackFailed: _onHeroLivePlaybackFailed,
+              ),
+            ValueListenableBuilder<IptvChannel?>(
+              valueListenable: _heroLiveChannel,
+              builder: (context, live, _) => IgnorePointer(
+                child: live == null
+                    ? const SizedBox.shrink()
+                    : const DecoratedBox(
+                        decoration: BoxDecoration(color: Color(0x8C0D0B1A)),
+                        child: SizedBox.expand(),
+                      ),
+              ),
+            ),
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment(-0.85, -0.95),
+                    radius: 1.25,
+                    colors: [Color(0x2E7B5CFF), Color(0x000D0B1A)],
+                    stops: [0.0, 0.62],
+                  ),
+                ),
+                child: SizedBox.expand(),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: _kMosaicPadX),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: _kMosaicHeadTop),
+                  // Identity band: the wall's only chrome. Fixed height so
+                  // the grid below it never shifts as titles change.
+                  SizedBox(
+                    height: _mosaicHeadHeight(context),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: ValueListenableBuilder<_CanvasFavFocus?>(
+                            valueListenable: _canvasFavFocus,
+                            builder: (context, fav, _) => Align(
+                              alignment: Alignment.bottomLeft,
+                              child: fav != null
+                                  ? _StageFavIdentity(fav: fav)
+                                  : _CanvasIdentity(
+                                      item: _heroItem,
+                                      enriched: _heroEnriched,
+                                      trailerShowing: _heroTrailerShowing,
+                                      variant: _StageIdentityVariant.headline,
+                                      maxWidth: max(1.0, gridW * 0.5),
+                                    ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 32),
+                        // The windowed TAB STRIP needs the full board width
+                        // to show useful context; here it shares a row with
+                        // the identity and collapses to a single slot, which
+                        // is both cramped and (before the window fix) the
+                        // wrong rail. The compact label says the same thing
+                        // in a fraction of the width and is correct by
+                        // construction: it names the ACTIVE rail and its
+                        // position among all of them.
+                        Flexible(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _promenadeLabel(
+                                  view,
+                                  align: MainAxisAlignment.end,
+                                ),
+                                if (view.rails.length > 1) ...[
+                                  const SizedBox(height: 8),
+                                  // The grid can page for as long as the
+                                  // catalog has more, so "walk to the last
+                                  // line" is not a way out of it. The hold
+                                  // gesture is the way out, and a gesture
+                                  // nothing announces may as well not exist.
+                                  Text(
+                                    'HOLD ▲▼ TO CHANGE ROW',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.4,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.34,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: _kMosaicHeadGap),
+                  Expanded(
+                    child: GridView.builder(
+                      // Keyed by rail IDENTITY: a rail streaming in above the
+                      // active one must never swap the wall's contents.
+                      key: ValueKey('mosaic-rail-$railKey'),
+                      padding: const EdgeInsets.only(bottom: 24),
+                      clipBehavior: Clip.hardEdge,
+                      cacheExtent: 600,
+                      gridDelegate:
+                          SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: perRow,
+                            crossAxisSpacing: _kMosaicGap,
+                            mainAxisSpacing: _kMosaicGap,
+                            mainAxisExtent: extent,
+                          ),
+                      itemCount: count,
+                      itemBuilder: (context, col) => Center(
+                        child: SizedBox(
+                          width: cellW,
+                          child: _mosaicCell(
+                            rail,
+                            railKey,
+                            items,
+                            nodes,
+                            col,
+                            count,
+                            perRow,
+                            cellW,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// One wall cell. The grid overrides all four arrows: LEFT hands off to the
+  /// sidebar only at a ROW edge (a grid's leftmost cell is not column 0, so
+  /// the row grammar would leave the sidebar unreachable from every row but
+  /// the first), and UP/DOWN step a whole row before falling through to rail
+  /// switching.
+  Widget _mosaicCell(
+    _CanvasRail rail,
+    String railKey,
+    List<StremioMeta> items,
+    List<FocusNode> nodes,
+    int col,
+    int count,
+    int perRow,
+    double cellW,
+  ) {
+    final atRowStart = col % perRow == 0;
+    // Prefetch two rows out, the grid equivalent of the row's six-cards rule.
+    void prefetch() {
+      if (rail.sectionIndex != null && col >= count - perRow * 2) {
+        _loadMoreRow(rail.sectionIndex!);
+      }
+    }
+
+    void focusAt(int target) {
+      if (target < 0 || target >= nodes.length) return;
+      nodes[target].requestFocus();
+    }
+
+    final onLeft = atRowStart
+        ? () => MainPageBridge.focusTvSidebar?.call()
+        : () => focusAt(col - 1);
+    // RIGHT always advances while a cell exists — wrapping onto the next
+    // grid line, the way a wall of posters reads. Stopping at the visual row
+    // end would strand every cell past it behind DOWN alone.
+    final onRight = () {
+      prefetch();
+      if (col + 1 < nodes.length) {
+        focusAt(col + 1);
+      } else if (rail.sectionIndex != null) {
+        // At the very end with a page in flight: remember the move so it
+        // completes when the cells land.
+        _deferStageRight(railKey, col);
+      }
+    };
+    final onUp = col - perRow >= 0
+        ? () {
+            if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
+            focusAt(col - perRow);
+          }
+        : () {
+            if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
+            _stageSwitchRail(-1);
+          };
+    // DOWN steps a whole line, and at the LAST line always leaves for the
+    // next rail (prefetching on the way out, so coming back finds more).
+    // Consuming DOWN to paginate would trap the user inside a long catalog.
+    final onDown = () {
+      if (_stageHoldSwallow(LogicalKeyboardKey.arrowDown)) return;
+      if (col + perRow < count) {
+        prefetch();
+        focusAt(col + perRow);
+        return;
+      }
+      prefetch();
+      _stageSwitchRail(1);
+    };
+    // A catalog keeps paging for as long as it has more, so the last grid
+    // line is a moving target and DOWN alone can never reliably reach the
+    // next rail. HOLDING the key changes rail from anywhere in the grid.
+    final onUpHold = () => _stageHoldJump(LogicalKeyboardKey.arrowUp, () {
+      _stageSwitchRail(-1);
+      return true;
+    });
+    final onDownHold = () => _stageHoldJump(LogicalKeyboardKey.arrowDown, () {
+      _stageSwitchRail(1);
+      return true;
+    });
+
+    if (rail.favKind != null) {
+      return _canvasFavCell(
+        rail.favKind!,
+        railKey,
+        col,
+        onUp: onUp,
+        onDown: onDown,
+        onLeft: onLeft,
+        onRight: onRight,
+        onUpHold: onUpHold,
+        onDownHold: onDownHold,
+      );
+    }
+    final item = items[col];
+    return SizedBox(
+      height: cellW * 3 / 2,
+      child: _BoardCell(
+        item: item,
+        isTelevision: true,
+        focusNode: nodes[col],
+        column: col,
+        rowNodes: nodes,
+        hasBoundSource: _isBound(item),
+        ringColor: Colors.white,
+        progress: rail.cw?.progressOf(item),
+        episodeLabel: rail.cw?.episodeOf(item),
+        onQuickPlay: rail.cw != null || _pikpakOnly
+            ? null
+            : () => _onCatalogPlay(item, _sections[rail.sectionIndex!].addon),
+        onLongPress: rail.cw == null
+            ? null
+            : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
+        onFocused: () {
+          _setHero(item);
+          _canvasCols[railKey] = col;
+        },
+        onUp: onUp,
+        onDown: onDown,
+        onUpHold: onUpHold,
+        onDownHold: onDownHold,
+        onLeft: onLeft,
+        onRight: onRight,
+        onOpen: () {
+          if (rail.cw != null) {
+            rail.cw!.onOpen(item);
+          } else {
+            _openItem(item, _sections[rail.sectionIndex!].addon);
+          }
+        },
+      ),
+    );
+  }
+
+  // ── DECK view ────────────────────────────────────────────────────────────
+
+  /// DECK: the trailer stops being wallpaper and becomes an OBJECT — a
+  /// rounded 16:9 card floating on ink with the next two titles stacked
+  /// behind it. The hole follows the card's laid-out rect (Canvas proved that
+  /// needs no native work); the rounded corners are four ink wedges painted
+  /// ABOVE the layers, because a clip would put a saveLayer over the hole.
+  Widget _buildDeckBoard() {
+    final view = _resolveStageRail();
+    if (view == null) {
+      return BrandLoadingStage(isTelevision: widget.isTelevision);
+    }
+    _seedStageFocusOnce();
+    final rail = view.rail;
+    final railKey = view.key;
+    final favRail = rail.favKind != null;
+    final items = view.items;
+    final nodes = view.nodes;
+    final count = favRail ? _canvasFavItemCount(rail.favKind!) : items.length;
+
+    return LayoutBuilder(
+      builder: (context, cons) {
+        final boardW = cons.maxWidth;
+        final boardH = cons.maxHeight;
+        // RESERVE THE RAIL FIRST, then let the card have what is left — the
+        // other way round, a tall card on a short board silently pushes the
+        // rail off the bottom edge.
+        final railBoxH = _stageRailBoxH(
+          context,
+          boardH * 0.24,
+          maxH: boardH * 0.34,
+        );
+        final railZoneH =
+            _atriumLabelHeight(context) +
+            _kAtriumLabelGap +
+            railBoxH +
+            _kDeckRailTail;
+        final cardTop = boardH * 0.11;
+        // The TRUE remainder — never clamped up, which would hand the card
+        // height the rail has already been promised.
+        var cardH = max(0.0, boardH - cardTop - railZoneH - _kDeckRailGap);
+        var cardW = cardH * 16 / 9;
+        final maxCardW = boardW * 0.56;
+        if (cardW > maxCardW) {
+          cardW = maxCardW;
+          cardH = cardW * 9 / 16;
+        }
+        final cardLeft = boardW - cardW - _kDeckCardRightPad;
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // Constant ground — a single radial, never tweened.
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment(0.55, -0.35),
+                    radius: 1.15,
+                    colors: [Color(0xFF1B1730), Color(0xFF0C0A16), Color(0xFF08070F)],
+                    stops: [0.0, 0.62, 1.0],
+                  ),
+                ),
+                child: SizedBox.expand(),
+              ),
+            ),
+            // The deck's two peek cards — STATIC art of the next two titles
+            // on this rail. Never a second video: one engine, one card.
+            // Listens to the focused column so the stack DEALS as you move;
+            // only this subtree rebuilds.
+            ValueListenableBuilder<int>(
+              valueListenable: _stageCol,
+              builder: (context, focusedCol, _) => Stack(
+                children: _deckPeeks(
+                  items: items,
+                  favRail: favRail,
+                  focused: focusedCol,
+                  left: cardLeft,
+                  top: cardTop,
+                  width: cardW,
+                  height: cardH,
+                ),
+              ),
+            ),
+            // THE CARD.
+            Positioned(
+              left: cardLeft,
+              top: cardTop,
+              width: cardW,
+              height: cardH,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _CanvasArtLayer(
+                    item: _heroItem,
+                    enriched: _heroEnriched,
+                    fav: _canvasFavFocus,
+                  ),
+                  if (_heroTrailerActive)
+                    _HeroTrailerLayer(
+                      trailer: _heroTrailer,
+                      heroHeight: cardH,
+                      fullBleed: true,
+                      volume: _heroTrailerVolume,
+                      loading: _heroTrailerLoading,
+                      onPlayingChanged: _onHeroTrailerPlaying,
+                      takeover: _heroTrailerTakeover,
+                    ),
+                  if (_heroTrailerActive)
+                    _HeroLiveLayer(
+                      channel: _heroLiveChannel,
+                      streamUrl: _heroLiveUrl,
+                      heroHeight: cardH,
+                      fullBleed: true,
+                      volume: _heroTrailerVolume,
+                      onPlayingChanged: _onHeroTrailerPlaying,
+                      onPlaybackFailed: _onHeroLivePlaybackFailed,
+                    ),
+                  // Rounded corners WITHOUT a clip: four ink wedges painted
+                  // over the layers. A ClipRRect here would wrap the punch
+                  // hole in a saveLayer and break the blend.
+                  IgnorePointer(
+                    child: CustomPaint(
+                      painter: const _CornerWedges(
+                        radius: _kDeckCardRadius,
+                        color: Color(0xFF0C0A16),
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                  // A hairline inside the wedges reads as the card's edge.
+                  IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(_kDeckCardRadius),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.10),
+                          width: 1,
+                        ),
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // IDENTITY column, left of the card.
+            Positioned(
+              left: _kDeckPanelPad,
+              top: 0,
+              width: (cardLeft - _kDeckPanelPad - 40).clamp(140.0, 560.0),
+              bottom: railZoneH,
+              child: IgnorePointer(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ValueListenableBuilder<_CanvasFavFocus?>(
+                    valueListenable: _canvasFavFocus,
+                    builder: (context, fav, _) => fav != null
+                        ? _StageFavIdentity(fav: fav)
+                        : _CanvasIdentity(
+                            item: _heroItem,
+                            enriched: _heroEnriched,
+                            trailerShowing: _heroTrailerShowing,
+                            variant:
+                                boardH - railZoneH >=
+                                    _stageNarrowIdentityH(context)
+                                ? _StageIdentityVariant.narrow
+                                : _StageIdentityVariant.headline,
+                            maxWidth: (cardLeft - _kDeckPanelPad - 40).clamp(
+                              140.0,
+                              560.0,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ),
+            // The rail. Recedes with the lights in theater, cells still
+            // MOUNTED so focus survives.
+            Positioned(
+              left: _kDeckPanelPad,
+              right: 0,
+              bottom: 0,
+              child: AnimatedSlide(
+                offset: _canvasTheater ? const Offset(0, 0.12) : Offset.zero,
+                duration: _canvasTheater
+                    ? const Duration(milliseconds: 900)
+                    : const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                child: AnimatedOpacity(
+                  opacity: _canvasTheater ? 0.0 : 1.0,
+                  duration: _canvasTheater
+                      ? const Duration(milliseconds: 900)
+                      : const Duration(milliseconds: 250),
+                  curve: Curves.easeOut,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(right: _kDeckPanelPad),
+                        child: _deckRailLabel(view),
+                      ),
+                      const SizedBox(height: _kAtriumLabelGap),
+                      SizedBox(
+                        height: railBoxH,
+                        child: ListView.builder(
+                          key: ValueKey('deck-rail-$railKey'),
+                          scrollDirection: Axis.horizontal,
+                          clipBehavior: Clip.hardEdge,
+                          cacheExtent: 400,
+                          itemCount: count,
+                          itemBuilder: (context, col) => Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 7),
+                            child: Center(
+                              child: SizedBox(
+                                width: favRail
+                                    ? _stageFavW(context, railBoxH)
+                                    : _stagePosterW(railBoxH),
+                                child: favRail
+                                    ? _canvasFavCell(
+                                        rail.favKind!,
+                                        railKey,
+                                        col,
+                                      )
+                                    : SizedBox(
+                                        height: railBoxH,
+                                        child: _stageShelfCell(
+                                          rail,
+                                          railKey,
+                                          items,
+                                          nodes,
+                                          col,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: _kDeckRailTail),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Deck's rail label — the same quiet caps as Atrium's rows, with the
+  /// stacked chevron pair that says UP/DOWN changes rails.
+  Widget _deckRailLabel(_StageRailView view) => Row(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.keyboard_arrow_up_rounded,
+            size: 13,
+            color: Colors.white.withValues(alpha: 0.45),
+          ),
+          Transform.translate(
+            offset: const Offset(0, -5),
+            child: Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 13,
+              color: Colors.white.withValues(alpha: 0.45),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(width: 12),
+      Flexible(
+        child: Text(
+          _canvasTabTitle(view.rails, view.index).toUpperCase(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: _kAtriumLabelFontSize,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.8,
+            color: Colors.white.withValues(alpha: 0.86),
+          ),
+        ),
+      ),
+    ],
+  );
+
+  /// The two cards stacked behind the hero — the NEXT two titles on this
+  /// rail, drawn from the focused column so moving along the rail deals them
+  /// forward. Static art, no focus, no video.
+  List<Widget> _deckPeeks({
+    required List<StremioMeta> items,
+    required bool favRail,
+    required int focused,
+    required double left,
+    required double top,
+    required double width,
+    required double height,
+  }) {
+    // Favourites rails have no StremioMeta to draw from — the deck simply
+    // shows the single card, which is correct: a favourite has no "next".
+    if (favRail || items.isEmpty) return const [];
+    final at = focused.clamp(0, items.length - 1);
+    final peeks = <Widget>[];
+    // Painted far-to-near so the nearer card overlaps the farther one.
+    for (final spec in const [
+      (step: 2, dx: 0.19, scale: 0.87, alpha: 0.30),
+      (step: 1, dx: 0.10, scale: 0.94, alpha: 0.52),
+    ]) {
+      final i = at + spec.step;
+      if (i >= items.length) continue;
+      final art = _wideArtUrl(items[i]);
+      if (art == null || art.isEmpty) continue;
+      peeks.add(
+        Positioned(
+          left: left,
+          top: top,
+          width: width,
+          height: height,
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: spec.alpha,
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+              child: AnimatedSlide(
+                offset: Offset(spec.dx, 0),
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                child: Transform.scale(
+                  scale: spec.scale,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(_kDeckCardRadius),
+                    child: CachedNetworkImage(
+                      key: ValueKey('deck-peek-${spec.step}-$art'),
+                      imageUrl: art,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 480,
+                      fadeInDuration: Duration.zero,
+                      fadeOutDuration: Duration.zero,
+                      errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return peeks;
+  }
+
+  /// The shared poster shelf cell (Canvas grammar: L/R along the rail, U/D
+  /// switches rails) — used by Deck and Tonight's bottom strip.
+  Widget _stageShelfCell(
+    _CanvasRail rail,
+    String railKey,
+    List<StremioMeta> items,
+    List<FocusNode> nodes,
+    int col, {
+    VoidCallback? onUp,
+    VoidCallback? onDown,
+    VoidCallback? onUpHold,
+    VoidCallback? onDownHold,
+    VoidCallback? onFocusedExtra,
+  }) {
+    final item = items[col];
+    return _BoardCell(
+      item: item,
+      isTelevision: true,
+      focusNode: nodes[col],
+      column: col,
+      rowNodes: nodes,
+      hasBoundSource: _isBound(item),
+      ringColor: Colors.white,
+      progress: rail.cw?.progressOf(item),
+      episodeLabel: rail.cw?.episodeOf(item),
+      onQuickPlay: rail.cw != null || _pikpakOnly
+          ? null
+          : () => _onCatalogPlay(item, _sections[rail.sectionIndex!].addon),
+      onLongPress: rail.cw == null
+          ? null
+          : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
+      onFocused: () {
+        _setHero(item);
+        _canvasCols[railKey] = col;
+        _stageCol.value = col;
+        onFocusedExtra?.call();
+      },
+      onUp: onUp ?? () => _stageSwitchRail(-1),
+      onDown: onDown ?? () => _stageSwitchRail(1),
+      onUpHold: onUpHold,
+      onDownHold: onDownHold,
+      onOpen: () {
+        if (rail.cw != null) {
+          rail.cw!.onOpen(item);
+        } else {
+          _openItem(item, _sections[rail.sectionIndex!].addon);
+        }
+      },
+      onNearEnd: rail.sectionIndex == null
+          ? null
+          : () => _loadMoreRow(rail.sectionIndex!),
+    );
+  }
+
+  // ── TONIGHT view ─────────────────────────────────────────────────────────
+
+  String _tonightQueueKeyOf(_TonightQueueEntry e) =>
+      '${_canvasRailKeyOf(e.rail)}#${e.col}';
+
+  /// Where the remembered queue row sits NOW. Identity first (CW rows stream
+  /// in and prepend, so a raw index would silently point at another title),
+  /// the remembered index only as a fallback.
+  int _resolveTonightQueueIndex(List<_TonightQueueEntry> queue) {
+    if (queue.isEmpty) return 0;
+    final key = _tonightQueueKey;
+    if (key != null) {
+      final i = queue.indexWhere((e) => _tonightQueueKeyOf(e) == key);
+      if (i >= 0) return i;
+    }
+    return _tonightQueueCol.clamp(0, queue.length - 1);
+  }
+
+  bool _tonightFocusQueue() {
+    final queue = _tonightQueue;
+    if (queue.isEmpty) return false;
+    final e = queue[_resolveTonightQueueIndex(queue)];
+    var node = _nearestMountedNode(e.rail.cw!.nodes, e.col);
+    // The remembered row may have scrolled out of the lazy list's mounted
+    // range (CW rows stream in and prepend). Fall back to the FIRST queue
+    // entry, which is always built, rather than failing the jump.
+    if (node == null && queue.isNotEmpty) {
+      final first = queue.first;
+      node = _nearestMountedNode(first.rail.cw!.nodes, first.col);
+      if (node != null) {
+        _tonightQueueCol = 0;
+        _tonightQueueKey = _tonightQueueKeyOf(first);
+      }
+    }
+    if (node == null) return false;
+    _tonightZoneIsQueue = true;
+    node.requestFocus();
+    return true;
+  }
+
+  bool _tonightFocusRail() {
+    final node = () {
+      final rails = _stageRails;
+      if (rails.isEmpty) return null;
+      final rail = rails[_resolveCanvasRailIndex(rails)];
+      return _nearestMountedNode(
+        _canvasRailNodes(rail),
+        _canvasCols[_canvasRailKeyOf(rail)] ?? 0,
+      );
+    }();
+    if (node == null) return false;
+    _tonightZoneIsQueue = false;
+    node.requestFocus();
+    return true;
+  }
+
+  /// TONIGHT: resume-first. A large card carries whatever has focus, a
+  /// vertical Continue queue stands beside it, and one rail runs underneath.
+  /// UP/DOWN walks the two zones as a single column, so the Continue rows sit
+  /// "above" the first rail exactly as they read.
+  Widget _buildTonightBoard() {
+    final queue = _tonightQueue;
+    final rails = _stageRails;
+    if (queue.isEmpty && rails.isEmpty) {
+      return BrandLoadingStage(isTelevision: widget.isTelevision);
+    }
+    // A zone that no longer exists can't hold focus.
+    if (_tonightZoneIsQueue && queue.isEmpty) _tonightZoneIsQueue = false;
+    if (!_tonightZoneIsQueue && rails.isEmpty) _tonightZoneIsQueue = true;
+    final view = rails.isEmpty ? null : _resolveStageRail();
+    _seedStageFocusOnce();
+
+    return LayoutBuilder(
+      builder: (context, cons) {
+        final boardW = cons.maxWidth;
+        final boardH = cons.maxHeight;
+
+        // ── Geometry, derived bottom-up. The rail zone is reserved FIRST,
+        // then the main zone takes what is left, then the card and the queue
+        // rows are sized from that — so nothing can overlap on a short board.
+        final labelH = _atriumLabelHeight(context);
+        final double railBoxH = rails.isEmpty
+            ? 0
+            : _stageRailBoxH(context, boardH * 0.21, maxH: boardH * 0.30);
+        final double railZoneH = rails.isEmpty
+            ? 0
+            : labelH + _kAtriumLabelGap + railBoxH + _kTonightRailTail;
+        final headerH = _tonightHeaderHeight(context);
+        // The TRUE remainder: clamping this up would re-spend the header's and
+        // the rail's reserved height and push them off the board.
+        final mainH = max(0.0, boardH - headerH - railZoneH - _kTonightZoneGap);
+
+        var cardH = mainH;
+        var cardW = cardH * 16 / 9;
+        final maxCardW = boardW * 0.58;
+        if (cardW > maxCardW) {
+          cardW = maxCardW;
+          cardH = cardW * 9 / 16;
+        }
+        // The queue is the whole point of Tonight, so a board too narrow to
+        // hold both shrinks the CARD, never the queue. Only a board narrower
+        // than roughly a card floor plus the queue's minimum drops it — and
+        // then only when there is a rail left to hold focus.
+        if (queue.isNotEmpty) {
+          final maxWithQueue =
+              boardW -
+              _kTonightPadX * 2 -
+              _kTonightZoneGap -
+              _kTonightQueueMinW;
+          if (cardW > maxWithQueue) {
+            // Shrink toward the queue, but NEVER widen past what the vertical
+            // remainder allows — a wider card is a taller card, and that
+            // height belongs to the rail.
+            cardW = min(max(maxWithQueue, boardW * 0.34), mainH * 16 / 9);
+            cardH = cardW * 9 / 16;
+          }
+        }
+        // How many rows actually FIT — never a fixed four.
+        // What a row actually needs at this text scale: two lines of type,
+        // the progress bar, their gaps and the row's own padding. Below one
+        // of these the queue simply isn't drawn — a 1px row would overflow.
+        final rowMinH = _tonightRowMinHeight(context);
+        // Zero rows is allowed — but never when the queue is the ONLY thing
+        // that could hold focus, or the board would have nothing focusable.
+        final minRows = (rails.isEmpty && queue.isNotEmpty) ? 1 : 0;
+        final visibleRows = (mainH / (rowMinH + _kTonightRowGap)).floor().clamp(
+          minRows,
+          4,
+        );
+        final queueW = (boardW - cardW - _kTonightPadX * 2 - _kTonightZoneGap)
+            .clamp(0.0, boardW);
+        // Never leave the board with nothing focusable: if the queue can't be
+        // drawn and there is no rail either, draw it anyway.
+        // With no rail beneath it the queue is the ONLY focusable zone, so
+        // it takes the whole board and the card steps aside entirely rather
+        // than squeezing it to nothing.
+        final queueOnly = rails.isEmpty && queue.isNotEmpty;
+        final effQueueW = queueOnly
+            ? max(1.0, boardW - _kTonightPadX * 2)
+            : queueW;
+        final showQueue =
+            queue.isNotEmpty &&
+            visibleRows > 0 &&
+            (queueOnly || effQueueW >= _kTonightQueueMinW) &&
+            effQueueW > 0;
+        // A zone that isn't on screen must not be the one holding focus.
+        if (!showQueue && rails.isNotEmpty) _tonightZoneIsQueue = false;
+        // Never taller than the share it actually has: the row height is the
+        // MIN of what looks right and what fits.
+        final rowH = visibleRows == 0
+            ? 0.0
+            : min(
+                max(
+                  (mainH - (visibleRows - 1) * _kTonightRowGap) / visibleRows,
+                  rowMinH,
+                ),
+                _kTonightRowMaxH,
+              );
+        final queueBoxH = visibleRows == 0
+            ? 0.0
+            : (rowH * visibleRows + _kTonightRowGap * (visibleRows - 1)).clamp(
+                0.0,
+                mainH,
+              );
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // Constant ground — one gradient, never tweened.
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF161227),
+                      Color(0xFF0E0C1B),
+                      Color(0xFF0A0813),
+                    ],
+                    stops: [0.0, 0.46, 1.0],
+                  ),
+                ),
+                child: SizedBox.expand(),
+              ),
+            ),
+            Positioned(
+              left: _kTonightPadX,
+              right: _kTonightPadX,
+              top: 0,
+              height: headerH,
+              child: _tonightHeader(queue.length),
+            ),
+            // THE CARD — art, trailer and live all in this rect, so the punch
+            // hole is exactly the card. Stood down in queue-only mode, where
+            // the queue owns the board.
+            if (!(queueOnly && showQueue))
+              Positioned(
+              left: _kTonightPadX,
+              top: headerH,
+              width: cardW,
+              height: cardH,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _CanvasArtLayer(
+                    item: _heroItem,
+                    enriched: _heroEnriched,
+                    fav: _canvasFavFocus,
+                  ),
+                  if (_heroTrailerActive)
+                    _HeroTrailerLayer(
+                      trailer: _heroTrailer,
+                      heroHeight: cardH,
+                      fullBleed: true,
+                      volume: _heroTrailerVolume,
+                      loading: _heroTrailerLoading,
+                      onPlayingChanged: _onHeroTrailerPlaying,
+                      takeover: _heroTrailerTakeover,
+                    ),
+                  if (_heroTrailerActive)
+                    _HeroLiveLayer(
+                      channel: _heroLiveChannel,
+                      streamUrl: _heroLiveUrl,
+                      heroHeight: cardH,
+                      fullBleed: true,
+                      volume: _heroTrailerVolume,
+                      onPlayingChanged: _onHeroTrailerPlaying,
+                      onPlaybackFailed: _onHeroLivePlaybackFailed,
+                    ),
+                  // Legibility ramp + the caption block, painted ABOVE the
+                  // hole (plain draws only).
+                  const IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Color(0xF00A0810),
+                            Color(0xA00A0810),
+                            Color(0x000A0810),
+                          ],
+                          stops: [0.0, 0.30, 0.68],
+                        ),
+                      ),
+                      child: SizedBox.expand(),
+                    ),
+                  ),
+                  IgnorePointer(
+                    child: CustomPaint(
+                      painter: const _CornerWedges(
+                        radius: _kTonightCardRadius,
+                        color: Color(0xFF100D1F),
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                  Positioned(
+                    left: 24,
+                    right: 24,
+                    bottom: 20,
+                    child: IgnorePointer(
+                      child: _TonightCardCaption(
+                        item: _heroItem,
+                        enriched: _heroEnriched,
+                        fav: _canvasFavFocus,
+                        info: _tonightCard,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // THE QUEUE.
+            if (showQueue)
+              Positioned(
+                left: queueOnly
+                    ? _kTonightPadX
+                    : _kTonightPadX + cardW + _kTonightZoneGap,
+                top: headerH,
+                width: effQueueW,
+                height: max(rowH, queueBoxH),
+                child: _tonightQueueList(
+                  queue,
+                  rowH,
+                  effQueueW,
+                  rails.isNotEmpty,
+                ),
+              ),
+            // THE RAIL.
+            if (view != null)
+              Positioned(
+                left: _kTonightPadX,
+                right: 0,
+                bottom: 0,
+                child: _tonightRail(
+                  view,
+                  railBoxH,
+                  queueAbove: queue.isNotEmpty && showQueue,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// A queue row's true minimum at the current text scale: title + episode +
+  /// their gaps + the progress bar + the row's vertical padding.
+  double _tonightRowMinHeight(BuildContext context) {
+    final t = MediaQuery.textScalerOf(context);
+    return t.scale(13.5) * 1.25 +
+        5 +
+        t.scale(11.5) * 1.25 +
+        9 +
+        4 +
+        20 +
+        4;
+  }
+
+  double _tonightHeaderHeight(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(_kTonightTitleSize) * 1.35 +
+      _kTonightHeaderPad;
+
+  Widget _tonightHeader(int inProgress) {
+    final now = DateTime.now();
+    const days = [
+      'MONDAY',
+      'TUESDAY',
+      'WEDNESDAY',
+      'THURSDAY',
+      'FRIDAY',
+      'SATURDAY',
+      'SUNDAY',
+    ];
+    // A weekday word, not a clock: a minute-accurate label would need a timer
+    // ticking on the home board for the whole session.
+    final day = days[(now.weekday - 1).clamp(0, 6)];
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            const Text(
+              'Tonight',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: _kTonightTitleSize,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.4,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Text(
+              day,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.40),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 2.2,
+              ),
+            ),
+            const Spacer(),
+            if (inProgress > 0)
+              Text(
+                '$inProgress IN PROGRESS',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.40),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2.2,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tonightQueueList(
+    List<_TonightQueueEntry> queue,
+    double rowH,
+    double queueW,
+    bool hasRail,
+  ) {
+    // The thumb is capped by the row's WIDTH, not just its height. Sized
+    // purely as `rowH * 16/9` it ate two thirds of a narrow queue and left
+    // the title about ten characters — "Orange Is t…". Whatever is left of
+    // 16:9 after this cap, BoxFit.cover crops.
+    final thumbW = min(rowH * 16 / 9, queueW * _kTonightThumbShare);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Expanded(
+          child: ListView.builder(
+            key: const ValueKey('tonight-queue'),
+            padding: EdgeInsets.zero,
+            clipBehavior: Clip.hardEdge,
+            itemCount: queue.length,
+            itemExtent: rowH + _kTonightRowGap,
+            itemBuilder: (context, i) {
+              final e = queue[i];
+              final cw = e.rail.cw!;
+              final item = cw.items[e.col];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: _kTonightRowGap),
+                child: _TonightQueueRow(
+                  item: item,
+                  height: rowH,
+                  thumbWidth: thumbW,
+                  focusNode: cw.nodes[e.col],
+                  episode: cw.episodeOf(item),
+                  progress: cw.progressOf(item),
+                  hasBoundSource: _isBound(item),
+                  onFocused: () {
+                    _tonightZoneIsQueue = true;
+                    _tonightQueueCol = i;
+                    _tonightQueueKey = _tonightQueueKeyOf(e);
+                    _tonightCard.value = _TonightCardInfo(
+                      // OK opens the detail page for a Continue Watching card
+                      // everywhere in the app; the HOLD menu is what resumes.
+                      action: 'Open',
+                      // HOLD opens the card menu (Play / Remove) — not a
+                      // direct resume, so it is named for what it is.
+                      holdAction: 'Options',
+                      episode: cw.episodeOf(item),
+                      progress: cw.progressOf(item),
+                    );
+                    _setHero(item);
+                  },
+                  onOpen: () => cw.onOpen(item),
+                  onLongPress: () =>
+                      _openCwCardMenu(cw, item, e.rail.cwIndex, e.col),
+                  onUp: () {
+                    if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
+                    if (i > 0) {
+                      _nearestMountedNode(
+                        queue[i - 1].rail.cw!.nodes,
+                        queue[i - 1].col,
+                      )?.requestFocus();
+                    }
+                  },
+                  onDown: () {
+                    if (_stageHoldSwallow(LogicalKeyboardKey.arrowDown)) return;
+                    if (i + 1 < queue.length) {
+                      _nearestMountedNode(
+                        queue[i + 1].rail.cw!.nodes,
+                        queue[i + 1].col,
+                      )?.requestFocus();
+                    } else if (hasRail) {
+                      _tonightFocusRail();
+                    }
+                  },
+                  // HELD down: leave the queue for the rail in one gesture.
+                  // The queue is every Continue Watching item from every
+                  // source flattened into one column, so stepping past it a
+                  // row at a time can be a long walk.
+                  onDownHold: hasRail
+                      ? () => _stageHoldJump(
+                          LogicalKeyboardKey.arrowDown,
+                          _tonightFocusRail,
+                        )
+                      : null,
+                  onLeft: () => MainPageBridge.focusTvSidebar?.call(),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tonightRail(
+    _StageRailView view,
+    double boxH, {
+    required bool queueAbove,
+  }) {
+    final rail = view.rail;
+    final railKey = view.key;
+    final favRail = rail.favKind != null;
+    final items = view.items;
+    final nodes = view.nodes;
+    final count = favRail ? _canvasFavItemCount(rail.favKind!) : items.length;
+    // UP walks back through the rails and then into the queue — the two zones
+    // are one vertical column.
+    void up() {
+      if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
+      if (view.index > 0) {
+        _stageSwitchRail(-1);
+      } else if (queueAbove) {
+        _tonightFocusQueue();
+      }
+    }
+
+    void down() {
+      if (_stageHoldSwallow(LogicalKeyboardKey.arrowDown)) return;
+      _stageSwitchRail(1);
+    }
+
+    // HELD up: back to the Continue queue from any rail, the mirror of the
+    // queue's held DOWN.
+    final upHold = queueAbove
+        ? () => _stageHoldJump(LogicalKeyboardKey.arrowUp, _tonightFocusQueue)
+        : null;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(right: _kTonightPadX),
+          child: _deckRailLabel(view),
+        ),
+        const SizedBox(height: _kAtriumLabelGap),
+        SizedBox(
+          height: boxH,
+          child: ListView.builder(
+            key: ValueKey('tonight-rail-$railKey'),
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.hardEdge,
+            cacheExtent: 400,
+            itemCount: count,
+            itemBuilder: (context, col) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+              child: Center(
+                child: SizedBox(
+                  width: favRail
+                      ? _stageFavW(context, boxH)
+                      : _stagePosterW(boxH),
+                  child: favRail
+                      ? _canvasFavCell(
+                          rail.favKind!,
+                          railKey,
+                          col,
+                          onUp: up,
+                          onDown: down,
+                          onUpHold: upHold,
+                        )
+                      : SizedBox(
+                          height: boxH,
+                          child: _stageShelfCell(
+                            rail,
+                            railKey,
+                            items,
+                            nodes,
+                            col,
+                            onUp: up,
+                            onDown: down,
+                            onUpHold: upHold,
+                            onFocusedExtra: () {
+                              _tonightZoneIsQueue = false;
+                              _tonightCard.value = _TonightCardInfo(
+                                action: 'Open',
+                                // Only Continue Watching cards arm hold-OK on
+                                // TV (they are the ones with a menu); catalog
+                                // cards have no hold action, so no hint.
+                                holdAction: rail.cw != null ? 'Options' : null,
+                                episode: rail.cw?.episodeOf(items[col]),
+                                progress: rail.cw?.progressOf(items[col]),
+                              );
+                            },
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: _kTonightRailTail),
+      ],
+    );
+  }
+
   /// Tab label for a rail, with colliding titles disambiguated by the
   /// section's type tag — two addon catalogs often share a name ("Popular"
   /// for both Movies and Series), and identical neighbouring tabs read as a
@@ -4811,12 +7471,30 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // the chevron affordance (~25px) and the "+N more" tail (~92px).
         const perTab = 196.0;
         const reserved = 25.0 + 92.0;
+        // May legitimately be ZERO: a narrow board (Mosaic's header shares its
+        // width with the identity, and Screen Size can shrink the board) has
+        // room for the chevrons and the "+N more" tail but not a label — and
+        // an unflexible label there would overflow the Row.
         final maxTabs = (((cons.maxWidth - reserved) / perTab).floor()).clamp(
-          1,
+          0,
           4,
         );
-    var start = active - 1;
-    if (start > rails.length - maxTabs) start = rails.length - maxTabs;
+    // Zero tabs fit: show no labels at all, but still say how many rails
+    // there are (otherwise the row is a pair of chevrons with no context).
+    // Leading CONTEXT (starting one rail early) only makes sense once there
+    // is room for more than one label. With a single slot, starting at
+    // `active - 1` put the ONLY visible label on the rail BEFORE the active
+    // one — so the strip named a rail the board wasn't showing, and nothing
+    // was styled active because `i == active` never matched. The window must
+    // always contain the active rail.
+    var start = switch (maxTabs) {
+      0 => 0,
+      1 => active,
+      _ => active - 1,
+    };
+    if (maxTabs > 0 && start > rails.length - maxTabs) {
+      start = rails.length - maxTabs;
+    }
     if (start < 0) start = 0;
     var end = start + maxTabs;
     if (end > rails.length) end = rails.length;
@@ -4848,7 +7526,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           ),
         ),
         for (var i = start; i < end; i++)
-          Padding(
+          Flexible(
+            child: Padding(
             padding: const EdgeInsets.only(right: 26),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -4883,6 +7562,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 ),
               ],
             ),
+          ),
           ),
         if (end < rails.length)
           Padding(
@@ -4986,6 +7666,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// keypress. TV Home board only; other modes leave the shell alone.
   void _publishAmbientArt(StremioMeta? item, StremioMeta? enriched) {
     if (!_heroTrailerActive) return;
+    // Layouts whose own ground is INK (Atrium's panel, Deck's and Tonight's
+    // fields, Mosaic's veiled wash) must not light the shell: the shell art
+    // only shows in the 64px strip behind the ghost rail, so a bright blurred
+    // sliver would butt straight into the board's flat ground and read as a
+    // seam. Publishing null leaves the shell on its flat page ink, which is
+    // exactly what those boards continue.
+    if (_stageActive && !_stagePublishesShellArt) {
+      _ambientArtItemId = null;
+      if (MainPageBridge.tvAmbientArt.value != null) {
+        MainPageBridge.tvAmbientArt.value = null;
+      }
+      return;
+    }
     final backdrop = item?.background?.isNotEmpty == true
         ? item!.background
         : (enriched?.background?.isNotEmpty == true
@@ -5018,6 +7711,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (!_heroTrailerActive || !_heroTrailerEnabled || _heroTrailerSuppressed) {
       return;
     }
+    // A layout with no place to put moving picture (Mosaic) never resolves a
+    // trailer at all — the resolve is a network + engine cost for something
+    // that would be invisible under its veil.
+    if (_stageActive && !_stageWantsAmbient) return;
     // A Canvas favourite owns the stage (or its live feed does): a catalog
     // trailer must never start beneath it. The next catalog/CW focus goes
     // through _setHero, which clears both and reschedules. Safe to skip the
@@ -5032,6 +7729,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_heroTrailerShowing.value) _heroTrailerShowing.value = false;
     _heroTrailerTimer = Timer(const Duration(milliseconds: 2400), () async {
       if (!mounted || req != _heroTrailerReq) return;
+      // The layout may have changed during the dwell — a stage with nowhere
+      // to put moving picture must not spin up an engine.
+      if (_stageActive && !_stageWantsAmbient) return;
       // Covered by ANY modal (bottom sheet, dialog — which never reach the
       // PageRoute-only route observer) or a pushed page: a trailer must not
       // start under it. The cover's dismissal path re-arms where relevant
@@ -5163,7 +7863,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // it in.
     if (wasLive && _heroTrailerActive) {
       _publishAmbientArt(_heroItem.value, _heroEnriched.value);
-      MainPageBridge.tvHeroTint.value = _heroTint.value;
+      // Through the GATE, not straight at the bridge: the ink-ground layouts
+      // publish no shell tint, and restoring one here would leave a coloured
+      // sidebar sitting on a flat board until something else cleared it.
+      _publishHeroTintToShell(_heroTint.value);
     }
   }
 
@@ -5319,7 +8022,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// out at playback edges (the old complaint); the room simply wears the
   /// focused film's hue while browsing. TV Home board only.
   void _publishHeroTintToShell(Color? color) {
-    if (_heroTrailerActive) MainPageBridge.tvHeroTint.value = color;
+    if (!_heroTrailerActive) return;
+    // The tint exists to make the sidebar read as glass over the SHELL ART.
+    // Layouts that publish no art (ink grounds — see [_publishAmbientArt])
+    // would just get a coloured rail floating on flat ink, so they stay
+    // neutral.
+    MainPageBridge.tvHeroTint.value =
+        (_stageActive && !_stagePublishesShellArt) ? null : color;
   }
 
   /// Title-treatment art URL derivable SYNCHRONOUSLY from an IMDb id — the
@@ -10735,9 +13444,22 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
     }
 
-    // CANVAS: the whole screen is the stage — its own build path (loading /
-    // error / empty guards above are shared with classic).
-    if (_canvasActive) return _buildCanvasBoard();
+    // STAGE layouts: each owns the whole screen and has its own build path
+    // (the loading / error / empty guards above are shared with classic).
+    switch (_homeStyleEffective) {
+      case 'canvas':
+        return _buildCanvasBoard();
+      case 'atrium':
+        return _buildAtriumBoard();
+      case 'mosaic':
+        return _buildMosaicBoard();
+      case 'promenade':
+        return _buildPromenadeBoard();
+      case 'deck':
+        return _buildDeckBoard();
+      case 'tonight':
+        return _buildTonightBoard();
+    }
 
     final tv = widget.isTelevision;
     final width = MediaQuery.of(context).size.width;
@@ -14337,6 +17059,29 @@ class _BoardCell extends StatelessWidget {
   /// Forwarded to [_StremioCard.ringColor] (Canvas cells use white).
   final Color? ringColor;
 
+  /// Cell shape + the art that fills it. Defaults are the 2:3 poster every
+  /// row uses; Promenade's strip passes 16/9 with a derived wide still.
+  final double aspectRatio;
+  final String? artUrl;
+
+  /// Dim applied to this cell while it is NOT focused (Promenade's strip).
+  final Color? restVeil;
+
+  /// HELD up/down — fired on the first key REPEAT instead of [onUp]/[onDown].
+  /// Tonight uses it to escape a long Continue queue in one gesture rather
+  /// than one row at a time. Null keeps a held key doing what a tapped one
+  /// does (the fast-scroll every rail relies on).
+  final VoidCallback? onUpHold;
+  final VoidCallback? onDownHold;
+
+  /// Horizontal overrides. Null keeps the row grammar (LEFT walks back along
+  /// [rowNodes] and hands off to the sidebar at column 0; RIGHT walks forward
+  /// and prefetches). Mosaic's GRID must override both — its leftmost cell is
+  /// not column 0, so without this the sidebar would be unreachable from
+  /// every row but the first — and Tonight's queue overrides them too.
+  final VoidCallback? onLeft;
+  final VoidCallback? onRight;
+
   const _BoardCell({
     required this.item,
     required this.isTelevision,
@@ -14355,6 +17100,13 @@ class _BoardCell extends StatelessWidget {
     this.onNearEnd,
     this.heroTag,
     this.ringColor,
+    this.onLeft,
+    this.onRight,
+    this.aspectRatio = 2 / 3,
+    this.artUrl,
+    this.restVeil,
+    this.onUpHold,
+    this.onDownHold,
   });
 
   KeyEventResult _handleArrows(FocusNode node, KeyEvent event) {
@@ -14366,7 +17118,9 @@ class _BoardCell extends StatelessWidget {
     }
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.arrowLeft) {
-      if (column > 0) {
+      if (onLeft != null) {
+        onLeft!();
+      } else if (column > 0) {
         rowNodes[column - 1].requestFocus();
       } else {
         // First card in the row — leave to the sidebar (no leading tile now).
@@ -14378,17 +17132,27 @@ class _BoardCell extends StatelessWidget {
       // Prefetch the next page a few cards before the end so DPAD users never
       // hit a wall on a catalog that still has more.
       if (column >= rowNodes.length - 6) onNearEnd?.call();
-      if (column < rowNodes.length - 1) {
+      if (onRight != null) {
+        onRight!();
+      } else if (column < rowNodes.length - 1) {
         rowNodes[column + 1].requestFocus();
       }
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp) {
-      onUp();
+      if (event is KeyRepeatEvent && onUpHold != null) {
+        onUpHold!();
+      } else {
+        onUp();
+      }
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowDown) {
-      onDown();
+      if (event is KeyRepeatEvent && onDownHold != null) {
+        onDownHold!();
+      } else {
+        onDown();
+      }
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -14415,6 +17179,9 @@ class _BoardCell extends StatelessWidget {
         onLongPress: onLongPress,
         onOpen: onOpen,
         heroTag: heroTag,
+        aspectRatio: aspectRatio,
+        artUrl: artUrl,
+        restVeil: restVeil,
       ),
     );
   }
@@ -14448,6 +17215,24 @@ String? _metahubLogoUrl(StremioMeta item) {
   final tt = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
   return tt == null ? null : 'https://images.metahub.space/logo/medium/$tt/img';
 }
+
+/// Metahub 16:9 still, derived the same synchronous way — catalog items carry
+/// a poster but rarely a backdrop, and the wide-cell layouts (Promenade's
+/// strip, Tonight's queue) need landscape art the moment a rail paints, not
+/// after /meta enrichment. Null when the item has no IMDb-shaped id.
+String? _metahubBackgroundUrl(StremioMeta item) {
+  final tt = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
+  return tt == null
+      ? null
+      : 'https://images.metahub.space/background/medium/$tt/img';
+}
+
+/// Best available wide art for a 16:9 cell: whatever the item already carries,
+/// then the derived metahub still, then the poster (cover-cropped) so a cell
+/// is never empty.
+String? _wideArtUrl(StremioMeta item) =>
+    _firstNonEmpty(item.background, _metahubBackgroundUrl(item)) ??
+    _firstNonEmpty(item.poster, null);
 
 /// Whether [enriched] describes the same title as [item]. Raw id equality is
 /// not enough: an addon can list a title as `tmdb:603` while the /meta
@@ -14489,6 +17274,662 @@ class _CanvasRail {
 /// favourites aren't StremioMeta, so the hero pipeline can't describe them;
 /// this lightweight override carries the focused item's own art + name
 /// instead (null = a catalog/CW item owns the stage as usual).
+/// Paints the four corner "wedges" that make a rectangle read as a rounded
+/// card — the area between the rect and its rounded inset, filled with the
+/// page ink. Used instead of a ClipRRect wherever the box contains the
+/// underlay trailer: a clip would introduce a saveLayer over the punch hole
+/// and break its BlendMode.clear against the translucent surface, while a
+/// plain fill painted ABOVE the hole is the proven pattern.
+class _CornerWedges extends CustomPainter {
+  final double radius;
+  final Color color;
+  const _CornerWedges({required this.radius, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final path = Path.combine(
+      PathOperation.difference,
+      Path()..addRect(rect),
+      Path()..addRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius))),
+    );
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_CornerWedges old) =>
+      old.radius != radius || old.color != color;
+}
+
+/// What a stage board resolved for this frame (see
+/// [_SearchScreenState._resolveStageRail]) — the rail list, which one is
+/// active, its identity key, its items and its focus nodes.
+class _StageRailView {
+  final List<_CanvasRail> rails;
+  final int index;
+  final _CanvasRail rail;
+  final String key;
+  final List<StremioMeta> items;
+  final List<FocusNode> nodes;
+  const _StageRailView({
+    required this.rails,
+    required this.index,
+    required this.rail,
+    required this.key,
+    required this.items,
+    required this.nodes,
+  });
+}
+
+/// The identity block a stage shows while a FAVOURITES cell has focus.
+/// Favourites aren't StremioMeta, so the logo/meta/synopsis pipeline has
+/// nothing true to say about them — this is the favourite's own name and
+/// source line, in the same type as the catalog identity above it.
+class _StageFavIdentity extends StatelessWidget {
+  final _CanvasFavFocus fav;
+  final bool centered;
+
+  const _StageFavIdentity({required this.fav, this.centered = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: centered
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          fav.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: centered ? TextAlign.center : TextAlign.start,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 26,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -0.4,
+            height: 1.1,
+            shadows: [Shadow(color: Colors.black54, blurRadius: 14)],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          fav.subtitle,
+          textAlign: centered ? TextAlign.center : TextAlign.start,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.6),
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.4,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// What Tonight's big card says about the focused entry. Derived per focus —
+/// the OK hint has to tell the truth: a part-watched title resumes, a catalog
+/// title opens, a favourite is watched.
+class _TonightCardInfo {
+  /// What OK actually does — never what the layout wishes it did. Continue
+  /// Watching cards open their detail page on OK across the whole app, and
+  /// Tonight keeps that grammar rather than diverging.
+  final String action;
+
+  /// What a HELD OK does, when that differs (resume, or the card menu).
+  final String? holdAction;
+  final String? episode;
+  final double? progress;
+  const _TonightCardInfo({
+    required this.action,
+    this.holdAction,
+    this.episode,
+    this.progress,
+  });
+}
+
+/// The caption block on Tonight's card: title art, what you are about to do,
+/// the episode, how much is left and the progress bar. Everything is driven
+/// by listenables so a DPAD move repaints this block alone.
+class _TonightCardCaption extends StatelessWidget {
+  final ValueListenable<StremioMeta?> item;
+  final ValueListenable<StremioMeta?> enriched;
+  final ValueListenable<_CanvasFavFocus?> fav;
+  final ValueListenable<_TonightCardInfo?> info;
+
+  const _TonightCardCaption({
+    required this.item,
+    required this.enriched,
+    required this.fav,
+    required this.info,
+  });
+
+  /// Minutes left from a '60 min'-shaped runtime and a 0..1 progress.
+  static String? _timeLeft(String? runtime, double? progress) {
+    if (runtime == null || progress == null || progress <= 0) return null;
+    final m = RegExp(r'(\d+)').firstMatch(runtime);
+    if (m == null) return null;
+    final total = int.tryParse(m.group(1)!);
+    if (total == null || total <= 0) return null;
+    final left = ((1 - progress.clamp(0.0, 1.0)) * total).round();
+    return left <= 0 ? null : '$left min left';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<_CanvasFavFocus?>(
+      valueListenable: fav,
+      builder: (context, favFocus, _) {
+        if (favFocus != null) {
+          return _block(
+            context,
+            hold: null,
+            titleWidget: Text(
+              favFocus.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.3,
+                shadows: [Shadow(color: Colors.black54, blurRadius: 12)],
+              ),
+            ),
+            line: favFocus.subtitle,
+            action: 'Watch',
+            progress: null,
+          );
+        }
+        return ValueListenableBuilder<StremioMeta?>(
+          valueListenable: item,
+          builder: (context, it, _) => ValueListenableBuilder<StremioMeta?>(
+            valueListenable: enriched,
+            builder: (context, en, _) =>
+                ValueListenableBuilder<_TonightCardInfo?>(
+                  valueListenable: info,
+                  builder: (context, nfo, _) {
+                    final it0 = it;
+                    if (it0 == null) return const SizedBox.shrink();
+                    final enr = (en != null && _sameCanvasTitle(it0, en))
+                        ? en
+                        : null;
+                    final logo =
+                        _firstNonEmpty(enr?.logo, it0.logo) ??
+                        _metahubLogoUrl(it0);
+                    final runtime = _firstNonEmpty(enr?.runtime, it0.runtime);
+                    final left = _timeLeft(runtime, nfo?.progress);
+                    final parts = <String>[
+                      if (nfo?.episode != null) nfo!.episode!,
+                      if (left != null)
+                        left
+                      else if (runtime != null)
+                        runtime,
+                      if (nfo?.episode == null && left == null)
+                        (it0.type == 'series' ? 'SERIES' : 'MOVIE'),
+                    ];
+                    return _block(
+                      context,
+                      hold: nfo?.holdAction,
+                      titleWidget: logo != null
+                          ? ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxHeight: 46,
+                                maxWidth: 300,
+                              ),
+                              child: CachedNetworkImage(
+                                imageUrl: logo,
+                                fit: BoxFit.contain,
+                                alignment: Alignment.bottomLeft,
+                                memCacheWidth: 400,
+                                fadeInDuration: Duration.zero,
+                                fadeOutDuration: Duration.zero,
+                                placeholder: (_, __) =>
+                                    const SizedBox(height: 46),
+                                errorWidget: (_, __, ___) =>
+                                    _fallbackTitle(it0.name),
+                              ),
+                            )
+                          : _fallbackTitle(it0.name),
+                      line: parts.join('  ·  '),
+                      action: nfo?.action ?? 'Open',
+                      progress: nfo?.progress,
+                    );
+                  },
+                ),
+          ),
+        );
+      },
+    );
+  }
+
+  static Widget _fallbackTitle(String name) => Text(
+    name,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: const TextStyle(
+      color: Colors.white,
+      fontSize: 22,
+      fontWeight: FontWeight.w900,
+      letterSpacing: -0.3,
+      shadows: [Shadow(color: Colors.black54, blurRadius: 12)],
+    ),
+  );
+
+  Widget _block(
+    BuildContext context, {
+    required Widget titleWidget,
+    required String line,
+    required String action,
+    required String? hold,
+    required double? progress,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        titleWidget,
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                line,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.74),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            if (hold != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.30),
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'HOLD  $hold',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'OK  $action',
+                style: const TextStyle(
+                  color: Color(0xFF12101F),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (progress != null && progress > 0) ...[
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: SizedBox(
+              height: 5,
+              child: ColoredBox(
+                color: Colors.white.withValues(alpha: 0.22),
+                child: FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: progress.clamp(0.0, 1.0),
+                  heightFactor: 1,
+                  child: const ColoredBox(color: Colors.white),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// One row of Tonight's Continue queue: a 16:9 still, the title, the episode
+/// and a progress bar. Carries the same focus grammar and the same hold-OK
+/// menu as a Continue Watching card, so nothing is lost by laying the row out
+/// horizontally instead of as a poster.
+class _TonightQueueRow extends StatefulWidget {
+  final StremioMeta item;
+  final double height;
+
+  /// Width of the still. Capped by the row's width upstream — see
+  /// [_SearchScreenState._tonightQueueList].
+  final double thumbWidth;
+  final FocusNode focusNode;
+  final String? episode;
+  final double? progress;
+
+  /// Mirrors the board cards' bookmark mark — a title with a source already
+  /// bound plays without picking one, and that is worth seeing here too.
+  final bool hasBoundSource;
+  final VoidCallback onFocused;
+  final VoidCallback onOpen;
+  final VoidCallback onLongPress;
+  final VoidCallback onUp;
+  final VoidCallback onDown;
+
+  /// Held DOWN — see [_BoardCell.onDownHold]. Null keeps a held key stepping
+  /// one row at a time.
+  final VoidCallback? onDownHold;
+  final VoidCallback onLeft;
+
+  const _TonightQueueRow({
+    required this.item,
+    required this.height,
+    required this.thumbWidth,
+    required this.focusNode,
+    required this.episode,
+    required this.progress,
+    required this.hasBoundSource,
+    required this.onFocused,
+    required this.onOpen,
+    required this.onLongPress,
+    required this.onUp,
+    required this.onDown,
+    this.onDownHold,
+    required this.onLeft,
+  });
+
+  @override
+  State<_TonightQueueRow> createState() => _TonightQueueRowState();
+}
+
+class _TonightQueueRowState extends State<_TonightQueueRow>
+    with SingleTickerProviderStateMixin {
+  bool _focused = false;
+  bool _keyDown = false;
+  bool _holdFired = false;
+  bool _holding = false;
+
+  /// Same 500ms hold-OK the Continue Watching cards use.
+  static const _holdDuration = Duration(milliseconds: 500);
+  late final AnimationController _holdController = AnimationController(
+    vsync: this,
+    duration: _holdDuration,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _holdController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        _holdFired = true;
+        setState(() => _holding = false);
+        _holdController.reset();
+        widget.onLongPress();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _holdController.dispose();
+    super.dispose();
+  }
+
+  void _cancelHold() {
+    _holdController.reset();
+    if (_holding && mounted) setState(() => _holding = false);
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) {
+      if (isActivateKey(event.logicalKey) ||
+          event.logicalKey == LogicalKeyboardKey.space) {
+        final wasPress = _keyDown && !_holdFired;
+        _keyDown = false;
+        _holdFired = false;
+        _cancelHold();
+        if (wasPress) widget.onOpen();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
+      if (event is KeyDownEvent) {
+        _keyDown = true;
+        _holdFired = false;
+        setState(() => _holding = true);
+        _holdController.forward(from: 0);
+      }
+      // Swallow auto-repeat while held.
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      widget.onUp();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      if (event is KeyRepeatEvent && widget.onDownHold != null) {
+        widget.onDownHold!();
+      } else {
+        widget.onDown();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      widget.onLeft();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      // Nothing to the right of the queue — swallow it so Flutter's geometric
+      // traversal can't wander into the rail below.
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final h = widget.height;
+    final thumbW = widget.thumbWidth;
+    final art = _wideArtUrl(widget.item);
+    return Focus(
+      focusNode: widget.focusNode,
+      onFocusChange: (f) {
+        setState(() => _focused = f);
+        if (!f) {
+          _keyDown = false;
+          _holdFired = false;
+          _cancelHold();
+        } else {
+          widget.onFocused();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            Scrollable.ensureVisible(
+              context,
+              alignment: 0.5,
+              alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutCubic,
+            );
+          });
+        }
+      },
+      onKeyEvent: _onKey,
+      child: GestureDetector(
+        onTap: widget.onOpen,
+        onLongPress: widget.onLongPress,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          height: h,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: _focused ? 0.10 : 0.045),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _focused
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.06),
+              width: _focused ? 2.5 : 1,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(9),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: thumbW,
+                  height: h,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      const ColoredBox(color: Color(0xFF171426)),
+                      if (art != null && art.isNotEmpty)
+                        CachedNetworkImage(
+                          imageUrl: art,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 420,
+                          fadeInDuration: HomeTheme.imageFadeIn(true),
+                          fadeOutDuration: HomeTheme.imageFadeOut(true),
+                          errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                        ),
+                      if (widget.hasBoundSource)
+                        const Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Icon(
+                            Icons.bookmark_rounded,
+                            size: 15,
+                            color: Colors.white,
+                            shadows: [
+                              Shadow(color: Colors.black, blurRadius: 6),
+                            ],
+                          ),
+                        ),
+                      if (_holding)
+                        const ColoredBox(color: Color(0x730A0810)),
+                      if (_holding)
+                        Center(
+                          child: SizedBox(
+                            width: 26,
+                            height: 26,
+                            child: AnimatedBuilder(
+                              animation: _holdController,
+                              builder: (context, _) =>
+                                  CircularProgressIndicator(
+                                    value: _holdController.value,
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                    backgroundColor: Colors.white24,
+                                  ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.item.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                        if (widget.episode != null) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            widget.episode!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.56),
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                        if (widget.progress != null) ...[
+                          const SizedBox(height: 9),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: SizedBox(
+                              height: 4,
+                              child: ColoredBox(
+                                // 0.18 vanished against the row's own panel,
+                                // so the fill read as a dash floating in
+                                // space rather than a bar with a track.
+                                color: Colors.white.withValues(alpha: 0.28),
+                                child: FractionallySizedBox(
+                                  alignment: Alignment.centerLeft,
+                                  widthFactor: widget.progress!.clamp(
+                                    0.0,
+                                    1.0,
+                                  ),
+                                  heightFactor: 1,
+                                  child: const ColoredBox(color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One row of Tonight's Continue Watching queue: which CW rail it came from
+/// and which column within it (so the cell's FocusNode, progress, episode
+/// label and open/remove actions all come from the row's own contract).
+class _TonightQueueEntry {
+  final _CanvasRail rail;
+  final int col;
+  const _TonightQueueEntry({required this.rail, required this.col});
+}
+
 class _CanvasFavFocus {
   final String? art;
   final BoxFit fit;
@@ -14505,6 +17946,23 @@ class _CanvasFavFocus {
 /// Canvas stage floor + full-bleed key art for the settled hero item. Sits
 /// BELOW the underlay punch hole; the AnimatedSwitcher fade wraps only this
 /// sibling, never the engine, so the hole's BlendMode.clear is untouched.
+/// Metahub backdrop URLs that came back 404 this session — the same
+/// memo the title-logo art keeps, for the same reason: without it every
+/// focus on a title with no derived still re-requests a known-dead URL.
+///
+/// Bounded: a long session browsing paginated catalogs would otherwise keep
+/// every miss for the life of the process. A full clear is fine — the cost of
+/// forgetting is one re-request per title, exactly what the memo saves.
+final Set<String> _deadBackdropUrls = <String>{};
+const int _kDeadBackdropMemoMax = 512;
+
+void _rememberDeadBackdrop(String url) {
+  if (_deadBackdropUrls.length >= _kDeadBackdropMemoMax) {
+    _deadBackdropUrls.clear();
+  }
+  _deadBackdropUrls.add(url);
+}
+
 class _CanvasArtLayer extends StatelessWidget {
   final ValueListenable<StremioMeta?> item;
   final ValueListenable<StremioMeta?> enriched;
@@ -14535,12 +17993,24 @@ class _CanvasArtLayer extends StatelessWidget {
           final enr = (it != null && en != null && _sameCanvasTitle(it, en))
               ? en
               : null;
-          final bg =
-              _firstNonEmpty(
-                enr?.background,
-                _firstNonEmpty(it?.background, it?.poster),
-              ) ??
-              '';
+          // WIDE art first. The old chain fell straight from "no backdrop"
+          // to the POSTER, which a 16:9 box has to crop to a horizontal
+          // slice — on a title whose poster is a row of character portraits
+          // that reads as several unrelated images stacked in one card. The
+          // metahub still (derived synchronously from the IMDb id, exactly
+          // like the title logo) is a real landscape frame and exists for
+          // most titles; the poster stays as the last resort, applied by the
+          // error branch below so a 404 still lands on something.
+          final wide = it == null
+              ? null
+              : _firstNonEmpty(enr?.background, it.background) ??
+                    (_deadBackdropUrls.contains(_metahubBackgroundUrl(it) ?? '')
+                        ? null
+                        : _metahubBackgroundUrl(it));
+          final posterUrl = (it?.poster?.isNotEmpty ?? false)
+              ? it!.poster
+              : null;
+          final bg = wide ?? posterUrl ?? '';
           final Widget art;
           final favArt = fav?.art;
           if (fav != null) {
@@ -14577,6 +18047,11 @@ class _CanvasArtLayer extends StatelessWidget {
           } else if (bg.isEmpty) {
             art = const SizedBox.shrink(key: ValueKey('canvas-art-none'));
           } else {
+            // A derived metahub still can 404 (not every title has one).
+            // Remember that so the next focus doesn't ask again, and fall
+            // back to the poster in place rather than to an empty stage.
+            final derived = wide != null && wide != enr?.background &&
+                wide != it?.background;
             art = CachedNetworkImage(
               key: ValueKey(bg),
               imageUrl: bg,
@@ -14585,7 +18060,21 @@ class _CanvasArtLayer extends StatelessWidget {
               memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
               fadeInDuration: Duration.zero,
               fadeOutDuration: Duration.zero,
-              errorWidget: (_, __, ___) => const SizedBox.shrink(),
+              errorWidget: (_, __, ___) {
+                if (derived) _rememberDeadBackdrop(bg);
+                if (posterUrl == null || bg == posterUrl) {
+                  return const SizedBox.shrink();
+                }
+                return CachedNetworkImage(
+                  imageUrl: posterUrl,
+                  fit: BoxFit.cover,
+                  alignment: Alignment.topCenter,
+                  memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
+                  fadeInDuration: Duration.zero,
+                  fadeOutDuration: Duration.zero,
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                );
+              },
             );
           }
           return Stack(
@@ -14596,6 +18085,20 @@ class _CanvasArtLayer extends StatelessWidget {
               const ColoredBox(color: kStremioBg),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 240),
+                // AnimatedSwitcher's DEFAULT layout centres its children under
+                // LOOSE constraints, so a BoxFit.cover image sizes to its own
+                // aspect instead of the box. On Canvas the box is the whole
+                // 16:9 screen and it looked identical either way — but Atrium's
+                // art column is nearly square, and there the backdrop
+                // letterboxed with ink bands above and below it. Expand both
+                // the incoming and outgoing child so "cover" means the box.
+                layoutBuilder: (currentChild, previousChildren) => Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ...previousChildren,
+                    if (currentChild != null) currentChild,
+                  ],
+                ),
                 child: art,
               ),
             ],
@@ -14616,6 +18119,24 @@ class _CanvasArtLayer extends StatelessWidget {
 /// white key art) stays legible without the stage going flat. Painted ABOVE
 /// both the idle art and the live video — plain gradient draws over the
 /// punch hole, the same on-device-proven pattern as the region feathers.
+/// How a stage lights its art. Every variant is a set of CONSTANT gradients
+/// painted above the art AND the video — plain draws over the punch hole, the
+/// on-device-proven pattern (never an Opacity wrapper, never a tween).
+enum _StageScrimVariant {
+  /// Canvas / Deck / Tonight: left column + bottom ramp + a bottom-left text
+  /// pocket, seating an edge-anchored identity block.
+  canvas,
+
+  /// Promenade: symmetric — a bottom ramp for the strip, a centred pocket
+  /// under the identity, and a light top wash so the trailer pill reads.
+  centered,
+
+  /// Atrium: the art is a COLUMN, so the only left lighting it needs is a
+  /// narrow feather melting into the ink panel at the seam, plus a bottom
+  /// ramp under the poster wall.
+  seam,
+}
+
 class _CanvasScrims extends StatelessWidget {
   /// Theater mode: ALL the stage lighting fades — the left column scrim, the
   /// bottom ramp and the text pocket exist to seat text and shelf that have
@@ -14623,64 +18144,155 @@ class _CanvasScrims extends StatelessWidget {
   /// the top-left corner, carries its own art shadows).
   final bool theater;
 
-  const _CanvasScrims({this.theater = false});
+  final _StageScrimVariant variant;
+
+  const _CanvasScrims({
+    this.theater = false,
+    this.variant = _StageScrimVariant.canvas,
+  });
+
+  static const _canvasLayers = <Widget>[
+    DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [Color(0xF00D0B1A), Color(0xA80D0B1A), Color(0x000D0B1A)],
+          stops: [0.0, 0.32, 0.66],
+        ),
+      ),
+    ),
+    DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Color(0xF50D0B1A), Color(0xC20D0B1A), Color(0x000D0B1A)],
+          stops: [0.0, 0.20, 0.50],
+        ),
+      ),
+    ),
+    // The text pocket: centred under the identity block (lower-left
+    // quadrant), dissolving well before mid-screen so the art/video
+    // keeps its glow everywhere else.
+    DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          center: Alignment(-0.72, 0.55),
+          radius: 0.95,
+          colors: [Color(0xCC0D0B1A), Color(0x000D0B1A)],
+          stops: [0.12, 1.0],
+        ),
+      ),
+    ),
+  ];
+
+  static const _centeredLayers = <Widget>[
+    // Bottom ramp — deeper than Canvas's: the strip sits lower and the
+    // identity stands directly on it.
+    DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Color(0xF70D0B1A), Color(0xCC0D0B1A), Color(0x000D0B1A)],
+          stops: [0.0, 0.24, 0.56],
+        ),
+      ),
+    ),
+    // Centre pocket: the symmetric twin of Canvas's corner pocket, seating
+    // the centred logo + meta without flattening the frame's edges.
+    DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          center: Alignment(0, 0.30),
+          radius: 0.78,
+          colors: [Color(0xB80D0B1A), Color(0x000D0B1A)],
+          stops: [0.10, 1.0],
+        ),
+      ),
+    ),
+    // A whisper at the top so the TRAILER pill never sits on bright sky.
+    DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x730D0B1A), Color(0x000D0B1A)],
+          stops: [0.0, 0.22],
+        ),
+      ),
+    ),
+  ];
+
+  static const _seamLayers = <Widget>[
+    // The seam: a narrow melt into the ink panel on the left. Short, so the
+    // art keeps its width — the panel beside it already carries the text.
+    DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [Color(0xF20D0B1A), Color(0x8C0D0B1A), Color(0x000D0B1A)],
+          stops: [0.0, 0.07, 0.22],
+        ),
+      ),
+    ),
+    DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Color(0xF50D0B1A), Color(0xCC0D0B1A), Color(0x000D0B1A)],
+          stops: [0.0, 0.36, 0.76],
+        ),
+      ),
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
+    final layers = switch (variant) {
+      _StageScrimVariant.canvas => _canvasLayers,
+      _StageScrimVariant.centered => _centeredLayers,
+      _StageScrimVariant.seam => _seamLayers,
+    };
     return AnimatedOpacity(
       opacity: theater ? 0.0 : 1.0,
       duration: theater
           ? const Duration(milliseconds: 900)
           : const Duration(milliseconds: 250),
       curve: Curves.easeOut,
-      child: const Stack(
-      fit: StackFit.expand,
-      children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [
-                Color(0xF00D0B1A),
-                Color(0xA80D0B1A),
-                Color(0x000D0B1A),
-              ],
-              stops: [0.0, 0.32, 0.66],
-            ),
-          ),
-        ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.bottomCenter,
-              end: Alignment.topCenter,
-              colors: [
-                Color(0xF50D0B1A),
-                Color(0xC20D0B1A),
-                Color(0x000D0B1A),
-              ],
-              stops: [0.0, 0.20, 0.50],
-            ),
-          ),
-        ),
-        // The text pocket: centred under the identity block (lower-left
-        // quadrant), dissolving well before mid-screen so the art/video
-        // keeps its glow everywhere else.
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: RadialGradient(
-              center: Alignment(-0.72, 0.55),
-              radius: 0.95,
-              colors: [Color(0xCC0D0B1A), Color(0x000D0B1A)],
-              stops: [0.12, 1.0],
-            ),
-          ),
-        ),
-      ],
-      ),
+      child: Stack(fit: StackFit.expand, children: layers),
     );
   }
+}
+
+/// How a stage sets its identity block.
+enum _StageIdentityVariant {
+  /// Canvas / Deck / Tonight: bottom-left, one meta line, three-line synopsis.
+  stage,
+
+  /// Atrium: a narrow ink column — the meta breaks onto two lines (facts, then
+  /// genres) so it can never overrun the column, and the synopsis gets a
+  /// fourth line because there is room for it.
+  narrow,
+
+  /// Promenade: centred, no synopsis — the composition is the point.
+  centered,
+
+  /// Mosaic: a fixed-height band above the wall — logo and one meta line,
+  /// left-aligned, no synopsis (the grid is the content; this is a caption).
+  headline,
+}
+
+/// The height a [_StageIdentityVariant.narrow] block needs before its synopsis
+/// is worth reserving: logo, two meta lines, the slot itself and the air
+/// between them, at the current text scale. Below this the caller asks for
+/// [_StageIdentityVariant.headline] instead of clipping.
+double _stageNarrowIdentityH(BuildContext context) {
+  final t = MediaQuery.textScalerOf(context);
+  return 56 + 10 + t.scale(23) * 1.3 * 2 + 6 + 10 + 78;
 }
 
 /// Canvas identity block: logo title-art (held EMPTY while loading, text only
@@ -14696,14 +18308,48 @@ class _CanvasIdentity extends StatelessWidget {
   /// True while ambient video owns the stage — drives the meta/synopsis fade.
   final ValueListenable<bool> trailerShowing;
 
+  final _StageIdentityVariant variant;
+
+  /// Width the block may occupy — the text column's real width, so the logo
+  /// and synopsis are capped by geometry rather than by a guess.
+  final double maxWidth;
+
   const _CanvasIdentity({
     required this.item,
     required this.enriched,
     required this.trailerShowing,
+    this.variant = _StageIdentityVariant.stage,
+    this.maxWidth = 430,
   });
 
   @override
   Widget build(BuildContext context) {
+    final centered = variant == _StageIdentityVariant.centered;
+    final narrow = variant == _StageIdentityVariant.narrow;
+    final headline = variant == _StageIdentityVariant.headline;
+    final noSynopsis = centered || headline;
+    // The stage variant is Canvas's, and Canvas never capped its title or
+    // meta line — only the synopsis. Keep that exactly, or long logo-less
+    // titles start ellipsising where they never used to.
+    final capWidth = variant != _StageIdentityVariant.stage;
+    Widget capped(Widget child) => capWidth
+        ? ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: child,
+          )
+        : child;
+    final cross = centered
+        ? CrossAxisAlignment.center
+        : CrossAxisAlignment.start;
+    final align = centered ? TextAlign.center : TextAlign.start;
+    final double logoMaxW = centered
+        ? 380
+        : min(maxWidth, narrow ? 340 : (headline ? 360 : 300));
+    final double logoMaxH = centered ? 66 : (headline ? _kMosaicLogoH : 56);
+    // Fixed synopsis slot (see below) — 3 lines on a stage, 4 in a column.
+    final int synLines = narrow ? 4 : 3;
+    final double synSlot = narrow ? 78 : 58;
+
     return ValueListenableBuilder<StremioMeta?>(
       valueListenable: item,
       builder: (context, it, _) => ValueListenableBuilder<StremioMeta?>(
@@ -14730,31 +18376,48 @@ class _CanvasIdentity extends StatelessWidget {
           );
           final titleText = Text(
             it0.name,
-            maxLines: 1,
+            maxLines: narrow ? 2 : 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            textAlign: align,
+            style: TextStyle(
               color: Colors.white,
-              fontSize: 30,
+              fontSize: headline ? _kStageHeadlineTitleSize : 30,
               fontWeight: FontWeight.w900,
               letterSpacing: -0.5,
               height: 1.05,
-              shadows: [Shadow(color: Colors.black54, blurRadius: 14)],
+              shadows: const [Shadow(color: Colors.black54, blurRadius: 14)],
             ),
           );
+          final genreText = (genres != null && genres.isNotEmpty)
+              ? genres.take(2).join(' · ')
+              : null;
+          // The narrow column splits the line rather than ellipsising it.
           final metaParts = <String>[
             it0.type == 'series' ? 'SERIES' : 'MOVIE',
             if (year != null) year,
             if (runtime != null) runtime,
-            if (genres != null && genres.isNotEmpty)
-              genres.take(2).join(' · '),
+            if (!narrow && !headline && genreText != null) genreText,
           ];
+          // Headline stands in for narrow on short columns, so it wraps the
+          // genres the same way — in the facts row they would just be the
+          // first thing ellipsised away.
+          final wrapGenres = narrow || headline;
+          final metaStyle = TextStyle(
+            color: Colors.white.withValues(alpha: 0.7),
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+          );
           return AnimatedSwitcher(
             duration: const Duration(milliseconds: 220),
             // AnimatedSwitcher's DEFAULT layout centers its child — which
             // floated the whole identity block to mid-screen, off the left
-            // scrim column it was designed to stand on. Pin it bottom-left.
+            // scrim column it was designed to stand on. Pin it to the edge
+            // the variant is anchored to.
             layoutBuilder: (currentChild, previousChildren) => Stack(
-              alignment: Alignment.bottomLeft,
+              alignment: centered
+                  ? Alignment.bottomCenter
+                  : Alignment.bottomLeft,
               children: [
                 ...previousChildren,
                 if (currentChild != null) currentChild,
@@ -14762,28 +18425,30 @@ class _CanvasIdentity extends StatelessWidget {
             ),
             child: Column(
               key: ValueKey('canvas-id-${it0.id}'),
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: cross,
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (logo != null)
                   ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      maxWidth: 300,
-                      maxHeight: 56,
+                    constraints: BoxConstraints(
+                      maxWidth: logoMaxW,
+                      maxHeight: logoMaxH,
                     ),
                     child: CachedNetworkImage(
                       imageUrl: logo,
                       fit: BoxFit.contain,
-                      alignment: Alignment.bottomLeft,
+                      alignment: centered
+                          ? Alignment.bottomCenter
+                          : Alignment.bottomLeft,
                       memCacheWidth: 480,
                       fadeInDuration: Duration.zero,
                       fadeOutDuration: Duration.zero,
-                      placeholder: (_, __) => const SizedBox(height: 56),
-                      errorWidget: (_, __, ___) => titleText,
+                      placeholder: (_, __) => SizedBox(height: logoMaxH),
+                      errorWidget: (_, __, ___) => capped(titleText),
                     ),
                   )
                 else
-                  titleText,
+                  capped(titleText),
                 const SizedBox(height: 10),
                 // Meta + synopsis fade while the ambient trailer plays; the
                 // logo above stays. Sibling-above-the-hole opacity — the
@@ -14797,96 +18462,115 @@ class _CanvasIdentity extends StatelessWidget {
                     child: kid,
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: cross,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (rating != null) ...[
-                            const Text(
-                              'IMDb',
-                              style: TextStyle(
-                                color: Color(0xFFF5C518),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              rating.toStringAsFixed(1),
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                              child: Text(
-                                '·',
+                      capped(
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: centered
+                              ? MainAxisAlignment.center
+                              : MainAxisAlignment.start,
+                          children: [
+                            if (rating != null) ...[
+                              const Text(
+                                'IMDb',
                                 style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.3),
+                                  color: Color(0xFFF5C518),
                                   fontSize: 12,
+                                  fontWeight: FontWeight.w800,
                                 ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                rating.toStringAsFixed(1),
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                                child: Text(
+                                  '·',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.3),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            Flexible(
+                              child: Text(
+                                metaParts.join('  ·  '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: metaStyle,
                               ),
                             ),
                           ],
-                          Flexible(
-                            child: Text(
-                              metaParts.join('  ·  '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.7),
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.2,
-                              ),
+                        ),
+                      ),
+                      // Narrow columns carry genres on their own line rather
+                      // than ellipsising the facts away.
+                      if (wrapGenres && genreText != null) ...[
+                        const SizedBox(height: 6),
+                        capped(
+                          Text(
+                            genreText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: metaStyle.copyWith(
+                              color: Colors.white.withValues(alpha: 0.46),
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
+                        ),
+                      ],
                       // Fixed-height synopsis slot: the description usually
                       // lands ~300ms after the settle (/meta enrichment), and
                       // this block is BOTTOM-anchored — reserving the lines
                       // keeps the logo from jumping when the text arrives.
-                      SizedBox(
-                        height: 58,
-                        child: description != null
-                            ? ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 430,
-                                ),
-                                child: Text(
-                                  description,
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(
-                                      alpha: 0.78,
-                                    ),
-                                    fontSize: 12.5,
-                                    height: 1.5,
-                                    fontWeight: FontWeight.w500,
-                                    // Crisp, tight shadow — a seasoning under
-                                    // the scrim, never a smear (big radii
-                                    // read as muddy text on TV panels).
-                                    shadows: const [
-                                      Shadow(
-                                        color: Color(0xBF000000),
-                                        blurRadius: 3,
-                                        offset: Offset(0, 1),
-                                      ),
-                                    ],
+                      // Promenade has no synopsis at all, so it reserves
+                      // nothing.
+                      if (!noSynopsis) ...[
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: synSlot,
+                          child: description != null
+                              ? ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxWidth: maxWidth,
                                   ),
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
+                                  child: Text(
+                                    description,
+                                    maxLines: synLines,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.78,
+                                      ),
+                                      fontSize: 12.5,
+                                      height: 1.5,
+                                      fontWeight: FontWeight.w500,
+                                      // Crisp, tight shadow — a seasoning under
+                                      // the scrim, never a smear (big radii
+                                      // read as muddy text on TV panels).
+                                      shadows: const [
+                                        Shadow(
+                                          color: Color(0xBF000000),
+                                          blurRadius: 3,
+                                          offset: Offset(0, 1),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -14935,6 +18619,18 @@ class _StremioCard extends StatefulWidget {
   /// on two rows never trips Hero's duplicate-tag assert.
   final String? heroTag;
 
+  /// Cell shape. 2:3 everywhere except Promenade's wide strip (16/9) — only
+  /// the box changes; focus feel, hold-OK, progress and badges are identical.
+  final double aspectRatio;
+
+  /// Art override. Null uses [item].poster (the row default); the wide cells
+  /// pass a derived 16:9 still so a landscape box isn't filled with a
+  /// centre-cropped poster.
+  final String? artUrl;
+
+  /// Dim while unfocused — see [CardFocusRise.restVeil].
+  final Color? restVeil;
+
   const _StremioCard({
     required this.item,
     required this.isTelevision,
@@ -14947,6 +18643,9 @@ class _StremioCard extends StatefulWidget {
     this.onLongPress,
     required this.onOpen,
     this.heroTag,
+    this.aspectRatio = 2 / 3,
+    this.artUrl,
+    this.restVeil,
   });
 
   @override
@@ -15002,7 +18701,8 @@ class _StremioCardState extends State<_StremioCard>
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final poster = item.poster;
+    final wide = widget.aspectRatio > 1;
+    final poster = widget.artUrl ?? item.poster;
     // Focus visuals (scale + shadow + ring on one curve) live in the shared
     // [CardFocusRise] so tuning lands once for every board card.
     final List<Widget> layers = [
@@ -15012,7 +18712,11 @@ class _StremioCardState extends State<_StremioCard>
             fit: BoxFit.cover,
             // Decode board posters at a capped width — tiles are small,
             // full-res posters are the main memory churn while scrolling.
-            memCacheWidth: widget.isTelevision ? 320 : 480,
+            // A wide cell is ~2.7x the width of a poster at the same height,
+            // so it gets a proportionally larger cap rather than a blur.
+            memCacheWidth: widget.isTelevision
+                ? (wide ? 640 : 320)
+                : (wide ? 860 : 480),
             // Short fade on TV (see HomeTheme.imageFadeIn): posters arriving
             // as hard-snapping rectangles was the last cheap tell at the card
             // level; memory-cached loads still land settled with no fade.
@@ -15085,6 +18789,8 @@ class _StremioCardState extends State<_StremioCard>
       active: _active,
       isTelevision: widget.isTelevision,
       ringColor: widget.ringColor,
+      aspectRatio: widget.aspectRatio,
+      restVeil: widget.restVeil,
       children: layers,
     );
 
@@ -15330,6 +19036,15 @@ class _FavArtCell extends StatelessWidget {
   final List<FocusNode> rowNodes;
   final VoidCallback onUp;
   final VoidCallback onDown;
+
+  /// Horizontal overrides — see [_BoardCell.onLeft]. Null keeps the row
+  /// grammar.
+  final VoidCallback? onLeft;
+  final VoidCallback? onRight;
+
+  /// Held up/down — see [_BoardCell.onUpHold].
+  final VoidCallback? onUpHold;
+  final VoidCallback? onDownHold;
   final Widget child;
 
   const _FavArtCell({
@@ -15338,6 +19053,10 @@ class _FavArtCell extends StatelessWidget {
     required this.rowNodes,
     required this.onUp,
     required this.onDown,
+    this.onLeft,
+    this.onRight,
+    this.onUpHold,
+    this.onDownHold,
     required this.child,
   });
 
@@ -15350,7 +19069,9 @@ class _FavArtCell extends StatelessWidget {
     }
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.arrowLeft) {
-      if (column > 0) {
+      if (onLeft != null) {
+        onLeft!();
+      } else if (column > 0) {
         rowNodes[column - 1].requestFocus();
       } else {
         MainPageBridge.focusTvSidebar?.call();
@@ -15358,17 +19079,27 @@ class _FavArtCell extends StatelessWidget {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowRight) {
-      if (column < rowNodes.length - 1) {
+      if (onRight != null) {
+        onRight!();
+      } else if (column < rowNodes.length - 1) {
         rowNodes[column + 1].requestFocus();
       }
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp) {
-      onUp();
+      if (event is KeyRepeatEvent && onUpHold != null) {
+        onUpHold!();
+      } else {
+        onUp();
+      }
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowDown) {
-      onDown();
+      if (event is KeyRepeatEvent && onDownHold != null) {
+        onDownHold!();
+      } else {
+        onDown();
+      }
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;

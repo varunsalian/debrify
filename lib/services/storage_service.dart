@@ -645,21 +645,35 @@ class StorageService {
 
   static const String _tvHomeStyleKey = 'tv_home_style';
 
-  /// TV Home layout: 'canvas' (full-bleed stage + one bottom shelf, the
-  /// default) or 'classic' (hero + scrolling rows). Phone/desktop and the
-  /// Search tab never read it. Unset — and any stale value like the removed
-  /// 'shelf' — coerces to 'canvas'; only an explicit 'classic' keeps classic.
+  /// Every shipping TV Home layout. 'canvas' is the product default;
+  /// 'classic' is the original hero + scrolling rows. The rest are the
+  /// alternate stages (see `_buildAtriumBoard` and friends in search_screen).
+  ///
+  /// Coercion is TOTAL and both ways: a value written by a newer build and
+  /// read by an older one — or the long-removed 'shelf' — lands on 'canvas'
+  /// rather than rendering nothing.
+  static const Set<String> kTvHomeStyles = {
+    'canvas',
+    'classic',
+    'atrium',
+    'mosaic',
+    'promenade',
+    'deck',
+    'tonight',
+  };
+
+  /// TV Home layout. Phone/desktop and the Search tab never read it.
   static Future<String> getTvHomeStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_tvHomeStyleKey);
-    return raw == 'classic' ? 'classic' : 'canvas';
+    return kTvHomeStyles.contains(raw) ? raw! : 'canvas';
   }
 
   static Future<void> setTvHomeStyle(String style) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _tvHomeStyleKey,
-      style == 'classic' ? 'classic' : 'canvas',
+      kTvHomeStyles.contains(style) ? style : 'canvas',
     );
   }
 

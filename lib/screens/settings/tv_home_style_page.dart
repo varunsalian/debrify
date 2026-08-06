@@ -25,6 +25,31 @@ const List<TvHomeStyleChoice> kTvHomeStyleChoices = [
     'Classic',
     'Hero spotlight with scrolling rows',
   ),
+  TvHomeStyleChoice(
+    'atrium',
+    'Atrium',
+    'Split screen — details on the left, art and two rows of posters right',
+  ),
+  TvHomeStyleChoice(
+    'mosaic',
+    'Mosaic',
+    'A wall of posters, no hero — the lightest layout',
+  ),
+  TvHomeStyleChoice(
+    'promenade',
+    'Promenade',
+    'Centred art with a wide strip that slides through the middle',
+  ),
+  TvHomeStyleChoice(
+    'deck',
+    'Deck',
+    'The trailer plays in a card, with the next titles stacked behind it',
+  ),
+  TvHomeStyleChoice(
+    'tonight',
+    'Tonight',
+    'Resume first — a big Continue card, an Up Next queue, one row below',
+  ),
 ];
 
 /// Row caption for the current choice (rail subtitle in TV settings).
