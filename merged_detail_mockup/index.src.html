@@ -1,0 +1,1031 @@
+<title>Merged details page — six layouts</title>
+<style>
+/* ══ Page chrome (theme-aware) ═══════════════════════════════════════════ */
+:root{
+  --pg:#F6F5F2; --pg2:#FFFFFF; --pt:#16161A; --pt2:#5A5A63; --pt3:#8B8B93;
+  --pl:rgba(20,20,26,.10); --pac:#7A6F16;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --pg:#0E0E11; --pg2:#15151A; --pt:#EDEDF0; --pt2:#9A9AA4; --pt3:#6B6B75;
+         --pl:rgba(240,240,245,.11); --pac:#C9BE4E; }
+}
+:root[data-theme="light"]{ --pg:#F6F5F2; --pg2:#FFFFFF; --pt:#16161A; --pt2:#5A5A63; --pt3:#8B8B93; --pl:rgba(20,20,26,.10); --pac:#7A6F16; }
+:root[data-theme="dark"]{ --pg:#0E0E11; --pg2:#15151A; --pt:#EDEDF0; --pt2:#9A9AA4; --pt3:#6B6B75; --pl:rgba(240,240,245,.11); --pac:#C9BE4E; }
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--pg); color:var(--pt);
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:56px 24px 120px}
+h1{font-size:clamp(30px,4.4vw,46px);line-height:1.03;letter-spacing:-.035em;font-weight:800;margin:0 0 14px;text-wrap:balance}
+.lede{font-size:17px;color:var(--pt2);max-width:64ch;margin:0 0 8px}
+.eyebrow{font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--pac);margin:0 0 10px}
+.rule{height:1px;background:var(--pl);margin:34px 0}
+
+/* Token strip */
+.tokens{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 0}
+.tok{display:flex;align-items:center;gap:8px;border:1px solid var(--pl);border-radius:999px;padding:5px 12px 5px 6px;font-size:12px;color:var(--pt2);background:var(--pg2)}
+.sw{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.tok b{color:var(--pt);font-weight:650;font-variant-numeric:tabular-nums}
+
+/* Size switcher */
+.bar{position:sticky;top:0;z-index:40;display:flex;flex-wrap:wrap;gap:14px;align-items:center;
+  padding:12px 0;background:color-mix(in srgb,var(--pg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--pl);margin-bottom:34px}
+.seg{display:flex;gap:2px;padding:3px;border:1px solid var(--pl);border-radius:11px;background:var(--pg2)}
+.seg button{appearance:none;border:0;background:transparent;color:var(--pt2);font:inherit;font-size:12.5px;font-weight:600;
+  padding:6px 13px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--pt);color:var(--pg);}
+.seg button:focus-visible{outline:2px solid var(--pac);outline-offset:1px}
+.hint{font-size:12.5px;color:var(--pt3)}
+.hint kbd{font:inherit;font-family:ui-monospace,monospace;font-size:11.5px;border:1px solid var(--pl);border-radius:5px;padding:1px 5px;color:var(--pt2)}
+
+/* Concept blocks */
+.concept{margin:0 0 76px}
+.chead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:0 0 6px}
+.cnum{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--pac);letter-spacing:.1em}
+.cname{font-size:26px;font-weight:800;letter-spacing:-.025em;margin:0}
+.cthesis{color:var(--pt2);max-width:70ch;margin:0 0 4px}
+.caxis{font-size:12.5px;color:var(--pt3);margin:0 0 18px}
+.caxis b{color:var(--pt2);font-weight:650}
+.cmovie{margin:-12px 0 18px}
+.cmovie .mv{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--pac);border:1px solid var(--pl);border-radius:5px;padding:1px 7px;margin-right:8px;vertical-align:1px}
+
+/* Device stage */
+.stage{position:relative;display:flex;justify-content:center;padding:0}
+.holder{position:relative;transform-origin:top center}
+.screen{
+  position:relative;overflow:hidden;background:#0B0B0E;color:#F2F1EA;
+  container-type:size; border-radius:10px;
+  box-shadow:0 30px 70px -30px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.07);
+  font-family:ui-sans-serif,system-ui,-apple-system,Roboto,sans-serif;
+}
+.screen.active{box-shadow:0 30px 70px -30px rgba(0,0,0,.65), 0 0 0 2px var(--pac)}
+.sizetag{position:absolute;right:0;top:-24px;font-family:ui-monospace,monospace;font-size:11px;color:var(--pt3)}
+
+/* ══ Shared screen vocabulary ═══════════════════════════════════════════ */
+.screen *{box-sizing:border-box}
+.screen{
+  --ink:#0B0B0E; --ink2:#0E0B14;
+  --ac:#ABA124;              /* sampled from the poster, as the app does */
+  --gold:#F5B942;            /* STATE only */
+  --focus:#FBBF24;
+  --imdb:#F5C518; --trakt:#ED1C24; --simkl:#22D3EE;
+  --tx:#F2F1EA; --tx2:rgba(242,241,234,.64); --tx3:rgba(242,241,234,.40);
+  --hair:rgba(242,241,234,.11); --glass:rgba(242,241,234,.07);
+}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.035;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E")}
+.art{position:absolute;inset:0;object-fit:cover;width:100%;height:100%}
+.scrim{position:absolute;inset:0}
+.mono{font-family:ui-monospace,ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+
+/* focus ring — the app's in-bounds foreground border, never a glow */
+[data-f]{position:relative;outline:none}
+[data-f].foc::after{content:"";position:absolute;inset:0;border:2.5px solid var(--focus);border-radius:inherit;pointer-events:none;z-index:5}
+[data-f].foc.rnd::after{border-radius:999px}
+[data-f].foc.circ::after{border-radius:50%}
+
+/* identity pieces */
+.logo{display:block;object-fit:contain;object-position:left bottom;
+  filter:drop-shadow(0 2px 9px rgba(0,0,0,.9)) drop-shadow(0 0 22px rgba(0,0,0,.55))}
+.eyeb{font-size:9.5px;font-weight:800;letter-spacing:.22em;color:var(--ac);text-transform:uppercase}
+.ttl{font-weight:800;letter-spacing:-.03em;line-height:1.02;text-wrap:balance}
+.metarow{display:flex;align-items:center;gap:11px;flex-wrap:wrap;color:var(--tx2);font-size:12px;font-weight:600}
+.metarow .dot{width:3px;height:3px;border-radius:50%;background:var(--tx3)}
+.cert{border:1px solid var(--hair);background:var(--glass);border-radius:4px;padding:0 5px;font-size:10.5px;font-weight:700;color:var(--tx)}
+.imdb{display:inline-flex;align-items:center;gap:5px}
+.imdb i{background:var(--imdb);color:#000;border-radius:3px;padding:0 4px;font-size:9px;font-weight:800;font-style:normal;letter-spacing:.02em}
+.gen{display:flex;gap:6px;flex-wrap:wrap}
+.gen span{border:1px solid var(--hair);background:var(--glass);border-radius:999px;padding:3px 10px;font-size:10.5px;color:var(--tx2)}
+.syn{color:var(--tx2);line-height:1.55}
+
+/* actions */
+.acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:9px 16px;font-size:12.5px;font-weight:700;
+  border:1px solid var(--hair);background:var(--glass);color:var(--tx);cursor:default;white-space:nowrap}
+.btn.pri{background:#F6F5F0;color:#0D0D10;border-color:transparent;padding:10px 18px;
+  box-shadow:0 6px 22px -6px color-mix(in srgb,var(--ac) 70%,transparent)}
+.btn.src{color:var(--gold);border-color:color-mix(in srgb,var(--gold) 30%,transparent);background:color-mix(in srgb,var(--gold) 12%,transparent)}
+.btn.ico{padding:0;width:36px;height:36px;justify-content:center;border-radius:50%}
+.btn svg{width:15px;height:15px;flex:none}
+.btn.pri svg{width:17px;height:17px}
+.trk{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:6px 13px 6px 8px;border:1px solid var(--hair);background:var(--glass)}
+.trk .mk{width:19px;height:19px;border-radius:50%;display:grid;place-items:center;font-size:9px;font-weight:900;flex:none}
+.trk .lab{display:flex;flex-direction:column;line-height:1}
+.trk .lab b{font-size:8px;font-weight:800;letter-spacing:.13em}
+.trk .lab span{font-size:11.5px;font-weight:650;margin-top:3px}
+.trk.on.tr{background:color-mix(in srgb,var(--trakt) 12%,transparent);border-color:color-mix(in srgb,var(--trakt) 42%,transparent)}
+.trk.on.sk{background:color-mix(in srgb,var(--simkl) 12%,transparent);border-color:color-mix(in srgb,var(--simkl) 42%,transparent)}
+.trk.tr .mk{background:var(--trakt);color:#fff}
+.trk.sk .mk{background:var(--simkl);color:#04262C}
+.trk.tr .lab b{color:var(--trakt)} .trk.sk .lab b{color:var(--simkl)}
+.trk .rt{border-left:1px solid currentColor;padding-left:9px;margin-left:3px;font-size:11.5px;font-weight:800;opacity:.9}
+/* compact tracker — for narrow columns, where the brand eyebrow costs more than it tells */
+.trk.sm{padding:5px 11px 5px 6px;gap:7px}
+.trk.sm .mk{width:17px;height:17px;font-size:8px}
+.trk.sm .lab b{display:none}
+.trk.sm .lab span{font-size:11px;margin-top:0}
+
+/* Text lockup — the honest render when the logo art is too small to read.
+   The app already falls back to type for dark/unsuitable logos. */
+.wordmark{display:flex;flex-direction:column;line-height:.86;letter-spacing:-.03em;font-weight:800;flex:none}
+.wordmark b{font-size:15px}
+.wordmark i{font-style:normal;font-size:8.5px;font-weight:700;letter-spacing:.2em;color:var(--ac);margin-top:4px}
+
+/* season control */
+.seasonbar{display:flex;align-items:center;gap:10px}
+.sbtn{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--hair);background:var(--glass);color:var(--tx2);font-size:12px}
+.spick{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--hair);background:var(--glass);border-radius:999px;padding:5px 13px;font-size:12px;font-weight:700}
+.scount{font-size:11px;color:var(--tx3)}
+.schips{display:flex;gap:6px;overflow:auto;scrollbar-width:none}
+.schips::-webkit-scrollbar{display:none}
+.schip{border:1px solid var(--hair);background:var(--glass);border-radius:999px;padding:4px 12px;font-size:11px;font-weight:650;color:var(--tx2);white-space:nowrap}
+.schip.on{background:var(--tx);color:#0D0D10;border-color:transparent}
+
+/* episode primitives */
+/* These components are authored as <span> so they can nest anywhere; without an
+   explicit display they stay inline, sit on the text baseline, and leave a
+   descender gap that pushed every card caption out of its box. */
+.thumb,.epc,.sc,.gc,.castc,.recc{display:block}
+.thumb{position:relative;overflow:hidden;border-radius:6px;background:#1A1622;flex:none}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.prog{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(0,0,0,.55)}
+.prog i{display:block;height:100%;background:var(--gold)}
+.tick{color:var(--gold);flex:none}
+.upnext{position:absolute;top:4px;left:4px;background:var(--gold);color:#2A1E02;font-size:7.5px;font-weight:800;letter-spacing:.06em;padding:1.5px 5px;border-radius:3px}
+.epname{font-weight:650;letter-spacing:-.01em}
+.epmeta{color:var(--tx3);font-size:11px;display:flex;gap:9px;align-items:center}
+.epsyn{color:var(--tx2);font-size:11.5px;line-height:1.45;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+
+/* cast + recs */
+.castrow{display:flex;gap:12px;overflow:hidden;
+  -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 20px),transparent);
+  mask-image:linear-gradient(to right,#000 calc(100% - 20px),transparent)}
+.castc{width:58px;text-align:center;flex:none}
+.castc .ph{width:52px;height:52px;border-radius:50%;overflow:hidden;margin:0 auto;background:var(--glass)}
+.castc .ph img{width:100%;height:100%;object-fit:cover}
+.castc b{display:block;font-size:9.5px;font-weight:600;color:var(--tx2);margin-top:5px;line-height:1.25}
+.recrow{display:flex;gap:9px}
+.recc{width:74px;flex:none;border-radius:7px;overflow:hidden;aspect-ratio:2/3;background:var(--glass)}
+.recc img{width:100%;height:100%;object-fit:cover;display:block}
+.slab{font-size:9.5px;font-weight:800;letter-spacing:.16em;color:var(--tx3);text-transform:uppercase}
+.kv{display:grid;grid-template-columns:64px 1fr;gap:4px 10px;font-size:11.5px}
+.kv dt{color:var(--tx3)} .kv dd{margin:0;color:var(--tx2)}
+.backb{position:absolute;top:14px;left:14px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(0,0,0,.42);border:1px solid var(--hair);z-index:8}
+/* Inline variant, for layouts whose header is already a flex row — floating it
+   there left it half a line above everything it sat next to. */
+.backi{position:static;flex:none}
+
+/* Every scroll region fades at its edge, so a row cut by the fold reads as
+   "there is more" rather than as a clipped element. */
+.fade{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent);
+      mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent)}
+.fadex{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 22px),transparent);
+       mask-image:linear-gradient(to right,#000 calc(100% - 22px),transparent)}
+
+/* ─────────────────────────  I · MARQUEE  ───────────────────────────── */
+.marq{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end}
+.marq .scrim{background:
+  linear-gradient(to top,var(--ink) 6%,rgba(11,11,14,.92) 42%,rgba(11,11,14,.64) 68%,rgba(11,11,14,.38) 100%),
+  radial-gradient(120% 90% at 8% 20%,color-mix(in srgb,var(--ac) 18%,transparent),transparent 62%)}
+/* The identity text is capped so the artwork keeps its right half, but the
+   action row is NOT — capping it there forced the tracker pills onto a second
+   line and ate the rail's captions. */
+.marq .id{position:relative;padding:0 34px 9px;display:flex;flex-direction:column;gap:9px;max-width:58%}
+.marq .actbar{position:relative;padding:0 34px 13px}
+.marq .rail{position:relative;padding:0 0 18px 34px}
+.marq .railhead{display:flex;align-items:center;gap:14px;margin-bottom:9px;padding-right:34px}
+.marq .cards{display:flex;gap:11px;overflow:auto;scrollbar-width:none;padding-right:34px}
+.marq .cards::-webkit-scrollbar{display:none}
+.marq .epc{width:172px;flex:none;border-radius:8px}
+.marq .epc .thumb{width:100%;aspect-ratio:16/9;border-radius:8px}
+.marq .epc .cap{padding:7px 2px 0;display:flex;gap:8px;align-items:baseline}
+.marq .epc .n{font-size:11px;font-weight:800;color:var(--tx3);flex:none}
+.marq .epc .t{font-size:11.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.marq .logo{height:68px;max-width:100%}
+.marq .ttl{font-size:34px}
+@container (max-width:900px){
+  .marq .id{max-width:100%;padding:0 22px 9px}
+  .marq .actbar{padding:0 22px 12px}
+  .marq .logo{height:58px;max-width:78%}
+  .marq .ttl{font-size:28px}
+  .marq .rail{padding-left:22px}
+  .marq .railhead,.marq .cards{padding-right:22px}
+}
+@container (max-width:560px){
+  .marq{justify-content:flex-end}
+  .marq .scrim{background:linear-gradient(to top,var(--ink) 30%,rgba(11,11,14,.72) 58%,rgba(11,11,14,.15) 100%),
+    radial-gradient(100% 60% at 50% 0%,color-mix(in srgb,var(--ac) 20%,transparent),transparent 70%)}
+  .marq .art{height:62%;top:0;bottom:auto}
+  .marq .id{padding:0 18px 9px;gap:9px}
+  .marq .actbar{padding:0 18px 12px}
+  .marq .logo{height:52px;max-width:82%}
+  .marq .epc{width:150px}
+  .marq .rail{padding:0 0 16px 18px}
+  .marq .railhead,.marq .cards{padding-right:18px}
+}
+
+/* ─────────────────────────  II · DOSSIER  ──────────────────────────── */
+.dos{position:absolute;inset:0;display:flex}
+.dos .art{filter:saturate(.7)}
+.dos .scrim{background:linear-gradient(105deg,var(--ink) 0%,rgba(11,11,14,.93) 34%,rgba(11,11,14,.62) 100%)}
+.dos .left{position:relative;width:326px;flex:none;padding:18px 20px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.dos .plate{display:flex;gap:13px}
+.dos .pos{width:76px;aspect-ratio:2/3;border-radius:7px;overflow:hidden;flex:none;box-shadow:0 10px 26px -10px #000}
+.dos .pos img{width:100%;height:100%;object-fit:cover;display:block}
+.dos .ttl{font-size:21px}
+.dos .segd{display:flex;gap:2px;padding:3px;border:1px solid var(--hair);border-radius:10px;background:rgba(0,0,0,.3)}
+.dos .segd span{flex:1;text-align:center;font-size:10.5px;font-weight:700;padding:5px;border-radius:7px;color:var(--tx3)}
+.dos .segd span.on{background:var(--glass);color:var(--tx)}
+/* flex:none on every child — otherwise the synopsis, being the only freely
+   shrinkable item, collapsed to nothing while the rigid blocks below kept
+   their height. */
+.dos .body{overflow:hidden;display:flex;flex-direction:column;gap:14px}
+.dos .body>*{flex:none}
+/* Only when the column is tall enough to hold it — on a 540px TV this is the
+   first thing that would push the cast off the bottom. */
+.dos .kvblk{display:none}
+@container (min-height:860px){ .dos .kvblk{display:block} }
+.dos .right{position:relative;flex:1;background:color-mix(in srgb,var(--ink2) 86%,transparent);border-left:1px solid var(--hair);display:flex;flex-direction:column}
+.dos .rhead{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--hair)}
+.dos .list{flex:1;overflow:auto;padding:8px 12px 14px;display:flex;flex-direction:column;gap:4px;scrollbar-width:none}
+.dos .list::-webkit-scrollbar{display:none}
+.dos .row{display:flex;gap:12px;align-items:center;padding:8px;border-radius:9px}
+.dos .row .thumb{width:104px;aspect-ratio:16/9}
+.dos .row .mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.dos .row .epname{font-size:13px}
+.dos .row .epsyn{-webkit-line-clamp:2}
+.dos .row .end{display:flex;align-items:center;gap:8px;flex:none;color:var(--tx3)}
+@container (max-width:900px){ .dos .left{width:264px;padding:16px} .dos .row .thumb{width:88px} .dos .row .epsyn{display:none} }
+@container (max-width:560px){
+  .dos{flex-direction:column}
+  .dos .left{width:100%;padding:14px 16px 12px;gap:10px}
+  .dos .scrim{background:linear-gradient(to bottom,rgba(11,11,14,.55) 0%,rgba(11,11,14,.92) 38%,var(--ink) 60%)}
+  .dos .right{border-left:0;border-top:1px solid var(--hair)}
+  .dos .body .castblk{display:none}
+  .dos .row .thumb{width:96px}
+}
+
+/* ─────────────────────────  III · BROADSHEET  ──────────────────────── */
+.brd{position:absolute;inset:0;background:#0A0A0C;padding:26px 32px;display:flex;flex-direction:column;gap:0;overflow:hidden}
+.brd .top{display:flex;gap:24px;align-items:flex-start;border-bottom:1px solid var(--hair);padding-bottom:16px}
+.brd .hl{flex:1;min-width:0}
+.brd .ttl{font-family:ui-serif,"New York",Georgia,"Times New Roman",serif;font-weight:600;letter-spacing:-.02em;font-size:44px;line-height:.96}
+.brd .dek{font-family:ui-serif,"New York",Georgia,serif;font-size:13.5px;line-height:1.5;color:var(--tx2);max-width:52ch;margin-top:9px}
+.brd .plate{width:104px;flex:none;border-radius:2px;overflow:hidden;aspect-ratio:2/3}
+.brd .plate img{width:100%;height:100%;object-fit:cover;display:block;filter:grayscale(1) contrast(1.06)}
+.brd .strap{display:flex;gap:18px;align-items:center;padding:9px 0;border-bottom:1px solid var(--hair);font-size:10.5px;letter-spacing:.1em;color:var(--tx3)}
+.brd .strap b{color:var(--tx2);font-weight:700}
+.brd .strap .up{text-transform:uppercase}
+.brd .cols{flex:1;display:grid;grid-template-columns:1fr 216px;gap:0 26px;overflow:hidden;padding-top:12px}
+.brd .ledger{overflow:auto;scrollbar-width:none;padding-right:4px}
+.brd .ledger::-webkit-scrollbar{display:none}
+.brd .lrow{display:grid;grid-template-columns:26px 1fr auto;gap:12px;align-items:baseline;padding:8px 8px;border-bottom:1px solid rgba(242,241,234,.055);border-radius:4px}
+.brd .lrow .n{font-size:12px;font-weight:700;color:var(--tx3)}
+.brd .lrow .t{font-family:ui-serif,"New York",Georgia,serif;font-size:15px;font-weight:600;letter-spacing:-.005em}
+/* A ledger's whole argument is that the columns line up — so the trailing data
+   is a fixed grid, not a flex row whose cells shift when a tick appears. */
+.brd .lrow .d{font-size:10.5px;color:var(--tx3);display:grid;
+  grid-template-columns:28px 30px 78px 24px;gap:0 14px;align-items:baseline;text-align:right}
+.brd .lrow .d .tick{justify-self:center}
+.brd .lrow .d svg{display:block}
+.brd .lrow.foc .t{color:var(--focus)}
+.brd .lrow .exp{grid-column:2/4;display:none;gap:12px;margin-top:8px}
+.brd .lrow.foc .exp{display:flex}
+.brd .lrow .exp .thumb{width:132px;aspect-ratio:16/9;border-radius:3px}
+.brd .lrow .exp p{margin:0;font-size:11.5px;line-height:1.5;color:var(--tx2)}
+.brd .lrow.crow .d{grid-template-columns:1fr;text-align:right}
+.brd .lrow.crow .t{font-size:15px}
+.stg .castgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px}
+.stg .cc{display:flex;gap:11px;align-items:center;padding:7px;border-radius:10px;min-width:0}
+.stg .cc .ph{width:44px;height:44px;border-radius:50%;overflow:hidden;flex:none;background:var(--glass)}
+.stg .cc .ph img{width:100%;height:100%;object-fit:cover;display:block}
+.stg .cc .nm{min-width:0;display:flex;flex-direction:column;gap:2px}
+.stg .cc .nm b{font-size:13px;font-weight:650}
+.stg .cc .nm span{font-size:11px;color:var(--tx3)}
+.dos .refblk{padding:11px 9px 4px}
+.dos .refblk .slab{margin-bottom:9px}
+.brd .aside{border-left:1px solid var(--hair);padding-left:22px;overflow:hidden;display:flex;flex-direction:column;gap:15px}
+.brd .acts{margin-bottom:2px}
+.brd .btn{border-radius:3px}
+.brd .btn.pri{border-radius:3px;box-shadow:none}
+.brd .trk{border-radius:3px}
+@container (max-width:900px){ .brd{padding:22px 24px} .brd .ttl{font-size:34px} .brd .cols{grid-template-columns:1fr 180px;gap:0 18px} }
+@container (max-width:560px){
+  .brd{padding:18px 18px}
+  .brd .ttl{font-size:27px} .brd .dek{font-size:12.5px;-webkit-line-clamp:3;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+  .brd .plate{width:72px}
+  .brd .cols{grid-template-columns:1fr}
+  .brd .aside{display:none}
+  .brd .macts{display:flex!important;padding:11px 0;border-bottom:1px solid var(--hair)}
+  /* The strap can't hold the season control at 390px — it moves down to sit
+     with the actions, where there's room for it. */
+  .brd .strap{flex-wrap:wrap;gap:10px 14px}
+  .brd .strap .seasonbar{display:none}
+  .brd .macts .seasonbar{display:flex}
+  /* Runtime is the least useful of the four data columns on a narrow ledger. */
+  .brd .lrow{grid-template-columns:22px 1fr auto;gap:10px}
+  .brd .lrow .d{grid-template-columns:26px 74px 24px;gap:0 12px}
+  .brd .lrow .d .rt{display:none}
+}
+.brd .macts{display:none}
+
+/* ─────────────────────────  IV · STAGE  ────────────────────────────── */
+.stg{position:absolute;inset:0;display:flex;flex-direction:column}
+.stg .top{position:relative;height:52%;flex:none;overflow:hidden}
+.stg .top .scrim{background:linear-gradient(to top,var(--ink) 4%,rgba(11,11,14,.86) 48%,rgba(11,11,14,.40) 76%,rgba(11,11,14,.16) 100%),
+  radial-gradient(90% 100% at 12% 100%,color-mix(in srgb,var(--ac) 22%,transparent),transparent 60%)}
+.stg .idw{position:absolute;left:32px;right:32px;bottom:14px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px}
+.stg .idl{display:flex;flex-direction:column;gap:10px;min-width:0}
+.stg .logo{height:66px;max-width:340px}
+.stg .ttl{font-size:30px}
+.stg .bot{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--ink)}
+.stg .tabs{display:flex;gap:22px;padding:0 32px;border-bottom:1px solid var(--hair);flex:none}
+.stg .tab{padding:11px 0 9px;font-size:12.5px;font-weight:700;color:var(--tx3);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.stg .tab.on{color:var(--tx);border-bottom-color:var(--ac)}
+.stg .tab .c{font-size:10px;color:var(--tx3);margin-left:5px;font-weight:600}
+.stg .panel{flex:1;overflow:auto;padding:12px 32px 18px;scrollbar-width:none}
+.stg .panel::-webkit-scrollbar{display:none}
+.stg .phead{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.stg .row{display:flex;gap:12px;align-items:center;padding:7px;border-radius:9px}
+.stg .row .thumb{width:112px;aspect-ratio:16/9}
+.stg .row .mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.stg .row .epname{font-size:13px}
+.stg .row .epsyn{-webkit-line-clamp:1}
+.stg .row .end{display:flex;align-items:center;gap:9px;color:var(--tx3);flex:none}
+@container (max-width:900px){ .stg .idw{left:22px;right:22px} .stg .logo{height:52px} .stg .tabs,.stg .panel{padding-left:22px;padding-right:22px} }
+@container (max-width:560px){
+  .stg .top{height:38%}
+  .stg .idw{left:16px;right:16px;bottom:12px;flex-direction:column;align-items:flex-start;gap:11px}
+  .stg .logo{height:44px;max-width:70%}
+  .stg .tabs{gap:16px;padding:0 16px;overflow:auto;scrollbar-width:none}
+  .stg .tabs::-webkit-scrollbar{display:none}
+  .stg .panel{padding:11px 16px 16px}
+  .stg .row .thumb{width:92px}
+  .stg .row .epsyn{display:none}
+}
+
+/* ─────────────────────────  V · FILMSTRIP  ─────────────────────────── */
+.flm{position:absolute;inset:0;overflow:hidden}
+.flm .still{position:absolute;inset:0;transition:opacity .28s ease}
+.flm .still img{width:100%;height:100%;object-fit:cover;display:block}
+.flm .scrim{background:linear-gradient(100deg,rgba(11,11,14,.94) 0%,rgba(11,11,14,.80) 34%,rgba(11,11,14,.24) 68%,rgba(11,11,14,.72) 100%),
+  linear-gradient(to top,var(--ink) 0%,rgba(11,11,14,.35) 32%,transparent 60%)}
+.flm .chipsm{display:none}
+.flm .head{position:absolute;top:16px;left:32px;right:32px;display:flex;align-items:center;gap:12px}
+.flm .head .lg{height:26px;object-fit:contain;opacity:.92}
+.flm .info{position:absolute;left:32px;top:50%;transform:translateY(-58%);max-width:44%;display:flex;flex-direction:column;gap:11px}
+.flm .epn{font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:.16em;color:var(--ac)}
+.flm .ttl{font-size:33px}
+/* The movie variant carries an extra line of identity and a poster strip that
+   is half as tall again as a 16:9 one, so the centre-locked anchor collided
+   with it. It gets its own anchor and a wider column. */
+@container (orientation:landscape){
+  .flm.mv .info{max-width:54%;top:42%;transform:translateY(-50%)}
+  .flm.mv .ttl{font-size:30px}
+}
+.flm .strip{position:absolute;left:0;right:0;bottom:0;padding:0 32px 14px}
+.flm .slabrow{display:flex;align-items:center;gap:12px;margin-bottom:7px}
+.flm .cards{display:flex;gap:10px;overflow:auto;scrollbar-width:none;padding-top:7px}
+.flm .cards::-webkit-scrollbar{display:none}
+.flm .sc{width:118px;flex:none;border-radius:6px;transition:transform .2s ease}
+.flm .sc .thumb{width:100%;aspect-ratio:16/9;border-radius:6px;opacity:.55;transition:opacity .2s ease}
+.flm .sc.foc{transform:translateY(-6px)}
+.flm .sc.foc .thumb{opacity:1}
+.flm .sc .cap{display:flex;gap:7px;align-items:baseline;padding:6px 1px 0;font-size:10.5px}
+.flm .sc .n{font-weight:800;color:var(--tx3)}
+.flm .sc .t{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flm .sc.foc .t{color:var(--tx)}
+@container (max-width:900px){ .flm .info{max-width:52%;left:22px} .flm .head,.flm .strip{left:22px;right:22px} .flm .strip{padding-left:22px;padding-right:22px} .flm .ttl{font-size:26px} }
+/* PORTRAIT, not "narrow": a full-bleed still behind a left-locked info column
+   is a landscape idea. Keyed to width alone, an 834×1112 tablet kept the
+   landscape treatment and opened a dead zone down the middle. Everything
+   becomes an ordinary flex stack instead — still, episode, strip — and the
+   episode block centres in whatever height is left, because on this concept the
+   episode IS the page and must not read as a short block with a hole under it.
+   Absolute positioning is dropped rather than patched with percentage margins
+   (those resolve against WIDTH and drifted badly). */
+@container (orientation:portrait){
+  .flm{display:flex;flex-direction:column}
+  .flm .still{position:relative;inset:auto;height:44%;flex:none}
+  .flm .scrim{background:linear-gradient(to top,var(--ink) 54%,rgba(11,11,14,.45) 66%,transparent 100%)}
+  .flm .head{left:20px;right:20px;top:14px}
+  .flm .head .seasonbar{display:none}
+  .flm .info{position:relative;z-index:2;transform:none;max-width:100%;left:auto;top:auto;
+    padding:0 20px;flex:1;min-height:0;justify-content:center;gap:11px}
+  .flm .syn{-webkit-line-clamp:none;max-width:100%}
+  .flm .strip{position:relative;z-index:2;inset:auto;padding:0 0 18px 20px;flex:none}
+  .flm .slabrow,.flm .cards{padding-right:20px}
+  .flm .sc{width:140px}
+  .flm .chipsm{display:block;margin-top:1px}
+}
+@container (orientation:portrait) and (min-height:900px){
+  .flm .still{height:52%}
+}
+@container (max-width:560px){
+  .flm .head{left:16px;right:16px;top:13px}
+  .flm .info{padding:0 16px}
+  .flm .ttl{font-size:23px}
+  .flm .strip{padding:0 0 16px 16px}
+  .flm .slabrow,.flm .cards{padding-right:16px}
+  .flm .sc{width:128px}
+}
+
+/* ─────────────────────────  VI · CONSOLE  ──────────────────────────── */
+.con{position:absolute;inset:0;background:var(--ink);display:flex;flex-direction:column;overflow:hidden}
+.con .art{opacity:.20;filter:saturate(.55) blur(1px)}
+.con .scrim{background:linear-gradient(to bottom,rgba(11,11,14,.55) 0%,var(--ink) 46%)}
+.con .strip{position:relative;display:flex;align-items:center;gap:14px;padding:13px 30px;border-bottom:1px solid var(--hair);flex:none}
+.con .strip .lg{height:30px;object-fit:contain}
+.con .strip .sp{flex:1}
+.con .main{position:relative;flex:1;min-height:0;display:grid;grid-template-columns:1fr 238px;gap:0}
+.con .lcol{padding:15px 24px 14px 30px;display:flex;flex-direction:column;gap:12px;min-width:0;overflow:hidden}
+.con .hero{display:flex;gap:16px;padding:11px;border-radius:13px;border:1px solid var(--hair);
+  background:linear-gradient(120deg,color-mix(in srgb,var(--ac) 11%,transparent),rgba(242,241,234,.035));flex:none}
+.con .hero .thumb{width:214px;aspect-ratio:16/9;border-radius:9px}
+.con .hero .hm{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px;justify-content:center}
+.con .hero .lab{font-size:9.5px;font-weight:800;letter-spacing:.2em;color:var(--gold)}
+.con .hero .ht{font-size:19px;font-weight:750;letter-spacing:-.02em}
+.con .bar{height:4px;border-radius:999px;background:rgba(242,241,234,.14);overflow:hidden;max-width:280px}
+.con .bar i{display:block;height:100%;background:var(--gold)}
+.con .grid{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:max-content;align-content:start;
+  gap:12px 10px;overflow:auto;scrollbar-width:none;padding-bottom:4px}
+.con .grid::-webkit-scrollbar{display:none}
+.con .gc .thumb{width:100%;aspect-ratio:16/9;border-radius:7px}
+.con .gc .cap{display:flex;gap:6px;align-items:baseline;padding:5px 1px 0;font-size:10.5px}
+.con .gc .n{font-weight:800;color:var(--tx3)}
+.con .gc .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx2)}
+.con .conmeta{display:none;flex-direction:column;gap:10px;flex:none}
+.con .rcol{border-left:1px solid var(--hair);padding:16px 22px;display:flex;flex-direction:column;gap:15px;overflow:hidden;background:rgba(0,0,0,.22)}
+.con .rcol>*{flex:none}
+/* A 540px-tall TV has room for summary, details and cast — not a poster rail
+   as well. It comes back the moment the screen is tall enough to hold it. */
+.con .recs{display:none}
+@container (min-height:700px){ .con .recs{display:block} }
+@container (max-width:900px){
+  /* A portrait tablet has height to spare — the reference column lies down
+     under the grid instead of disappearing, which is what dropping it did. */
+  .con .main{grid-template-columns:1fr;grid-template-rows:auto auto;overflow:auto;scrollbar-width:none}
+  .con .main::-webkit-scrollbar{display:none}
+  .con .rcol{border-left:0;border-top:1px solid var(--hair);flex-direction:row;flex-wrap:wrap;gap:18px 26px;padding:16px 22px 20px}
+  .con .rcol>*{flex:1 1 210px;min-width:0}
+  .con .lcol{padding:14px 22px} .con .hero .thumb{width:172px} .con .grid{grid-template-columns:repeat(3,1fr)}
+  /* Stacked, the PAGE scrolls — so the column and the grid must take their
+     natural height. Left clipping, they hid the hero's title and swallowed the
+     back half of the season with no way to reach it. */
+  .con .lcol,.con .grid,.con .rcol{overflow:visible}
+  .con .grid,.con .rcol{-webkit-mask-image:none;mask-image:none}
+  /* 834px can't hold identity + meta + five controls on one line either — it
+     just wrapped instead of stacking, which reads as a mistake rather than a
+     layout. Same treatment as portrait. */
+  .con .strip .stripmeta,.con .strip .stripacts{display:none}
+  .con .conmeta{display:flex}
+}
+@container (max-width:560px){
+  /* The header keeps only what identifies the page; the meta line and every
+     control drop into the column below, where they get the full width instead
+     of being squeezed into a vertical stack. */
+  .con .strip{padding:11px 16px;gap:10px}
+  .con .lcol{padding:12px 16px 14px;gap:11px}
+  .con .hero{flex-direction:column;gap:11px;padding:10px}
+  .con .hero .thumb{width:100%}
+  .con .grid{grid-template-columns:repeat(2,1fr)}
+}
+
+/* footnote table */
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:10px}
+.tbl th,.tbl td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--pl);vertical-align:top}
+.tbl th{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--pt3);font-weight:700}
+.tbl td:first-child{white-space:nowrap;font-weight:650}
+.scrollx{overflow-x:auto}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Debrify · merged details page</p>
+  <h1>Six layouts for the one screen that decides what you watch</h1>
+  <p class="lede">The merged page answers two questions at once — <em>what is this</em> and <em>which episode do I press play on</em>. Each concept below settles that tension differently, and each is drawn at four sizes from the same content, so the answer has to survive a 10-foot TV and a phone in one hand.</p>
+
+  <div class="tokens">
+    <span class="tok"><i class="sw" style="background:#0B0B0E"></i>ground <b>#0B0B0E</b></span>
+    <span class="tok"><i class="sw" style="background:#ABA124"></i>title accent <b>#ABA124</b></span>
+    <span class="tok"><i class="sw" style="background:#F5B942"></i>state gold <b>#F5B942</b></span>
+    <span class="tok"><i class="sw" style="background:#ED1C24"></i>Trakt <b>#ED1C24</b></span>
+    <span class="tok"><i class="sw" style="background:#22D3EE"></i>Simkl <b>#22D3EE</b></span>
+  </div>
+  <p class="caxis" style="margin-top:12px">The accent is <b>sampled from the poster</b> the same way <code>extractDominantColor</code> does in the app — so it changes per title, and gold stays reserved for state (watched, bound sources, progress) exactly as the codebase requires.</p>
+
+  <div class="bar">
+    <div class="seg" id="sizes" role="group" aria-label="Screen size">
+      <button data-size="tv" aria-pressed="true">TV · 960×540</button>
+      <button data-size="desktop" aria-pressed="false">Desktop · 1280×800</button>
+      <button data-size="tablet" aria-pressed="false">Tablet · 834×1112</button>
+      <button data-size="phone" aria-pressed="false">Phone · 390×844</button>
+    </div>
+    <div class="seg" id="kinds" role="group" aria-label="Title type">
+      <button data-kind="series" aria-pressed="true">Series</button>
+      <button data-kind="movie" aria-pressed="false">Movie</button>
+    </div>
+    <span class="hint">Click a screen, then drive it with <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> — the focus model is half the design.</span>
+  </div>
+
+  <div id="concepts"></div>
+
+  <div class="rule"></div>
+  <h2 style="font-size:22px;letter-spacing:-.02em;margin:0 0 4px">How each one behaves as the screen shrinks</h2>
+  <p class="cthesis">No concept is allowed to become a different idea on a phone — the structural axis has to survive, or it isn't one layout.</p>
+  <div class="scrollx">
+    <table class="tbl">
+      <thead><tr><th>Concept</th><th>TV / desktop</th><th>Tablet</th><th>Phone</th></tr></thead>
+      <tbody id="respbody"></tbody>
+    </table>
+  </div>
+
+  <div class="rule"></div>
+  <h2 style="font-size:22px;letter-spacing:-.02em;margin:0 0 4px">The same screen serves movies</h2>
+  <p class="cthesis"><code>MergedDetailScreen</code> handles both — <code>_isMovie</code> drops the episode pane for a single centred column. Five of these six concepts are organised around the episode list, so it's worth being explicit about what each one becomes when that list isn't there. Switch the toggle above to Movie to walk them.</p>
+  <div class="scrollx">
+    <table class="tbl">
+      <thead><tr><th>Concept</th><th>Verdict</th><th>What replaces the season</th></tr></thead>
+      <tbody id="moviebody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const IMG = __IMG_MAP__;
+
+/* ── Content ───────────────────────────────────────────────────────────
+   The same screen serves movies, where the episode list — the load-bearing
+   element in five of these six concepts — simply isn't there. Both titles are
+   real: Breaking Bad S5 and its cast from TVmaze, Interstellar's art from
+   metahub with cast headshots from TVmaze's person records. */
+const SERIES = {
+  kind:"SERIES", movie:false,
+  name:"Breaking Bad", year:"2008–2013", cert:"TV-MA", rating:"9.2", runtime:"49m",
+  genres:["Crime","Drama","Thriller"],
+  syn:"A high-school chemistry teacher diagnosed with inoperable lung cancer turns to manufacturing and selling methamphetamine with a former student to secure his family's future.",
+  awards:"16 wins · 58 nominations",
+  creditLabel:"Creator", director:"Vince Gilligan", studio:"Sony Pictures Television",
+  country:"United States", lang:"English",
+  season:5, seasons:5, epcount:16, sources:2,
+  bg:"bg", logo:"logo", poster:"poster", primary:"Resume · S5E9",
+};
+const MOVIE = {
+  kind:"MOVIE", movie:true,
+  name:"Interstellar", year:"2014", cert:"PG-13", rating:"8.7", runtime:"2h 49m",
+  genres:["Adventure","Drama","Sci-Fi"],
+  syn:"When Earth becomes uninhabitable, a former test pilot is tasked to pilot a spacecraft, along with a team of researchers, to find a new planet for humans.",
+  awards:"1 Oscar · 44 wins · 148 nominations",
+  creditLabel:"Director", director:"Christopher Nolan", studio:"Syncopy · Legendary",
+  country:"United States", lang:"English",
+  sources:3, progress:38,
+  bg:"mbg", logo:"mlogo", poster:"mposter", primary:"Resume · 38%",
+};
+const EPS = __EPS__;
+const SERIES_CAST = __CAST__;
+const MOVIE_CAST = __MCAST__;
+const MOVIE_RECS = __MRECS__;
+
+let mode = "series";
+let SHOW = SERIES;
+let CAST = SERIES_CAST;
+const isMovie = () => SHOW.movie;
+
+const ICON = {
+  play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+  film:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 5v14M17 5v14"/></svg>',
+  link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
+  tick:'<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1.2 14.4-4-4 1.4-1.4 2.6 2.6 5.6-5.6L17.8 9l-7 7.4z"/></svg>',
+  kebab:'<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>',
+  layers:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>',
+};
+
+/* progress model — 1..8 watched, 9 in progress, rest unseen */
+const st = n => n<=8 ? {w:true,p:100} : (n===9 ? {w:false,p:47} : {w:false,p:0});
+
+/* ── Shared fragments ─────────────────────────────────────────────────── */
+const meta = () => `<div class="metarow"><span>${SHOW.runtime}</span><i class="dot"></i><span>${SHOW.year}</span>
+  <span class="cert">${SHOW.cert}</span><span class="imdb"><b>${SHOW.rating}</b><i>IMDb</i></span></div>`;
+const genres = (n=3) => `<div class="gen">${SHOW.genres.slice(0,n).map(g=>`<span>${g}</span>`).join("")}</div>`;
+const btnPri = (label) => `<span class="btn pri rnd" data-f>${ICON.play}${label ?? SHOW.primary}</span>`;
+/* Movies get the manual Sources list as a first-class button — for a series the
+   episode list is the picker, which is why the app hides it there. */
+const btnSources = () => isMovie() ? `<span class="btn rnd" data-f>${ICON.layers}Sources</span>` : "";
+const btnTrailer = () => `<span class="btn rnd" data-f>${ICON.film}Trailer</span>`;
+const btnSrc = () => `<span class="btn src rnd" data-f>${ICON.link}${SHOW.sources} sources</span>`;
+const btnMore = () => `<span class="btn ico circ" data-f>${ICON.more}</span>`;
+const trkTrakt = () => `<span class="trk tr on rnd" data-f><i class="mk">t</i><span class="lab"><b>TRAKT</b><span>Watchlist</span></span><b class="rt">9</b></span>`;
+const trkSimkl = () => `<span class="trk sk on rnd" data-f><i class="mk">s</i><span class="lab"><b>SIMKL</b><span>Watching</span></span></span>`;
+const actions = (o={}) => `<div class="acts">${btnPri()}${o.trailer!==false?btnTrailer():""}${btnSources()}${btnSrc()}${btnMore()}${o.trackers!==false?trkTrakt()+trkSimkl():""}</div>`;
+const seasonBar = () => `<div class="seasonbar"><span class="sbtn" data-f>‹</span><span class="spick rnd" data-f>Season ${SHOW.season} ▾</span><span class="sbtn" data-f>›</span><span class="scount mono">${SHOW.epcount} episodes</span></div>`;
+const seasonChips = () => `<div class="schips fadex">${Array.from({length:SHOW.seasons},(_,i)=>
+  `<span class="schip rnd ${i+1===SHOW.season?"on":""}" data-f>Season ${i+1}</span>`).join("")}</div>`;
+const castImg = c => IMG[(isMovie()?'mcast':'cast')+c.i];
+const castRow = (n=6) => `<div class="castrow">${CAST.slice(0,n).map(c=>
+  `<span class="castc" data-f><span class="ph circ"><img src="${castImg(c)}" alt=""></span><b>${c.actor}</b></span>`).join("")}</div>`;
+const recRow = (n=6) => `<div class="recrow">${Array.from({length:n},(_,i)=>
+  `<span class="recc" data-f><img src="${IMG[(isMovie()?'mrec':'rec')+(i+1)]}" alt=""></span>`).join("")}</div>`;
+/* The collection a movie shows where a series shows its season. */
+const RECS = () => MOVIE_RECS;
+const recCard = (r,w) => `<span class="epc" data-f style="width:${w}px">
+  <span class="thumb" style="aspect-ratio:2/3;width:100%"><img src="${IMG['mrec'+r.i]}" alt=""></span>
+  <span class="cap"><span class="t">${r.title}</span></span></span>`;
+const kv = () => `<dl class="kv"><dt>${SHOW.creditLabel}</dt><dd>${SHOW.director}</dd><dt>Studio</dt><dd>${SHOW.studio}</dd>
+  <dt>Country</dt><dd>${SHOW.country}</dd><dt>Language</dt><dd>${SHOW.lang}</dd></dl>`;
+const thumb = (e,cls="") => {
+  const s = st(e.n);
+  return `<span class="thumb ${cls}"><img src="${IMG['ep'+e.n]}" alt="">
+    ${s.w?`<span style="position:absolute;inset:0;background:rgba(0,0,0,.45)"></span>`:""}
+    ${e.n===9?`<span class="upnext">UP NEXT</span>`:""}
+    ${s.p>0&&s.p<100?`<span class="prog"><i style="width:${s.p}%"></i></span>`:""}</span>`;
+};
+const epEnd = e => { const s=st(e.n);
+  return `<span class="end">${s.w?`<span class="tick">${ICON.tick}</span>`:(s.p?`<b class="mono" style="color:var(--gold);font-size:11px">${s.p}%</b>`:"")}<span style="opacity:.4">${ICON.kebab}</span></span>`; };
+/* What a movie shows where a series shows its season. */
+const movieReference = () => `
+  <div class="refblk"><div class="slab">Summary</div>
+    <p class="syn" style="margin:0;font-size:12.5px">${SHOW.syn}</p></div>
+  <div class="refblk"><div class="slab">Cast</div>${castRow(6)}</div>
+  <div class="refblk"><div class="slab">Details</div>${kv()}</div>
+  <div class="refblk"><div class="slab">More like this</div>${recRow(6)}</div>
+  <div class="refblk"><div class="slab">Parents guide</div>
+    <dl class="kv"><dt>Violence</dt><dd>Mild</dd><dt>Profanity</dt><dd>Moderate</dd>
+      <dt>Frightening</dt><dd>Moderate</dd></dl></div>`;
+const movieCastPanel = () => `<div class="castgrid">${CAST.map(c=>
+  `<span class="cc" data-f><span class="ph circ"><img src="${castImg(c)}" alt=""></span>
+    <span class="nm"><b>${c.actor}</b><span>${c.role}</span></span></span>`).join("")}</div>`;
+const back = () => `<span class="backb circ" data-f>${ICON.back}</span>`;
+const backi = () => `<span class="backb backi circ" data-f>${ICON.back}</span>`;
+
+/* ── I · MARQUEE ──────────────────────────────────────────────────────── */
+const marquee = () => `<div class="marq">
+  <img class="art" src="${IMG[SHOW.bg]}" alt=""><div class="scrim"></div>${back()}
+  <div class="id">
+    <img class="logo" src="${IMG[SHOW.logo]}" alt="${SHOW.name}">
+    ${meta()}${genres()}
+  </div>
+  <div class="actbar">${actions()}</div>
+  <div class="rail">
+    <div class="railhead">${isMovie()
+      ? `<span class="slab">More like this</span><span class="scount mono">${RECS().length} films</span>`
+      : seasonBar()}</div>
+    <div class="cards">${isMovie()
+      ? RECS().map(r=>recCard(r,92)).join("")
+      : EPS.map(e=>`<span class="epc" data-f>${thumb(e)}
+      <span class="cap"><span class="n mono">${e.n}</span><span class="t">${e.name}</span></span></span>`).join("")}</div>
+  </div><div class="grain"></div></div>`;
+
+/* ── II · DOSSIER ─────────────────────────────────────────────────────── */
+const dossier = () => `<div class="dos">
+  <img class="art" src="${IMG[SHOW.bg]}" alt=""><div class="scrim"></div>
+  <div class="left">
+    ${back()}
+    <div style="height:24px"></div>
+    <div class="plate">
+      <span class="pos"><img src="${IMG[SHOW.poster]}" alt=""></span>
+      <span style="min-width:0;display:flex;flex-direction:column;gap:6px">
+        <span class="eyeb">${SHOW.kind}</span>
+        <span class="ttl">${SHOW.name}</span>
+        ${meta()}
+      </span>
+    </div>
+    <div class="acts">${btnPri()}${btnSrc()}${btnMore()}
+      <span class="trk tr on sm rnd" data-f><i class="mk">t</i><span class="lab"><b>TRAKT</b><span>Watchlist</span></span><b class="rt">9</b></span>
+      <span class="trk sk on sm rnd" data-f><i class="mk">s</i><span class="lab"><b>SIMKL</b><span>Watching</span></span></span>
+    </div>
+    <div class="segd">${isMovie()
+      ? `<span class="on" data-f>About</span><span data-f>Sources</span>`
+      : `<span class="on" data-f>Episodes</span><span data-f>About</span>`}</div>
+    <div class="body fade">
+      <p class="syn" style="font-size:11.5px;margin:0;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden">${SHOW.syn}</p>
+      <div class="castblk"><div class="slab" style="margin-bottom:9px">Cast</div>${castRow(4)}</div>
+      <div class="kvblk"><div class="slab" style="margin-bottom:9px">Details</div>${kv()}</div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="rhead">${isMovie()
+      ? `<span class="slab">About this film</span><span class="scount mono">${SHOW.runtime}</span>`
+      : seasonBar()}</div>
+    <div class="list fade">${isMovie() ? movieReference() : EPS.map(e=>`<span class="row" data-f>${thumb(e)}
+      <span class="mid"><span class="epname">${e.n}. ${e.name}</span>
+        <span class="epmeta mono"><b style="color:var(--imdb)">★ ${e.rating}</b><span>${e.date}</span><span>${e.runtime}m</span></span>
+        <span class="epsyn">${e.summary}</span></span>${epEnd(e)}</span>`).join("")}</div>
+  </div><div class="grain"></div></div>`;
+
+/* ── III · BROADSHEET ─────────────────────────────────────────────────── */
+const broadsheet = () => `<div class="brd">
+  <div class="top">
+    <div class="hl">
+      <div class="strap up" style="border:0;padding:0 0 8px"><b>${SHOW.kind}</b>${isMovie()
+        ? `<span>${SHOW.runtime}</span>` : `<span>${SHOW.seasons} seasons</span>`}<span>${SHOW.year}</span></div>
+      <div class="ttl">${SHOW.name}</div>
+      <p class="dek">${SHOW.syn}</p>
+    </div>
+    <span class="plate"><img src="${IMG[SHOW.poster]}" alt=""></span>
+  </div>
+  <div class="strap"><span>${SHOW.runtime}</span><span class="cert">${SHOW.cert}</span><span class="imdb"><b>${SHOW.rating}</b><i>IMDb</i></span>
+    <span class="up" style="color:var(--gold)">${SHOW.awards}</span><span style="flex:1"></span>${isMovie()?"":seasonBar()}</div>
+  <div class="acts macts">${btnPri()}${btnSrc()}${isMovie()?"":seasonBar()}</div>
+  <div class="cols">
+    <div class="ledger fade">${isMovie()
+      ? CAST.map((c,i)=>`<div class="lrow crow" data-f>
+          <span class="n mono">${String(i+1).padStart(2,"0")}</span>
+          <span class="t">${c.actor}</span>
+          <span class="d mono"><span>${c.role}</span></span></div>`).join("")
+      : EPS.map(e=>`<div class="lrow" data-f>
+      <span class="n mono">${String(e.n).padStart(2,"0")}</span>
+      <span class="t">${e.name}</span>
+      <span class="d mono"><span>${st(e.n).w?`<span class="tick">${ICON.tick}</span>`:(st(e.n).p?`<b style="color:var(--gold)">${st(e.n).p}%</b>`:"")}</span><span class="rt">${e.runtime}m</span><span>${e.date}</span><span style="color:var(--imdb)">${e.rating}</span></span>
+      <span class="exp">${thumb(e)}<p>${e.summary}</p></span></div>`).join("")}</div>
+    <div class="aside">
+      ${actions({trailer:false,trackers:false})}
+      <div>${trkTrakt()}</div><div>${trkSimkl()}</div>
+      <div><div class="slab" style="margin-bottom:7px">Credits</div>${kv()}</div>
+      <div><div class="slab" style="margin-bottom:8px">Cast</div>${castRow(3)}</div>
+    </div>
+  </div><div class="grain"></div></div>`;
+
+/* ── IV · STAGE ───────────────────────────────────────────────────────── */
+const stage = () => `<div class="stg">
+  <div class="top"><img class="art" src="${IMG[SHOW.bg]}" alt=""><div class="scrim"></div>${back()}
+    <div class="idw">
+      <div class="idl"><img class="logo" src="${IMG[SHOW.logo]}" alt="${SHOW.name}">${meta()}${actions({trackers:false})}</div>
+      <div style="display:flex;gap:8px;flex:none">${trkTrakt()}${trkSimkl()}</div>
+    </div>
+  </div>
+  <div class="bot">
+    <div class="tabs fadex">${isMovie()
+      ? `<span class="tab on" data-f>Cast<span class="c mono">${CAST.length}</span></span>
+         <span class="tab" data-f>About</span><span class="tab" data-f>Sources</span>
+         <span class="tab" data-f>Similar</span><span class="tab" data-f>Parents Guide</span>`
+      : `<span class="tab on" data-f>Episodes<span class="c mono">${SHOW.epcount}</span></span>
+         <span class="tab" data-f>Cast<span class="c mono">${CAST.length}</span></span>
+         <span class="tab" data-f>About</span><span class="tab" data-f>Similar</span><span class="tab" data-f>Parents Guide</span>`}</div>
+    <div class="panel fade">${isMovie() ? movieCastPanel() : `
+      <div class="phead">${seasonChips()}</div>
+      ${EPS.map(e=>`<span class="row" data-f>${thumb(e)}
+        <span class="mid"><span class="epname">${e.n}. ${e.name}</span>
+          <span class="epmeta mono"><b style="color:var(--imdb)">★ ${e.rating}</b><span>${e.date}</span></span>
+          <span class="epsyn">${e.summary}</span></span>${epEnd(e)}</span>`).join("")}`}
+    </div>
+  </div><div class="grain"></div></div>`;
+
+/* ── V · FILMSTRIP ──────────────────────────────────────────────────────
+   The one concept a movie genuinely breaks: with no episodes there is nothing
+   for the strip to be, and nothing for focus to drive. What's left is a
+   full-bleed still with a recommendations rail — which is Marquee. Shown here
+   honestly rather than hidden. */
+const filmstripMovie = () => `<div class="flm mv">
+  <div class="still"><img src="${IMG[SHOW.bg]}" alt="" data-still></div><div class="scrim"></div>
+  <div class="head">${backi()}<span class="wordmark"><b>${SHOW.name}</b><i>${SHOW.kind} · ${SHOW.year}</i></span></div>
+  <div class="info">
+    <span class="epn">${SHOW.genres.join(" · ").toUpperCase()}</span>
+    <span class="ttl">${SHOW.name}</span>
+    <div class="metarow mono"><span>${SHOW.runtime}</span><i class="dot"></i><span>${SHOW.year}</span>
+      <span class="cert">${SHOW.cert}</span><span class="imdb"><b>${SHOW.rating}</b><i>IMDb</i></span></div>
+    <p class="syn" style="margin:0;font-size:12px;max-width:46ch;display:-webkit-box;
+      -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${SHOW.syn}</p>
+    <div class="acts">${btnPri()}${btnSources()}${btnSrc()}${btnMore()}</div>
+  </div>
+  <div class="strip">
+    <div class="slabrow"><span class="slab">More like this</span><span class="scount mono">${RECS().length} films</span></div>
+    <div class="cards">${RECS().map(r=>`<span class="sc" data-f style="width:84px">
+      <span class="thumb" style="aspect-ratio:2/3;width:100%;opacity:1"><img src="${IMG['mrec'+r.i]}" alt=""></span>
+      <span class="cap"><span class="t">${r.title}</span></span></span>`).join("")}</div>
+  </div><div class="grain"></div></div>`;
+const filmstrip = () => isMovie() ? filmstripMovie() : `<div class="flm">
+  <div class="still"><img src="${IMG.ep9}" alt="" data-still></div><div class="scrim"></div>
+  <div class="head">${backi()}<span class="wordmark"><b>${SHOW.name}</b><i>Series · ${SHOW.seasons} seasons</i></span>
+    <span style="flex:1"></span>${seasonBar()}</div>
+  <div class="info">
+    <span class="epn" data-slot="n">SEASON 5 · EPISODE 9</span>
+    <span class="ttl" data-slot="t">Blood Money</span>
+    <div class="metarow mono" data-slot="m"><span>Aug 11 2013</span><i class="dot"></i><span>47m</span><span class="imdb"><b>8.3</b><i>IMDb</i></span></div>
+    <p class="syn" style="margin:0;font-size:12px;max-width:46ch" data-slot="s"></p>
+    <div class="acts">${btnPri("Resume · 47%")}${btnSrc()}${btnMore()}</div>
+    <div class="chipsm">${seasonChips()}</div>
+  </div>
+  <div class="strip">
+    <div class="slabrow"><span class="slab">Season 5</span><span class="scount mono">${SHOW.epcount} episodes</span></div>
+    <div class="cards">${EPS.map(e=>`<span class="sc" data-f data-ep="${e.n}">${thumb(e)}
+      <span class="cap"><span class="n mono">${String(e.n).padStart(2,"0")}</span><span class="t">${e.name}</span></span></span>`).join("")}</div>
+  </div><div class="grain"></div></div>`;
+
+/* ── VI · CONSOLE ─────────────────────────────────────────────────────── */
+const console_ = () => { const up = EPS.find(e=>e.n===9) || EPS[0];
+  const heroArt = isMovie()
+    ? `<span class="thumb"><img src="${IMG[SHOW.bg]}" alt=""><span class="prog"><i style="width:38%"></i></span></span>`
+    : thumb(up);
+  return `<div class="con">
+  <img class="art" src="${IMG[SHOW.bg]}" alt=""><div class="scrim"></div>
+  <div class="strip">${backi()}<span class="wordmark"><b>${SHOW.name}</b><i>${isMovie()?SHOW.year:"Season "+SHOW.season}</i></span>
+    <span class="stripmeta">${meta()}</span><span class="sp"></span>
+    <span class="stripacts">${btnSrc()}${btnMore()}${trkTrakt()}${trkSimkl()}</span></div>
+  <div class="main">
+    <div class="lcol">
+      <!-- Portrait can't hold identity and controls on one line, so they move
+           down here where there's full width. Hidden at every other size. -->
+      <div class="conmeta">${meta()}<div class="acts">${btnSrc()}${btnMore()}${trkTrakt()}${trkSimkl()}</div></div>
+      <div class="hero">${heroArt}
+        <div class="hm"><span class="lab">Continue watching</span>
+          <span class="ht">${isMovie() ? SHOW.name : up.n+". "+up.name}</span>
+          <span class="epmeta mono">${isMovie()
+            ? SHOW.year+" · "+SHOW.runtime+" · 1 h 45 m left"
+            : "S5 · E"+up.n+" · "+up.runtime+"m · 25 min left"}</span>
+          <span class="bar"><i style="width:${isMovie()?38:47}%"></i></span>
+          <span class="acts" style="margin-top:4px">${btnPri("Resume")}${btnTrailer()}${btnSources()}</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;flex:none">${isMovie()
+        ? `<span class="slab">More like this</span><span class="scount mono">${RECS().length} films</span>`
+        : seasonBar()}</div>
+      <div class="grid fade">${isMovie()
+        ? RECS().map(r=>`<span class="gc" data-f>
+            <span class="thumb" style="aspect-ratio:2/3"><img src="${IMG['mrec'+r.i]}" alt=""></span>
+            <span class="cap"><span class="t">${r.title}</span></span></span>`).join("")
+        : EPS.filter(e=>e.n!==9).map(e=>`<span class="gc" data-f>${thumb(e)}
+        <span class="cap"><span class="n mono">${String(e.n).padStart(2,"0")}</span><span class="t">${e.name}</span></span></span>`).join("")}</div>
+    </div>
+    <div class="rcol fade">
+      <div><div class="slab" style="margin-bottom:7px">Summary</div>
+        <p class="syn" style="margin:0;font-size:11.5px;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden">${SHOW.syn}</p></div>
+      <div><div class="slab" style="margin-bottom:7px">Details</div>${kv()}</div>
+      <div><div class="slab" style="margin-bottom:8px">Cast</div>${castRow(3)}</div>
+      <div class="recs"><div class="slab" style="margin-bottom:8px">More like this</div>${recRow(3)}</div>
+    </div>
+  </div><div class="grain"></div></div>`; };
+
+/* ── Concept registry ─────────────────────────────────────────────────── */
+const CONCEPTS = [
+  {id:"marquee",
+   movie:"Clean. The rail stops being the season and becomes <b>More Like This</b>; everything else is unchanged.", n:"I", name:"Marquee",
+   thesis:"Full-bleed artwork with the identity anchored bottom-left, and the season laid out as a horizontal rail of wide episode cards along the bottom edge.",
+   axis:"Episodes run <b>horizontally</b>. Down from the actions lands in the rail; left/right walks the season. The show is the stage, the episodes are the marquee.",
+   render:marquee,
+   resp:["Identity block capped at 60% width so art breathes on the right","Identity goes full width, cards drop to 154px","Art becomes a 62% top panel; the rail stays horizontal and thumbable"]},
+  {id:"dossier",
+   movie:"Clean. The right pane stops being a list and becomes the <b>reference column</b> — summary, cast, details, similar, parents guide — and the segment reads About / Sources.", n:"II", name:"Dossier",
+   thesis:"A fixed identity card on the left that never scrolls, and the entire right side given to a vertical episode list — today's two-pane, but with the panes genuinely independent.",
+   axis:"Two <b>independent scroll planes</b>. The left is a reference card with a segmented Episodes/About switch; the right is pure list. Nothing moves when you browse.",
+   render:dossier,
+   resp:["326px card + full-height list","264px card, synopsis drops off the rows","Card collapses to a header, list takes the rest"]},
+  {id:"broadsheet",
+   movie:"Strong. The ledger becomes the <b>cast list</b>, which is the one other thing on this page that's genuinely a numbered table. The editorial treatment arguably suits a film better than a season.", n:"III", name:"Broadsheet",
+   thesis:"No backdrop wash at all. A serif masthead, hairline rules, a typeset spec column, and the season as a numbered ledger that opens its still only on the focused line.",
+   axis:"<b>Type carries it, not artwork.</b> The cheapest layout to render — one small plate, stills only on demand — and the only one that stays legible at any density.",
+   render:broadsheet,
+   resp:["Ledger + 216px aside column","Aside narrows to 180px","Aside drops entirely; actions move to a strap under the masthead"]},
+  {id:"stage",
+   movie:"Trivial — <b>drop one tab</b>. Cast leads instead of Episodes, and Sources joins the row. The cheapest concept to support both.", n:"IV", name:"Stage",
+   thesis:"A true 50/50 split — artwork or trailer owns the top half, and the bottom half is a tabbed deck holding Episodes, Cast, About, Similar and the Parents Guide.",
+   axis:"<b>Tabs</b> are the cross-size mechanism: everything the page knows has a home, and none of it costs vertical scroll on any device.",
+   render:stage,
+   resp:["52% stage, five tabs inline","Same, tab strip starts to scroll","Stage drops to 38%, tabs scroll horizontally"]},
+  {id:"filmstrip",
+   movie:"<b>Breaks.</b> With no episodes there is nothing for the strip to be and nothing for focus to drive, so it collapses into Marquee with a recommendations rail. A movie would need a different layout, or this concept is series-only.", n:"V", name:"Filmstrip",
+   thesis:"The focused episode's still becomes the page. Move along the strip and the whole screen changes — title, date, rating, synopsis and backdrop all follow the cursor.",
+   axis:"<b>Episode-centric, not show-centric.</b> The page is about the thing you're about to play; the show identity shrinks to a lockup in the corner.",
+   render:filmstrip,
+   resp:["Still full-bleed, info locked to the left third","Info column widens to 52%","Still becomes a 42% top panel, info stacks beneath it"]},
+  {id:"console",
+   movie:"Clean. The hero card becomes the movie's own resume card and the grid becomes <b>More Like This</b>. The shape — one big action, a collection under it — survives intact.", n:"VI", name:"Console",
+   thesis:"Resume-first. A large continue-watching card is the hero, the rest of the season sits beneath it as a dense grid, and the reference material lives in a right column.",
+   axis:"<b>Action before description.</b> The one thing you most likely want is the biggest element on screen; everything else is arranged around it by likelihood.",
+   render:console_,
+   resp:["Hero card + 4-up grid + 238px reference column","Reference column drops, grid goes 3-up","Hero card stacks vertically, grid goes 2-up"]},
+];
+
+const SIZES = {tv:[960,540], desktop:[1280,800], tablet:[834,1112], phone:[390,844]};
+let size = "tv";
+
+/* ── Build ────────────────────────────────────────────────────────────── */
+const root = document.getElementById("concepts");
+root.innerHTML = CONCEPTS.map(c=>`
+  <section class="concept" id="c-${c.id}">
+    <div class="chead"><span class="cnum">${c.n}</span><h2 class="cname">${c.name}</h2></div>
+    <p class="cthesis">${c.thesis}</p>
+    <p class="caxis">${c.axis}</p>
+    <p class="caxis cmovie"><b class="mv">As a movie</b> ${c.movie}</p>
+    <div class="stage"><div class="holder"><div class="sizetag mono"></div>
+      <div class="screen" tabindex="0" data-c="${c.id}"></div></div></div>
+  </section>`).join("");
+
+document.getElementById("respbody").innerHTML = CONCEPTS.map(c=>
+  `<tr><td>${c.n} · ${c.name}</td><td>${c.resp[0]}</td><td>${c.resp[1]}</td><td>${c.resp[2]}</td></tr>`).join("");
+document.getElementById("moviebody").innerHTML = CONCEPTS.map(c=>{
+  const m = c.movie.replace(/<\/?b>/g,"");
+  const cut = m.indexOf(".");
+  return `<tr><td>${c.n} · ${c.name}</td><td>${m.slice(0,cut)}</td><td>${m.slice(cut+1).trim()}</td></tr>`;
+}).join("");
+
+function paint(){
+  const [w,h] = SIZES[size];
+  CONCEPTS.forEach(c=>{
+    const scr = document.querySelector(`.screen[data-c="${c.id}"]`);
+    const holder = scr.closest(".holder");
+    scr.style.width = w+"px"; scr.style.height = h+"px";
+    scr.innerHTML = c.render();
+    const avail = Math.min(holder.parentElement.clientWidth, 1132);
+    const s = Math.min(1, avail / w);
+    holder.style.transform = `scale(${s})`;
+    holder.parentElement.style.height = (h*s)+"px";
+    holder.querySelector(".sizetag").textContent = `${w} × ${h}`;
+    // Filmstrip owns its own cursor — the strip card IS the focus, so seeding
+    // the back button too would paint two rings.
+    if (c.id === "filmstrip" && !isMovie()) { syncFilm(scr); }
+    else {
+      // Seed on the primary action — that's where a real page puts the remote,
+      // not on whatever element happens to come first in the DOM.
+      const seed = scr.querySelector(".btn.pri[data-f]") || scr.querySelector("[data-f]");
+      if (seed) seed.classList.add("foc");
+    }
+  });
+}
+document.getElementById("sizes").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  size = b.dataset.size;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute("aria-pressed", String(x===b)));
+  paint();
+});
+document.getElementById("kinds").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  mode = b.dataset.kind;
+  SHOW = mode === "movie" ? MOVIE : SERIES;
+  CAST = mode === "movie" ? MOVIE_CAST : SERIES_CAST;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute("aria-pressed", String(x===b)));
+  document.body.dataset.kind = mode;
+  paint();
+});
+window.addEventListener("resize", paint);
+
+/* ── Filmstrip: focus drives the whole screen ─────────────────────────── */
+function syncFilm(scr, n){
+  const cards = [...scr.querySelectorAll("[data-ep]")];
+  if(!cards.length) return;
+  const card = n ? cards.find(c=>+c.dataset.ep===n) : cards.find(c=>c.classList.contains("foc")) || cards[8] || cards[0];
+  if(!card) return;
+  cards.forEach(c=>c.classList.toggle("foc", c===card));
+  const e = EPS.find(x=>x.n === +card.dataset.ep); if(!e) return;
+  const s = st(e.n);
+  scr.querySelector("[data-still]").src = IMG["ep"+e.n];
+  scr.querySelector('[data-slot="n"]').textContent = `SEASON 5 · EPISODE ${e.n}`;
+  scr.querySelector('[data-slot="t"]').textContent = e.name;
+  scr.querySelector('[data-slot="m"]').innerHTML =
+    `<span>${e.date}</span><i class="dot"></i><span>${e.runtime}m</span><span class="imdb"><b>${e.rating}</b><i>IMDb</i></span>`+
+    (s.w?`<span class="tick" style="display:inline-flex">${ICON.tick}</span>`:"");
+  scr.querySelector('[data-slot="s"]').textContent = e.summary;
+  const pri = scr.querySelector(".btn.pri");
+  if(pri) pri.innerHTML = ICON.play + (s.w ? "Watch again" : s.p ? `Resume · ${s.p}%` : "Play");
+  // Keep the cursor visible — the default card is E9, nine along the strip.
+  const strip = card.parentElement;
+  if(strip) strip.scrollLeft = Math.max(0, card.offsetLeft - strip.clientWidth/2 + card.offsetWidth/2);
+}
+
+/* ── DPAD engine ──────────────────────────────────────────────────────── */
+let active = null;
+document.addEventListener("click", e=>{
+  const scr = e.target.closest(".screen");
+  document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("active", s===scr));
+  active = scr || null;
+  if (scr) scr.focus({preventScroll:true});
+});
+const vis = el => el.offsetParent !== null && el.getBoundingClientRect().width > 0;
+document.addEventListener("keydown", e=>{
+  if(!active) return;
+  const dirs = {ArrowUp:"u",ArrowDown:"d",ArrowLeft:"l",ArrowRight:"r"};
+  const d = dirs[e.key]; if(!d) return;
+  e.preventDefault();
+  const items = [...active.querySelectorAll("[data-f]")].filter(vis);
+  if(!items.length) return;
+  let cur = active.querySelector("[data-f].foc");
+  if(!cur || !vis(cur)){ cur = items[0]; items.forEach(i=>i.classList.remove("foc")); cur.classList.add("foc"); return; }
+  const a = cur.getBoundingClientRect(), ax = a.left+a.width/2, ay = a.top+a.height/2;
+  let best=null, bestScore=Infinity;
+  for(const it of items){
+    if(it===cur) continue;
+    const b = it.getBoundingClientRect(), bx = b.left+b.width/2, by = b.top+b.height/2;
+    const dx = bx-ax, dy = by-ay;
+    let main, cross;
+    if(d==="u"){ if(dy > -6) continue; main=-dy; cross=Math.abs(dx); }
+    else if(d==="d"){ if(dy < 6) continue; main=dy; cross=Math.abs(dx); }
+    else if(d==="l"){ if(dx > -6) continue; main=-dx; cross=Math.abs(dy); }
+    else { if(dx < 6) continue; main=dx; cross=Math.abs(dy); }
+    const score = main + cross*2.4;
+    if(score < bestScore){ bestScore=score; best=it; }
+  }
+  if(!best) return;
+  items.forEach(i=>i.classList.remove("foc"));
+  best.classList.add("foc");
+  best.scrollIntoView({block:"nearest",inline:"nearest",behavior:"smooth"});
+  if(active.dataset.c === "filmstrip" && best.dataset.ep && !isMovie()) syncFilm(active, +best.dataset.ep);
+});
+
+paint();
+</script>

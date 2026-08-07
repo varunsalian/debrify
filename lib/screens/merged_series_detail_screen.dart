@@ -18,6 +18,11 @@ import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/youtube_service.dart';
+import '../widgets/detail/detail_layout_console.dart';
+import '../widgets/detail/detail_layout_dossier.dart';
+import '../widgets/detail/detail_layout_marquee.dart';
+import '../widgets/detail/detail_layout_stage.dart';
+import '../widgets/detail/detail_model.dart';
 import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/episodes_panel.dart';
 import '../widgets/home/home_theme.dart';
@@ -29,6 +34,7 @@ import '../services/simkl/simkl_service.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import '../widgets/tracker_brand_marks.dart';
 import 'episodes_screen.dart' show kCatalogDetailRouteName;
+import 'settings/detail_page_style_page.dart' show effectiveDetailPageStyle;
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
 /// episode drill-down fused into one Stremio-styled screen. Reached only from
@@ -258,6 +264,29 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// or stacked) builds the panel at a time.
   final GlobalKey<EpisodesPanelState> _episodesPanelKey =
       GlobalKey<EpisodesPanelState>();
+
+  /// Which body to draw. Read SYNCHRONOUSLY from the warmed cache so the first
+  /// build already has it — an async read would paint Classic for a frame and
+  /// then re-lay-out the whole page.
+  ///
+  /// Direct-source mode (Xtream IPTV series) always gets Classic: that path has
+  /// its own contract (URL-backed episodes, a different progress loader,
+  /// playback on top of this page) and a single caller, so supporting six
+  /// arrangements there would risk a shipped feature for nothing.
+  late final String _style = widget.seasonsLoader != null
+      ? 'classic'
+      : effectiveDetailPageStyle(StorageService.detailPageStyleCached);
+
+  /// Filmstrip pushes the focused episode's still here. Painted by the shell as
+  /// an ambient layer — never as [HeroTrailerBackdrop.imageUrl], which stays
+  /// the title art the route Hero flies back into on pop.
+  String? _focusedStillUrl;
+
+  /// The two focus anchors the shell owns, handed to whichever body draws.
+  late final DetailFocusCoordinator _focusCoordinator = DetailFocusCoordinator(
+    backNode: _backButtonFocusNode,
+    primaryEntry: _leftEntryFocusNode,
+  );
 
   StremioMeta get _item => _enriched ?? widget.item;
 
@@ -788,19 +817,52 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        // Darker tint so even a bright poster reads as a dark surface.
+                        // Ambient still (Filmstrip): the focused episode's frame,
+                        // painted over the backdrop art but under everything
+                        // else. Inside this AnimatedOpacity so it fades away
+                        // with the rest of the content when the trailer is
+                        // promoted, and suppressed outright while it is —
+                        // otherwise it would cover the fullscreen video.
+                        if (_focusedStillUrl != null &&
+                            !_trailerForeground &&
+                            !_trailerAmbientPlaying)
+                          Positioned.fill(
+                            child: _AmbientStill(
+                              url: _focusedStillUrl!,
+                              isTelevision: widget.isTelevision,
+                            ),
+                          ),
+                        // Darker tint so even a bright poster reads as a dark
+                        // surface. Skipped for layouts that paint their own
+                        // scrim — two stacked washes take the artwork to
+                        // near-black, and a full-bleed layout is ABOUT the
+                        // artwork. Those layouts keep a much lighter floor so
+                        // a blown-out image still can't wash out the chrome.
                         DecoratedBox(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
-                              colors: [
-                                _bg.withValues(alpha: 0.60),
-                                _bg.withValues(alpha: 0.88),
-                              ],
+                              colors: _bodySpec.ownScrim
+                                  ? [
+                                      _bg.withValues(alpha: 0.10),
+                                      _bg.withValues(alpha: 0.24),
+                                    ]
+                                  : [
+                                      _bg.withValues(alpha: 0.60),
+                                      _bg.withValues(alpha: 0.88),
+                                    ],
                             ),
                           ),
                         ),
+                        // Flat editorial ground (Broadsheet). Painted here so
+                        // it covers the artwork without ever becoming an
+                        // ancestor of the trailer backdrop, and so it fades
+                        // out with the content on promotion.
+                        if (_bodySpec.inkGround)
+                          const Positioned.fill(
+                            child: ColoredBox(color: Color(0xFF0A0A0C)),
+                          ),
                         // Ambient per-title color grade: a soft glow of the
                         // extracted accent in the upper-left, under the content,
                         // so the whole surface is subtly lit by the title's own
@@ -830,27 +892,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                             ),
                           ),
                         ),
-                        SafeArea(
-                          child: _isMovie
-                              // A movie has no episode list — one centered,
-                              // scrollable Stremio detail column.
-                              ? Center(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 720,
-                                    ),
-                                    child: _buildInfoPane(),
-                                  ),
-                                )
-                              : (_wide
-                                    ? _buildTwoPane(backdropUrl)
-                                    : Column(
-                                        children: [
-                                          _buildHero(),
-                                          Expanded(child: _buildStackedBody()),
-                                        ],
-                                      )),
-                        ),
+                        SafeArea(child: _buildBody(backdropUrl)),
                         // Back button.
                         Positioned(
                           top: 0,
@@ -892,6 +934,124 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           ],
         ),
       ),
+    );
+  }
+
+  /// Everything the alternate layouts render, rebuilt with the screen so every
+  /// load, refresh and tracker round-trip reaches them unchanged.
+  ///
+  /// Layouts are stateless with respect to data — they own only focus, scroll
+  /// and tab state.
+  DetailModel _buildDetailModel() {
+    return DetailModel(
+      item: _item,
+      isMovie: _isMovie,
+      isTelevision: widget.isTelevision,
+      accent: _accent,
+      imdbExtra: _imdbExtra,
+      parentsGuide: _parentsGuide,
+      recommendations: _recommendations ?? const [],
+      primaryLabel: _primaryLabel,
+      sourceCount: widget.boundSourceCount?.call(_item) ?? 0,
+      hasTrailer: _trailerYtId != null,
+      trailerBusy: _trailerResolving || _trailerLoading,
+      trailerPlaying: _trailerAmbientPlaying,
+      hasTrakt: _traktOnlyMenuOptions.isNotEmpty,
+      traktTracked: _traktTracked,
+      traktLabel: _traktPillLabel,
+      traktRating: _traktStatus?.rating,
+      hasSimkl: _menuOptionsSimkl.isNotEmpty,
+      simklTracked: _simklTracked,
+      simklLabel: _simklPillLabel,
+      simklRating: _simklStatus?.rating,
+      showPrimary: widget.showQuickPlay,
+      onPrimary: widget.onResume,
+      onBrowse: _isMovie ? widget.onBrowse : null,
+      onTrailer: _playTrailer,
+      onSelectSource: widget.onSelectSource == null
+          ? null
+          : () async {
+              await widget.onSelectSource!(_item);
+              if (mounted) setState(() {});
+            },
+      onAppMenu: (_appMenuOptions.isNotEmpty && widget.onTraktAction != null)
+          ? _showAppActionsMenu
+          : null,
+      onTraktMenu: widget.onTraktAction != null ? _showQuickActionsMenu : null,
+      onSimklMenu: widget.onSimklAction != null
+          ? _showSimklQuickActionsMenu
+          : null,
+      onRecommendationTap: widget.onRecommendationTap,
+      onAmbientStill: (url) {
+        if (!mounted || _focusedStillUrl == url) return;
+        setState(() => _focusedStillUrl = url);
+      },
+      focus: _focusCoordinator,
+    );
+  }
+
+  /// Hands an alternate layout the hosted engine. Null for movies, which have
+  /// no episode list at all.
+  Widget Function(Widget Function(BuildContext, EpisodesPanelView))?
+  get _episodesHost => _isMovie
+      ? null
+      : (builder) => _buildEpisodesPanel(contentBuilder: builder);
+
+  /// What the active body wants painted behind it.
+  DetailBodySpec get _bodySpec => switch (_style) {
+    'broadsheet' => const DetailBodySpec(inkGround: true),
+    // Marquee and Stage are showcase layouts — the artwork is the point, and
+    // each already paints the gradient its own identity block sits on.
+    'marquee' || 'stage' => const DetailBodySpec(ownScrim: true),
+    _ => const DetailBodySpec(),
+  };
+
+  /// The one thing that switches on the chosen layout. Everything around it —
+  /// PopScope, the trailer backdrop and its promote/dismiss, the tint, the back
+  /// button, the trailer chip — is shell, written once.
+  Widget _buildBody(String? backdropUrl) {
+    switch (_style) {
+      case 'marquee':
+        return DetailMarquee(
+          model: _buildDetailModel(),
+          episodesHost: _episodesHost,
+        );
+      case 'dossier':
+        return DetailDossier(
+          model: _buildDetailModel(),
+          episodesHost: _episodesHost,
+        );
+      case 'stage':
+        return DetailStage(
+          model: _buildDetailModel(),
+          episodesHost: _episodesHost,
+        );
+      case 'console':
+        return DetailConsole(
+          model: _buildDetailModel(),
+          episodesHost: _episodesHost,
+        );
+      // Alternate layouts land here as they ship; anything not yet drawable
+      // was already narrowed to 'classic' by effectiveDetailPageStyle.
+      default:
+        return _buildClassicBody(backdropUrl);
+    }
+  }
+
+  /// Today's screen, unchanged: movie column, two-pane, or stacked.
+  Widget _buildClassicBody(String? backdropUrl) {
+    if (_isMovie) {
+      // A movie has no episode list — one centered, scrollable detail column.
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: _buildInfoPane(),
+        ),
+      );
+    }
+    if (_wide) return _buildTwoPane(backdropUrl);
+    return Column(
+      children: [_buildHero(), Expanded(child: _buildStackedBody())],
     );
   }
 
@@ -1725,9 +1885,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   // ── Bodies ────────────────────────────────────────────────────────────────
 
-  Widget _buildEpisodesPanel() {
+  /// [contentBuilder] non-null hands the arrangement to an alternate layout;
+  /// the engine (loading, watch merge, enrichment, playback, options) is
+  /// identical either way.
+  Widget _buildEpisodesPanel({
+    Widget Function(BuildContext, EpisodesPanelView)? contentBuilder,
+  }) {
     return EpisodesPanel(
       key: _episodesPanelKey,
+      contentBuilder: contentBuilder,
       show: widget.item,
       addon: widget.addon,
       initialSeason: widget.initialSeason,
@@ -4043,6 +4209,43 @@ class _SimklStatusRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The focused episode's frame, painted over the title artwork.
+///
+/// Switches instantly on TV: a fullscreen animated opacity per DPAD move is
+/// exactly what the TV cost budget forbids. Off-TV it cross-fades.
+class _AmbientStill extends StatelessWidget {
+  final String url;
+  final bool isTelevision;
+
+  const _AmbientStill({required this.url, required this.isTelevision});
+
+  @override
+  Widget build(BuildContext context) {
+    final image = CachedNetworkImage(
+      key: ValueKey(url),
+      imageUrl: url,
+      fit: BoxFit.cover,
+      cacheManager: DebrifyImageCache.manager,
+      memCacheWidth: 1280,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      placeholder: (_, __) => const SizedBox.shrink(),
+      errorWidget: (_, __, ___) => const SizedBox.shrink(),
+    );
+    if (isTelevision) return image;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 260),
+      // The default layout centres children under LOOSE constraints, so a
+      // BoxFit.cover image would size itself to its own aspect and letterbox.
+      layoutBuilder: (current, previous) => Stack(
+        fit: StackFit.expand,
+        children: [...previous, if (current != null) current],
+      ),
+      child: image,
     );
   }
 }

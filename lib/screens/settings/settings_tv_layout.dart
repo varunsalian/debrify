@@ -78,6 +78,8 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenIptvStyle;
   final String playerGuideStyleLabel;
   final Future<void> Function() onOpenPlayerGuideStyle;
+  final String detailPageStyleLabel;
+  final Future<void> Function() onOpenDetailPageStyle;
   // Live TV & DVR.
   final Future<void> Function() onOpenRecordings;
   final Future<void> Function() onOpenIptvSettings;
@@ -131,6 +133,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenIptvStyle,
     required this.playerGuideStyleLabel,
     required this.onOpenPlayerGuideStyle,
+    required this.detailPageStyleLabel,
+    required this.onOpenDetailPageStyle,
     required this.onOpenRecordings,
     required this.onOpenIptvSettings,
     required this.showSupportDonation,
@@ -205,7 +209,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// exactly 8; About up to 6 with the conditional donation row;
   /// Data & Backup up to 5). Connections and Trackers are sized from their
   /// own lists; see the pool computation in [initState].
-  static const int _kMaxCategoryRows = 8;
+  static const int _kMaxCategoryRows = 9;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -628,6 +632,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 subtitle: widget.playerGuideStyleLabel,
                 onTap: widget.onOpenPlayerGuideStyle,
                 focusNode: _paneNodes[7],
+              ),
+              SettingsTile.spec(
+                SettingsRows.detailPageStyle,
+                subtitle: widget.detailPageStyleLabel,
+                onTap: widget.onOpenDetailPageStyle,
+                focusNode: _paneNodes[8],
               ),
             ],
           ),

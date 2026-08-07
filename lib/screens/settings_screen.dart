@@ -46,6 +46,7 @@ import 'settings/iptv_style_page.dart';
 import 'settings/text_brightness_page.dart';
 import 'settings/launch_animation_page.dart';
 import '../widgets/launch/launch_ident.dart';
+import 'settings/detail_page_style_page.dart';
 import 'settings/player_guide_style_page.dart';
 import 'settings/tv_home_style_page.dart';
 import 'settings/tv_screen_size_page.dart';
@@ -182,6 +183,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _tvSidebarStyle = 'ghost';
   String _iptvStyle = 'command';
   String _playerGuideStyle = 'classic';
+  String _detailPageStyle = 'classic';
   String _phoneNavStyle = 'classic';
   String _textBrightness = 'bright';
   String _launchAnimation = 'horizon';
@@ -259,6 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getPhoneNavStyle(),
       StorageService.getTextBrightness(),
       StorageService.getLaunchAnimation(),
+      StorageService.getDetailPageStyle(),
     ]);
 
     if (!mounted) return;
@@ -291,6 +294,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final phoneNavStyle = results[25] as String;
     final textBrightness = results[26] as String;
     final launchAnimation = results[27] as String;
+    final detailPageStyle = results[28] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -432,6 +436,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _phoneNavStyle = phoneNavStyle;
     _textBrightness = textBrightness;
     _launchAnimation = launchAnimation;
+    _detailPageStyle = detailPageStyle;
 
     setState(() {});
 
@@ -733,6 +738,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenIptvStyle: _openIptvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
+      detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
+      onOpenDetailPageStyle: _openDetailPageStylePage,
       onOpenRecordings: _openRecordings,
       onOpenIptvSettings: _openIptvSettings,
       showSupportDonation: _supportDonation.hasProviders,
@@ -803,6 +810,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenIptvStyle: _openIptvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
+      detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
+      onOpenDetailPageStyle: _openDetailPageStylePage,
       phoneNavStyleLabel: _phoneNavStyle == 'floating'
           ? 'Floating button'
           : 'Classic bar',
@@ -1167,6 +1176,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'live tv',
           'dvr',
           'live tv & dvr',
+        ],
+      ),
+      // Ungated: the details page opens on every platform.
+      nav(
+        SettingsRows.detailPageStyle,
+        'Appearance',
+        _openDetailPageStylePage,
+        subtitle: detailPageStyleLabel(_detailPageStyle),
+        keywords: const [
+          'details','detail','page','layout','style','theme','look',
+          'movie','series','show','episodes','episode list',
+          'marquee','dossier','broadsheet','stage','filmstrip','console','classic',
         ],
       ),
       if (!PlatformUtil.isAndroidTvCached)
@@ -3666,6 +3687,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Same contract as [_openTvHomeStyle], for the details-page layout picker.
+  Future<void> _openDetailPageStylePage() async {
+    await pushSettingsPage(context, const DetailPageStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getDetailPageStyle();
+    if (!mounted) return;
+    setState(() {
+      _detailPageStyle = style;
+    });
+  }
+
   /// Same contract as [_openTvHomeStyle], for the text brightness picker.
   Future<void> _openTextBrightnessPage() async {
     await pushSettingsPage(context, const TextBrightnessPage());
@@ -3907,6 +3939,8 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenIptvStyle;
   final String playerGuideStyleLabel;
   final Future<void> Function() onOpenPlayerGuideStyle;
+  final String detailPageStyleLabel;
+  final Future<void> Function() onOpenDetailPageStyle;
   final String phoneNavStyleLabel;
 
   const _SettingsLayout({
@@ -3953,6 +3987,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenIptvStyle,
     required this.playerGuideStyleLabel,
     required this.onOpenPlayerGuideStyle,
+    required this.detailPageStyleLabel,
+    required this.onOpenDetailPageStyle,
     required this.phoneNavStyleLabel,
   });
 
@@ -4022,6 +4058,11 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.playerGuideStyle,
                       subtitle: playerGuideStyleLabel,
                       onTap: onOpenPlayerGuideStyle,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.detailPageStyle,
+                      subtitle: detailPageStyleLabel,
+                      onTap: onOpenDetailPageStyle,
                     ),
                     // Phone/small-window chrome — TVs navigate by sidebar
                     // and never read the style.

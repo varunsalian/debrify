@@ -29,6 +29,93 @@ import 'home/home_theme.dart';
 /// [AdvancedSearchSelection] and, just before dispatching it, call
 /// [onBeforeTerminalDispatch] so the host can tear its route stack down to
 /// wherever the result should land. The back affordance calls [onBack].
+/// What a custom arrangement should move focus to when the view generation
+/// changes. Mirrors what Classic does implicitly.
+enum EpisodeFocusIntent {
+  /// Nothing should move (a rebuild that isn't a data change).
+  none,
+
+  /// A fresh load or deep link resolved — reveal and focus [EpisodesPanelView.landing].
+  landing,
+
+  /// The user stepped the season; their attention is on the stepper, so the
+  /// layout re-focuses its own season control. Classic does the same thing by
+  /// re-requesting `_episodeSeasonDropdownFocusNode`.
+  seasonControl,
+}
+
+/// Everything a custom episode arrangement needs, so alternate layouts can be
+/// drawn without forking the engine (season loading, the Trakt/Simkl watch
+/// merge, enrichment, playback dispatch and the options sheet all stay here).
+///
+/// Handed to [EpisodesPanel.contentBuilder]. Layouts own their own FocusNodes —
+/// they must NOT reach for the engine's, which are disposed and rebuilt on
+/// every season change.
+class EpisodesPanelView {
+  final List<TraktSeason> seasons;
+  final int selectedSeasonNumber;
+
+  /// Episodes of the selected season. Empty while loading or on failure.
+  final List<TraktEpisode> episodes;
+  final bool loading;
+  final bool unavailable;
+
+  /// Poster fallback for episodes with no still of their own.
+  final String? showImageUrl;
+
+  /// Bumped when resolved episodes are PUBLISHED and on every season swap.
+  ///
+  /// Deliberately not the engine's internal load generation, which bumps when a
+  /// load *starts* (and guards enrichment) — a layout first built during
+  /// loading would then never see it change when the data actually landed.
+  final int generation;
+
+  /// The episode the engine resolved to land on — an explicit deep link, else
+  /// Trakt next-up, else local last-played, else the season's first. Validated
+  /// as a pair: a stored episode number is only honoured when its season is the
+  /// season that was actually selected. Null while loading / when empty.
+  final TraktEpisode? landing;
+
+  final EpisodeFocusIntent focusIntent;
+
+  /// 0..100, or null when the episode has no progress.
+  final double? Function(TraktEpisode) progressOf;
+  final bool Function(TraktEpisode) isNext;
+  final void Function(TraktEpisode) play;
+  final void Function(TraktEpisode) options;
+  final void Function(int delta) stepSeason;
+  final void Function(int seasonNumber) selectSeason;
+
+  /// Host's stable LEFT-crossing target, when it supplied one.
+  final VoidCallback? onLeftEdge;
+
+  /// Failure terminals. [onSearchForSources] is null when the host gave no
+  /// `onItemSelected` — direct-source shows have no torrent-search fallback.
+  final VoidCallback onRetry;
+  final VoidCallback? onSearchForSources;
+
+  const EpisodesPanelView({
+    required this.seasons,
+    required this.selectedSeasonNumber,
+    required this.episodes,
+    required this.loading,
+    required this.unavailable,
+    required this.showImageUrl,
+    required this.generation,
+    required this.landing,
+    required this.focusIntent,
+    required this.progressOf,
+    required this.isNext,
+    required this.play,
+    required this.options,
+    required this.stepSeason,
+    required this.selectSeason,
+    required this.onLeftEdge,
+    required this.onRetry,
+    required this.onSearchForSources,
+  });
+}
+
 class EpisodesPanel extends StatefulWidget {
   /// The series to browse.
   final StremioMeta show;
@@ -116,6 +203,12 @@ class EpisodesPanel extends StatefulWidget {
   /// watch-progress map, replacing the IMDb-keyed local/Trakt/Simkl merge.
   final Future<Map<String, double>> Function()? watchProgressLoader;
 
+  /// Alternate arrangement. Null (the default) keeps today's rendering exactly;
+  /// when set, the panel renders ONLY what this returns — no chrome of its own —
+  /// and suppresses its internal scroll/focus side effects, which target widgets
+  /// that a custom tree does not contain.
+  final Widget Function(BuildContext, EpisodesPanelView)? contentBuilder;
+
   const EpisodesPanel({
     super.key,
     required this.show,
@@ -137,6 +230,7 @@ class EpisodesPanel extends StatefulWidget {
     this.seasonsLoader,
     this.onPlayEpisode,
     this.watchProgressLoader,
+    this.contentBuilder,
   });
 
   @override
@@ -165,6 +259,17 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// sources" action that preserves the catalog pack-search path on demand.
   bool _episodesUnavailable = false;
   Map<String, double> _episodeWatchProgress = {};
+
+  /// Bumped when resolved episodes are PUBLISHED and on every season swap —
+  /// see [EpisodesPanelView.generation] for why this is not the load
+  /// generation. Only read by custom arrangements.
+  int _viewGeneration = 0;
+  TraktEpisode? _landing;
+  EpisodeFocusIntent _focusIntent = EpisodeFocusIntent.none;
+
+  /// True when a custom arrangement is driving. Gates every engine side effect
+  /// that targets a widget only the classic tree contains.
+  bool get _custom => widget.contentBuilder != null;
 
   /// The next episode to watch for the current show (from Trakt), used only to
   /// highlight the corresponding tile. Landing still prefers the last-played
@@ -773,10 +878,25 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         _episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
       }
 
+      // The stored/next-up episode number is only meaningful inside the season
+      // it came from. When the resolved season fell back to `seasons.first`
+      // (because the remembered one no longer exists), carrying the episode
+      // number across would land on an unrelated episode of season 1.
+      final landedInTargetSeason =
+          effectiveSeason == null || effectiveSeason == targetSeason.number;
+      final landingEpisode = (landedInTargetSeason && effectiveEpisode != null)
+          ? targetSeason.episodes
+                .where((e) => e.number == effectiveEpisode)
+                .firstOrNull
+          : null;
+
       setState(() {
         _episodeSeasons = seasons;
         _selectedSeasonNumber = targetSeason.number;
         _isLoadingEpisodes = false;
+        _landing = landingEpisode ?? targetSeason.episodes.firstOrNull;
+        _focusIntent = EpisodeFocusIntent.landing;
+        _viewGeneration++;
       });
 
       // Fill in per-episode thumbnails from TVMaze for any episode that didn't
@@ -800,14 +920,21 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       // Scroll to (and focus) the target episode once its tile is built.
       // Robust against variable EpisodeTile height + lazy ListView building
       // (the old fixed focusIndex*128 estimate is wrong for the new tile).
-      final targetEpIndex = effectiveEpisode != null
-          ? targetSeason.episodes.indexWhere((e) => e.number == effectiveEpisode)
-          : -1;
-      _scrollFocusEpisode(
-        targetEpIndex < 0 ? 0 : targetEpIndex,
-        targetSeason.episodes.length,
-        generation,
-      );
+      // A custom arrangement owns its own scrollable and FocusNodes, so the
+      // engine's reveal would target widgets that do not exist there. The
+      // layout reveals `view.landing` itself, driven by `focusIntent`.
+      if (!_custom) {
+        final targetEpIndex = effectiveEpisode != null
+            ? targetSeason.episodes.indexWhere(
+                (e) => e.number == effectiveEpisode,
+              )
+            : -1;
+        _scrollFocusEpisode(
+          targetEpIndex < 0 ? 0 : targetEpIndex,
+          targetSeason.episodes.length,
+          generation,
+        );
+      }
     } catch (e) {
       if (!mounted || generation != _episodeModeGeneration) return;
       debugPrint('EpisodesPanel: Episode fetch failed: $e');
@@ -1035,11 +1162,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       _episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
     }
 
-    if (_episodeScrollController.hasClients) {
+    if (!_custom && _episodeScrollController.hasClients) {
       _episodeScrollController.jumpTo(0);
     }
 
-    setState(() => _selectedSeasonNumber = seasonNumber);
+    setState(() {
+      _selectedSeasonNumber = seasonNumber;
+      _landing = season.episodes.firstOrNull;
+      // The user is on the stepper — keep them there, as Classic does by
+      // re-requesting the season dropdown.
+      _focusIntent = EpisodeFocusIntent.seasonControl;
+      _viewGeneration++;
+    });
   }
 
   void _onEpisodeTap(TraktEpisode episode) {
@@ -1482,6 +1616,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final custom = widget.contentBuilder;
+    if (custom != null) return custom(context, _buildView());
     if (widget.compact) {
       return Column(
         children: [
@@ -1504,6 +1640,55 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     );
   }
 
+  /// Snapshot handed to a custom arrangement. Cheap — it closes over state
+  /// rather than copying it, and is rebuilt with the panel.
+  EpisodesPanelView _buildView() {
+    final season = _episodeSeasons
+        .where((s) => s.number == _selectedSeasonNumber)
+        .firstOrNull;
+    final episodes =
+        season?.episodes ?? _episodeSeasons.firstOrNull?.episodes ?? const [];
+    final show = _selectedShow ?? widget.show;
+    return EpisodesPanelView(
+      seasons: _episodeSeasons,
+      selectedSeasonNumber: _selectedSeasonNumber,
+      episodes: episodes,
+      loading: _isLoadingEpisodes,
+      unavailable: _episodesUnavailable,
+      showImageUrl: show.poster,
+      generation: _viewGeneration,
+      landing: _landing,
+      focusIntent: _focusIntent,
+      progressOf: (e) => _episodeWatchProgress['${e.season}-${e.number}'],
+      isNext: (e) =>
+          _nextEpisode != null &&
+          _nextEpisode!.season == e.season &&
+          _nextEpisode!.episode == e.number,
+      play: _onEpisodeQuickPlay,
+      options: _showEpisodeOptions,
+      stepSeason: _stepSeason,
+      selectSeason: (n) => _onSeasonChanged(n),
+      onLeftEdge: widget.onFocusLeftEdge,
+      onRetry: () => _enterEpisodeMode(
+        show,
+        initialSeason: widget.initialSeason,
+        initialEpisode: widget.initialEpisode,
+      ),
+      // Mirrors the classic failure UI: no torrent-search fallback exists for
+      // direct-source shows, so the offer is withheld rather than dead.
+      onSearchForSources: widget.onItemSelected != null
+          ? () => _fallbackToDirectSearch(show)
+          : null,
+    );
+  }
+
+  /// Layouts call this after acting on [EpisodeFocusIntent], so a rebuild that
+  /// isn't a data change doesn't yank the cursor a second time.
+  void consumeFocusIntent() {
+    if (_focusIntent == EpisodeFocusIntent.none) return;
+    _focusIntent = EpisodeFocusIntent.none;
+  }
+
   // ── Compact (Stremio) rendering ──────────────────────────────────────────
 
   int get _currentSeasonIndex =>
@@ -1518,6 +1703,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // Stepping into the first/last season disables the chevron we're on, which
     // would drop primary focus into the void. Park focus on the always-present
     // season dropdown so the remote stays live.
+    // Classic parks focus on its always-present dropdown; a custom arrangement
+    // has no such node, and its own season control keeps focus already.
+    if (_custom) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _episodeSeasonDropdownFocusNode.requestFocus();
     });

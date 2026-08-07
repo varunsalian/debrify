@@ -199,6 +199,13 @@ Future<void> main() async {
   try {
     await StorageService.getLaunchAnimation();
   } catch (_) {}
+  // Warms the details-page layout choice: MergedDetailScreen picks its body in
+  // the first build, so an async-only read would paint Classic for a frame and
+  // then re-lay-out the entire page. Same rule — a cosmetic pref must never
+  // block startup.
+  try {
+    await StorageService.getDetailPageStyle();
+  } catch (_) {}
   await _capImageCache();
   await _resolveStartupChannel();
   // Discover's remembered Sort per source, warmed before first frame so the

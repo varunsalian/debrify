@@ -677,6 +677,50 @@ class StorageService {
     );
   }
 
+  static const String _detailPageStyleKey = 'detail_page_style';
+
+  /// Every value storage will persist for the merged details page look
+  /// (Appearance → Details Page). All seven are accepted from day one — a
+  /// choice written by a newer build has to survive a downgrade rather than be
+  /// silently rewritten to the default the first time an older build reads it.
+  ///
+  /// What a given BUILD can actually draw is a narrower set —
+  /// `kDetailPageStylesShipped` in `screens/settings/detail_page_style_page.dart`
+  /// — and dispatch/labels/picker all go through `effectiveDetailPageStyle`.
+  static const Set<String> kDetailPageStyles = {
+    'classic',
+    'marquee',
+    'dossier',
+    'broadsheet',
+    'stage',
+    'filmstrip',
+    'console',
+  };
+
+  /// Synchronous mirror, warmed in main() before runApp: `MergedDetailScreen`
+  /// picks its body in the first build, so an async-only read would paint
+  /// Classic for a frame and then re-lay-out the whole page.
+  ///
+  /// Normalizes toward 'classic' on BOTH sides — an unrecognized value has to
+  /// mean the default for the reader and the writer alike.
+  static String detailPageStyleCached = 'classic';
+
+  static Future<String> getDetailPageStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_detailPageStyleKey);
+    detailPageStyleCached = kDetailPageStyles.contains(value)
+        ? value!
+        : 'classic';
+    return detailPageStyleCached;
+  }
+
+  static Future<void> setDetailPageStyle(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = kDetailPageStyles.contains(value) ? value : 'classic';
+    await prefs.setString(_detailPageStyleKey, normalized);
+    detailPageStyleCached = normalized;
+  }
+
   static const String _iptvStyleKey = 'iptv_style';
   static const Set<String> _iptvStyles = {'command', 'edition', 'console'};
 

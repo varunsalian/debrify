@@ -178,6 +178,12 @@ abstract final class SettingsRows {
     title: 'Player Guide',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen layout) — passed per call site.
+  static const detailPageStyle = SettingsRowContent(
+    icon: Icons.article_rounded,
+    title: 'Details Page',
+    subtitle: '',
+  );
   // Subtitle is dynamic (current folder) — passed per call site.
   static const downloadLocation = SettingsRowContent(
     icon: Icons.folder_rounded,
