@@ -279,3 +279,44 @@ ultimately re-running this on a genuine 4K/HDR television.
 the available hardware. Do not start the integration until it is demonstrated on
 a 4K panel. `AVDisplayManager` is not exposed as `UIScreen.displayManager` on
 this SDK, so a future attempt needs another route to the real output format.
+
+---
+
+## The cheaper answer, from Apple's documentation (2026-08-07)
+
+Apple's *Updating Your App for Apple TV 4K* tech talk states the requirement
+verbatim:
+
+> "The first step is to add a **2x launch image**. Until you do so, tvOS is going
+> to run your app in **compatibility mode**."
+
+In compatibility mode the app gets a 1920x1080 buffer that tvOS upscales;
+`scale` is 1.0 and `nativeBounds` is 1920x1080 — exactly what the probe
+measured. With a 2x launch image, `scale` reflects retina and `nativeBounds`
+reports the attached 4K display's real pixels, i.e. **the UI renders at
+3840x2160**.
+
+Debrify's tvOS target had **no launch image at all** (only AppIcon.brandassets
+and AccentColor) and no `UILaunchStoryboardName`, so on a 4K TV it was
+guaranteed to be in compatibility mode.
+
+**Why this matters more than the engine work:** the mpv texture composites into
+that surface. In compatibility mode it can never exceed 1080p — which is the
+ceiling we measured and blamed on the texture architecture. Out of compatibility
+mode, the EXISTING mpv path can carry 4K video: no second playback stack, no
+bridge, no subtitle overlay rewrite, and no TrueHD -> lossy EAC3 downgrade.
+
+Video on the hardware plane remains genuinely independent (Apple: video
+resolution does not depend on compatibility mode), and it is still **the only
+route to HDR/Dolby Vision**, which a Flutter texture cannot carry.
+
+**Done:** `tvos/Runner/Assets.xcassets/LaunchImage.launchimage` (1920x1080 and
+3840x2160, #020617 to match the Android and iOS splash) plus
+`ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage` on all three
+configurations. Verified compiled into `Assets.car`; the device still reports
+1080p because the attached display is not 4K, which is the documented behaviour.
+
+**Standing conclusion:** ship the launch image, keep AetherEngine parked. Revisit
+the engine only if HDR specifically matters, and only after measuring the mpv
+path on a genuine 4K panel — a comparison that was impossible before, since
+compatibility mode capped everything at 1080p regardless of engine.
