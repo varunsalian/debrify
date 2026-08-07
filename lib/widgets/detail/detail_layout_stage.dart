@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../utils/platform_util.dart';
 
 import '../../services/debrify_image_cache.dart';
 import '../../services/imdb_enrichment_service.dart';
@@ -10,6 +11,7 @@ import 'detail_episode_cells.dart';
 import 'detail_identity.dart';
 import 'detail_model.dart';
 import 'detail_style.dart';
+import 'theme/detail_theme.dart';
 
 /// **Stage** — a true split: artwork owns the top half, and the bottom half is
 /// a tabbed deck holding Episodes, Cast, About, Similar and the Parents Guide.
@@ -42,6 +44,10 @@ class DetailStage extends StatefulWidget {
 enum _Tab { episodes, cast, about, similar, guide }
 
 class _DetailStageState extends State<DetailStage> {
+  /// Resolved once per build; every helper below is called from build, so a
+  /// field is simpler than threading it through a dozen signatures.
+  late DetailTheme _t;
+
   final DetailCellNodes _cellNodes = DetailCellNodes('stage');
   int _handledGeneration = -1;
 
@@ -105,6 +111,7 @@ class _DetailStageState extends State<DetailStage> {
 
   @override
   Widget build(BuildContext context) {
+    _t = DetailThemeScope.of(context);
     final m = widget.model;
     final size = resolveDetailSize(
       isTelevision: m.isTelevision,
@@ -126,7 +133,7 @@ class _DetailStageState extends State<DetailStage> {
         ),
         Expanded(
           child: DecoratedBox(
-            decoration: const BoxDecoration(color: DetailPalette.ink),
+            decoration: BoxDecoration(color: _t.ground),
             child: !showStrip
                 ? const SizedBox.shrink()
                 : Column(
@@ -169,7 +176,7 @@ class _DetailStageState extends State<DetailStage> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        DecoratedBox(decoration: BoxDecoration(gradient: detailStageScrim())),
+        DecoratedBox(decoration: BoxDecoration(gradient: detailStageScrim(_t))),
         Positioned(
           left: size.gutter,
           right: size.gutter,
@@ -186,7 +193,7 @@ class _DetailStageState extends State<DetailStage> {
     final hasSources = m.isMovie && m.onBrowse != null;
     return Container(
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: DetailPalette.hair)),
+        border: Border(bottom: BorderSide(color: _t.hair)),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -279,6 +286,7 @@ class _DetailStageState extends State<DetailStage> {
             guide: m.parentsGuide!,
             tv: m.isTelevision,
             dense: true,
+            theme: _t,
           ),
         );
     }
@@ -312,7 +320,7 @@ class _DetailStageState extends State<DetailStage> {
             width: double.infinity,
             padding: EdgeInsets.fromLTRB(size.gutter, 11, size.gutter, 10),
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: DetailPalette.hair)),
+              border: Border(bottom: BorderSide(color: _t.hair)),
             ),
             child: DetailSeasonControl(
               seasonNumber: view.selectedSeasonNumber,
@@ -326,6 +334,7 @@ class _DetailStageState extends State<DetailStage> {
                 seasonNumbers: [for (final s in view.seasons) s.number],
                 selected: view.selectedSeasonNumber,
                 isTelevision: m.isTelevision,
+                theme: _t,
                 onSelected: view.selectSeason,
               ),
               focusNode: _seasonNode,
@@ -395,26 +404,21 @@ class _DetailStageState extends State<DetailStage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
             decoration: BoxDecoration(
-              color: DetailPalette.gold.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: DetailPalette.gold.withValues(alpha: 0.24),
-              ),
+              // AWARD: immutable metadata, not computed state.
+              color: _t.award.withValues(alpha: 0.12),
+              borderRadius: _t.brSm,
+              border: Border.all(color: _t.award.withValues(alpha: 0.24)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.emoji_events_rounded,
-                  size: 15,
-                  color: DetailPalette.gold,
-                ),
+                Icon(Icons.emoji_events_rounded, size: 15, color: _t.award),
                 const SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     awards,
-                    style: const TextStyle(
-                      color: DetailPalette.gold,
+                    style: TextStyle(
+                      color: _t.award,
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
@@ -428,11 +432,7 @@ class _DetailStageState extends State<DetailStage> {
         if (synopsis != null && synopsis.isNotEmpty) ...[
           Text(
             synopsis,
-            style: TextStyle(
-              color: DetailPalette.tx2,
-              fontSize: 13.5,
-              height: 1.55,
-            ),
+            style: TextStyle(color: _t.tx2, fontSize: 13.5, height: 1.55),
           ),
           const SizedBox(height: 20),
         ],
@@ -446,13 +446,13 @@ class _DetailStageState extends State<DetailStage> {
                   width: 86,
                   child: Text(
                     r.$1,
-                    style: TextStyle(color: DetailPalette.tx3, fontSize: 12.5),
+                    style: TextStyle(color: _t.tx3, fontSize: 12.5),
                   ),
                 ),
                 Expanded(
                   child: Text(
                     r.$2,
-                    style: TextStyle(color: DetailPalette.tx2, fontSize: 12.5),
+                    style: TextStyle(color: _t.tx2, fontSize: 12.5),
                   ),
                 ),
               ],
@@ -539,9 +539,11 @@ class _TabButton extends StatefulWidget {
 
 class _TabButtonState extends State<_TabButton> {
   bool _focused = false;
+  static final _tv = PlatformUtil.isAndroidTvCached;
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final active = widget.active;
     return DetailEdgeTrap(
       trapLeft: widget.trapLeft,
@@ -579,12 +581,20 @@ class _TabButtonState extends State<_TabButton> {
           child: Container(
             padding: const EdgeInsets.fromLTRB(2, 12, 2, 9),
             decoration: BoxDecoration(
+              // Several themes set focus == tx, where an underline alone makes
+              // the focused tab identical to the active one. A ground says
+              // "the cursor is here" regardless of the palette.
+              color: _focused ? t.panel : null,
               border: Border(
                 bottom: BorderSide(
-                  color: active
-                      ? Colors.white
-                      : (_focused ? DetailPalette.focus : Colors.transparent),
-                  width: 2,
+                  // Focus WINS over active. The other way round, landing on the
+                  // already-selected tab painted it exactly as it looked
+                  // unfocused — the cursor vanished on the one tab the user
+                  // arrives at first.
+                  color: _focused
+                      ? t.focus
+                      : (active ? t.tx : Colors.transparent),
+                  width: _focused ? t.focusWidthFor(_tv) : 2,
                 ),
               ),
             ),
@@ -593,9 +603,7 @@ class _TabButtonState extends State<_TabButton> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: active
-                    ? Colors.white
-                    : (_focused ? DetailPalette.focus : DetailPalette.tx3),
+                color: _focused ? t.focus : (active ? t.tx : t.tx3),
               ),
             ),
           ),
@@ -618,10 +626,12 @@ class _CastLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final url = member.imageUrl;
     return Row(
       children: [
-        ClipOval(
+        ClipRRect(
+          borderRadius: t.brCast,
           child: SizedBox(
             width: 42,
             height: 42,
@@ -631,12 +641,11 @@ class _CastLine extends StatelessWidget {
                     fit: BoxFit.cover,
                     cacheManager: DebrifyImageCache.manager,
                     memCacheWidth: 140,
-                    placeholder: (_, __) =>
-                        ColoredBox(color: DetailPalette.glass),
+                    placeholder: (_, __) => ColoredBox(color: t.placeholder),
                     errorWidget: (_, __, ___) =>
-                        ColoredBox(color: DetailPalette.glass),
+                        ColoredBox(color: t.placeholder),
                   )
-                : ColoredBox(color: DetailPalette.glass),
+                : ColoredBox(color: t.placeholder),
           ),
         ),
         const SizedBox(width: 11),
@@ -649,9 +658,10 @@ class _CastLine extends StatelessWidget {
                 member.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
+                  color: t.tx,
                 ),
               ),
               if (member.character?.isNotEmpty == true)
@@ -659,7 +669,7 @@ class _CastLine extends StatelessWidget {
                   member.character!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: DetailPalette.tx3, fontSize: 11),
+                  style: TextStyle(color: t.tx3, fontSize: 11),
                 ),
             ],
           ),
@@ -683,13 +693,14 @@ class _StagePosterState extends State<_StagePoster> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final p = widget.poster;
     return DetailFocusRing(
       focused: _focused,
-      radius: BorderRadius.circular(9),
+      radius: t.imgRadius(9),
       child: Material(
-        color: DetailPalette.glass,
-        borderRadius: BorderRadius.circular(9),
+        color: t.panel,
+        borderRadius: t.imgRadius(9),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: widget.onTap,
@@ -700,12 +711,10 @@ class _StagePosterState extends State<_StagePoster> {
                   fit: BoxFit.cover,
                   cacheManager: DebrifyImageCache.manager,
                   memCacheWidth: 300,
-                  placeholder: (_, __) =>
-                      ColoredBox(color: DetailPalette.glass),
-                  errorWidget: (_, __, ___) =>
-                      ColoredBox(color: DetailPalette.glass),
+                  placeholder: (_, __) => ColoredBox(color: t.placeholder),
+                  errorWidget: (_, __, ___) => ColoredBox(color: t.placeholder),
                 )
-              : ColoredBox(color: DetailPalette.glass),
+              : ColoredBox(color: t.placeholder),
         ),
       ),
     );

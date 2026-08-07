@@ -22,7 +22,10 @@ import '../widgets/detail/detail_layout_console.dart';
 import '../widgets/detail/detail_layout_dossier.dart';
 import '../widgets/detail/detail_layout_marquee.dart';
 import '../widgets/detail/detail_layout_stage.dart';
+import '../widgets/detail/detail_style.dart';
 import '../widgets/detail/detail_model.dart';
+import '../widgets/detail/theme/detail_theme.dart';
+import '../widgets/detail/theme/detail_themes.dart';
 import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/episodes_panel.dart';
 import '../widgets/home/home_theme.dart';
@@ -35,6 +38,7 @@ import '../services/simkl/simkl_menu_helpers.dart';
 import '../widgets/tracker_brand_marks.dart';
 import 'episodes_screen.dart' show kCatalogDetailRouteName;
 import 'settings/detail_page_style_page.dart' show effectiveDetailPageStyle;
+import 'settings/detail_theme_page.dart' show effectiveDetailTheme;
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
 /// episode drill-down fused into one Stremio-styled screen. Reached only from
@@ -276,6 +280,16 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   late final String _style = widget.seasonsLoader != null
       ? 'classic'
       : effectiveDetailPageStyle(StorageService.detailPageStyleCached);
+
+  /// The look the alternate layouts are drawn in. Read synchronously from the
+  /// warmed cache for the same reason as [_style] — the page resolves both in
+  /// its first build, and an async read would repaint the whole thing.
+  ///
+  /// Classic is deliberately unthemed, so this is only consulted by the
+  /// alternate bodies.
+  late final DetailTheme _theme = DetailThemes.byId(
+    effectiveDetailTheme(StorageService.detailThemeCached),
+  );
 
   /// Filmstrip pushes the focused episode's still here. Painted by the shell as
   /// an ambient layer — never as [HeroTrailerBackdrop.imageUrl], which stays
@@ -860,8 +874,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                         // ancestor of the trailer backdrop, and so it fades
                         // out with the content on promotion.
                         if (_bodySpec.inkGround)
-                          const Positioned.fill(
-                            child: ColoredBox(color: Color(0xFF0A0A0C)),
+                          Positioned.fill(
+                            child: ColoredBox(color: _groundColor),
                           ),
                         // Ambient per-title color grade: a soft glow of the
                         // extracted accent in the upper-left, under the content,
@@ -874,7 +888,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                             child: TweenAnimationBuilder<Color?>(
                               duration: const Duration(milliseconds: 500),
                               tween: ColorTween(
-                                end: _accent.withValues(alpha: 0.16),
+                                end: _accent.withValues(
+                                  alpha: _themedBody ? _theme.washOpacity : 0.16,
+                                ),
                               ),
                               builder: (_, color, __) => DecoratedBox(
                                 decoration: BoxDecoration(
@@ -907,6 +923,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                                 () => Navigator.of(context).maybePop(),
                                 tooltip: 'Back',
                                 focusNode: _backButtonFocusNode,
+                                // Square themes (Noir, Concrete, Phosphor,
+                                // Blueprint) cannot be forced into a circle.
+                                theme: _themedBody ? _theme : null,
                               ),
                             ),
                           ),
@@ -927,7 +946,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 child: SafeArea(
                   child: Padding(
                     padding: EdgeInsets.all(widget.isTelevision ? 20 : 12),
-                    child: _TrailerPlayingChip(onTap: _playTrailer),
+                    child: _TrailerPlayingChip(
+                onTap: _playTrailer,
+                theme: _themedBody ? _theme : null,
+              ),
                   ),
                 ),
               ),
@@ -947,7 +969,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       item: _item,
       isMovie: _isMovie,
       isTelevision: widget.isTelevision,
-      accent: _accent,
+      // Signal keeps the poster-extracted accent, which is what ships today.
+      // A fixed-palette theme (Noir's white, Phosphor's amber) would be
+      // contaminated by it, so it uses its own.
+      accent: _theme.useArtworkAccent ? _accent : _theme.accent,
       imdbExtra: _imdbExtra,
       parentsGuide: _parentsGuide,
       recommendations: _recommendations ?? const [],
@@ -999,37 +1024,59 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   /// What the active body wants painted behind it.
   DetailBodySpec get _bodySpec => switch (_style) {
-    'broadsheet' => const DetailBodySpec(inkGround: true),
     // Marquee and Stage are showcase layouts — the artwork is the point, and
     // each already paints the gradient its own identity block sits on.
     'marquee' || 'stage' => const DetailBodySpec(ownScrim: true),
-    _ => const DetailBodySpec(),
+    // A light theme cannot sit on the artwork at all: its own ground has to
+    // cover it, or black-on-paper text lands on a photograph.
+    _ => DetailBodySpec(inkGround: _themedBody && _theme.lightGround),
   };
+
+  /// Whether the active layout is one the theme applies to.
+  bool get _themedBody => _style != 'classic';
+
+  /// The ground the shell paints when the body asks for a flat one.
+  Color get _groundColor => _themedBody ? _theme.ground : const Color(0xFF0A0A0C);
 
   /// The one thing that switches on the chosen layout. Everything around it —
   /// PopScope, the trailer backdrop and its promote/dismiss, the tint, the back
   /// button, the trailer chip — is shell, written once.
   Widget _buildBody(String? backdropUrl) {
+    // Every alternate body is wrapped; Classic never is, so it cannot be
+    // affected by a theme even accidentally.
+    // Grid and grain are whole-page textures, so they are applied once here
+    // rather than by each layout — and Classic, which is never wrapped, cannot
+    // pick them up by accident.
+    Widget themed(Widget body) => DetailThemeScope(
+      theme: _theme,
+      child: DetailAtmosphere(child: body),
+    );
+
     switch (_style) {
       case 'marquee':
-        return DetailMarquee(
-          model: _buildDetailModel(),
-          episodesHost: _episodesHost,
+        return themed(
+          DetailMarquee(
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
         );
       case 'dossier':
-        return DetailDossier(
-          model: _buildDetailModel(),
-          episodesHost: _episodesHost,
+        return themed(
+          DetailDossier(
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
         );
       case 'stage':
-        return DetailStage(
-          model: _buildDetailModel(),
-          episodesHost: _episodesHost,
+        return themed(
+          DetailStage(model: _buildDetailModel(), episodesHost: _episodesHost),
         );
       case 'console':
-        return DetailConsole(
-          model: _buildDetailModel(),
-          episodesHost: _episodesHost,
+        return themed(
+          DetailConsole(
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
         );
       // Alternate layouts land here as they ship; anything not yet drawable
       // was already narrowed to 'classic' by effectiveDetailPageStyle.
@@ -2264,13 +2311,17 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     VoidCallback onTap, {
     String? tooltip,
     FocusNode? focusNode,
+    DetailTheme? theme,
   }) {
     return _RoundIconButton(
       icon: icon,
       onTap: onTap,
       tooltip: tooltip,
       focusNode: focusNode,
-      background: Colors.black.withValues(alpha: 0.35),
+      background: theme == null
+          ? Colors.black.withValues(alpha: 0.35)
+          : theme.ground.withValues(alpha: 0.55),
+      theme: theme,
     );
   }
 }
@@ -2365,7 +2416,15 @@ class _FocusHalo extends StatelessWidget {
   final BorderRadius? radius; // null → circle
   final Widget child;
 
-  const _FocusHalo({required this.focused, required this.child, this.radius});
+  /// Null keeps Classic's gold.
+  final Color? ringColor;
+
+  const _FocusHalo({
+    required this.focused,
+    required this.child,
+    this.radius,
+    this.ringColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2379,7 +2438,7 @@ class _FocusHalo extends StatelessWidget {
         shape: radius == null ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: radius,
         border: focused
-            ? Border.all(color: HomeTheme.focusGold, width: 2.5)
+            ? Border.all(color: ringColor ?? HomeTheme.focusGold, width: 2.5)
             : null,
       ),
       child: child,
@@ -2669,22 +2728,31 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
 /// strand the remote when it appears/disappears as the trailer plays/pauses.
 class _TrailerPlayingChip extends StatelessWidget {
   final VoidCallback onTap;
-  const _TrailerPlayingChip({required this.onTap});
+
+  /// Null for Classic.
+  final DetailTheme? theme;
+
+  const _TrailerPlayingChip({required this.onTap, this.theme});
 
   @override
   Widget build(BuildContext context) {
+    final t = theme;
+    final radius = t?.brBtn ?? BorderRadius.circular(999);
     return Material(
-      color: Colors.black.withValues(alpha: 0.42),
-      borderRadius: BorderRadius.circular(999),
+      color: t?.ground.withValues(alpha: 0.6) ??
+          Colors.black.withValues(alpha: 0.42),
+      borderRadius: radius,
       child: InkWell(
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: radius,
         canRequestFocus: false,
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+            borderRadius: radius,
+            border: Border.all(
+              color: t?.hair ?? Colors.white.withValues(alpha: 0.14),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -2692,13 +2760,13 @@ class _TrailerPlayingChip extends StatelessWidget {
               Icon(
                 Icons.graphic_eq_rounded,
                 size: 14,
-                color: Colors.white.withValues(alpha: 0.85),
+                color: t?.tx ?? Colors.white.withValues(alpha: 0.85),
               ),
               const SizedBox(width: 7),
               Text(
                 'Trailer playing',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.85),
+                  color: t?.tx ?? Colors.white.withValues(alpha: 0.85),
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.2,
@@ -3062,12 +3130,17 @@ class _RoundIconButton extends StatefulWidget {
   final String? tooltip;
   final Color? background;
   final FocusNode? focusNode;
+
+  /// Null for Classic, which keeps its circle and its gold ring exactly.
+  final DetailTheme? theme;
+
   const _RoundIconButton({
     required this.icon,
     required this.onTap,
     this.tooltip,
     this.background,
     this.focusNode,
+    this.theme,
   });
 
   @override
@@ -3079,22 +3152,30 @@ class _RoundIconButtonState extends State<_RoundIconButton> {
 
   @override
   Widget build(BuildContext context) {
+    final t = widget.theme;
+    final circular = t == null || t.radiusBtn >= 999;
+    final side = BorderSide(
+      color: t?.ghostBorder ?? Colors.white.withValues(alpha: 0.16),
+    );
+    final shape = circular
+        ? CircleBorder(side: side)
+        : RoundedRectangleBorder(borderRadius: t.brBtn, side: side);
     final btn = _FocusHalo(
       focused: _focused,
+      radius: circular ? null : t.brBtn,
+      ringColor: t?.focus,
       child: Material(
         color: widget.background ?? Colors.white.withValues(alpha: 0.08),
-        shape: CircleBorder(
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
-        ),
+        shape: shape,
         child: InkWell(
-          customBorder: const CircleBorder(),
+          customBorder: shape,
           focusNode: widget.focusNode,
           onTap: widget.onTap,
           onFocusChange: (f) => setState(() => _focused = f),
           child: SizedBox(
             width: 46,
             height: 46,
-            child: Icon(widget.icon, color: Colors.white, size: 22),
+            child: Icon(widget.icon, color: t?.tx ?? Colors.white, size: 22),
           ),
         ),
       ),

@@ -10,6 +10,7 @@ import 'detail_episode_cells.dart';
 import 'detail_identity.dart';
 import 'detail_model.dart';
 import 'detail_style.dart';
+import 'theme/detail_theme.dart';
 
 /// **Dossier** — a fixed identity card on the left that never scrolls, and the
 /// whole right side given to the episode list.
@@ -39,6 +40,10 @@ class DetailDossier extends StatefulWidget {
 }
 
 class _DetailDossierState extends State<DetailDossier> {
+  /// Resolved once per build; every helper below is called from build, so a
+  /// field is simpler than threading it through a dozen signatures.
+  late DetailTheme _t;
+
   final DetailCellNodes _cellNodes = DetailCellNodes('dossier');
   int _handledGeneration = -1;
 
@@ -63,6 +68,7 @@ class _DetailDossierState extends State<DetailDossier> {
 
   @override
   Widget build(BuildContext context) {
+    _t = DetailThemeScope.of(context);
     final m = widget.model;
     final size = resolveDetailSize(
       isTelevision: m.isTelevision,
@@ -87,16 +93,21 @@ class _DetailDossierState extends State<DetailDossier> {
             onKeyEvent: _leftKey,
             child: DecoratedBox(
               decoration: BoxDecoration(
+                // A theme that declares its own identity light uses it; the
+                // rest keep Dossier's ground falloff.
                 gradient: LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    DetailPalette.ink.withValues(alpha: 0.90),
-                    DetailPalette.ink.withValues(alpha: 0.62),
+                    _t.ground.withValues(alpha: 0.90),
+                    _t.ground.withValues(alpha: 0.62),
                   ],
                 ),
               ),
-              child: _card(m, size),
+              // The wash is a light ON the ground, so it overlays rather than
+              // replacing it — these gradients are translucent by design and
+              // would wash the surface out if they became the fill.
+              child: DetailWash(wash: _t.idWash, child: _card(m, size)),
             ),
           ),
         ),
@@ -106,10 +117,10 @@ class _DetailDossierState extends State<DetailDossier> {
             onKeyEvent: _rightKey,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: DetailPalette.ink2.withValues(alpha: 0.86),
-                border: Border(left: BorderSide(color: DetailPalette.hair)),
+                color: _t.pane.withValues(alpha: 0.86),
+                border: Border(left: BorderSide(color: _t.hair)),
               ),
-              child: _rightPane(m, size),
+              child: DetailWash(wash: _t.paneWash, child: _rightPane(m, size)),
             ),
           ),
         ),
@@ -131,10 +142,10 @@ class _DetailDossierState extends State<DetailDossier> {
             onKeyEvent: _rightKey,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: DetailPalette.ink2.withValues(alpha: 0.86),
-                border: Border(top: BorderSide(color: DetailPalette.hair)),
+                color: _t.pane.withValues(alpha: 0.86),
+                border: Border(top: BorderSide(color: _t.hair)),
               ),
-              child: _rightPane(m, size),
+              child: DetailWash(wash: _t.paneWash, child: _rightPane(m, size)),
             ),
           ),
         ),
@@ -151,7 +162,7 @@ class _DetailDossierState extends State<DetailDossier> {
     // Only when the column is tall enough to hold it — on a 540px TV this is
     // the first thing that would push the cast off the bottom.
     final tall = MediaQuery.of(context).size.height >= 860;
-    return Padding(
+    final card = Padding(
       padding: EdgeInsets.fromLTRB(
         size.gutter,
         m.isTelevision ? 58 : 46,
@@ -170,16 +181,16 @@ class _DetailDossierState extends State<DetailDossier> {
                   child: AspectRatio(
                     aspectRatio: 2 / 3,
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(7),
+                      borderRadius: _t.imgRadius(7),
                       child: CachedNetworkImage(
                         imageUrl: poster,
                         fit: BoxFit.cover,
                         cacheManager: DebrifyImageCache.manager,
                         memCacheWidth: 240,
                         placeholder: (_, __) =>
-                            ColoredBox(color: DetailPalette.glass),
+                            ColoredBox(color: _t.placeholder),
                         errorWidget: (_, __, ___) =>
-                            ColoredBox(color: DetailPalette.glass),
+                            ColoredBox(color: _t.placeholder),
                       ),
                     ),
                   ),
@@ -202,14 +213,13 @@ class _DetailDossierState extends State<DetailDossier> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      m.name,
+                      _t.displayCase(m.name),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: size.isTight ? 20 : 23,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                        height: 1.05,
+                      style: _t.titleStyle(
+                        size: size.isTight ? 20 : 23,
+                        weight: FontWeight.w800,
+                        tracking: -0.5,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -231,18 +241,14 @@ class _DetailDossierState extends State<DetailDossier> {
               synopsis,
               maxLines: size.isPhone ? 3 : 5,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: DetailPalette.tx2,
-                fontSize: 12,
-                height: 1.5,
-              ),
+              style: TextStyle(color: _t.tx2, fontSize: 12, height: 1.5),
             ),
           ],
           // Cast is informational here — its tiles are not focusable, so it can
           // never become a wall of no-op DPAD targets.
           if (cast.isNotEmpty && !size.isPhone && tall) ...[
             const SizedBox(height: 18),
-            detailSlab('Cast'),
+            DetailSlab('Cast'),
             const SizedBox(height: 9),
             SizedBox(
               height: 74,
@@ -256,6 +262,16 @@ class _DetailDossierState extends State<DetailDossier> {
           ],
         ],
       ),
+    );
+
+    // Split gives this card a FIXED height; stacked gives it its intrinsic
+    // one. Bounded means it can overflow — a movie's action row wraps to more
+    // lines than a series', and a large display face or text scale adds more
+    // still. Scrolling when bounded makes that impossible by construction
+    // instead of leaving it to fit by luck.
+    return LayoutBuilder(
+      builder: (context, c) =>
+          c.hasBoundedHeight ? SingleChildScrollView(child: card) : card,
     );
   }
 
@@ -291,7 +307,7 @@ class _DetailDossierState extends State<DetailDossier> {
           Container(
             padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: DetailPalette.hair)),
+              border: Border(bottom: BorderSide(color: _t.hair)),
             ),
             child: Row(
               children: [
@@ -307,6 +323,7 @@ class _DetailDossierState extends State<DetailDossier> {
                     seasonNumbers: [for (final s in view.seasons) s.number],
                     selected: view.selectedSeasonNumber,
                     isTelevision: m.isTelevision,
+                    theme: _t,
                     onSelected: view.selectSeason,
                   ),
                   focusNode: _seasonNode,
@@ -364,20 +381,16 @@ class _DetailDossierState extends State<DetailDossier> {
       padding: EdgeInsets.fromLTRB(size.gutter, 16, size.gutter, 24),
       children: [
         if (synopsis != null && synopsis.isNotEmpty) ...[
-          detailSlab('Summary'),
+          DetailSlab('Summary'),
           const SizedBox(height: 8),
           Text(
             synopsis,
-            style: TextStyle(
-              color: DetailPalette.tx2,
-              fontSize: 13,
-              height: 1.55,
-            ),
+            style: TextStyle(color: _t.tx2, fontSize: 13, height: 1.55),
           ),
           const SizedBox(height: 22),
         ],
         if (cast.isNotEmpty) ...[
-          detailSlab('Cast'),
+          DetailSlab('Cast'),
           const SizedBox(height: 10),
           SizedBox(
             height: 74,
@@ -391,7 +404,7 @@ class _DetailDossierState extends State<DetailDossier> {
           const SizedBox(height: 22),
         ],
         if (rows.isNotEmpty) ...[
-          detailSlab('Details'),
+          DetailSlab('Details'),
           const SizedBox(height: 8),
           for (final r in rows)
             Padding(
@@ -403,19 +416,13 @@ class _DetailDossierState extends State<DetailDossier> {
                     width: 74,
                     child: Text(
                       r.$1,
-                      style: TextStyle(
-                        color: DetailPalette.tx3,
-                        fontSize: 12.5,
-                      ),
+                      style: TextStyle(color: _t.tx3, fontSize: 12.5),
                     ),
                   ),
                   Expanded(
                     child: Text(
                       r.$2,
-                      style: TextStyle(
-                        color: DetailPalette.tx2,
-                        fontSize: 12.5,
-                      ),
+                      style: TextStyle(color: _t.tx2, fontSize: 12.5),
                     ),
                   ),
                 ],
@@ -424,7 +431,7 @@ class _DetailDossierState extends State<DetailDossier> {
           const SizedBox(height: 22),
         ],
         if (recs.isNotEmpty && m.onRecommendationTap != null) ...[
-          detailSlab('More like this'),
+          DetailSlab('More like this'),
           const SizedBox(height: 10),
           SizedBox(
             height: 156,
@@ -441,9 +448,14 @@ class _DetailDossierState extends State<DetailDossier> {
           const SizedBox(height: 22),
         ],
         if (guide != null && !guide.isEmpty) ...[
-          detailSlab('Parents guide'),
+          DetailSlab('Parents guide'),
           const SizedBox(height: 10),
-          ParentsGuideSection(guide: guide, tv: m.isTelevision, dense: true),
+          ParentsGuideSection(
+            guide: guide,
+            tv: m.isTelevision,
+            dense: true,
+            theme: _t,
+          ),
         ],
       ],
     );
@@ -553,13 +565,15 @@ class _CastChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final url = member.imageUrl;
     return SizedBox(
       width: 58,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ClipOval(
+          ClipRRect(
+            borderRadius: t.brCast,
             child: SizedBox(
               width: 46,
               height: 46,
@@ -569,12 +583,11 @@ class _CastChip extends StatelessWidget {
                       fit: BoxFit.cover,
                       cacheManager: DebrifyImageCache.manager,
                       memCacheWidth: 150,
-                      placeholder: (_, __) =>
-                          ColoredBox(color: DetailPalette.glass),
+                      placeholder: (_, __) => ColoredBox(color: t.placeholder),
                       errorWidget: (_, __, ___) =>
-                          ColoredBox(color: DetailPalette.glass),
+                          ColoredBox(color: t.placeholder),
                     )
-                  : ColoredBox(color: DetailPalette.glass),
+                  : ColoredBox(color: t.placeholder),
             ),
           ),
           const SizedBox(height: 5),
@@ -583,7 +596,7 @@ class _CastChip extends StatelessWidget {
             maxLines: 2,
             textAlign: TextAlign.center,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: DetailPalette.tx2, fontSize: 9.5),
+            style: TextStyle(color: t.tx2, fontSize: 9.5),
           ),
         ],
       ),
@@ -605,15 +618,16 @@ class _RecPosterState extends State<_RecPoster> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final String? poster = widget.rec.poster as String?;
     return SizedBox(
       width: 100,
       child: DetailFocusRing(
         focused: _focused,
-        radius: BorderRadius.circular(9),
+        radius: t.imgRadius(9),
         child: Material(
-          color: DetailPalette.glass,
-          borderRadius: BorderRadius.circular(9),
+          color: t.panel,
+          borderRadius: t.imgRadius(9),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: widget.onTap,
@@ -624,12 +638,11 @@ class _RecPosterState extends State<_RecPoster> {
                     fit: BoxFit.cover,
                     cacheManager: DebrifyImageCache.manager,
                     memCacheWidth: 300,
-                    placeholder: (_, __) =>
-                        ColoredBox(color: DetailPalette.glass),
+                    placeholder: (_, __) => ColoredBox(color: t.placeholder),
                     errorWidget: (_, __, ___) =>
-                        ColoredBox(color: DetailPalette.glass),
+                        ColoredBox(color: t.placeholder),
                   )
-                : ColoredBox(color: DetailPalette.glass),
+                : ColoredBox(color: t.placeholder),
           ),
         ),
       ),

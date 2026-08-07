@@ -206,6 +206,11 @@ Future<void> main() async {
   try {
     await StorageService.getDetailPageStyle();
   } catch (_) {}
+  // And the details THEME, for the same reason — the page resolves both in its
+  // first build, so a stored choice must be readable before the first frame.
+  try {
+    await StorageService.getDetailTheme();
+  } catch (_) {}
   await _capImageCache();
   await _resolveStartupChannel();
   // Discover's remembered Sort per source, warmed before first frame so the

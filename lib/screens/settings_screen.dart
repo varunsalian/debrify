@@ -47,8 +47,10 @@ import 'settings/text_brightness_page.dart';
 import 'settings/launch_animation_page.dart';
 import '../widgets/launch/launch_ident.dart';
 import 'settings/detail_page_style_page.dart';
+import 'settings/detail_theme_page.dart';
 import 'settings/player_guide_style_page.dart';
 import 'settings/tv_home_style_page.dart';
+import 'settings/tv_render_quality_page.dart';
 import 'settings/tv_screen_size_page.dart';
 import 'settings/recordings_page.dart';
 import 'settings/tv_sidebar_style_page.dart';
@@ -178,12 +180,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoUpdateChecksEnabled = true;
   bool _tvKeyboardEnabled = true;
   int _tvUiScalePercent = StorageService.kTvUiScaleDefault;
+  TvRenderQuality _tvRenderQuality = TvRenderQuality.auto;
   String _tvHomeStyle = 'canvas';
   String _discoverLayout = 'stage';
   String _tvSidebarStyle = 'ghost';
   String _iptvStyle = 'command';
   String _playerGuideStyle = 'classic';
   String _detailPageStyle = 'classic';
+  String _detailTheme = 'signal';
   String _phoneNavStyle = 'classic';
   String _textBrightness = 'bright';
   String _launchAnimation = 'horizon';
@@ -262,6 +266,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getTextBrightness(),
       StorageService.getLaunchAnimation(),
       StorageService.getDetailPageStyle(),
+      StorageService.getTvRenderQuality(),
+      StorageService.getDetailTheme(),
     ]);
 
     if (!mounted) return;
@@ -295,6 +301,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final textBrightness = results[26] as String;
     final launchAnimation = results[27] as String;
     final detailPageStyle = results[28] as String;
+    final tvRenderQuality = results[29] as TvRenderQuality;
+    final detailTheme = results[30] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -428,6 +436,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _autoUpdateChecksEnabled = autoCheckEnabled;
     _tvKeyboardEnabled = tvKeyboardEnabled;
     _tvUiScalePercent = tvUiScalePercent;
+    _tvRenderQuality = tvRenderQuality;
     _tvHomeStyle = tvHomeStyle;
     _tvSidebarStyle = tvSidebarStyle;
     _discoverLayout = discoverLayout;
@@ -437,6 +446,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _textBrightness = textBrightness;
     _launchAnimation = launchAnimation;
     _detailPageStyle = detailPageStyle;
+    _detailTheme = detailTheme;
 
     setState(() {});
 
@@ -728,6 +738,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenLaunchAnimation: _openLaunchAnimationPage,
       tvUiScalePercent: _tvUiScalePercent,
       onOpenTvScreenSize: _openTvScreenSize,
+      tvRenderQualityLabel: tvRenderQualityLabel(_tvRenderQuality),
+      onOpenTvRenderQuality: _openTvRenderQuality,
       tvSidebarStyleLabel: tvSidebarStyleLabel(_tvSidebarStyle),
       onOpenTvSidebarStyle: _openTvSidebarStyle,
       discoverLayoutLabel: discoverLayoutLabel(_discoverLayout),
@@ -740,6 +752,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
       detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
       onOpenDetailPageStyle: _openDetailPageStylePage,
+      detailThemeLabel: detailThemeLabel(_detailTheme),
+      onOpenDetailTheme: _openDetailThemePage,
       onOpenRecordings: _openRecordings,
       onOpenIptvSettings: _openIptvSettings,
       showSupportDonation: _supportDonation.hasProviders,
@@ -812,6 +826,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
       detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
       onOpenDetailPageStyle: _openDetailPageStylePage,
+      detailThemeLabel: detailThemeLabel(_detailTheme),
+      onOpenDetailTheme: _openDetailThemePage,
       phoneNavStyleLabel: _phoneNavStyle == 'floating'
           ? 'Floating button'
           : 'Classic bar',
@@ -1061,6 +1077,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'home & display',
           ],
         ),
+      // Android TV only — the render scale is applied natively in
+      // MainActivity, so the row would be inert anywhere else. Keyworded for
+      // the SYMPTOM: nobody searches "render scale", they search "stutter".
+      if (_isAndroidTv)
+        nav(
+          SettingsRows.tvRenderQuality,
+          'Appearance',
+          _openTvRenderQuality,
+          subtitle: tvRenderQualityLabel(_tvRenderQuality),
+          keywords: const [
+            'stutter',
+            'stuttering',
+            'lag',
+            'laggy',
+            'jank',
+            'janky',
+            'choppy',
+            'slow',
+            'smooth',
+            'smoothness',
+            'performance',
+            'fps',
+            'frame rate',
+            'speed',
+            'scrolling',
+            'resolution',
+            'render',
+            'rendering',
+            '720p',
+            '1080p',
+            'sharp',
+            'sharpness',
+            'blurry',
+            'soft',
+            'quality',
+            'gpu',
+            'graphics',
+            'display',
+            'home & display',
+          ],
+        ),
       // Android TV only — the layout branch only exists on the TV home board.
       if (_isAndroidTv)
         nav(
@@ -1176,6 +1233,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'live tv',
           'dvr',
           'live tv & dvr',
+        ],
+      ),
+      // Ungated: the theme applies wherever an alternate layout draws.
+      nav(
+        SettingsRows.detailTheme,
+        'Appearance',
+        _openDetailThemePage,
+        subtitle: detailThemeLabel(_detailTheme),
+        keywords: const [
+          'details','detail','theme','colour','color','palette','look','style',
+          'skin','dark','light','noir','broadsheet','phosphor','aurora',
+          'concrete','velvet','blueprint','broadcast','sepia','obsidian','halo',
+          'prestige','deep field','graphite','vault','spectrum','verdant',
+          'frost','cinemascope','gold',
         ],
       ),
       // Ungated: the details page opens on every platform.
@@ -3631,6 +3702,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Same contract as [_openTvScreenSize] — MainActivity reads the render
+  /// pref in `onCreate` too, so the page owns the write and the restart
+  /// notice; we only re-read for the row's caption.
+  Future<void> _openTvRenderQuality() async {
+    await pushSettingsPage(context, const TvRenderQualityPage());
+    if (!mounted) return;
+    final quality = await StorageService.getTvRenderQuality();
+    if (!mounted) return;
+    setState(() {
+      _tvRenderQuality = quality;
+    });
+  }
+
   /// The page writes the pref and live-applies via MainPageBridge; re-read it
   /// on the way back so the rail row's caption matches.
   Future<void> _openTvHomeStyle() async {
@@ -3695,6 +3779,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {
       _detailPageStyle = style;
+    });
+  }
+
+  /// Same contract as [_openTvHomeStyle], for the details-page theme picker.
+  Future<void> _openDetailThemePage() async {
+    await pushSettingsPage(context, const DetailThemePage());
+    if (!mounted) return;
+    final theme = await StorageService.getDetailTheme();
+    if (!mounted) return;
+    setState(() {
+      _detailTheme = theme;
     });
   }
 
@@ -3941,6 +4036,8 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenPlayerGuideStyle;
   final String detailPageStyleLabel;
   final Future<void> Function() onOpenDetailPageStyle;
+  final String detailThemeLabel;
+  final Future<void> Function() onOpenDetailTheme;
   final String phoneNavStyleLabel;
 
   const _SettingsLayout({
@@ -3989,6 +4086,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenPlayerGuideStyle,
     required this.detailPageStyleLabel,
     required this.onOpenDetailPageStyle,
+    required this.detailThemeLabel,
+    required this.onOpenDetailTheme,
     required this.phoneNavStyleLabel,
   });
 
@@ -4063,6 +4162,11 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.detailPageStyle,
                       subtitle: detailPageStyleLabel,
                       onTap: onOpenDetailPageStyle,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.detailTheme,
+                      subtitle: detailThemeLabel,
+                      onTap: onOpenDetailTheme,
                     ),
                     // Phone/small-window chrome — TVs navigate by sidebar
                     // and never read the style.

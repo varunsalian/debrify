@@ -68,6 +68,11 @@ class SettingsTvLayout extends StatefulWidget {
   // at — 100 is the panel's own size, and smaller fits more on screen.
   final int tvUiScalePercent;
   final Future<void> Function() onOpenTvScreenSize;
+  // Rendering: whether the UI is rastered at the panel's own resolution or at
+  // a ~720p buffer the TV scales back up. Label, not enum — this file only
+  // captions the row.
+  final String tvRenderQualityLabel;
+  final Future<void> Function() onOpenTvRenderQuality;
   final String tvSidebarStyleLabel;
   final Future<void> Function() onOpenTvSidebarStyle;
   final String discoverLayoutLabel;
@@ -80,6 +85,8 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenPlayerGuideStyle;
   final String detailPageStyleLabel;
   final Future<void> Function() onOpenDetailPageStyle;
+  final String detailThemeLabel;
+  final Future<void> Function() onOpenDetailTheme;
   // Live TV & DVR.
   final Future<void> Function() onOpenRecordings;
   final Future<void> Function() onOpenIptvSettings;
@@ -123,6 +130,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenLaunchAnimation,
     required this.tvUiScalePercent,
     required this.onOpenTvScreenSize,
+    required this.tvRenderQualityLabel,
+    required this.onOpenTvRenderQuality,
     required this.tvSidebarStyleLabel,
     required this.onOpenTvSidebarStyle,
     required this.discoverLayoutLabel,
@@ -135,6 +144,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenPlayerGuideStyle,
     required this.detailPageStyleLabel,
     required this.onOpenDetailPageStyle,
+    required this.detailThemeLabel,
+    required this.onOpenDetailTheme,
     required this.onOpenRecordings,
     required this.onOpenIptvSettings,
     required this.showSupportDonation,
@@ -206,10 +217,13 @@ const List<_Category> _kCategories = [
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
   /// written out here rather than driven by a provider list (Appearance has
-  /// exactly 8; About up to 6 with the conditional donation row;
+  /// exactly 10; About up to 6 with the conditional donation row;
   /// Data & Backup up to 5). Connections and Trackers are sized from their
   /// own lists; see the pool computation in [initState].
-  static const int _kMaxCategoryRows = 9;
+  ///
+  /// MUST cover the largest category: the pane indexes [_paneNodes] directly,
+  /// so a row added past the pool throws on build.
+  static const int _kMaxCategoryRows = 11;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -621,23 +635,37 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenTvScreenSize,
                 focusNode: _paneNodes[5],
               ),
+              // Next to Screen Size on purpose: both govern how the picture
+              // is drawn on this panel rather than what it looks like.
+              SettingsTile.spec(
+                SettingsRows.tvRenderQuality,
+                subtitle: widget.tvRenderQualityLabel,
+                onTap: widget.onOpenTvRenderQuality,
+                focusNode: _paneNodes[6],
+              ),
               SettingsTile.spec(
                 SettingsRows.iptvAppearance,
                 subtitle: widget.iptvStyleLabel,
                 onTap: widget.onOpenIptvStyle,
-                focusNode: _paneNodes[6],
+                focusNode: _paneNodes[7],
               ),
               SettingsTile.spec(
                 SettingsRows.playerGuideStyle,
                 subtitle: widget.playerGuideStyleLabel,
                 onTap: widget.onOpenPlayerGuideStyle,
-                focusNode: _paneNodes[7],
+                focusNode: _paneNodes[8],
               ),
               SettingsTile.spec(
                 SettingsRows.detailPageStyle,
                 subtitle: widget.detailPageStyleLabel,
                 onTap: widget.onOpenDetailPageStyle,
-                focusNode: _paneNodes[8],
+                focusNode: _paneNodes[9],
+              ),
+              SettingsTile.spec(
+                SettingsRows.detailTheme,
+                subtitle: widget.detailThemeLabel,
+                onTap: widget.onOpenDetailTheme,
+                focusNode: _paneNodes[10],
               ),
             ],
           ),

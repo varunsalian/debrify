@@ -10,6 +10,21 @@ import '../models/webdav_item.dart';
 import '../utils/json_isolate.dart';
 import '../utils/platform_util.dart';
 
+/// How the Android TV UI is rastered — see
+/// [StorageService.getTvRenderQuality]. Three states, not a switch: the
+/// automatic branch is the ABSENCE of the stored pref, because that absence is
+/// what lets MainActivity keep making the device-capability call.
+enum TvRenderQuality {
+  /// Let MainActivity decide (GLES2-class hardware gets the 720p buffer).
+  auto,
+
+  /// Always raster at the panel's own resolution.
+  sharp,
+
+  /// Always raster at ~720p and let the TV's scaler upscale.
+  fast,
+}
+
 class StorageService {
   static const String _apiKeyKey = 'real_debrid_api_key';
   static const String _rdEndpointKey = 'real_debrid_endpoint';
@@ -466,6 +481,61 @@ class StorageService {
     await prefs.setInt('tv_ui_scale_percent', percent);
   }
 
+  /// Android TV rendering mode — whether the Flutter UI is rastered at the
+  /// panel's own resolution or at a ~720p buffer the TV's scaler blows back
+  /// up for free.
+  ///
+  /// GLES2-class boxes are fill-rate bound: the same build at 720p feels near
+  /// native on hardware that judders at 1080p. MainActivity decides this in
+  /// `computeRenderScale` and has always been able to be overridden by
+  /// `flutter.tv_low_res_render` — there was simply no way to set it. This is
+  /// that way.
+  ///
+  /// TRI-STATE, and the absence of the key is load-bearing: native reads it as
+  /// `getBoolean(key, auto)` where `auto` IS the device decision, so
+  /// [TvRenderQuality.auto] must REMOVE the key rather than write `false`.
+  /// Writing `false` on a weak TV would strip the 720p subsidy off the very
+  /// devices that need it — a silent, permanent regression on the hardware
+  /// least able to absorb it.
+  ///
+  /// Read natively before the engine is built, so a change lands on the next
+  /// cold start. Android TV only; ignored everywhere else.
+  static const String _tvRenderQualityKey = 'tv_low_res_render';
+
+  static Future<TvRenderQuality> getTvRenderQuality() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getBool(_tvRenderQualityKey);
+    if (stored == null) return TvRenderQuality.auto;
+    return stored ? TvRenderQuality.fast : TvRenderQuality.sharp;
+  }
+
+  static Future<void> setTvRenderQuality(TvRenderQuality quality) async {
+    final prefs = await SharedPreferences.getInstance();
+    switch (quality) {
+      case TvRenderQuality.auto:
+        await prefs.remove(_tvRenderQualityKey);
+      case TvRenderQuality.sharp:
+        await prefs.setBool(_tvRenderQualityKey, false);
+      case TvRenderQuality.fast:
+        await prefs.setBool(_tvRenderQualityKey, true);
+    }
+  }
+
+  /// What MainActivity ACTUALLY decided for the engine currently running —
+  /// written natively on every launch (`renderScale < 0.999f`), so under
+  /// [TvRenderQuality.auto] it's the only way to see which branch this TV
+  /// landed on. Also the honest answer after a change that hasn't been cold-
+  /// started into yet: the pref says what will happen, this says what is.
+  ///
+  /// Written on every ANDROID launch, phones included (the `putBoolean` sits
+  /// outside any TV guard) — off TV `renderScale` stays 1.0, so a phone reads
+  /// `false`, not null. Null means MainActivity never ran at all: iOS, macOS,
+  /// desktop. Callers must treat null as "unknown", never as "full res".
+  static Future<bool?> getTvLowResRenderActive() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('tv_low_res_render_active');
+  }
+
   /// Show the new Stremio-styled Addons hub (single list + source/type filters,
   /// purple Discover theme, 1-click marketplace) instead of the classic two-tab
   /// Addons screen. On by default; can be turned off per-device via
@@ -719,6 +789,59 @@ class StorageService {
     final normalized = kDetailPageStyles.contains(value) ? value : 'classic';
     await prefs.setString(_detailPageStyleKey, normalized);
     detailPageStyleCached = normalized;
+  }
+
+  static const String _detailThemeKey = 'detail_theme';
+
+  /// Every look the details page can wear (Appearance → Details Theme).
+  ///
+  /// Same contract as [kDetailPageStyles]: all values are accepted from day
+  /// one so a theme written by a newer build survives a downgrade, and what a
+  /// given BUILD can draw is the narrower `kDetailThemesShipped` in
+  /// `screens/settings/detail_theme_page.dart`.
+  ///
+  /// The layout and the theme are orthogonal — one says where things are, the
+  /// other what they look like.
+  static const Set<String> kDetailThemes = {
+    'signal',
+    'noir',
+    'broadsheet',
+    'phosphor',
+    'aurora',
+    'concrete',
+    'velvet',
+    'blueprint',
+    'broadcast',
+    'sepia',
+    'obsidian',
+    'halo',
+    'prestige',
+    'deep_field',
+    'graphite',
+    'vault',
+    'spectrum',
+    'verdant',
+    'frost',
+    'cinemascope',
+  };
+
+  /// Synchronous mirror, warmed in main() before runApp — the details page
+  /// picks its theme in the first build, so an async-only read would paint
+  /// Signal for a frame and then repaint the whole page.
+  static String detailThemeCached = 'signal';
+
+  static Future<String> getDetailTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_detailThemeKey);
+    detailThemeCached = kDetailThemes.contains(value) ? value! : 'signal';
+    return detailThemeCached;
+  }
+
+  static Future<void> setDetailTheme(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = kDetailThemes.contains(value) ? value : 'signal';
+    await prefs.setString(_detailThemeKey, normalized);
+    detailThemeCached = normalized;
   }
 
   static const String _iptvStyleKey = 'iptv_style';
@@ -6600,7 +6723,57 @@ class StorageService {
       );
     }
   }
+
+  static const String _homeExtraRowsKey = 'home_extra_rows_v1';
+
+  /// The OPT-IN extra Home rows (default-off, so the disabled-set above can't
+  /// express them): Trakt/Simkl list rows and IPTV custom-list rows. IDs are
+  /// `traktlist:<apiValue>`, `traktlist:custom:<id>`, `traktlist:liked:<id>`,
+  /// `simkllist:<enumName>`, `iptvlist:<listId>`. [HomeExtraRow.title] is the
+  /// display name captured at opt-in time so dynamic rows (custom/liked
+  /// lists, IPTV lists) render a header instantly and stay representable in
+  /// the Home Rows manager through an API outage; built-in rows ignore it.
+  /// Order is NOT meaningful — the board renders extras in canonical order.
+  static Future<List<HomeExtraRow>> getHomeExtraRows() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_homeExtraRowsKey);
+    if (json == null) return const [];
+    try {
+      final list = jsonDecode(json) as List<dynamic>;
+      final seen = <String>{};
+      final out = <HomeExtraRow>[];
+      for (final e in list) {
+        if (e is! Map) continue;
+        final id = e['id'];
+        if (id is! String || id.isEmpty || !seen.add(id)) continue;
+        final title = e['title'];
+        out.add((id: id, title: title is String ? title : ''));
+      }
+      return out;
+    } catch (e) {
+      debugPrint('Error reading home extra rows: $e');
+      return const [];
+    }
+  }
+
+  /// Save the opted-in extra Home rows (empty = key removed).
+  static Future<void> setHomeExtraRows(List<HomeExtraRow> rows) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (rows.isEmpty) {
+      await prefs.remove(_homeExtraRowsKey);
+    } else {
+      await prefs.setString(
+        _homeExtraRowsKey,
+        jsonEncode([
+          for (final r in rows) {'id': r.id, 'title': r.title},
+        ]),
+      );
+    }
+  }
 }
+
+/// One opted-in extra Home row — see [StorageService.getHomeExtraRows].
+typedef HomeExtraRow = ({String id, String title});
 
 class ApiKeyValidator {
   static bool isValidFormat(String apiKey) {

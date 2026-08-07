@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import 'detail_episode_cells.dart';
 import 'detail_identity.dart';
 import 'detail_model.dart';
 import 'detail_style.dart';
+import 'theme/detail_theme.dart';
 
 /// **Console** — resume-first. A large continue-watching card is the hero, the
 /// rest of the season sits beneath it as a dense grid, and the reference
@@ -39,6 +41,10 @@ class DetailConsole extends StatefulWidget {
 }
 
 class _DetailConsoleState extends State<DetailConsole> {
+  /// Resolved once per build; every helper below is called from build, so a
+  /// field is simpler than threading it through a dozen signatures.
+  late DetailTheme _t;
+
   final DetailCellNodes _cellNodes = DetailCellNodes('console');
   int _handledGeneration = -1;
 
@@ -68,6 +74,7 @@ class _DetailConsoleState extends State<DetailConsole> {
 
   @override
   Widget build(BuildContext context) {
+    _t = DetailThemeScope.of(context);
     final m = widget.model;
     final size = resolveDetailSize(
       isTelevision: m.isTelevision,
@@ -115,7 +122,9 @@ class _DetailConsoleState extends State<DetailConsole> {
 
   /// The rail's own opaque ground, shared with its edge fade so the two can't
   /// disagree.
-  static const Color _railGround = Color(0xFF0A0A0D);
+  /// The rail's own opaque ground, shared with its edge fade so the two can't
+  /// disagree. Derived from the theme, or a light theme gets a black column.
+  Color get _railGround => _t.railBg;
 
   bool _referenceHasContent(DetailModel m) =>
       (m.synopsis?.isNotEmpty ?? false) ||
@@ -140,7 +149,7 @@ class _DetailConsoleState extends State<DetailConsole> {
         12,
       ),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: DetailPalette.hair)),
+        border: Border(bottom: BorderSide(color: _t.hair)),
       ),
       child: Row(
         children: [
@@ -152,13 +161,13 @@ class _DetailConsoleState extends State<DetailConsole> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  m.name,
+                  _t.displayCase(m.name),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
+                  style: _t.titleStyle(
+                    size: 15,
+                    weight: FontWeight.w800,
+                    tracking: -0.3,
                     height: 1,
                   ),
                 ),
@@ -228,7 +237,9 @@ class _DetailConsoleState extends State<DetailConsole> {
         Text(
           'CONTINUE WATCHING',
           style: TextStyle(
-            color: DetailPalette.gold,
+            // CALLOUT: "CONTINUE WATCHING" is an attention flag, not a
+            // measurement — a theme may colour it apart from progress.
+            color: _t.callout,
             fontSize: 9.5,
             fontWeight: FontWeight.w800,
             letterSpacing: 2,
@@ -236,13 +247,13 @@ class _DetailConsoleState extends State<DetailConsole> {
         ),
         const SizedBox(height: 7),
         Text(
-          m.name,
+          _t.displayCase(m.name),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: size.isTight ? 18 : 20,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.4,
+          style: _t.titleStyle(
+            size: size.isTight ? 18 : 20,
+            weight: FontWeight.w700,
+            tracking: -0.4,
             height: 1.1,
           ),
         ),
@@ -264,14 +275,15 @@ class _DetailConsoleState extends State<DetailConsole> {
     final box = Container(
       padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: DetailPalette.hair),
+        borderRadius: _t.imgRadius(13),
+        border: Border.all(color: _t.hair),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
             m.accent.withValues(alpha: 0.11),
-            Colors.white.withValues(alpha: 0.035),
+            // 50% of a 7% panel — the 3.5% white the hero shipped with.
+            _t.fade(_t.panel, 0.5),
           ],
         ),
       ),
@@ -302,7 +314,7 @@ class _DetailConsoleState extends State<DetailConsole> {
     final url = m.backdrop;
     if (url == null || url.isEmpty) return const SizedBox.shrink();
     return ClipRRect(
-      borderRadius: BorderRadius.circular(9),
+      borderRadius: _t.imgRadius(9),
       child: AspectRatio(
         aspectRatio: 16 / 9,
         child: CachedNetworkImage(
@@ -310,8 +322,8 @@ class _DetailConsoleState extends State<DetailConsole> {
           fit: BoxFit.cover,
           cacheManager: DebrifyImageCache.manager,
           memCacheWidth: 640,
-          placeholder: (_, __) => ColoredBox(color: DetailPalette.glass),
-          errorWidget: (_, __, ___) => ColoredBox(color: DetailPalette.glass),
+          placeholder: (_, __) => ColoredBox(color: _t.placeholder),
+          errorWidget: (_, __, ___) => ColoredBox(color: _t.placeholder),
         ),
       ),
     );
@@ -341,6 +353,13 @@ class _DetailConsoleState extends State<DetailConsole> {
     }
     return _recNodes[i];
   }
+
+  /// The caption band, derived from the live text scale — the grid's aspect
+  /// ratio is computed from the same number, so they cannot disagree.
+  double _captionH(BuildContext context) =>
+      16 * MediaQuery.textScalerOf(context).scale(1);
+
+  static const _gridPad = EdgeInsets.only(top: 4, bottom: 8);
 
   int _columns(DetailSize size) => switch (size) {
     DetailSize.tv => 4,
@@ -389,50 +408,66 @@ class _DetailConsoleState extends State<DetailConsole> {
     );
     final cols = _columns(size);
 
-    final grid = GridView.builder(
-      // Stacked, the PAGE scrolls, so the grid must not own a controller too.
-      controller: shrinkWrap ? null : _gridScroll,
-      shrinkWrap: shrinkWrap,
-      physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
-      padding: const EdgeInsets.only(top: 4, bottom: 8),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: cols,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 12,
-        // 16:9 art plus a derived caption band — never a magic ratio, so a
-        // large text scale can't clip the title.
-        childAspectRatio:
-            1 /
-            (9 / 16 + (26 * MediaQuery.textScalerOf(context).scale(1)) / 200),
-      ),
-      itemCount: episodes.length,
-      itemBuilder: (context, i) {
-        final e = episodes[i];
-        final lastRowStart = ((episodes.length - 1) ~/ cols) * cols;
-        return DetailEdgeTrap(
-          trapUp: i < cols,
-          // DOWN on a short final row stays put rather than geometry-jumping
-          // to whatever sits below-left of it.
-          trapDown: i >= lastRowStart,
-          // The reference rail is off to the right and scrolls independently,
-          // so the grid's right edge is the only way in.
-          trapRight:
-              _refReachable(m, size) &&
-              (i % cols == cols - 1 || i == episodes.length - 1),
-          onUp: () => many ? _seasonNode.requestFocus() : m.focus.focusEntry(),
-          onDown: () {},
-          onRight: () => _refNode.requestFocus(),
-          child: DetailEpisodeCard(
-            episode: e,
-            fallbackImage: view.showImageUrl,
-            progress: view.progressOf(e),
-            isNext: view.isNext(e),
-            focusNode: _cellNodes.of(view.generation, e.season, e.number),
-            onPlay: () => view.play(e),
-            onOptions: () => view.options(e),
-            width: double.infinity,
-            scrollAxis: Axis.vertical,
+    // The ratio has to come from the cell's REAL width, or it disagrees with
+    // the caption band the card reserves and every card overflows by the
+    // difference. The old form assumed a 200px cell and dropped the 6px gap
+    // entirely — which is precisely what the cards were overflowing by.
+    final grid = LayoutBuilder(
+      builder: (context, c) {
+        final cellW =
+            (c.maxWidth - 10 * (cols - 1) - _gridPad.horizontal) / cols;
+        // Whichever is TALLER: the height Console shipped with, or the height
+        // the content actually needs. Wide cells keep the shipped geometry
+        // exactly; narrow ones — which is where the old fixed ratio clipped
+        // captions — get just enough to fit.
+        final cellH = math.max(
+          cellW * (9 / 16 + 26 / 200),
+          cellW * 9 / 16 + 6 + _captionH(context),
+        );
+        return GridView.builder(
+          // Stacked, the PAGE scrolls, so the grid must not own a controller too.
+          controller: shrinkWrap ? null : _gridScroll,
+          shrinkWrap: shrinkWrap,
+          physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+          padding: _gridPad,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 12,
+            childAspectRatio: cellW / cellH,
           ),
+          itemCount: episodes.length,
+          itemBuilder: (context, i) {
+            final e = episodes[i];
+            final lastRowStart = ((episodes.length - 1) ~/ cols) * cols;
+            return DetailEdgeTrap(
+              trapUp: i < cols,
+              // DOWN on a short final row stays put rather than geometry-jumping
+              // to whatever sits below-left of it.
+              trapDown: i >= lastRowStart,
+              // The reference rail is off to the right and scrolls independently,
+              // so the grid's right edge is the only way in.
+              trapRight:
+                  _refReachable(m, size) &&
+                  (i % cols == cols - 1 || i == episodes.length - 1),
+              onUp: () =>
+                  many ? _seasonNode.requestFocus() : m.focus.focusEntry(),
+              onDown: () {},
+              onRight: () => _refNode.requestFocus(),
+              child: DetailEpisodeCard(
+                episode: e,
+                fallbackImage: view.showImageUrl,
+                progress: view.progressOf(e),
+                isNext: view.isNext(e),
+                focusNode: _cellNodes.of(view.generation, e.season, e.number),
+                onPlay: () => view.play(e),
+                onOptions: () => view.options(e),
+                width: double.infinity,
+                captionHeight: _captionH(context),
+                scrollAxis: Axis.vertical,
+              ),
+            );
+          },
         );
       },
     );
@@ -456,6 +491,7 @@ class _DetailConsoleState extends State<DetailConsole> {
                 seasonNumbers: [for (final s in view.seasons) s.number],
                 selected: view.selectedSeasonNumber,
                 isTelevision: m.isTelevision,
+                theme: _t,
                 onSelected: view.selectSeason,
               ),
               focusNode: _seasonNode,
@@ -520,7 +556,7 @@ class _DetailConsoleState extends State<DetailConsole> {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: detailSlab('More like this'),
+          child: DetailSlab('More like this'),
         ),
         if (shrinkWrap) grid else Expanded(child: grid),
       ],
@@ -554,7 +590,7 @@ class _DetailConsoleState extends State<DetailConsole> {
         woven.add(
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 15),
-            child: Divider(height: 1, thickness: 1, color: DetailPalette.hair),
+            child: Divider(height: 1, thickness: 1, color: _t.hair),
           ),
         );
       }
@@ -581,27 +617,30 @@ class _DetailConsoleState extends State<DetailConsole> {
         // exact colour, and over a translucent surface that reads as a band.
         color: _railGround,
         border: flow
-            ? Border(top: BorderSide(color: DetailPalette.hair))
-            : Border(left: BorderSide(color: DetailPalette.hair)),
+            ? Border(top: BorderSide(color: _t.hair))
+            : Border(left: BorderSide(color: _t.hair)),
       ),
-      child: flow
-          // Stacked, the whole page scrolls, so the pane is plain content.
-          ? body
-          : _ReferencePane(
-              focusNode: _refNode,
-              controller: _refScroll,
-              onExitLeft: _focusLastGridCell,
-              child: DetailScrollFade(
-                ground: _railGround,
-                // Keeps normal physics: the pane drives this controller from
-                // DPAD keys, but the rail also renders on desktop, where a
-                // wheel or trackpad has to work.
-                child: SingleChildScrollView(
-                  controller: _refScroll,
-                  child: body,
+      child: DetailWash(
+        wash: _t.railWash,
+        child: flow
+            // Stacked, the whole page scrolls, so the pane is plain content.
+            ? body
+            : _ReferencePane(
+                focusNode: _refNode,
+                controller: _refScroll,
+                onExitLeft: _focusLastGridCell,
+                child: DetailScrollFade(
+                  ground: _railGround,
+                  // Keeps normal physics: the pane drives this controller from
+                  // DPAD keys, but the rail also renders on desktop, where a
+                  // wheel or trackpad has to work.
+                  child: SingleChildScrollView(
+                    controller: _refScroll,
+                    child: body,
+                  ),
                 ),
               ),
-            ),
+      ),
     );
   }
 
@@ -623,23 +662,20 @@ class _DetailConsoleState extends State<DetailConsole> {
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: DetailPalette.gold.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: DetailPalette.gold.withValues(alpha: 0.24)),
+          // AWARD: immutable metadata, not computed state.
+          color: _t.award.withValues(alpha: 0.12),
+          borderRadius: _t.brSm,
+          border: Border.all(color: _t.award.withValues(alpha: 0.24)),
         ),
         child: Row(
           children: [
-            const Icon(
-              Icons.emoji_events_rounded,
-              size: 14,
-              color: DetailPalette.gold,
-            ),
+            Icon(Icons.emoji_events_rounded, size: 14, color: _t.award),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 awards,
-                style: const TextStyle(
-                  color: DetailPalette.gold,
+                style: TextStyle(
+                  color: _t.award,
                   fontSize: 11.5,
                   fontWeight: FontWeight.w700,
                   height: 1.3,
@@ -660,17 +696,13 @@ class _DetailConsoleState extends State<DetailConsole> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          detailSlab('Summary'),
+          DetailSlab('Summary'),
           const SizedBox(height: 9),
           Text(
             synopsis,
             maxLines: flow ? null : 9,
             overflow: flow ? null : TextOverflow.ellipsis,
-            style: TextStyle(
-              color: DetailPalette.tx2,
-              fontSize: 12.5,
-              height: 1.55,
-            ),
+            style: TextStyle(color: _t.tx2, fontSize: 12.5, height: 1.55),
           ),
         ],
       ),
@@ -685,7 +717,7 @@ class _DetailConsoleState extends State<DetailConsole> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          detailSlab('Details'),
+          DetailSlab('Details'),
           const SizedBox(height: 9),
           for (final r in rows)
             Padding(
@@ -697,14 +729,14 @@ class _DetailConsoleState extends State<DetailConsole> {
                     width: 74,
                     child: Text(
                       r.$1,
-                      style: TextStyle(color: DetailPalette.tx3, fontSize: 12),
+                      style: TextStyle(color: _t.tx3, fontSize: 12),
                     ),
                   ),
                   Expanded(
                     child: Text(
                       r.$2,
                       style: TextStyle(
-                        color: DetailPalette.tx2,
+                        color: _t.tx2,
                         fontSize: 12,
                         height: 1.35,
                       ),
@@ -731,7 +763,7 @@ class _DetailConsoleState extends State<DetailConsole> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          detailSlab('Cast'),
+          DetailSlab('Cast'),
           const SizedBox(height: 10),
           for (final member in cast.take(6))
             Padding(
@@ -751,7 +783,7 @@ class _DetailConsoleState extends State<DetailConsole> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          detailSlab('Parents guide'),
+          DetailSlab('Parents guide'),
           const SizedBox(height: 10),
           for (final cat in guide.categories)
             Padding(
@@ -763,7 +795,7 @@ class _DetailConsoleState extends State<DetailConsole> {
                       cat.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: DetailPalette.tx2, fontSize: 12),
+                      style: TextStyle(color: _t.tx2, fontSize: 12),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -821,10 +853,12 @@ class _CastPortrait extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final url = member.imageUrl;
     return Row(
       children: [
-        ClipOval(
+        ClipRRect(
+          borderRadius: t.brCast,
           child: SizedBox(
             width: 34,
             height: 34,
@@ -834,12 +868,11 @@ class _CastPortrait extends StatelessWidget {
                     fit: BoxFit.cover,
                     cacheManager: DebrifyImageCache.manager,
                     memCacheWidth: 110,
-                    placeholder: (_, __) =>
-                        ColoredBox(color: DetailPalette.glass),
+                    placeholder: (_, __) => ColoredBox(color: t.placeholder),
                     errorWidget: (_, __, ___) =>
-                        ColoredBox(color: DetailPalette.glass),
+                        ColoredBox(color: t.placeholder),
                   )
-                : ColoredBox(color: DetailPalette.glass),
+                : ColoredBox(color: t.placeholder),
           ),
         ),
         const SizedBox(width: 10),
@@ -852,10 +885,11 @@ class _CastPortrait extends StatelessWidget {
                 member.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   height: 1.2,
+                  color: t.tx,
                 ),
               ),
               if (member.character?.isNotEmpty == true)
@@ -863,11 +897,7 @@ class _CastPortrait extends StatelessWidget {
                   member.character!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: DetailPalette.tx3,
-                    fontSize: 10.5,
-                    height: 1.3,
-                  ),
+                  style: TextStyle(color: t.tx3, fontSize: 10.5, height: 1.3),
                 ),
             ],
           ),
@@ -882,23 +912,28 @@ class _SeverityChip extends StatelessWidget {
   final String severity;
   const _SeverityChip({required this.severity});
 
+  /// A semantic scale, like the IMDb badge: green→red means the same thing in
+  /// every theme, so it is deliberately not themed.
   static Color _color(String s) => switch (s.toLowerCase()) {
     'none' => const Color(0xFF4ADE80),
     'mild' => const Color(0xFFFBBF24),
     'moderate' => const Color(0xFFFB923C),
     'severe' => const Color(0xFFEF4444),
-    _ => Colors.white54,
+    // A mid grey rather than a white one: the fallback has to stay visible on
+    // Broadsheet's paper as well as on ink.
+    _ => const Color(0xFF8A8A8A),
   };
 
   @override
   Widget build(BuildContext context) {
     if (severity.isEmpty) return const SizedBox.shrink();
+    final t = DetailThemeScope.of(context);
     final c = _color(severity);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: c.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: t.brBtn,
         border: Border.all(color: c.withValues(alpha: 0.34)),
       ),
       child: Text(
@@ -936,13 +971,14 @@ class _ConsolePosterState extends State<_ConsolePoster> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final p = widget.poster;
     return DetailFocusRing(
       focused: _focused,
-      radius: BorderRadius.circular(9),
+      radius: t.imgRadius(9),
       child: Material(
-        color: DetailPalette.glass,
-        borderRadius: BorderRadius.circular(9),
+        color: t.panel,
+        borderRadius: t.imgRadius(9),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           focusNode: widget.focusNode,
@@ -954,12 +990,10 @@ class _ConsolePosterState extends State<_ConsolePoster> {
                   fit: BoxFit.cover,
                   cacheManager: DebrifyImageCache.manager,
                   memCacheWidth: 300,
-                  placeholder: (_, __) =>
-                      ColoredBox(color: DetailPalette.glass),
-                  errorWidget: (_, __, ___) =>
-                      ColoredBox(color: DetailPalette.glass),
+                  placeholder: (_, __) => ColoredBox(color: t.placeholder),
+                  errorWidget: (_, __, ___) => ColoredBox(color: t.placeholder),
                 )
-              : ColoredBox(color: DetailPalette.glass),
+              : ColoredBox(color: t.placeholder),
         ),
       ),
     );
@@ -1013,6 +1047,7 @@ class _ReferencePaneState extends State<_ReferencePane> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (f) => setState(() => _focused = f),
@@ -1048,8 +1083,8 @@ class _ReferencePaneState extends State<_ReferencePane> {
         decoration: BoxDecoration(
           border: Border(
             left: BorderSide(
-              color: _focused ? DetailPalette.focus : Colors.transparent,
-              width: 2.5,
+              color: _focused ? t.focus : Colors.transparent,
+              width: t.focusWidthFor(PlatformUtil.isAndroidTvCached),
             ),
           ),
         ),

@@ -10,6 +10,7 @@ import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import '../home/home_theme.dart';
 import 'detail_style.dart';
+import 'theme/detail_theme.dart';
 
 /// How a cell reaches the per-episode options menu.
 ///
@@ -199,6 +200,7 @@ class DetailEpisodeThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final p = progress ?? 0;
     final watched = p >= 100;
     final partial = p > 0 && p < 100;
@@ -222,19 +224,18 @@ class DetailEpisodeThumb extends StatelessWidget {
               fadeOutDuration: HomeTheme.imageFadeOut(
                 PlatformUtil.isAndroidTvCached,
               ),
-              placeholder: (_, __) =>
-                  const ColoredBox(color: Color(0xFF1A1622)),
-              errorWidget: (_, __, ___) =>
-                  const ColoredBox(color: Color(0xFF1A1622)),
+              placeholder: (_, __) => ColoredBox(color: t.placeholder),
+              errorWidget: (_, __, ___) => ColoredBox(color: t.placeholder),
             )
           else
-            const ColoredBox(color: Color(0xFF1A1622)),
+            ColoredBox(color: t.placeholder),
           if (watched) ColoredBox(color: Colors.black.withValues(alpha: 0.45)),
           if (watched && showTick)
-            const Center(
+            Center(
               child: Icon(
                 Icons.check_circle_rounded,
-                color: DetailPalette.gold,
+                // STATE: a measurement, not a flag.
+                color: t.state,
                 size: 22,
               ),
             ),
@@ -245,13 +246,14 @@ class DetailEpisodeThumb extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: DetailPalette.gold,
-                  borderRadius: BorderRadius.circular(4),
+                  // CALLOUT: an attention flag, not a measurement.
+                  color: t.callout,
+                  borderRadius: t.brSm,
                 ),
-                child: const Text(
+                child: Text(
                   'UP NEXT',
                   style: TextStyle(
-                    color: Color(0xFF2A1E02),
+                    color: t.calloutText,
                     fontSize: 8,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.4,
@@ -270,7 +272,13 @@ class DetailEpisodeThumb extends StatelessWidget {
                 child: FractionallySizedBox(
                   alignment: Alignment.centerLeft,
                   widthFactor: (p / 100).clamp(0.0, 1.0),
-                  child: const ColoredBox(color: DetailPalette.gold),
+                  // The one place a theme may carry a gradient — small type
+                  // never does, or it becomes unreadable.
+                  child: t.stateGradient != null
+                      ? DecoratedBox(
+                          decoration: BoxDecoration(gradient: t.stateGradient),
+                        )
+                      : ColoredBox(color: t.state),
                 ),
               ),
             ),
@@ -293,6 +301,15 @@ class DetailEpisodeCard extends StatelessWidget {
   final void Function(bool)? onFocusChange;
   final Axis scrollAxis;
 
+  /// Exact height reserved for the caption band.
+  ///
+  /// The rail that hosts these cards has to be a bounded height, and it derives
+  /// that from `art + gap + captionHeight`. If the caption is then free to grow
+  /// — a taller data font, a bigger text scale — the card overflows the rail it
+  /// was measured for. Reserving the band makes the two agree by construction
+  /// instead of by estimate.
+  final double captionHeight;
+
   const DetailEpisodeCard({
     super.key,
     required this.episode,
@@ -303,12 +320,14 @@ class DetailEpisodeCard extends StatelessWidget {
     required this.onPlay,
     required this.onOptions,
     required this.width,
+    required this.captionHeight,
     this.onFocusChange,
     this.scrollAxis = Axis.horizontal,
   });
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     return DetailEpisodeInteraction(
       focusNode: focusNode,
       // Horizontal cells need RIGHT to advance.
@@ -325,7 +344,7 @@ class DetailEpisodeCard extends StatelessWidget {
           children: [
             DetailFocusRing(
               focused: focused,
-              radius: BorderRadius.circular(8),
+              radius: t.brImg,
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: DetailEpisodeThumb(
@@ -333,37 +352,35 @@ class DetailEpisodeCard extends StatelessWidget {
                   fallbackImage: fallbackImage,
                   progress: progress,
                   isNext: isNext,
-                  radius: BorderRadius.circular(8),
+                  radius: t.brImg,
                 ),
               ),
             ),
             const SizedBox(height: 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${episode.number}',
-                  style: TextStyle(
-                    color: DetailPalette.tx3,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+            SizedBox(
+              height: captionHeight,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${episode.number}',
+                    style: t.dataStyle(size: 11, weight: FontWeight.w800),
                   ),
-                ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    episode.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: focused ? Colors.white : DetailPalette.tx2,
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      episode.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: focused ? t.tx : t.tx2,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
@@ -401,6 +418,7 @@ class DetailEpisodeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final p = progress ?? 0;
     final watched = p >= 100;
     final partial = p > 0 && p < 100;
@@ -413,12 +431,12 @@ class DetailEpisodeRow extends StatelessWidget {
       onLeftEdge: onLeftEdge,
       builder: (context, focused) => DetailFocusRing(
         focused: focused,
-        radius: BorderRadius.circular(10),
+        radius: t.brRadius,
         child: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: focused ? Colors.white.withValues(alpha: 0.05) : null,
-            borderRadius: BorderRadius.circular(10),
+            color: focused ? t.panel : null,
+            borderRadius: t.brRadius,
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -445,9 +463,10 @@ class DetailEpisodeRow extends StatelessWidget {
                       '${episode.number}. ${episode.title}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
+                        color: t.tx,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -459,11 +478,7 @@ class DetailEpisodeRow extends StatelessWidget {
                           episode.overview!,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: DetailPalette.tx2,
-                            fontSize: 11.5,
-                            height: 1.4,
-                          ),
+                          style: t.bodyStyle(size: 11.5, height: 1.4),
                         ),
                       ),
                   ],
@@ -471,26 +486,21 @@ class DetailEpisodeRow extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               if (watched)
-                const Icon(
-                  Icons.check_circle_rounded,
-                  color: DetailPalette.gold,
-                  size: 17,
-                )
+                Icon(Icons.check_circle_rounded, color: t.state, size: 17)
               else if (partial)
                 Text(
                   '${p.round()}%',
-                  style: const TextStyle(
-                    color: DetailPalette.gold,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                  style: t.dataStyle(
+                    size: 11.5,
+                    color: t.state,
+                    weight: FontWeight.w700,
                   ),
                 ),
               const SizedBox(width: 8),
               Icon(
                 Icons.more_vert_rounded,
                 size: 18,
-                color: Colors.white.withValues(alpha: focused ? 0.85 : 0.3),
+                color: focused ? t.tx2 : t.tx3,
               ),
             ],
           ),
@@ -506,33 +516,26 @@ class _MetaLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final bits = <Widget>[];
     final r = episode.rating;
     if (r != null && r > 0) {
       bits.add(
         Text(
           '★ ${r.toStringAsFixed(1)}',
-          style: const TextStyle(
-            color: DetailPalette.imdb,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            fontFeatures: [FontFeature.tabularFigures()],
+          // RATING, not state: this is data. Signal keeps IMDb yellow, which
+          // is deliberately NOT the state gold.
+          style: t.dataStyle(
+            size: 11,
+            color: t.rating,
+            weight: FontWeight.w700,
           ),
         ),
       );
     }
     final aired = episode.formattedAirDate;
     if (aired != null && aired.isNotEmpty) {
-      bits.add(
-        Text(
-          aired,
-          style: TextStyle(
-            color: DetailPalette.tx3,
-            fontSize: 11,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-      );
+      bits.add(Text(aired, style: t.dataStyle(size: 11)));
     }
     if (bits.isEmpty) return const SizedBox.shrink();
     return Wrap(
@@ -585,6 +588,7 @@ class DetailEpisodesStatus extends StatelessWidget {
         ),
       );
     }
+    final t = DetailThemeScope.of(context);
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -605,21 +609,21 @@ class DetailEpisodesStatus extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.tv_off_rounded,
-                size: 40,
-                color: Colors.white.withValues(alpha: 0.4),
-              ),
+              Icon(Icons.tv_off_rounded, size: 40, color: t.tx3),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 "Couldn't load episodes",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: t.tx,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
                 'The episode list is unavailable right now.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: DetailPalette.tx2, fontSize: 12.5),
+                style: t.bodyStyle(size: 12.5),
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -632,9 +636,9 @@ class DetailEpisodesStatus extends StatelessWidget {
                     style: ButtonStyle(
                       side: WidgetStateProperty.resolveWith(
                         (states) => states.contains(WidgetState.focused)
-                            ? const BorderSide(
-                                color: HomeTheme.focusGold,
-                                width: 2,
+                            ? BorderSide(
+                                color: t.focus,
+                                width: t.focusWidthFor(isTelevision),
                               )
                             : null,
                       ),
@@ -648,9 +652,11 @@ class DetailEpisodesStatus extends StatelessWidget {
                       style: ButtonStyle(
                         side: WidgetStateProperty.resolveWith(
                           (states) => states.contains(WidgetState.focused)
-                              ? const BorderSide(
-                                  color: HomeTheme.focusGold,
-                                  width: 2,
+                              ? BorderSide(
+                                  color: t.focus,
+                                  width: t.focusWidthFor(
+                                    PlatformUtil.isAndroidTvCached,
+                                  ),
                                 )
                               : null,
                         ),

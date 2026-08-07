@@ -8,6 +8,7 @@ import 'detail_episode_cells.dart';
 import 'detail_identity.dart';
 import 'detail_model.dart';
 import 'detail_style.dart';
+import 'theme/detail_theme.dart';
 
 /// **Marquee** — full-bleed artwork with the identity anchored bottom-left and
 /// the season laid out as a horizontal rail of wide episode cards.
@@ -37,6 +38,10 @@ class DetailMarquee extends StatefulWidget {
 }
 
 class _DetailMarqueeState extends State<DetailMarquee> {
+  /// Resolved once per build; every helper below is called from build, so a
+  /// field is simpler than threading it through a dozen signatures.
+  late DetailTheme _t;
+
   /// Layout-owned, generation-keyed. The engine disposes and rebuilds its own
   /// nodes on every season change, so borrowing them risks mounting a disposed
   /// node from an outgoing subtree.
@@ -72,6 +77,7 @@ class _DetailMarqueeState extends State<DetailMarquee> {
 
   @override
   Widget build(BuildContext context) {
+    _t = DetailThemeScope.of(context);
     final m = widget.model;
     final size = resolveDetailSize(
       isTelevision: m.isTelevision,
@@ -85,7 +91,7 @@ class _DetailMarqueeState extends State<DetailMarquee> {
         // Legibility floor: artwork can be anything, and stops picked against a
         // dark backdrop wash out completely over a bright one.
         DecoratedBox(
-          decoration: BoxDecoration(gradient: detailIdentityScrim()),
+          decoration: BoxDecoration(gradient: detailIdentityScrim(_t)),
         ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -171,7 +177,7 @@ class _DetailMarqueeState extends State<DetailMarquee> {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: [for (final g in genres.take(3)) detailPill(g)],
+            children: [for (final g in genres.take(3)) DetailPill(g)],
           ),
         ],
       ],
@@ -243,6 +249,7 @@ class _DetailMarqueeState extends State<DetailMarquee> {
                 seasonNumbers: [for (final s in view.seasons) s.number],
                 selected: view.selectedSeasonNumber,
                 isTelevision: m.isTelevision,
+                theme: _t,
                 onSelected: view.selectSeason,
               ),
               focusNode: _seasonNode,
@@ -278,6 +285,7 @@ class _DetailMarqueeState extends State<DetailMarquee> {
                   onPlay: () => view.play(e),
                   onOptions: () => view.options(e),
                   width: cardW,
+                  captionHeight: captionH,
                 ),
               );
             },
@@ -344,7 +352,7 @@ class _DetailMarqueeState extends State<DetailMarquee> {
       children: [
         Padding(
           padding: EdgeInsets.only(left: gutter, bottom: 9),
-          child: detailSlab('More like this'),
+          child: DetailSlab('More like this'),
         ),
         SizedBox(
           height: cardW * 3 / 2 + 6 + captionH,
@@ -397,6 +405,7 @@ class _RecCardState extends State<_RecCard> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final poster = widget.rec.poster;
     return SizedBox(
       width: widget.width,
@@ -406,10 +415,10 @@ class _RecCardState extends State<_RecCard> {
         children: [
           DetailFocusRing(
             focused: _focused,
-            radius: BorderRadius.circular(8),
+            radius: t.imgRadius(8),
             child: Material(
-              color: DetailPalette.glass,
-              borderRadius: BorderRadius.circular(8),
+              color: t.panel,
+              borderRadius: t.imgRadius(8),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 focusNode: widget.focusNode,
@@ -424,11 +433,11 @@ class _RecCardState extends State<_RecCard> {
                           cacheManager: DebrifyImageCache.manager,
                           memCacheWidth: 300,
                           placeholder: (_, __) =>
-                              ColoredBox(color: DetailPalette.glass),
+                              ColoredBox(color: t.placeholder),
                           errorWidget: (_, __, ___) =>
-                              ColoredBox(color: DetailPalette.glass),
+                              ColoredBox(color: t.placeholder),
                         )
-                      : ColoredBox(color: DetailPalette.glass),
+                      : ColoredBox(color: t.placeholder),
                 ),
               ),
             ),
@@ -441,7 +450,7 @@ class _RecCardState extends State<_RecCard> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: _focused ? Colors.white : DetailPalette.tx2,
+              color: _focused ? t.tx : t.tx2,
             ),
           ),
         ],

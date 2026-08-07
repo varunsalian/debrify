@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/imdb_parents_guide_service.dart';
+import 'detail/theme/detail_theme.dart';
 import 'home/home_theme.dart';
 import '../utils/tv_keys.dart';
 
@@ -10,11 +11,20 @@ class ParentsGuideSection extends StatefulWidget {
   final bool tv;
   final bool dense;
 
+  /// Set ONLY by the themed detail layouts.
+  ///
+  /// Null keeps today's exact literals, which is what Classic and every other
+  /// caller must keep rendering — passing the theme is opt-in precisely so
+  /// this widget cannot drift for them. Without it, white text and a gold
+  /// focus ring land on Broadsheet's paper and Concrete's grey.
+  final DetailTheme? theme;
+
   const ParentsGuideSection({
     super.key,
     required this.guide,
     this.tv = false,
     this.dense = false,
+    this.theme,
   });
 
   @override
@@ -36,7 +46,11 @@ class _ParentsGuideSectionState extends State<ParentsGuideSection> {
         Text(
           'PARENTS GUIDE',
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.5),
+            // The shipped ALPHA with the theme's ink, so Signal is exactly the
+            // 50% white it always was and a light theme gets 50% black.
+            color: widget.theme == null
+                ? Colors.white.withValues(alpha: 0.5)
+                : widget.theme!.fade(widget.theme!.tx, 0.5),
             fontSize: 10,
             fontWeight: FontWeight.w800,
             letterSpacing: 2.2,
@@ -45,13 +59,15 @@ class _ParentsGuideSectionState extends State<ParentsGuideSection> {
         SizedBox(height: widget.dense ? 8 : 12),
         for (final cat in cats)
           _CategoryRow(
+            theme: widget.theme,
             category: cat,
             expanded: _expandedCategoryId == cat.id,
             tv: widget.tv,
             dense: widget.dense,
             onToggle: () => setState(() {
-              _expandedCategoryId =
-                  _expandedCategoryId == cat.id ? null : cat.id;
+              _expandedCategoryId = _expandedCategoryId == cat.id
+                  ? null
+                  : cat.id;
             }),
           ),
       ],
@@ -60,6 +76,7 @@ class _ParentsGuideSectionState extends State<ParentsGuideSection> {
 }
 
 class _CategoryRow extends StatefulWidget {
+  final DetailTheme? theme;
   final ParentsGuideCategory category;
   final bool expanded;
   final bool tv;
@@ -67,6 +84,7 @@ class _CategoryRow extends StatefulWidget {
   final VoidCallback onToggle;
 
   const _CategoryRow({
+    required this.theme,
     required this.category,
     required this.expanded,
     required this.tv,
@@ -88,6 +106,8 @@ class _CategoryRowState extends State<_CategoryRow> {
     final cat = widget.category;
     final color = _severityColor(cat.severity);
     final hasItems = cat.items.isNotEmpty;
+    // Null under Classic, which renders this section unthemed.
+    final t = widget.theme;
 
     return Padding(
       padding: EdgeInsets.only(bottom: widget.dense ? 4 : 6),
@@ -106,8 +126,9 @@ class _CategoryRowState extends State<_CategoryRow> {
         child: MouseRegion(
           onEnter: (_) => setState(() => _hovered = true),
           onExit: (_) => setState(() => _hovered = false),
-          cursor:
-              hasItems ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          cursor: hasItems
+              ? SystemMouseCursors.click
+              : SystemMouseCursors.basic,
           child: GestureDetector(
             onTap: hasItems ? widget.onToggle : null,
             behavior: HitTestBehavior.opaque,
@@ -120,15 +141,25 @@ class _CategoryRowState extends State<_CategoryRow> {
                 vertical: widget.dense ? 7 : 9,
               ),
               decoration: BoxDecoration(
+                // The shipped alphas over the theme's ink: Signal keeps exactly
+                // the 8%/4% white it had, and a light theme gets those same
+                // weights in black rather than an invisible white.
                 color: _active
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.white.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(10),
+                    ? (t == null
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : t.fade(t.tx, 0.08))
+                    : (t == null
+                          ? Colors.white.withValues(alpha: 0.04)
+                          : t.fade(t.tx, 0.04)),
+                borderRadius: t?.brRadius ?? BorderRadius.circular(10),
                 border: Border.all(
+                  // _active is the FOCUS state, so a theme's ring must be full
+                  // strength and must honour the TV width floor — a 1.2px 50%
+                  // hairline is not a cursor you can see at three metres.
                   color: _active
-                      ? HomeTheme.focusGold.withValues(alpha: 0.5)
-                      : Colors.white.withValues(alpha: 0.06),
-                  width: _active ? 1.2 : 0.5,
+                      ? (t?.focus ?? HomeTheme.focusGold.withValues(alpha: 0.5))
+                      : (t?.hair ?? Colors.white.withValues(alpha: 0.06)),
+                  width: _active ? (t?.focusWidthFor(widget.tv) ?? 1.2) : 0.5,
                 ),
               ),
               child: Column(
@@ -143,7 +174,9 @@ class _CategoryRowState extends State<_CategoryRow> {
                         child: Text(
                           cat.label,
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.88),
+                            color: widget.theme == null
+                                ? Colors.white.withValues(alpha: 0.88)
+                                : widget.theme!.fade(widget.theme!.tx, 0.88),
                             fontSize: widget.dense ? 12 : 13,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.2,
@@ -163,7 +196,9 @@ class _CategoryRowState extends State<_CategoryRow> {
                           child: Icon(
                             Icons.expand_more_rounded,
                             size: 16,
-                            color: Colors.white.withValues(alpha: 0.4),
+                            color:
+                                widget.theme?.tx3 ??
+                                Colors.white.withValues(alpha: 0.4),
                           ),
                         ),
                       ],
@@ -188,8 +223,7 @@ class _CategoryRowState extends State<_CategoryRow> {
   }
 
   Widget _buildItems(ParentsGuideCategory cat) {
-    final nonSpoilerItems =
-        cat.items.where((i) => !i.isSpoiler).toList();
+    final nonSpoilerItems = cat.items.where((i) => !i.isSpoiler).toList();
     if (nonSpoilerItems.isEmpty) return const SizedBox.shrink();
 
     return Padding(
@@ -209,7 +243,9 @@ class _CategoryRowState extends State<_CategoryRow> {
                     width: 4,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.3),
+                      color:
+                          widget.theme?.tx3 ??
+                          Colors.white.withValues(alpha: 0.3),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -219,7 +255,9 @@ class _CategoryRowState extends State<_CategoryRow> {
                   child: Text(
                     nonSpoilerItems[i].text,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.65),
+                      color:
+                          widget.theme?.tx2 ??
+                          Colors.white.withValues(alpha: 0.65),
                       fontSize: widget.dense ? 11 : 12,
                       height: 1.4,
                     ),
@@ -285,10 +323,7 @@ class _SeverityBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: color.withValues(alpha: 0.3),
-          width: 0.5,
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
       ),
       child: Text(
         label,

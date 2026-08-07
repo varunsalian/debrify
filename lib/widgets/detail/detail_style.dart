@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../utils/platform_util.dart';
-import '../home/home_theme.dart';
+import 'theme/detail_theme.dart';
 
 /// Which shape a details-page layout should draw itself in.
 ///
@@ -43,79 +43,90 @@ extension DetailSizeX on DetailSize {
   };
 }
 
-/// Per-page palette. `accent` is the title colour the screen extracted from the
-/// poster; everything else is fixed.
-///
-/// `gold` is STATE ONLY — watched, progress, bound sources, awards. It is never
-/// used for decoration, which is what makes it readable as state at a glance.
-class DetailPalette {
-  final Color accent;
-
-  const DetailPalette({required this.accent});
-
-  static const Color ink = Color(0xFF0B0B0E);
-  static const Color ink2 = Color(0xFF0E0B14);
-  static const Color gold = Color(0xFFF5B942);
-  static const Color imdb = Color(0xFFF5C518);
-  static Color get focus => HomeTheme.focusGold;
-
-  static Color get glass => Colors.white.withValues(alpha: 0.07);
-  static Color get hair => Colors.white.withValues(alpha: 0.11);
-  static Color get tx2 => Colors.white.withValues(alpha: 0.64);
-  static Color get tx3 => Colors.white.withValues(alpha: 0.40);
-}
-
 /// Bottom-anchored scrim for identity over artwork.
 ///
-/// Tuned for a **legibility floor, not a look**: artwork can be anything, and
-/// stops picked against a dark backdrop wash out completely over a bright one.
-/// The identity band sits on ≥0.55 alpha ink whatever the image.
-LinearGradient detailIdentityScrim() => const LinearGradient(
+/// A **legibility floor, not a look**: artwork can be anything, and stops
+/// picked against a dark backdrop wash out completely over a bright one. The
+/// identity band sits on ≥0.55 alpha of the theme's OWN ground whatever the
+/// image — which is also what lets a light theme scrim upward into paper
+/// rather than into ink.
+LinearGradient detailIdentityScrim(DetailTheme t) => LinearGradient(
   begin: Alignment.bottomCenter,
   end: Alignment.topCenter,
   colors: [
-    DetailPalette.ink,
-    Color(0xEB0B0B0E),
-    Color(0xA30B0B0E),
-    Color(0x610B0B0E),
+    t.ground,
+    t.ground.withValues(alpha: 0.92),
+    t.ground.withValues(alpha: 0.64),
+    t.ground.withValues(alpha: 0.38),
   ],
-  stops: [0.06, 0.42, 0.68, 1.0],
+  stops: const [0.06, 0.42, 0.68, 1.0],
 );
 
 /// Top-half scrim for layouts that split art and content (Stage).
-LinearGradient detailStageScrim() => const LinearGradient(
+LinearGradient detailStageScrim(DetailTheme t) => LinearGradient(
   begin: Alignment.bottomCenter,
   end: Alignment.topCenter,
   colors: [
-    DetailPalette.ink,
-    Color(0xDB0B0B0E),
-    Color(0x660B0B0E),
-    Color(0x290B0B0E),
+    t.ground,
+    t.ground.withValues(alpha: 0.86),
+    t.ground.withValues(alpha: 0.40),
+    t.ground.withValues(alpha: 0.16),
   ],
-  stops: [0.04, 0.48, 0.76, 1.0],
+  stops: const [0.04, 0.48, 0.76, 1.0],
 );
 
-/// Uppercase section label ("SUMMARY", "MORE LIKE THIS").
-Widget detailSlab(String text) => Text(
-  text.toUpperCase(),
-  style: TextStyle(
-    color: DetailPalette.tx3,
-    fontSize: 10.5,
-    fontWeight: FontWeight.w800,
-    letterSpacing: 1.5,
-  ),
-);
+/// Section label ("SUMMARY", "MORE LIKE THIS").
+///
+/// A widget rather than a function so it can read the theme — its case,
+/// tracking, size and family are all per-theme.
+class DetailSlab extends StatelessWidget {
+  final String text;
+  const DetailSlab(this.text, {super.key});
 
-/// Glass chip used for genres.
-Widget detailPill(String text) => Container(
-  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
-  decoration: BoxDecoration(
-    color: DetailPalette.glass,
-    borderRadius: BorderRadius.circular(999),
-    border: Border.all(color: DetailPalette.hair),
-  ),
-  child: Text(text, style: const TextStyle(fontSize: 11.5)),
-);
+  @override
+  Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
+    final label = Text(
+      t.slabStyle.letterSpacing == null ? text : text.toUpperCase(),
+      style: t.slabStyle,
+    );
+    // A theme that declares a rule gets one under every section heading; the
+    // rest stay a bare label.
+    if (t.dividerGradient == null) return label;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        label,
+        const SizedBox(height: 5),
+        Container(
+          height: 1,
+          decoration: BoxDecoration(gradient: t.dividerGradient),
+        ),
+      ],
+    );
+  }
+}
+
+/// Chip used for genres.
+class DetailPill extends StatelessWidget {
+  final String text;
+  const DetailPill(this.text, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
+      decoration: BoxDecoration(
+        color: t.panel,
+        borderRadius: t.brBtn,
+        border: Border.all(color: t.hair),
+      ),
+      child: Text(text, style: TextStyle(fontSize: 11.5, color: t.tx2)),
+    );
+  }
+}
 
 /// The house focus ring: an in-bounds FOREGROUND border.
 ///
@@ -127,26 +138,74 @@ class DetailFocusRing extends StatelessWidget {
   final BorderRadius? radius; // null → circle
   final Widget child;
 
+  /// The surface the ring is drawn ON, when it is a known fill.
+  ///
+  /// A filled primary button can be the same colour as the theme's cursor —
+  /// Noir is white on white — and the ring vanishes. Passing the fill lets the
+  /// theme pick a colour that contrasts with it.
+  final Color? on;
+
   const DetailFocusRing({
     super.key,
     required this.focused,
     required this.child,
     this.radius,
+    this.on,
   });
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
+    final tv = PlatformUtil.isAndroidTvCached;
+    // An outward ring cannot be a foreground decoration — it has to be drawn
+    // outside the child's bounds, which only a non-layout-affecting overlay
+    // can do. Signal's offset is 0, so Signal keeps the in-bounds path exactly.
+    if (t.focusOffset > 0) {
+      final o = t.focusOffset;
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          child,
+          if (focused)
+            Positioned(
+              left: -o,
+              top: -o,
+              right: -o,
+              bottom: -o,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: radius == null
+                        ? BoxShape.circle
+                        : BoxShape.rectangle,
+                    borderRadius: radius == null
+                        ? null
+                        : BorderRadius.circular(radius!.topLeft.x + o),
+                    border: Border.all(
+                      color: on == null ? t.focus : t.focusOn(on!),
+                      width: t.focusWidthFor(tv),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    }
     return AnimatedContainer(
       // Snap on TV (house idiom): a ring fade per DPAD move repaints every
       // element in flight while a held key surfs the rail.
-      duration: PlatformUtil.isAndroidTvCached
-          ? Duration.zero
-          : const Duration(milliseconds: 140),
+      duration: tv ? Duration.zero : const Duration(milliseconds: 140),
       foregroundDecoration: BoxDecoration(
         shape: radius == null ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: radius,
+        // focusWidthFor floors the width on TV: Vault and Cinemascope both ask
+        // for 1px, which is invisible at three metres.
         border: focused
-            ? Border.all(color: DetailPalette.focus, width: 2.5)
+            ? Border.all(
+                color: on == null ? t.focus : t.focusOn(on!),
+                width: t.focusWidthFor(tv),
+              )
             : null,
       ),
       child: child,
@@ -341,20 +400,22 @@ class DetailScrollFade extends StatelessWidget {
   final Widget child;
   final AxisDirection edge;
   final double extent;
+
+  /// Required: a painted fade only works over a known OPAQUE surface, and a
+  /// default would let a caller fade to a colour its ground never was.
   final Color ground;
 
   const DetailScrollFade({
     super.key,
     required this.child,
+    required this.ground,
     this.edge = AxisDirection.down,
     this.extent = 28,
-    this.ground = DetailPalette.ink,
   });
 
   @override
   Widget build(BuildContext context) {
-    final vertical =
-        edge == AxisDirection.down || edge == AxisDirection.up;
+    final vertical = edge == AxisDirection.down || edge == AxisDirection.up;
     final fade = IgnorePointer(
       child: SizedBox(
         width: vertical ? null : extent,
@@ -393,4 +454,101 @@ class DetailScrollFade extends StatelessWidget {
       ],
     );
   }
+}
+
+/// A region's own light — the wash a theme paints over its ground.
+///
+/// Painted as a decoration rather than a stacked overlay so it sits behind the
+/// region's content without adding a layer to composite.
+class DetailWash extends StatelessWidget {
+  final Gradient? wash;
+  final Widget child;
+
+  const DetailWash({super.key, required this.wash, required this.child});
+
+  @override
+  Widget build(BuildContext context) => wash == null
+      ? child
+      : DecoratedBox(
+          decoration: BoxDecoration(gradient: wash),
+          child: child,
+        );
+}
+
+/// Blueprint's 32px rule and the film grain some themes ask for.
+///
+/// Both are whole-page textures, so they are applied once at the body root
+/// rather than by each layout. Grain is a foreground layer and is forced off on
+/// TV by [DetailTheme.grainFor] — a per-frame blend over a full screen is not
+/// something a 2 GB box should be asked to do.
+class DetailAtmosphere extends StatelessWidget {
+  final Widget child;
+
+  const DetailAtmosphere({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
+    final tv = PlatformUtil.isAndroidTvCached;
+    final grain = t.grainFor(tv);
+    if (!t.grid && grain <= 0) return child;
+    return CustomPaint(
+      painter: t.grid ? _GridPainter(t.hair) : null,
+      // Grain takes the theme's own ink, so a light theme gets dark specks
+      // rather than a white haze over its paper.
+      foregroundPainter: grain > 0 ? _GrainPainter(grain, t.tx) : null,
+      child: child,
+    );
+  }
+}
+
+class _GridPainter extends CustomPainter {
+  final Color color;
+  const _GridPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    for (var x = 0.0; x < size.width; x += 32) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), p);
+    }
+    for (var y = 0.0; y < size.height; y += 32) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GridPainter old) => old.color != color;
+}
+
+class _GrainPainter extends CustomPainter {
+  final double strength;
+  final Color ink;
+  const _GrainPainter(this.strength, this.ink);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // A FIXED seed: grain that reshuffles on every repaint reads as noise on a
+    // broken signal rather than as film.
+    final rnd = math.Random(7);
+    final p = Paint()..color = ink.withValues(alpha: strength);
+    final count = (size.width * size.height / 900).clamp(0, 3000).toInt();
+    for (var i = 0; i < count; i++) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+          rnd.nextDouble() * size.width,
+          rnd.nextDouble() * size.height,
+          1,
+          1,
+        ),
+        p,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GrainPainter old) =>
+      old.strength != strength || old.ink != ink;
 }

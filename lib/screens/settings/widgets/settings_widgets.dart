@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../services/main_page_bridge.dart';
+import '../../../services/storage_service.dart';
 import '../../../widgets/shimmer.dart';
 
 /// Shared visual tokens for the Settings screens.
@@ -136,6 +137,12 @@ abstract final class SettingsRows {
     title: 'Screen Size',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen mode) — passed per call site.
+  static const tvRenderQuality = SettingsRowContent(
+    icon: Icons.hd_rounded,
+    title: 'Rendering',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen layout) — passed per call site.
   static const tvHomeStyle = SettingsRowContent(
     icon: Icons.view_quilt_rounded,
@@ -182,6 +189,12 @@ abstract final class SettingsRows {
   static const detailPageStyle = SettingsRowContent(
     icon: Icons.article_rounded,
     title: 'Details Page',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (the chosen theme) — passed per call site.
+  static const detailTheme = SettingsRowContent(
+    icon: Icons.palette_rounded,
+    title: 'Details Theme',
     subtitle: '',
   );
   // Subtitle is dynamic (current folder) — passed per call site.
@@ -1703,6 +1716,45 @@ String tvUiScaleLabel(int percent) {
     if (c.percent == percent) return c.label;
   }
   return '$percent%';
+}
+
+/// One entry in the Android TV "Rendering" picker.
+class TvRenderQualityChoice {
+  final TvRenderQuality quality;
+  final String label;
+  final String subtitle;
+  const TvRenderQualityChoice(this.quality, this.label, this.subtitle);
+}
+
+/// Automatic first: it's the default, and it's the only option that leaves the
+/// device-capability call intact. The other two are named for the TRADE, not
+/// for the mechanism — nobody browsing settings knows what a render buffer is,
+/// but everybody knows which of "sharper" and "smoother" they want right now.
+const List<TvRenderQualityChoice> kTvRenderQualityChoices = [
+  TvRenderQualityChoice(
+    TvRenderQuality.auto,
+    'Automatic',
+    "Default — Debrify picks based on this TV's graphics",
+  ),
+  TvRenderQualityChoice(
+    TvRenderQuality.sharp,
+    'Sharper picture',
+    'Draw at the panel\'s full resolution',
+  ),
+  TvRenderQualityChoice(
+    TvRenderQuality.fast,
+    'Smoother navigation',
+    'Draw at about 720p so scrolling stays fluid — text and art look softer',
+  ),
+];
+
+/// Caption for [quality] — the settings row's subtitle and the picker's
+/// selected label.
+String tvRenderQualityLabel(TvRenderQuality quality) {
+  for (final c in kTvRenderQualityChoices) {
+    if (c.quality == quality) return c.label;
+  }
+  return 'Automatic';
 }
 
 /// One choice inside a [SettingsSelectDropdown].

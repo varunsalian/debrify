@@ -7,6 +7,7 @@ import '../../utils/platform_util.dart';
 import '../tracker_brand_marks.dart';
 import 'detail_model.dart';
 import 'detail_style.dart';
+import 'theme/detail_theme.dart';
 
 /// Shared identity + action vocabulary for the alternate detail layouts.
 ///
@@ -41,51 +42,67 @@ class _DetailPrimaryButtonState extends State<DetailPrimaryButton> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
+    final tv = PlatformUtil.isAndroidTvCached;
     return DetailFocusRing(
       focused: _focused,
-      radius: BorderRadius.circular(999),
+      // The fill can BE the theme's cursor colour — Noir white-on-white,
+      // Spectrum's cyan ring over the cyan end of its gradient. Either way the
+      // ring needs to know what it sits on.
+      on: t.btnGradient == null ? t.btnFill : t.btnGradient!.colors.last,
+      radius: t.brBtn,
       // A static drop shadow, rasterised once and carried by the transform —
       // not a per-frame backdrop blur, which the weak TV GPU cannot afford.
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: t.brBtn,
           boxShadow: [
             BoxShadow(
               color: widget.glow.withValues(alpha: 0.42),
               blurRadius: 18,
               spreadRadius: -2,
             ),
+            ...t.shadowFor(tv),
           ],
         ),
         child: Material(
-          color: const Color(0xFFF6F5F0),
-          borderRadius: BorderRadius.circular(999),
-          child: InkWell(
-            focusNode: widget.focusNode,
-            autofocus: widget.autofocus,
-            onFocusChange: (f) => setState(() => _focused = f),
-            borderRadius: BorderRadius.circular(999),
-            onTap: widget.onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 10),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.play_arrow_rounded,
-                    color: Color(0xFF0D0D10),
-                    size: 19,
-                  ),
-                  const SizedBox(width: 7),
-                  Text(
-                    widget.label,
-                    style: const TextStyle(
-                      color: Color(0xFF0D0D10),
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w700,
+          // A gradient theme paints the fill itself; a flat one uses btnFill.
+          color: t.btnGradient == null ? t.btnFill : Colors.transparent,
+          borderRadius: t.brBtn,
+          child: Ink(
+            decoration: BoxDecoration(
+              gradient: t.btnGradient,
+              borderRadius: t.brBtn,
+              border: t.btnBorder == null
+                  ? null
+                  : Border.all(color: t.btnBorder!, width: t.btnBorderWidth),
+            ),
+            child: InkWell(
+              focusNode: widget.focusNode,
+              autofocus: widget.autofocus,
+              onFocusChange: (f) => setState(() => _focused = f),
+              borderRadius: t.brBtn,
+              onTap: widget.onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 19,
+                  vertical: 10,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.play_arrow_rounded, color: t.btnText, size: 19),
+                    const SizedBox(width: 7),
+                    Text(
+                      widget.label,
+                      style: TextStyle(
+                        color: t.btnText,
+                        fontSize: 13.5,
+                        fontWeight: t.btnWeight,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -120,42 +137,43 @@ class _DetailGhostButtonState extends State<DetailGhostButton> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     return DetailFocusRing(
       focused: _focused,
-      radius: BorderRadius.circular(999),
+      radius: t.brBtn,
       child: Material(
-        color: DetailPalette.glass,
-        borderRadius: BorderRadius.circular(999),
+        color: t.ghostFill,
+        borderRadius: t.brBtn,
         child: InkWell(
           focusNode: widget.focusNode,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: t.brBtn,
           onTap: widget.onTap,
           onFocusChange: (f) => setState(() => _focused = f),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: DetailPalette.hair),
+              borderRadius: t.brBtn,
+              border: Border.all(color: t.ghostBorder),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (widget.busy)
-                  const SizedBox(
+                  SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white70,
+                      color: t.ghostText,
                     ),
                   )
                 else
-                  Icon(widget.icon, color: Colors.white, size: 16),
+                  Icon(widget.icon, color: t.ghostText, size: 16),
                 const SizedBox(width: 7),
                 Text(
                   widget.label,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: t.ghostText,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -192,33 +210,32 @@ class _DetailSourcePillState extends State<DetailSourcePill> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final bound = widget.count > 0;
-    const gold = DetailPalette.gold;
+    // A bound source is a MEASUREMENT of what you've set up, so it reads as
+    // state rather than identity.
+    final gold = t.state;
     final label = bound
         ? (widget.count > 1 ? '${widget.count} sources' : '1 source')
         : 'Bind source';
     return DetailFocusRing(
       focused: _focused,
-      radius: BorderRadius.circular(999),
+      radius: t.brBtn,
       child: Material(
-        color: bound
-            ? gold.withValues(alpha: 0.13)
-            : Colors.white.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(999),
+        color: bound ? gold.withValues(alpha: 0.13) : t.ghostFill,
+        borderRadius: t.brBtn,
         child: InkWell(
           focusNode: widget.focusNode,
           autofocus: widget.autofocus,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: t.brBtn,
           onTap: widget.onTap,
           onFocusChange: (f) => setState(() => _focused = f),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: t.brBtn,
               border: Border.all(
-                color: bound
-                    ? gold.withValues(alpha: 0.30)
-                    : DetailPalette.hair,
+                color: bound ? gold.withValues(alpha: 0.30) : t.ghostBorder,
               ),
             ),
             child: Row(
@@ -226,14 +243,14 @@ class _DetailSourcePillState extends State<DetailSourcePill> {
               children: [
                 Icon(
                   bound ? Icons.link_rounded : Icons.link_off_rounded,
-                  color: bound ? gold : Colors.white70,
+                  color: bound ? gold : t.ghostText,
                   size: 15,
                 ),
                 const SizedBox(width: 7),
                 Text(
                   label,
                   style: TextStyle(
-                    color: bound ? gold : Colors.white70,
+                    color: bound ? gold : t.ghostText,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -272,20 +289,31 @@ class _DetailRoundButtonState extends State<DetailRoundButton> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
+    // A square theme (Noir, Concrete, Phosphor, Blueprint) must not be forced
+    // into a circle, so the shape follows the radius token.
+    final circular = t.radiusBtn >= 999;
+    final shape = circular
+        ? CircleBorder(side: BorderSide(color: t.ghostBorder))
+        : RoundedRectangleBorder(
+            borderRadius: t.brBtn,
+            side: BorderSide(color: t.ghostBorder),
+          );
     return DetailFocusRing(
       focused: _focused,
+      radius: circular ? null : t.brBtn,
       child: Material(
-        color: DetailPalette.glass,
-        shape: CircleBorder(side: BorderSide(color: DetailPalette.hair)),
+        color: t.ghostFill,
+        shape: shape,
         child: InkWell(
-          customBorder: const CircleBorder(),
+          customBorder: shape,
           focusNode: widget.focusNode,
           onTap: widget.onTap,
           onFocusChange: (f) => setState(() => _focused = f),
           child: SizedBox(
             width: widget.size,
             height: widget.size,
-            child: Icon(widget.icon, color: Colors.white, size: 19),
+            child: Icon(widget.icon, color: t.ghostText, size: 19),
           ),
         ),
       ),
@@ -330,16 +358,17 @@ class _DetailTrackerPillState extends State<DetailTrackerPill> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
+    // widget.accent is Trakt red or Simkl cyan — a third party's mark, never
+    // themed. Only the surface around it follows the theme.
     final accent = widget.accent;
     final tracked = widget.tracked;
-    final radius = BorderRadius.circular(999);
+    final radius = t.brBtn;
     return DetailFocusRing(
       focused: _focused,
       radius: radius,
       child: Material(
-        color: tracked
-            ? accent.withValues(alpha: 0.12)
-            : Colors.white.withValues(alpha: 0.07),
+        color: tracked ? accent.withValues(alpha: 0.12) : t.ghostFill,
         borderRadius: radius,
         child: InkWell(
           focusNode: widget.focusNode,
@@ -353,9 +382,7 @@ class _DetailTrackerPillState extends State<DetailTrackerPill> {
             decoration: BoxDecoration(
               borderRadius: radius,
               border: Border.all(
-                color: tracked
-                    ? accent.withValues(alpha: 0.42)
-                    : DetailPalette.hair,
+                color: tracked ? accent.withValues(alpha: 0.42) : t.ghostBorder,
               ),
             ),
             child: Row(
@@ -371,9 +398,7 @@ class _DetailTrackerPillState extends State<DetailTrackerPill> {
                       Text(
                         widget.brand,
                         style: TextStyle(
-                          color: tracked
-                              ? accent
-                              : Colors.white.withValues(alpha: 0.5),
+                          color: tracked ? accent : t.tx3,
                           fontSize: 9,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 1.3,
@@ -385,9 +410,7 @@ class _DetailTrackerPillState extends State<DetailTrackerPill> {
                     Text(
                       widget.state,
                       style: TextStyle(
-                        color: tracked
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.62),
+                        color: tracked ? t.tx : t.tx2,
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
                         height: 1,
@@ -433,6 +456,7 @@ class DetailMetaBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final parts = <Widget>[];
     void add(Widget w) {
       if (parts.isNotEmpty) parts.add(const SizedBox(width: 14));
@@ -442,7 +466,7 @@ class DetailMetaBar extends StatelessWidget {
     Widget text(String s) => Text(
       s,
       style: TextStyle(
-        color: DetailPalette.tx2,
+        color: t.tx2,
         fontSize: fontSize,
         fontWeight: FontWeight.w600,
       ),
@@ -458,15 +482,16 @@ class DetailMetaBar extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           decoration: BoxDecoration(
-            color: DetailPalette.glass,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: DetailPalette.hair),
+            color: t.panel,
+            borderRadius: t.brSm,
+            border: Border.all(color: t.hair),
           ),
           child: Text(
             cert,
             style: TextStyle(
               fontSize: fontSize - 1.5,
               fontWeight: FontWeight.w700,
+              color: t.tx,
             ),
           ),
         ),
@@ -480,14 +505,21 @@ class DetailMetaBar extends StatelessWidget {
           children: [
             Text(
               r.toStringAsFixed(1),
-              style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: FontWeight.w700,
+                color: t.tx,
+              ),
             ),
             const SizedBox(width: 5),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
               decoration: BoxDecoration(
-                color: DetailPalette.imdb,
-                borderRadius: BorderRadius.circular(4),
+                // The IMDb badge is a LOGO, not a colour choice — it keeps its
+                // own yellow in every theme, exactly as the Trakt and Simkl
+                // marks do.
+                color: const Color(0xFFF5C518),
+                borderRadius: t.brSm,
               ),
               child: const Text(
                 'IMDb',
@@ -530,19 +562,29 @@ class DetailLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     final logo = model.logo;
     if (logo == null || logo.isEmpty) {
+      // The common path — most titles have no logo art — so it must be themed
+      // or every light theme shows a white wordmark on paper.
       return Text(
-        model.name,
+        t.displayCase(model.name),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: height * 0.44,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.03 * height * 0.44,
-          height: 1.03,
-          shadows: const [Shadow(color: Colors.black87, blurRadius: 16)],
-        ),
+        style: t
+            .titleStyle(
+              size: height * 0.44,
+              weight: FontWeight.w800,
+              tracking: -0.03 * height * 0.44,
+              height: 1.03,
+            )
+            .copyWith(
+              // Derived from the ground so a light theme gets a light halo
+              // rather than a black smear behind its wordmark.
+              shadows: [
+                Shadow(color: t.ground.withValues(alpha: 0.87), blurRadius: 16),
+              ],
+            ),
       );
     }
     return ConstrainedBox(
@@ -561,12 +603,13 @@ class DetailLogo extends StatelessWidget {
         memCacheHeight: (height * 3).round(),
         placeholder: (_, __) => const SizedBox.shrink(),
         errorWidget: (_, __, ___) => Text(
-          model.name,
+          t.displayCase(model.name),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: height * 0.44,
-            fontWeight: FontWeight.w800,
+          style: t.titleStyle(
+            size: height * 0.44,
+            weight: FontWeight.w800,
+            tracking: 0,
             height: 1.03,
           ),
         ),
@@ -793,10 +836,14 @@ Future<void> showDetailSeasonPicker({
   required int selected,
   required bool isTelevision,
   required void Function(int seasonNumber) onSelected,
+  // Passed EXPLICITLY: a modal sheet builds under the root navigator and so
+  // never inherits DetailThemeScope. Relying on the fallback would silently
+  // render every theme's picker in Signal.
+  required DetailTheme theme,
 }) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: const Color(0xFF141019),
+    backgroundColor: theme.pane,
     showDragHandle: true,
     isScrollControlled: true,
     builder: (sheetCtx) => SafeArea(
@@ -815,7 +862,7 @@ Future<void> showDetailSeasonPicker({
               color: Colors.transparent,
               child: InkWell(
                 autofocus: isTelevision && active,
-                focusColor: Colors.white.withValues(alpha: 0.12),
+                focusColor: theme.focus.withValues(alpha: 0.18),
                 onTap: () {
                   Navigator.of(sheetCtx).pop();
                   if (!active) onSelected(n);
@@ -829,7 +876,7 @@ Future<void> showDetailSeasonPicker({
                             ? Icons.radio_button_checked_rounded
                             : Icons.radio_button_unchecked_rounded,
                         size: 19,
-                        color: active ? DetailPalette.focus : Colors.white38,
+                        color: active ? theme.focus : theme.tx3,
                       ),
                       const SizedBox(width: 14),
                       Text(
@@ -837,7 +884,7 @@ Future<void> showDetailSeasonPicker({
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: active ? Colors.white : DetailPalette.tx2,
+                          color: active ? theme.tx : theme.tx2,
                         ),
                       ),
                     ],
@@ -893,6 +940,7 @@ class _DetailSeasonControlState extends State<DetailSeasonControl> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -926,13 +974,13 @@ class _DetailSeasonControlState extends State<DetailSeasonControl> {
         children: [
           DetailFocusRing(
             focused: _focused,
-            radius: BorderRadius.circular(999),
+            radius: t.brBtn,
             child: Material(
-              color: DetailPalette.glass,
-              borderRadius: BorderRadius.circular(999),
+              color: t.ghostFill,
+              borderRadius: t.brBtn,
               child: InkWell(
                 focusNode: widget.focusNode,
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: t.brBtn,
                 onTap: widget.onPick,
                 onFocusChange: (f) => setState(() => _focused = f),
                 child: Container(
@@ -941,8 +989,8 @@ class _DetailSeasonControlState extends State<DetailSeasonControl> {
                     vertical: 7,
                   ),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: DetailPalette.hair),
+                    borderRadius: t.brBtn,
+                    border: Border.all(color: t.ghostBorder),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -950,21 +998,22 @@ class _DetailSeasonControlState extends State<DetailSeasonControl> {
                       Icon(
                         Icons.chevron_left_rounded,
                         size: 17,
-                        color: widget.canPrev ? Colors.white70 : Colors.white24,
+                        color: widget.canPrev ? t.tx2 : t.tx3,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'Season ${widget.seasonNumber}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w700,
+                          color: t.tx,
                         ),
                       ),
                       const SizedBox(width: 6),
                       Icon(
                         Icons.chevron_right_rounded,
                         size: 17,
-                        color: widget.canNext ? Colors.white70 : Colors.white24,
+                        color: widget.canNext ? t.tx2 : t.tx3,
                       ),
                     ],
                   ),
@@ -975,18 +1024,14 @@ class _DetailSeasonControlState extends State<DetailSeasonControl> {
           const SizedBox(width: 10),
           Text(
             '${widget.episodeCount} episodes',
-            style: TextStyle(
-              color: DetailPalette.tx3,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-            ),
+            style: t.dataStyle(size: 11.5),
           ),
           if (widget.hint != null && PlatformUtil.isAndroidTvCached) ...[
             const SizedBox(width: 14),
             Text(
               widget.hint!,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.30),
+                color: t.tx3,
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
               ),
