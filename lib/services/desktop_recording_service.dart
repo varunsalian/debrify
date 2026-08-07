@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import '../utils/app_storage.dart';
 
 import 'live_recording_service.dart'
     show LiveRecordingService, RecordingLibraryEntry;
@@ -319,7 +320,7 @@ class DesktopRecordingService {
   static Future<Directory> recordingsDir() async {
     final base =
         (await getDownloadsDirectory()) ??
-        await getApplicationDocumentsDirectory();
+        await AppStorage.documents();
     final sep = Platform.pathSeparator;
     return Directory('${base.path}${sep}Debrify${sep}Recordings');
   }

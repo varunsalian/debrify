@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import '../utils/app_storage.dart';
 import 'package:sqflite/sqflite.dart';
 
 class DebrifyTvDatabase {
@@ -26,7 +27,7 @@ class DebrifyTvDatabase {
       return _db!;
     }
 
-    final docsDir = await getApplicationDocumentsDirectory();
+    final docsDir = await AppStorage.documents();
     final dbPath = p.join(docsDir.path, 'debrify_tv.db');
 
     _db = await openDatabase(

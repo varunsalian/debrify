@@ -522,7 +522,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         ? (await DesktopScheduleService.instance.list()).length
         : 0;
     final maxConcurrent = await LiveRecordingService.maxConcurrent();
-    final batteryExempt = engineSupported && !PlatformUtil.isAndroidTvCached
+    final batteryExempt = engineSupported && !PlatformUtil.isTelevision
         ? await LiveRecordingService.isIgnoringBatteryOptimizations()
         : null;
 
@@ -552,7 +552,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
     // TV entry focus: land on the first tab (not a TextField, so no keyboard
     // pops) so DPAD users are never stranded on nothing.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         // Only a bare FocusScopeNode as primary focus means DPAD is
@@ -950,7 +950,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // focused delete button was using — so reseed DPAD focus on the same row
     // slot of a surviving playlist (or the tab bar when the list empties).
     _ensureFocusNodes();
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (_playlistFocusNodes.isEmpty) {
@@ -1129,7 +1129,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     if (!mounted) return;
     // The deleted row's focus node is gone with it; land DPAD on the same
     // slot of a surviving list, or on Create when the section empties.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (_listFocusNodes.isEmpty) {
@@ -3293,7 +3293,7 @@ class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
         // Off-TV only: on TV the action buttons seed DPAD focus (see the
         // Save/Cancel autofocus below), matching the import-name dialog — a
         // field autofocus in TV passthrough mode pops the broken system IME.
-        autofocus: !PlatformUtil.isAndroidTvCached,
+        autofocus: !PlatformUtil.isTelevision,
         textInputAction: TextInputAction.next,
         onUpArrow: up(_nameFocusNode),
         onDownArrow: down(_nameFocusNode),
@@ -3393,13 +3393,13 @@ class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
           style: _dialogButtonFocusStyle,
           // TV: seed DPAD focus on Cancel only when Save opens disabled, so
           // focus is never stranded on the dialog scope.
-          autofocus: PlatformUtil.isAndroidTvCached && !_canSave,
+          autofocus: PlatformUtil.isTelevision && !_canSave,
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         FilledButton(
           style: _dialogButtonFocusStyle,
-          autofocus: PlatformUtil.isAndroidTvCached && _canSave,
+          autofocus: PlatformUtil.isTelevision && _canSave,
           onPressed: _canSave ? _submit : null,
           child: const Text('Save'),
         ),
@@ -3765,7 +3765,7 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
             prefixIcon: const Icon(Icons.label_outline),
             // Off-TV only: on TV the dialog's action buttons seed DPAD focus
             // (below), matching the old clone which never autofocused on TV.
-            autofocus: !PlatformUtil.isAndroidTvCached,
+            autofocus: !PlatformUtil.isTelevision,
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _submit(),
           ),
@@ -3776,13 +3776,13 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
           style: _dialogButtonFocusStyle,
           // TV: when the default name is invalid Import opens disabled, so
           // seed DPAD focus here instead.
-          autofocus: PlatformUtil.isAndroidTvCached && !_initialNameValid,
+          autofocus: PlatformUtil.isTelevision && !_initialNameValid,
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         FilledButton(
           style: _dialogButtonFocusStyle,
-          autofocus: PlatformUtil.isAndroidTvCached && _initialNameValid,
+          autofocus: PlatformUtil.isTelevision && _initialNameValid,
           onPressed: _errorText == null ? _submit : null,
           child: const Text('Import'),
         ),

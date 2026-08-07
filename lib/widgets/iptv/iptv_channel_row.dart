@@ -905,7 +905,7 @@ class _RowEpgState extends State<_RowEpg> {
   /// data — long enough that rows scrolled past never reach it. A remote
   /// arrows through a list far slower than a finger flings one, and TV
   /// hardware has the least headroom, so it waits longest.
-  static Duration get _fetchDwell => PlatformUtil.isAndroidTvCached
+  static Duration get _fetchDwell => PlatformUtil.isTelevision
       ? const Duration(milliseconds: 900)
       : const Duration(milliseconds: 450);
 

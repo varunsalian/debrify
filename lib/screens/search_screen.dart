@@ -17229,7 +17229,7 @@ class _HeroAmbientChipState extends State<_HeroAmbientChip>
   /// trailer, compositing over the underlay video every frame — continuous
   /// idle animation is exactly what the TV effects budget bans, and a static
   /// lit dot reads identically from the couch. Phones keep the breath.
-  bool get _pulseOk => !PlatformUtil.isAndroidTvCached;
+  bool get _pulseOk => !PlatformUtil.isTelevision;
 
   @override
   void initState() {

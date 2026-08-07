@@ -48,7 +48,7 @@ class _SwitchRowState extends State<SwitchRow> {
       },
       child: AnimatedContainer(
         // TV: snap — see TvFocusableCard.
-        duration: PlatformUtil.isAndroidTvCached
+        duration: PlatformUtil.isTelevision
             ? Duration.zero
             : const Duration(milliseconds: 150),
         decoration: BoxDecoration(

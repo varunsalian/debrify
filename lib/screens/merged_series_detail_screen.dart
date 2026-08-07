@@ -2431,7 +2431,7 @@ class _FocusHalo extends StatelessWidget {
     return AnimatedContainer(
       // Snap on TV (house focus idiom): a 140ms ring fade per DPAD move makes
       // held-key surfing repaint every element in flight on the weak GPU.
-      duration: PlatformUtil.isAndroidTvCached
+      duration: PlatformUtil.isTelevision
           ? Duration.zero
           : const Duration(milliseconds: 140),
       foregroundDecoration: BoxDecoration(
@@ -2656,7 +2656,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
     return AnimatedScale(
       // Snap on TV: every frame of the scale pop re-rasters the pill AND its
       // blur-18 glow shadow; instant scale keeps the glow a one-time paint.
-      duration: PlatformUtil.isAndroidTvCached
+      duration: PlatformUtil.isTelevision
           ? Duration.zero
           : const Duration(milliseconds: 140),
       scale: _focused ? 1.05 : 1.0,

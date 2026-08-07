@@ -135,7 +135,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
         _loading = false;
       });
       // TV entry focus: land DPAD users on the first chip instead of nothing.
-      if (PlatformUtil.isAndroidTvCached) {
+      if (PlatformUtil.isTelevision) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           // Don't yank focus if it already landed on a real node (only the

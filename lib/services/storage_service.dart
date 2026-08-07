@@ -558,8 +558,18 @@ class StorageService {
   /// default, so a value stored before this split — or by a phone install
   /// whose prefs were restored onto a TV box — can't switch the detail
   /// backdrop back on. Settings only offers the toggle off-TV to match.
+  /// "Is this a television?" for the ambient-trailer split below.
+  ///
+  /// The split is by FORM FACTOR, not by OS — Apple TV renders the very same
+  /// Home hero and Discover stage that Android TV does. [PlatformUtil.isAndroidTV]
+  /// short-circuits to false whenever the platform isn't Android, so tvOS has to
+  /// be added explicitly; it stays awaited (rather than reading the cached flag)
+  /// so this keeps warming the probe exactly as it did before.
+  static Future<bool> _isTelevision() async =>
+      await PlatformUtil.isAndroidTV() || PlatformUtil.isTvOS;
+
   static Future<bool> getDetailTrailerAutoplayEnabled() async {
-    if (await PlatformUtil.isAndroidTV()) return false;
+    if (await _isTelevision()) return false;
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool('detail_trailer_autoplay_enabled') ?? true;
   }
@@ -576,7 +586,7 @@ class StorageService {
   /// — [getDetailTrailerAutoplayEnabled] is its counterpart). Exactly one of
   /// the pair is live on any given device, and Settings shows only that one.
   static Future<bool> getHomeHeroTrailerEnabled() async {
-    if (!await PlatformUtil.isAndroidTV()) return false;
+    if (!await _isTelevision()) return false;
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool('home_hero_trailer_enabled') ?? true;
   }
@@ -604,7 +614,7 @@ class StorageService {
   /// backdrop. Per-surface keys make such writes unreadable instead, so
   /// non-TV starts at the defaults its backdrop has always used.
   static Future<String> _ambientTrailerKey(String suffix) async =>
-      await PlatformUtil.isAndroidTV()
+      await _isTelevision()
       ? 'home_hero_trailer_$suffix'
       : 'detail_trailer_$suffix';
 

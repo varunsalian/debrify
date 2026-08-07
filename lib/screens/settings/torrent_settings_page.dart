@@ -22,7 +22,7 @@ class _TorrentSettingsPageState extends State<TorrentSettingsPage> {
     super.initState();
     AnalyticsService.screenView('torrent_settings');
     // On TV, land DPAD focus on the first row so users aren't stranded.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _firstTileFocus.requestFocus();
       });

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../utils/platform_util.dart';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
@@ -131,6 +132,10 @@ class AnalyticsService {
   static String currentPlatformLabel() {
     if (kIsWeb) return 'web';
     if (Platform.isAndroid) return 'android';
+    // Before the isIOS check, never after: Platform.isIOS is TRUE on Apple TV,
+    // so tvOS installs would otherwise be indistinguishable from iPhones in
+    // analytics — exactly the split worth being able to see.
+    if (PlatformUtil.isTvOS) return 'tvos';
     if (Platform.isIOS) return 'ios';
     if (Platform.isMacOS) return 'macos';
     if (Platform.isWindows) return 'windows';

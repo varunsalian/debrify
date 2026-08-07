@@ -293,7 +293,7 @@ String _getDedupeKey(Map<String, dynamic> item) {
   /// saveLayer re-rasterises the whole row on every scroll frame, and a 2%
   /// edge fade is invisible at TV viewing distance.
   Widget _edgeFade(Widget child) {
-    if (PlatformUtil.isAndroidTvCached) return child;
+    if (PlatformUtil.isTelevision) return child;
     return ShaderMask(
       shaderCallback: (Rect bounds) {
         return LinearGradient(

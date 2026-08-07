@@ -17,7 +17,7 @@ import '../utils/tv_keys.dart';
 /// TV: skip the glass blur (see the action-sheet panel below — it swaps to an
 /// opaque fill there, so no BackdropFilter saveLayer on weak TV GPUs).
 Widget _maybeBlur(Widget child) {
-  if (PlatformUtil.isAndroidTvCached) return child;
+  if (PlatformUtil.isTelevision) return child;
   return BackdropFilter(
     filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
     child: child,
@@ -622,7 +622,7 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
                             child: _maybeBlur(
                               Container(
                                 decoration: BoxDecoration(
-                                  color: PlatformUtil.isAndroidTvCached
+                                  color: PlatformUtil.isTelevision
                                       ? const Color(0xF5181820)
                                       : Colors.white.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(20),

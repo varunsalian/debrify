@@ -500,7 +500,7 @@ class _SourceSheetState extends State<SourceSheet>
   /// so the blur is barely visible — but its saveLayer re-blurs the live video
   /// underneath on every frame, which weak TV GPUs can't afford.
   Widget _frost(Widget child) {
-    if (PlatformUtil.isAndroidTvCached) return child;
+    if (PlatformUtil.isTelevision) return child;
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
       child: child,

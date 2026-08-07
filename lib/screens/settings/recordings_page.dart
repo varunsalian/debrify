@@ -832,7 +832,7 @@ class _RecordingsPageState extends State<RecordingsPage>
                               fmtBytes: _fmtBytes,
                               fmtElapsed: _fmtElapsed,
                               autofocus:
-                                  PlatformUtil.isAndroidTvCached && i == 0,
+                                  PlatformUtil.isTelevision && i == 0,
                               onStop: () => unawaited(_stopDesktop(capture)),
                             ),
                           for (final (i, rec) in _live.indexed)
@@ -848,7 +848,7 @@ class _RecordingsPageState extends State<RecordingsPage>
                               fmtBytes: _fmtBytes,
                               fmtElapsed: _fmtElapsed,
                               autofocus:
-                                  PlatformUtil.isAndroidTvCached &&
+                                  PlatformUtil.isTelevision &&
                                   i == 0 &&
                                   desktopCaptures.isEmpty,
                               onStop: () => unawaited(_stopAndroid(rec)),
@@ -880,7 +880,7 @@ class _RecordingsPageState extends State<RecordingsPage>
                                   '${_clock(schedule.endMs)}',
                               fmtCountdown: _fmtCountdown,
                               autofocus:
-                                  PlatformUtil.isAndroidTvCached &&
+                                  PlatformUtil.isTelevision &&
                                   liveCount == 0 &&
                                   i == 0,
                               onCancel: () =>
@@ -936,7 +936,7 @@ class _RecordingsPageState extends State<RecordingsPage>
                                       ? display.channel!
                                       : display.title,
                                   autofocus:
-                                      PlatformUtil.isAndroidTvCached &&
+                                      PlatformUtil.isTelevision &&
                                       liveCount == 0 &&
                                       _schedules.isEmpty &&
                                       i == 0,
@@ -1214,7 +1214,7 @@ class _RecDotState extends State<_RecDot> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    if (!PlatformUtil.isAndroidTvCached) {
+    if (!PlatformUtil.isTelevision) {
       _controller = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 900),
@@ -1641,7 +1641,7 @@ class _EmptyDvr extends StatelessWidget {
             icon: Icons.add_rounded,
             label: 'Schedule a recording',
             filled: true,
-            autofocus: PlatformUtil.isAndroidTvCached,
+            autofocus: PlatformUtil.isTelevision,
             onPressed: onSchedule,
           ),
         ),

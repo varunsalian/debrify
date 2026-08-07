@@ -102,7 +102,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
     // TV: land DPAD focus somewhere when the page opens so users aren't
     // stranded. The Save button, not a TextField — autofocusing a field
     // would pop the soft keyboard.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         // Bail if something already holds real focus (a scope node just
@@ -181,7 +181,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
     _snack('WebDAV server removed');
     // Removing the last server unmounts the focused Disconnect button
     // (_enabled goes false) — reseed DPAD focus on something that remains.
-    if (PlatformUtil.isAndroidTvCached && servers.isEmpty) {
+    if (PlatformUtil.isTelevision && servers.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _focusAndReveal(_saveFocusNode);
       });
@@ -208,7 +208,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
     });
     // TV: don't focus the TextField directly (pops the soft keyboard) —
     // land on the Save button instead; it still reveals the cleared form.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       _focusAndReveal(_saveFocusNode);
     } else {
       _focusAndReveal(_nameFocusNode);

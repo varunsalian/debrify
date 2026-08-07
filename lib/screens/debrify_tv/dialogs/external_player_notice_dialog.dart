@@ -187,7 +187,7 @@ class _DontShowAgainRowState extends State<_DontShowAgainRow> {
         onTap: () => widget.onChanged(!widget.value),
         child: AnimatedContainer(
           // TV: snap — see SwitchRow.
-          duration: PlatformUtil.isAndroidTvCached
+          duration: PlatformUtil.isTelevision
               ? Duration.zero
               : const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -266,7 +266,7 @@ class _DialogButtonState extends State<_DialogButton> {
       child: GestureDetector(
         onTap: widget.onPressed,
         child: AnimatedContainer(
-          duration: PlatformUtil.isAndroidTvCached
+          duration: PlatformUtil.isTelevision
               ? Duration.zero
               : const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),

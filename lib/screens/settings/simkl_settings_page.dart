@@ -56,7 +56,7 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
   }
 
   void _focusOnTv(FocusNode node) {
-    if (!PlatformUtil.isAndroidTvCached) return;
+    if (!PlatformUtil.isTelevision) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && node.context != null) node.requestFocus();
     });
@@ -79,7 +79,7 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
     // the user already focused something (e.g. the AppBar back button)
     // while the async load ran. Reseeds elsewhere skip this guard on
     // purpose: there the focused node just unmounted.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final primary = FocusManager.instance.primaryFocus;

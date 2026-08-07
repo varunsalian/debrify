@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import '../utils/app_storage.dart';
 import 'package:flutter/services.dart';
 
 import '../services/analytics_service.dart';
@@ -412,15 +413,15 @@ class _DownloadsScreenState extends State<DownloadsScreen>
             final sep = Platform.pathSeparator;
             destPath = 'Downloads${sep}Debrify$sep$folder$sep$filename';
           } else {
-            final docs = await getApplicationDocumentsDirectory();
+            final docs = await AppStorage.documents();
             destPath = '${docs.path}/downloads/$folder/$filename';
           }
         } catch (e) {
-          final docs = await getApplicationDocumentsDirectory();
+          final docs = await AppStorage.documents();
           destPath = '${docs.path}/downloads/$folder/$filename';
         }
       } else {
-        final docs = await getApplicationDocumentsDirectory();
+        final docs = await AppStorage.documents();
         destPath = '${docs.path}/downloads/$folder/$filename';
       }
 

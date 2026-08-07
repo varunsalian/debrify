@@ -2005,7 +2005,7 @@ class _CatalogSelectSourceButtonState
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: PlatformUtil.isAndroidTvCached
+          duration: PlatformUtil.isTelevision
               ? Duration.zero
               : const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -2022,7 +2022,7 @@ class _CatalogSelectSourceButtonState
                   : Colors.white.withValues(alpha: 0.14),
               width: _isFocused ? 2 : 1,
             ),
-            boxShadow: (_isFocused && !PlatformUtil.isAndroidTvCached)
+            boxShadow: (_isFocused && !PlatformUtil.isTelevision)
                 ? [
                     BoxShadow(
                       color: HomeTheme.focusGold.withValues(alpha: 0.32),

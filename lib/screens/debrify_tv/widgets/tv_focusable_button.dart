@@ -50,7 +50,7 @@ class _TvFocusableButtonState extends State<TvFocusableButton> {
         scale: _isFocused ? 1.1 : 1.0,
         // TV: snap — animating the scale re-rasters the button (and its
         // blurred shadow) for ~12 frames per focus move.
-        duration: PlatformUtil.isAndroidTvCached
+        duration: PlatformUtil.isTelevision
             ? Duration.zero
             : const Duration(milliseconds: 200),
         curve: Curves.easeOut,
@@ -59,7 +59,7 @@ class _TvFocusableButtonState extends State<TvFocusableButton> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             // TV: the white border is the focus cue; skip the blurred glow.
-            boxShadow: _isFocused && !PlatformUtil.isAndroidTvCached
+            boxShadow: _isFocused && !PlatformUtil.isTelevision
                 ? [
                     BoxShadow(
                       color: Colors.white.withOpacity(0.3),

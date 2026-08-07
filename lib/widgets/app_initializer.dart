@@ -32,12 +32,12 @@ class _AppInitializerState extends State<AppInitializer>
   bool _splashDone = false;
   // Shows the corner spinner during the hold-for-home phase.
   bool _holdingForHome = false;
-  bool _isAndroidTv = PlatformUtil.isAndroidTvCached;
+  bool _isAndroidTv = PlatformUtil.isTelevision;
   // On TV, let MainPage build and fetch behind an opacity-zero render object,
   // but don't raster its first (very expensive) frame while the spinner is
   // moving. _finishSplash gives it a short hidden prepaint window once the
   // spinner has faded out.
-  bool _paintHomeBehindSplash = !PlatformUtil.isAndroidTvCached;
+  bool _paintHomeBehindSplash = !PlatformUtil.isTelevision;
 
   late AnimationController _revealController;
   late AnimationController _exitController;

@@ -52,7 +52,7 @@ class PipelineLoadingOverlay {
     // while the loader is up.
     final nav = Navigator.of(context, rootNavigator: true);
     final handle = PipelineLoadingOverlay._(nav, state, steps);
-    final tv = PlatformUtil.isAndroidTvCached;
+    final tv = PlatformUtil.isTelevision;
 
     // Pushed as an explicit route (not showGeneralDialog) so [dismiss] can
     // target THIS route: the play flow now keeps the loader up while the

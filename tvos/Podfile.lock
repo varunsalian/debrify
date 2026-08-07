@@ -1,0 +1,37 @@
+PODS:
+  - media_kit_libs_tvos_video (0.0.1)
+  - media_kit_video_tvos (0.0.1):
+    - media_kit_libs_tvos_video
+  - sqflite_tvos (0.0.1)
+  - video_player_tvos (0.0.1)
+  - wakelock_plus_tvos (0.0.1)
+
+DEPENDENCIES:
+  - media_kit_libs_tvos_video (from `/Users/varunbsalian/Documents/Projects/debrify/packages/media_kit_libs_tvos_video/tvos`)
+  - media_kit_video_tvos (from `/Users/varunbsalian/Documents/Projects/debrify/packages/media_kit_video_tvos/tvos`)
+  - sqflite_tvos (from `/Users/varunbsalian/.pub-cache/hosted/pub.dev/sqflite_tvos-0.0.2/tvos`)
+  - video_player_tvos (from `/Users/varunbsalian/.pub-cache/hosted/pub.dev/video_player_tvos-0.0.1/tvos`)
+  - wakelock_plus_tvos (from `/Users/varunbsalian/.pub-cache/hosted/pub.dev/wakelock_plus_tvos-0.0.1/tvos`)
+
+EXTERNAL SOURCES:
+  media_kit_libs_tvos_video:
+    :path: "/Users/varunbsalian/Documents/Projects/debrify/packages/media_kit_libs_tvos_video/tvos"
+  media_kit_video_tvos:
+    :path: "/Users/varunbsalian/Documents/Projects/debrify/packages/media_kit_video_tvos/tvos"
+  sqflite_tvos:
+    :path: "/Users/varunbsalian/.pub-cache/hosted/pub.dev/sqflite_tvos-0.0.2/tvos"
+  video_player_tvos:
+    :path: "/Users/varunbsalian/.pub-cache/hosted/pub.dev/video_player_tvos-0.0.1/tvos"
+  wakelock_plus_tvos:
+    :path: "/Users/varunbsalian/.pub-cache/hosted/pub.dev/wakelock_plus_tvos-0.0.1/tvos"
+
+SPEC CHECKSUMS:
+  media_kit_libs_tvos_video: d998688ddb5fb192c0830b3f1cca5cbfe7c049c6
+  media_kit_video_tvos: 1e8f02e1df1cd31c947b31bef16f93740396e984
+  sqflite_tvos: c473ff0295bc0c18f416393eed404091eb1598a5
+  video_player_tvos: d8ff3846a49c5603dfcb49c91a6921aef9ce5d46
+  wakelock_plus_tvos: 0f67f6936faa0d7548e9bb2d950154a84cf601a3
+
+PODFILE CHECKSUM: 712a21dd2c574ece2f276d51b9d22ea4716d9298
+
+COCOAPODS: 1.16.2

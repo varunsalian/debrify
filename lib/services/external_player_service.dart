@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../utils/platform_util.dart';
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/external_player.dart';
@@ -440,7 +441,7 @@ class ExternalPlayerService {
 
   /// Check if an iOS player is likely installed by checking if we can open its URL scheme
   static Future<bool> isIOSPlayerInstalled(iOSExternalPlayer player) async {
-    if (!Platform.isIOS) return false;
+    if (!PlatformUtil.isIosMobile) return false;
     if (player == iOSExternalPlayer.customScheme) return true;
 
     try {
@@ -454,7 +455,7 @@ class ExternalPlayerService {
 
   /// Detect which iOS players are installed
   static Future<Map<iOSExternalPlayer, bool>> detectInstalledIOSPlayers() async {
-    if (!Platform.isIOS) return {};
+    if (!PlatformUtil.isIosMobile) return {};
 
     final results = <iOSExternalPlayer, bool>{};
 
@@ -474,7 +475,7 @@ class ExternalPlayerService {
     String url, {
     String? title,
   }) async {
-    if (!Platform.isIOS) {
+    if (!PlatformUtil.isIosMobile) {
       return iOSExternalPlayerLaunchResult.failed('Not running on iOS');
     }
 
@@ -491,7 +492,7 @@ class ExternalPlayerService {
     iOSExternalPlayer player, {
     String? title,
   }) async {
-    if (!Platform.isIOS) {
+    if (!PlatformUtil.isIosMobile) {
       return iOSExternalPlayerLaunchResult.failed('Not running on iOS');
     }
 

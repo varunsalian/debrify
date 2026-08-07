@@ -123,7 +123,7 @@ class _NeonActionSheet extends StatelessWidget {
     // move runs a ~120ms focus animation, so item-to-item navigation dragged
     // the blur along and felt sluggish on weak TV GPUs. The panel colour is
     // 95% opaque anyway, so an opaque panel reads near-identically.
-    final isTv = PlatformUtil.isAndroidTvCached;
+    final isTv = PlatformUtil.isTelevision;
     // First three actions are the primaries (Play / Download / Playlist —
     // the order _showChooser builds); everything else goes to the quiet list.
     final pillCount = actions.length >= 4 ? 3 : actions.length;

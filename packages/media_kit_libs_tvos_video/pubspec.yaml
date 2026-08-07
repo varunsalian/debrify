@@ -1,0 +1,21 @@
+name: media_kit_libs_tvos_video
+description: tvOS dependency package for package:media_kit — vends libmpv and its ffmpeg/ass dependency xcframeworks with Apple TV slices.
+version: 0.0.1
+publish_to: 'none'
+
+environment:
+  sdk: ^3.8.1
+  flutter: ">=3.3.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      # The `tvos:` key is what makes flutter-tvos pick this package up at
+      # all — a plugin declaring only `ios:` is silently skipped, which is
+      # exactly how media_kit currently vanishes from the tvOS build.
+      tvos:
+        pluginClass: MediaKitLibsTvosVideoPlugin

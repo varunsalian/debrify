@@ -8,6 +8,7 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import '../utils/app_storage.dart';
 import 'package:sqlite3/open.dart' as sqlite_open;
 import 'package:sqlite3/sqlite3.dart';
 
@@ -542,7 +543,7 @@ class IptvCatalogDb {
       await runExclusive(() async {
         final dir =
             debugDirectoryOverride ??
-            (await getApplicationDocumentsDirectory()).path;
+            (await AppStorage.documents()).path;
         final base = p.join(dir, _dbFileName);
         for (final suffix in const ['', '-wal', '-shm']) {
           try {
@@ -679,7 +680,7 @@ class IptvCatalogDb {
   static Future<void> _open() async {
     final dir =
         debugDirectoryOverride ??
-        (await getApplicationDocumentsDirectory()).path;
+        (await AppStorage.documents()).path;
     final path = p.join(dir, _dbFileName);
 
     final prepared = await compute(

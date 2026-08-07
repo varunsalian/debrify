@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../utils/platform_util.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -1167,7 +1168,7 @@ class VideoPlayerLauncher {
         debugPrint('Failed to launch external player on Android: $e');
         return false;
       }
-    } else if (Platform.isIOS) {
+    } else if (PlatformUtil.isIosMobile) {
       // iOS: Use URL scheme to launch preferred external player
       final result = await ExternalPlayerService.launchWithPreferredIOSPlayer(
         url,

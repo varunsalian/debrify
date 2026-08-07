@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../utils/media_kit_init.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -76,7 +77,7 @@ class MediaKitTrailerEngine implements TrailerEngine {
   MediaKitTrailerEngine() {
     // Idempotent; the main player also initializes it, but guard in case the
     // trailer is the first media_kit surface in this session.
-    mk.MediaKit.ensureInitialized();
+    MediaKitInit.ensureInitialized();
     _player = mk.Player();
     _controller = mkv.VideoController(_player);
   }

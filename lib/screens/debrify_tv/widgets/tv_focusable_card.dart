@@ -122,7 +122,7 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
               // TV: snap instead of animating — a 200ms tween of a blurred
               // shadow + gradient repaints the card every frame of every
               // focus move, the main jank source in the channel grid.
-              duration: PlatformUtil.isAndroidTvCached
+              duration: PlatformUtil.isTelevision
                   ? Duration.zero
                   : const Duration(milliseconds: 200),
               width: double.infinity,
@@ -143,7 +143,7 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                 ),
                 // TV: the 3px white border is the focus cue; blurred shadows
                 // are the expensive part of the repaint, so skip them there.
-                boxShadow: PlatformUtil.isAndroidTvCached
+                boxShadow: PlatformUtil.isTelevision
                     ? null
                     : _isFocused
                     ? [

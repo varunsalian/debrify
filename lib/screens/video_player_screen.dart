@@ -1,10 +1,12 @@
 import 'dart:async';
+import '../utils/media_kit_init.dart';
 import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import '../utils/app_storage.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
 import 'package:screen_brightness/screen_brightness.dart';
@@ -1046,7 +1048,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     SubtitleSettingsService.instance.resetSyncOffset();
     _loadSubtitleSettings();
     unawaited(_loadSkipSegmentSettings());
-    mk.MediaKit.ensureInitialized();
+    MediaKitInit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // The player opens landscape — a video wants the long edge — unless the
     // user asked it to open upright, in which case the Portrait/Landscape
@@ -4977,11 +4979,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (Platform.isAndroid) {
       dir =
           (await getExternalStorageDirectory()) ??
-          await getApplicationDocumentsDirectory();
+          await AppStorage.documents();
     } else {
       dir =
           (await getDownloadsDirectory()) ??
-          await getApplicationDocumentsDirectory();
+          await AppStorage.documents();
     }
     final sep = Platform.pathSeparator;
     final prefix = '${dir.path}${sep}Debrify${sep}Recordings$sep${base}_$stamp';

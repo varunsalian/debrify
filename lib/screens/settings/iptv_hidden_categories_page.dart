@@ -56,7 +56,7 @@ class _CategoryRow {
 }
 
 class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
-  late final bool _isTv = PlatformUtil.isAndroidTvCached;
+  late final bool _isTv = PlatformUtil.isTelevision;
 
   List<_CatalogTab> _tabs = const [];
   int _selectedTab = 0;

@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/app_version_info.dart';
+
 import 'stremio_service.dart';
 
 /// Service for running app migrations on fresh install or update.
@@ -63,10 +65,27 @@ class AppMigrationService {
       // present) stops us from ever re-adding one the user removed.
       await _ensureEssentialAddons(prefs);
 
-      final packageInfo = await PackageInfo.fromPlatform();
+      // Never a bare fromPlatform() here: this call sits AFTER the essential
+      // addon seeding but BEFORE every version-gated migration, so a platform
+      // that can't answer (Apple TV — see [AppVersionInfo]) used to throw
+      // straight out of the try and silently abandon the whole run.
+      final packageInfo = await AppVersionInfo.get();
 
       final currentVersion = packageInfo.version;
       final currentBuildNumber = packageInfo.buildNumber;
+
+      // No version to gate on: the addon seeding above has already happened,
+      // which is the part that must run on every launch. Recording an empty
+      // version as "last seen" would make the next launch on a working
+      // platform read it as a version CHANGE and re-run migrations against a
+      // baseline that never existed — so stop here without writing.
+      if (AppVersionInfo.isUnavailable) {
+        debugPrint(
+          'AppMigrationService: version unavailable on this platform — '
+          'essential addons seeded, version-gated migrations skipped',
+        );
+        return false;
+      }
 
       final lastVersion = prefs.getString(_lastVersionKey);
       final lastBuildNumber = prefs.getString(_lastBuildNumberKey);

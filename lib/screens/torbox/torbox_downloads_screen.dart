@@ -35,7 +35,7 @@ import '../../utils/tv_keys.dart';
 /// opaque, so the blur only tints the thin margin ring around them, while its
 /// saveLayer costs a full-screen blur pass on weak TV GPUs.
 Widget _maybeBlur(Widget child, {double sigma = 12}) {
-  if (PlatformUtil.isAndroidTvCached) return child;
+  if (PlatformUtil.isTelevision) return child;
   return BackdropFilter(
     filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
     child: child,

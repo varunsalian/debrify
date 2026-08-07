@@ -102,7 +102,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
 
     // TV: land DPAD focus on the first interactive row so users aren't
     // stranded with nothing focused when the page opens.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         // Only a bare FocusScopeNode as primary focus means DPAD is
@@ -241,7 +241,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
 
         // The login form unmounted on success, so when the last dialog pops
         // focus tries to restore to the dead Login node — reseed Logout.
-        if (PlatformUtil.isAndroidTvCached && mounted) {
+        if (PlatformUtil.isTelevision && mounted) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _logoutButtonFocusNode.requestFocus();
           });
@@ -260,7 +260,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
         });
         // On failure the (previously disabled) Login button re-enables but
         // focus was already dropped — reseed it so DPAD isn't stranded.
-        if (PlatformUtil.isAndroidTvCached && !_isConnected) {
+        if (PlatformUtil.isTelevision && !_isConnected) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _loginButtonFocusNode.requestFocus();
           });

@@ -30,7 +30,7 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
     AnalyticsService.screenView('debrify_tv_settings');
     // TV: land DPAD focus on the first body row. The builder's rows load
     // async, so retry a few frames until one becomes focusable.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       _seedTvFocus();
     }
   }

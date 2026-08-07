@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import '../utils/app_storage.dart';
 import 'package:xml/xml_events.dart';
 
 import 'iptv_catalog_db.dart';
@@ -764,7 +765,7 @@ class XmltvEpgSource {
   /// orphans forever on storage-starved TV boxes.
   static Future<void> _sweepCache({required String keep}) async {
     try {
-      final support = await getApplicationSupportDirectory();
+      final support = await AppStorage.support();
       final dir = Directory('${support.path}/epg_cache');
       if (!await dir.exists()) return;
       final cutoff = DateTime.now().subtract(const Duration(days: 7));
@@ -780,7 +781,7 @@ class XmltvEpgSource {
   }
 
   static Future<File> _cacheFileFor(String cacheKey) async {
-    final support = await getApplicationSupportDirectory();
+    final support = await AppStorage.support();
     final dir = Directory('${support.path}/epg_cache');
     if (!await dir.exists()) await dir.create(recursive: true);
     return File('${dir.path}/$cacheKey.json');

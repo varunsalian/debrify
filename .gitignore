@@ -53,3 +53,9 @@ discord/.deploy.env
 discord/node_modules/
 discord/.wrangler/
 discord/nightly_logs/
+
+# tvOS libmpv binaries: ~2.7 GB of prebuilt xcframeworks fetched from
+# karelrooted/libmpv. The PACKAGE SOURCE next to them (podspec, Swift stub,
+# Dart) is the real work and is tracked; re-fetch the binaries with
+# packages/media_kit_libs_tvos_video/fetch_frameworks.sh.
+packages/media_kit_libs_tvos_video/tvos/Frameworks/

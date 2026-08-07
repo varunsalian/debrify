@@ -675,7 +675,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   /// so the blur is barely visible — but its saveLayer re-blurs the live video
   /// underneath on every frame, which weak TV GPUs can't afford.
   Widget _frost(Widget child) {
-    if (PlatformUtil.isAndroidTvCached) return child;
+    if (PlatformUtil.isTelevision) return child;
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
       child: child,
@@ -1566,7 +1566,7 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
           child: EpgScheduleList(
             key: ValueKey('schedule-${channel.url}'),
             channel: channel,
-            isTelevision: PlatformUtil.isAndroidTvCached,
+            isTelevision: PlatformUtil.isTelevision,
             tokens: t,
             onPlayProgramme: widget.onPlayProgramme == null
                 ? null

@@ -77,7 +77,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   // was on. Re-seed focus once the new subtree is on screen. TV-only: touch
   // users don't rely on focus.
   void _refocusOnTv(FocusNode node) {
-    if (!PlatformUtil.isAndroidTvCached) return;
+    if (!PlatformUtil.isTelevision) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         node.requestFocus();
@@ -90,7 +90,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   // somewhere (e.g. the back button) while this page was loading — don't
   // steal focus from them.
   bool get _seedEntryFocus {
-    if (!PlatformUtil.isAndroidTvCached) return false;
+    if (!PlatformUtil.isTelevision) return false;
     final primary = FocusManager.instance.primaryFocus;
     return primary == null || primary is FocusScopeNode;
   }

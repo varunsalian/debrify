@@ -67,7 +67,7 @@ class _TransitionOverlayState extends State<TransitionOverlay>
             // TV: a BackdropFilter over the live video surface re-blurs every
             // frame; a slightly more opaque plain scrim hides the peeking
             // frame at zero GPU cost.
-            if (PlatformUtil.isAndroidTvCached)
+            if (PlatformUtil.isTelevision)
               const ColoredBox(color: Color(0xF20B0B0F))
             else
               BackdropFilter(

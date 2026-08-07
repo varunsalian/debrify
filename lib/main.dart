@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'utils/app_version_info.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -85,6 +86,10 @@ Future<void> _capImageCache() async {
     // theme's page-transition builder reads on every route push.
     isTv = await PlatformUtil.isAndroidTV();
   } catch (_) {}
+  // Apple TV is a television too, and [PlatformUtil.isAndroidTV] short-circuits
+  // to false whenever the platform is not Android — so without this the caps
+  // below never reach a device that needs them just as much as a TV box does.
+  isTv = isTv || PlatformUtil.isTvOS;
   // When the TV probe FAILED (as opposed to answering "no"), cap any Android
   // device: the asymmetry decides it. A phone mistakenly capped loses a
   // little cache headroom; a 1 GB TV box mistakenly left on Flutter's stock
@@ -136,7 +141,7 @@ class _TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       return FadeTransition(
         opacity: CurvedAnimation(
           parent: animation,
@@ -166,6 +171,25 @@ Future<void> main() async {
     debugPrint('Unhandled async error: $error\n$stack');
     return true;
   };
+  // On a release tvOS build, Dart's print() lands on stdout, which the device
+  // console does not carry — so Flutter errors, and anything we log while
+  // bringing the port up, are simply invisible on real hardware. Forward
+  // debugPrint (which the framework's own error reporting also routes through)
+  // to a native channel that NSLogs it, where `devicectl --console` can see it.
+  if (PlatformUtil.isTvOS) {
+    const channel = MethodChannel('debrify/tvlog');
+    final original = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      original(message, wrapWidth: wrapWidth);
+      if (message != null) {
+        channel.invokeMethod<void>('log', message).catchError((_) {});
+      }
+    };
+    final view = PlatformDispatcher.instance.views.first;
+    debugPrint(
+      '[tvOS] physicalSize=${view.physicalSize} dpr=${view.devicePixelRatio}',
+    );
+  }
   // Fire-and-forget: Pug's init does several platform-channel reads
   // (package_info/device_info/connectivity/timezone) + storage setup that are
   // slow on weak TV hardware. Never block first frame on analytics — it runs
@@ -469,7 +493,7 @@ class _DebrifyAppState extends State<DebrifyApp> {
         // Synchronous TV flag — warmed in main() before runApp. The previous
         // FutureBuilder here re-issued an isTelevision channel call and
         // rebuilt the entire app subtree every time this builder ran.
-        final isTv = PlatformUtil.isAndroidTvCached;
+        final isTv = PlatformUtil.isTelevision;
 
         // Wrap with global Escape key handler for desktop fullscreen exit
         Widget content = child!;
@@ -512,18 +536,62 @@ class _DebrifyAppState extends State<DebrifyApp> {
           child: content,
         );
 
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            // TV: No text scaling (1.0) to prevent zoom issues
-            // Mobile: Respect accessibility but cap at 1.3 for layout consistency
-            textScaler: TextScaler.linear(
-              isTv
-                  ? 1.0
-                  : min(MediaQuery.textScalerOf(context).scale(1.0), 1.3),
-            ),
+        final mq = MediaQuery.of(context).copyWith(
+          // TV: No text scaling (1.0) to prevent zoom issues
+          // Mobile: Respect accessibility but cap at 1.3 for layout consistency
+          textScaler: TextScaler.linear(
+            isTv
+                ? 1.0
+                : min(MediaQuery.textScalerOf(context).scale(1.0), 1.3),
           ),
-          child: content,
         );
+
+        // Apple TV hands Flutter a devicePixelRatio of 1.0, so the logical
+        // canvas is the full 1920x1080. Android TV reports 2.0 for the very
+        // same panel — a 960x540 canvas — and every dimension in this app (type
+        // scale, padding, card and row sizes, focus rings) was designed against
+        // that. Left alone, the entire UI draws at half its intended physical
+        // size: fine at a desk, unreadable from a sofa.
+        //
+        // The embedder won't tell us otherwise — the engine reads UIScreen.scale
+        // (pinned to 1.0 on tvOS) and ignores the view's contentScaleFactor — so
+        // halve the logical canvas here and scale the tree back up to fill the
+        // surface. Rasterisation still happens at the full 1920x1080, so this
+        // costs no sharpness. Placed inside MaterialApp.builder so routes,
+        // dialogs and overlays all sit within the scaled subtree.
+        if (PlatformUtil.isTvOS) {
+          const factor = 2.0;
+          final scaled = Size(
+            mq.size.width / factor,
+            mq.size.height / factor,
+          );
+          return MediaQuery(
+            data: mq.copyWith(
+              size: scaled,
+              devicePixelRatio: mq.devicePixelRatio * factor,
+              // Drop the tvOS overscan safe area. Apple TV reports ~80pt
+              // horizontal / ~60pt vertical insets; Android TV reports none,
+              // and this UI already carries its own 10-foot margins — so
+              // honouring these too insets everything a second time and leaves
+              // the whole app floating in the middle of the panel with the
+              // backdrop showing around it. The layouts are the safe area.
+              padding: EdgeInsets.zero,
+              viewPadding: EdgeInsets.zero,
+              viewInsets: mq.viewInsets / factor,
+            ),
+            child: FittedBox(
+              fit: BoxFit.fill,
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: scaled.width,
+                height: scaled.height,
+                child: content,
+              ),
+            ),
+          );
+        }
+
+        return MediaQuery(data: mq, child: content);
       },
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         // Optimize scroll physics for TV
@@ -885,7 +953,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   // frame already builds the right layout branch — waiting for the async
   // platform check here used to flash the non-TV chrome (the old top bar) on
   // TV for a frame or two before setState flipped the flag.
-  bool _isAndroidTv = PlatformUtil.isAndroidTvCached;
+  bool _isAndroidTv = PlatformUtil.isTelevision;
 
   /// Covers the boot while the IPTV startup channel resolves and launches.
   /// Torn down by [MainPageBridge.notifyPlayerLaunching] (which every playback
@@ -1207,8 +1275,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     );
     _animationController.forward();
 
-    AndroidNativeDownloader.isTelevision().then((isTv) async {
+    AndroidNativeDownloader.isTelevision().then((isTvProbe) async {
       if (!mounted) return;
+
+      // The probe is an ANDROID method channel: on Apple TV there is no such
+      // channel, so it answers false and would drop a living-room device into
+      // the phone/desktop shell — and skip the block below, leaving the sidebar
+      // with no focus callbacks, so LEFT does nothing. [PlatformUtil] already
+      // knows the platform-level answer; this probe can only ever ADD Android
+      // TV to it, never take a television away.
+      final isTv = isTvProbe || PlatformUtil.isTelevision;
 
       setState(() {
         _isAndroidTv = isTv;
@@ -1665,7 +1741,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     try {
       final autoEnabled = await StorageService.getUpdateAutoCheckEnabled();
       if (!autoEnabled) return true;
-      final packageInfo = await PackageInfo.fromPlatform();
+      final packageInfo = await AppVersionInfo.get();
       UpdateSummary summary;
       try {
         summary = await UpdateService.checkForUpdates(
@@ -2980,8 +3056,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                 final nonTvSelected = nonTvIndices.indexOf(_selectedIndex);
                 // Touch tablets (iPad / Android tablet in landscape) get the
                 // wider rail. True desktop keeps the slim rail.
+                //
+                // The television exclusion is load-bearing: Platform.isIOS is
+                // TRUE on Apple TV, so without it a TV would be classed as a
+                // touch tablet and given the finger-sized rail.
                 final expandDesktopSidebar =
-                    !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+                    !kIsWeb &&
+                    (Platform.isAndroid || Platform.isIOS) &&
+                    !PlatformUtil.isTelevision;
                 final desktopSidebarWidth = expandDesktopSidebar
                     ? DesktopSidebarNav.expandedWidth
                     : DesktopSidebarNav.width;

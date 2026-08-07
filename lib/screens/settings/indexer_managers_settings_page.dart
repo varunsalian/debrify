@@ -61,7 +61,7 @@ class _IndexerManagersSettingsPageState
     // On TV, land DPAD focus on the first interactive element so users
     // aren't stranded (the first row's switch, or Add when the list is
     // empty).
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         // Only a bare FocusScopeNode as primary focus means DPAD is
@@ -103,7 +103,7 @@ class _IndexerManagersSettingsPageState
             borderRadius: 12,
             child: TextButton(
               // TV: seed DPAD focus inside the dialog (BACK still dismisses).
-              autofocus: PlatformUtil.isAndroidTvCached,
+              autofocus: PlatformUtil.isTelevision,
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancel'),
             ),
@@ -122,7 +122,7 @@ class _IndexerManagersSettingsPageState
     await _saveConfigs(_configs.where((item) => item.id != config.id).toList());
     // The deleted row unmounted under the focused Delete button — reseed
     // DPAD focus on a surviving row (or Add when the list empties).
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         (_configs.isEmpty ? _addButtonFocus : _firstRowFocus).requestFocus();
@@ -503,7 +503,7 @@ class _IndexerManagerEditorDialogState
                         value: _type,
                         // TV: seed DPAD focus on the first control (not a
                         // text field — that would pop the soft keyboard).
-                        autofocus: PlatformUtil.isAndroidTvCached,
+                        autofocus: PlatformUtil.isTelevision,
                         decoration: const InputDecoration(labelText: 'Type'),
                         isExpanded: true,
                         items: IndexerManagerType.values

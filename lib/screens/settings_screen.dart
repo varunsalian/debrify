@@ -9,8 +9,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../utils/app_version_info.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import '../utils/app_storage.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -245,7 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getTraktAccessToken(),
       StorageService.getTraktTokenExpiry(),
       StorageService.getTraktUsername(),
-      PackageInfo.fromPlatform(),
+      AppVersionInfo.get(),
       AndroidNativeDownloader.isTelevision(),
       StorageService.getUpdateAutoCheckEnabled(),
       StorageService.getIndexerManagerConfigs(),
@@ -1261,7 +1263,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'marquee','dossier','broadsheet','stage','filmstrip','console','classic',
         ],
       ),
-      if (!PlatformUtil.isAndroidTvCached)
+      if (!PlatformUtil.isTelevision)
         nav(
           SettingsRows.navigationStyle,
           'Appearance',
@@ -2779,7 +2781,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // never left without a copy when saveFile is unavailable (some TV
       // platforms lack a system save dialog).
       try {
-        final dir = await getApplicationDocumentsDirectory();
+        final dir = await AppStorage.documents();
         final fallbackPath = '${dir.path}/$fileName';
         await File(fallbackPath).writeAsBytes(bytes, flush: true);
         if (!mounted) return;

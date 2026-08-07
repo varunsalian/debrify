@@ -742,6 +742,19 @@ class MainActivity : FlutterActivity() {
             displayFeaturesBounds: IntArray,
             displayFeaturesType: IntArray,
             displayFeaturesState: IntArray,
+            // Added by the engine in Flutter 3.44. Same physical-pixel space
+            // as the width/height/insets above, so they scale with them —
+            // leaving them raw would hand the engine constraints and corner
+            // radii from the unscaled surface. Their defaults are 0 (not an
+            // unbounded sentinel), so scaling is safe arithmetic.
+            minWidth: Int,
+            maxWidth: Int,
+            minHeight: Int,
+            maxHeight: Int,
+            physicalDisplayCornerRadiusTopLeft: Int,
+            physicalDisplayCornerRadiusTopRight: Int,
+            physicalDisplayCornerRadiusBottomRight: Int,
+            physicalDisplayCornerRadiusBottomLeft: Int,
         ) {
             super.setViewportMetrics(
                 devicePixelRatio * dprScale,
@@ -763,6 +776,14 @@ class MainActivity : FlutterActivity() {
                 IntArray(displayFeaturesBounds.size) { i -> s(displayFeaturesBounds[i]) },
                 displayFeaturesType,
                 displayFeaturesState,
+                s(minWidth),
+                s(maxWidth),
+                s(minHeight),
+                s(maxHeight),
+                s(physicalDisplayCornerRadiusTopLeft),
+                s(physicalDisplayCornerRadiusTopRight),
+                s(physicalDisplayCornerRadiusBottomRight),
+                s(physicalDisplayCornerRadiusBottomLeft),
             )
         }
     }

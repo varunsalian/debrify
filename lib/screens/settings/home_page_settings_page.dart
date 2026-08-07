@@ -54,7 +54,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   /// an OR — a stale stored `true` for the wrong platform can't leak through.
   /// The cached TV read is safe here: build() is gated on [_loading], and
   /// clearing it awaits getters that themselves await the TV probe.
-  bool get _ambientTrailerEnabled => PlatformUtil.isAndroidTvCached
+  bool get _ambientTrailerEnabled => PlatformUtil.isTelevision
       ? _heroTrailerEnabled
       : _trailerAutoplayEnabled;
 
@@ -123,7 +123,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _loading = false;
       });
       // TV: land DPAD focus on the first row so users aren't stranded.
-      if (PlatformUtil.isAndroidTvCached) {
+      if (PlatformUtil.isTelevision) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           // Don't yank focus if it already landed on a real node (only the
@@ -223,7 +223,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
             extraRows: extras,
             traktUserLists: traktUserLists,
             iptvLists: iptvLists,
-            isTelevision: PlatformUtil.isAndroidTvCached,
+            isTelevision: PlatformUtil.isTelevision,
           ),
         ),
       );
@@ -286,7 +286,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                     ),
                   ],
                 ),
-                if (!PlatformUtil.isAndroidTvCached) ...[
+                if (!PlatformUtil.isTelevision) ...[
                   const SizedBox(height: 16),
 
                   // TV has separate Home and Search tabs, so a Home default
@@ -379,7 +379,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 SettingsSection(
                   title: '',
                   children: [
-                    if (PlatformUtil.isAndroidTvCached)
+                    if (PlatformUtil.isTelevision)
                       SettingsToggleTile(
                         icon: Icons.smart_display_rounded,
                         title: 'Trailer on Home Spotlight',
@@ -441,7 +441,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                         // Name the surface rather than say "the trailer" — the
                         // IPTV guide's live channel preview is a feed, not a
                         // trailer, and deliberately ignores this.
-                        subtitle: PlatformUtil.isAndroidTvCached
+                        subtitle: PlatformUtil.isTelevision
                             ? 'Off plays the spotlight trailer silently.'
                             : 'Off plays the detail-page trailer silently.',
                         value: _ambientTrailerAudioEnabled,
@@ -506,7 +506,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                     // Underlay (default) = native hardware plane behind a
                     // translucent Flutter surface, the smooth path; off =
                     // legacy Flutter-Texture compositing, the escape hatch.
-                    if (PlatformUtil.isAndroidTvCached)
+                    if (PlatformUtil.isTelevision)
                       SettingsToggleTile(
                         icon: Icons.layers_rounded,
                         title: 'Native Trailer Surface',
@@ -536,7 +536,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                       ),
                   ],
                 ),
-                if (!PlatformUtil.isAndroidTvCached) ...[
+                if (!PlatformUtil.isTelevision) ...[
                   const SizedBox(height: 16),
                   SettingsInfoBanner(
                     text: _infoTextForSourceType(_selectedSourceType),

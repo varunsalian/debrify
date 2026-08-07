@@ -345,7 +345,7 @@ class _ExternalPlayerSettingsPageState
       String iosPreferredKey = 'vlc';
       String? iosCustomScheme;
 
-      if (Platform.isIOS) {
+      if (PlatformUtil.isIosMobile) {
         installedIOS = await ExternalPlayerService.detectInstalledIOSPlayers();
         iosPreferredKey = await StorageService.getPreferredIOSExternalPlayer();
         iosCustomScheme = await StorageService.getIOSCustomSchemeTemplate();
@@ -478,7 +478,7 @@ class _ExternalPlayerSettingsPageState
       // Load fonts (built-in + custom) separately (async)
       _loadFonts();
       // Entry focus on TV: land DPAD on the first row once content builds.
-      if (PlatformUtil.isAndroidTvCached) {
+      if (PlatformUtil.isTelevision) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           // Only seed focus if nothing concrete is focused yet — a bare
@@ -1867,7 +1867,7 @@ class _ExternalPlayerSettingsPageState
     final isSupportedPlatform =
         Platform.isMacOS ||
         Platform.isAndroid ||
-        Platform.isIOS ||
+        PlatformUtil.isIosMobile ||
         Platform.isLinux ||
         Platform.isWindows;
 
@@ -2636,7 +2636,7 @@ class _ExternalPlayerSettingsPageState
                 ],
 
                 // iOS-specific player selection
-                if (Platform.isIOS && _defaultPlayerMode == 'external') ...[
+                if (PlatformUtil.isIosMobile && _defaultPlayerMode == 'external') ...[
                   const SizedBox(height: 16),
                   Card(
                     child: Column(
@@ -2681,7 +2681,7 @@ class _ExternalPlayerSettingsPageState
                 ],
 
                 // iOS Custom URL Scheme configuration
-                if (Platform.isIOS &&
+                if (PlatformUtil.isIosMobile &&
                     _defaultPlayerMode == 'external' &&
                     _selectedIOSPlayer == iOSExternalPlayer.customScheme) ...[
                   const SizedBox(height: 16),
@@ -2819,7 +2819,7 @@ class _ExternalPlayerSettingsPageState
                 ],
 
                 // iOS external player info
-                if (Platform.isIOS && _defaultPlayerMode == 'external') ...[
+                if (PlatformUtil.isIosMobile && _defaultPlayerMode == 'external') ...[
                   const SizedBox(height: 16),
                   SettingsInfoBanner(
                     text:
