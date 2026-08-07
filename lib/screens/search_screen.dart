@@ -21,7 +21,9 @@ import '../services/analytics_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../services/engine/dynamic_engine.dart';
 import '../services/engine/settings_manager.dart';
+import '../services/home_list_rows.dart';
 import '../services/iptv_cw_router.dart';
+import '../services/iptv_media_store.dart';
 import '../services/local_bound_source_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/playlist_player_service.dart';
@@ -60,6 +62,7 @@ import '../widgets/source_row.dart';
 import '../widgets/torrent_filters_sheet.dart';
 import '../widgets/torrent_result_row.dart';
 import '../widgets/tv_text_field.dart';
+import 'iptv/xtream_series_detail.dart';
 import 'playlist_content_view_screen.dart';
 import 'see_all/catalog_see_all_screen.dart';
 import 'see_all/continue_watching_see_all_screen.dart';
@@ -641,6 +644,30 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // [_reloadForHomeSettings] when the manager saves.
   Set<String> _homeDisabled = {};
 
+  // The OPT-IN extra rows (Trakt/Simkl list rows, IPTV custom-list rows) from
+  // the same manager — default-off, so they live in their own store
+  // (`home_extra_rows_v1`). Tracker ids become [HomeListSection]s at the head
+  // of the board in [_load]; `iptvlist:` ids drive the IPTV list favourites
+  // rows. Refreshed by [_reloadForHomeSettings].
+  List<HomeExtraRow> _homeExtras = const [];
+
+  /// Whether any Trakt/Simkl list row is opted in — gates the tracker-row
+  /// resolve in [_load] and the integrations-triggered reload.
+  bool get _trackerExtrasEnabled =>
+      _homeExtras.any((r) => HomeExtraRowIds.isTracker(r.id));
+
+  /// Board load generation. [_load] is re-entrant (Home Rows save,
+  /// integration connect/disconnect) and mutates shared state
+  /// ([_boardRefs]/[_boardCursor]/[_homeSections]); every await inside the
+  /// load pipeline re-checks this so a superseded load can neither apply its
+  /// stale sections nor advance the new load's cursor.
+  int _boardLoadGen = 0;
+
+  /// A triggered board reload arrived while a catalog search was showing its
+  /// results — running [_load] then would stomp the search view, so it's
+  /// latched here and consumed by [_restoreHome].
+  bool _pendingBoardReload = false;
+
   // Board infinite scroll. Every (addon, catalog) pair is enumerated up front in
   // [_boardRefs] (cheap — manifest metadata, no network), then fetched in batches
   // as the user nears the bottom. [_boardCursor] is the next ref to load; it
@@ -757,6 +784,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // directly via VideoPlayerLauncher (no tab switch). Loaded once on init.
   List<IptvChannel> _iptvFavChannels = [];
   final List<FocusNode> _iptvFavNodes = [];
+
+  // Opted-in IPTV custom lists as Home rows (`iptvlist:` extras), rendered
+  // through the favourites-row family after the IPTV favourites row. Rebuilt
+  // by [_loadIptvListRows] on init, on Home Rows saves, and whenever
+  // [IptvMediaStore.listsRevision] bumps (any list mutation anywhere in the
+  // app). Rows own their FocusNodes, reconciled by list id across reloads.
+  List<_IptvListRow> _iptvListRows = [];
+  int _iptvListRowsLoadToken = 0;
 
   // Playlist favourites — a leading row of the user's saved playlist items
   // (movies / collections added from search or cloud). Cards show the item
@@ -1314,6 +1349,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // rebuilt on return; on TV a tab switch already reloads it fresh).
     if (!widget.searchMode && !widget.discoverMode) {
       MainPageBridge.addHomeSettingsListener(_reloadForHomeSettings);
+      // IPTV list mutations (picker, IPTV settings, provider deletion,
+      // reconcile, import) all bump the store revision — the only signal a
+      // Home that stays alive across tab switches gets about them.
+      IptvMediaStore.listsRevision.addListener(_onIptvListsRevision);
       unawaited(_loadHomeDefaultView());
       // TV home layout pref (classic/canvas): loaded once here, then
       // live-reloaded whenever the Settings picker fires the bridge. HOME
@@ -1399,6 +1438,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _loadTvFavorites(),
         _loadStremioTvFavorites(),
         _loadIptvFavorites(),
+        _loadIptvListRows(),
         _loadPlaylistFavorites(),
       ]);
     }
@@ -1454,6 +1494,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (!widget.searchMode) {
       _loadTraktContinueWatching();
       _loadSimklContinueWatching();
+    }
+    // Opted-in tracker LIST rows live in the board's section pipeline, so a
+    // connect/disconnect needs a board reload to add/drop them. Home board
+    // only — this listener is registered by every SearchScreen variant, and
+    // Search/Discover must never run the board pipeline. Deferred while a
+    // catalog search is showing (see _requestBoardReload); safe against
+    // overlap via _boardLoadGen.
+    if (!widget.searchMode && !widget.discoverMode && _trackerExtrasEnabled) {
+      _requestBoardReload();
     }
   }
 
@@ -1561,6 +1610,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     MainPageBridge.removePlayerLaunchListener(_markPlaybackStarted);
     MainPageBridge.removeHomeSettingsListener(_reloadForHomeSettings);
+    IptvMediaStore.listsRevision.removeListener(_onIptvListsRevision);
+    for (final row in _iptvListRows) {
+      for (final n in row.nodes) {
+        n.dispose();
+      }
+      row.nodes.clear();
+    }
     if (MainPageBridge.tvHomeStyleChanged == _onTvHomeStyleChanged) {
       MainPageBridge.tvHomeStyleChanged = null;
     }
@@ -1712,20 +1768,66 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _rowCol.clear();
   }
 
-  /// Re-read the hidden-rows set and reload the board if it actually changed.
-  /// Fires on any home-settings change (the broadcast is shared), so the
-  /// set-equality guard skips reloads for unrelated settings.
+  /// Re-read the hidden-rows set + opted-in extras and reload the board if
+  /// either actually changed. Fires on any home-settings change (the
+  /// broadcast is shared), so the equality guards skip reloads for unrelated
+  /// settings.
   Future<void> _reloadForHomeSettings() async {
     if (!mounted) return;
     await _loadHomeDefaultView();
     if (!mounted) return;
     final disabled = await StorageService.getHomeDisabledSections();
+    final extras = await StorageService.getHomeExtraRows();
     if (!mounted) return;
-    final unchanged =
+    final disabledUnchanged =
         disabled.length == _homeDisabled.length &&
         disabled.containsAll(_homeDisabled);
-    if (unchanged) return;
-    setState(() => _homeDisabled = disabled);
+    // Titles participate too: a stored rename must re-render the row header.
+    // Diffed per family: `iptvlist:` extras feed the favourites-family rows,
+    // everything else feeds the board pipeline — so toggling an IPTV list
+    // row must not refetch every addon catalog, and vice versa.
+    List<HomeExtraRow> family(List<HomeExtraRow> rows, {required bool iptv}) =>
+        [
+          for (final r in rows)
+            if (HomeExtraRowIds.isIptv(r.id) == iptv) r,
+        ];
+    bool sameRows(List<HomeExtraRow> a, List<HomeExtraRow> b) =>
+        a.length == b.length &&
+        List.generate(
+          a.length,
+          (i) => a[i].id == b[i].id && a[i].title == b[i].title,
+        ).every((same) => same);
+    final boardExtrasUnchanged = sameRows(
+      family(extras, iptv: false),
+      family(_homeExtras, iptv: false),
+    );
+    final iptvExtrasUnchanged = sameRows(
+      family(extras, iptv: true),
+      family(_homeExtras, iptv: true),
+    );
+    if (disabledUnchanged && boardExtrasUnchanged && iptvExtrasUnchanged) {
+      return;
+    }
+    setState(() {
+      _homeDisabled = disabled;
+      _homeExtras = extras;
+    });
+    if (!disabledUnchanged || !boardExtrasUnchanged) _requestBoardReload();
+    // IPTV list rows live outside the board's section pipeline. The loader
+    // reads its own extras from storage, so it can't race the reload above.
+    if (!iptvExtrasUnchanged) unawaited(_loadIptvListRows());
+  }
+
+  /// Run [_load] for a TRIGGERED reload (Home Rows save, integration
+  /// connect/disconnect) — unless a catalog search is showing its results, in
+  /// which case `_load`'s visible reset would stomp the search view. The
+  /// reload is latched instead and [_restoreHome] performs it when the board
+  /// comes back. (The initState load never comes through here.)
+  void _requestBoardReload() {
+    if (_catalogQuery.isNotEmpty || _catalogSearching) {
+      _pendingBoardReload = true;
+      return;
+    }
     _load();
   }
 
@@ -1743,15 +1845,40 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   Future<void> _load() async {
+    final gen = ++_boardLoadGen;
     setState(() {
       _loading = true;
       _error = null;
     });
     unawaited(_refreshPikpakOnly());
     try {
-      _homeDisabled = await StorageService.getHomeDisabledSections();
+      final disabled = await StorageService.getHomeDisabledSections();
+      final extras = await StorageService.getHomeExtraRows();
+      // Commit the prefs and (crucially) start the tracker fan-out only if
+      // this load still owns the board — a superseded run kicking off its own
+      // resolve would double the concurrent tracker requests beside the
+      // winning generation's and stale-write the shared settings fields.
+      if (!mounted || gen != _boardLoadGen) return;
+      _homeDisabled = disabled;
+      _homeExtras = extras;
+      // Opt-in Trakt/Simkl list rows, resolved IN PARALLEL with the first
+      // catalog batch below. Home board only — the Search tab runs _load just
+      // to warm the catalog refs for its search, and Discover never comes
+      // through here. The 5s deadline keeps the rows that finished and drops
+      // stragglers, bounding what an enabled config can add to first paint
+      // (nothing at all is fetched in the default, nothing-enabled config).
+      final listRowsFuture =
+          widget.searchMode || widget.discoverMode || !_trackerExtrasEnabled
+          ? Future.value(const <HomeListSection>[])
+          // catchError at creation, not at the await: a superseded load
+          // returns before awaiting this future, and an unawaited throw
+          // would surface as an unhandled async error. A resolve failure
+          // just means no list rows this load.
+          : HomeListRowsService.instance
+                .resolve(_homeExtras, deadline: const Duration(seconds: 5))
+                .catchError((_) => const <HomeListSection>[]);
       final addons = await _stremio.getCatalogAddons();
-      if (!mounted) return;
+      if (!mounted || gen != _boardLoadGen) return;
       // Enumerate every BROWSABLE catalog across all addons — no global row cap.
       // This is cheap (manifest data); items are pulled lazily in batches on
       // scroll. Catalogs that require a `search` extra are search-only: browsing
@@ -1774,16 +1901,36 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
       // First batch is blocking so the board isn't empty on first paint; skip
       // runs of empty catalogs so we always land on some visible rows.
-      final first = await _fetchBoardBatchUntilNonEmpty();
-      if (!mounted) return;
-      _homeSections = first;
+      final first = await _fetchBoardBatchUntilNonEmpty(gen);
+      final listRows = await listRowsFuture;
+      if (!mounted || gen != _boardLoadGen) return;
+      // List rows lead the sections — after the favourites rows, before every
+      // addon catalog row. Batching appends after them untouched.
+      final sections = [...listRows, ...first];
+      _homeSections = sections;
       setState(() => _loading = false);
       MainPageBridge.homeBoardReady.value = true;
-      _applySections(first);
+      // A catalog search may have STARTED while this load was in flight —
+      // `_sections` now holds (or is streaming) search results, and applying
+      // the board over them would permanently mix the two views. Same
+      // discipline as _loadMoreBoard: the Home cache above is refreshed, the
+      // visible view is not — _restoreHome re-applies _homeSections when the
+      // search ends.
+      if (_catalogQuery.isNotEmpty || _catalogSearching) return;
+      _applySections(sections);
       _maybeAutoFocusBoard();
       _maybeAutoFillBoard();
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || gen != _boardLoadGen) return;
+      // Mid-search, the error screen must not replace the search results
+      // (_buildBoard renders _error before anything else) — latch a retry
+      // for _restoreHome instead.
+      if (_catalogQuery.isNotEmpty || _catalogSearching) {
+        _pendingBoardReload = true;
+        setState(() => _loading = false);
+        MainPageBridge.homeBoardReady.value = true;
+        return;
+      }
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -1796,18 +1943,22 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// Fetch the next batch of catalog rows from [_boardCursor], skipping over any
   /// runs of empty catalogs, and return the non-empty sections (advancing the
-  /// cursor as it goes). Empty result ⇒ the board is exhausted.
-  Future<List<CatalogSection>> _fetchBoardBatchUntilNonEmpty() async {
-    while (_boardCursor < _boardRefs.length) {
-      final batch = await _fetchBoardBatch(_kBoardBatchSize);
+  /// cursor as it goes). Empty result ⇒ the board is exhausted — or [gen] went
+  /// stale (a newer [_load] owns the cursor now; stop without touching it).
+  Future<List<CatalogSection>> _fetchBoardBatchUntilNonEmpty(int gen) async {
+    while (gen == _boardLoadGen && _boardCursor < _boardRefs.length) {
+      final batch = await _fetchBoardBatch(_kBoardBatchSize, gen);
       if (batch.isNotEmpty) return batch;
     }
     return const [];
   }
 
   /// Fetch exactly one batch of up to [n] catalog rows in parallel, advancing
-  /// [_boardCursor], and return the non-empty ones (order preserved).
-  Future<List<CatalogSection>> _fetchBoardBatch(int n) async {
+  /// [_boardCursor], and return the non-empty ones (order preserved). No-ops
+  /// when [gen] is stale so a superseded load can't advance the fresh load's
+  /// cursor.
+  Future<List<CatalogSection>> _fetchBoardBatch(int n, int gen) async {
+    if (gen != _boardLoadGen) return const [];
     final end = (_boardCursor + n).clamp(0, _boardRefs.length);
     final slice = _boardRefs.sublist(_boardCursor, end);
     _boardCursor = end;
@@ -1868,10 +2019,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Load and append the next batch of board rows (deduped against re-entry).
   Future<void> _loadMoreBoard() async {
     if (_boardLoadingMore || _boardCursor >= _boardRefs.length) return;
+    // Bind this append to the load generation that owns the current cursor —
+    // if a full reload lands mid-fetch, the stale batch must not append onto
+    // (or advance) the fresh board.
+    final gen = _boardLoadGen;
     setState(() => _boardLoadingMore = true);
     try {
-      final more = await _fetchBoardBatchUntilNonEmpty();
-      if (!mounted) return;
+      final more = await _fetchBoardBatchUntilNonEmpty(gen);
+      if (!mounted || gen != _boardLoadGen) return;
       if (more.isNotEmpty) {
         // Always keep the board cache growing so nothing is lost…
         _homeSections = [..._homeSections, ...more];
@@ -2301,23 +2456,30 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _catalogQuery.isEmpty &&
       !_catalogSearching;
 
-  /// The visible favourites rows in render order: Playlist, Debrify TV, Stremio
-  /// TV, then IPTV. This is the single source of truth for both rendering
-  /// ([_buildBoard]) and the index-based DPAD focus wiring below, so the two
-  /// never drift out of sync.
-  List<_FavKind> get _favRowKinds => [
-    if (_playlistFavVisible) _FavKind.playlist,
-    if (_tvFavVisible) _FavKind.debrify,
-    if (_stvFavVisible) _FavKind.stremio,
-    if (_iptvFavVisible) _FavKind.iptv,
+  /// The visible favourites-family rows in render order: Playlist, Debrify TV,
+  /// Stremio TV, IPTV favourites, then one row per opted-in IPTV custom list.
+  /// This is the single source of truth for both rendering ([_buildBoard]) and
+  /// the index-based DPAD focus wiring below, so the two never drift out of
+  /// sync. IPTV list rows share the favourites gates (board only, non-empty)
+  /// and are opt-in by construction — [_iptvListRows] only ever holds enabled
+  /// lists.
+  List<_FavRowRef> get _favRowKinds => [
+    if (_playlistFavVisible) const _FavRowRef(_FavKind.playlist),
+    if (_tvFavVisible) const _FavRowRef(_FavKind.debrify),
+    if (_stvFavVisible) const _FavRowRef(_FavKind.stremio),
+    if (_iptvFavVisible) const _FavRowRef(_FavKind.iptv),
+    if (_catalogQuery.isEmpty && !_catalogSearching)
+      for (var i = 0; i < _iptvListRows.length; i++)
+        if (_iptvListRows[i].channels.isNotEmpty) _FavRowRef(_FavKind.iptv, i),
   ];
 
   int get _favRowCount => _favRowKinds.length;
   bool get _anyFavVisible => _favRowKinds.isNotEmpty;
 
-  /// The focus-node list backing a favourites row of the given [kind].
-  List<FocusNode> _favNodesFor(_FavKind kind) {
-    switch (kind) {
+  /// The focus-node list backing a favourites row of the given [ref].
+  List<FocusNode> _favNodesFor(_FavRowRef ref) {
+    if (ref.isIptvList) return _iptvListRows[ref.list].nodes;
+    switch (ref.kind) {
       case _FavKind.iptv:
         return _iptvFavNodes;
       case _FavKind.debrify:
@@ -2604,6 +2766,193 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     while (_iptvFavNodes.length > _iptvFavChannels.length) {
       _iptvFavNodes.removeLast().dispose();
     }
+  }
+
+  /// Rebuild the opted-in IPTV custom-list rows from the store.
+  ///
+  /// Channels are rebuilt from the stored list metadata alone (no provider
+  /// fetch), keeping ALL presentation fields — content type and duration
+  /// drive play routing and the live-preview gate, so the favourites row's
+  /// lossy live-only mapping must not be copied here. Order is the list's own
+  /// (added_at), the user's curation.
+  ///
+  /// Token-guarded: the list picker queues several immediate mutations, each
+  /// bumping [IptvMediaStore.listsRevision] — an older multi-list read must
+  /// not commit after a newer one (stale channels, node reconciliation
+  /// against the wrong rows). Only the newest load applies state.
+  ///
+  /// Nodes reconcile by list id: surviving rows keep their FocusNodes (grown/
+  /// shrunk to the channel count), removed rows' nodes are disposed — if one
+  /// held DPAD focus, the board's global dead-focus reclaim re-anchors it.
+  Future<void> _loadIptvListRows() async {
+    final token = ++_iptvListRowsLoadToken;
+    try {
+      // Read the extras store directly rather than [_homeExtras]: on a cold
+      // start this runs CONCURRENTLY with _load() (which populates that
+      // field), and losing the race would blank the list rows until the next
+      // trigger.
+      final extras = await StorageService.getHomeExtraRows();
+      if (token != _iptvListRowsLoadToken || !mounted) return;
+      final wanted = <String>{
+        for (final r in extras)
+          if (HomeExtraRowIds.iptvListId(r.id) != null)
+            HomeExtraRowIds.iptvListId(r.id)!,
+      }..remove(StorageService.iptvFavoritesListId);
+      List<_IptvListRow> next = const [];
+      if (wanted.isNotEmpty) {
+        final metas = await StorageService.getIptvLists();
+        final rows = <_IptvListRow>[];
+        final prevById = {for (final r in _iptvListRows) r.listId: r};
+        for (final meta in metas) {
+          if (!wanted.contains(meta.id) || meta.isFavorites) continue;
+          final map = await StorageService.getIptvListChannels(meta.id);
+          if (token != _iptvListRowsLoadToken || !mounted) return;
+          final channels = <IptvChannel>[];
+          map.forEach((url, m) {
+            final name = (m['name'] as String?) ?? '';
+            final logo = (m['logoUrl'] as String?) ?? '';
+            final group = (m['group'] as String?) ?? '';
+            channels.add(
+              IptvChannel(
+                name: name.isEmpty ? 'Unknown Channel' : name,
+                url: url,
+                logoUrl: logo.isEmpty ? null : logo,
+                group: group.isEmpty ? null : group,
+                channelNumber: (m['channelNumber'] as num?)?.toInt(),
+                duration: (m['duration'] as num?)?.toInt() ?? -1,
+                contentType: m['contentType'] as String?,
+                attributes: {
+                  if ((m['playlistId'] as String?)?.isNotEmpty ?? false)
+                    'list_playlist_id': m['playlistId'] as String,
+                },
+                httpHeaders: StorageService.iptvFavoriteHeaders(m),
+              ),
+            );
+          });
+          if (channels.isEmpty) continue;
+          final row = prevById.remove(meta.id) ?? _IptvListRow(meta.id, '');
+          row
+            ..title = meta.name
+            ..channels = channels;
+          while (row.nodes.length < channels.length) {
+            row.nodes.add(
+              FocusNode(
+                debugLabel:
+                    'search_iptvlist_${meta.id}_${row.nodes.length}',
+              ),
+            );
+          }
+          while (row.nodes.length > channels.length) {
+            row.nodes.removeLast().dispose();
+          }
+          rows.add(row);
+        }
+        // Rows that fell out (list deleted/emptied/de-selected): dispose their
+        // nodes. The TV board's global focus watcher reclaims focus if one of
+        // them held it.
+        for (final gone in prevById.values) {
+          for (final n in gone.nodes) {
+            n.dispose();
+          }
+          gone.nodes.clear();
+        }
+        next = rows;
+      } else if (_iptvListRows.isEmpty) {
+        return; // nothing enabled, nothing shown — no state churn
+      } else {
+        for (final gone in _iptvListRows) {
+          for (final n in gone.nodes) {
+            n.dispose();
+          }
+          gone.nodes.clear();
+        }
+      }
+      if (!mounted || token != _iptvListRowsLoadToken) return;
+      setState(() => _iptvListRows = next);
+      _maybeAutoFocusBoard();
+    } catch (_) {
+      // List rows just stay as they were (same policy as the favourites row).
+    }
+  }
+
+  /// [IptvMediaStore.listsRevision] bumped — some list mutated somewhere in
+  /// the app (picker, IPTV settings, provider deletion, reconcile, import).
+  void _onIptvListsRevision() {
+    if (!mounted) return;
+    _loadIptvListRows();
+  }
+
+  /// Play an IPTV custom-list entry by CONTENT TYPE — a list can hold VOD and
+  /// collapsed series alongside live channels, and each routes differently
+  /// (mirroring [IptvCwRouter]): live → the favourites-row live launch; VOD →
+  /// watch-record + direct launch (the player restores resume by URL); an
+  /// `xtream-series://` sentinel → the merged Xtream series page.
+  Future<void> _playIptvListChannel(IptvChannel channel) async {
+    if (channel.url.startsWith('xtream-series://')) {
+      return _openIptvListSeries(channel);
+    }
+    if (!channel.isLive) {
+      // Remember on-demand plays so the IPTV Continue Watching shelf can
+      // rebuild the row later — recorded BEFORE the launch (the player
+      // process can be killed outright on TV), same as the IPTV page.
+      await StorageService.recordIptvWatch(
+        channel.url,
+        channelName: channel.name,
+        logoUrl: channel.logoUrl,
+        group: channel.group,
+        playlistId: channel.attributes['list_playlist_id'],
+        httpHeaders: channel.httpHeaders.isEmpty ? null : channel.httpHeaders,
+      );
+      if (!mounted) return;
+    }
+    await _playIptvChannel(channel);
+  }
+
+  /// A collapsed series sentinel stored in a list: resolve its Xtream origin
+  /// and open the merged series page (the episode list / Resume plays from
+  /// there) — the sentinel URL itself is not a stream.
+  Future<void> _openIptvListSeries(IptvChannel channel) async {
+    // xtream-series://<originId>/<seriesId>
+    final rest = channel.url.substring('xtream-series://'.length);
+    final slash = rest.indexOf('/');
+    final originId = slash < 0
+        ? (channel.attributes['list_playlist_id'] ?? '')
+        : rest.substring(0, slash);
+    final seriesId = slash < 0 ? rest : rest.substring(slash + 1);
+    if (seriesId.isEmpty) return;
+    final playlists = await StorageService.getIptvPlaylists();
+    if (!mounted) return;
+    IptvPlaylist? origin;
+    for (final p in playlists) {
+      if (p.id == originId && p.isXtreamCodes) {
+        origin = p;
+        break;
+      }
+    }
+    if (origin == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("This series' provider is no longer available"),
+        ),
+      );
+      return;
+    }
+    await openXtreamSeries(
+      context,
+      playlist: origin,
+      series: IptvChannel(
+        name: channel.name,
+        url: channel.url,
+        logoUrl: channel.logoUrl,
+        group: channel.group ?? channel.name,
+        contentType: 'series',
+        attributes: {
+          'series_id': seriesId,
+          if (originId.isNotEmpty) 'series_playlist_id': originId,
+        },
+      ),
+      isTelevision: widget.isTelevision,
+    );
   }
 
   /// Play an IPTV favourite. Unlike the TV channels there's no bridge/tab
@@ -2916,13 +3265,55 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (addonId != null && _addonsById.containsKey(addonId)) {
       return _addonsById[addonId]!;
     }
-    if (_homeSections.isNotEmpty) return _homeSections.first.addon;
+    // "Any homepage addon" means a REAL catalog addon — the Trakt/Simkl list
+    // rows that now lead _homeSections carry only a placeholder addon (empty
+    // baseUrl), which can't serve /meta or /stream.
+    for (final s in _homeSections) {
+      if (s is! HomeListSection) return s.addon;
+    }
     return StremioAddon(
       id: addonId ?? 'continue_watching',
       name: 'Continue Watching',
       manifestUrl: '',
       baseUrl: '',
     );
+  }
+
+  /// Open a board-section item through the right pipeline for its source.
+  /// Trakt list rows keep Trakt semantics (`isTraktSource` — status chips,
+  /// Trakt-first resume label), Simkl rows open plainly (Discover's
+  /// [_openSimklItem] routing), and real catalog sections route through their
+  /// own addon exactly as before.
+  void _sectionOpenItem(
+    CatalogSection section,
+    StremioMeta item, {
+    String? heroTag,
+  }) {
+    if (section is HomeListSection) {
+      _openItem(
+        item,
+        _addonForContinue(item.sourceAddon?.id),
+        isTraktSource: section.isTrakt,
+        heroTag: heroTag,
+      );
+      return;
+    }
+    _openItem(item, section.addon, heroTag: heroTag);
+  }
+
+  /// Quick-play counterpart to [_sectionOpenItem]. Trakt rows go through
+  /// [_playTraktItem] (CW-cached resume, else catalog play with Trakt-first
+  /// resume); Simkl rows play plainly like Discover's lists.
+  void _sectionQuickPlay(CatalogSection section, StremioMeta item) {
+    if (section is HomeListSection) {
+      if (section.isTrakt) {
+        _playTraktItem(item);
+      } else {
+        _playSimklItem(item);
+      }
+      return;
+    }
+    _onCatalogPlay(item, section.addon);
   }
 
   /// Open a Continue Watching title as a normal detail page (no Home-style
@@ -3767,6 +4158,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _catalogQuery = '';
       _catalogSearching = false;
     });
+    // A settings/integration reload arrived mid-search and was deferred so it
+    // couldn't stomp the results view — run it now instead of restoring the
+    // stale cached board.
+    if (_pendingBoardReload) {
+      _pendingBoardReload = false;
+      _load();
+      return;
+    }
     _applySections(_homeSections);
     _maybeAutoFillBoard();
   }
@@ -4440,7 +4839,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// focus driving the Canvas stage override (and the full-bleed live
   /// preview, for IPTV).
   Widget _canvasFavCell(
-    _FavKind kind,
+    _FavRowRef ref,
     String railKey,
     int col, {
     VoidCallback? onUp,
@@ -4450,12 +4849,51 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     VoidCallback? onUpHold,
     VoidCallback? onDownHold,
   }) {
-    final nodes = _favNodesFor(kind);
+    final nodes = _favNodesFor(ref);
     // Rail switching is the default vertical grammar; Mosaic (grid) and
     // Tonight (zones) pass their own.
     final up = onUp ?? () => _stageSwitchRail(-1);
     final down = onDown ?? () => _stageSwitchRail(1);
-    switch (kind) {
+    // An IPTV custom-list row: same cell stack as the favourites row below,
+    // but channels come from the list, play routes by CONTENT TYPE (a list
+    // can hold VOD), and only a live entry retunes the stage's live preview.
+    if (ref.isIptvList) {
+      final row = _iptvListRows[ref.list];
+      final channel = row.channels[col];
+      final live = channel.isLive;
+      return _FavArtCell(
+        isTelevision: true,
+        column: col,
+        rowNodes: nodes,
+        onUp: up,
+        onDown: down,
+        onLeft: onLeft,
+        onRight: onRight,
+        onUpHold: onUpHold,
+        onDownHold: onDownHold,
+        child: _ArtPoster(
+          imageUrl: channel.logoUrl,
+          title: channel.name,
+          imageFit: BoxFit.contain,
+          isTelevision: true,
+          ringColor: Colors.white,
+          focusNode: nodes[col],
+          onOpen: () => _playIptvListChannel(channel),
+          onFocused: () => _canvasFavFocused(
+            railKey,
+            col,
+            _CanvasFavFocus(
+              art: channel.logoUrl,
+              fit: BoxFit.contain,
+              title: channel.name,
+              subtitle: 'IPTV · ${row.title.toUpperCase()}',
+            ),
+            liveChannel: live ? channel : null,
+          ),
+        ),
+      );
+    }
+    switch (ref.kind) {
       case _FavKind.iptv:
         final channel = _iptvFavChannels[col];
         return _FavArtCell(
@@ -4646,7 +5084,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   String _canvasRailKeyOf(_CanvasRail rail) {
     if (rail.cw != null) return 'cw:${rail.cw!.title}:${rail.cw!.tag ?? ''}';
-    if (rail.favKind != null) return 'fav:${rail.favKind!.name}';
+    if (rail.favKind != null) {
+      final ref = rail.favKind!;
+      // Content-addressed: a list row keys on its LIST ID, so reordering or
+      // adding lists never makes the remembered rail point at a different
+      // list (unlike the positional `sec:` keys below).
+      if (ref.isIptvList) {
+        return 'fav:iptvlist:${_iptvListRows[ref.list].listId}';
+      }
+      return 'fav:${ref.kind.name}';
+    }
     return 'sec:${rail.sectionIndex}';
   }
 
@@ -4742,9 +5189,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         rails.add(_CanvasRail(cw: cwRows[i], cwIndex: i));
       }
     }
-    for (final kind in _favRowKinds) {
-      if (_canvasFavItemCount(kind) == 0) continue;
-      rails.add(_CanvasRail(favKind: kind));
+    for (final ref in _favRowKinds) {
+      if (_canvasFavItemCount(ref) == 0) continue;
+      rails.add(_CanvasRail(favKind: ref));
     }
     for (var i = 0; i < _sections.length; i++) {
       if (_sections[i].items.isEmpty || i >= _rowNodes.length) continue;
@@ -4840,8 +5287,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ]
       : _canvasRails;
 
-  int _canvasFavItemCount(_FavKind kind) {
-    switch (kind) {
+  int _canvasFavItemCount(_FavRowRef ref) {
+    if (ref.isIptvList) return _iptvListRows[ref.list].channels.length;
+    switch (ref.kind) {
       case _FavKind.iptv:
         return _iptvFavChannels.length;
       case _FavKind.debrify:
@@ -4853,8 +5301,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
   }
 
-  String _canvasFavTitle(_FavKind kind) {
-    switch (kind) {
+  String _canvasFavTitle(_FavRowRef ref) {
+    if (ref.isIptvList) return _iptvListRows[ref.list].title;
+    switch (ref.kind) {
       case _FavKind.iptv:
         return 'IPTV Favorites';
       case _FavKind.debrify:
@@ -5156,9 +5605,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                   episodeLabel: rail.cw?.episodeOf(item),
                                   onQuickPlay: rail.cw != null || _pikpakOnly
                                       ? null
-                                      : () => _onCatalogPlay(
+                                      : () => _sectionQuickPlay(
+                                          _sections[rail.sectionIndex!],
                                           item,
-                                          _sections[rail.sectionIndex!].addon,
                                         ),
                                   onLongPress: rail.cw == null
                                       ? null
@@ -5178,9 +5627,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                     if (rail.cw != null) {
                                       rail.cw!.onOpen(item);
                                     } else {
-                                      _openItem(
+                                      _sectionOpenItem(
+                                        _sections[rail.sectionIndex!],
                                         item,
-                                        _sections[rail.sectionIndex!].addon,
                                       );
                                     }
                                   },
@@ -5588,7 +6037,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       episodeLabel: rail.cw?.episodeOf(item),
       onQuickPlay: rail.cw != null || _pikpakOnly
           ? null
-          : () => _onCatalogPlay(item, _sections[rail.sectionIndex!].addon),
+          : () => _sectionQuickPlay(_sections[rail.sectionIndex!], item),
       onLongPress: rail.cw == null
           ? null
           : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
@@ -5602,7 +6051,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         if (rail.cw != null) {
           rail.cw!.onOpen(item);
         } else {
-          _openItem(item, _sections[rail.sectionIndex!].addon);
+          _sectionOpenItem(_sections[rail.sectionIndex!], item);
         }
       },
       onNearEnd: rail.sectionIndex == null
@@ -6059,9 +6508,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                             episodeLabel: rail.cw?.episodeOf(items[col]),
                             onQuickPlay: rail.cw != null || _pikpakOnly
                                 ? null
-                                : () => _onCatalogPlay(
+                                : () => _sectionQuickPlay(
+                                    _sections[rail.sectionIndex!],
                                     items[col],
-                                    _sections[rail.sectionIndex!].addon,
                                   ),
                             onLongPress: rail.cw == null
                                 ? null
@@ -6082,9 +6531,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               if (rail.cw != null) {
                                 rail.cw!.onOpen(items[col]);
                               } else {
-                                _openItem(
+                                _sectionOpenItem(
+                                  _sections[rail.sectionIndex!],
                                   items[col],
-                                  _sections[rail.sectionIndex!].addon,
                                 );
                               }
                             },
@@ -6428,7 +6877,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         episodeLabel: rail.cw?.episodeOf(item),
         onQuickPlay: rail.cw != null || _pikpakOnly
             ? null
-            : () => _onCatalogPlay(item, _sections[rail.sectionIndex!].addon),
+            : () => _sectionQuickPlay(_sections[rail.sectionIndex!], item),
         onLongPress: rail.cw == null
             ? null
             : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
@@ -6446,7 +6895,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           if (rail.cw != null) {
             rail.cw!.onOpen(item);
           } else {
-            _openItem(item, _sections[rail.sectionIndex!].addon);
+            _sectionOpenItem(_sections[rail.sectionIndex!], item);
           }
         },
       ),
@@ -6837,7 +7286,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       episodeLabel: rail.cw?.episodeOf(item),
       onQuickPlay: rail.cw != null || _pikpakOnly
           ? null
-          : () => _onCatalogPlay(item, _sections[rail.sectionIndex!].addon),
+          : () => _sectionQuickPlay(_sections[rail.sectionIndex!], item),
       onLongPress: rail.cw == null
           ? null
           : () => _openCwCardMenu(rail.cw!, item, rail.cwIndex, col),
@@ -6855,7 +7304,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         if (rail.cw != null) {
           rail.cw!.onOpen(item);
         } else {
-          _openItem(item, _sections[rail.sectionIndex!].addon);
+          _sectionOpenItem(_sections[rail.sectionIndex!], item);
         }
       },
       onNearEnd: rail.sectionIndex == null
@@ -14077,6 +14526,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// "Movies" / "Series" (etc.) tag for a catalog row, so two "Popular" rows
   /// (one movies, one series) are distinguishable. Null for unknown types.
   String? _sectionTypeLabel(CatalogSection section) {
+    // Tracker list rows: the tag names the SOURCE ("Watchlist · Trakt") — the
+    // list itself mixes movies and shows, so a type tag would be wrong.
+    if (section is HomeListSection) {
+      return section.isTrakt ? 'Trakt' : 'Simkl';
+    }
     switch (section.catalog.type.toLowerCase()) {
       case 'movie':
         return 'Movies';
@@ -14096,6 +14550,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// where the rail left off; item taps route back through [_openItem] so the
   /// existing detail flow (Trakt actions, recommendations) is reused unchanged.
   void _openCatalogSeeAll(CatalogSection section) {
+    // Tracker list rows browse in their OWN See-All (list dropdowns, list
+    // semantics) — the catalog browser would try to page them through a
+    // placeholder addon that can't serve a catalog endpoint.
+    if (section is HomeListSection) {
+      _openListRowSeeAll(section);
+      return;
+    }
     Navigator.of(context)
         .push(
           MaterialPageRoute(
@@ -14120,6 +14581,44 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           ),
         )
         .then((_) => _afterSeeAllReturn());
+  }
+
+  /// "See All" for a Trakt/Simkl list row: the tracker's own See-All screen,
+  /// opened directly on the row's list (`initialList`). CW items/progress are
+  /// passed exactly as the Discover wiring does, so switching the List
+  /// dropdown to Continue Watching inside the screen keeps resume semantics
+  /// (the Simkl screen needs its SEPARATE CW handlers for that — without
+  /// them, CW items would open/play plainly).
+  void _openListRowSeeAll(HomeListSection section) {
+    final Widget screen;
+    if (section.isTrakt) {
+      screen = TraktSeeAllScreen(
+        initialList: section.traktChoice,
+        cwItems: List<StremioMeta>.of(_traktAll),
+        cwProgress: _traktProgress,
+        onOpen: _openTraktItem,
+        onQuickPlay: _pikpakOnly ? null : _playTraktItem,
+        isBound: _isBound,
+        isTelevision: widget.isTelevision,
+      );
+    } else {
+      screen = SimklSeeAllScreen(
+        initialList: section.simklList,
+        cwItems: List<StremioMeta>.of(_simklAll),
+        cwProgress: _simklProgress,
+        onOpen: _openSimklItem,
+        onQuickPlay: _pikpakOnly ? null : _playSimklItem,
+        cwOnOpen: _openSimklCwItem,
+        cwOnQuickPlay: _pikpakOnly ? null : _playSimklCwItem,
+        isBound: _isBound,
+        isTelevision: widget.isTelevision,
+      );
+    }
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => screen))
+        // trackers:true — this grid renders the tracker's own lists, and a
+        // played title must reflect on return (same as _openTraktSeeAll).
+        .then((_) => _refreshAfterPlayback(trackers: true));
   }
 
   /// A real content player launched — see [_playedSinceRefresh].
@@ -14467,16 +14966,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                             hasBoundSource: _isBound(item),
                             onQuickPlay: _pikpakOnly
                                 ? null
-                                : () => _onCatalogPlay(item, section.addon),
+                                : () => _sectionQuickPlay(section, item),
                             onFocused: () {
                               _setHero(item);
                               _rowCol[rowIndex] = col;
                             },
                             onUp: up(col),
                             onDown: down(col),
-                            onOpen: () => _openItem(
+                            onOpen: () => _sectionOpenItem(
+                              section,
                               item,
-                              section.addon,
                               heroTag: heroTag,
                             ),
                             onNearEnd: () => _loadMoreRow(rowIndex),
@@ -14612,11 +15111,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
-  /// Dispatch to the right favourites-row builder for [kind]. [favIndex] is the
+  /// Dispatch to the right favourites-row builder for [ref]. [favIndex] is the
   /// row's position among the visible favourites rows and [cwCount] the number
   /// of Continue Watching rows above them (both drive the DPAD up/down wiring).
-  Widget _buildFavRow(_FavKind kind, int favIndex, int cwCount) {
-    switch (kind) {
+  Widget _buildFavRow(_FavRowRef ref, int favIndex, int cwCount) {
+    if (ref.isIptvList) return _buildIptvListRow(ref, favIndex, cwCount);
+    switch (ref.kind) {
       case _FavKind.iptv:
         return _buildIptvFavRow(favIndex, cwCount);
       case _FavKind.debrify:
@@ -14808,6 +15308,47 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             // channel's live stream — same HeroTrailerBackdrop(live: true)
             // mechanism the IPTV page's own inline preview uses.
             onFocused: () => _setHeroLiveIptv(channel),
+          ),
+        );
+      },
+    );
+  }
+
+  /// An opted-in IPTV custom list as a Home row. Same cell stack as the IPTV
+  /// favourites row, but content-aware: play routes by the stored content
+  /// type (lists can hold VOD/series alongside live), and only a live entry
+  /// retunes the hero's live preview on focus.
+  Widget _buildIptvListRow(_FavRowRef ref, int favIndex, int cwCount) {
+    final tv = widget.isTelevision;
+    final row = _iptvListRows[ref.list];
+    return _buildFavRowShell(
+      title: row.title,
+      tags: const [
+        _CategoryTag('IPTV'),
+        _CategoryTag('List', icon: Icons.playlist_play_rounded),
+      ],
+      itemCount: row.channels.length,
+      cellBuilder: (col, posterW, cellH) {
+        final channel = row.channels[col];
+        final live = channel.isLive;
+        return _FavArtCell(
+          isTelevision: tv,
+          column: col,
+          rowNodes: row.nodes,
+          onUp: _favRowOnUp(favIndex, cwCount, col),
+          onDown: _favRowOnDown(favIndex, col),
+          child: _ArtPoster(
+            imageUrl: channel.logoUrl,
+            title: channel.name,
+            // Logos are usually square/wide, not 2:3 — contain so they aren't
+            // cropped; the gradient shows around them.
+            imageFit: BoxFit.contain,
+            isTelevision: tv,
+            focusNode: row.nodes[col],
+            onOpen: () => _playIptvListChannel(channel),
+            onFocused: live
+                ? () => _setHeroLiveIptv(channel)
+                : _clearHeroLiveIptv,
           ),
         );
       },
@@ -17254,13 +17795,14 @@ String? _firstNonEmpty(String? a, String? b) => (a != null && a.isNotEmpty)
     : ((b != null && b.isNotEmpty) ? b : null);
 
 /// One Canvas rail — a Continue Watching row ([cw] non-null, with its
-/// position among the CW rows in [cwIndex]), a favourites rail
-/// ([favKind] non-null: IPTV / Debrify TV / Stremio TV / Playlist), or a
-/// catalog section ([sectionIndex] into `_sections`/`_rowNodes`).
+/// position among the CW rows in [cwIndex]), a favourites-family rail
+/// ([favKind] non-null: IPTV / Debrify TV / Stremio TV / Playlist / an IPTV
+/// custom-list row), or a catalog section ([sectionIndex] into
+/// `_sections`/`_rowNodes`).
 class _CanvasRail {
   final _CwRow? cw;
   final int cwIndex;
-  final _FavKind? favKind;
+  final _FavRowRef? favKind;
   final int? sectionIndex;
   const _CanvasRail({
     this.cw,
@@ -19024,6 +19566,39 @@ class _SeeAllLinkState extends State<_SeeAllLink> {
 /// Stremio TV, IPTV) is defined by [_SearchScreenState._favRowKinds], the single
 /// source of truth for both rendering and the index-based DPAD focus wiring.
 enum _FavKind { iptv, debrify, stremio, playlist }
+
+/// One visible favourites-family row: a singleton [kind] row ([list] == -1),
+/// or — for `kind == _FavKind.iptv` with [list] >= 0 — the IPTV custom-list
+/// row at that index of [_SearchScreenState._iptvListRows]. Value-equal so
+/// rebuilt ref lists compare cleanly.
+class _FavRowRef {
+  final _FavKind kind;
+  final int list;
+  const _FavRowRef(this.kind, [this.list = -1]);
+
+  bool get isIptvList => list >= 0;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _FavRowRef && other.kind == kind && other.list == list;
+
+  @override
+  int get hashCode => Object.hash(kind, list);
+}
+
+/// One opted-in IPTV custom list shown as a Home row. [channels] are rebuilt
+/// from the stored list metadata alone (no provider fetch) with their full
+/// presentation fields — a list can hold VOD alongside live channels, and the
+/// content type drives both the play routing and whether focus retunes the
+/// hero live preview. [nodes] are owned here and reconciled by [listId]
+/// across reloads (see [_SearchScreenState._loadIptvListRows]).
+class _IptvListRow {
+  final String listId;
+  String title;
+  List<IptvChannel> channels;
+  final List<FocusNode> nodes = [];
+  _IptvListRow(this.listId, this.title) : channels = const [];
+}
 
 /// Generic DPAD arrow-handling wrapper for a favourites-row card — the arrow
 /// counterpart to [_BoardCell] for the IPTV / Debrify TV / Stremio TV rows.

@@ -3,7 +3,11 @@ import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../services/home_list_rows.dart';
+import '../../services/iptv_media_store.dart' show IptvListMeta;
+import '../../services/simkl/simkl_list_source.dart';
 import '../../services/storage_service.dart';
+import '../../services/trakt/trakt_list_source.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/home/home_theme.dart';
@@ -11,24 +15,47 @@ import '../../widgets/home/home_theme.dart';
 /// Full-screen DPAD-first Home-row manager — a two-pane "group → item" filter,
 /// modelled on the Stremio TV channel filter's grammar but 2 levels deep (no
 /// genre wall). The left rail lists groups (Continue Watching, Trakt, Simkl,
-/// Favorites, then each catalog addon); the right pane lists that group's rows
-/// as on/off toggles. Header actions: All on / All off / Invert.
+/// IPTV Lists, Favorites, then each catalog addon); the right pane lists that
+/// group's rows as on/off toggles. Header actions: All on / All off / Invert.
 ///
-/// Persists the same disabled-id set the Home board reads
-/// ([StorageService.setHomeDisabledSections]): fixed leaves like `cw:movies`,
-/// `trakt:shows`, `fav:iptv`, and catalog leaves `addonId:type:catalogId`. On
-/// save the set is regenerated from leaf state (only OFF rows are stored).
+/// TWO stores back the leaves. Default-ON rows persist the same disabled-id
+/// set the Home board reads ([StorageService.setHomeDisabledSections]): fixed
+/// leaves like `cw:movies`, `trakt:shows`, `fav:iptv`, and catalog leaves
+/// `addonId:type:catalogId` — only OFF rows are stored. OPT-IN rows (Trakt/
+/// Simkl list rows, IPTV custom-list rows — default off) persist the enabled
+/// entries instead ([StorageService.setHomeExtraRows], id + display title).
+///
+/// An enabled opt-in row whose backing data didn't load (Trakt outage, a
+/// vanished list) is still materialized as an "unavailable" leaf from its
+/// stored title, so a save can never silently delete it — selections survive
+/// an outage and come back with it.
 class HomeSectionsFilterPage extends StatefulWidget {
   /// The board's catalog addons with their browsable catalogs, in board order.
   final List<({StremioAddon addon, List<StremioAddonCatalog> catalogs})>
       catalogTree;
   final Set<String> disabled;
+
+  /// The currently opted-in extra rows (`home_extra_rows_v1`).
+  final List<HomeExtraRow> extraRows;
+
+  /// The account's Trakt custom + liked lists, pre-fetched by the opener
+  /// (empty when unauthenticated or the fetch failed — enabled entries then
+  /// surface as unavailable leaves).
+  final List<TraktListChoice> traktUserLists;
+
+  /// The user's IPTV lists (incl. Favorites, which is filtered out here — it
+  /// already has the `fav:iptv` leaf).
+  final List<IptvListMeta> iptvLists;
+
   final bool isTelevision;
 
   const HomeSectionsFilterPage({
     super.key,
     required this.catalogTree,
     required this.disabled,
+    this.extraRows = const [],
+    this.traktUserLists = const [],
+    this.iptvLists = const [],
     required this.isTelevision,
   });
 
@@ -36,13 +63,27 @@ class HomeSectionsFilterPage extends StatefulWidget {
   State<HomeSectionsFilterPage> createState() => _HomeSectionsFilterPageState();
 }
 
-/// One toggleable Home row.
+/// One toggleable Home row. [defaultOn] rows persist to the disabled set when
+/// OFF; opt-in rows ([defaultOn] false) persist to the extras store when ON,
+/// carrying [extraTitle] as the row's display name. [unavailable] marks an
+/// enabled opt-in leaf whose backing data didn't load this visit.
 class _Item {
   final String id;
   final String label;
   final String? badge; // catalog type badge (MOVIE/SERIES/…); null for fixed
+  final bool defaultOn;
+  final String? extraTitle;
+  final bool unavailable;
   bool on;
-  _Item(this.id, this.label, this.on, {this.badge});
+  _Item(
+    this.id,
+    this.label,
+    this.on, {
+    this.badge,
+    this.defaultOn = true,
+    this.extraTitle,
+    this.unavailable = false,
+  });
 }
 
 /// A rail group whose items are the rows shown under it.
@@ -117,6 +158,27 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   List<_Group> _buildModel() {
     final d = widget.disabled;
     bool on(String id) => !d.contains(id);
+    final extraById = {for (final r in widget.extraRows) r.id: r};
+    bool extraOn(String id) => extraById.containsKey(id);
+
+    // Opt-in leaf factory: ON = present in the extras store.
+    _Item opt(String id, String label, {String? badge}) => _Item(
+          id,
+          label,
+          extraOn(id),
+          badge: badge,
+          defaultOn: false,
+          extraTitle: label,
+        );
+
+    final customLists = [
+      for (final c in widget.traktUserLists)
+        if (!c.liked && c.userListId != null) c,
+    ];
+    final likedLists = [
+      for (final c in widget.traktUserLists)
+        if (c.liked && c.userListId != null) c,
+    ];
 
     final groups = <_Group>[
       _Group('Continue Watching', [
@@ -124,17 +186,33 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         _Item('cw:series', 'Series', on('cw:series')),
       ]),
       _Group('Trakt', [
-        _Item('trakt:movies', 'Movies', on('trakt:movies')),
-        _Item('trakt:shows', 'Shows', on('trakt:shows')),
+        _Item('trakt:movies', 'Movies', on('trakt:movies'), badge: 'CW'),
+        _Item('trakt:shows', 'Shows', on('trakt:shows'), badge: 'CW'),
+        for (final l in TraktSeeAllList.values)
+          if (l != TraktSeeAllList.continueWatching)
+            opt(HomeExtraRowIds.traktBuiltin(l), l.label, badge: 'LIST'),
+        for (final c in customLists)
+          opt(HomeExtraRowIds.traktUserList(c), c.label, badge: 'CUSTOM'),
+        for (final c in likedLists)
+          opt(HomeExtraRowIds.traktUserList(c), c.label, badge: 'LIKED'),
       ]),
       _Group('Simkl', [
-        _Item('simkl:movies', 'Movies', on('simkl:movies')),
-        _Item('simkl:shows', 'Shows', on('simkl:shows')),
+        _Item('simkl:movies', 'Movies', on('simkl:movies'), badge: 'CW'),
+        _Item('simkl:shows', 'Shows', on('simkl:shows'), badge: 'CW'),
+        for (final l in SimklSeeAllList.values)
+          if (l != SimklSeeAllList.continueWatching)
+            opt(HomeExtraRowIds.simkl(l), l.label, badge: 'LIST'),
       ]),
       _Group('IPTV Continue Watching', [
         _Item('iptv:movies', 'Movies', on('iptv:movies')),
         _Item('iptv:series', 'Series', on('iptv:series')),
       ]),
+      if (widget.iptvLists.any((m) => !m.isFavorites))
+        _Group('IPTV Lists', [
+          for (final m in widget.iptvLists)
+            if (!m.isFavorites)
+              opt(HomeExtraRowIds.iptvList(m.id), m.name, badge: 'LIST'),
+        ]),
       _Group('Favorites', [
         _Item('fav:playlist', 'Playlist', on('fav:playlist')),
         _Item('fav:debrify', 'Debrify TV', on('fav:debrify')),
@@ -142,6 +220,45 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         _Item('fav:iptv', 'IPTV', on('fav:iptv')),
       ]),
     ];
+
+    // Enabled opt-in rows the groups above couldn't represent (Trakt outage,
+    // a deleted list, an unmatched id): materialize each as an UNAVAILABLE
+    // leaf from its stored title so it stays visible, survives a save
+    // verbatim, and can still be deliberately turned off.
+    final represented = <String>{
+      for (final g in groups)
+        for (final it in g.items) it.id,
+    };
+    _Item stray(HomeExtraRow r) => _Item(
+          r.id,
+          r.title.isNotEmpty ? r.title : r.id,
+          true,
+          defaultOn: false,
+          extraTitle: r.title,
+          unavailable: true,
+        );
+    for (final r in widget.extraRows) {
+      if (represented.contains(r.id)) continue;
+      final String groupName;
+      if (r.id.startsWith(HomeExtraRowIds.traktPrefix)) {
+        groupName = 'Trakt';
+      } else if (r.id.startsWith(HomeExtraRowIds.simklPrefix)) {
+        groupName = 'Simkl';
+      } else if (r.id.startsWith(HomeExtraRowIds.iptvPrefix)) {
+        groupName = 'IPTV Lists';
+      } else {
+        continue; // unknown grammar — preserved by _persist, not shown
+      }
+      final target = groups.cast<_Group?>().firstWhere(
+            (g) => g!.name == groupName,
+            orElse: () => null,
+          );
+      if (target != null) {
+        target.items.add(stray(r));
+      } else {
+        groups.add(_Group(groupName, [stray(r)]));
+      }
+    }
 
     for (final entry in widget.catalogTree) {
       final addon = entry.addon;
@@ -174,14 +291,31 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   Future<void> _persist() async {
     if (!_changed || _saved) return;
     _saved = true;
-    // Store only the OFF rows (empty set = everything shown → key removed).
+    // Default-on rows: store only the OFF ids (empty set = everything shown
+    // → key removed). Opt-in rows: store the ON entries with their display
+    // titles.
     final out = <String>{};
+    final extras = <HomeExtraRow>[];
+    final modelIds = <String>{};
     for (final g in _groups) {
       for (final it in g.items) {
-        if (!it.on) out.add(it.id);
+        modelIds.add(it.id);
+        if (it.defaultOn) {
+          if (!it.on) out.add(it.id);
+        } else if (it.on) {
+          extras.add((id: it.id, title: it.extraTitle ?? it.label));
+        }
       }
     }
+    // Never destroy what the model couldn't see: any stored extra whose id
+    // built no leaf at all (unknown grammar, future version) survives a save
+    // verbatim. Unavailable leaves are already IN the model, so a deliberate
+    // toggle-off still removes those.
+    for (final r in widget.extraRows) {
+      if (!modelIds.contains(r.id)) extras.add(r);
+    }
     await StorageService.setHomeDisabledSections(out);
+    await StorageService.setHomeExtraRows(extras);
   }
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -783,14 +917,22 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
                                 it.label,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  // Unavailable = enabled but its backing
+                                  // data didn't load (outage / deleted list)
+                                  // — dimmed, still toggleable off.
+                                  color: it.unavailable
+                                      ? Colors.white.withValues(alpha: 0.45)
+                                      : Colors.white,
                                   fontSize: 13.5,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
-                            if (it.badge != null) ...[
+                            if (it.unavailable) ...[
+                              const SizedBox(width: 8),
+                              _typeBadge('UNAVAILABLE'),
+                            ] else if (it.badge != null) ...[
                               const SizedBox(width: 8),
                               _typeBadge(it.badge!),
                             ],

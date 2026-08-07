@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
+import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
+import '../../services/trakt/trakt_list_source.dart';
+import '../../services/trakt/trakt_service.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
 import 'home_sections_filter_page.dart';
@@ -174,26 +177,60 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
     }
   }
 
+  /// True while the Home Rows manager's inputs are being gathered (the Trakt
+  /// user-lists fetch can take a few seconds) — renders a busy subtitle on
+  /// the tile and drops re-taps.
+  bool _gatheringHomeRows = false;
+
   /// Open the two-pane Home Rows manager (which rows/catalogs appear on the
-  /// Home board). Feeds it the same browsable catalog tree the board uses;
-  /// notifies the board to rebuild if anything changed.
+  /// Home board). Feeds it the same browsable catalog tree the board uses,
+  /// plus the opt-in extras and their dynamic leaf data — the user's Trakt
+  /// custom/liked lists (authenticated only, bounded, tolerated to fail:
+  /// enabled entries then show as unavailable leaves) and the IPTV lists.
+  /// Notifies the board to rebuild if anything changed.
   Future<void> _openHomeRowsManager() async {
-    final tree = [
-      for (final a in _addons)
-        (addon: a, catalogs: a.catalogs.where((c) => c.isBrowsable).toList()),
-    ].where((e) => e.catalogs.isNotEmpty).toList();
-    final disabled = await StorageService.getHomeDisabledSections();
-    if (!mounted) return;
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => HomeSectionsFilterPage(
-          catalogTree: tree,
-          disabled: Set.of(disabled),
-          isTelevision: PlatformUtil.isAndroidTvCached,
+    if (_gatheringHomeRows) return;
+    setState(() => _gatheringHomeRows = true);
+    try {
+      final tree = [
+        for (final a in _addons)
+          (addon: a, catalogs: a.catalogs.where((c) => c.isBrowsable).toList()),
+      ].where((e) => e.catalogs.isNotEmpty).toList();
+      final disabled = await StorageService.getHomeDisabledSections();
+      final extras = await StorageService.getHomeExtraRows();
+      var iptvLists = const <IptvListMeta>[];
+      try {
+        iptvLists = await StorageService.getIptvLists();
+      } catch (_) {
+        // Enabled iptvlist: entries surface as unavailable leaves.
+      }
+      var traktUserLists = const <TraktListChoice>[];
+      try {
+        if (await TraktService.instance.isAuthenticated()) {
+          traktUserLists = await TraktListSource.instance
+              .loadUserLists()
+              .timeout(const Duration(seconds: 5), onTimeout: () => const []);
+        }
+      } catch (_) {
+        // Same: enabled custom/liked entries become unavailable leaves.
+      }
+      if (!mounted) return;
+      final changed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => HomeSectionsFilterPage(
+            catalogTree: tree,
+            disabled: Set.of(disabled),
+            extraRows: extras,
+            traktUserLists: traktUserLists,
+            iptvLists: iptvLists,
+            isTelevision: PlatformUtil.isAndroidTvCached,
+          ),
         ),
-      ),
-    );
-    if (changed == true) MainPageBridge.notifyHomeSettingsChanged();
+      );
+      if (changed == true) MainPageBridge.notifyHomeSettingsChanged();
+    } finally {
+      if (mounted) setState(() => _gatheringHomeRows = false);
+    }
   }
 
   @override
@@ -239,7 +276,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                     SettingsTile(
                       icon: Icons.dashboard_customize_rounded,
                       title: 'Home Rows',
-                      subtitle: 'Choose which rows appear on Home',
+                      subtitle: _gatheringHomeRows
+                          ? 'Loading your lists…'
+                          : 'Choose which rows appear on Home',
                       onTap: _openHomeRowsManager,
                       focusNode: PlatformUtil.isAndroidTvCached
                           ? null

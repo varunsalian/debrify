@@ -64,6 +64,13 @@ class TraktSeeAllScreen extends StatefulWidget {
   final Widget? leading;
   final FocusNode? leadingNode;
 
+  /// Open directly on this list instead of Continue Watching (a Home list
+  /// row's See-All). A custom/liked choice must carry its full account
+  /// payload (ids + owner) — the screen seeds its group dropdown from it so
+  /// the selection is representable before (or without) the async user-lists
+  /// refresh. Null keeps today's behavior exactly.
+  final TraktListChoice? initialList;
+
   const TraktSeeAllScreen({
     super.key,
     required this.cwItems,
@@ -77,6 +84,7 @@ class TraktSeeAllScreen extends StatefulWidget {
     this.embedded = false,
     this.leading,
     this.leadingNode,
+    this.initialList,
   });
 
   @override
@@ -224,11 +232,46 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
         }
       }
     }
+    // A Home list row's See-All: open on that list, not Continue Watching.
+    // Custom/liked choices SEED their group array so both dropdowns can
+    // represent the selection immediately — _loadUserLists() fills the rest
+    // async and must not be a prerequisite (or a Trakt hiccup would render a
+    // blank dropdown over a grid that fetched fine).
+    final initial = widget.initialList;
+    if (initial != null && !initial.isContinueWatching) {
+      _list = initial;
+      if (!initial.isBuiltin) {
+        if (initial.liked) {
+          _group = 'liked';
+          _likedLists = [initial];
+        } else {
+          _group = 'custom';
+          _customLists = [initial];
+        }
+      }
+    }
     _recompute();
     // Embedded (Discover): the host focuses the Source dropdown on entry, and a
     // source swap re-mounts this panel — so don't yank focus into the grid here,
     // it would steal the DPAD ring off the Source dropdown on every swap.
-    if (widget.isTelevision && !widget.embedded) {
+    //
+    // Opening on a fetched list: the grid is empty until the fetch lands, so
+    // an immediate _focusEntry would park focus on the back button for the
+    // whole visit. Defer it to the fetch's completion instead (and only if
+    // nothing real took focus meanwhile).
+    if (initial != null && !initial.isContinueWatching) {
+      unawaited(
+        _fetchList(_list).then((_) {
+          if (!mounted || !widget.isTelevision || widget.embedded) return;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final primary = FocusManager.instance.primaryFocus;
+            if (primary != null && primary is! FocusScopeNode) return;
+            _focusEntry();
+          });
+        }),
+      );
+    } else if (widget.isTelevision && !widget.embedded) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _focusEntry());
     }
     _loadUserLists();
@@ -258,13 +301,26 @@ class _TraktSeeAllScreenState extends State<TraktSeeAllScreen> {
 
   /// Load the user's custom + liked lists in the background and split them into
   /// the two groups. Returns [] when Trakt isn't connected or on error, so the
-  /// dropdown simply keeps only the built-in entries.
+  /// dropdown simply keeps only the built-in entries — and, when the screen was
+  /// opened on a seeded [TraktSeeAllScreen.initialList], that seed (the early
+  /// return keeps the seeded single-entry arrays intact).
   Future<void> _loadUserLists() async {
     final lists = await TraktListSource.instance.loadUserLists();
     if (!mounted || lists.isEmpty) return;
     setState(() {
       _customLists = [for (final c in lists) if (!c.liked) c];
       _likedLists = [for (final c in lists) if (c.liked) c];
+      // The active selection must stay representable: if the refresh no
+      // longer contains the seeded initial list (deleted/unliked upstream,
+      // or a partial response), keep it as a leading entry rather than
+      // handing the group dropdown a value absent from its options.
+      if (_group == 'custom' && !_list.isBuiltin && !_customLists.contains(_list)) {
+        _customLists = [_list, ..._customLists];
+      } else if (_group == 'liked' &&
+          !_list.isBuiltin &&
+          !_likedLists.contains(_list)) {
+        _likedLists = [_list, ..._likedLists];
+      }
     });
   }
 
