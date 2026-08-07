@@ -1,7 +1,9 @@
 # Apple TV — true 4K playback via the hardware video plane
 
-Status: **Phase 0 done and both gates passed on device (2026-08-07). Nothing
-else built. Awaiting a go/no-go.**
+Status: **NO-GO on this plan as written.** Phase 0's two gates passed on device
+(2026-08-07), but a review found the plan under-scopes the player integration
+and over-reads the 4K evidence. Superseded by the narrower Spike 2 below.
+Nothing beyond the probe is built.
 
 ---
 
@@ -162,3 +164,89 @@ mpv as the fallback so a stall upstream is survivable.
 - **Screenshots:** System Events → Xcode → Devices → button "Take Screenshot";
   the PNG lands on the Desktop. Kill any `--console` session first, since it
   terminates the app when it exits.
+
+---
+
+# Review findings (Codex, 2026-08-07) — plan revised to NO-GO
+
+## Corrections to the evidence above
+
+- **The 2160p number does not prove 4K reached the panel.**
+  `presentationSize` is the decoded item's dimensions; for a non-adaptive MKV it
+  simply reports the file. The 720p-vs-1440p comparison IS meaningful (adaptive
+  HLS picks a variant by render target), but "true 4K output" remains unproven.
+  Proving it needs the HDMI output format, not a decoder property.
+- **The `mk.NativePlayer` sites were mischaracterised.** They are Android audio
+  effects, subtitle delay, file-format probing and `stream-record` —
+  `video_player_screen.dart:1754`, `:3166`, `:4682` — not decode/cache tuning.
+- **The ~25-member surface is understated.** Missing: currently-selected track,
+  log stream, first-frame/readiness, render mode, external audio, external
+  subtitle registration, seek completion, capabilities, native escape hatch.
+- **One clock is not enough.** Aether separates playback time from displayed
+  source PTS; subtitles must render against `sourceTime` while resume/UI use
+  presentation time. Collapsing them drifts subtitles across seeks and remux
+  epochs.
+
+## Scope the six steps missed
+
+Backend event semantics silently underpin: skip segments
+(`video_player_screen.dart:1186`, `:2107`), resume autosave every 6s (`:2231`,
+`:7679`), Trakt/Simkl progress and per-seek hooks (`:8067`), completion →
+next episode (`:2198`), wakelock/lifecycle (`:2123`). Duplicated, reordered or
+stale events can scrobble the wrong episode, auto-advance twice, or save the old
+position against the new item.
+
+Also absent: external subtitles (the current path preserves raw bytes so libmpv
+can detect legacy encodings, `:10597`, `:10863`), `AVAudioSession` ownership,
+interruptions and route changes, HDMI/audio-format changes, `MPNowPlayingSession`
+and remote commands, PiP (tvOS has no sample-buffer PiP, and a Flutter-painted
+subtitle overlay cannot appear in a native PiP window anyway).
+
+**IPTV contradiction:** Step 4 selects the engine from a global tvOS pref while
+the non-goals keep IPTV on mpv — but one `VideoPlayerScreen` serves both, so
+per-content routing is required *before* player creation. IPTV's error detection
+(`:5170`) also assumes events only count after `open()` returns; a native bridge
+can emit first-frame before the channel result and produce false timeouts.
+
+**Error/retry is a state machine, not an edge case:** PikPak recovery reopens the
+same player and cross-checks stream state (`:6473`, `:6610`). Whether an engine
+failure continues that loop, falls back immediately, or falls back only after
+retries is undefined.
+
+## Fallback redesign (the flag itself is fine)
+
+Automatic "fall back for anything the engine refuses" is not sound: it creates
+two owners of audio and the visible surface. Defensible v1:
+
+- **one backend per media session**, chosen before creation;
+- **every event tagged with a session generation**, stale ones dropped;
+- **one-way fallback only before first frame**; after first frame, offer
+  "Retry with mpv" as a full session restart, never a seamless swap.
+
+Note `MediaKitInit.ensureInitialized()` is unconditional (`:1051`), so today even
+an engine session would initialise mpv. Backends are not actually isolated.
+
+## Other reasons to hold
+
+- **TrueHD is re-encoded to lossy EAC3 5.1** (8ch → 6ch @ 768 kbps). That is an
+  audio REGRESSION for exactly the audience that cares about 4K remuxes, and it
+  partly cancels the reason for doing this.
+- Debrify would ship and test **two playback stacks, two FFmpeg families, two
+  rendering models** — permanently.
+- The tvOS port has **almost no player-level automated coverage**
+  (`test/video_player_navigation_test.dart` doesn't even instantiate
+  `VideoPlayerScreen`), so "tests pass" protects nothing in Step 1.
+- The licence claim was too categorical: the Apple Store exception preserves
+  source/licence obligations for Aether and modifications; FFmpeg configuration
+  and notices still need a release compliance review.
+
+## Revised direction — Spike 2 before any integration
+
+1. **Prove actual HDMI output.** Read the real output format during playback
+   (tvOS video/display mode, or an HDR TV's own badge), not a decoder property.
+   If the plane doesn't actually deliver 2160p to the panel, stop here.
+2. **Define and test the full contract** — backend, render, and event semantics
+   including session generations, source-vs-presentation time, first-frame,
+   completion, seek-landed, and error/retry — against the real feature list
+   above, BEFORE touching the 11k-line player screen.
+3. Only then re-cost the integration. It is larger than 5-6 days as scoped.
