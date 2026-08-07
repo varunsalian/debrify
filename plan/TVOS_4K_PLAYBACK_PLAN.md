@@ -250,3 +250,32 @@ an engine session would initialise mpv. Backends are not actually isolated.
    completion, seek-landed, and error/retry — against the real feature list
    above, BEFORE touching the 11k-line player screen.
 3. Only then re-cost the integration. It is larger than 5-6 days as scoped.
+
+---
+
+## Spike 2, step 1 result (2026-08-07): output stayed 1080p
+
+Measured during playback of the 4K remux through AetherEngine on the video plane:
+
+```
+[output]  currentMode=1920x1080  bounds=1920x1080  nativeBounds=1920x1080  scale=1.0
+[aether]  presentationSize=(3840.0, 2160.0)  nativeAV=true
+```
+
+`UIScreen.currentMode` never left 1080p while the decoder reported 2160p —
+confirming the review's point that `presentationSize` describes the FILE, not the
+output. Two readings remain, and this hardware cannot separate them:
+
+1. The attached display (a non-HDR monitor) is the limit and the box is simply
+   outputting 1080p — the 4K case is then untestable here, though it may still
+   hold on a 4K panel.
+2. `UIScreen.currentMode` mirrors the UI surface on tvOS and never reports the
+   HDMI mode — in which case this probe is inconclusive as well.
+
+**Discriminator:** the TV's own Settings > Video and Audio > Format, and
+ultimately re-running this on a genuine 4K/HDR television.
+
+**Consequence:** the benefit that justifies the whole integration is UNPROVEN on
+the available hardware. Do not start the integration until it is demonstrated on
+a 4K panel. `AVDisplayManager` is not exposed as `UIScreen.displayManager` on
+this SDK, so a future attempt needs another route to the real output format.
