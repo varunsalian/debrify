@@ -192,6 +192,12 @@ abstract final class SettingsRows {
     subtitle: '',
   );
   // Subtitle is dynamic (the chosen theme) — passed per call site.
+  // Subtitle is dynamic (the chosen theme) — passed per call site.
+  static const appTheme = SettingsRowContent(
+    icon: Icons.format_paint_rounded,
+    title: 'App Theme',
+    subtitle: '',
+  );
   static const detailTheme = SettingsRowContent(
     icon: Icons.palette_rounded,
     title: 'Details Theme',

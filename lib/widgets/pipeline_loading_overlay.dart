@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/overlay_theme.dart';
 import '../utils/platform_util.dart';
 
 /// The real resolve stages a play flows through. The overlay shows the subset
@@ -54,6 +55,12 @@ class PipelineLoadingOverlay {
     final handle = PipelineLoadingOverlay._(nav, state, steps);
     final tv = PlatformUtil.isTelevision;
 
+    // RawDialogRoute skips InheritedTheme capture, and this loader is SHARED:
+    // search_screen (themed) and Stremio TV (frozen) both launch it. Snapshot
+    // the launcher's themes so it renders what its launcher renders — the
+    // freeze included when launched from inside a LegacyThemeBoundary.
+    final capturedThemes = captureAppThemes(context);
+
     // Pushed as an explicit route (not showGeneralDialog) so [dismiss] can
     // target THIS route: the play flow now keeps the loader up while the
     // player route/activity launches on top of it, and a blind pop() at that
@@ -62,7 +69,7 @@ class PipelineLoadingOverlay {
       barrierDismissible: false,
       barrierColor: Colors.black.withValues(alpha: 0.55),
       transitionDuration: const Duration(milliseconds: 280),
-      pageBuilder: (_, __, ___) => PopScope(
+      pageBuilder: (_, __, ___) => capturedThemes.wrap(PopScope(
         canPop: false,
         // Back cancels a cancelable play: dismiss immediately, THEN run the
         // caller's cancel — matching the Cancel button, so the overlay never
@@ -90,7 +97,7 @@ class PipelineLoadingOverlay {
                   onCancel();
                 },
         ),
-      ),
+      )),
       transitionBuilder: (context, animation, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
         child: child,

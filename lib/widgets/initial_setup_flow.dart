@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/account_service.dart';
 import '../services/analytics_service.dart';
+import '../theme/legacy_theme_boundary.dart';
 import '../services/main_page_bridge.dart';
 import '../services/engine/remote_engine_manager.dart';
 import '../services/engine/local_engine_storage.dart';
@@ -46,7 +47,11 @@ class InitialSetupFlow extends StatefulWidget {
         barrierDismissible: false,
         barrierColor: Colors.black.withValues(alpha: 0.85),
         useSafeArea: false,
-        builder: (dialogContext) => const InitialSetupFlow(),
+        // Onboarding is an EXCLUDED surface, and this dialog builds under the
+        // root Navigator's overlay — no boundary wrapping AppInitializer can
+        // reach it, so the freeze lives in the builder itself.
+        builder: (dialogContext) =>
+            const LegacyThemeBoundary(child: InitialSetupFlow()),
       );
       return result ?? false;
     } finally {

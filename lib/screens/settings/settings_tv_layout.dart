@@ -85,6 +85,8 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenPlayerGuideStyle;
   final String detailPageStyleLabel;
   final Future<void> Function() onOpenDetailPageStyle;
+  final String appThemeLabel;
+  final Future<void> Function() onOpenAppTheme;
   final String detailThemeLabel;
   final Future<void> Function() onOpenDetailTheme;
   final String parentsGuideStyleLabel;
@@ -146,6 +148,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenPlayerGuideStyle,
     required this.detailPageStyleLabel,
     required this.onOpenDetailPageStyle,
+    required this.appThemeLabel,
+    required this.onOpenAppTheme,
     required this.detailThemeLabel,
     required this.onOpenDetailTheme,
     required this.parentsGuideStyleLabel,
@@ -227,7 +231,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   ///
   /// MUST cover the largest category: the pane indexes [_paneNodes] directly,
   /// so a row added past the pool throws on build.
-  static const int _kMaxCategoryRows = 12;
+  static const int _kMaxCategoryRows = 13;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -665,17 +669,27 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenDetailPageStyle,
                 focusNode: _paneNodes[9],
               ),
+              // Node indices MUST stay contiguous in visual order: _paneKey
+              // hand-wires Up/Down as node index ± 1, so a row numbered out
+              // of sequence is skipped on the way down and trapped at the
+              // pool end once reached.
+              SettingsTile.spec(
+                SettingsRows.appTheme,
+                subtitle: widget.appThemeLabel,
+                onTap: widget.onOpenAppTheme,
+                focusNode: _paneNodes[10],
+              ),
               SettingsTile.spec(
                 SettingsRows.detailTheme,
                 subtitle: widget.detailThemeLabel,
                 onTap: widget.onOpenDetailTheme,
-                focusNode: _paneNodes[10],
+                focusNode: _paneNodes[11],
               ),
               SettingsTile.spec(
                 SettingsRows.parentsGuideStyle,
                 subtitle: widget.parentsGuideStyleLabel,
                 onTap: widget.onOpenParentsGuideStyle,
-                focusNode: _paneNodes[11],
+                focusNode: _paneNodes[12],
               ),
             ],
           ),

@@ -41,8 +41,12 @@ import 'services/trakt/trakt_service.dart';
 import 'widgets/app_initializer.dart';
 
 import 'widgets/animated_background.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'services/main_page_bridge.dart';
+import 'theme/app_surfaces.dart';
+import 'theme/app_theme_controller.dart';
+import 'theme/app_theme_scope.dart';
+import 'theme/legacy_theme_boundary.dart';
+import 'theme/system_bars.dart';
 import 'models/rd_torrent.dart';
 import 'package:window_manager/window_manager.dart';
 import 'services/deep_link_service.dart';
@@ -115,48 +119,9 @@ Future<void> _capImageCache() async {
   cache.maximumSizeBytes = 56 << 20; // 56 MB
 }
 
-/// TV-aware page transition: on Android TV every push/pop animates a
-/// full-screen layer, and the default Material zoom transition (scale + fade +
-/// snapshotting) is visibly janky on weak TV GPUs — it's a big part of why the
-/// app doesn't feel native there. TV gets a plain fast fade instead: the
-/// incoming page fades in over the first 40% of the route animation (~120ms of
-/// the standard 300ms), which reads as an instant, native-style switch and
-/// costs one opacity layer. Phones keep the stock zoom transition untouched.
-///
-/// The TV check reads [PlatformUtil.isAndroidTvCached] per transition build —
-/// warmed in main() before runApp — so the ThemeData stays const/synchronous.
-class _TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
-  const _TvAwarePageTransitionsBuilder();
-
-  static const PageTransitionsBuilder _phoneDefault =
-      ZoomPageTransitionsBuilder();
-
-  @override
-  Widget buildTransitions<T>(
-    PageRoute<T> route,
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    if (PlatformUtil.isTelevision) {
-      return FadeTransition(
-        opacity: CurvedAnimation(
-          parent: animation,
-          curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
-        ),
-        child: child,
-      );
-    }
-    return _phoneDefault.buildTransitions(
-      route,
-      context,
-      animation,
-      secondaryAnimation,
-      child,
-    );
-  }
-}
+// The TV-aware page transition moved to `theme/app_theme_adapter.dart`
+// (TvAwarePageTransitionsBuilder) along with the root ThemeData construction
+// it belongs to — both are shared by the legacy and themed builds.
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -217,6 +182,13 @@ Future<void> main() async {
   // synchronously in DebrifyApp.build, so the stored choice must be readable
   // before the first frame or text would flash bright and then dim.
   await TextBrightnessController.warm();
+  // Warms the app theme AFTER the preset (it is an input), for the same
+  // reason: the controller's memoized ThemeData is read in the first build.
+  await AppThemeController.warm();
+  // From here the system-bar owner is the authority — it re-applies on every
+  // active-surface or theme change (the _initOrientation call below remains
+  // the pre-warm default and matches the legacy style anyway).
+  SystemBarsOwner.init();
   // Warms the launch-ident choice: AppInitializer builds the splash in its
   // initState, so an async-only read would flash the default ident's world
   // for a frame. A cosmetic pref must never block startup.
@@ -463,15 +435,24 @@ class _DebrifyAppState extends State<DebrifyApp> {
     // in place — including const subtrees, which a mutable color token could
     // never reach (same instance → the element short-circuits the rebuild).
     TextBrightnessController.notifier.addListener(_onTextBrightnessChanged);
+    // Same contract for the app theme: the controller memoizes the derived
+    // ThemeData/AppTheme pair, so this rebuild only ever READS them — the
+    // recompute happened once, inside the controller, when the change fired.
+    AppThemeController.instance.addListener(_onAppThemeChanged);
   }
 
   void _onTextBrightnessChanged() {
     if (mounted) setState(() {});
   }
 
+  void _onAppThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     TextBrightnessController.notifier.removeListener(_onTextBrightnessChanged);
+    AppThemeController.instance.removeListener(_onAppThemeChanged);
     super.dispose();
   }
 
@@ -491,7 +472,7 @@ class _DebrifyAppState extends State<DebrifyApp> {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _scaffoldMessengerKey,
-      navigatorObservers: [appRouteObserver],
+      navigatorObservers: [appRouteObserver, AppSurfaceRouteObserver()],
       title: 'Debrify',
       debugShowCheckedModeBanner: false,
       // Performance optimizations for TV with TV-aware text scaling
@@ -501,8 +482,15 @@ class _DebrifyAppState extends State<DebrifyApp> {
         // rebuilt the entire app subtree every time this builder ran.
         final isTv = PlatformUtil.isTelevision;
 
-        // Wrap with global Escape key handler for desktop fullscreen exit
-        Widget content = child!;
+        // The app-theme token scope, ABOVE the root Navigator (builder's
+        // child IS the Navigator): every route, dialog, sheet and root
+        // overlay inherits it, and excluded surfaces shadow it lower down
+        // with a LegacyThemeBoundary. An open overlay restyles live on theme
+        // change for free — it inherits from here, not from a capture.
+        Widget content = AppThemeScope(
+          theme: AppThemeController.instance.theme,
+          child: child!,
+        );
         if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
           content = Focus(
             autofocus: false,
@@ -608,200 +596,13 @@ class _DebrifyAppState extends State<DebrifyApp> {
         // Optimize scroll physics for TV
         physics: const ClampingScrollPhysics(),
       ),
-      // Wrapped by the Text Brightness pass; the inner ThemeData stays
-      // byte-for-byte the theme the app has always shipped.
-      theme: _applyTextBrightness(ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        // TV: fast fade instead of the Material zoom push/pop (see
-        // _TvAwarePageTransitionsBuilder). Phones/desktop keep their defaults.
-        pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {TargetPlatform.android: _TvAwarePageTransitionsBuilder()},
-        ),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(
-            0xFF818CF8,
-          ), // Indigo 400 (brighter for contrast on dark)
-          onPrimary: Colors.white,
-          primaryContainer: Color(0xFF3730A3),
-          onPrimaryContainer: Colors.white,
-          secondary: Color(0xFF34D399), // Emerald 400
-          onSecondary: Colors.white,
-          secondaryContainer: Color(0xFF065F46),
-          onSecondaryContainer: Colors.white,
-          tertiary: Color(0xFFFBBF24), // Amber 400
-          onTertiary: Colors.white,
-          tertiaryContainer: Color(0xFF92400E),
-          onTertiaryContainer: Colors.white,
-          surface: Color(0xFF06080F), // Near black with blue tint
-          onSurface: Colors.white,
-          surfaceContainerHighest: Color(0xFF141824), // Dark elevated surface
-          surfaceContainerHigh: Color(0xFF1C2233), // Input fills
-          surfaceContainer: Color(0xFF2A3040), // Mid containers
-          surfaceContainerLow: Color(0xFF3A4050), // Lighter containers
-          surfaceContainerLowest: Color(0xFF94A3B8), // Slate 400
-          background: Color(0xFF020408), // True near-black
-          onBackground: Colors.white,
-          error: Color(0xFFEF4444), // Red 500
-          onError: Colors.white,
-          errorContainer: Color(0xFF7F1D1D), // Red 900
-          onErrorContainer: Colors.white,
-          outline: Color(0xFF475569), // Slate 600
-          outlineVariant: Color(0xFF334155), // Slate 700
-          shadow: Color(0xFF000000),
-          scrim: Color(0xFF000000),
-          inverseSurface: Color(0xFFF8FAFC), // Slate 50
-          onInverseSurface: Color(0xFF0F172A), // Slate 900
-          inversePrimary: Color(0xFF818CF8), // Indigo 400
-          surfaceTint: Color(0xFF6366F1), // Indigo 500
-        ),
-        textTheme: GoogleFonts.interTextTheme(
-          const TextTheme(
-            displayLarge: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
-            ),
-            displayMedium: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.25,
-            ),
-            displaySmall: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-            headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
-            headlineMedium: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
-            headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            titleLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            titleMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-            titleSmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-            bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
-            bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
-            bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-            labelLarge: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.1,
-            ),
-            labelMedium: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.5,
-            ),
-            labelSmall: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ),
-        cardTheme: CardThemeData(
-          elevation: 8,
-          shadowColor: Colors.black.withValues(alpha: 0.3),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          color: const Color(0xFF141824),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 4,
-            shadowColor: Colors.black.withValues(alpha: 0.3),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            side: const BorderSide(color: Color(0xFF2A3040)),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: const Color(0xFF1C2233),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF818CF8), width: 2),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          ),
-        ),
-        appBarTheme: const AppBarTheme(
-          elevation: 0,
-          backgroundColor: Color(0xFF06080F),
-          foregroundColor: Colors.white,
-          centerTitle: true,
-          titleTextStyle: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        drawerTheme: const DrawerThemeData(backgroundColor: Color(0xFF141824)),
-        snackBarTheme: SnackBarThemeData(
-          backgroundColor: const Color(0xFF141824),
-          contentTextStyle: const TextStyle(color: Colors.white),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          behavior: SnackBarBehavior.floating,
-          elevation: 8,
-        ),
-      ), TextBrightnessController.current),
+      // Memoized in AppThemeController — under `legacy` this is byte-for-byte
+      // the theme the app has always shipped (the construction moved verbatim
+      // into theme/app_theme_adapter.dart, Text Brightness pass included).
+      theme: AppThemeController.instance.themeData,
       home: const AppInitializer(),
     );
   }
-}
-
-/// Tones the theme's text down per the Appearance → Text Brightness preset.
-///
-/// A POST-transform of the finished theme rather than different construction
-/// inputs, so [TextBrightness.bright] returns [base] untouched — the default
-/// look cannot regress by construction. For soft/dim it retargets only what
-/// text reads: `onSurface` (+ `onSurfaceVariant` where the preset says so),
-/// every `textTheme` color (the theme has merged typography defaults in by
-/// now, so `apply` covers all fifteen styles), the app-bar title and the
-/// snackbar body. Icons, buttons, on-accent text and surfaces are none of
-/// this pass's business.
-ThemeData _applyTextBrightness(ThemeData base, TextBrightness preset) {
-  final Color? text = preset.primary;
-  if (text == null) return base;
-  return base.copyWith(
-    colorScheme: base.colorScheme.copyWith(
-      onSurface: text,
-      onSurfaceVariant: preset.secondary,
-    ),
-    textTheme: base.textTheme.apply(bodyColor: text, displayColor: text),
-    appBarTheme: base.appBarTheme.copyWith(
-      titleTextStyle: base.appBarTheme.titleTextStyle?.copyWith(color: text),
-    ),
-    snackBarTheme: base.snackBarTheme.copyWith(
-      contentTextStyle:
-          base.snackBarTheme.contentTextStyle?.copyWith(color: text),
-    ),
-  );
 }
 
 class MainPage extends StatefulWidget {
@@ -1097,6 +898,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    // Active-surface signal: the initializer above picked the boot tab before
+    // any tap could, so system-bar ownership needs it published explicitly.
+    AppSurfaceState.instance.publishTab(_selectedIndex);
     // Startup channel: show the cover immediately so the user never sees the
     // IPTV page assembling itself underneath, and publish the splash hand-off
     // signal — AppInitializer waits on homeBoardReady, which only the Home
@@ -2199,6 +2003,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     setState(() {
       _selectedIndex = index;
     });
+    AppSurfaceState.instance.publishTab(index);
     _animationController.reset();
     _animationController.forward();
 
@@ -2395,6 +2200,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _simklAuthenticated = simklAuthenticated;
       _selectedIndex = nextIndex;
     });
+    AppSurfaceState.instance.publishTab(nextIndex);
   }
 
   /// Insert the Trakt Calendar tab (screen-ID 19) just before Downloads (2)
@@ -2575,11 +2381,18 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     return ordered;
   }
 
-  /// Resolve the widget for a nav index. Most come straight from the const
-  /// [_pages] list; the "Browse" tabs (IPTV/YouTube) are built here so the
-  /// already-resolved [_isAndroidTv] flag can be passed in (avoiding a
-  /// first-frame layout/focus flash from async re-detection).
-  Widget _buildPage(int index) {
+  /// Resolve the widget for a nav index, routed through the tab-boundary
+  /// factory: FROZEN destinations (see [AppSurfaces.tabs]) are wrapped in a
+  /// [LegacyThemeBoundary] so they render today's look under any app theme;
+  /// themed destinations inherit the live scope above the Navigator.
+  Widget _buildPage(int index) =>
+      AppSurfaces.wrapTab(index, _buildTabContent(index));
+
+  /// Most tabs come straight from the const [_pages] list; the "Browse" tabs
+  /// (IPTV/YouTube) are built here so the already-resolved [_isAndroidTv]
+  /// flag can be passed in (avoiding a first-frame layout/focus flash from
+  /// async re-detection).
+  Widget _buildTabContent(int index) {
     switch (index) {
       case 9: // Stremio TV — built here (not from the const _pages list) so it
         // gets the resolved native TV flag, like IPTV/YouTube/Home. Without it
@@ -3255,15 +3068,18 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           ),
         ),
         // Startup-channel cover — last child so it sits above everything,
-        // including the nav chrome.
+        // including the nav chrome. Frozen: it covers the boot into IPTV (a
+        // frozen tab) and is an in-route overlay no tab boundary can reach.
         if (_showIptvStartupOverlay)
           Positioned.fill(
-            child: AutoLaunchOverlay(
-              launchTitle: 'Starting channel',
-              channelName: _iptvStartupChannelName,
-              channelNumber: _iptvStartupChannelNumber,
-              cancelHint: 'Press BACK to cancel',
-              onTimeout: _cancelIptvStartup,
+            child: LegacyThemeBoundary(
+              child: AutoLaunchOverlay(
+                launchTitle: 'Starting channel',
+                channelName: _iptvStartupChannelName,
+                channelNumber: _iptvStartupChannelNumber,
+                cancelHint: 'Press BACK to cancel',
+                onTimeout: _cancelIptvStartup,
+              ),
             ),
           ),
       ],

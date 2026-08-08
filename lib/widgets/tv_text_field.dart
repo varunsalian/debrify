@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../services/storage_service.dart';
 import '../services/tv_voice_input.dart';
+import '../theme/overlay_theme.dart';
 import '../services/tvos_keyboard_signal.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
@@ -388,14 +389,21 @@ class TvTextFieldState extends State<TvTextField> {
           widget.controller.text.isEmpty,
     );
     final overlay = Overlay.of(context, rootOverlay: true);
+    // A bare OverlayEntry inherits nothing local — and this keyboard opens
+    // from INCLUDED and FROZEN surfaces alike. Snapshot the field's ambient
+    // themes so the panel renders what its field renders (the legacy freeze
+    // included when the field sits inside a LegacyThemeBoundary). Inside the
+    // Positioned: CapturedThemes.wrap inserts plain widgets, and Positioned
+    // must stay the overlay Stack's direct child.
+    final capturedThemes = captureAppThemes(context);
     _overlay = OverlayEntry(
       builder: (_) => Positioned(
         left: 0,
         right: 0,
         bottom: 16,
-        child: SafeArea(
+        child: capturedThemes.wrap(SafeArea(
           child: Center(child: TvKeyboardPanel(controller: _kb!)),
-        ),
+        )),
       ),
     );
     overlay.insert(_overlay!);

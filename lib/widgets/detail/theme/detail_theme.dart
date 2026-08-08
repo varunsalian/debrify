@@ -298,6 +298,69 @@ class DetailTheme {
   /// Broadsheet and Phosphor set titles in caps; most themes don't.
   String displayCase(String s) => displayUpper ? s.toUpperCase() : s;
 
+  /// This theme with its text tokens replaced — the ONLY mutation the app-level
+  /// text-brightness resolver needs. Deliberately not a general `copyWith`:
+  /// fifty-odd optional parameters invite drive-by theme edits that bypass the
+  /// registry, and nothing else has a legitimate reason to derive a theme.
+  DetailTheme withText({Color? tx, Color? tx2, Color? tx3}) => DetailTheme(
+    id: id,
+    label: label,
+    subtitle: subtitle,
+    ground: ground,
+    pane: pane,
+    railBg: railBg,
+    panel: panel,
+    hair: hair,
+    tx: tx ?? this.tx,
+    tx2: tx2 ?? this.tx2,
+    tx3: tx3 ?? this.tx3,
+    accent: accent,
+    state: state,
+    callout: callout,
+    calloutText: calloutText,
+    award: award,
+    rating: rating,
+    focus: focus,
+    btnFill: btnFill,
+    btnText: btnText,
+    ghostFill: ghostFill,
+    ghostBorder: ghostBorder,
+    ghostText: ghostText,
+    imageBg: imageBg,
+    paneWash: paneWash,
+    railWash: railWash,
+    idWash: idWash,
+    lightGround: lightGround,
+    stateGradient: stateGradient,
+    useArtworkAccent: useArtworkAccent,
+    washOpacity: washOpacity,
+    radius: radius,
+    radiusSm: radiusSm,
+    radiusBtn: radiusBtn,
+    radiusImg: radiusImg,
+    radiusCast: radiusCast,
+    displayFont: displayFont,
+    bodyFont: bodyFont,
+    dataFont: dataFont,
+    displayWeight: displayWeight,
+    displayUpper: displayUpper,
+    displayTracking: displayTracking,
+    displaySize: displaySize,
+    slabSize: slabSize,
+    slabTracking: slabTracking,
+    slabWeight: slabWeight,
+    btnWeight: btnWeight,
+    btnGradient: btnGradient,
+    btnBorder: btnBorder,
+    btnBorderWidth: btnBorderWidth,
+    focusWidth: focusWidth,
+    focusOffset: focusOffset,
+    shadow: shadow,
+    dividerGradient: dividerGradient,
+    grain: grain,
+    grid: grid,
+  );
+
   TextStyle get slabStyle => TextStyle(
     fontFamily: dataFont.family,
     fontFamilyFallback: dataFont.fallback,
@@ -337,7 +400,13 @@ class DetailTheme {
 ///
 /// Only the alternate layouts are wrapped — Classic is deliberately outside,
 /// because it keeps its own private widgets and its own look.
-class DetailThemeScope extends InheritedWidget {
+///
+/// An [InheritedTheme], not a plain InheritedWidget: `InheritedTheme.capture`
+/// silently SKIPS plain inherited widgets, so dialogs and sheets launched from
+/// a themed layout used to lose the scope unless every launcher re-wrapped it
+/// by hand. As an InheritedTheme it rides the same capture that already
+/// carries `Theme` into `showDialog`/`showModalBottomSheet` builders.
+class DetailThemeScope extends InheritedTheme {
   final DetailTheme theme;
 
   const DetailThemeScope({
@@ -345,6 +414,10 @@ class DetailThemeScope extends InheritedWidget {
     required this.theme,
     required super.child,
   });
+
+  @override
+  Widget wrap(BuildContext context, Widget child) =>
+      DetailThemeScope(theme: theme, child: child);
 
   /// Themes are const singletons, so identity is the right comparison and
   /// there is no fifty-field `==` to keep correct.

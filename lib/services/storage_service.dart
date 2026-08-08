@@ -859,6 +859,37 @@ class StorageService {
     detailThemeCached = normalized;
   }
 
+  static const String _appThemeKey = 'app_theme';
+
+  /// The app-wide theme (Appearance → App Theme). `'legacy'` is the sentinel
+  /// meaning "render today's app exactly" and is the default; any other
+  /// accepted value is a [kDetailThemes] id applied app-wide.
+  ///
+  /// Unknown/removed ids normalize to `'legacy'` on BOTH sides — never to a
+  /// random theme — so a value written by a newer build downgrades safely.
+  ///
+  /// Write-through contract (owned by `AppThemeController.select`): choosing a
+  /// real app theme also mirrors the id into [_detailThemeKey], and the mirror
+  /// is written FIRST — a crash between the two writes must leave an
+  /// older-build-consistent view, and old builds only read `detail_theme`.
+  static String appThemeCached = 'legacy';
+
+  static Future<String> getAppTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_appThemeKey);
+    appThemeCached =
+        (value == 'legacy' || kDetailThemes.contains(value)) ? value! : 'legacy';
+    return appThemeCached;
+  }
+
+  static Future<void> setAppTheme(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized =
+        (value == 'legacy' || kDetailThemes.contains(value)) ? value : 'legacy';
+    await prefs.setString(_appThemeKey, normalized);
+    appThemeCached = normalized;
+  }
+
   static const String _parentsGuideStyleKey = 'parents_guide_style';
   static const Set<String> kParentsGuideStyles = {'classic', 'compass'};
 

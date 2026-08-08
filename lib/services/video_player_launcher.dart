@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/iptv_playlist.dart';
+import '../theme/app_surfaces.dart';
 import '../models/movie_collection.dart';
 import '../models/torrent.dart';
 import '../services/external_player_service.dart';
@@ -945,8 +946,12 @@ class VideoPlayerLauncher {
     // there's no between-screens gap and the loader never sits under the
     // player route.
     handoffNow();
+    // FrozenLegacyPageRoute: the player is an excluded surface, and this one
+    // push serves every launcher call site — the route's LegacyThemeBoundary
+    // keeps it (and every dialog/sheet it opens) on today's look under any
+    // app theme.
     final result = await Navigator.of(context).push<Map<String, dynamic>?>(
-      MaterialPageRoute(builder: (_) => args.toWidget()),
+      FrozenLegacyPageRoute(builder: (_) => args.toWidget()),
     );
 
     // Handle Quick Play next episode request from player

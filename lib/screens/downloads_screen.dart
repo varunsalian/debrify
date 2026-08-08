@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 
 import '../services/analytics_service.dart';
 import '../services/download_service.dart';
+import '../theme/app_surfaces.dart';
 import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
@@ -238,7 +239,9 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
   Future<void> _openGroupDetail(TorrentDownloadGroup group) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      // Downloads is a frozen surface; its pushed detail screen must carry
+      // the freeze too — pushed routes inherit from ABOVE the tab boundary.
+      FrozenLegacyPageRoute(
         builder: (_) => TorrentDownloadDetailScreen(
           groupId: group.id,
           groupTitle: group.title,

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../services/analytics_service.dart';
 import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
+import '../theme/app_surfaces.dart';
 import '../services/playlist_player_service.dart';
 import '../widgets/adaptive_playlist_section.dart';
 import '../widgets/tv_text_field.dart';
@@ -225,7 +226,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   Future<void> _viewItem(Map<String, dynamic> item) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      // Playlist is a frozen surface; its pushed content view must carry the
+      // freeze too — pushed routes inherit from ABOVE the tab boundary.
+      FrozenLegacyPageRoute(
         builder: (context) => PlaylistContentViewScreen(
           playlistItem: item,
           onPlaybackStarted: () => Navigator.of(context).pop(),

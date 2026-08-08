@@ -49,7 +49,9 @@ import 'settings/text_brightness_page.dart';
 import 'settings/launch_animation_page.dart';
 import '../widgets/launch/launch_ident.dart';
 import 'settings/detail_page_style_page.dart';
+import 'settings/app_theme_page.dart';
 import 'settings/detail_theme_page.dart';
+import '../theme/app_theme_controller.dart';
 import 'settings/parents_guide_style_page.dart';
 import 'settings/player_guide_style_page.dart';
 import 'settings/tv_home_style_page.dart';
@@ -759,6 +761,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
       detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
       onOpenDetailPageStyle: _openDetailPageStylePage,
+      appThemeLabel: appThemeLabel(AppThemeController.instance.id),
+      onOpenAppTheme: _openAppThemePage,
       detailThemeLabel: detailThemeLabel(_detailTheme),
       onOpenDetailTheme: _openDetailThemePage,
       parentsGuideStyleLabel: parentsGuideStyleLabel(_parentsGuideStyle),
@@ -835,6 +839,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
       detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
       onOpenDetailPageStyle: _openDetailPageStylePage,
+      appThemeLabel: appThemeLabel(AppThemeController.instance.id),
+      onOpenAppTheme: _openAppThemePage,
       detailThemeLabel: detailThemeLabel(_detailTheme),
       onOpenDetailTheme: _openDetailThemePage,
       parentsGuideStyleLabel: parentsGuideStyleLabel(_parentsGuideStyle),
@@ -1244,6 +1250,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'live tv',
           'dvr',
           'live tv & dvr',
+        ],
+      ),
+      // App-wide theme (experimental) — the token layer's picker.
+      nav(
+        SettingsRows.appTheme,
+        'Appearance',
+        _openAppThemePage,
+        subtitle: appThemeLabel(AppThemeController.instance.id),
+        keywords: const [
+          'app','theme','app theme','whole app','colour','color','palette',
+          'look','style','skin','dark','light','legacy','classic','broadsheet',
+          'experimental',
         ],
       ),
       // Ungated: the theme applies wherever an alternate layout draws.
@@ -3821,6 +3839,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// App-wide theme picker. Also refreshes the Details Theme subtitle: picking
+  /// a real app theme write-through-mirrors it into `detail_theme`.
+  Future<void> _openAppThemePage() async {
+    await pushSettingsPage(context, const AppThemePage());
+    if (!mounted) return;
+    final theme = await StorageService.getDetailTheme();
+    if (!mounted) return;
+    setState(() {
+      _detailTheme = theme;
+    });
+  }
+
   Future<void> _openParentsGuideStylePage() async {
     await pushSettingsPage(context, const ParentsGuideStylePage());
     if (!mounted) return;
@@ -4074,6 +4104,8 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenPlayerGuideStyle;
   final String detailPageStyleLabel;
   final Future<void> Function() onOpenDetailPageStyle;
+  final String appThemeLabel;
+  final Future<void> Function() onOpenAppTheme;
   final String detailThemeLabel;
   final Future<void> Function() onOpenDetailTheme;
   final String parentsGuideStyleLabel;
@@ -4126,6 +4158,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenPlayerGuideStyle,
     required this.detailPageStyleLabel,
     required this.onOpenDetailPageStyle,
+    required this.appThemeLabel,
+    required this.onOpenAppTheme,
     required this.detailThemeLabel,
     required this.onOpenDetailTheme,
     required this.parentsGuideStyleLabel,
@@ -4204,6 +4238,11 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.detailPageStyle,
                       subtitle: detailPageStyleLabel,
                       onTap: onOpenDetailPageStyle,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.appTheme,
+                      subtitle: appThemeLabel,
+                      onTap: onOpenAppTheme,
                     ),
                     SettingsTile.spec(
                       SettingsRows.detailTheme,

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
+import '../theme/app_surfaces.dart';
+import '../theme/legacy_theme_boundary.dart';
 import 'launch/launch_ident.dart';
 import 'launch/loading_sweep.dart';
 import '../services/app_migration_service.dart';
@@ -55,6 +57,12 @@ class _AppInitializerState extends State<AppInitializer>
   @override
   void initState() {
     super.initState();
+
+    // The launch ident owns the screen from here until the splash fades —
+    // system bars and any theme decision must treat the surface as frozen.
+    // Re-published here (not only at process start) because the remote-config
+    // restart path pushes a fresh AppInitializer mid-session.
+    AppSurfaceState.instance.publishBootstrap(true);
 
     _ident = launchIdentFor(StorageService.launchAnimationCached);
 
@@ -223,6 +231,7 @@ class _AppInitializerState extends State<AppInitializer>
       await Future.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;
       setState(() => _splashDone = true);
+      AppSurfaceState.instance.publishBootstrap(false);
       return;
     }
 
@@ -236,6 +245,7 @@ class _AppInitializerState extends State<AppInitializer>
     if (!mounted) return;
     _idleController.stop();
     setState(() => _splashDone = true);
+    AppSurfaceState.instance.publishBootstrap(false);
   }
 
   Future<void> _waitForReveal() async {
@@ -277,6 +287,7 @@ class _AppInitializerState extends State<AppInitializer>
       _paintHomeBehindSplash = true;
       _splashDone = true;
     });
+    AppSurfaceState.instance.publishBootstrap(false);
     _showPendingPostSetupSnackBarIfNeeded();
   }
 
@@ -399,7 +410,14 @@ class _AppInitializerState extends State<AppInitializer>
     // A full-screen opacity layer over an already-rendered Home page is one of
     // the costliest possible exit effects on weak TV GPUs. TV performs a clean
     // cut after the hidden prepaint above; other platforms retain the fade.
-    if (_isAndroidTv) return splash;
-    return FadeTransition(opacity: _exitAnimation, child: splash);
+    //
+    // LegacyThemeBoundary: launch idents are an excluded surface — they are
+    // in-route overlays, not tab bodies or pushed routes, so this is the
+    // third containment mechanism (the bootstrap boundary). No messenger:
+    // the splash is not a snackbar surface.
+    if (_isAndroidTv) return LegacyThemeBoundary(child: splash);
+    return LegacyThemeBoundary(
+      child: FadeTransition(opacity: _exitAnimation, child: splash),
+    );
   }
 }

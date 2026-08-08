@@ -289,9 +289,16 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// warmed cache for the same reason as [_style] — the page resolves both in
   /// its first build, and an async read would repaint the whole thing.
   ///
+  /// A GETTER, not a `late final`: selecting an app theme write-through
+  /// mirrors into `detail_theme`, and a State-lifetime capture would leave an
+  /// already-open details route on the stale look until reopened. Resolving
+  /// per read keeps it a 20-entry const lookup — free — and an open route now
+  /// restyles on its next rebuild. (Foundation item 2 of the theme rollout;
+  /// the full `(app_theme, detail_theme, style)` resolution is step 5.)
+  ///
   /// Classic is deliberately unthemed, so this is only consulted by the
   /// alternate bodies.
-  late final DetailTheme _theme = DetailThemes.byId(
+  DetailTheme get _theme => DetailThemes.byId(
     effectiveDetailTheme(StorageService.detailThemeCached),
   );
 

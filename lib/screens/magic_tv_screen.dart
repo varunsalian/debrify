@@ -44,6 +44,8 @@ import '../services/community/magnet_yaml_service.dart';
 import '../services/community/community_channel_model.dart';
 import '../services/community/community_channels_service.dart';
 import '../services/main_page_bridge.dart';
+import '../theme/app_surfaces.dart';
+import '../theme/overlay_theme.dart';
 import '../utils/file_utils.dart';
 import '../utils/nsfw_filter.dart';
 import '../utils/rd_blocked_filter.dart';
@@ -4599,7 +4601,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
                   // Fall back to Flutter video player
                   await Navigator.of(context).push(
-                    MaterialPageRoute(
+                    FrozenLegacyPageRoute(
                       builder: (_) => VideoPlayerScreen(
                         videoUrl: firstUrl,
                         title: firstTitleResolved,
@@ -4942,7 +4944,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       // Fall back to Flutter video player
       await Navigator.of(context).push(
-        MaterialPageRoute(
+        FrozenLegacyPageRoute(
           builder: (_) => VideoPlayerScreen(
             videoUrl: firstUrl,
             title: firstTitle,
@@ -5331,7 +5333,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         MainPageBridge.notifyPlayerLaunching();
 
         await Navigator.of(context).push(
-          MaterialPageRoute(
+          FrozenLegacyPageRoute(
             builder: (_) => VideoPlayerScreen(
               videoUrl: first['url'] ?? '',
               title: first['title'] ?? 'Debrify TV',
@@ -5611,7 +5613,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         MainPageBridge.notifyPlayerLaunching();
 
         await Navigator.of(context).push(
-          MaterialPageRoute(
+          FrozenLegacyPageRoute(
             builder: (_) => VideoPlayerScreen(
               videoUrl: first['url'] ?? '',
               title: first['title'] ?? 'Debrify TV',
@@ -5911,7 +5913,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       // Fall back to Flutter video player
       await Navigator.of(context).push(
-        MaterialPageRoute(
+        FrozenLegacyPageRoute(
           builder: (_) => VideoPlayerScreen(
             videoUrl: firstUrl,
             title: firstTitle,
@@ -6158,7 +6160,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
       // Fall back to Flutter video player
       await Navigator.of(context).push(
-        MaterialPageRoute(
+        FrozenLegacyPageRoute(
           builder: (_) => VideoPlayerScreen(
             videoUrl: firstUrl,
             title: firstTitle,
@@ -7190,7 +7192,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       MainPageBridge.notifyPlayerLaunching();
 
       await Navigator.of(context).push(
-        MaterialPageRoute(
+        FrozenLegacyPageRoute(
           builder: (_) => VideoPlayerScreen(
             videoUrl: first['url'] ?? '',
             title: first['title'] ?? 'Debrify TV',
@@ -7360,7 +7362,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       MainPageBridge.notifyPlayerLaunching();
 
       await Navigator.of(context).push(
-        MaterialPageRoute(
+        FrozenLegacyPageRoute(
           builder: (_) => VideoPlayerScreen(
             videoUrl: first['url'] ?? '',
             title: first['title'] ?? 'Debrify TV',
@@ -7480,19 +7482,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted || !_progressOpen) {
         return;
       }
+      // showGeneralDialog skips InheritedTheme capture; snapshot this frozen
+      // screen's themes so the dialog stays legacy under any app theme.
+      final capturedThemes = captureAppThemes(context);
       showGeneralDialog(
         context: context,
         barrierColor: Colors.black.withOpacity(0.6),
         barrierDismissible: false,
         transitionDuration: const Duration(milliseconds: 260),
         pageBuilder: (ctx, _, __) {
-          return ChannelCreationDialog(
+          return capturedThemes.wrap(ChannelCreationDialog(
             channelName: channelName,
             countdownSeconds: countdownSeconds,
             onReady: (dialogCtx) {
               _progressSheetContext = dialogCtx;
             },
-          );
+          ));
         },
         transitionBuilder: (ctx, animation, secondary, child) {
           final curved = CurvedAnimation(
@@ -7526,6 +7531,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!mounted || !_progressOpen) {
         return;
       }
+      // Same snapshot rule as the channel-creation dialog above.
+      final capturedThemes = captureAppThemes(context);
       showGeneralDialog(
         context: context,
         barrierColor: Colors.black.withOpacity(0.6),
@@ -7534,12 +7541,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         pageBuilder: (ctx, _, __) {
           // Use pageBuilder context directly - simpler and avoids race conditions
           _progressSheetContext = ctx;
-          return CachedLoadingDialog(
+          return capturedThemes.wrap(CachedLoadingDialog(
             onCancel: () {
               debugPrint('[MagicTV] onCancel callback triggered');
               _cancelActiveWatch(dialogContext: ctx);
             },
-          );
+          ));
         },
         transitionBuilder: (ctx, animation, secondary, child) {
           final curved = CurvedAnimation(
@@ -7599,7 +7606,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             MainPageBridge.notifyPlayerLaunching();
 
             await Navigator.of(context).push(
-              MaterialPageRoute(
+              FrozenLegacyPageRoute(
                 builder: (_) => VideoPlayerScreen(
                   videoUrl: videoUrl,
                   title: next.name,
@@ -10065,7 +10072,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       MainPageBridge.notifyPlayerLaunching();
 
       await Navigator.of(context).push(
-        MaterialPageRoute(
+        FrozenLegacyPageRoute(
           builder: (_) => VideoPlayerScreen(
             videoUrl: first['url'] ?? '',
             title: first['title'] ?? 'Debrify TV',
@@ -10350,7 +10357,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!_watchCancelled) {
         MainPageBridge.notifyPlayerLaunching();
         await Navigator.of(context).push(
-          MaterialPageRoute(
+          FrozenLegacyPageRoute(
             builder: (_) => VideoPlayerScreen(
               videoUrl: first['url'] ?? '',
               title: first['title'] ?? 'Debrify TV',
@@ -10618,7 +10625,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       if (!_watchCancelled) {
         MainPageBridge.notifyPlayerLaunching();
         await Navigator.of(context).push(
-          MaterialPageRoute(
+          FrozenLegacyPageRoute(
             builder: (_) => VideoPlayerScreen(
               videoUrl: first['url'] ?? '',
               title: firstTitle,

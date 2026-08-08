@@ -1,0 +1,11 @@
+# Phase-one theming surfaces. One line per surface: label = glob(s).
+# Consumed by tool/measure_theme_surface.sh so the plan's table is reproducible.
+calendar = lib/screens/trakt_calendar_screen.dart
+addons = lib/screens/addons_screen.dart lib/screens/addons/*.dart
+cloud = lib/screens/cloud_screen.dart lib/screens/debrid_downloads_screen.dart lib/screens/torbox/*.dart lib/screens/premiumize/*.dart lib/screens/pikpak/*.dart lib/screens/alldebrid/*.dart lib/widgets/cloud/*.dart lib/screens/webdav/*.dart
+settings = lib/screens/settings_screen.dart lib/screens/settings/*.dart lib/screens/settings/widgets/*.dart
+home_search_discover = lib/screens/search_screen.dart
+home_widgets = lib/widgets/home/*.dart
+see_all = lib/widgets/see_all/*.dart lib/screens/see_all/*.dart
+shell = lib/main.dart lib/widgets/tv_sidebar_nav.dart lib/widgets/mobile_classic_nav.dart lib/widgets/mobile_floating_nav.dart lib/widgets/desktop_sidebar_nav.dart lib/widgets/tv_ambient_art_stage.dart lib/widgets/animated_background.dart
+details_themed = lib/screens/merged_series_detail_screen.dart lib/widgets/detail/*.dart lib/widgets/detail/theme/*.dart
