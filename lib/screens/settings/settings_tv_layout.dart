@@ -87,6 +87,8 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenDetailPageStyle;
   final String detailThemeLabel;
   final Future<void> Function() onOpenDetailTheme;
+  final String parentsGuideStyleLabel;
+  final Future<void> Function() onOpenParentsGuideStyle;
   // Live TV & DVR.
   final Future<void> Function() onOpenRecordings;
   final Future<void> Function() onOpenIptvSettings;
@@ -146,6 +148,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenDetailPageStyle,
     required this.detailThemeLabel,
     required this.onOpenDetailTheme,
+    required this.parentsGuideStyleLabel,
+    required this.onOpenParentsGuideStyle,
     required this.onOpenRecordings,
     required this.onOpenIptvSettings,
     required this.showSupportDonation,
@@ -217,13 +221,13 @@ const List<_Category> _kCategories = [
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
   /// written out here rather than driven by a provider list (Appearance has
-  /// exactly 10; About up to 6 with the conditional donation row;
+  /// exactly 12; About up to 6 with the conditional donation row;
   /// Data & Backup up to 5). Connections and Trackers are sized from their
   /// own lists; see the pool computation in [initState].
   ///
   /// MUST cover the largest category: the pane indexes [_paneNodes] directly,
   /// so a row added past the pool throws on build.
-  static const int _kMaxCategoryRows = 11;
+  static const int _kMaxCategoryRows = 12;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -666,6 +670,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 subtitle: widget.detailThemeLabel,
                 onTap: widget.onOpenDetailTheme,
                 focusNode: _paneNodes[10],
+              ),
+              SettingsTile.spec(
+                SettingsRows.parentsGuideStyle,
+                subtitle: widget.parentsGuideStyleLabel,
+                onTap: widget.onOpenParentsGuideStyle,
+                focusNode: _paneNodes[11],
               ),
             ],
           ),

@@ -235,6 +235,12 @@ Future<void> main() async {
   try {
     await StorageService.getDetailTheme();
   } catch (_) {}
+  // Parents Guide chooses its presentation synchronously when metadata lands.
+  // Warm the cosmetic preference so a stored Classic choice never flashes
+  // Compass for one frame.
+  try {
+    await StorageService.getParentsGuideStyle();
+  } catch (_) {}
   await _capImageCache();
   await _resolveStartupChannel();
   // Discover's remembered Sort per source, warmed before first frame so the

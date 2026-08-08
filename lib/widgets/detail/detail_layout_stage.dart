@@ -286,6 +286,7 @@ class _DetailStageState extends State<DetailStage> {
             guide: m.parentsGuide!,
             tv: m.isTelevision,
             dense: true,
+            accent: m.accent,
             theme: _t,
           ),
         );

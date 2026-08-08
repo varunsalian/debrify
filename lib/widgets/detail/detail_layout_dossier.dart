@@ -473,6 +473,7 @@ class _DetailDossierState extends State<DetailDossier> {
             guide: guide,
             tv: m.isTelevision,
             dense: true,
+            accent: m.accent,
             theme: _t,
           ),
         ],

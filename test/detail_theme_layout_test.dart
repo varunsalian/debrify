@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/imdb_parents_guide_service.dart';
+import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
 import 'package:debrify/widgets/detail/detail_layout_console.dart';
 import 'package:debrify/widgets/detail/detail_layout_dossier.dart';
@@ -195,6 +196,7 @@ Future<void> _pump(
   required Size size,
   required bool isTelevision,
   double textScale = 1,
+  bool withParentsGuide = false,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -216,7 +218,11 @@ Future<void> _pump(
               theme: theme,
               child: _layout(
                 layoutId,
-                _model(isMovie: isMovie, isTelevision: isTelevision),
+                _model(
+                  isMovie: isMovie,
+                  isTelevision: isTelevision,
+                  withParentsGuide: withParentsGuide,
+                ),
               ),
             ),
           ),
@@ -475,6 +481,49 @@ void main() {
         find.byIcon(Icons.radio_button_checked_rounded),
       );
       expect(mark.color, artworkAccent);
+    });
+
+    testWidgets('Console renders Compass as a read-only themed dashboard', (
+      tester,
+    ) async {
+      StorageService.parentsGuideStyleCached = 'compass';
+      addTearDown(() => StorageService.parentsGuideStyleCached = 'compass');
+      await _pump(
+        tester,
+        'console',
+        DetailThemes.broadsheet,
+        isMovie: false,
+        size: _tv,
+        isTelevision: true,
+        withParentsGuide: true,
+      );
+
+      expect(find.text('AT A GLANCE'), findsOneWidget);
+      expect(find.text('Select a category'), findsNothing);
+      expect(find.text('Some stylized action violence.'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.text('AT A GLANCE')).style!.fontFamily,
+        'monospace',
+      );
+    });
+
+    testWidgets('Console still honors the Classic Parents Guide choice', (
+      tester,
+    ) async {
+      StorageService.parentsGuideStyleCached = 'classic';
+      addTearDown(() => StorageService.parentsGuideStyleCached = 'compass');
+      await _pump(
+        tester,
+        'console',
+        DetailThemes.signal,
+        isMovie: false,
+        size: _tv,
+        isTelevision: true,
+        withParentsGuide: true,
+      );
+
+      expect(find.text('AT A GLANCE'), findsNothing);
+      expect(find.text('Violence & Gore'), findsOneWidget);
     });
 
     testWidgets('adaptive actions reveal every DPAD target', (tester) async {

@@ -197,6 +197,12 @@ abstract final class SettingsRows {
     title: 'Details Theme',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen presentation) — passed per call site.
+  static const parentsGuideStyle = SettingsRowContent(
+    icon: Icons.family_restroom_rounded,
+    title: 'Parents Guide',
+    subtitle: '',
+  );
   // Subtitle is dynamic (current folder) — passed per call site.
   static const downloadLocation = SettingsRowContent(
     icon: Icons.folder_rounded,

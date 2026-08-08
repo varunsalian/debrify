@@ -4,6 +4,13 @@ Interactive mocks for eleven alternative layouts of `MergedDetailScreen`
 (`lib/screens/merged_series_detail_screen.dart` + `lib/widgets/episodes_panel.dart`),
 each drawn at **four screen sizes** from one set of content.
 
+The companion **`parents_guide.html`** explores five responsive presentations
+for the Parents Guide: Compass, Curtain, Constellation, Spectrum, and Ledger.
+Its device switcher previews TV, desktop, portrait tablet, and phone compositions;
+its theme picker carries all twenty shipped detail themes so light, dark,
+colourful, and high-contrast combinations can be reviewed against the same
+guide content.
+
 Open **`index.html`**, pick a size, click a screen, and drive it with the arrow
 keys — every concept's DPAD model is part of the proposal, not an afterthought.
 
@@ -75,6 +82,8 @@ More Like This.
 ## Files
 
 - `index.html` — the built page (all artwork inlined as data URIs). Open this.
+- `parents_guide.html` — five interactive Parents Guide concepts with theme and
+  spoiler controls.
 - `index.src.html` — source, with `__IMG_MAP__` / `__EPS__` / `__CAST__` /
   `__MCAST__` / `__MRECS__` tokens.
 - `data.json` — episode, cast, movie-cast and movie-recommendation metadata.

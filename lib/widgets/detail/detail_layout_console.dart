@@ -5,8 +5,10 @@ import 'package:flutter/services.dart';
 
 import '../../services/debrify_image_cache.dart';
 import '../../services/imdb_enrichment_service.dart';
+import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import '../episodes_panel.dart';
+import '../parents_guide_section.dart';
 import 'detail_episode_cells.dart';
 import 'detail_identity.dart';
 import 'detail_model.dart';
@@ -570,9 +572,9 @@ class _DetailConsoleState extends State<DetailConsole> {
   ///
   /// Deliberately **non-focusable throughout**: it is not in this layout's DPAD
   /// graph (the grid is), so anything focusable here would be unreachable on a
-  /// remote. That rules out the interactive [ParentsGuideSection] — the guide
-  /// appears as a read-only severity summary instead, which is what a 272px
-  /// rail can carry anyway. Stage's Parents Guide tab is where you expand it.
+  /// remote. Parents Guide therefore uses its read-only mode here: Compass is
+  /// still visually consistent with the other layouts, but it introduces no
+  /// unreachable controls in this 272px rail.
   Widget _reference(DetailModel m, DetailSize size, {bool flow = false}) {
     final sections = <Widget>[
       ..._awardsSection(m),
@@ -778,6 +780,18 @@ class _DetailConsoleState extends State<DetailConsole> {
   List<Widget> _guideSection(DetailModel m) {
     final guide = m.parentsGuide;
     if (guide == null || guide.isEmpty) return const [];
+    if (StorageService.parentsGuideStyleCached == 'compass') {
+      return [
+        ParentsGuideSection(
+          guide: guide,
+          tv: m.isTelevision,
+          dense: true,
+          interactive: false,
+          accent: m.accent,
+          theme: _t,
+        ),
+      ];
+    }
     return [
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,

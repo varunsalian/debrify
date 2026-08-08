@@ -2260,6 +2260,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             guide: guide,
             tv: widget.isTelevision,
             dense: true,
+            accent: _accent,
           ),
         );
     }

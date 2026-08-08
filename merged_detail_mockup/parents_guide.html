@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en" data-page-theme="dark" data-device="desktop">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parents Guide — five premium concepts</title>
+<style>
+:root{
+  --page:#0b0b0e;--page-pane:#141419;--page-text:#f3f3f5;--page-muted:#8d8d99;
+  --page-hair:rgba(255,255,255,.11);--page-accent:#fbbf24;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--page-text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button,select{font:inherit}
+.page{max-width:1240px;margin:auto;padding:52px 28px 120px}
+.kicker{margin:0 0 10px;color:var(--page-accent);font-size:11px;font-weight:850;letter-spacing:.19em;text-transform:uppercase}
+h1{max-width:820px;margin:0;font-size:clamp(38px,6vw,68px);line-height:.96;letter-spacing:-.055em}
+.lede{max-width:700px;margin:20px 0 34px;color:var(--page-muted);font-size:17px;line-height:1.6}
+.toolbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 62px;padding:12px 0;background:color-mix(in srgb,var(--page) 88%,transparent);border-bottom:1px solid var(--page-hair);backdrop-filter:blur(18px)}
+.control{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--page-hair);border-radius:10px;background:var(--page-pane);color:var(--page-muted);font-size:12px}
+.control b{color:var(--page-text);font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+.control select{max-width:165px;border:0;outline:0;background:transparent;color:var(--page-text);font-weight:700}
+.control option{background:#17171c}
+.device-seg{display:flex;gap:2px;padding:3px;border:1px solid var(--page-hair);border-radius:11px;background:var(--page-pane)}
+.device-seg button{appearance:none;border:0;border-radius:8px;background:transparent;color:var(--page-muted);padding:6px 11px;font-size:11px;font-weight:750;cursor:pointer}
+.device-seg button[aria-pressed="true"]{background:var(--page-text);color:var(--page)}
+.spoiler-toggle{cursor:pointer;user-select:none}.spoiler-toggle input{accent-color:var(--page-accent)}
+.hint{margin-left:auto;color:var(--page-muted);font-size:12px}
+.concept{margin:0 0 92px}
+.single-concept .page{max-width:1240px;padding:24px}
+.single-concept .page>h1,.single-concept .page>.kicker,.single-concept .page>.lede,.single-concept .page>.toolbar{display:none}
+.single-concept .concept{display:none;margin:0}.single-concept .concept.preview-target{display:block}.single-concept .concept-head{margin-bottom:14px}
+.concept-head{display:grid;grid-template-columns:54px minmax(0,1fr);gap:2px 16px;align-items:baseline;margin-bottom:20px}
+.num{grid-row:1/3;color:var(--page-accent);font:750 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em}
+.concept h2{margin:0;font-size:27px;letter-spacing:-.035em}
+.thesis{margin:5px 0 0;color:var(--page-muted);line-height:1.55}
+.device{position:relative;margin-inline:auto;overflow:hidden;border:1px solid rgba(255,255,255,.12);border-radius:15px;background:#09090b;box-shadow:0 38px 90px -42px #000,0 0 0 1px rgba(255,255,255,.025);container-type:inline-size;transition:width .28s ease,aspect-ratio .28s ease}
+html[data-device="tv"] .device{width:min(100%,960px);aspect-ratio:16/9}
+html[data-device="desktop"] .device{width:100%;aspect-ratio:16/10}
+html[data-device="tablet"] .device{width:min(72%,760px);aspect-ratio:3/4}
+html[data-device="phone"] .device{width:min(390px,100%);aspect-ratio:390/844;border-radius:24px}
+.screen{--ground:#0b0b0e;--pane:#0e0b14;--tx:#fff;--tx2:rgba(255,255,255,.64);--accent:#aba124;--focus:#fbbf24;position:absolute;inset:0;overflow:hidden;background:var(--ground);color:var(--tx)}
+.screen *{box-sizing:border-box}
+.backdrop{position:absolute;inset:0;background:url("art/bg.jpg") center 25%/cover no-repeat;filter:saturate(.82)}
+.backdrop::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,color-mix(in srgb,var(--ground) 96%,transparent) 0%,color-mix(in srgb,var(--ground) 68%,transparent) 44%,color-mix(in srgb,var(--ground) 84%,transparent) 100%),linear-gradient(0deg,var(--ground),transparent 58%)}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.035;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)'/%3E%3C/svg%3E")}
+.chrome{position:absolute;z-index:3;top:4.3%;left:3.3%;right:3.3%;display:flex;align-items:center;gap:12px}
+.back{width:34px;height:34px;border:1px solid color-mix(in srgb,var(--tx) 18%,transparent);border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--ground) 54%,transparent);font-weight:800}
+.crumb{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--tx2)}
+.cert{margin-left:auto;padding:5px 9px;border:1px solid color-mix(in srgb,var(--tx) 18%,transparent);border-radius:5px;font-size:9px;font-weight:800}
+.guide{position:absolute;z-index:4;background:color-mix(in srgb,var(--pane) 92%,transparent);border:1px solid color-mix(in srgb,var(--tx) 13%,transparent);box-shadow:0 28px 90px rgba(0,0,0,.42);backdrop-filter:blur(28px)}
+.eyebrow{font-size:9px;font-weight:850;letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+.title{margin:8px 0 0;font-size:clamp(18px,2.45cqw,34px);line-height:1.02;letter-spacing:-.045em}
+.summary{color:var(--tx2);font-size:clamp(8px,.95cqw,13px);line-height:1.5}
+.severity{--sev:#fb923c;display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border-radius:999px;background:color-mix(in srgb,var(--sev) 14%,transparent);border:1px solid color-mix(in srgb,var(--sev) 32%,transparent);color:var(--sev);font-size:9px;font-weight:850;letter-spacing:.07em;text-transform:uppercase}
+.severity::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--sev);box-shadow:0 0 12px color-mix(in srgb,var(--sev) 65%,transparent)}
+.moderate{--sev:#fb923c}.mild{--sev:#fbbf24}.none{--sev:#4ade80}.severe{--sev:#ef4444}
+.cat-button{appearance:none;color:inherit;cursor:pointer}
+.cat-button:focus-visible,.cat-button.active{outline:2.5px solid var(--focus);outline-offset:-2px}
+.category-name{font-weight:750;letter-spacing:-.015em}
+.item-list{display:grid;gap:9px;margin-top:15px}
+.advisory{position:relative;padding-left:14px;color:var(--tx2);font-size:clamp(8px,.88cqw,12px);line-height:1.45}
+.advisory::before{content:"";position:absolute;left:0;top:.55em;width:4px;height:4px;border-radius:50%;background:var(--accent)}
+.spoiler{display:none!important}.show-spoilers .spoiler{display:flex!important}
+.spoiler-lock{display:inline-flex;align-items:center;gap:5px;color:var(--accent);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.focus-note{position:absolute;z-index:7;right:2.5%;bottom:2.5%;font-size:8px;color:var(--tx2);letter-spacing:.1em;text-transform:uppercase}
+
+/* I — Compass */
+.compass .guide{inset:10% 8%;display:grid;grid-template-columns:32% 68%;border-radius:18px;overflow:hidden}
+.compass-side{position:relative;padding:7% 8%;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 12%,var(--pane)),var(--pane));border-right:1px solid color-mix(in srgb,var(--tx) 10%,transparent)}
+.compass-side::after{content:"";position:absolute;width:70%;aspect-ratio:1;left:-27%;bottom:-25%;border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:50%;box-shadow:0 0 0 26px color-mix(in srgb,var(--accent) 4%,transparent),0 0 0 52px color-mix(in srgb,var(--accent) 3%,transparent)}
+.compass-side .title{margin-bottom:11px}
+.overall{position:relative;width:105px;aspect-ratio:1;margin:13% 0 10%;display:grid;place-items:center;border-radius:50%;background:conic-gradient(#fb923c 0 58%,color-mix(in srgb,var(--tx) 8%,transparent) 58%);box-shadow:0 15px 45px color-mix(in srgb,var(--accent) 13%,transparent)}
+.overall::before{content:"";position:absolute;inset:7px;border-radius:inherit;background:var(--pane)}
+.overall div{position:relative;text-align:center}.overall b{display:block;font-size:22px}.overall span{font-size:7px;letter-spacing:.14em;color:var(--tx2);text-transform:uppercase}
+.trust{position:absolute;left:8%;right:8%;bottom:8%;font-size:8px;line-height:1.45;color:var(--tx2)}
+.compass-main{padding:5.2% 5%;overflow:hidden}
+.compass-main-head{display:flex;align-items:center;gap:12px}.compass-main-head .summary{margin-left:auto}
+.meter-list{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin:4.2% 0}
+.meter{min-width:0;border:1px solid color-mix(in srgb,var(--tx) 9%,transparent);border-radius:10px;background:color-mix(in srgb,var(--tx) 4%,transparent);padding:11px 9px;text-align:left}
+.meter .icon{font-size:14px}.meter .category-name{display:block;margin:15px 0 7px;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meter .level{display:block;height:3px;border-radius:3px;background:color-mix(in srgb,var(--tx) 10%,transparent);overflow:hidden}.meter .level i{display:block;height:100%;background:var(--sev);width:58%}.meter.mild .level i{width:31%}.meter.none .level i{width:8%}.meter.severe .level i{width:90%}
+.compass-panel{padding:4%;border:1px solid color-mix(in srgb,var(--tx) 9%,transparent);border-radius:12px;background:color-mix(in srgb,var(--tx) 3%,transparent)}
+.panel-top{display:flex;align-items:center;gap:10px}.panel-top .severity{margin-left:auto}
+
+/* II — Curtain */
+.curtain .backdrop::after{background:linear-gradient(90deg,color-mix(in srgb,var(--ground) 38%,transparent),color-mix(in srgb,var(--ground) 88%,transparent) 53%,var(--ground))}
+.curtain-title{position:absolute;z-index:2;left:5%;bottom:9%;width:29%}.curtain-title img{width:58%;max-height:60px;object-fit:contain;object-position:left bottom;filter:drop-shadow(0 3px 12px #000)}
+.curtain-title p{font-size:9px;color:var(--tx2);line-height:1.5}.curtain-title .meta{font-size:9px;font-weight:700}
+.curtain .guide{top:0;right:0;bottom:0;width:52%;border-width:0 0 0 1px;border-radius:0;padding:8% 4.5% 4%}
+.curtain-head{display:flex;align-items:flex-end;gap:12px;padding-bottom:4%;border-bottom:1px solid color-mix(in srgb,var(--tx) 12%,transparent)}
+.curtain-head .severity{margin-left:auto}
+.curtain-body{display:grid;grid-template-columns:35% 65%;height:75%;padding-top:5%}
+.curtain-nav{display:flex;flex-direction:column;gap:5px;padding-right:12%}
+.curtain-nav .cat-button{display:flex;align-items:center;gap:8px;border:0;border-radius:8px;background:transparent;padding:9px;text-align:left;font-size:9px}
+.curtain-nav .cat-button.active{background:color-mix(in srgb,var(--tx) 7%,transparent)}
+.curtain-nav .dot{width:6px;height:6px;border-radius:50%;background:var(--sev)}
+.curtain-detail{padding-left:8%;border-left:1px solid color-mix(in srgb,var(--tx) 10%,transparent)}
+.curtain-detail h3{font-size:15px;margin:0 0 4px}.curtain-detail .count{font-size:8px;color:var(--tx2);text-transform:uppercase;letter-spacing:.12em}
+.source{position:absolute;bottom:4%;right:4.5%;font-size:7px;color:var(--tx2)}
+.curtain .focus-note{left:54%;right:auto;bottom:1.5%}
+
+/* III — Constellation */
+.constellation .backdrop{opacity:.25;filter:grayscale(.7)}
+.constellation .backdrop::after{background:radial-gradient(circle at 50% 43%,transparent,var(--ground) 72%),linear-gradient(0deg,var(--ground),transparent)}
+.constellation .guide{inset:0;border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none}
+.constellation-center{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);width:25%;aspect-ratio:1;display:grid;place-items:center;text-align:center;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--pane) 98%,transparent) 0 52%,color-mix(in srgb,var(--accent) 16%,transparent) 53% 55%,transparent 56%);box-shadow:0 0 90px color-mix(in srgb,var(--accent) 14%,transparent)}
+.constellation-center::after{content:"";position:absolute;inset:-25%;border:1px solid color-mix(in srgb,var(--tx) 10%,transparent);border-radius:50%}
+.constellation-center b{display:block;font-size:clamp(18px,2.8cqw,37px);letter-spacing:-.04em}.constellation-center span{display:block;font-size:8px;color:var(--tx2);letter-spacing:.14em;text-transform:uppercase}
+.orbit{position:absolute;left:50%;top:45%;width:57%;aspect-ratio:2.1;transform:translate(-50%,-50%);border:1px solid color-mix(in srgb,var(--tx) 10%,transparent);border-radius:50%}
+.orb{position:absolute;width:18%;aspect-ratio:1;border-radius:50%;border:1px solid color-mix(in srgb,var(--tx) 12%,transparent);background:color-mix(in srgb,var(--pane) 96%,transparent);display:grid;place-items:center;text-align:center;padding:2%;box-shadow:0 15px 35px rgba(0,0,0,.22)}
+.orb .glyph{display:block;font-size:15px}.orb .category-name{display:block;font-size:8px;margin-top:3px}.orb .severity{padding:3px 6px;font-size:6px;margin-top:4px}
+.orb:nth-child(1){left:-8%;top:40%}.orb:nth-child(2){left:16%;top:-37%}.orb:nth-child(3){right:16%;top:-37%}.orb:nth-child(4){right:-8%;top:40%}.orb:nth-child(5){left:41%;bottom:-34%}
+.constellation-copy{position:absolute;left:24%;right:24%;bottom:1.7%;text-align:center}.constellation-copy h3{margin:0 0 5px;font-size:13px}.constellation-copy .summary{max-width:620px;margin:auto}
+.constellation .focus-note{top:5%;right:13%;left:auto;bottom:auto}
+
+/* IV — Spectrum */
+.spectrum .backdrop{inset:0 0 42%;background-position:center 40%}
+.spectrum .backdrop::after{background:linear-gradient(0deg,var(--ground),transparent 88%),linear-gradient(90deg,color-mix(in srgb,var(--ground) 84%,transparent),transparent)}
+.spectrum-heading{position:absolute;z-index:2;left:4%;top:15%;max-width:38%}.spectrum-heading .summary{margin:8px 0}
+.spectrum .guide{left:3%;right:3%;bottom:3%;height:53%;border-radius:14px;padding:2.5% 3.2%}
+.spectrum-top{display:flex;align-items:end;gap:12px}.spectrum-top .summary{margin-left:auto}
+.scale-axis{display:grid;grid-template-columns:repeat(4,1fr);margin:2.5% 0 1%;padding:0 7px;color:var(--tx2);font-size:7px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.scale-axis span{text-align:center}.scale-axis span+span{border-left:1px solid color-mix(in srgb,var(--tx) 10%,transparent)}
+.spectrum-cats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.spectrum-cats .cat-button{min-width:0;border:1px solid color-mix(in srgb,var(--tx) 9%,transparent);border-radius:9px;background:color-mix(in srgb,var(--tx) 3%,transparent);padding:9px;text-align:left}
+.spectrum-cats .category-name{display:block;font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.spectrum-bar{display:block;height:4px;margin:10px 0 7px;border-radius:4px;background:linear-gradient(90deg,#4ade80 0 25%,#fbbf24 25% 50%,#fb923c 50% 75%,#ef4444 75%);position:relative}.spectrum-bar::after{content:"";position:absolute;left:var(--level);top:50%;width:9px;height:9px;transform:translate(-50%,-50%);border:2px solid var(--pane);border-radius:50%;background:var(--sev);box-shadow:0 0 0 1px var(--sev)}
+.spectrum-cats .severity{padding:3px 6px;font-size:6px}.spectrum-detail{display:flex;align-items:center;gap:12px;margin-top:12px;padding-top:10px;border-top:1px solid color-mix(in srgb,var(--tx) 10%,transparent)}.spectrum-detail .summary{flex:1}.spectrum .focus-note{top:5%;right:13%;bottom:auto}
+
+/* V — Ledger */
+.ledger .backdrop{width:40%;right:auto;filter:grayscale(.15) saturate(.65)}
+.ledger .backdrop::after{background:linear-gradient(90deg,transparent 45%,var(--ground)),linear-gradient(0deg,var(--ground),transparent 35%)}
+.ledger .guide{inset:0;border:0;border-radius:0;background:transparent;box-shadow:none;display:grid;grid-template-columns:38% 62%;backdrop-filter:none}
+.ledger-cover{position:relative;padding:17% 9% 7%;display:flex;flex-direction:column;justify-content:flex-end}.ledger-cover .title{font-family:ui-serif,Georgia,serif;font-weight:500}.ledger-cover .summary{max-width:250px}.ledger-seal{width:56px;height:56px;margin:13px 0;display:grid;place-items:center;border:1px solid var(--accent);border-radius:50%;font:700 8px/1.2 ui-monospace,monospace;color:var(--accent);text-align:center;letter-spacing:.08em}
+.ledger-sheet{margin:3%;padding:6% 6%;border:1px solid color-mix(in srgb,var(--tx) 14%,transparent);background:color-mix(in srgb,var(--pane) 96%,transparent);border-radius:4px;overflow:hidden}
+.ledger-sheet header{display:flex;align-items:flex-end;padding-bottom:4%;border-bottom:1px solid color-mix(in srgb,var(--tx) 16%,transparent)}
+.ledger-sheet header .severity{margin-left:auto}.ledger-rows{margin-top:2%}.ledger-row{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;width:100%;border:0;border-bottom:1px solid color-mix(in srgb,var(--tx) 10%,transparent);background:transparent;color:inherit;padding:2.7% 1%;text-align:left}.ledger-row .index{font:700 8px ui-monospace,monospace;color:var(--accent)}.ledger-row .category-name{font-family:ui-serif,Georgia,serif;font-size:12px}.ledger-row .severity{font-family:ui-sans-serif,system-ui}.ledger-row.active{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.ledger-excerpt{margin-top:4%;padding:3.5%;border-left:2px solid var(--accent);background:color-mix(in srgb,var(--accent) 5%,transparent)}.ledger-excerpt b{font:600 13px ui-serif,Georgia,serif}.ledger-excerpt .summary{margin-top:6px}
+.ledger .focus-note{top:5%;right:13%;bottom:auto}
+
+/* Portrait compositions — reflow, never desktop shrinkage */
+html[data-device="tablet"] .chrome,html[data-device="phone"] .chrome{top:3%;left:5%;right:5%}
+html[data-device="tablet"] .crumb,html[data-device="phone"] .crumb{max-width:58%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-device="phone"] .back{width:31px;height:31px}
+html[data-device="phone"] .focus-note{display:none}
+
+/* Compass: identity becomes a masthead; dashboard becomes the reading plane. */
+html[data-device="tablet"] .compass .guide,html[data-device="phone"] .compass .guide{inset:8% 5% 4%;display:block;border-radius:16px;overflow:auto}
+html[data-device="tablet"] .compass-side,html[data-device="phone"] .compass-side{height:29%;padding:7%;border-right:0;border-bottom:1px solid color-mix(in srgb,var(--tx) 10%,transparent)}
+html[data-device="tablet"] .compass-side::after,html[data-device="phone"] .compass-side::after{left:auto;right:-12%;bottom:-70%;width:45%}
+html[data-device="tablet"] .compass-side .title,html[data-device="phone"] .compass-side .title{max-width:58%;margin-bottom:7px}
+html[data-device="tablet"] .overall,html[data-device="phone"] .overall{position:absolute;right:8%;top:20%;width:82px;margin:0}
+html[data-device="tablet"] .trust,html[data-device="phone"] .trust{left:7%;right:auto;bottom:7%}
+html[data-device="tablet"] .compass-main,html[data-device="phone"] .compass-main{height:71%;padding:6%;overflow:auto}
+html[data-device="tablet"] .meter-list{grid-template-columns:repeat(5,1fr);margin:5% 0}
+html[data-device="phone"] .meter-list{grid-template-columns:repeat(2,1fr);margin:6% 0;gap:8px}
+html[data-device="phone"] .meter{padding:10px}html[data-device="phone"] .meter .category-name{margin:7px 0 6px;font-size:10px}
+html[data-device="phone"] .compass-panel{padding:6%}html[data-device="phone"] .trust{display:none}
+
+/* Curtain: side drawer on wide screens, bottom sheet on portrait screens. */
+html[data-device="tablet"] .curtain .backdrop,html[data-device="phone"] .curtain .backdrop{inset:0 0 62%;background-position:center top}
+html[data-device="tablet"] .curtain .backdrop::after,html[data-device="phone"] .curtain .backdrop::after{background:linear-gradient(0deg,var(--ground),color-mix(in srgb,var(--ground) 10%,transparent) 70%)}
+html[data-device="tablet"] .curtain-title,html[data-device="phone"] .curtain-title{left:7%;top:17%;bottom:auto;width:70%}
+html[data-device="tablet"] .curtain-title img,html[data-device="phone"] .curtain-title img{width:38%;max-height:54px}
+html[data-device="tablet"] .curtain-title p:not(.meta),html[data-device="phone"] .curtain-title p:not(.meta){display:none}
+html[data-device="tablet"] .curtain .guide,html[data-device="phone"] .curtain .guide{left:0;right:0;top:31%;bottom:0;width:auto;padding:9% 7% 5%;border:1px solid color-mix(in srgb,var(--tx) 13%,transparent);border-bottom:0;border-radius:22px 22px 0 0}
+html[data-device="tablet"] .curtain-body,html[data-device="phone"] .curtain-body{display:block;height:auto;padding-top:6%}
+html[data-device="tablet"] .curtain-nav,html[data-device="phone"] .curtain-nav{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;padding:0 0 6%;}
+html[data-device="tablet"] .curtain-nav .cat-button,html[data-device="phone"] .curtain-nav .cat-button{border:1px solid color-mix(in srgb,var(--tx) 8%,transparent);background:color-mix(in srgb,var(--tx) 3%,transparent)}
+html[data-device="tablet"] .curtain-detail,html[data-device="phone"] .curtain-detail{padding:6% 0 0;border-left:0;border-top:1px solid color-mix(in srgb,var(--tx) 10%,transparent)}
+html[data-device="tablet"] .source,html[data-device="phone"] .source{left:7%;right:auto;bottom:2%}
+html[data-device="tablet"] .curtain .focus-note{display:none}
+
+/* Constellation: orbit becomes a spatial grid/list, preserving its overview. */
+html[data-device="tablet"] .constellation-center,html[data-device="phone"] .constellation-center{left:6%;right:6%;top:10%;width:auto;aspect-ratio:auto;transform:none;padding:6%;border-radius:14px;background:color-mix(in srgb,var(--pane) 95%,transparent);text-align:left;display:block}
+html[data-device="tablet"] .constellation-center::after,html[data-device="phone"] .constellation-center::after{display:none}
+html[data-device="tablet"] .constellation-center b,html[data-device="phone"] .constellation-center b{font-size:24px}
+html[data-device="tablet"] .orbit,html[data-device="phone"] .orbit{left:6%;right:6%;top:28%;width:auto;aspect-ratio:auto;transform:none;border:0;border-radius:0;display:grid;gap:9px}
+html[data-device="tablet"] .orbit{grid-template-columns:repeat(2,1fr)}html[data-device="phone"] .orbit{grid-template-columns:1fr}
+html[data-device="tablet"] .orb,html[data-device="phone"] .orb{position:static!important;width:100%;aspect-ratio:auto;border-radius:11px;padding:12px 14px;text-align:left;display:block}
+html[data-device="tablet"] .orb>span,html[data-device="phone"] .orb>span{display:grid;grid-template-columns:28px 1fr auto;align-items:center;width:100%}
+html[data-device="tablet"] .orb .glyph,html[data-device="phone"] .orb .glyph{margin:0;font-size:14px}
+html[data-device="tablet"] .orb .category-name,html[data-device="phone"] .orb .category-name{margin:0;font-size:10px}
+html[data-device="tablet"] .orb .severity,html[data-device="phone"] .orb .severity{margin:0}
+html[data-device="tablet"] .constellation-copy,html[data-device="phone"] .constellation-copy{left:7%;right:7%;bottom:auto;padding-top:4%;border-top:1px solid color-mix(in srgb,var(--tx) 10%,transparent);text-align:left}
+html[data-device="tablet"] .constellation-copy{top:58%}html[data-device="phone"] .constellation-copy{top:68%}
+html[data-device="tablet"] .constellation .focus-note{display:none}
+
+/* Spectrum: comparison cards become scan-friendly rows on portrait screens. */
+html[data-device="tablet"] .spectrum .backdrop,html[data-device="phone"] .spectrum .backdrop{inset:0 0 73%;background-position:center top}
+html[data-device="tablet"] .spectrum-heading,html[data-device="phone"] .spectrum-heading{left:7%;top:12%;max-width:70%}
+html[data-device="tablet"] .spectrum-heading .summary,html[data-device="phone"] .spectrum-heading .summary{display:none}
+html[data-device="tablet"] .spectrum .guide,html[data-device="phone"] .spectrum .guide{left:0;right:0;top:25%;bottom:0;height:auto;padding:8% 7% 5%;border-radius:22px 22px 0 0;overflow:auto}
+html[data-device="tablet"] .spectrum-cats{grid-template-columns:repeat(2,1fr)}html[data-device="phone"] .spectrum-cats{grid-template-columns:1fr}
+html[data-device="tablet"] .scale-axis,html[data-device="phone"] .scale-axis{margin:6% 0 2%}
+html[data-device="tablet"] .spectrum-cats .cat-button,html[data-device="phone"] .spectrum-cats .cat-button{display:grid;grid-template-columns:minmax(86px,1fr) 1.4fr auto;align-items:center;gap:9px;padding:10px 12px}
+html[data-device="tablet"] .spectrum-bar,html[data-device="phone"] .spectrum-bar{margin:0}
+html[data-device="tablet"] .spectrum-detail,html[data-device="phone"] .spectrum-detail{align-items:flex-start;flex-wrap:wrap}
+html[data-device="tablet"] .spectrum .focus-note{display:none}
+
+/* Ledger: the cover becomes a compact prologue above one vertical ledger. */
+html[data-device="tablet"] .ledger .backdrop,html[data-device="phone"] .ledger .backdrop{inset:0 0 65%;width:auto;background-position:center top}
+html[data-device="tablet"] .ledger .backdrop::after,html[data-device="phone"] .ledger .backdrop::after{background:linear-gradient(0deg,var(--ground),transparent 78%)}
+html[data-device="tablet"] .ledger .guide,html[data-device="phone"] .ledger .guide{display:block;overflow:auto}
+html[data-device="tablet"] .ledger-cover,html[data-device="phone"] .ledger-cover{height:32%;padding:13% 7% 4%;display:block}
+html[data-device="tablet"] .ledger-cover .title,html[data-device="phone"] .ledger-cover .title{max-width:70%;font-size:22px}
+html[data-device="tablet"] .ledger-cover .summary,html[data-device="phone"] .ledger-cover .summary{display:none}
+html[data-device="tablet"] .ledger-seal,html[data-device="phone"] .ledger-seal{position:absolute;right:7%;bottom:8%;width:48px;height:48px;margin:0}
+html[data-device="tablet"] .ledger-sheet,html[data-device="phone"] .ledger-sheet{margin:0 4% 4%;padding:7%;overflow:visible}
+html[data-device="tablet"] .ledger-row,html[data-device="phone"] .ledger-row{padding:4% 1%}
+html[data-device="phone"] .ledger-row{grid-template-columns:24px 1fr auto;gap:7px}html[data-device="phone"] .ledger-row .category-name{font-size:10px}html[data-device="phone"] .ledger-row .severity{padding:3px 5px;font-size:6px}
+html[data-device="tablet"] .ledger .focus-note{display:none}
+
+@media(max-width:760px){
+  .page{padding:34px 14px 80px}.toolbar{margin-bottom:42px}.hint{display:none}.concept{margin-bottom:58px}.concept-head{grid-template-columns:36px 1fr}.concept h2{font-size:22px}.thesis{font-size:13px}.device{border-radius:9px}
+}
+</style>
+</head>
+<body>
+<main class="page">
+  <p class="kicker">Merged detail · interaction study</p>
+  <h1>A Parents Guide that belongs on every screen.</h1>
+  <p class="lede">Five premium OTT directions using only the guide data Debrify already receives. Every concept now has an intentional TV, desktop, tablet, and phone composition.</p>
+
+  <div class="toolbar">
+    <label class="control"><b>App theme</b><select id="themePicker" aria-label="App theme"></select></label>
+    <div class="device-seg" aria-label="Preview size"><button data-device="tv" aria-pressed="false">TV</button><button data-device="desktop" aria-pressed="true">Desktop</button><button data-device="tablet" aria-pressed="false">Tablet</button><button data-device="phone" aria-pressed="false">Phone</button></div>
+    <label class="control spoiler-toggle"><input id="spoilers" type="checkbox"> Show spoiler notes</label>
+    <span class="hint">Click a category to preview focus and detail</span>
+  </div>
+
+  <section class="concept" id="compass">
+    <header class="concept-head"><span class="num">01</span><h2>Compass</h2><p class="thesis">A familiar modal, elevated into a fast severity dashboard. Lowest implementation risk and the clearest upgrade from today.</p></header>
+    <div class="device"><div class="screen compass" data-guide="compass">
+      <div class="backdrop"></div><div class="grain"></div>
+      <div class="chrome"><span class="back">‹</span><span class="crumb">Breaking Bad · title details</span><span class="cert">TV-MA</span></div>
+      <div class="guide">
+        <aside class="compass-side"><span class="eyebrow">Family advisory</span><h3 class="title">Know before you watch.</h3><p class="summary">A spoiler-safe overview built from five content signals.</p><div class="overall"><div><b>3/4</b><span>Moderate</span></div></div><p class="trust">Community-sourced guidance<br>Last reviewed 3 months ago</p></aside>
+        <div class="compass-main"><div class="compass-main-head"><span class="eyebrow">At a glance</span><span class="summary">5 categories · 12 notes</span></div>
+          <div class="meter-list">
+            <button class="meter cat-button moderate active" data-cat="violence"><span class="icon">◇</span><span class="category-name">Violence</span><span class="level"><i></i></span></button>
+            <button class="meter cat-button mild" data-cat="language"><span class="icon">Aa</span><span class="category-name">Language</span><span class="level"><i></i></span></button>
+            <button class="meter cat-button none" data-cat="nudity"><span class="icon">◌</span><span class="category-name">Sex & nudity</span><span class="level"><i></i></span></button>
+            <button class="meter cat-button severe" data-cat="substances"><span class="icon">⌁</span><span class="category-name">Substances</span><span class="level"><i></i></span></button>
+            <button class="meter cat-button moderate" data-cat="frightening"><span class="icon">△</span><span class="category-name">Frightening</span><span class="level"><i></i></span></button>
+          </div>
+          <div class="compass-panel guide-panel"></div>
+        </div>
+      </div><span class="focus-note">← → category · select to expand</span>
+    </div></div>
+  </section>
+
+  <section class="concept" id="curtain">
+    <header class="concept-head"><span class="num">02</span><h2>Curtain</h2><p class="thesis">A right-hand glass drawer keeps the film visible and makes the guide feel like part of playback—not a settings dialog.</p></header>
+    <div class="device"><div class="screen curtain" data-guide="curtain">
+      <div class="backdrop"></div><div class="grain"></div><div class="chrome"><span class="back">‹</span><span class="crumb">Back to details</span></div>
+      <div class="curtain-title"><img src="art/logo.png" alt="Breaking Bad"><p class="meta">2008–2013 · 5 seasons · TV-MA</p><p>A chemistry teacher diagnosed with inoperable lung cancer turns to manufacturing and selling methamphetamine.</p></div>
+      <div class="guide"><div class="curtain-head"><div><span class="eyebrow">Parents guide</span><h3 class="title">Content advisory</h3></div><span class="severity moderate">Moderate</span></div>
+        <div class="curtain-body"><nav class="curtain-nav">
+          <button class="cat-button moderate active" data-cat="violence"><span class="dot"></span>Violence</button><button class="cat-button mild" data-cat="language"><span class="dot"></span>Language</button><button class="cat-button none" data-cat="nudity"><span class="dot"></span>Sex & nudity</button><button class="cat-button severe" data-cat="substances"><span class="dot"></span>Substances</button><button class="cat-button moderate" data-cat="frightening"><span class="dot"></span>Frightening</button>
+        </nav><div class="curtain-detail guide-panel"></div></div><span class="source">Guidance supplied by IMDb community contributors</span>
+      </div><span class="focus-note">↑ ↓ category · back closes drawer</span>
+    </div></div>
+  </section>
+
+  <section class="concept" id="constellation">
+    <header class="concept-head"><span class="num">03</span><h2>Constellation</h2><p class="thesis">A bold TV-first overview. Every category is visible from the sofa, with severity encoded by position, colour, and label.</p></header>
+    <div class="device"><div class="screen constellation" data-guide="constellation">
+      <div class="backdrop"></div><div class="grain"></div><div class="chrome"><span class="back">‹</span><span class="crumb">Parents guide · Breaking Bad</span><span class="cert">TV-MA</span></div>
+      <div class="guide"><div class="orbit">
+        <button class="orb cat-button moderate active" data-cat="violence"><span><span class="glyph">◇</span><span class="category-name">Violence</span><span class="severity moderate">Moderate</span></span></button>
+        <button class="orb cat-button mild" data-cat="language"><span><span class="glyph">Aa</span><span class="category-name">Language</span><span class="severity mild">Mild</span></span></button>
+        <button class="orb cat-button none" data-cat="nudity"><span><span class="glyph">◌</span><span class="category-name">Sex & nudity</span><span class="severity none">None</span></span></button>
+        <button class="orb cat-button severe" data-cat="substances"><span><span class="glyph">⌁</span><span class="category-name">Substances</span><span class="severity severe">Severe</span></span></button>
+        <button class="orb cat-button moderate" data-cat="frightening"><span><span class="glyph">△</span><span class="category-name">Frightening</span><span class="severity moderate">Moderate</span></span></button>
+      </div><div class="constellation-center"><div><span>Overall guide</span><b>Moderate</b><span>3 of 4</span></div></div><div class="constellation-copy guide-panel"></div></div>
+      <span class="focus-note">Directional navigation follows the orbit</span>
+    </div></div>
+  </section>
+
+  <section class="concept" id="spectrum">
+    <header class="concept-head"><span class="num">04</span><h2>Spectrum</h2><p class="thesis">A severity-first comparison using the exact category and rating data available today—no inferred timestamps or episode markers.</p></header>
+    <div class="device"><div class="screen spectrum" data-guide="spectrum">
+      <div class="backdrop"></div><div class="grain"></div><div class="chrome"><span class="back">‹</span><span class="crumb">Parents guide · Breaking Bad</span><span class="cert">TV-MA</span></div>
+      <div class="spectrum-heading"><span class="eyebrow">Content profile</span><h3 class="title">See the whole signal.</h3><p class="summary">Compare every category before opening the supporting notes.</p><span class="severity moderate">Moderate overall</span></div>
+      <div class="guide"><div class="spectrum-top"><div><span class="eyebrow">Severity spectrum</span><div class="category-name">Five content signals</div></div><span class="summary">Select a category for spoiler-safe detail</span></div>
+        <div class="scale-axis"><span>None</span><span>Mild</span><span>Moderate</span><span>Severe</span></div>
+        <div class="spectrum-cats"><button class="cat-button moderate active" data-cat="violence"><span class="category-name">Violence</span><span class="spectrum-bar moderate" style="--level:64%"></span><span class="severity moderate">Moderate</span></button><button class="cat-button mild" data-cat="language"><span class="category-name">Language</span><span class="spectrum-bar mild" style="--level:38%"></span><span class="severity mild">Mild</span></button><button class="cat-button none" data-cat="nudity"><span class="category-name">Sex & nudity</span><span class="spectrum-bar none" style="--level:8%"></span><span class="severity none">None</span></button><button class="cat-button severe" data-cat="substances"><span class="category-name">Substances</span><span class="spectrum-bar severe" style="--level:90%"></span><span class="severity severe">Severe</span></button><button class="cat-button moderate" data-cat="frightening"><span class="category-name">Frightening</span><span class="spectrum-bar moderate" style="--level:66%"></span><span class="severity moderate">Moderate</span></button></div>
+        <div class="spectrum-detail guide-panel"></div>
+      </div><span class="focus-note">Category comparison uses current IMDb fields</span>
+    </div></div>
+  </section>
+
+  <section class="concept" id="ledger">
+    <header class="concept-head"><span class="num">05</span><h2>Ledger</h2><p class="thesis">An editorial, low-motion treatment for prestige themes. Dense enough to be useful, restrained enough to feel cinematic.</p></header>
+    <div class="device"><div class="screen ledger" data-guide="ledger">
+      <div class="backdrop"></div><div class="grain"></div><div class="chrome"><span class="back">‹</span><span class="crumb">Advisory record · Breaking Bad</span><span class="cert">TV-MA</span></div>
+      <div class="guide"><aside class="ledger-cover"><span class="eyebrow">Family viewing note</span><h3 class="title">A measured view of what’s on screen.</h3><div class="ledger-seal">3 / 4<br>MODERATE</div><p class="summary">Five categories. Twelve spoiler-safe notes. One calm place to decide.</p></aside>
+        <section class="ledger-sheet"><header><div><span class="eyebrow">Parents guide</span><h3 class="title">Advisory ledger</h3></div><span class="severity moderate">Moderate</span></header><div class="ledger-rows">
+          <button class="ledger-row cat-button moderate active" data-cat="violence"><span class="index">01</span><span class="category-name">Violence & gore</span><span class="severity moderate">Moderate</span></button><button class="ledger-row cat-button mild" data-cat="language"><span class="index">02</span><span class="category-name">Profanity</span><span class="severity mild">Mild</span></button><button class="ledger-row cat-button none" data-cat="nudity"><span class="index">03</span><span class="category-name">Sex & nudity</span><span class="severity none">None</span></button><button class="ledger-row cat-button severe" data-cat="substances"><span class="index">04</span><span class="category-name">Alcohol, drugs & smoking</span><span class="severity severe">Severe</span></button><button class="ledger-row cat-button moderate" data-cat="frightening"><span class="index">05</span><span class="category-name">Frightening & intense scenes</span><span class="severity moderate">Moderate</span></button>
+        </div><div class="ledger-excerpt guide-panel"></div></section></div><span class="focus-note">One reading plane · minimal motion</span>
+    </div></div>
+  </section>
+</main>
+<script>
+const themes={
+  signal:["Signal Gold","#0B0B0E","#0E0B14","#FFFFFF","rgba(255,255,255,.64)","#ABA124","#FBBF24"],
+  noir:["Noir","#0A0A0A","#0A0A0A","#FFFFFF","rgba(255,255,255,.68)","#FFFFFF","#FFFFFF"],
+  broadsheet:["Broadsheet","#F3EFE7","#EFEAE0","#16130E","rgba(22,19,14,.72)","#8A2B18","#8A2B18"],
+  phosphor:["Phosphor","#000000","#000000","#FFB000","rgba(255,176,0,.66)","#FFB000","#FFB000"],
+  aurora:["Aurora","#0D1030","#141845","#F4F3FF","rgba(244,243,255,.70)","#8FB8FF","#BFD4FF"],
+  concrete:["Concrete","#C9C7C1","#DEDCD6","#141414","rgba(20,20,20,.74)","#1A38E0","#1A38E0"],
+  velvet:["Velvet","#180A10","#1D0D14","#F6EBDA","rgba(246,235,218,.68)","#D6B26A","#E8CE96"],
+  blueprint:["Blueprint","#062028","#07242D","#DFF7FD","rgba(223,247,253,.66)","#5EEAFF","#5EEAFF"],
+  broadcast:["Broadcast","#0E1A3C","#132250","#FFFFFF","rgba(255,255,255,.72)","#FFD400","#FFD400"],
+  sepia:["Sepia","#241C14","#2B2118","#EFE3D0","rgba(239,227,208,.66)","#C98A3E","#E3B476"],
+  obsidian:["Obsidian","#000000","#050505","#FFFFFF","rgba(255,255,255,.66)","#E50914","#FFFFFF"],
+  halo:["Halo","#141518","#17181C","#F5F6F8","rgba(245,246,248,.62)","#C9D2DE","#FFFFFF"],
+  prestige:["Prestige","#100418","#150620","#F4EDFF","rgba(244,237,255,.66)","#B07BFF","#D9B8FF"],
+  deep_field:["Deep Field","#05132E","#08183A","#EAF3FF","rgba(234,243,255,.68)","#5AC8FA","#9BDCFF"],
+  graphite:["Graphite","#15181C","#1A1E24","#E8EDF2","rgba(232,237,242,.63)","#2DD4BF","#5EEAD4"],
+  vault:["Vault","#0C0C0C","#0C0C0C","#F7F5F0","rgba(247,245,240,.58)","#F7F5F0","#F7F5F0"],
+  spectrum:["Spectrum","#0F0F12","#141418","#F2F2F5","rgba(242,242,245,.64)","#22D3EE","#67E8F9"],
+  verdant:["Verdant","#0A0F0A","#0D140D","#F0F5EC","rgba(240,245,236,.64)","#A3E635","#BEF264"],
+  frost:["Frost","#1C2230","#232A3A","#FFFFFF","rgba(255,255,255,.72)","#FFFFFF","#FFFFFF"],
+  cinemascope:["Cinemascope","#070707","#0A0A0A","#F2E7D5","rgba(242,231,213,.60)","#E8C07A","#F2E7D5"]
+};
+const guide={
+  violence:{label:"Violence & gore",severity:"Moderate",tone:"moderate",count:"3 spoiler-safe notes",items:["Several confrontations include threats, fighting and visible injuries.","Violence is infrequent, but consequences are shown rather than implied.","A late-season confrontation contains stronger detail."]},
+  language:{label:"Profanity",severity:"Mild",tone:"mild",count:"2 spoiler-safe notes",items:["Occasional strong language appears during tense conversations.","Insults and threats are more common than explicit profanity."]},
+  nudity:{label:"Sex & nudity",severity:"None",tone:"none",count:"No reported notes",items:["No notable sex or nudity guidance has been reported for this title."]},
+  substances:{label:"Alcohol, drugs & smoking",severity:"Severe",tone:"severe",count:"4 spoiler-safe notes",items:["Drug manufacture and distribution are central to the story.","Substance use, smoking and alcohol appear across multiple episodes.","The consequences of addiction are depicted directly."]},
+  frightening:{label:"Frightening & intense scenes",severity:"Moderate",tone:"moderate",count:"3 spoiler-safe notes",items:["Sustained threat and moral tension may be unsettling for younger viewers.","Some episodes end with intense or distressing imagery."]}
+};
+const picker=document.querySelector("#themePicker");
+Object.entries(themes).forEach(([id,t])=>picker.add(new Option(t[0],id)));
+function applyTheme(id){const t=themes[id];document.querySelectorAll(".screen").forEach(s=>{s.style.setProperty("--ground",t[1]);s.style.setProperty("--pane",t[2]);s.style.setProperty("--tx",t[3]);s.style.setProperty("--tx2",t[4]);s.style.setProperty("--accent",t[5]);s.style.setProperty("--focus",t[6])});localStorage.setItem("pg-theme",id)}
+const params=new URLSearchParams(location.search);
+const requestedConcept=params.get("concept");
+if(requestedConcept){const target=document.getElementById(requestedConcept);if(target){document.body.classList.add("single-concept");target.classList.add("preview-target")}}
+const requestedTheme=params.get("theme");
+picker.value=themes[requestedTheme]?requestedTheme:(localStorage.getItem("pg-theme")||"signal");applyTheme(picker.value);picker.addEventListener("change",e=>applyTheme(e.target.value));
+const deviceButtons=[...document.querySelectorAll(".device-seg [data-device]")];
+function applyDevice(id){document.documentElement.dataset.device=id;deviceButtons.forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.device===id)));localStorage.setItem("pg-device",id)}
+const requestedDevice=params.get("size");
+applyDevice(["tv","desktop","tablet","phone"].includes(requestedDevice)?requestedDevice:(localStorage.getItem("pg-device")||"desktop"));
+deviceButtons.forEach(button=>button.addEventListener("click",()=>applyDevice(button.dataset.device)));
+function panelMarkup(kind,item){
+  const notes=item.items.map((x,i)=>`<div class="advisory ${i===item.items.length-1?"spoiler":""}">${x}${i===item.items.length-1?` <span class="spoiler-lock">◉ spoiler</span>`:""}</div>`).join("");
+  if(kind==="constellation")return `<h3>${item.label} · ${item.severity}</h3><p class="summary">${item.items[0]}</p>`;
+  if(kind==="spectrum")return `<span class="severity ${item.tone}">${item.severity}</span><span class="summary">${item.items[0]}</span><span class="spoiler-lock">${item.count}</span>`;
+  if(kind==="ledger")return `<b>${item.label}</b><p class="summary">${item.items[0]}</p>`;
+  return `<div class="panel-top"><div><span class="eyebrow">Selected category</span><div class="category-name">${item.label}</div></div><span class="severity ${item.tone}">${item.severity}</span></div><div class="item-list">${notes}</div>`;
+}
+function selectCategory(screen,button){screen.querySelectorAll(".cat-button").forEach(b=>b.classList.remove("active"));button.classList.add("active");screen.querySelector(".guide-panel").innerHTML=panelMarkup(screen.dataset.guide,guide[button.dataset.cat])}
+document.querySelectorAll(".screen").forEach(screen=>{const first=screen.querySelector(".cat-button.active");selectCategory(screen,first);screen.querySelectorAll(".cat-button").forEach(button=>button.addEventListener("click",()=>selectCategory(screen,button)))});
+document.querySelector("#spoilers").addEventListener("change",e=>document.body.classList.toggle("show-spoilers",e.target.checked));
+</script>
+</body>
+</html>

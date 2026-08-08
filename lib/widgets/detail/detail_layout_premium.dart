@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/debrify_image_cache.dart';
 import '../../services/imdb_parents_guide_service.dart';
+import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_episode_model.dart';
 import '../episodes_panel.dart';
 import '../horizontal_mouse_wheel.dart';
@@ -709,10 +710,16 @@ class _DetailPremiumState extends State<DetailPremium> {
             side: BorderSide(color: _t.hair),
           ),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 620, maxHeight: 680),
+            constraints: BoxConstraints(
+              maxWidth: StorageService.parentsGuideStyleCached == 'compass'
+                  ? 900
+                  : 620,
+              maxHeight: 680,
+            ),
             child: _ParentsGuideDialogBody(
               guide: guide,
               television: _m.isTelevision,
+              accent: _m.accent,
               theme: _t,
             ),
           ),
@@ -1357,11 +1364,13 @@ class _MosaicFeatureTileState extends State<_MosaicFeatureTile> {
 class _ParentsGuideDialogBody extends StatefulWidget {
   final ParentsGuideResult guide;
   final bool television;
+  final Color accent;
   final DetailTheme theme;
 
   const _ParentsGuideDialogBody({
     required this.guide,
     required this.television,
+    required this.accent,
     required this.theme,
   });
 
@@ -1415,6 +1424,7 @@ class _ParentsGuideDialogBodyState extends State<_ParentsGuideDialogBody> {
         child: ParentsGuideSection(
           guide: widget.guide,
           tv: widget.television,
+          accent: widget.accent,
           theme: widget.theme,
         ),
       ),

@@ -859,6 +859,29 @@ class StorageService {
     detailThemeCached = normalized;
   }
 
+  static const String _parentsGuideStyleKey = 'parents_guide_style';
+  static const Set<String> kParentsGuideStyles = {'classic', 'compass'};
+
+  /// Synchronous mirror used by the Parents Guide widget. Compass is the new
+  /// default; Classic remains available as a zero-risk fallback in Appearance.
+  static String parentsGuideStyleCached = 'compass';
+
+  static Future<String> getParentsGuideStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_parentsGuideStyleKey);
+    parentsGuideStyleCached = kParentsGuideStyles.contains(value)
+        ? value!
+        : 'compass';
+    return parentsGuideStyleCached;
+  }
+
+  static Future<void> setParentsGuideStyle(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = kParentsGuideStyles.contains(value) ? value : 'compass';
+    await prefs.setString(_parentsGuideStyleKey, normalized);
+    parentsGuideStyleCached = normalized;
+  }
+
   static const String _iptvStyleKey = 'iptv_style';
   static const Set<String> _iptvStyles = {'command', 'edition', 'console'};
 

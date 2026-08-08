@@ -50,6 +50,7 @@ import 'settings/launch_animation_page.dart';
 import '../widgets/launch/launch_ident.dart';
 import 'settings/detail_page_style_page.dart';
 import 'settings/detail_theme_page.dart';
+import 'settings/parents_guide_style_page.dart';
 import 'settings/player_guide_style_page.dart';
 import 'settings/tv_home_style_page.dart';
 import 'settings/tv_render_quality_page.dart';
@@ -190,6 +191,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _playerGuideStyle = 'classic';
   String _detailPageStyle = 'classic';
   String _detailTheme = 'signal';
+  String _parentsGuideStyle = 'compass';
   String _phoneNavStyle = 'classic';
   String _textBrightness = 'bright';
   String _launchAnimation = 'horizon';
@@ -270,6 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getDetailPageStyle(),
       StorageService.getTvRenderQuality(),
       StorageService.getDetailTheme(),
+      StorageService.getParentsGuideStyle(),
     ]);
 
     if (!mounted) return;
@@ -305,6 +308,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final detailPageStyle = results[28] as String;
     final tvRenderQuality = results[29] as TvRenderQuality;
     final detailTheme = results[30] as String;
+    final parentsGuideStyle = results[31] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -449,6 +453,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _launchAnimation = launchAnimation;
     _detailPageStyle = detailPageStyle;
     _detailTheme = detailTheme;
+    _parentsGuideStyle = parentsGuideStyle;
 
     setState(() {});
 
@@ -756,6 +761,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenDetailPageStyle: _openDetailPageStylePage,
       detailThemeLabel: detailThemeLabel(_detailTheme),
       onOpenDetailTheme: _openDetailThemePage,
+      parentsGuideStyleLabel: parentsGuideStyleLabel(_parentsGuideStyle),
+      onOpenParentsGuideStyle: _openParentsGuideStylePage,
       onOpenRecordings: _openRecordings,
       onOpenIptvSettings: _openIptvSettings,
       showSupportDonation: _supportDonation.hasProviders,
@@ -830,6 +837,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenDetailPageStyle: _openDetailPageStylePage,
       detailThemeLabel: detailThemeLabel(_detailTheme),
       onOpenDetailTheme: _openDetailThemePage,
+      parentsGuideStyleLabel: parentsGuideStyleLabel(_parentsGuideStyle),
+      onOpenParentsGuideStyle: _openParentsGuideStylePage,
       phoneNavStyleLabel: _phoneNavStyle == 'floating'
           ? 'Floating button'
           : 'Classic bar',
@@ -1249,6 +1258,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'concrete','velvet','blueprint','broadcast','sepia','obsidian','halo',
           'prestige','deep field','graphite','vault','spectrum','verdant',
           'frost','cinemascope','gold',
+        ],
+      ),
+      nav(
+        SettingsRows.parentsGuideStyle,
+        'Appearance',
+        _openParentsGuideStylePage,
+        subtitle: parentsGuideStyleLabel(_parentsGuideStyle),
+        keywords: const [
+          'parents',
+          'parental',
+          'guide',
+          'advisory',
+          'content rating',
+          'severity',
+          'compass',
+          'classic',
+          'family',
         ],
       ),
       // Ungated: the details page opens on every platform.
@@ -3795,6 +3821,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<void> _openParentsGuideStylePage() async {
+    await pushSettingsPage(context, const ParentsGuideStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getParentsGuideStyle();
+    if (!mounted) return;
+    setState(() {
+      _parentsGuideStyle = style;
+    });
+  }
+
   /// Same contract as [_openTvHomeStyle], for the text brightness picker.
   Future<void> _openTextBrightnessPage() async {
     await pushSettingsPage(context, const TextBrightnessPage());
@@ -4040,6 +4076,8 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenDetailPageStyle;
   final String detailThemeLabel;
   final Future<void> Function() onOpenDetailTheme;
+  final String parentsGuideStyleLabel;
+  final Future<void> Function() onOpenParentsGuideStyle;
   final String phoneNavStyleLabel;
 
   const _SettingsLayout({
@@ -4090,6 +4128,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenDetailPageStyle,
     required this.detailThemeLabel,
     required this.onOpenDetailTheme,
+    required this.parentsGuideStyleLabel,
+    required this.onOpenParentsGuideStyle,
     required this.phoneNavStyleLabel,
   });
 
@@ -4169,6 +4209,11 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.detailTheme,
                       subtitle: detailThemeLabel,
                       onTap: onOpenDetailTheme,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.parentsGuideStyle,
+                      subtitle: parentsGuideStyleLabel,
+                      onTap: onOpenParentsGuideStyle,
                     ),
                     // Phone/small-window chrome — TVs navigate by sidebar
                     // and never read the style.
