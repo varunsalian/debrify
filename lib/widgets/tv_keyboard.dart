@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../utils/platform_util.dart';
 import 'package:flutter/services.dart';
 
 import '../utils/tv_keys.dart';
@@ -96,7 +98,12 @@ final List<List<TvKey>> _symbolPage = [
 /// act on the whole field, unlike everything to their left.
 List<TvKey> _actionRow(int page, String submitLabel, bool voice) => [
   TvKey.action(TvKeyAction.page, label: page == 0 ? '?123' : 'ABC', flex: 3),
-  TvKey.action(TvKeyAction.systemIme, icon: Icons.smartphone_rounded, flex: 3),
+  // Hidden on tvOS: handing the session to Apple's keyboard is a one-way trip
+  // there, because that keyboard never returns its submit action to Dart —
+  // which is the very reason this in-app keyboard is enabled on the platform.
+  // The key would strand the user in a field they cannot complete.
+  if (!PlatformUtil.isTvOS)
+    TvKey.action(TvKeyAction.systemIme, icon: Icons.smartphone_rounded, flex: 3),
   if (voice)
     TvKey.action(TvKeyAction.voice, icon: Icons.mic_rounded, flex: 3),
   TvKey.action(TvKeyAction.space, icon: Icons.space_bar_rounded, flex: voice ? 4 : 5),

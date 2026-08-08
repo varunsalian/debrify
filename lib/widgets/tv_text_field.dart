@@ -281,8 +281,16 @@ class TvTextFieldState extends State<TvTextField> {
   /// the focus-loss listener doesn't read it as "editing was abandoned".
   bool _imeSwitch = false;
 
+  /// Apple TV takes this path too.
+  ///
+  /// It was Android-TV-only on the reasoning that tvOS has a real system
+  /// keyboard — it does, but on the flutter-tvos fork that keyboard never
+  /// delivers its submit action back to Dart, so `onSubmitted` never fires and
+  /// every field on the platform is a dead end: text goes in, nothing happens.
+  /// The in-app keyboard sidesteps the platform IME entirely, which is the
+  /// same reason it exists on Android TV.
   bool get _tvShell =>
-      PlatformUtil.isAndroidTvCached &&
+      PlatformUtil.isTelevision &&
       StorageService.tvKeyboardEnabledCached &&
       widget.enabled;
 
@@ -837,6 +845,7 @@ class TvTextFieldState extends State<TvTextField> {
     required ValueChanged<String>? onSubmitted,
     bool autofocus = false,
     bool enabled = true,
+    bool readOnly = false,
     GestureTapCallback? onTap,
   }) {
     if (widget.validator != null) {
@@ -851,6 +860,7 @@ class TvTextFieldState extends State<TvTextField> {
         textCapitalization: widget.textCapitalization,
         keyboardType: keyboardType,
         enabled: enabled,
+        readOnly: readOnly,
         obscureText: widget.obscureText,
         cursorColor: widget.cursorColor,
         inputFormatters: widget.inputFormatters,
@@ -872,6 +882,7 @@ class TvTextFieldState extends State<TvTextField> {
       textCapitalization: widget.textCapitalization,
       keyboardType: keyboardType,
       enabled: enabled,
+      readOnly: readOnly,
       obscureText: widget.obscureText,
       cursorColor: widget.cursorColor,
       inputFormatters: widget.inputFormatters,
@@ -907,7 +918,7 @@ class TvTextFieldState extends State<TvTextField> {
   /// leave only from the text edges, via a Shortcuts override because the
   /// editable otherwise consumes edge presses silently. Never active off TV.
   Widget _wrapPassthroughArrows(Widget field) {
-    if (!PlatformUtil.isAndroidTvCached) return field;
+    if (!PlatformUtil.isTelevision) return field;
     if (widget.onLeftArrow != null || widget.onRightArrow != null) {
       field = Shortcuts(
         shortcuts: const <ShortcutActivator, Intent>{
@@ -981,6 +992,19 @@ class TvTextFieldState extends State<TvTextField> {
       keyboardType: _useSystemIme
           ? (widget.keyboardType ?? TextInputType.text)
           : TextInputType.none,
+      // tvOS presents its fullscreen keyboard for ANY focused text field, and
+      // `TextInputType.none` does not stop it the way it does on Android — so
+      // pressing a key on the Debrify keyboard summoned Apple's on top of it.
+      // `readOnly` is the stronger statement: Flutter never opens a platform
+      // text-input connection at all.
+      //
+      // The trade, stated honestly: without that connection there is no
+      // system caret and a paired Bluetooth keyboard cannot type into the
+      // field either — the Debrify keys write to the controller directly, so
+      // they are unaffected. On tvOS that is the better half of the deal,
+      // because the alternative is Apple's keyboard covering ours on every
+      // keypress. Lifted for the explicit hand-off below.
+      readOnly: PlatformUtil.isTvOS && !_useSystemIme,
       onSubmitted: _onFieldSubmitted,
       // During a system-IME hand-off a tap belongs to the stock field (it
       // re-shows the IME); otherwise it starts a Debrify-keyboard session.

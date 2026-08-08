@@ -35,12 +35,17 @@ jobs:
       uses: actions/setup-java@v4
       with:
         distribution: 'zulu'
-        java-version: '17'
+        # 21, not 17: AGP 8.11.1 / Kotlin 2.2.20 / Gradle 8.14 came in with the
+        # Flutter 3.44 upgrade, and 21 is the JDK the release APK was actually
+        # verified on locally (Android Studio's JBR). 17 is still within AGP's
+        # supported range, so this is alignment with what was tested rather
+        # than a hard requirement.
+        java-version: '21'
 
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.32.8'
+        flutter-version: '3.44.8'
         channel: 'stable'
 
     - name: Cache dependencies
@@ -102,7 +107,7 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.32.8'
+        flutter-version: '3.44.8'
         channel: 'stable'
 
     - name: Get dependencies
@@ -174,7 +179,7 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.32.8'
+        flutter-version: '3.44.8'
         channel: 'stable'
 
     - name: Enable Windows desktop
@@ -220,7 +225,7 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.32.8'
+        flutter-version: '3.44.8'
         channel: 'stable'
 
     - name: Get dependencies
@@ -312,7 +317,7 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.32.8'
+        flutter-version: '3.44.8'
         channel: 'stable'
 
     - name: Enable Linux desktop
@@ -402,7 +407,7 @@ jobs:
       run: |
         # subosito/flutter-action doesn't support linux-arm64, install manually
         # Using stable tag - see https://github.com/subosito/flutter-action/issues/345
-        git clone --depth 1 --branch 3.38.9 https://github.com/flutter/flutter.git $RUNNER_TEMP/flutter
+        git clone --depth 1 --branch 3.44.8 https://github.com/flutter/flutter.git $RUNNER_TEMP/flutter
         echo "$RUNNER_TEMP/flutter/bin" >> $GITHUB_PATH
 
     - name: Precache Flutter

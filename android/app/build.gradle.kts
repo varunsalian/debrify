@@ -20,6 +20,19 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
 
+    // Flutter 3.44 flipped the packaging default to extractNativeLibs=false,
+    // which stores the .so files uncompressed. That is Google's recommendation
+    // — mmap'd straight from the APK, so LESS space on the device and a faster
+    // start — but it nearly doubles the DOWNLOAD (85MB -> 160MB universal),
+    // and Debrify ships its APK by hand through GitHub, where the download is
+    // the number users see. Keep the pre-upgrade behaviour until that trade is
+    // deliberately made; the alternative worth considering is --split-per-abi.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11

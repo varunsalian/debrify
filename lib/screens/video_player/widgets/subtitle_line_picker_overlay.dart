@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+
+import 'tv_tappable.dart';
 import '../services/subtitle_cue_parser.dart';
 import '../services/subtitle_settings_service.dart';
 import '../constants/color_constants.dart';
@@ -225,6 +227,7 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
           ),
           const Spacer(),
           _headerButton(
+            autofocus: true,
             icon: Icons.tune_rounded,
             label: _showManualSlider ? 'Hide Slider' : 'Slider',
             onTap: () => setState(() => _showManualSlider = !_showManualSlider),
@@ -252,8 +255,10 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
     required String label,
     required VoidCallback onTap,
     bool accent = false,
+    bool autofocus = false,
   }) {
-    return GestureDetector(
+    return TvTappable(
+      autofocus: autofocus,
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -329,7 +334,7 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
               ),
               const Spacer(),
               if (_highlightedIndex >= 0)
-                GestureDetector(
+                TvTappable(
                   onTap: () => _scrollToIndex(_highlightedIndex),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -377,7 +382,7 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
               final isCurrent = index == _highlightedIndex;
               final isPast = index < _highlightedIndex;
 
-              return GestureDetector(
+              return TvTappable(
                 onTap: () => _onCueTapped(index),
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
@@ -462,7 +467,7 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
       ),
       child: Row(
         children: [
-          GestureDetector(
+          TvTappable(
             onTap: () => _onSliderChanged(_appliedOffsetMs - step),
             child: Container(
               width: 32,
@@ -493,7 +498,7 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
               ),
             ),
           ),
-          GestureDetector(
+          TvTappable(
             onTap: () => _onSliderChanged(_appliedOffsetMs + step),
             child: Container(
               width: 32,

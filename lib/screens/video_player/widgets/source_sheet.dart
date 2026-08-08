@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
@@ -100,6 +101,14 @@ class _SourceSheetState extends State<SourceSheet>
   @override
   void initState() {
     super.initState();
+
+    // A television opens this over the player, whose root Focus already holds
+    // focus in this scope — so `autofocus: true` on the KeyboardListener never
+    // wins and the sheet renders its virtual focus while receiving no keys at
+    // all (the DPAD appears dead). Claim focus explicitly once mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _keyboardFocusNode.requestFocus();
+    });
 
     _rebuildTabs();
     _autoSelectTab();
@@ -420,6 +429,7 @@ class _SourceSheetState extends State<SourceSheet>
 
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
+      TvOverlayBack.mark();
       widget.onClose();
       return;
     }
@@ -463,9 +473,17 @@ class _SourceSheetState extends State<SourceSheet>
   void _handleSearchKeys(KeyEvent event) {
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       _searchFocusNode.unfocus();
+      // Reclaim the sheet's key listener: unfocusing clears the scope's
+      // focused child, and without this the list paints a focused row but
+      // stops receiving DPAD keys entirely.
+      _keyboardFocusNode.requestFocus();
       setState(() => _focusZone = _FocusZone.tabs);
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _searchFocusNode.unfocus();
+      // Reclaim the sheet's key listener: unfocusing clears the scope's
+      // focused child, and without this the list paints a focused row but
+      // stops receiving DPAD keys entirely.
+      _keyboardFocusNode.requestFocus();
       setState(() => _focusZone = _FocusZone.sources);
     }
   }

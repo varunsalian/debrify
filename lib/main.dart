@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'dart:math';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart';
@@ -8,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'utils/app_version_info.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -176,7 +174,9 @@ Future<void> main() async {
   // bringing the port up, are simply invisible on real hardware. Forward
   // debugPrint (which the framework's own error reporting also routes through)
   // to a native channel that NSLogs it, where `devicectl --console` can see it.
-  if (PlatformUtil.isTvOS) {
+  // Debug/profile only: in release this would funnel every debugPrint in the
+  // app — tokens and URLs among them — into the device log.
+  if (PlatformUtil.isTvOS && !kReleaseMode) {
     const channel = MethodChannel('debrify/tvlog');
     final original = debugPrint;
     debugPrint = (String? message, {int? wrapWidth}) {
@@ -537,13 +537,18 @@ class _DebrifyAppState extends State<DebrifyApp> {
         );
 
         final mq = MediaQuery.of(context).copyWith(
-          // TV: No text scaling (1.0) to prevent zoom issues
-          // Mobile: Respect accessibility but cap at 1.3 for layout consistency
-          textScaler: TextScaler.linear(
-            isTv
-                ? 1.0
-                : min(MediaQuery.textScalerOf(context).scale(1.0), 1.3),
-          ),
+          // TV: no text scaling at all — a 10-foot layout is already sized for
+          // the room, and scaling it overflows rows.
+          //
+          // Mobile: respect accessibility, capped at 1.3 so layouts hold. This
+          // CLAMPS the platform's own scaler rather than sampling it once at
+          // size 1.0 and rebuilding a linear one: Android's scaler is
+          // non-linear (it grows small text more than headings), so flattening
+          // it to a single multiplier threw that curve away and mis-sized
+          // large text for anyone using a non-default font size.
+          textScaler: isTv
+              ? TextScaler.noScaling
+              : MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3),
         );
 
         // Apple TV hands Flutter a devicePixelRatio of 1.0, so the logical
@@ -2801,7 +2806,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       children: [
         // Main app content
         PopScope(
-          canPop: false,
+          // Apple TV at the Home tab lets the press through, so tvOS can do
+          // what Menu-at-root means there: return to its Home screen. Every
+          // other platform and every other tab keeps the interception, which
+          // is what drives folder-back, tab-walk and double-back-to-exit.
+          canPop: PlatformUtil.isTvOS &&
+              _selectedIndex == 15 &&
+              !_showIptvStartupOverlay,
           onPopInvoked: (bool didPop) async {
             if (didPop) return;
 
@@ -2832,7 +2843,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
             // there, so two quick presses anywhere closed the whole app,
             // which read as "back randomly exits". Only Home arms
             // double-back-to-exit.
-            if (!_isAndroidTv && _selectedIndex != 15) {
+            // Apple TV takes this path too. Menu on tvOS means "go back", and
+            // its root is the Home tab — without this, BACK from any other tab
+            // did nothing at all, because the Android-TV branch below skips the
+            // walk and the old `Platform.isIOS` guard (true on tvOS) then
+            // swallowed the press. Android TV keeps its sidebar contract.
+            if ((!_isAndroidTv || PlatformUtil.isTvOS) && _selectedIndex != 15) {
               final visible = _computeVisibleNavIndices();
               if (visible.contains(15)) {
                 _onItemTapped(15);
@@ -2848,11 +2864,24 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
               return; // Do nothing
             }
 
-            // iOS: Don't force exit - iOS apps don't have back buttons
-            // Users exit by swiping up or using home button
-            if (Platform.isIOS) {
+            // iPhone / iPad: don't force exit — there is no back button, and
+            // users leave by swiping up. NOT tvOS: `Platform.isIOS` is true
+            // there, and this guard was why BACK did nothing on Apple TV.
+            if (PlatformUtil.isIosMobile) {
               return; // Do nothing
             }
+
+            // Apple TV: nothing to do here, and deliberately so.
+            //
+            // `SystemNavigator.pop()` does NOT exit a tvOS app — the Darwin
+            // implementation only pops a navigation controller, and this app
+            // installs its FlutterViewController as the window root. A
+            // double-press "exit" would promise something it cannot deliver.
+            // What DOES work is not consuming the press: tvOS returns to its
+            // own Home screen when an app leaves Menu unhandled at its root,
+            // which is the platform's convention anyway (users leave via Menu
+            // or the TV button, not by killing the app). See the canPop below.
+            if (PlatformUtil.isTvOS) return;
 
             // Android (both mobile and TV): Double back press to exit
             if (Platform.isAndroid) {

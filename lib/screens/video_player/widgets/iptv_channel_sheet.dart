@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 import '../../../services/android_native_downloader.dart';
 import '../../../services/desktop_schedule_service.dart';
@@ -92,14 +93,14 @@ class IptvChannelSheet extends StatefulWidget {
   });
 
   @override
-  State<IptvChannelSheet> createState() => _IptvChannelSheetState();
+  State<IptvChannelSheet> createState() => IptvChannelSheetState();
 }
 
 enum _FocusZone { search, channels }
 
 enum _CompactPane { channels, schedule }
 
-class _IptvChannelSheetState extends State<IptvChannelSheet>
+class IptvChannelSheetState extends State<IptvChannelSheet>
     with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -167,6 +168,14 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   @override
   void initState() {
     super.initState();
+
+    // A television opens this over the player, whose root Focus already holds
+    // focus in this scope — so `autofocus: true` on the KeyboardListener never
+    // wins and the sheet renders its virtual focus while receiving no keys at
+    // all (the DPAD appears dead). Claim focus explicitly once mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _keyboardFocusNode.requestFocus();
+    });
 
     _channels = List.from(widget.channels);
     _filteredChannels = List.from(_channels);
@@ -595,14 +604,34 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
 
   // ─── Keyboard / DPAD ────────────────────────────────────────────────
 
+  /// The BACK contract, callable by the host.
+  ///
+  /// On tvOS the Menu press never reaches this widget — it arrives at the
+  /// player's PopScope — so without this the host would close the whole guide
+  /// from the schedule pane and skip [_handleClose]'s category restoration.
+  /// Returns true when it consumed the press.
+  bool handleHostBack() {
+    if (_compactPane == _CompactPane.schedule) {
+      setState(() => _compactPane = _CompactPane.channels);
+      return true;
+    }
+    _handleClose();
+    return true;
+  }
+
   void _handleKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return;
 
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
+      // Signal the host ONLY when this press actually closed the sheet. A
+      // press that merely walks the schedule pane back leaves the sheet open,
+      // so the host never consumes the mark — and a stale mark would later
+      // swallow an unrelated BACK.
       if (_compactPane == _CompactPane.schedule) {
         setState(() => _compactPane = _CompactPane.channels);
       } else {
+        TvOverlayBack.mark();
         _handleClose();
       }
       return;
@@ -621,11 +650,23 @@ class _IptvChannelSheetState extends State<IptvChannelSheet>
   void _handleSearchKeys(KeyEvent event) {
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _searchFocusNode.unfocus();
+      // Reclaim the sheet's key listener: unfocusing clears the scope's
+      // focused child, and without this the list paints a focused row but
+      // stops receiving DPAD keys entirely.
+      _keyboardFocusNode.requestFocus();
       setState(() => _focusZone = _FocusZone.channels);
     }
   }
 
   void _handleChannelKeys(KeyEvent event) {
+    if (_compactPane == _CompactPane.schedule) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        setState(() => _compactPane = _CompactPane.channels);
+      }
+      // Everything else is swallowed: moving the channel selection from here
+      // would rebuild the very schedule being read.
+      return;
+    }
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       if (_focusedIndex > 0) {
         setState(() {
@@ -1954,7 +1995,7 @@ class _GuideMenuButton extends StatelessWidget {
 /// channel rebuilt differently in the two places stops matching itself, and
 /// the playing row can no longer be found in its own list.
 IptvChannel iptvChannelFromBrowsePayload(Map<String, dynamic> raw) =>
-    _IptvChannelSheetState._channelFromMap(raw);
+    IptvChannelSheetState._channelFromMap(raw);
 
 /// A dropdown-looking button that opens a picker rather than a popup menu —
 /// for lists too long to sit in a [PopupMenuButton].

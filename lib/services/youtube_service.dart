@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import '../utils/platform_util.dart';
 import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -329,9 +331,16 @@ class YoutubeService {
   static final Map<String, Future<YoutubeResolvedStreams?>> _resolveInFlight = {};
 
   /// Resolution cap for ambient backdrop trailers (Home hero, Discover rail).
-  /// 720p: crisp in the hero region (480p read soft once the edge feathers came
-  /// off) while still lighter than a 1080p decode+composite on weak TV silicon.
-  static const int ambientTrailerMaxHeight = 720;
+  ///
+  /// 720p on Android TV: crisp in the hero region (480p read soft once the edge
+  /// feathers came off) while still lighter than a 1080p decode+composite on
+  /// weak TV silicon — the boxes this was tuned against.
+  ///
+  /// 1080p on Apple TV: an A15 with hardware HEVC/H.264 is not that hardware,
+  /// and the hero is full-bleed on a 1080p surface, so a 720p stream is being
+  /// upscaled across the whole screen. This is the one place the platform
+  /// difference is worth spending decode on.
+  static int get ambientTrailerMaxHeight => PlatformUtil.isTvOS ? 1080 : 720;
 
   /// Resolve a YouTube [videoId] into playable/downloadable stream URLs.
   ///

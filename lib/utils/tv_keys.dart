@@ -26,3 +26,28 @@ bool isActivateKey(LogicalKeyboardKey key) =>
 /// space through ActivateIntent, so keyboard users keep it.
 bool isActivateOrSpaceKey(LogicalKeyboardKey key) =>
     isActivateKey(key) || key == LogicalKeyboardKey.space;
+
+
+/// A one-shot signal that an in-player overlay closed itself in response to a
+/// BACK/ESCAPE key.
+///
+/// Those overlays listen through a `KeyboardListener`, which cannot consume an
+/// event — so the same press bubbles on to the player, which would then pop the
+/// whole screen. The player consumes this signal to ignore that tail. Scoped to
+/// key-driven closes only: a close by OK, tap or selection must NOT swallow the
+/// user's next deliberate BACK.
+class TvOverlayBack {
+  TvOverlayBack._();
+
+  static bool _pending = false;
+
+  /// Called by an overlay just before it closes itself from a BACK key.
+  static void mark() => _pending = true;
+
+  /// True once, for the press that closed an overlay.
+  static bool consume() {
+    final was = _pending;
+    _pending = false;
+    return was;
+  }
+}

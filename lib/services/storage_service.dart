@@ -550,14 +550,6 @@ class StorageService {
     await prefs.setBool('stremio_addon_hub_enabled', enabled);
   }
 
-  /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
-  /// metadata addon provides one. Exactly ONE ambient-trailer surface exists
-  /// per platform, and this is the non-TV one: OFF on Android TV always (the
-  /// Home hero spotlight owns ambient there — [getHomeHeroTrailerEnabled]),
-  /// default ON everywhere else. The TV case is hard-off rather than a
-  /// default, so a value stored before this split — or by a phone install
-  /// whose prefs were restored onto a TV box — can't switch the detail
-  /// backdrop back on. Settings only offers the toggle off-TV to match.
   /// "Is this a television?" for the ambient-trailer split below.
   ///
   /// The split is by FORM FACTOR, not by OS — Apple TV renders the very same
@@ -568,6 +560,14 @@ class StorageService {
   static Future<bool> _isTelevision() async =>
       await PlatformUtil.isAndroidTV() || PlatformUtil.isTvOS;
 
+  /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
+  /// metadata addon provides one. Exactly ONE ambient-trailer surface exists
+  /// per platform, and this is the non-TV one: OFF on any television always
+  /// (the Home hero spotlight owns ambient there — [getHomeHeroTrailerEnabled]),
+  /// default ON everywhere else. The TV case is hard-off rather than a
+  /// default, so a value stored before this split — or by a phone install
+  /// whose prefs were restored onto a TV box — can't switch the detail
+  /// backdrop back on. Settings only offers the toggle off-TV to match.
   static Future<bool> getDetailTrailerAutoplayEnabled() async {
     if (await _isTelevision()) return false;
     final prefs = await SharedPreferences.getInstance();

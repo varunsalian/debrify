@@ -46,17 +46,6 @@ class AppDelegate: FlutterAppDelegate {
 
         GeneratedPluginRegistrant.register(with: self)
 
-        // TEMPORARY (tvOS bring-up): what the engine is actually rendering into.
-        // Dart's print() goes to stdout in a release build and the device
-        // console only carries NSLog/os_log, so the answer has to come from
-        // here. Remove once the render path is settled.
-        let screen = UIScreen.main
-        NSLog(
-            "[tvOS] screen.bounds=\(screen.bounds) scale=\(screen.scale) "
-                + "nativeBounds=\(screen.nativeBounds) nativeScale=\(screen.nativeScale) "
-                + "flutterView=\(flutterViewController.view.bounds) "
-                + "contentScaleFactor=\(flutterViewController.view.contentScaleFactor)")
-
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
 }

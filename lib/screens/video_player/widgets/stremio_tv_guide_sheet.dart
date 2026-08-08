@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 import '../../../models/torrent.dart';
 import '../../../utils/platform_util.dart';
@@ -84,6 +85,14 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
   @override
   void initState() {
     super.initState();
+
+    // A television opens this over the player, whose root Focus already holds
+    // focus in this scope — so `autofocus: true` on the KeyboardListener never
+    // wins and the sheet renders its virtual focus while receiving no keys at
+    // all (the DPAD appears dead). Claim focus explicitly once mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _keyboardFocusNode.requestFocus();
+    });
 
     _currentChannelId = widget.currentChannelId;
     _parseChannels();
@@ -353,6 +362,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
 
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
+      TvOverlayBack.mark();
       widget.onClose();
       return;
     }
@@ -370,6 +380,10 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
   void _handleSearchKeys(KeyEvent event) {
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _searchFocusNode.unfocus();
+      // Reclaim the sheet's key listener: unfocusing clears the scope's
+      // focused child, and without this the list paints a focused row but
+      // stops receiving DPAD keys entirely.
+      _keyboardFocusNode.requestFocus();
       setState(() => _focusZone = _FocusZone.channels);
     }
   }
