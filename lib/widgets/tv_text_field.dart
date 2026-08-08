@@ -298,9 +298,6 @@ class TvTextFieldState extends State<TvTextField> {
   /// Cancels the Apple TV "editing finished" subscription.
   VoidCallback? _tvosEndEditing;
 
-  /// Text at the moment the platform keyboard opened, so a dismissal that
-  /// changed nothing doesn't fire a submit.
-  String? _tvosTextAtEditStart;
 
   @override
   void initState() {
@@ -340,9 +337,6 @@ class TvTextFieldState extends State<TvTextField> {
   }
 
   void _handleFocusChange() {
-    if (PlatformUtil.isTvOS && _shellNode.hasFocus && !_tvShell) {
-      _tvosTextAtEditStart = widget.controller.text;
-    }
     // Editing must not outlive the editor's focus: if a background focus grab
     // (or a route push) moves focus elsewhere, take the keyboard down instead
     // of leaving a zombie overlay. hasFocus on the shell includes the editor
@@ -458,7 +452,6 @@ class TvTextFieldState extends State<TvTextField> {
     _removeOverlay();
     _kb?.dispose();
     _kb = null;
-    _tvosTextAtEditStart = widget.controller.text;
     setState(() => _useSystemIme = true);
     _imeSwitch = true;
     _editNode.unfocus();
@@ -1002,38 +995,26 @@ class TvTextFieldState extends State<TvTextField> {
   ///   can't submit every mounted field;
   /// * only when the platform keyboard was really in play — with the Debrify
   ///   keyboard on, the field is `readOnly` and never opens a platform
-  ///   session, so this must not fire there;
-  /// * only when the text CHANGED during the session, so backing out of a
-  ///   field you merely looked at stays silent.
+  ///   session, so this must not fire there.
+  ///
+  /// Beyond that it does NOT second-guess the user: see the comment inside.
   void _handleTvosEndEditing() {
     if (!mounted || !PlatformUtil.isTvOS) return;
     final usingPlatformKeyboard = !_tvShell || _useSystemIme;
     if (!usingPlatformKeyboard) return;
     final node = _tvShell ? _editNode : _shellNode;
     if (!node.hasFocus) return;
-    final text = widget.controller.text;
-    final changed = text != _tvosTextAtEditStart;
-    // This notification IS the session boundary, so the baseline moves whether
-    // or not we submit. Updating it only on submit left it stale: tvOS closes
-    // its keyboard without changing Flutter focus, so nothing else would have
-    // re-seeded it before the next session.
-    _tvosTextAtEditStart = text;
-    if (!changed) {
-      // Nothing typed, so nothing to submit — but a hand-off still has to be
-      // closed out, or it stays stuck with the in-app keyboard gone.
-      _endPlatformImeSession();
-      return;
-    }
-    // Deliberately no "text is empty" test. Clearing a field and confirming is
-    // a real submission — it's how you reset a search — and skipping it also
-    // used to leave the baseline behind.
+    // Submit unconditionally — no "did the text change" test.
     //
-    // Route through the normal editor-action path rather than calling the
-    // caller's onSubmitted directly: that is what ends the edit session and
-    // drops _useSystemIme. Without it a hand-off to the platform IME never
-    // came back, because the dismissal produces no Dart focus change to
-    // unwind it.
-    _onFieldSubmitted(text);
+    // That test looked prudent (it stopped a BACK press from submitting when
+    // nothing was typed) but it bought that by breaking the case the fix
+    // exists for: pressing the action key on a PREFILLED or deliberately
+    // unchanged field then did nothing, and neither did submitting the same
+    // search twice. Since the action key and BACK are indistinguishable here,
+    // suppressing one necessarily suppresses the other — and of the two, a
+    // dead action key is a bug while a redundant re-submit of identical text
+    // is merely redundant.
+    _onFieldSubmitted(widget.controller.text);
   }
 
   @override
