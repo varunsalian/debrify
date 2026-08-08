@@ -76,6 +76,28 @@ fetch_one() {
     return 1
   fi
 
+  # CocoaPods derives a bare archive's link flag from LibraryPath by truncating
+  # at the first dot, so upstream's `libluajit-5.1.a` becomes `-lluajit-5` and
+  # the link dies with "library 'luajit-5' not found". Rename the archive and
+  # the plist that names it so the derived flag is `-lluajit51` — which is what
+  # the podspec's OTHER_LDFLAGS asks for.
+  #
+  # This used to be a by-hand fix applied to one machine's copy, which is
+  # exactly why the first CI run failed: a pristine download has never been
+  # patched. Do it here so a fresh clone and CI both get it.
+  if [[ "$name" == "Libluajit-5.1" ]]; then
+    for a in "$fw"/*/libluajit-5.1.a; do
+      [[ -f "$a" ]] && mv "$a" "${a%/*}/libluajit51.a"
+    done
+    sed -i '' 's|libluajit-5\.1\.a|libluajit51.a|g' "$fw/Info.plist"
+    # Fail loudly if upstream ever renames it — silently shipping the old name
+    # reproduces the exact link error this exists to prevent.
+    if grep -q 'libluajit-5\.1\.a' "$fw/Info.plist"; then
+      echo "error: $name — luajit rename did not take" >&2
+      return 1
+    fi
+  fi
+
   rm -rf "$DEST/$name.xcframework"
   mv "$fw" "$DEST/$name.xcframework"
   rm -rf "$stage" "$zip"
