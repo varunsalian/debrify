@@ -1,4 +1,4 @@
-<title>Merged details page — six layouts</title>
+<title>Merged details page — eleven layouts</title>
 <style>
 /* ══ Page chrome (theme-aware) ═══════════════════════════════════════════ */
 :root{
@@ -497,6 +497,107 @@ h1{font-size:clamp(30px,4.4vw,46px);line-height:1.03;letter-spacing:-.035em;font
   .con .grid{grid-template-columns:repeat(2,1fr)}
 }
 
+/* ─────────────────────────  VII · VISTA  ────────────────────────────── */
+.vis{position:absolute;inset:0;overflow:hidden;background:#07080b}
+.vis>.art{filter:saturate(.9) contrast(1.04);transform:scale(1.01)}
+.vis>.scrim{background:linear-gradient(90deg,rgba(5,6,9,.96) 0%,rgba(5,6,9,.72) 35%,rgba(5,6,9,.08) 74%),linear-gradient(to top,#07080b 0%,transparent 48%)}
+.vis .vtop{position:absolute;left:34px;right:34px;top:18px;display:flex;align-items:center;gap:12px;z-index:2}
+.vis .brandline{font-size:9px;font-weight:800;letter-spacing:.24em;text-transform:uppercase;color:rgba(255,255,255,.62)}
+.vis .vguide{display:flex;align-items:center;gap:7px;border:1px solid rgba(255,255,255,.15);background:rgba(6,7,10,.42);border-radius:999px;padding:5px 10px;font-size:9px;font-weight:750;color:rgba(255,255,255,.78)}
+.vis .vguide b{font-size:8px;letter-spacing:.08em;color:var(--gold)}
+.vis .vid{position:absolute;left:38px;top:30%;transform:translateY(-50%);width:42%;display:flex;flex-direction:column;gap:11px;z-index:2}
+.vis .logo{height:72px;max-width:330px}
+.vis .vdeck{position:absolute;left:28px;right:28px;bottom:22px;height:176px;padding:13px;border:1px solid rgba(255,255,255,.14);border-radius:22px;background:linear-gradient(120deg,rgba(15,17,22,.78),rgba(18,19,24,.46));backdrop-filter:blur(22px) saturate(1.25);box-shadow:0 24px 70px rgba(0,0,0,.42);display:grid;grid-template-columns:280px 1fr;gap:15px;z-index:3}
+.vis .vnow{border-radius:14px;overflow:hidden;position:relative;background:#15171c}
+.vis .vnow .thumb{position:absolute;inset:0;border-radius:14px}
+.vis .vnow .thumb img{filter:saturate(.9)}
+.vis .vnow .wash{position:absolute;inset:0;background:linear-gradient(to top,rgba(4,5,8,.96),rgba(4,5,8,.02) 72%)}
+.vis .vnow .copy{position:absolute;left:14px;right:14px;bottom:12px;display:flex;flex-direction:column;gap:3px}
+.vis .vnow .copy em{font-style:normal;font-size:8px;font-weight:850;letter-spacing:.18em;color:var(--gold)}
+.vis .vnow .copy b{font-size:15px}
+.vis .vrail{min-width:0;display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.vis .vrailhead{display:flex;align-items:center;gap:12px;padding:0 3px}
+.vis .vcards{display:flex;gap:10px;overflow:auto;scrollbar-width:none;padding:4px 2px 8px}
+.vis .vcards::-webkit-scrollbar{display:none}
+.vis .vcard{width:142px;flex:none;border-radius:11px;transition:transform .2s}
+.vis .vcard .thumb{width:100%;aspect-ratio:16/9;border-radius:9px}
+.vis .vcard .cap{display:flex;gap:6px;padding:6px 2px 0;font-size:10px;color:var(--tx2)}
+.vis .vcard.foc{transform:translateY(-4px)}
+@container (max-width:900px){
+  .vis .vid{left:24px;width:55%}.vis .logo{height:58px}.vis .vtop{left:24px;right:24px}
+  .vis .vdeck{left:18px;right:18px;bottom:18px;grid-template-columns:220px 1fr;height:162px}
+}
+@container (orientation:portrait){
+  .vis>.art{height:48%;bottom:auto}.vis>.scrim{background:linear-gradient(to top,#07080b 50%,rgba(7,8,11,.38) 70%,rgba(7,8,11,.08))}
+  .vis .vid{left:22px;right:22px;top:25%;width:auto}.vis .vdeck{top:50%;bottom:18px;height:auto;grid-template-columns:1fr;grid-template-rows:190px 1fr;overflow:hidden}
+  .vis .vcards{flex-wrap:wrap;align-content:flex-start}.vis .vcard{width:calc(33.333% - 7px)}
+}
+@container (max-width:560px){
+  .vis .vtop{left:16px;right:16px}.vis .vtop .brandline,.vis .vtop>.cert{display:none}.vis .vguide{margin-left:auto;white-space:nowrap}.vis .vid{left:18px;right:18px;top:22%;gap:8px}.vis .logo{height:46px}.vis .vid .syn,.vis .vid .gen{display:none}
+  .vis .vdeck{left:12px;right:12px;bottom:12px;border-radius:18px;padding:10px;grid-template-rows:158px 1fr}.vis .vcard{width:calc(50% - 5px)}
+}
+
+/* ─────────────────────────  VIII · MONOLITH  ────────────────────────── */
+.mon{position:absolute;inset:0;display:grid;grid-template-columns:34% 66%;overflow:hidden;background:#09090b}
+.mon .mhero{position:relative;overflow:hidden}
+.mon .mhero>.art{object-position:center 20%;filter:saturate(.78) contrast(1.08)}
+.mon .mhero>.scrim{background:linear-gradient(to top,#09090b 0%,transparent 64%),linear-gradient(90deg,transparent 65%,#09090b 100%)}
+.mon .mposter{position:absolute;left:50%;top:48%;transform:translate(-50%,-50%);width:48%;aspect-ratio:2/3;border-radius:13px;overflow:hidden;box-shadow:0 32px 70px rgba(0,0,0,.66),0 0 0 1px rgba(255,255,255,.16)}
+.mon .mposter img{width:100%;height:100%;object-fit:cover}
+.mon .mhero .stamp{position:absolute;left:24px;bottom:20px;font-size:8px;font-weight:850;letter-spacing:.28em;text-transform:uppercase;color:rgba(255,255,255,.48)}
+.mon .mdeck{position:relative;padding:26px 30px 22px 12px;display:flex;flex-direction:column;gap:14px;min-width:0;background:radial-gradient(circle at 30% 10%,color-mix(in srgb,var(--ac) 16%,transparent),transparent 36%),#09090b}
+.mon .mhead{display:flex;align-items:flex-start;gap:16px}.mon .mhead .copy{display:flex;flex-direction:column;gap:8px;min-width:0}.mon .ttl{font-size:36px}.mon .mhead .backb{position:static;flex:none}
+.mon .mglass{flex:1;min-height:0;border-radius:18px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(145deg,rgba(255,255,255,.075),rgba(255,255,255,.025));overflow:hidden;display:flex;flex-direction:column;box-shadow:inset 0 1px rgba(255,255,255,.06)}
+.mon .mnav{display:flex;align-items:center;gap:18px;padding:12px 16px;border-bottom:1px solid var(--hair)}
+.mon .mnav b{font-size:10px;letter-spacing:.12em;text-transform:uppercase}.mon .mnav span{font-size:10px;color:var(--tx3)}
+.mon .mparent{border-left:1px solid var(--hair);padding-left:15px;color:var(--tx2)!important;white-space:nowrap}.mon .mparent b{margin-left:5px;color:var(--gold);letter-spacing:0;text-transform:none}
+.mon .mlist{padding:8px;overflow:auto;scrollbar-width:none}.mon .mlist::-webkit-scrollbar{display:none}
+.mon .mrow{display:grid;grid-template-columns:36px 112px 1fr auto;gap:11px;align-items:center;padding:7px;border-radius:11px}.mon .mrow .num{font-size:17px;font-weight:300;color:var(--tx3)}.mon .mrow .thumb{width:112px;aspect-ratio:16/9}.mon .mrow .copy{min-width:0}.mon .mrow .copy b{display:block;font-size:12.5px}.mon .mrow .copy span{display:block;font-size:10.5px;color:var(--tx3);margin-top:3px}.mon .mrow .state{font-size:10px;color:var(--gold)}
+@container (max-width:900px){.mon{grid-template-columns:31% 69%}.mon .mdeck{padding:20px 20px 18px 8px}.mon .ttl{font-size:29px}.mon .mrow{grid-template-columns:28px 90px 1fr auto}.mon .mrow .thumb{width:90px}}
+@container (orientation:portrait){.mon{grid-template-columns:1fr;grid-template-rows:38% 62%}.mon .mhero>.scrim{background:linear-gradient(to top,#09090b 0%,transparent 70%)}.mon .mposter{width:22%;top:50%;left:18%}.mon .mhero .stamp{left:32%;bottom:18px}.mon .mdeck{padding:0 20px 18px}.mon .mhead{margin-top:-12px;z-index:2}.mon .mglass{border-radius:16px}}
+@container (max-width:560px){.mon{grid-template-rows:32% 68%}.mon .mposter{width:28%;left:22%}.mon .mhero .stamp{display:none}.mon .mdeck{padding:0 14px 14px}.mon .ttl{font-size:25px}.mon .mhead .syn{display:none}.mon .mrow{grid-template-columns:24px 78px 1fr}.mon .mrow .thumb{width:78px}.mon .mrow .state{display:none}}
+
+/* ─────────────────────────  IX · MOSAIC  ────────────────────────────── */
+.mos{position:absolute;inset:0;padding:18px;background:radial-gradient(circle at 80% 0%,#29210d 0%,#101115 34%,#07080a 76%);display:grid;grid-template-columns:1.45fr .8fr;grid-template-rows:1fr 116px;gap:12px;overflow:hidden}
+.mos .tile{position:relative;border-radius:18px;border:1px solid rgba(255,255,255,.1);overflow:hidden;background:rgba(255,255,255,.045);box-shadow:0 18px 45px rgba(0,0,0,.23)}
+.mos .hero{grid-row:1/2}.mos .hero>.scrim{background:linear-gradient(90deg,rgba(5,6,8,.9),rgba(5,6,8,.22) 66%),linear-gradient(to top,rgba(5,6,8,.9),transparent 55%)}
+.mos .hero .copy{position:absolute;left:24px;right:24px;bottom:22px;display:flex;flex-direction:column;gap:9px}.mos .hero .logo{height:66px;max-width:290px}
+.mos .side{display:grid;grid-template-rows:1fr 1fr;gap:12px;background:none;border:0;overflow:visible;box-shadow:none}
+.mos .continue>.scrim{background:linear-gradient(to top,rgba(5,6,8,.92),rgba(5,6,8,.06))}.mos .continue .copy{position:absolute;left:14px;right:14px;bottom:12px}.mos .continue .copy small{display:block;font-size:8px;font-weight:850;letter-spacing:.16em;color:var(--gold);margin-bottom:4px}.mos .continue .copy b{font-size:14px}.mos .continue .copy span{display:block;font-size:10px;color:var(--tx2);margin-top:3px}
+.mos .facts{padding:15px;display:grid;grid-template-columns:1fr 1fr;gap:9px}.mos .fact{border-radius:12px;background:rgba(255,255,255,.045);padding:10px}.mos .fact b{display:block;font-size:16px}.mos .fact span{display:block;font-size:8px;color:var(--tx3);text-transform:uppercase;letter-spacing:.12em;margin-top:2px}
+.mos .fact.parent{grid-column:1/3;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid rgba(255,255,255,.07)}.mos .fact.parent b{font-size:11px;color:var(--gold)}.mos .fact.parent span{margin:0;text-align:right}
+.mos .rail{grid-column:1/3;padding:10px;display:flex;gap:10px;align-items:stretch}.mos .railtitle{width:124px;flex:none;padding:9px;display:flex;flex-direction:column;justify-content:space-between}.mos .railtitle b{font-size:12px}.mos .railtitle span{font-size:9px;color:var(--tx3)}.mos .mcards{display:flex;gap:9px;overflow:auto;scrollbar-width:none;flex:1}.mos .mcard{width:150px;flex:none;border-radius:11px;overflow:hidden;position:relative}.mos .mcard .thumb{position:absolute;inset:0;border-radius:11px}.mos .mcard .label{position:absolute;left:9px;right:9px;bottom:7px;font-size:9.5px;font-weight:700;text-shadow:0 2px 7px #000}
+@container (max-width:900px){.mos{grid-template-columns:1.25fr .8fr}.mos .hero .copy{left:18px;right:18px}.mos .hero .logo{height:54px}.mos .facts{padding:10px}.mos .railtitle{width:104px}.mos .mcard{width:132px}}
+@container (orientation:portrait){.mos{grid-template-columns:1fr;grid-template-rows:48% 160px 1fr;padding:14px}.mos .hero{grid-row:auto}.mos .side{grid-template-columns:1fr 1fr;grid-template-rows:1fr}.mos .rail{grid-column:auto}.mos .mcard{width:154px}}
+@container (max-width:560px){.mos{grid-template-rows:42% 140px 1fr;padding:10px;gap:9px}.mos .tile{border-radius:15px}.mos .hero .copy{left:14px;right:14px;bottom:14px}.mos .hero .logo{height:48px}.mos .hero .syn,.mos .hero .gen{display:none}.mos .facts{grid-template-columns:1fr 1fr;padding:8px}.mos .fact:nth-child(3),.mos .fact:nth-child(4){display:none}.mos .fact.parent{display:flex;grid-column:1/3;padding:6px 8px}.mos .fact.parent b{font-size:8.5px;white-space:nowrap}.mos .fact.parent span{display:none}.mos .rail{flex-direction:column}.mos .railtitle{width:auto;flex-direction:row}.mos .mcard{width:138px}}
+
+/* ─────────────────────────  X · HALO  ───────────────────────────────── */
+.hal{position:absolute;inset:0;overflow:hidden;background:#050609;text-align:center}
+.hal>.art{filter:saturate(.72) contrast(1.08);transform:scale(1.035)}
+.hal>.scrim{background:radial-gradient(circle at 50% 40%,rgba(8,9,12,.05) 0%,rgba(8,9,12,.42) 40%,#050609 88%),linear-gradient(to top,#050609 0%,transparent 68%)}
+.hal .halo{position:absolute;width:430px;height:430px;border-radius:50%;left:50%;top:43%;transform:translate(-50%,-50%);border:1px solid rgba(255,255,255,.12);box-shadow:0 0 0 34px rgba(255,255,255,.018),0 0 0 68px rgba(255,255,255,.012),inset 0 0 90px rgba(0,0,0,.28)}
+.hal .hhead{position:absolute;left:30px;right:30px;top:18px;display:flex;align-items:center;text-align:left}.hal .hhead .sp{flex:1}.hal .hhead .backb{position:static}
+.hal .brandline{font-size:9px;font-weight:800;letter-spacing:.22em;color:rgba(255,255,255,.58)}
+.hal .hguide{font-size:8.5px;font-weight:750;letter-spacing:.08em;color:rgba(255,255,255,.7);border-bottom:1px solid rgba(255,255,255,.28);padding:4px 0;margin-right:18px}.hal .hguide b{color:var(--gold);margin-left:5px}
+.hal .hcenter{position:absolute;left:50%;top:39%;transform:translate(-50%,-50%);width:min(500px,66%);display:flex;flex-direction:column;align-items:center;gap:10px}.hal .logo{height:78px;max-width:360px;object-position:center bottom}.hal .metarow,.hal .acts,.hal .gen{justify-content:center}
+.hal .hdock{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);width:min(780px,90%);height:126px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(10,11,15,.62);backdrop-filter:blur(22px);padding:10px 20px;display:flex;align-items:center;gap:12px;box-shadow:0 24px 70px rgba(0,0,0,.48)}
+.hal .hlabel{width:82px;text-align:left;flex:none}.hal .hlabel b{display:block;font-size:11px}.hal .hlabel span{display:block;font-size:8px;color:var(--tx3);margin-top:4px}.hal .hcards{display:flex;align-items:center;gap:9px;overflow:auto;scrollbar-width:none;flex:1}.hal .hcard{width:112px;flex:none;border-radius:10px;opacity:.58;transition:.2s}.hal .hcard .thumb{width:100%;aspect-ratio:16/9;border-radius:9px}.hal .hcard.foc{width:146px;opacity:1}.hal .hcard .cap{font-size:9px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hal .hnext{width:82px;flex:none;font-size:9px;color:var(--tx3)}
+@container (max-width:900px){.hal .halo{width:350px;height:350px}.hal .logo{height:64px}.hal .hdock{width:94%;height:116px}.hal .hcenter{width:74%}}
+@container (orientation:portrait){.hal .halo{top:34%;width:390px;height:390px}.hal .hcenter{top:33%;width:84%}.hal .hdock{bottom:22px;height:290px;border-radius:30px;align-items:flex-start;padding:17px;flex-direction:column}.hal .hlabel{width:auto}.hal .hcards{width:100%;align-items:flex-start;flex-wrap:wrap;align-content:flex-start}.hal .hcard,.hal .hcard.foc{width:calc(33.333% - 6px)}.hal .hnext{display:none}}
+@container (max-width:560px){.hal .halo{width:290px;height:290px;top:30%}.hal .hhead{left:14px;right:14px}.hal .hcenter{top:29%;gap:8px}.hal .logo{height:49px}.hal .hcenter .syn,.hal .hcenter .gen{display:none}.hal .hdock{left:12px;right:12px;width:auto;transform:none;height:330px;bottom:12px}.hal .hcard,.hal .hcard.foc{width:calc(50% - 5px)}}
+
+/* ─────────────────────────  XI · PREMIERE  ──────────────────────────── */
+.pre{position:absolute;inset:0;overflow:hidden;background:#08070a;display:grid;grid-template-columns:1fr 290px}
+.pre>.art{opacity:.34;filter:saturate(.7) contrast(1.12);grid-column:1/3}
+.pre>.scrim{background:linear-gradient(90deg,#08070a 0%,rgba(8,7,10,.72) 46%,rgba(8,7,10,.92) 78%),radial-gradient(circle at 55% 25%,rgba(92,25,38,.34),transparent 45%)}
+.pre .pword{position:absolute;left:28px;top:14%;font-family:ui-serif,Georgia,serif;font-size:clamp(58px,9cqw,118px);line-height:.78;letter-spacing:-.07em;color:rgba(255,255,255,.045);font-weight:700;white-space:nowrap}
+.pre .pmain{position:relative;padding:24px 30px;display:flex;flex-direction:column;justify-content:flex-end;gap:13px;min-width:0}.pre .logo{height:74px;max-width:340px}.pre .syn{max-width:54ch;font-size:12px}.pre .kicker{font-family:ui-serif,Georgia,serif;font-style:italic;color:#d8b88e;font-size:13px}
+.pre .pside{position:relative;margin:16px 16px 16px 0;border-left:1px solid rgba(216,184,142,.24);padding:16px 0 10px 18px;display:flex;flex-direction:column;gap:12px;overflow:hidden}.pre .pside .head{display:flex;align-items:center;gap:8px}.pre .pside .head b{font-family:ui-serif,Georgia,serif;font-size:18px;font-weight:500}.pre .plist{overflow:auto;scrollbar-width:none;display:flex;flex-direction:column;gap:2px}.pre .plist::-webkit-scrollbar{display:none}.pre .prow{display:grid;grid-template-columns:30px 1fr auto;gap:9px;align-items:center;padding:9px 8px;border-radius:8px}.pre .prow .n{font-family:ui-serif,Georgia,serif;font-size:18px;color:#d8b88e}.pre .prow .copy{min-width:0}.pre .prow .copy b{display:block;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pre .prow .copy span{display:block;font-size:9px;color:var(--tx3);margin-top:2px}.pre .prow .tick{font-size:10px}.pre .seal{width:42px;height:42px;border:1px solid rgba(216,184,142,.36);border-radius:50%;display:grid;place-items:center;font-family:ui-serif,Georgia,serif;font-style:italic;color:#d8b88e;font-size:16px;margin-top:auto}
+.pre .pguide{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid rgba(216,184,142,.2);border-bottom:1px solid rgba(216,184,142,.2);padding:8px 6px;font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--tx2)}.pre .pguide b{color:#d8b88e;font-size:9px}
+@container (max-width:900px){.pre{grid-template-columns:1fr 240px}.pre .pmain{padding:22px}.pre .logo{height:62px}.pre .pside{margin-right:12px}}
+@container (orientation:portrait){.pre{grid-template-columns:1fr;grid-template-rows:48% 52%}.pre>.art{grid-column:1;grid-row:1/3}.pre>.scrim{background:linear-gradient(to top,#08070a 38%,rgba(8,7,10,.5) 70%,rgba(8,7,10,.18)),radial-gradient(circle at 30% 20%,rgba(92,25,38,.3),transparent 50%)}.pre .pmain{grid-row:1;padding:22px;justify-content:flex-end}.pre .pside{grid-row:2;margin:0 18px 16px;padding:16px;border:1px solid rgba(216,184,142,.2);border-radius:16px;background:rgba(8,7,10,.58);backdrop-filter:blur(14px)}.pre .plist{display:grid;grid-template-columns:1fr 1fr;gap:2px 8px}.pre .seal{display:none}}
+@container (max-width:560px){.pre{grid-template-rows:43% 57%}.pre .pmain{padding:16px}.pre .logo{height:48px}.pre .pmain .syn,.pre .pmain .gen{display:none}.pre .pside{margin:0 10px 10px;padding:12px}.pre .plist{grid-template-columns:1fr}.pre .prow{padding:7px}.pre .pword{left:12px}}
+
 /* footnote table */
 .tbl{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:10px}
 .tbl th,.tbl td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--pl);vertical-align:top}
@@ -508,7 +609,7 @@ h1{font-size:clamp(30px,4.4vw,46px);line-height:1.03;letter-spacing:-.035em;font
 
 <div class="wrap">
   <p class="eyebrow">Debrify · merged details page</p>
-  <h1>Six layouts for the one screen that decides what you watch</h1>
+  <h1>Eleven layouts for the one screen that decides what you watch</h1>
   <p class="lede">The merged page answers two questions at once — <em>what is this</em> and <em>which episode do I press play on</em>. Each concept below settles that tension differently, and each is drawn at four sizes from the same content, so the answer has to survive a 10-foot TV and a phone in one hand.</p>
 
   <div class="tokens">
@@ -548,7 +649,7 @@ h1{font-size:clamp(30px,4.4vw,46px);line-height:1.03;letter-spacing:-.035em;font
 
   <div class="rule"></div>
   <h2 style="font-size:22px;letter-spacing:-.02em;margin:0 0 4px">The same screen serves movies</h2>
-  <p class="cthesis"><code>MergedDetailScreen</code> handles both — <code>_isMovie</code> drops the episode pane for a single centred column. Five of these six concepts are organised around the episode list, so it's worth being explicit about what each one becomes when that list isn't there. Switch the toggle above to Movie to walk them.</p>
+  <p class="cthesis"><code>MergedDetailScreen</code> handles both — <code>_isMovie</code> drops the episode pane for a single centred column. Most concepts are organised around the episode list, so it's worth being explicit about what each one becomes when that list isn't there. Switch the toggle above to Movie to walk them.</p>
   <div class="scrollx">
     <table class="tbl">
       <thead><tr><th>Concept</th><th>Verdict</th><th>What replaces the season</th></tr></thead>
@@ -562,7 +663,7 @@ const IMG = {"bg": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAYABgAAD/4QD0RXhpZ
 
 /* ── Content ───────────────────────────────────────────────────────────
    The same screen serves movies, where the episode list — the load-bearing
-   element in five of these six concepts — simply isn't there. Both titles are
+   element in several of these eleven concepts — simply isn't there. Both titles are
    real: Breaking Bad S5 and its cast from TVmaze, Interstellar's art from
    metahub with cast headshots from TVmaze's person records. */
 const SERIES = {
@@ -592,9 +693,10 @@ const SERIES_CAST = [{"actor": "Bryan Cranston", "role": "Walter White", "i": 1}
 const MOVIE_CAST = [{"actor": "Matthew McConaughey", "role": "Cooper", "i": 1}, {"actor": "Anne Hathaway", "role": "Brand", "i": 2}, {"actor": "Jessica Chastain", "role": "Murph", "i": 3}, {"actor": "Michael Caine", "role": "Professor Brand", "i": 4}, {"actor": "Casey Affleck", "role": "Tom", "i": 5}, {"actor": "Ellen Burstyn", "role": "Murph (older)", "i": 6}];
 const MOVIE_RECS = [{"i": 1, "title": "Blade Runner 2049"}, {"i": 2, "title": "Dune: Part Two"}, {"i": 3, "title": "The Batman"}, {"i": 4, "title": "Everything Everywhere"}, {"i": 5, "title": "Arrival"}, {"i": 6, "title": "Inception"}];
 
-let mode = "series";
-let SHOW = SERIES;
-let CAST = SERIES_CAST;
+const requestedKind = new URLSearchParams(location.search).get("kind");
+let mode = requestedKind === "movie" ? "movie" : "series";
+let SHOW = mode === "movie" ? MOVIE : SERIES;
+let CAST = mode === "movie" ? MOVIE_CAST : SERIES_CAST;
 const isMovie = () => SHOW.movie;
 
 const ICON = {
@@ -862,6 +964,60 @@ const console_ = () => { const up = EPS.find(e=>e.n===9) || EPS[0];
     </div>
   </div><div class="grain"></div></div>`; };
 
+/* ── VII · VISTA ───────────────────────────────────────────────────────── */
+const vista = () => { const up = EPS.find(e=>e.n===9) || EPS[0]; return `<div class="vis">
+  <img class="art" src="${IMG[SHOW.bg]}" alt=""><div class="scrim"></div>
+  <div class="vtop">${backi()}<span class="brandline">Debrify Originals</span><span style="flex:1"></span><span class="vguide rnd" data-f>Parents Guide <b>MODERATE</b></span><span class="cert">${SHOW.cert}</span></div>
+  <div class="vid"><img class="logo" src="${IMG[SHOW.logo]}" alt="${SHOW.name}">${meta()}${genres()}
+    <p class="syn" style="margin:0;font-size:12px;max-width:48ch">${SHOW.syn}</p><div class="acts">${btnPri()}${btnTrailer()}${btnSrc()}${btnMore()}</div></div>
+  <div class="vdeck">
+    <div class="vnow" data-f>${isMovie()
+      ? `<span class="thumb"><img src="${IMG[SHOW.bg]}" alt=""><span class="prog"><i style="width:${SHOW.progress}%"></i></span></span>`
+      : thumb(up)}<span class="wash"></span><span class="copy"><em>${isMovie()?"CONTINUE WATCHING":"UP NEXT · S5 E9"}</em><b>${isMovie()?SHOW.name:up.name}</b><span class="epmeta mono">${isMovie()?"1 h 45 m left":up.runtime+"m · 25 min left"}</span></span></div>
+    <div class="vrail"><div class="vrailhead"><span class="slab">${isMovie()?"Because you watched":"Season 5"}</span><span class="scount mono">${isMovie()?RECS().length+" films":SHOW.epcount+" episodes"}</span></div>
+      <div class="vcards">${isMovie()?RECS().map(r=>`<span class="vcard" data-f><span class="thumb"><img src="${IMG['mrec'+r.i]}" alt=""></span><span class="cap"><b>${r.title}</b></span></span>`).join("")
+        : EPS.map(e=>`<span class="vcard" data-f>${thumb(e)}<span class="cap"><b class="mono">${String(e.n).padStart(2,"0")}</b><span>${e.name}</span></span></span>`).join("")}</div></div>
+  </div><div class="grain"></div></div>`; };
+
+/* ── VIII · MONOLITH ───────────────────────────────────────────────────── */
+const monolith = () => `<div class="mon">
+  <div class="mhero"><img class="art" src="${IMG[SHOW.bg]}" alt=""><div class="scrim"></div>
+    <span class="mposter"><img src="${IMG[SHOW.poster]}" alt=""></span><span class="stamp">A Debrify presentation</span></div>
+  <div class="mdeck"><div class="mhead">${backi()}<div class="copy"><span class="eyeb">${SHOW.kind} · ${SHOW.year}</span><span class="ttl">${SHOW.name}</span>${meta()}</div></div>
+    <div class="acts">${btnPri()}${btnTrailer()}${btnSources()}${btnSrc()}${btnMore()}</div>
+    <div class="mglass"><div class="mnav"><b>${isMovie()?"The film":"Season 5"}</b><span>${isMovie()?"Cast & details":SHOW.epcount+" episodes"}</span><span style="flex:1"></span><span class="mparent" data-f>Parents Guide <b>Moderate</b></span></div>
+      <div class="mlist fade">${isMovie()?CAST.map((c,i)=>`<span class="mrow" data-f><span class="num mono">${String(i+1).padStart(2,"0")}</span><span class="thumb"><img src="${castImg(c)}" alt=""></span><span class="copy"><b>${c.actor}</b><span>${c.role}</span></span><span class="state">CAST</span></span>`).join("")
+        : EPS.map(e=>`<span class="mrow" data-f><span class="num mono">${String(e.n).padStart(2,"0")}</span>${thumb(e)}<span class="copy"><b>${e.name}</b><span>${e.date} · ${e.runtime}m · ★ ${e.rating}</span></span><span class="state">${st(e.n).w?"WATCHED":st(e.n).p?st(e.n).p+"%":""}</span></span>`).join("")}</div>
+    </div>
+  </div><div class="grain"></div></div>`;
+
+/* ── IX · MOSAIC ───────────────────────────────────────────────────────── */
+const mosaic = () => { const up=EPS.find(e=>e.n===9)||EPS[0]; return `<div class="mos">
+  <div class="tile hero"><img class="art" src="${IMG[SHOW.bg]}" alt=""><div class="scrim"></div>${back()}
+    <div class="copy"><img class="logo" src="${IMG[SHOW.logo]}" alt="${SHOW.name}">${meta()}${genres()}<p class="syn" style="margin:0;font-size:11.5px;max-width:50ch">${SHOW.syn}</p><div class="acts">${btnPri()}${btnTrailer()}${btnSrc()}${btnMore()}</div></div></div>
+  <div class="tile side">
+    <div class="tile continue" data-f><img class="art" src="${isMovie()?IMG[SHOW.bg]:IMG['ep'+up.n]}" alt=""><div class="scrim"></div><div class="copy"><small>${isMovie()?"CONTINUE WATCHING":"NEXT EPISODE"}</small><b>${isMovie()?SHOW.name:up.name}</b><span>${isMovie()?"38% complete":"S5 E9 · "+up.runtime+" min"}</span></div></div>
+    <div class="tile facts"><span class="fact"><b>${SHOW.rating}</b><span>IMDb score</span></span><span class="fact"><b>${isMovie()?SHOW.runtime:SHOW.seasons}</b><span>${isMovie()?"Runtime":"Seasons"}</span></span><span class="fact"><b>${SHOW.sources}</b><span>Sources</span></span><span class="fact"><b>${CAST.length}</b><span>Cast</span></span><span class="fact parent" data-f><b>Parents Guide · Moderate</b><span>Violence · Language</span></span></div>
+  </div>
+  <div class="tile rail"><div class="railtitle"><b>${isMovie()?"More like this":"The final season"}</b><span>${isMovie()?RECS().length+" curated films":SHOW.epcount+" episodes"}</span></div><div class="mcards">${isMovie()?RECS().map(r=>`<span class="mcard" data-f><span class="thumb"><img src="${IMG['mrec'+r.i]}" alt=""></span><span class="label">${r.title}</span></span>`).join("")
+      : EPS.map(e=>`<span class="mcard" data-f>${thumb(e)}<span class="label">${String(e.n).padStart(2,"0")} · ${e.name}</span></span>`).join("")}</div></div>
+  <div class="grain"></div></div>`; };
+
+/* ── X · HALO ──────────────────────────────────────────────────────────── */
+const halo = () => `<div class="hal"><img class="art" src="${IMG[SHOW.bg]}" alt=""><div class="scrim"></div><span class="halo"></span>
+  <div class="hhead">${backi()}<span class="sp"></span><span class="hguide" data-f>Parents Guide <b>MODERATE</b></span><span class="brandline">${isMovie()?"FEATURE PRESENTATION":"COMPLETE SERIES"}</span></div>
+  <div class="hcenter"><img class="logo" src="${IMG[SHOW.logo]}" alt="${SHOW.name}">${meta()}${genres()}<p class="syn" style="margin:0;font-size:11.5px;max-width:52ch">${SHOW.syn}</p><div class="acts">${btnPri()}${btnTrailer()}${btnSources()}${btnMore()}</div></div>
+  <div class="hdock"><span class="hlabel"><b>${isMovie()?"Explore":"Season 5"}</b><span>${isMovie()?"Hand-picked next":SHOW.epcount+" episodes"}</span></span><div class="hcards">${isMovie()?RECS().map(r=>`<span class="hcard" data-f><span class="thumb"><img src="${IMG['mrec'+r.i]}" alt=""></span><span class="cap">${r.title}</span></span>`).join("")
+      : EPS.map(e=>`<span class="hcard" data-f>${thumb(e)}<span class="cap">${String(e.n).padStart(2,"0")} · ${e.name}</span></span>`).join("")}</div><span class="hnext mono">${isMovie()?"CURATED FOR YOU":"S5 · 16"}</span></div>
+  <div class="grain"></div></div>`;
+
+/* ── XI · PREMIERE ─────────────────────────────────────────────────────── */
+const premiere = () => `<div class="pre"><img class="art" src="${IMG[SHOW.bg]}" alt=""><div class="scrim"></div><span class="pword">${SHOW.name}</span>
+  <div class="pmain">${backi()}<span class="kicker">Tonight's premiere selection</span><img class="logo" src="${IMG[SHOW.logo]}" alt="${SHOW.name}">${meta()}${genres()}<p class="syn">${SHOW.syn}</p><div class="acts">${btnPri()}${btnTrailer()}${btnSources()}${btnSrc()}${btnMore()}</div></div>
+  <div class="pside"><div class="head"><b>${isMovie()?"The ensemble":"Season Five"}</b><span class="scount mono">${isMovie()?CAST.length:SHOW.epcount}</span></div><div class="plist">${isMovie()?CAST.map((c,i)=>`<span class="prow" data-f><span class="n">${String(i+1).padStart(2,"0")}</span><span class="copy"><b>${c.actor}</b><span>${c.role}</span></span></span>`).join("")
+      : EPS.map(e=>`<span class="prow" data-f><span class="n">${String(e.n).padStart(2,"0")}</span><span class="copy"><b>${e.name}</b><span>${e.date} · ${e.runtime}m</span></span><span class="tick">${st(e.n).w?"✓":st(e.n).p?st(e.n).p+"%":""}</span></span>`).join("")}</div><span class="pguide" data-f>Parents Guide <b>Moderate</b></span><span class="seal">D</span></div>
+  <div class="grain"></div></div>`;
+
 /* ── Concept registry ─────────────────────────────────────────────────── */
 const CONCEPTS = [
   {id:"marquee",
@@ -900,14 +1056,51 @@ const CONCEPTS = [
    axis:"<b>Action before description.</b> The one thing you most likely want is the biggest element on screen; everything else is arranged around it by likelihood.",
    render:console_,
    resp:["Hero card + 4-up grid + 238px reference column","Reference column drops, grid goes 3-up","Hero card stacks vertically, grid goes 2-up"]},
+  {id:"vista",
+   movie:"Excellent. The up-next card becomes a cinematic continue tile and the episode shelf becomes a hand-picked film rail.", n:"VII", name:"Vista",
+   thesis:"A pristine cinematic canvas with a single floating glass shelf. Identity lives in the open image; playback and browsing live together in one tactile dock.",
+   axis:"<b>Artwork above, intent below.</b> The shelf is the only surface on the screen, making the whole page feel calm, expensive and immediately playable.",
+   render:vista,
+   resp:["Full-bleed identity + 2-column glass shelf","Shelf stacks under a shorter art stage","Compact hero over a 2-up frosted episode shelf"]},
+  {id:"monolith",
+   movie:"Excellent. The episode deck becomes an ensemble deck, turning cast into the film's browseable second act.", n:"VIII", name:"Monolith",
+   thesis:"A poster treated like an object in a gallery, paired with a deep black glass deck. The title feels collected rather than merely streamed.",
+   axis:"<b>Object and index.</b> The left side creates desire; the right side turns a season or cast into an impeccably ordered library.",
+   render:monolith,
+   resp:["Poster monument + deep episode deck","Narrower monument, denser rows","Artwork caps the page; the glass deck fills the lower field"]},
+  {id:"mosaic",
+   movie:"Excellent. The episode rail becomes recommendations while the utility tiles surface runtime, score, sources and cast.", n:"IX", name:"Mosaic",
+   thesis:"A cinematic bento board: one dominant hero, one immediate continue tile, quiet intelligence cards and a tactile shelf across the floor.",
+   axis:"<b>Priority expressed by area.</b> Every tile answers a different question without flattening the experience into a settings dashboard.",
+   render:mosaic,
+   resp:["Asymmetric 2-column bento + floor rail","Hero, utility pair and shelf stack vertically","Tight three-storey bento with a horizontal thumb rail"]},
+  {id:"halo",
+   movie:"Excellent. The orbital season dock becomes a curated film constellation without disturbing the centered theater composition.", n:"X", name:"Halo",
+   thesis:"A centered theater composition framed by concentric light, with the season floating in a pill-shaped orbital dock below.",
+   axis:"<b>Symmetry creates ceremony.</b> The title is the event; episodes orbit it as supporting choices instead of competing panels.",
+   render:halo,
+   resp:["Centered identity + wide orbital dock","Halo tightens and the dock widens","Dock becomes a rounded lower drawer with a 2-up grid"]},
+  {id:"premiere",
+   movie:"Excellent. The season ledger becomes a cast programme, preserving the red-carpet editorial character.", n:"XI", name:"Premiere",
+   thesis:"A midnight-red premiere programme: oversized ghost typography, restrained champagne rules and an elegant numbered episode ledger.",
+   axis:"<b>Luxury through restraint.</b> One cinematic field, one typographic programme, and just enough warmth to feel like an event rather than a catalog.",
+   render:premiere,
+   resp:["Cinematic field + narrow premiere ledger","Ledger compresses while typography scales","Identity stage over a two-column programme drawer"]},
 ];
 
 const SIZES = {tv:[960,540], desktop:[1280,800], tablet:[834,1112], phone:[390,844]};
-let size = "tv";
+const requestedSize = new URLSearchParams(location.search).get("size");
+let size = Object.hasOwn(SIZES, requestedSize) ? requestedSize : "tv";
+// Handy for critique/export: `index.html?only=vista` renders one concept while
+// the normal URL still presents the complete eleven-layout comparison.
+const requestedConcept = new URLSearchParams(location.search).get("only");
+const DISPLAY_CONCEPTS = requestedConcept
+  ? CONCEPTS.filter(c=>c.id===requestedConcept)
+  : CONCEPTS;
 
 /* ── Build ────────────────────────────────────────────────────────────── */
 const root = document.getElementById("concepts");
-root.innerHTML = CONCEPTS.map(c=>`
+root.innerHTML = DISPLAY_CONCEPTS.map(c=>`
   <section class="concept" id="c-${c.id}">
     <div class="chead"><span class="cnum">${c.n}</span><h2 class="cname">${c.name}</h2></div>
     <p class="cthesis">${c.thesis}</p>
@@ -916,10 +1109,15 @@ root.innerHTML = CONCEPTS.map(c=>`
     <div class="stage"><div class="holder"><div class="sizetag mono"></div>
       <div class="screen" tabindex="0" data-c="${c.id}"></div></div></div>
   </section>`).join("");
+[...document.querySelectorAll("#sizes button")].forEach(b=>
+  b.setAttribute("aria-pressed",String(b.dataset.size===size)));
+[...document.querySelectorAll("#kinds button")].forEach(b=>
+  b.setAttribute("aria-pressed",String(b.dataset.kind===mode)));
+document.body.dataset.kind = mode;
 
-document.getElementById("respbody").innerHTML = CONCEPTS.map(c=>
+document.getElementById("respbody").innerHTML = DISPLAY_CONCEPTS.map(c=>
   `<tr><td>${c.n} · ${c.name}</td><td>${c.resp[0]}</td><td>${c.resp[1]}</td><td>${c.resp[2]}</td></tr>`).join("");
-document.getElementById("moviebody").innerHTML = CONCEPTS.map(c=>{
+document.getElementById("moviebody").innerHTML = DISPLAY_CONCEPTS.map(c=>{
   const m = c.movie.replace(/<\/?b>/g,"");
   const cut = m.indexOf(".");
   return `<tr><td>${c.n} · ${c.name}</td><td>${m.slice(0,cut)}</td><td>${m.slice(cut+1).trim()}</td></tr>`;
@@ -927,7 +1125,7 @@ document.getElementById("moviebody").innerHTML = CONCEPTS.map(c=>{
 
 function paint(){
   const [w,h] = SIZES[size];
-  CONCEPTS.forEach(c=>{
+  DISPLAY_CONCEPTS.forEach(c=>{
     const scr = document.querySelector(`.screen[data-c="${c.id}"]`);
     const holder = scr.closest(".holder");
     scr.style.width = w+"px"; scr.style.height = h+"px";
