@@ -16,6 +16,7 @@ on:
           - macos
           - windows
           - ios
+          - tvos
           - linux
           - linux-arm64
 
@@ -301,6 +302,134 @@ jobs:
       with:
         name: debrify-ios
         path: build/ios/iphoneos/debrify-unsigned.ipa
+
+  tvos:
+    if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'tvos'
+    runs-on: macos-latest
+    env:
+      # The fork publishes no tags and `dev` moves, so pin the SHA. Bumping this
+      # is how the tvOS toolchain gets updated — nothing else here floats.
+      FLUTTER_TVOS_REF: 0e32f18683c034acb336cd37d7310c6084ba7383
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # tvOS can't use subosito/flutter-action. The build needs the
+    # fluttertv/flutter-tvos CLI, which clones its own pinned stock Flutter
+    # (bin/internal/flutter.version, currently the 3.44.8 commit) and downloads
+    # a tvOS engine artifact the stock SDK knows nothing about.
+    - name: Setup flutter-tvos
+      run: |
+        set -euo pipefail
+        git init --quiet "$HOME/flutter-tvos"
+        git -C "$HOME/flutter-tvos" remote add origin https://github.com/fluttertv/flutter-tvos.git
+        git -C "$HOME/flutter-tvos" fetch --depth 1 --quiet origin "$FLUTTER_TVOS_REF"
+        git -C "$HOME/flutter-tvos" checkout --quiet FETCH_HEAD
+        echo "$HOME/flutter-tvos/bin" >> "$GITHUB_PATH"
+
+    # The first flutter-tvos invocation does the whole one-time setup: clones
+    # the pinned stock Flutter SDK, compiles the CLI snapshot, then pulls the
+    # ~1 GB tvOS engine artifact. Its own step so a toolchain failure doesn't
+    # read as a build failure — and so the step name matches what's failing.
+    - name: Bootstrap flutter-tvos and precache engine
+      run: flutter-tvos precache
+
+    # flutter-tvos, not flutter: tvos/Podfile reads the `tvos` plugin list out
+    # of .flutter-plugins-dependencies, and only the fork's pub get writes that
+    # section. Stock pub get produces a Podfile run that links no plugins.
+    - name: Get dependencies
+      run: flutter-tvos pub get
+
+    # ~830 MB of prebuilt libmpv/ffmpeg xcframeworks, gitignored because they
+    # are 2.7 GB extracted. Deliberately not cached: a cache entry this size
+    # would crowd the repo's 10 GB budget and evict the Android job's.
+    - name: Fetch libmpv tvOS frameworks
+      run: packages/media_kit_libs_tvos_video/fetch_frameworks.sh
+
+    # There is no `--no-codesign` for tvOS the way there is for `flutter build
+    # ios`. The CLI reads DEVELOPMENT_TEAM out of tvos/Runner.xcodeproj and
+    # passes `-allowProvisioningUpdates`, which cannot resolve a profile on a
+    # runner with no Apple account. XCODE_XCCONFIG_FILE switches signing off for
+    # the whole xcodebuild invocation without touching the tracked project. The
+    # team ID the CLI passes on the command line still wins for that one
+    # setting, but is inert once signing is disallowed — and the Runner target's
+    # two codesign script phases already no-op when CODE_SIGNING_REQUIRED=NO.
+    - name: Build tvOS (unsigned)
+      run: |
+        set -euo pipefail
+        cat > "$RUNNER_TEMP/unsigned.xcconfig" <<'EOF'
+        CODE_SIGN_IDENTITY =
+        CODE_SIGNING_REQUIRED = NO
+        CODE_SIGNING_ALLOWED = NO
+        EOF
+        export XCODE_XCCONFIG_FILE="$RUNNER_TEMP/unsigned.xcconfig"
+        flutter-tvos build tvos --release
+
+    # Same reason as the iOS job: an unsigned Mach-O reserves no __LINKEDIT
+    # room for a signature, so Sideloadly/atvloadly abort in ldid before they
+    # can re-sign with the user's own Apple ID.
+    - name: Ad-hoc sign for sideloading
+      run: |
+        set -euo pipefail
+        APP=build/tvos/Release-appletvos/Runner.app
+        for d in "$APP"/Frameworks/*.dylib; do
+          [ -f "$d" ] && codesign -f -s - --timestamp=none "$d"
+        done
+        for f in "$APP"/Frameworks/*.framework; do
+          [ -d "$f" ] && codesign -f -s - --timestamp=none "$f"
+        done
+        codesign -f -s - --timestamp=none "$APP"
+
+        missing=0
+        check() {
+          if [ -f "$1" ] && [ "$(otool -l "$1" | grep -c LC_CODE_SIGNATURE)" -eq 0 ]; then
+            echo "::error::no LC_CODE_SIGNATURE in $1"
+            missing=$((missing + 1))
+          fi
+        }
+        check "$APP/Runner"
+        for d in "$APP"/Frameworks/*.dylib; do check "$d"; done
+        for f in "$APP"/Frameworks/*.framework; do
+          check "$f/$(basename "$f" .framework)"
+        done
+        if [ "$missing" -ne 0 ]; then
+          echo "::error::$missing binary(ies) left unsigned; IPA would not sideload"
+          exit 1
+        fi
+        echo "all binaries carry LC_CODE_SIGNATURE"
+
+    - name: Create unsigned IPA (release)
+      if: github.event_name == 'release'
+      run: |
+        cd build/tvos/Release-appletvos
+        mkdir -p Payload
+        cp -R Runner.app Payload/
+        zip -qr debrify-${{ github.event.release.tag_name }}-tvos-unsigned.ipa Payload
+        rm -rf Payload
+
+    - name: Create unsigned IPA (manual)
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        cd build/tvos/Release-appletvos
+        mkdir -p Payload
+        cp -R Runner.app Payload/
+        zip -qr debrify-tvos-unsigned.ipa Payload
+        rm -rf Payload
+
+    - name: Upload IPA to Release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/tvos/Release-appletvos/debrify-${{ github.event.release.tag_name }}-tvos-unsigned.ipa
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload IPA as artifact (manual)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: debrify-tvos
+        path: build/tvos/Release-appletvos/debrify-tvos-unsigned.ipa
 
   linux:
     if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'linux'
