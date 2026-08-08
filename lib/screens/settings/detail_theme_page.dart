@@ -15,13 +15,33 @@ import 'widgets/settings_widgets.dart';
 /// choice written by a newer build survives a downgrade. Dispatch, the Settings
 /// subtitle and the picker's selected state all read [effectiveDetailTheme]
 /// rather than the raw value.
+///
+/// ── The two light-ground themes are withheld for now ──────────────────────
+///
+/// `broadsheet` (#F3EFE7) and `concrete` (#C9C7C1) are the only cores whose
+/// ground is light — `AppTheme.fromDetail` classifies them by
+/// `ground.computeLuminance() > 0.5`, and no other core comes close.
+///
+/// **Bug:** text stays light-on-light and is unreadable on them. The token
+/// layer flips correctly, but the screens still carrying hardcoded light text
+/// literals never go through it, so they don't follow the ground when it turns
+/// pale. Every dark theme hides this — a light-on-dark literal happens to be
+/// right — which is why it only shows up on these two.
+///
+/// Withheld HERE rather than dropped from [DetailThemes.all] so the fallbacks
+/// stay graceful: [effectiveDetailTheme] narrows a stored `broadsheet` to
+/// `signal`, `AppThemes.byId` narrows it to legacy, and nothing is rewritten
+/// on disk. Anyone already on one lands on a readable theme, and gets theirs
+/// back the moment these are re-listed.
+///
+/// Re-enable both once the remaining literals read from the token layer.
 const Set<String> kDetailThemesShipped = {
   'signal',
   'noir',
-  'broadsheet',
+  // 'broadsheet', // light ground — unreadable text, see note above
   'phosphor',
   'aurora',
-  'concrete',
+  // 'concrete',   // light ground — unreadable text, see note above
   'velvet',
   'blueprint',
   'broadcast',
