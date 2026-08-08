@@ -1,6 +1,6 @@
-# Merged details page — six layout concepts
+# Merged details page — eleven layout concepts
 
-Interactive mocks for six alternative layouts of `MergedDetailScreen`
+Interactive mocks for eleven alternative layouts of `MergedDetailScreen`
 (`lib/screens/merged_series_detail_screen.dart` + `lib/widgets/episodes_panel.dart`),
 each drawn at **four screen sizes** from one set of content.
 
@@ -15,6 +15,11 @@ keys — every concept's DPAD model is part of the proposal, not an afterthought
 | IV | Stage | **Tabs** — 50/50 split, everything the page knows has a home |
 | V | Filmstrip | **Episode-centric** — the focused still *is* the page |
 | VI | Console | **Action before description** — a big continue card, then the season |
+| VII | Vista | **Artwork above, intent below** — one cinematic canvas and one glass shelf |
+| VIII | Monolith | **Object and index** — a gallery poster beside a deep episode deck |
+| IX | Mosaic | **Priority expressed by area** — a cinematic bento board |
+| X | Halo | **Symmetry creates ceremony** — the season orbits a centered title |
+| XI | Premiere | **Luxury through restraint** — a midnight-red programme and ledger |
 
 **The same screen serves movies**, so there's a Series / Movie toggle beside the
 size switcher. `MergedDetailScreen` drops the episode pane for a movie — and the
@@ -29,6 +34,11 @@ also states what it becomes without one:
 | IV | Stage | Trivial — drop one tab, add Sources |
 | V | Filmstrip | **Breaks** — nothing for the strip to be, nothing for focus to drive |
 | VI | Console | Clean — hero becomes the movie's resume card, grid becomes More Like This |
+| VII | Vista | Excellent — continue tile plus a curated film rail |
+| VIII | Monolith | Excellent — the episode deck becomes an ensemble deck |
+| IX | Mosaic | Excellent — recommendations replace the season rail |
+| X | Halo | Excellent — films become the orbital constellation |
+| XI | Premiere | Excellent — the ledger becomes a cast programme |
 
 Sizes: TV 960×540 (the app's logical TV size) · Desktop 1280×800 ·
 Tablet 834×1112 · Phone 390×844. Each frame is its own CSS container, so the
