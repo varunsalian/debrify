@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// One searchable settings destination.
 ///
@@ -262,18 +263,19 @@ class _EmptyResults extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.search_off_rounded, size: 40, color: kSettingsDim2),
+            Icon(Icons.search_off_rounded, size: 40, color: t.dim2),
             const SizedBox(height: 14),
             Text(
               'No settings match "$query"',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13.5, color: kSettingsDim),
+              style: TextStyle(fontSize: 13.5, color: t.dim),
             ),
           ],
         ),

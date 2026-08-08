@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
+import '../theme/app_theme_scope.dart';
 import '../utils/tv_keys.dart';
 import 'home/card_focus_rise.dart';
 import 'home/home_theme.dart';
@@ -96,6 +97,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final item = widget.item;
     final poster = item.poster;
     final rating = item.imdbRating;
@@ -175,14 +177,14 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         Positioned(top: 10, right: 10, child: _RatingChip(value: rating)),
 
       if (widget.hasBoundSource)
-        const Positioned(
+        Positioned(
           bottom: 10,
           right: 10,
           child: Icon(
             Icons.bookmark_rounded,
             size: 18,
-            color: Colors.white,
-            shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+            color: app.core.tx,
+            shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
           ),
         ),
 
@@ -216,7 +218,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                     child: Text(
                       item.year!,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.7),
+                        color: app.fade(app.core.tx, 0.7),
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.4,
@@ -270,7 +272,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
               if (_active) ...[
                 // Tight bright gold rim.
                 BoxShadow(
-                  color: HomeTheme.focusGold.withValues(alpha: 0.6),
+                  color: app.fade(app.home.focus, 0.6),
                   blurRadius: 30,
                   spreadRadius: 1,
                 ),
@@ -279,7 +281,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                 // is the main scroll-jank source on weak TV GPUs.
                 if (!widget.isTelevision)
                   BoxShadow(
-                    color: HomeTheme.focusGoldDeep.withValues(alpha: 0.32),
+                    color: app.fade(app.home.focusDeep, 0.32),
                     blurRadius: 90,
                     spreadRadius: 10,
                   ),
@@ -299,7 +301,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: HomeTheme.focusGold,
+                            color: app.home.focus,
                             width: 2.5,
                           ),
                         ),
@@ -394,8 +396,9 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
   }
 
   Widget _placeholder(String title) {
+    final app = AppThemeScope.of(context);
     return Container(
-      color: const Color(0xFF111118),
+      color: app.home.posterPlaceholder,
       alignment: Alignment.center,
       child: Padding(
         padding: const EdgeInsets.all(8),
@@ -405,7 +408,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.5),
+            color: app.fade(app.core.tx, 0.5),
             fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
@@ -430,20 +433,22 @@ class _GlassChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.18),
+          // On the glass, not the page — see AppTheme.onGlass.
+          color: app.fade(app.onGlass, 0.18),
           width: 0.5,
         ),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.9),
+          color: app.fade(app.core.tx, 0.9),
           fontSize: 9,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.8,
@@ -483,13 +488,15 @@ class _RatingChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.18),
+          // On the glass, not the page — see AppTheme.onGlass.
+          color: app.fade(app.onGlass, 0.18),
           width: 0.5,
         ),
       ),
@@ -500,8 +507,8 @@ class _RatingChip extends StatelessWidget {
           const SizedBox(width: 3),
           Text(
             value.toStringAsFixed(1),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: app.core.tx,
               fontSize: 10,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.2,

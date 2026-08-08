@@ -13,6 +13,8 @@ import '../services/storage_service.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../theme/app_theme_scope.dart';
+import 'detail/theme/detail_theme.dart';
 import 'episode_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_service.dart';
@@ -1242,6 +1244,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   Widget _buildEpisodeFiltersBar() {
+    final t = DetailThemeScope.maybeOf(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Container(
@@ -1301,7 +1304,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                       : Colors.white.withValues(alpha: 0.06),
                   border: Border.all(
                     color: _episodeBackButtonFocusNode.hasFocus
-                        ? HomeTheme.focusGold
+                        ? t.focus
                         : Colors.white.withValues(alpha: 0.14),
                     width: _episodeBackButtonFocusNode.hasFocus ? 2 : 1,
                   ),
@@ -1401,6 +1404,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   Widget _buildEpisodeSeasonDropdown() {
+    // Resolved OUTSIDE the ListenableBuilder: the callback re-runs on every
+    // focus change, and an inherited-widget lookup there would re-subscribe
+    // per DPAD move on the weak TV GPU.
+    final t = DetailThemeScope.maybeOf(context);
     return ListenableBuilder(
       listenable: _episodeSeasonDropdownFocusNode,
       builder: (context, _) {
@@ -1416,14 +1423,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: hasFocus
-                  ? HomeTheme.focusGold
+                  ? t.focus
                   : Colors.white.withValues(alpha: 0.10),
               width: hasFocus ? 2.0 : 1.0,
             ),
             boxShadow: (hasFocus && !widget.isTelevision)
                 ? [
                     BoxShadow(
-                      color: HomeTheme.focusGold.withValues(alpha: 0.32),
+                      color: t.fade(t.focus, 0.32),
                       blurRadius: 14,
                       spreadRadius: 0,
                     ),
@@ -1474,6 +1481,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// sources" action (the old auto-fallback, now opt-in).
   Widget _buildEpisodesUnavailable() {
     final show = _selectedShow ?? widget.show;
+    // Hoisted: the WidgetStateProperty resolvers below are closures the button
+    // re-evaluates on every state change, not build-time code.
+    final t = DetailThemeScope.maybeOf(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -1513,8 +1523,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                   style: ButtonStyle(
                     side: WidgetStateProperty.resolveWith(
                       (states) => states.contains(WidgetState.focused)
-                          ? const BorderSide(
-                              color: HomeTheme.focusGold, width: 2)
+                          ? BorderSide(color: t.focus, width: 2)
                           : null,
                     ),
                   ),
@@ -1533,8 +1542,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                     style: ButtonStyle(
                       side: WidgetStateProperty.resolveWith(
                         (states) => states.contains(WidgetState.focused)
-                            ? const BorderSide(
-                                color: HomeTheme.focusGold, width: 2)
+                            ? BorderSide(color: t.focus, width: 2)
                             : const BorderSide(color: Colors.white24),
                       ),
                     ),
@@ -1827,7 +1835,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final watched = (_episodeWatchProgress[key] ?? 0) >= 100;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF141019),
+      backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
       // With both Trakt and Simkl connected the menu is 7 tiles — taller than
       // the default sheet cap (9/16 of screen height) on portrait phones, and
@@ -1971,6 +1979,7 @@ class _CatalogSelectSourceButtonState
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.maybeOf(context);
     return Focus(
       focusNode: _focusNode,
       onFocusChange: (focused) => setState(() => _isFocused = focused),
@@ -2011,21 +2020,21 @@ class _CatalogSelectSourceButtonState
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             color: widget.hasBoundSource
-                ? HomeTheme.focusGold.withValues(alpha: 0.14)
+                ? t.fade(t.focus, 0.14)
                 : Colors.white.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isFocused
-                  ? HomeTheme.focusGold
+                  ? t.focus
                   : widget.hasBoundSource
-                  ? HomeTheme.focusGold.withValues(alpha: 0.45)
+                  ? t.fade(t.focus, 0.45)
                   : Colors.white.withValues(alpha: 0.14),
               width: _isFocused ? 2 : 1,
             ),
             boxShadow: (_isFocused && !PlatformUtil.isTelevision)
                 ? [
                     BoxShadow(
-                      color: HomeTheme.focusGold.withValues(alpha: 0.32),
+                      color: t.fade(t.focus, 0.32),
                       blurRadius: 12,
                     ),
                   ]
@@ -2040,7 +2049,7 @@ class _CatalogSelectSourceButtonState
                     : Icons.link_off_rounded,
                 size: 16,
                 color: widget.hasBoundSource
-                    ? HomeTheme.focusGold
+                    ? t.focus
                     : Colors.white.withValues(alpha: 0.85),
               ),
               const SizedBox(width: 6),
@@ -2052,7 +2061,7 @@ class _CatalogSelectSourceButtonState
                     : 'Select Source',
                 style: TextStyle(
                   color: widget.hasBoundSource
-                      ? HomeTheme.focusGold
+                      ? t.focus
                       : Colors.white.withValues(alpha: 0.85),
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -2084,12 +2093,14 @@ class _SeasonStepButton extends StatelessWidget {
     // IconButton (not a bare InkWell) so the disabled state at the first/last
     // season keeps its button semantics for screen readers; the state-resolved
     // style adds the gold DPAD focus ring the default overlay lacks.
+    // Hoisted out of the resolver closure, which is not build-time code.
+    final t = DetailThemeScope.maybeOf(context);
     return IconButton(
       visualDensity: VisualDensity.compact,
       style: ButtonStyle(
         side: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.focused)
-              ? const BorderSide(color: HomeTheme.focusGold, width: 2)
+              ? BorderSide(color: t.focus, width: 2)
               : null,
         ),
         backgroundColor: WidgetStateProperty.resolveWith(
@@ -2158,6 +2169,7 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
     // don't render a meaningless ★ 0.0 on every episode.
     final rating = (e.rating != null && e.rating! > 0) ? e.rating : null;
     final hasMeta = (airDate != null && airDate.isNotEmpty) || rating != null;
+    final t = DetailThemeScope.maybeOf(context);
 
     final row = Focus(
       focusNode: widget.focusNode,
@@ -2214,7 +2226,7 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: _focused
-                    ? HomeTheme.focusGold
+                    ? t.focus
                     : Colors.white.withValues(alpha: 0.06),
                 width: _focused ? 2 : 1,
               ),
@@ -2260,9 +2272,9 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                           Container(
                             color: Colors.black.withValues(alpha: 0.45),
                             alignment: Alignment.center,
-                            child: const Icon(
+                            child: Icon(
                               Icons.check_circle_rounded,
-                              color: HomeTheme.focusGold,
+                              color: t.focus,
                               size: 24,
                             ),
                           ),
@@ -2274,7 +2286,7 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: HomeTheme.focusGold,
+                                color: t.focus,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Text(
@@ -2299,7 +2311,7 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                               child: FractionallySizedBox(
                                 widthFactor: progress / 100,
                                 alignment: Alignment.centerLeft,
-                                child: Container(color: HomeTheme.focusGold),
+                                child: Container(color: t.focus),
                               ),
                             ),
                           ),
@@ -2392,13 +2404,13 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (watched)
-                      const Icon(Icons.check_circle_rounded,
-                          color: HomeTheme.focusGold, size: 18)
+                      Icon(Icons.check_circle_rounded,
+                          color: t.focus, size: 18)
                     else if (partial)
                       Text(
                         '${progress.round()}%',
-                        style: const TextStyle(
-                          color: HomeTheme.focusGold,
+                        style: TextStyle(
+                          color: t.focus,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),

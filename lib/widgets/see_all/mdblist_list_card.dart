@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/mdblist/mdblist_list_source.dart';
-
-/// The Stremio purple accent, matching `kStremioAccent` in search_screen.
-const Color _accent = Color(0xFF7B5CFF);
+import '../../theme/app_theme_scope.dart';
 
 /// A single MDBList "list" rendered as a 2:3 gradient card — the same footprint
 /// as the poster cards, but for a *collection* (which has no artwork): a list
@@ -27,6 +25,8 @@ class MdblistListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final accent = app.seeAll.accent;
     final footer = [
       '${list.itemCount} items',
       if (list.likes > 0) '♥ ${list.likes}',
@@ -48,13 +48,13 @@ class MdblistListCard extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              _accent.withValues(alpha: focused ? 0.34 : 0.20),
-              Colors.white.withValues(alpha: 0.04),
+              app.fade(accent, focused ? 0.34 : 0.20),
+              app.fade(app.core.tx, 0.04),
             ],
           ),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: focused ? _accent : Colors.white.withValues(alpha: 0.10),
+            color: focused ? accent : app.fade(app.core.tx, 0.10),
             width: focused ? 2 : 1,
           ),
         ),
@@ -66,7 +66,7 @@ class MdblistListCard extends StatelessWidget {
               child: Icon(
                 Icons.playlist_play_rounded,
                 size: 32,
-                color: Colors.white.withValues(alpha: 0.85),
+                color: app.fade(app.core.tx, 0.85),
               ),
             ),
             const Spacer(),
@@ -89,7 +89,7 @@ class MdblistListCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: app.fade(app.core.tx, 0.5),
                   fontSize: 11.5,
                 ),
               ),
@@ -101,7 +101,7 @@ class MdblistListCard extends StatelessWidget {
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.62),
+                color: app.fade(app.core.tx, 0.62),
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
               ),

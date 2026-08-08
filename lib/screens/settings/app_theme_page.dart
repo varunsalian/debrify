@@ -115,10 +115,11 @@ class _AppThemePageState extends State<AppThemePage> {
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Text(
                       'One look for the whole app — experimental. Applies to '
-                      'Home, Search, Discover, Cloud, Settings, Addons and '
-                      'Calendar as those screens are migrated. IPTV, YouTube, '
-                      'Stremio TV, Debrify TV and the player keep the classic '
-                      'look for now.',
+                      'Home, Search, Discover, the navigation, Cloud, '
+                      'Settings, Addons, Calendar and movie/series pages. '
+                      'IPTV, YouTube, Stremio TV, Debrify TV, Playlist, '
+                      'Downloads and the player deliberately keep the classic '
+                      'look.',
                       style: TextStyle(
                         fontSize: 12.5,
                         height: 1.45,

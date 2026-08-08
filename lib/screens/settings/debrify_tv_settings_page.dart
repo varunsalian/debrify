@@ -7,6 +7,7 @@ import '../../services/engine/engine_registry.dart';
 import '../../services/engine/config_loader.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
+import '../../theme/app_theme_scope.dart';
 
 class DebrifyTvSettingsPage extends StatefulWidget {
   const DebrifyTvSettingsPage({super.key});
@@ -126,25 +127,27 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
   }
 
   Widget _buildInfoSection(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kSettingsPanel,
+        color: t.panel,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kSettingsLine),
+        border: Border.all(color: t.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.info_outline, size: 20, color: kSettingsAccent2),
+              Icon(Icons.info_outline, size: 20, color: t.accent2),
               const SizedBox(width: 8),
               Text(
                 'Performance Tips',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: app.core.tx,
                 ),
               ),
             ],
@@ -154,7 +157,7 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
             'Higher limits = More results but slower\nLower limits = Faster but fewer results',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               fontStyle: FontStyle.italic,
-              color: kSettingsDim,
+              color: t.dim,
             ),
           ),
           const SizedBox(height: 8),
@@ -162,7 +165,7 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
             'Each enabled engine will make API calls per keyword. Consider disabling engines you don\'t need for better performance.',
             style: Theme.of(
               context,
-            ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+            ).textTheme.bodySmall?.copyWith(color: t.dim),
           ),
         ],
       ),
@@ -170,6 +173,7 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
   }
 
   Widget _buildResetButton(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return SizedBox(
       width: double.infinity,
       child: OutlinedButton.icon(
@@ -184,11 +188,11 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
           ),
           backgroundColor: WidgetStateProperty.resolveWith(
             (states) =>
-                states.contains(WidgetState.focused) ? kSettingsPanel2 : null,
+                states.contains(WidgetState.focused) ? t.panel2 : null,
           ),
           side: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.focused)
-                ? const BorderSide(color: kSettingsAccent, width: 1.5)
+                ? BorderSide(color: t.accent, width: 1.5)
                 : BorderSide(
                     color: const Color(0xFFB4A0FF).withValues(alpha: 0.3),
                   ),
@@ -199,6 +203,7 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
   }
 
   void _showResetConfirmation(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -214,12 +219,12 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
             style: ButtonStyle(
               backgroundColor: WidgetStateProperty.resolveWith(
                 (states) => states.contains(WidgetState.focused)
-                    ? kSettingsPanel
+                    ? t.panel
                     : null,
               ),
               side: WidgetStateProperty.resolveWith(
                 (states) => states.contains(WidgetState.focused)
-                    ? const BorderSide(color: kSettingsAccent, width: 1.5)
+                    ? BorderSide(color: t.accent, width: 1.5)
                     : null,
               ),
             ),

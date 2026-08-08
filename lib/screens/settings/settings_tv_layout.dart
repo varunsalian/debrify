@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/main_page_bridge.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// TV-only two-pane Settings shell (the "Mock 1" layout): a category rail on
 /// the left, the selected category's rows on the right.
@@ -445,6 +446,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return SettingsBackground(
       child: SafeArea(
         child: Row(
@@ -461,7 +463,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 child: const SizedBox.shrink(),
               ),
             _buildRail(),
-            Container(width: 1, color: kSettingsLine),
+            Container(width: 1, color: t.line),
             // Only the pane rebuilds when the category changes.
             Expanded(
               child: ValueListenableBuilder<int>(
@@ -951,6 +953,8 @@ class _RailItemState extends State<_RailItem> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Focus(
@@ -982,16 +986,16 @@ class _RailItemState extends State<_RailItem> {
                 final bool selected = sel == widget.index;
                 final bool focused = _focused;
                 final Color fg = (focused || selected)
-                    ? Colors.white
-                    : kSettingsDim;
+                    ? app.core.tx
+                    : t.dim;
                 final Color iconColor = (focused || selected)
-                    ? kSettingsAccent2
-                    : kSettingsDim;
+                    ? t.accent2
+                    : t.dim;
                 // Subtitle brightens with the row but stays a step dimmer than
                 // the title so the label still reads as primary.
                 final Color subColor = (focused || selected)
-                    ? Colors.white.withValues(alpha: 0.60)
-                    : kSettingsDim2;
+                    ? app.fade(app.core.tx, 0.60)
+                    : t.dim2;
                 return Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -1000,12 +1004,12 @@ class _RailItemState extends State<_RailItem> {
                   decoration: BoxDecoration(
                     color: selected
                         ? (focused
-                              ? kSettingsPanel2
-                              : kSettingsAccent.withValues(alpha: 0.12))
-                        : (focused ? kSettingsPanel2 : Colors.transparent),
+                              ? t.panel2
+                              : t.accent.withValues(alpha: 0.12))
+                        : (focused ? t.panel2 : Colors.transparent),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: focused ? kSettingsAccent : Colors.transparent,
+                      color: focused ? t.accent : Colors.transparent,
                       width: 1.5,
                     ),
                   ),
@@ -1080,8 +1084,10 @@ class _RailSearchItemState extends State<_RailSearchItem> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final bool focused = _focused;
-    final Color fg = focused ? Colors.white : kSettingsDim;
+    final Color fg = focused ? app.core.tx : t.dim;
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Focus(
@@ -1107,10 +1113,10 @@ class _RailSearchItemState extends State<_RailSearchItem> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: focused ? kSettingsPanel2 : kSettingsPanel,
+                color: focused ? t.panel2 : t.panel,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: focused ? kSettingsAccent : kSettingsLine,
+                  color: focused ? t.accent : t.line,
                   width: focused ? 1.5 : 1,
                 ),
               ),
@@ -1119,7 +1125,7 @@ class _RailSearchItemState extends State<_RailSearchItem> {
                   Icon(
                     Icons.search_rounded,
                     size: 20,
-                    color: focused ? kSettingsAccent2 : kSettingsDim,
+                    color: focused ? t.accent2 : t.dim,
                   ),
                   const SizedBox(width: 13),
                   Expanded(

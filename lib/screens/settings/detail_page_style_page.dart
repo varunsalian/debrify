@@ -4,6 +4,7 @@ import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// One selectable look for the merged details page.
 class DetailPageStyleChoice {
@@ -182,6 +183,7 @@ class _DetailPageStylePageState extends State<DetailPageStylePage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Details Page',
@@ -224,7 +226,7 @@ class _DetailPageStylePageState extends State<DetailPageStylePage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ],
@@ -238,6 +240,7 @@ class _DetailPageStylePageState extends State<DetailPageStylePage> {
   /// Radio-style row — a plain [SettingsTile] (the DPAD-proven row) with a
   /// check on the active one.
   Widget _optionRow(DetailPageStyleChoice choice) {
+    final t = AppThemeScope.of(context).settings;
     final bool active = _style == choice.value;
     return SettingsTile(
       icon: active
@@ -246,7 +249,7 @@ class _DetailPageStylePageState extends State<DetailPageStylePage> {
       title: choice.label,
       subtitle: choice.subtitle,
       trailing: active
-          ? const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2)
+          ? Icon(Icons.check_rounded, size: 20, color: t.accent2)
           : const SizedBox.shrink(),
       onTap: () => _select(choice.value),
     );

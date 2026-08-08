@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'see_all_theme.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// Lays out a See-All screen's filter dropdowns responsively.
 ///
@@ -106,9 +106,10 @@ class _SeeAllFilterBarState extends State<SeeAllFilterBar> {
   }
 
   Future<void> _openSheet() async {
+    final app = AppThemeScope.of(context);
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: kSeeAllPanel,
+      backgroundColor: app.seeAll.panel,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
@@ -186,6 +187,7 @@ class _SeeAllFilterBarState extends State<SeeAllFilterBar> {
     // guide column sits below _narrowMax while the window itself is wide. The
     // phone's IPTV filter bar stays inline at any width; this matches it.
     if (widget.quiet) {
+      final app = AppThemeScope.of(context);
       final items = _items();
       return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -199,7 +201,7 @@ class _SeeAllFilterBarState extends State<SeeAllFilterBar> {
                   height: 3,
                   margin: const EdgeInsets.symmetric(horizontal: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.25),
+                    color: app.fade(app.core.tx, 0.25),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -273,6 +275,7 @@ class _FiltersButtonState extends State<_FiltersButton> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -283,10 +286,10 @@ class _FiltersButtonState extends State<_FiltersButton> {
         child: Container(
           padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
           decoration: BoxDecoration(
-            color: kSeeAllPanel,
+            color: app.seeAll.panel,
             borderRadius: BorderRadius.circular(11),
             border: Border.all(
-              color: _hovered ? kSeeAllAccentBorder : kSeeAllLine,
+              color: _hovered ? app.seeAll.accentBorder : app.seeAll.line,
             ),
           ),
           child: Row(
@@ -307,7 +310,7 @@ class _FiltersButtonState extends State<_FiltersButton> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
                   decoration: BoxDecoration(
-                    color: kSeeAllAccent,
+                    color: app.seeAll.accent,
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: Text(

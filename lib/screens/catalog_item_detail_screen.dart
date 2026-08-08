@@ -9,7 +9,7 @@ import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/series_source_service.dart';
-import '../widgets/home/home_theme.dart';
+import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
@@ -714,7 +714,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     child: Text(
       widget.item.type == 'series' ? 'SERIES' : 'MOVIE',
       style: TextStyle(
-        color: HomeTheme.focusGold,
+        color: DetailThemeScope.maybeOf(context).focus,
         fontSize: 11,
         fontWeight: FontWeight.w800,
         letterSpacing: 2.4,
@@ -1901,6 +1901,10 @@ class _RecCardState extends State<_RecCard> {
   @override
   Widget build(BuildContext context) {
     final poster = widget.item.poster;
+    // Signal — this screen is never wrapped in a DetailThemeScope today, so
+    // the fallback IS the shipped gold. Hoisted out of the tree below so the
+    // lookup happens once per build, never inside an animated builder.
+    final t = DetailThemeScope.maybeOf(context);
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
@@ -1940,7 +1944,7 @@ class _RecCardState extends State<_RecCard> {
                         color: Colors.white.withValues(alpha: 0.06),
                         border: Border.all(
                           color: _active
-                              ? HomeTheme.focusGold
+                              ? t.focus
                               : Colors.white.withValues(alpha: 0.10),
                           width: _active ? 2 : 0.5,
                         ),
@@ -2076,6 +2080,7 @@ class _ReadMoreToggleState extends State<_ReadMoreToggle> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.maybeOf(context);
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
@@ -2107,13 +2112,13 @@ class _ReadMoreToggleState extends State<_ReadMoreToggle> {
               widget.label,
               style: TextStyle(
                 color: _active
-                    ? HomeTheme.focusGold
+                    ? t.focus
                     : Colors.white.withValues(alpha: 0.95),
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.3,
                 decoration: _active ? TextDecoration.underline : null,
-                decorationColor: HomeTheme.focusGold,
+                decorationColor: t.focus,
               ),
             ),
           ),
@@ -2329,6 +2334,7 @@ class _QuickActionState extends State<_QuickAction> {
   @override
   Widget build(BuildContext context) {
     final o = widget.option;
+    final t = DetailThemeScope.maybeOf(context);
 
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
@@ -2376,16 +2382,14 @@ class _QuickActionState extends State<_QuickAction> {
                           ),
                           border: Border.all(
                             color: _active
-                                ? HomeTheme.focusGold
+                                ? t.focus
                                 : Colors.white.withValues(alpha: 0.12),
                             width: _active ? 1.6 : 1,
                           ),
                           boxShadow: _active
                               ? [
                                   BoxShadow(
-                                    color: HomeTheme.focusGold.withValues(
-                                      alpha: 0.32,
-                                    ),
+                                    color: t.fade(t.focus, 0.32),
                                     blurRadius: 18,
                                     spreadRadius: 0.5,
                                   ),
@@ -2564,6 +2568,7 @@ class _SimklQuickActionState extends State<_SimklQuickAction> {
   @override
   Widget build(BuildContext context) {
     final o = widget.option;
+    final t = DetailThemeScope.maybeOf(context);
 
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
@@ -2611,16 +2616,14 @@ class _SimklQuickActionState extends State<_SimklQuickAction> {
                           ),
                           border: Border.all(
                             color: _active
-                                ? HomeTheme.focusGold
+                                ? t.focus
                                 : Colors.white.withValues(alpha: 0.12),
                             width: _active ? 1.6 : 1,
                           ),
                           boxShadow: _active
                               ? [
                                   BoxShadow(
-                                    color: HomeTheme.focusGold.withValues(
-                                      alpha: 0.32,
-                                    ),
+                                    color: t.fade(t.focus, 0.32),
                                     blurRadius: 18,
                                     spreadRadius: 0.5,
                                   ),
@@ -2739,6 +2742,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
   Widget build(BuildContext context) {
     final filled = widget.filled;
     final accent = widget.accent;
+    final t = DetailThemeScope.maybeOf(context);
 
     final filledBg = accent ?? Colors.white;
     final filledFg = accent == null ? Colors.black : Colors.white;
@@ -2756,12 +2760,12 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
     // even on the red Play button.
     final Color borderColor;
     if (_focused) {
-      borderColor = HomeTheme.focusGold;
+      borderColor = t.focus;
     } else if (filled) {
       borderColor = Colors.transparent;
     } else if (widget.tinted) {
       // A bound source: hint with a soft gold resting border.
-      borderColor = HomeTheme.focusGold.withValues(alpha: 0.5);
+      borderColor = t.fade(t.focus, 0.5);
     } else {
       borderColor = Colors.white.withValues(alpha: 0.18);
     }
@@ -2808,7 +2812,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
               boxShadow: _focused
                   ? [
                       BoxShadow(
-                        color: HomeTheme.focusGold.withValues(alpha: 0.55),
+                        color: t.fade(t.focus, 0.55),
                         blurRadius: 30,
                         spreadRadius: 2,
                       ),

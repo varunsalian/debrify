@@ -25,6 +25,7 @@ import '../widgets/detail/detail_layout_premium.dart';
 import '../widgets/detail/detail_layout_stage.dart';
 import '../widgets/detail/detail_style.dart';
 import '../widgets/detail/detail_model.dart';
+import '../theme/app_theme_scope.dart';
 import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/detail/theme/detail_themes.dart';
 import '../widgets/hero_trailer_backdrop.dart';
@@ -1891,7 +1892,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     showModalBottomSheet<void>(
       context: context,
       // Same standard sheet chrome as the per-episode ⋮ menu.
-      backgroundColor: const Color(0xFF141019),
+      backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetCtx) => _QuickActionsMenu(
@@ -1919,7 +1920,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     if (_traktOnlyMenuOptions.isEmpty || widget.onTraktAction == null) return;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF141019),
+      backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetCtx) => _TraktSheet(
@@ -1957,7 +1958,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     if (_menuOptionsSimkl.isEmpty || widget.onSimklAction == null) return;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF141019),
+      backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetCtx) => _SimklSheet(

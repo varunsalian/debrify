@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_theme.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
-import 'cloud_theme.dart';
 
 /// One entry of a [CloudSegmentedTabs] control.
 class CloudSegment<T> {
@@ -31,25 +32,26 @@ class CloudSegmentedTabs<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.045),
+        color: app.fade(app.core.tx, 0.045),
         borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: app.fade(app.core.tx, 0.08)),
       ),
       child: Row(
         children: [
           for (var i = 0; i < segments.length; i++) ...[
             if (i > 0) const SizedBox(width: 4),
-            Expanded(child: _segment(segments[i])),
+            Expanded(child: _segment(segments[i], app)),
           ],
         ],
       ),
     );
   }
 
-  Widget _segment(CloudSegment<T> segment) {
+  Widget _segment(CloudSegment<T> segment, AppTheme app) {
     final isSelected = segment.value == selected;
     return Focus(
       onKeyEvent: (node, event) {
@@ -68,11 +70,11 @@ class CloudSegmentedTabs<T> extends StatelessWidget {
               duration: const Duration(milliseconds: 150),
               padding: const EdgeInsets.symmetric(vertical: 9),
               decoration: BoxDecoration(
-                color: isSelected ? CloudTheme.accent : Colors.transparent,
+                color: isSelected ? app.cloud.accent : Colors.transparent,
                 borderRadius: BorderRadius.circular(9),
                 border: Border.all(
                   color: focused
-                      ? Colors.white.withValues(alpha: 0.9)
+                      ? app.fade(app.core.tx, 0.9)
                       : Colors.transparent,
                   width: 2,
                 ),
@@ -83,9 +85,12 @@ class CloudSegmentedTabs<T> extends StatelessWidget {
                   Icon(
                     segment.icon,
                     size: 17,
+                    // Selected rides an accent FILL, so its ink is decided by
+                    // the swatch, not the page — white on Broadcast's yellow
+                    // would be unreadable. Unselected sits on the page.
                     color: isSelected
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.55),
+                        ? app.inkOn(app.cloud.accent)
+                        : app.fade(app.core.tx, 0.55),
                   ),
                   const SizedBox(width: 8),
                   Flexible(
@@ -98,8 +103,8 @@ class CloudSegmentedTabs<T> extends StatelessWidget {
                         fontWeight:
                             isSelected ? FontWeight.w700 : FontWeight.w500,
                         color: isSelected
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.55),
+                            ? app.inkOn(app.cloud.accent)
+                            : app.fade(app.core.tx, 0.55),
                       ),
                     ),
                   ),

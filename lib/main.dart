@@ -58,7 +58,6 @@ import 'widgets/mobile_classic_nav.dart';
 import 'widgets/tv_ambient_art_stage.dart';
 import 'widgets/tv_sidebar_nav.dart';
 import 'widgets/desktop_sidebar_nav.dart';
-import 'widgets/home/home_theme.dart';
 import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
@@ -2620,6 +2619,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final visibleIndices = _computeVisibleNavIndices();
+    // Read ONCE here and captured by every builder below. The scrim and veil
+    // sit inside ValueListenableBuilders that re-run on each sidebar focus
+    // enter/exit — frequent enough that this file already avoids setState for
+    // them — and the Scaffold sits inside a LayoutBuilder that re-runs on
+    // every resize, so a lookup at any of those sites repeats an
+    // inherited-widget walk on a hot path.
+    final app = AppThemeScope.of(context);
 
     return Stack(
       children: [
@@ -2786,8 +2792,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                     opacity: expanded ? 1.0 : 0.0,
                                     duration: const Duration(milliseconds: 200),
                                     curve: Curves.easeOut,
-                                    child: const ColoredBox(
-                                      color: Color(0x8A05060E),
+                                    child: ColoredBox(
+                                      color: app.shell.sidebarScrim,
                                     ),
                                   ),
                             ),
@@ -2879,9 +2885,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                     ? const Duration(milliseconds: 900)
                                     : const Duration(milliseconds: 250),
                                 curve: Curves.easeOut,
-                                child: const ColoredBox(
-                                  color: Color(0xEB0D0B1A),
-                                ),
+                                child: ColoredBox(color: app.shell.railVeil),
                               ),
                             ),
                           ),
@@ -2933,17 +2937,18 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                   // static now: once this went opaque nothing could see it
                   // move, so the animation was dropped.)
                   //
-                  // #0D0B1A is already the app's de-facto ink (kStremioBg,
-                  // _kStremioBg, kSeeAllBg and HomeTheme.bg are all this exact
-                  // colour), so the strips now match every page that uses it and
-                  // sit within a hair of the few that don't. Safe to make opaque
-                  // because no non-TV page is translucent down to the wallpaper:
-                  // the one page that goes transparent on purpose is the glass
-                  // Home board, which is TV-gated (`_heroTrailerActive`).
+                  // shell.ink pins #0D0B1A under legacy — the app's de-facto
+                  // ink (kStremioBg, kSeeAllBg and HomeTheme.bg are all this
+                  // exact colour) — so the strips match every page that uses
+                  // it, and under a real app theme they follow its ground.
+                  // Safe to keep opaque because no non-TV page is translucent
+                  // down to the wallpaper: the one page that goes transparent
+                  // on purpose is the glass Home board, which is TV-gated
+                  // (`_heroTrailerActive`).
                   //
                   // TV keeps its transparent shell above — TvAmbientArtStage is
                   // the real background there.
-                  backgroundColor: HomeTheme.bg,
+                  backgroundColor: app.shell.ink,
                   // The REAL Scaffold slot, not a body child: Scaffold then
                   // owns the geometry — body inset above the bar, descendant
                   // MediaQuery stripped of the bottom padding the bar

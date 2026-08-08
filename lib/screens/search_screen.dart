@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/advanced_search_selection.dart';
+import '../theme/app_theme_scope.dart';
 import '../utils/platform_util.dart';
 import '../models/debrify_tv/channel.dart';
 import '../models/iptv_playlist.dart';
@@ -90,14 +91,11 @@ import 'premiumize/premiumize_files_screen.dart';
 import 'alldebrid/alldebrid_files_screen.dart';
 import 'pikpak/pikpak_files_screen.dart';
 
-/// Stremio-style palette for the Search tab: an indigo/purple accent and a deep
-/// near-black indigo base behind the poster board.
-const Color kStremioAccent = Color(0xFF7B5CFF);
-const Color kStremioBg = Color(0xFF0D0B1A);
-
-/// TV focus ring for board cards — violet-300, deliberately LIGHTER than
-/// [kStremioAccent]: a light ring over dark art pops at 10ft, while the deep
-/// accent stays for chrome (tags, sidebar). Pairs with the calm 1.045 scale.
+/// TV focus ring for board cards — violet-300, deliberately LIGHTER than the
+/// board's chrome accent: a light ring over dark art pops at 10ft, while the
+/// deep accent stays for chrome (tags, sidebar). Pairs with the calm 1.045
+/// scale. (The old kStremioAccent/kStremioBg palette constants now live in
+/// the app theme as `app.home.chromeAccent` / `app.home.bg`.)
 const Color kStremioFocusRing = kCardFocusRing;
 
 /// Continue Watching progress-bar fill (Stremio shows a white line; we use red).
@@ -3106,11 +3104,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     void run(String choice) =>
         unawaited(_handlePlaylistMenuChoice(choice, item, isFavorited));
 
+    final app = AppThemeScope.of(context);
     await showDebridActionSheet(
       context,
       providerLabel: 'Playlist',
       torrentName: title,
-      gradient: const [Color(0xFF7B5CFF), Color(0xFF9B7BFF)],
+      gradient: [app.seeAll.accent, app.seeAll.accent2],
       providerIcon: Icons.playlist_play_rounded,
       subtitle: isCollection
           ? 'Saved collection. Choose your next step.'
@@ -3160,7 +3159,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           ),
         DebridActionItem(
           icon: Icons.delete_outline_rounded,
-          color: const Color(0xFFEF4444),
+          color: app.home.danger,
           title: 'Delete',
           subtitle: 'Remove from playlist',
           onTap: () => run('delete'),
@@ -3243,7 +3242,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: HomeTheme.danger),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppThemeScope.of(dialogContext).home.danger,
+            ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Delete'),
           ),
@@ -6067,6 +6068,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _StageRailView view, {
     MainAxisAlignment align = MainAxisAlignment.center,
   }) {
+    final app = AppThemeScope.of(context);
     final title = _canvasTabTitle(view.rails, view.index);
     return Row(
       mainAxisAlignment: align,
@@ -6078,14 +6080,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             Icon(
               Icons.keyboard_arrow_up_rounded,
               size: 13,
-              color: Colors.white.withValues(alpha: 0.45),
+              color: app.fade(app.core.tx, 0.45),
             ),
             Transform.translate(
               offset: const Offset(0, -5),
               child: Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 13,
-                color: Colors.white.withValues(alpha: 0.45),
+                color: app.fade(app.core.tx, 0.45),
               ),
             ),
           ],
@@ -6100,7 +6102,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               fontSize: _kPromLabelFontSize,
               fontWeight: FontWeight.w800,
               letterSpacing: 2.4,
-              color: Colors.white.withValues(alpha: 0.82),
+              color: app.fade(app.core.tx, 0.82),
             ),
           ),
         ),
@@ -6118,7 +6120,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               fontSize: _kPromLabelFontSize,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.6,
-              color: Colors.white.withValues(alpha: 0.32),
+              color: app.fade(app.core.tx, 0.32),
             ),
             ),
           ),
@@ -6192,6 +6194,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// trailer, in the same rect — the hole simply follows the layer's box)
   /// with a two-row poster wall standing on its lower half.
   Widget _buildAtriumBoard() {
+    final app = AppThemeScope.of(context);
     final view = _resolveStageRail();
     if (view == null) {
       return BrandLoadingStage(isTelevision: widget.isTelevision);
@@ -6292,7 +6295,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               top: 0,
               bottom: 0,
               width: splitX,
-              child: const ColoredBox(color: kStremioBg),
+              child: ColoredBox(color: app.home.bg),
             ),
             // The seam itself — one hairline, so the cut reads as deliberate.
             Positioned(
@@ -6300,7 +6303,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               top: 0,
               bottom: 0,
               width: 1,
-              child: ColoredBox(color: Colors.white.withValues(alpha: 0.09)),
+              child: ColoredBox(color: app.fade(app.core.tx, 0.09)),
             ),
             // THE DOSSIER. Never focusable; vertically centred in the column.
             Positioned(
@@ -6417,6 +6420,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     required bool isTopRow,
     required bool hasRowBelow,
   }) {
+    final app = AppThemeScope.of(context);
     final rail = rails[index];
     final railKey = _canvasRailKeyOf(rail);
     final favRail = rail.favKind != null;
@@ -6461,7 +6465,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             fontSize: _kAtriumLabelFontSize,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.6,
-            color: Colors.white.withValues(alpha: 0.86),
+            color: app.fade(app.core.tx, 0.86),
             shadows: const [Shadow(color: Color(0x99000000), blurRadius: 6)],
           ),
         ),
@@ -6559,6 +6563,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// flat veil, one grid — and no ambient video (see [_stageWantsAmbient]),
   /// which is why it stays smooth on weak TV hardware.
   Widget _buildMosaicBoard() {
+    final app = AppThemeScope.of(context);
     final view = _resolveStageRail();
     if (view == null) {
       return BrandLoadingStage(isTelevision: widget.isTelevision);
@@ -6715,9 +6720,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                       fontSize: 10.5,
                                       fontWeight: FontWeight.w700,
                                       letterSpacing: 1.4,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.34,
-                                      ),
+                                      color: app.fade(app.core.tx, 0.34),
                                     ),
                                   ),
                                 ],
@@ -6910,6 +6913,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// needs no native work); the rounded corners are four ink wedges painted
   /// ABOVE the layers, because a clip would put a saveLayer over the hole.
   Widget _buildDeckBoard() {
+    final app = AppThemeScope.of(context);
     final view = _resolveStageRail();
     if (view == null) {
       return BrandLoadingStage(isTelevision: widget.isTelevision);
@@ -7038,7 +7042,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(_kDeckCardRadius),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.10),
+                          color: app.fade(app.core.tx, 0.10),
                           width: 1,
                         ),
                       ),
@@ -7156,43 +7160,46 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// Deck's rail label — the same quiet caps as Atrium's rows, with the
   /// stacked chevron pair that says UP/DOWN changes rails.
-  Widget _deckRailLabel(_StageRailView view) => Row(
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: [
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.keyboard_arrow_up_rounded,
-            size: 13,
-            color: Colors.white.withValues(alpha: 0.45),
-          ),
-          Transform.translate(
-            offset: const Offset(0, -5),
-            child: Icon(
-              Icons.keyboard_arrow_down_rounded,
+  Widget _deckRailLabel(_StageRailView view) {
+    final app = AppThemeScope.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.keyboard_arrow_up_rounded,
               size: 13,
-              color: Colors.white.withValues(alpha: 0.45),
+              color: app.fade(app.core.tx, 0.45),
+            ),
+            Transform.translate(
+              offset: const Offset(0, -5),
+              child: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 13,
+                color: app.fade(app.core.tx, 0.45),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(
+            _canvasTabTitle(view.rails, view.index).toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: _kAtriumLabelFontSize,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.8,
+              color: app.fade(app.core.tx, 0.86),
             ),
           ),
-        ],
-      ),
-      const SizedBox(width: 12),
-      Flexible(
-        child: Text(
-          _canvasTabTitle(view.rails, view.index).toUpperCase(),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: _kAtriumLabelFontSize,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.8,
-            color: Colors.white.withValues(alpha: 0.86),
-          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 
   /// The two cards stacked behind the hero — the NEXT two titles on this
   /// rail, drawn from the focused column so moving along the rail deals them
@@ -7639,6 +7646,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _kTonightHeaderPad;
 
   Widget _tonightHeader(int inProgress) {
+    final app = AppThemeScope.of(context);
     final now = DateTime.now();
     const days = [
       'MONDAY',
@@ -7660,10 +7668,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           crossAxisAlignment: CrossAxisAlignment.baseline,
           textBaseline: TextBaseline.alphabetic,
           children: [
-            const Text(
+            Text(
               'Tonight',
               style: TextStyle(
-                color: Colors.white,
+                color: app.core.tx,
                 fontSize: _kTonightTitleSize,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -0.4,
@@ -7673,7 +7681,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             Text(
               day,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.40),
+                color: app.fade(app.core.tx, 0.40),
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 2.2,
@@ -7684,7 +7692,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               Text(
                 '$inProgress IN PROGRESS',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.40),
+                  color: app.fade(app.core.tx, 0.40),
                   fontSize: 11.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 2.2,
@@ -7914,6 +7922,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// narrow enough that four capped labels + chevrons + the "+N more" tail
   /// would overflow the Row.
   Widget _canvasTabs(List<_CanvasRail> rails, int active) {
+    final app = AppThemeScope.of(context);
     return LayoutBuilder(
       builder: (context, cons) {
         // Worst-case per-tab footprint: 170px label cap + 26px gap. Reserve
@@ -7961,14 +7970,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               Icon(
                 Icons.keyboard_arrow_up_rounded,
                 size: 13,
-                color: Colors.white.withValues(alpha: 0.45),
+                color: app.fade(app.core.tx, 0.45),
               ),
               Transform.translate(
                 offset: const Offset(0, -5),
                 child: Icon(
                   Icons.keyboard_arrow_down_rounded,
                   size: 13,
-                  color: Colors.white.withValues(alpha: 0.45),
+                  color: app.fade(app.core.tx, 0.45),
                 ),
               ),
             ],
@@ -7995,8 +8004,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                           : FontWeight.w600,
                       letterSpacing: 0.3,
                       color: i == active
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.5),
+                          ? app.core.tx
+                          : app.fade(app.core.tx, 0.5),
                     ),
                   ),
                 ),
@@ -8006,7 +8015,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   width: 26,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(2),
-                    color: i == active ? Colors.white : Colors.transparent,
+                    color: i == active ? app.core.tx : Colors.transparent,
                   ),
                 ),
               ],
@@ -8021,7 +8030,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: Colors.white.withValues(alpha: 0.24),
+                color: app.fade(app.core.tx, 0.24),
               ),
             ),
           ),
@@ -9153,10 +9162,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Action menu for a keyword-result direct/external stream row (parity with
   /// the old direct-stream action dialog): Play/Open, Copy URL, Download.
   void _showKwStreamMenu(Torrent t, int i) {
+    final app = AppThemeScope.of(context);
     final external = t.isExternalStream;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: app.home.sheetBg,
       builder: (sheetCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -9164,7 +9174,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             ListTile(
               leading: Icon(
                 external ? Icons.open_in_new_rounded : Icons.play_arrow_rounded,
-                color: Colors.white,
+                color: app.core.tx,
               ),
               title: Text(
                 external ? 'Open externally' : 'Play now',
@@ -9503,6 +9513,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Info banner shown above the results when the list is narrowed to
   /// TorBox-cached torrents. Mirrors the old `_buildTorboxCachedOnlyNotice`.
   Widget _kwCachedOnlyNotice() {
+    final app = AppThemeScope.of(context);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       padding: const EdgeInsets.all(12),
@@ -9528,7 +9539,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               'during searches" in Torbox settings to see every result.',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.white.withValues(alpha: 0.85),
+                color: app.fade(app.core.tx, 0.85),
               ),
             ),
           ),
@@ -9848,6 +9859,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // rebuilt by the merged page once `traktStatusLoader` resolves — so
     // watchlist/collection/rating entries flip to their Remove form when the
     // title is already there.
+    final app = AppThemeScope.of(context);
     List<TraktMenuOption> buildMenuOptions(TraktTitleStatus? status) =>
         <TraktMenuOption>[
           ...buildTraktAddOnlyMenuOptions(
@@ -9860,18 +9872,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             status: status,
           ),
           if (inCw)
-            const TraktMenuOption(
+            TraktMenuOption(
               action: TraktItemMenuAction.removeFromPlayback,
               icon: Icons.delete_sweep_rounded,
-              color: Color(0xFFEF4444),
+              color: app.home.danger,
               label: 'Remove from Continue Watching',
               caption: 'Remove',
             ),
           if (inTraktCw)
-            const TraktMenuOption(
+            TraktMenuOption(
               action: TraktItemMenuAction.removeFromTraktPlayback,
               icon: Icons.remove_circle_outline_rounded,
-              color: Color(0xFFEF4444),
+              color: app.home.danger,
               label: 'Remove from Trakt Continue Watching',
               caption: 'Remove',
               isTrakt: true,
@@ -10215,6 +10227,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
+            final app = AppThemeScope.of(dialogContext);
             void closeIfEmpty() {
               if (dialogContext.mounted) Navigator.of(dialogContext).pop();
             }
@@ -10368,18 +10381,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                     Navigator.of(dialogContext).pop();
                                   }
                                 },
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.delete_sweep_outlined,
                                   size: 18,
-                                  color: Color(0xFFEF4444),
+                                  color: app.home.danger,
                                 ),
-                                label: const Text(
+                                label: Text(
                                   'Remove All',
-                                  style: TextStyle(color: Color(0xFFEF4444)),
+                                  style: TextStyle(color: app.home.danger),
                                 ),
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(
-                                    color: Color(0xFFEF4444),
+                                  side: BorderSide(
+                                    color: app.home.danger,
                                     width: 1,
                                   ),
                                   shape: RoundedRectangleBorder(
@@ -10402,18 +10415,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                     Navigator.of(dialogContext).pop();
                                   }
                                 },
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.delete_outline_rounded,
                                   size: 18,
-                                  color: Color(0xFFEF4444),
+                                  color: app.home.danger,
                                 ),
-                                label: const Text(
+                                label: Text(
                                   'Remove',
-                                  style: TextStyle(color: Color(0xFFEF4444)),
+                                  style: TextStyle(color: app.home.danger),
                                 ),
                                 style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(
-                                    color: Color(0xFFEF4444),
+                                  side: BorderSide(
+                                    color: app.home.danger,
                                     width: 1,
                                   ),
                                   shape: RoundedRectangleBorder(
@@ -10598,6 +10611,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     required VoidCallback onDelete,
     bool showDragHandle = true,
   }) {
+    final app = AppThemeScope.of(context);
     Color serviceColor;
     String serviceLabel;
     switch (source.debridService) {
@@ -10629,9 +10643,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: app.fade(app.core.tx, 0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: app.fade(app.core.tx, 0.08)),
       ),
       child: Row(
         children: [
@@ -10691,10 +10705,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             ),
           ),
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.close_rounded,
               size: 16,
-              color: Color(0xFFEF4444),
+              color: app.home.danger,
             ),
             onPressed: onDelete,
             tooltip: 'Remove source',
@@ -11556,27 +11570,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // screen — rail strip included. Every other mode keeps the opaque indigo
     // bloom below.
     final glassHome = _heroTrailerActive;
+    final app = AppThemeScope.of(context);
     return Scaffold(
-      backgroundColor: glassHome ? Colors.transparent : kStremioBg,
+      backgroundColor: glassHome ? Colors.transparent : app.home.bg,
       // A restrained indigo bloom near the top fading fast into near-black —
       // toned down from a saturated purple so the posters carry the colour
       // (Stremio's home grid is nearly monochrome).
       body: Container(
         decoration: glassHome
             ? null
-            : const BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment(0, -0.75),
-                  radius: 1.35,
-                  colors: [
-                    Color(0xFF241E44), // dim indigo bloom
-                    Color(0xFF161327),
-                    Color(0xFF0F0D1D),
-                    kStremioBg,
-                  ],
-                  stops: [0.0, 0.38, 0.68, 1.0],
-                ),
-              ),
+            : BoxDecoration(gradient: app.home.wash),
         child: SafeArea(
           // Three layouts:
           //  • Dedicated Search tab (searchMode) — the field + Catalog/Keyword
@@ -11710,6 +11713,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Centered translucent pill search — mirrors Stremio's search bar (rounded
   /// pill, centered text, a search glyph on the right that becomes a clear ✕).
   Widget _buildSearchField(bool tv) {
+    final app = AppThemeScope.of(context);
     final scheme = Theme.of(context).colorScheme;
     final radius = BorderRadius.circular(26);
     return Focus(
@@ -11804,18 +11808,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 _Mode.catalog => 'Search or paste link',
                 _Mode.keyword => 'Search torrents by keyword',
               },
-              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.32)),
+              hintStyle: TextStyle(color: app.fade(app.core.tx, 0.32)),
               suffixIcon: hasText
                   ? IconButton(
                       icon: Icon(
                         Icons.close_rounded,
-                        color: Colors.white.withValues(alpha: 0.55),
+                        color: app.fade(app.core.tx, 0.55),
                       ),
                       onPressed: _clearQuery,
                     )
                   : Icon(
                       Icons.search_rounded,
-                      color: Colors.white.withValues(alpha: 0.4),
+                      color: app.fade(app.core.tx, 0.4),
                     ),
               border: OutlineInputBorder(
                 borderRadius: radius,
@@ -11828,11 +11832,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               focusedBorder: OutlineInputBorder(
                 borderRadius: radius,
                 borderSide: BorderSide(
-                  color: kStremioAccent.withValues(alpha: 0.6),
+                  color: app.fade(app.home.chromeAccent, 0.6),
                 ),
               ),
               filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.06),
+              fillColor: app.fade(app.core.tx, 0.06),
               contentPadding: EdgeInsets.symmetric(
                 horizontal: 20,
                 vertical: tv ? 16 : 14,
@@ -12067,6 +12071,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// Empty state for the dedicated Search tab before the user types.
   Widget _buildSearchPrompt() {
+    final app = AppThemeScope.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
@@ -12076,14 +12081,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             Icon(
               Icons.search_rounded,
               size: 54,
-              color: Colors.white.withValues(alpha: 0.22),
+              color: app.fade(app.core.tx, 0.22),
             ),
             const SizedBox(height: 16),
             Text(
               'Search movies & shows',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.8),
+                color: app.fade(app.core.tx, 0.8),
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
               ),
@@ -12096,7 +12101,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               'search torrents directly.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: app.fade(app.core.tx, 0.5),
                 fontSize: 13.5,
                 height: 1.4,
               ),
@@ -12116,6 +12121,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// the search-capable addons, persisted across launches. Catalog-mode twin
   /// of [_kwSourcesButton].
   Widget _catalogSourcesButton() {
+    final app = AppThemeScope.of(context);
     final scheme = Theme.of(context).colorScheme;
     return Focus(
       focusNode: _catalogSourcesBtnFocus,
@@ -12157,8 +12163,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
                     color: focused
-                        ? Colors.white.withValues(alpha: 0.9)
-                        : Colors.white.withValues(alpha: 0.10),
+                        ? app.fade(app.core.tx, 0.9)
+                        : app.fade(app.core.tx, 0.10),
                     width: 1.5,
                   ),
                 ),
@@ -12427,6 +12433,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Standalone "Sources" pill shown in the pre-search keyword state so users
   /// can pick which trackers are queried before typing a query.
   Widget _kwSourcesButton() {
+    final app = AppThemeScope.of(context);
     final scheme = Theme.of(context).colorScheme;
     return Focus(
       focusNode: _kwSourcesBtnFocus,
@@ -12471,8 +12478,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   // focused, else the faint idle border.
                   border: Border.all(
                     color: focused
-                        ? Colors.white.withValues(alpha: 0.9)
-                        : Colors.white.withValues(alpha: 0.10),
+                        ? app.fade(app.core.tx, 0.9)
+                        : app.fade(app.core.tx, 0.10),
                     width: 1.5,
                   ),
                 ),
@@ -12538,8 +12545,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// left/right across tabs, up to the search field, down into the toolbar,
   /// select to activate.
   Widget _kwSourceTabs() {
-    const accent = Color(0xFF7B5CFF);
-    final dim = Colors.white.withValues(alpha: 0.55);
+    final app = AppThemeScope.of(context);
+    final accent = app.home.chromeAccent;
+    final dim = app.fade(app.core.tx, 0.55);
     final sources = _kwSourceList;
     final full = _kwFullSet;
     final counts = <String, int>{};
@@ -12555,12 +12563,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       Widget body(bool focused) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
         decoration: BoxDecoration(
-          color: on ? accent : Colors.white.withValues(alpha: 0.05),
+          color: on ? accent : app.fade(app.core.tx, 0.05),
           borderRadius: BorderRadius.circular(999),
           // Always 2px so focus never shifts layout.
           border: Border.all(
             color: focused
-                ? Colors.white.withValues(alpha: 0.9)
+                ? app.fade(app.core.tx, 0.9)
                 : Colors.transparent,
             width: 2,
           ),
@@ -12720,6 +12728,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Slim "still searching" strip under the toolbar while engines are in
   /// flight — rows are already usable, this just says more may arrive.
   Widget _kwSearchingStrip() {
+    final app = AppThemeScope.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
       child: Row(
@@ -12734,7 +12743,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             'Still searching sources…',
             style: TextStyle(
               fontSize: 11.5,
-              color: Colors.white.withValues(alpha: 0.55),
+              color: app.fade(app.core.tx, 0.55),
             ),
           ),
         ],
@@ -12745,7 +12754,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// The "+N new results" pill: tap (or OK on TV) folds the parked arrivals
   /// into the list; DOWN returns to the rows, UP reaches the toolbar.
   Widget _kwNewResultsPill() {
-    const accent = Color(0xFF7B5CFF);
+    final accent = AppThemeScope.of(context).home.chromeAccent;
     final n = _kwPendingNewCount;
     return Focus(
       focusNode: _kwPillFocus,
@@ -12819,6 +12828,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// floating FAB + bar (Home-style) rather than a toolbar pill — so the
   /// toolbar stays Sort/Filters/Sources and never swaps to selection controls.
   Widget _buildKeywordToolbar({bool floatingSelect = false}) {
+    final app = AppThemeScope.of(context);
     final scheme = Theme.of(context).colorScheme;
     // Every facet counts. Sizes were already missing here, so a size-only
     // filter quietly trimmed the results while the pill still read "Filters"
@@ -12856,10 +12866,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           // focused, else the active/idle border.
           border: Border.all(
             color: focused
-                ? Colors.white.withValues(alpha: 0.9)
+                ? app.fade(app.core.tx, 0.9)
                 : active
                 ? scheme.primary.withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.10),
+                : app.fade(app.core.tx, 0.10),
             width: 2,
           ),
         ),
@@ -13073,6 +13083,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Floating checklist FAB (bottom-left) that enters multi-select on small
   /// screens — ported from Home's torrent-search layout.
   Widget _buildKwSelectFab() {
+    final app = AppThemeScope.of(context);
     return Positioned(
       left: 16,
       bottom: 16,
@@ -13082,9 +13093,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           width: 46,
           height: 46,
           decoration: BoxDecoration(
-            color: const Color(0xFF334155),
+            color: app.home.controlBg,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+            border: Border.all(color: app.fade(app.core.tx, 0.15)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.4),
@@ -13093,9 +13104,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               ),
             ],
           ),
-          child: const Icon(
+          child: Icon(
             Icons.checklist_rounded,
-            color: Colors.white,
+            color: app.core.tx,
             size: 20,
           ),
         ),
@@ -13106,6 +13117,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// Floating multi-select bar (bottom) — Home-style. Right-inset so it clears
   /// the mobile floating "Menu" nav.
   Widget _buildKwSelectionBar() {
+    final app = AppThemeScope.of(context);
     final selectable = _kwSelectableResults.length;
     final count = _kwSelected.length;
     final allSelected = count > 0 && count == selectable;
@@ -13134,7 +13146,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         decoration: BoxDecoration(
           color: const Color(0xFF1E293B),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: kStremioAccent.withValues(alpha: 0.45)),
+          border: Border.all(
+            color: app.fade(app.home.chromeAccent, 0.45),
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.4),
@@ -13148,7 +13162,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             chip(
               const Icon(Icons.close_rounded, color: Colors.white70, size: 18),
               _exitKwSelection,
-              Colors.white.withValues(alpha: 0.1),
+              app.fade(app.core.tx, 0.1),
             ),
             const SizedBox(width: 10),
             Flexible(
@@ -13156,7 +13170,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 '$count selected',
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: count > 0 ? kStremioAccent : Colors.white54,
+                  color: count > 0 ? app.home.chromeAccent : Colors.white54,
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -13173,7 +13187,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 ),
               ),
               allSelected ? _deselectAllKw : _selectAllKw,
-              Colors.white.withValues(alpha: 0.08),
+              app.fade(app.core.tx, 0.08),
             ),
             const SizedBox(width: 8),
             chip(
@@ -13198,8 +13212,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               ),
               count > 0 ? _openBulkAdd : null,
               count > 0
-                  ? kStremioAccent
-                  : kStremioAccent.withValues(alpha: 0.3),
+                  ? app.home.chromeAccent
+                  : app.fade(app.home.chromeAccent, 0.3),
             ),
           ],
         ),
@@ -13294,6 +13308,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// filter so DPAD walks Source → the panel's own filters → grid. All item
   /// open/play/bound wiring is this screen's existing board handlers.
   Widget _buildDiscover() {
+    final app = AppThemeScope.of(context);
     final panel = _buildDiscoverPanel();
     // Touch has no persistent focus, so a reactive detail rail has nothing to
     // react to — keep the full-width grid there. TV gets the glass-stage
@@ -13414,7 +13429,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         return Stack(
           fit: StackFit.expand,
           children: [
-            const DecoratedBox(decoration: HomeTheme.pageBackground),
+            DecoratedBox(decoration: BoxDecoration(gradient: app.home.wash)),
             RepaintBoundary(child: _DiscoverStageBackdrop(shown: _discShown)),
             DiscoverTrailerStage(
               trailer: _discTrailerStreams,
@@ -13453,9 +13468,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   : IgnorePointer(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: const Color(
-                            0xFF0D0B1A,
-                          ).withValues(alpha: 0.92 * t),
+                          color: app.fade(app.home.bg, 0.92 * t),
                         ),
                       ),
                     ),
@@ -13506,6 +13519,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// owning fetch, filters and paging, and only the arrangement of its results
   /// changes — declared by the [DiscoverShelfScope] wrapped around it here.
   Widget _buildDiscoverStage(BoxConstraints c, Widget panel) {
+    final app = AppThemeScope.of(context);
     // Canvas's poster proportion (30% of the board, clamped) so the two
     // full-bleed shelves on this TV read as the same furniture.
     final cardH = (c.maxHeight * 0.30).clamp(140.0, 200.0);
@@ -13524,7 +13538,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return Stack(
       fit: StackFit.expand,
       children: [
-        const DecoratedBox(decoration: HomeTheme.pageBackground),
+        DecoratedBox(decoration: BoxDecoration(gradient: app.home.wash)),
         RepaintBoundary(
           child: _DiscoverStageBackdrop(
             shown: _discShown,
@@ -13662,7 +13676,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               : IgnorePointer(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0D0B1A).withValues(alpha: 0.92 * t),
+                      color: app.fade(app.home.bg, 0.92 * t),
                     ),
                   ),
                 ),
@@ -14274,6 +14288,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// enrichment changes and captured as locals — the per-frame builder just
   /// wraps them in cheap Opacity/Transform, never a full-screen save layer.
   Widget _buildTakeoverInfoOverlay() {
+    final app = AppThemeScope.of(context);
     const accentLight = Color(0xFFC4B5FD);
     return ValueListenableBuilder<StremioMeta?>(
       valueListenable: _heroItem,
@@ -14307,10 +14322,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.star_rounded,
                       size: 17,
-                      color: HomeTheme.focusGold,
+                      color: app.home.focus,
                     ),
                     const SizedBox(width: 4),
                     _takeoverMetaText(rating.toStringAsFixed(1)),
@@ -14338,7 +14353,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 fontWeight: FontWeight.w800,
                 height: 0.98,
                 letterSpacing: -0.5,
-                color: Colors.white,
+                color: app.core.tx,
                 shadows: const [
                   Shadow(
                     color: Colors.black87,
@@ -14359,7 +14374,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 3,
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: app.fade(app.core.tx, 0.6),
                       shadows: const [
                         Shadow(color: Colors.black87, blurRadius: 8),
                       ],
@@ -14410,11 +14425,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                 width: 5,
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(4),
-                                  gradient: const LinearGradient(
+                                  gradient: LinearGradient(
                                     begin: Alignment.topCenter,
                                     end: Alignment.bottomCenter,
                                     colors: [
-                                      HomeTheme.chromeAccent,
+                                      app.home.chromeAccent,
                                       accentLight,
                                     ],
                                   ),
@@ -14469,43 +14484,50 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   /// A metadata token in the takeover's lower-third meta line.
-  Widget _takeoverMetaText(String s) => Text(
-    s,
-    style: TextStyle(
-      fontSize: 14,
-      fontWeight: FontWeight.w600,
-      color: Colors.white.withValues(alpha: 0.9),
-      shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
-    ),
-  );
+  Widget _takeoverMetaText(String s) {
+    final app = AppThemeScope.of(context);
+    return Text(
+      s,
+      style: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: app.fade(app.core.tx, 0.9),
+        shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
+      ),
+    );
+  }
 
   /// The dot separator between takeover meta tokens.
-  Widget _takeoverMetaDot() => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 10),
-    child: Container(
-      width: 4,
-      height: 4,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.45),
-        shape: BoxShape.circle,
+  Widget _takeoverMetaDot() {
+    final app = AppThemeScope.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Container(
+        width: 4,
+        height: 4,
+        decoration: BoxDecoration(
+          color: app.fade(app.core.tx, 0.45),
+          shape: BoxShape.circle,
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   /// Status strip for a streaming catalog search (see the call site in
   /// [_buildBoard]). Fixed height so the swap from "searching" bar to the
   /// failure note doesn't reflow the rows under DPAD focus.
   Widget _buildSearchStatusStrip() {
+    final app = AppThemeScope.of(context);
     return SizedBox(
       height: 16,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: _catalogSearching
-            ? const Center(
+            ? Center(
                 child: LinearProgressIndicator(
                   minHeight: 2,
-                  color: kStremioAccent,
-                  backgroundColor: Color(0x22FFFFFF),
+                  color: app.home.chromeAccent,
+                  backgroundColor: const Color(0x22FFFFFF),
                 ),
               )
             : Align(
@@ -14514,7 +14536,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   '$_catalogSearchFailures source'
                   '${_catalogSearchFailures == 1 ? '' : 's'} didn\'t respond',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
+                    color: app.fade(app.core.tx, 0.45),
                     fontSize: 11,
                   ),
                 ),
@@ -14781,6 +14803,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     String? tag,
     VoidCallback? onSeeAll,
   }) {
+    final app = AppThemeScope.of(context);
     final tv = widget.isTelevision;
     final compact = !tv && MediaQuery.sizeOf(context).width < 480;
     return Padding(
@@ -14807,7 +14830,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                         style: GoogleFonts.poppins(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: Colors.white.withValues(alpha: 0.92),
+                          color: app.fade(app.core.tx, 0.92),
                         ),
                       ),
                       if (tag != null)
@@ -14816,7 +14839,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.poppins(
-                            color: Colors.white.withValues(alpha: 0.38),
+                            color: app.fade(app.core.tx, 0.38),
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.4,
@@ -14832,7 +14855,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                           TextSpan(
                             text: '  ·  $tag',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.34),
+                              color: app.fade(app.core.tx, 0.34),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -14848,7 +14871,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                       fontSize: tv ? 15 : 17,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0,
-                      color: Colors.white.withValues(alpha: 0.92),
+                      color: app.fade(app.core.tx, 0.92),
                     ),
                   ),
           ),
@@ -15700,7 +15723,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   /// per-frame layer. Boxed mode only.
   Widget _heroMoodField(ColorScheme scheme) {
     if (!widget.boxedTrailer) return const SizedBox.shrink();
-    const base = Color(0xFF0D0B1A); // the board's own bg
+    final base = AppThemeScope.of(context).home.bg; // the board's own bg
     return IgnorePointer(
       // RepaintBoundary so this layer's repaint never bubbles up and
       // re-rasters the whole hero band (region art included). The colour used
@@ -15786,6 +15809,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final item = widget.item;
     final background = widget.background;
     final description = widget.description;
@@ -15974,7 +15998,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
           // page, mirroring the bottom fade. The full Home hero has nothing
           // above it, so it's left untouched.
           if (compact)
-            const Align(
+            Align(
               alignment: Alignment.topCenter,
               child: FractionallySizedBox(
                 heightFactor: 0.28,
@@ -15984,7 +16008,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [kStremioBg, Colors.transparent],
+                      colors: [app.home.bg, Colors.transparent],
                     ),
                   ),
                 ),
@@ -16123,7 +16147,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                                     fontSize: 12.5,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0.3,
-                                    color: Colors.white.withValues(alpha: 0.82),
+                                    color: app.fade(app.core.tx, 0.82),
                                   ),
                                 ),
                               ),
@@ -16150,7 +16174,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                                     ? 12.5
                                     : (isTelevision ? 14.5 : 13),
                                 height: compact ? 1.3 : 1.45,
-                                color: Colors.white.withValues(alpha: 0.72),
+                                color: app.fade(app.core.tx, 0.72),
                               ),
                             ),
                             0.32,
@@ -16189,17 +16213,20 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     );
   }
 
-  Widget _dot() => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 9),
-    child: Container(
-      width: 3,
-      height: 3,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.4),
-        shape: BoxShape.circle,
+  Widget _dot() {
+    final app = AppThemeScope.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      child: Container(
+        width: 3,
+        height: 3,
+        decoration: BoxDecoration(
+          color: app.fade(app.core.tx, 0.4),
+          shape: BoxShape.circle,
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   /// The idle key-art's edge dissolve — three eased feather shapes, TINTED
   /// (lerped 0.34 toward the board bg) because at rest the art sits on the
@@ -16210,12 +16237,15 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
   /// seamlessly. Recolours only when the settled tint changes — never per
   /// frame.
   Widget _regionArtFeathers(ColorScheme scheme) {
+    // Hoisted out of the builder below: the tint notifier fires on every
+    // ambient artwork change, and an inherited-widget walk per tint frame is
+    // exactly the hot path this board cannot afford on a TV box.
+    final base = AppThemeScope.of(context).home.bg; // the board's own bg
     return IgnorePointer(
       child: ValueListenableBuilder<Color?>(
         valueListenable:
             widget.tint ?? const AlwaysStoppedAnimation<Color?>(null),
         builder: (context, tint, __) {
-          const base = Color(0xFF0D0B1A); // the board's own bg
           final melt = tint == null ? base : Color.lerp(base, tint, 0.34)!;
           return Stack(
             fit: StackFit.expand,
@@ -16555,6 +16585,7 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
     bool loading,
     bool playing,
   ) {
+    final app = AppThemeScope.of(context);
     return ClipRect(
       // Clip the cover-crop so the scaled-up video can't spill left over the
       // title text; the right side simply bleeds off the screen edge.
@@ -16599,21 +16630,21 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
                     _heroEdgeFeather(
                       Alignment.centerLeft,
                       Alignment.centerRight,
-                      const Color(0xFF0D0B1A),
+                      app.home.bg,
                       _heroTrailerVideoFeatherFrac,
                     ),
                     // Top: soften the upper edge into the hero.
                     _heroEdgeFeather(
                       Alignment.topCenter,
                       Alignment.bottomCenter,
-                      const Color(0xFF0D0B1A),
+                      app.home.bg,
                       0.10,
                     ),
                     // Bottom: melt down into the darkened rows.
                     _heroEdgeFeather(
                       Alignment.bottomCenter,
                       Alignment.topCenter,
-                      const Color(0xFF0D0B1A),
+                      app.home.bg,
                       0.20,
                     ),
                   ],
@@ -16792,6 +16823,7 @@ class _HeroLiveLayerState extends State<_HeroLiveLayer> {
   /// unconditional: the floor is opaque from the first frame this builds, so
   /// there's always something to feather.
   Widget _buildRegion(IptvChannel channel, String? url) {
+    final app = AppThemeScope.of(context);
     return ClipRect(
       child: Stack(
         fit: StackFit.expand,
@@ -16842,19 +16874,19 @@ class _HeroLiveLayerState extends State<_HeroLiveLayer> {
                   _heroEdgeFeather(
                     Alignment.centerLeft,
                     Alignment.centerRight,
-                    const Color(0xFF0D0B1A),
+                    app.home.bg,
                     _heroTrailerVideoFeatherFrac,
                   ),
                   _heroEdgeFeather(
                     Alignment.topCenter,
                     Alignment.bottomCenter,
-                    const Color(0xFF0D0B1A),
+                    app.home.bg,
                     0.10,
                   ),
                   _heroEdgeFeather(
                     Alignment.bottomCenter,
                     Alignment.topCenter,
-                    const Color(0xFF0D0B1A),
+                    app.home.bg,
                     0.20,
                   ),
                 ],
@@ -16920,10 +16952,11 @@ class _HeroLiveGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Icon(
       Icons.live_tv_rounded,
       size: 64,
-      color: kStremioAccent.withValues(alpha: 0.85),
+      color: app.fade(app.home.chromeAccent, 0.85),
     );
   }
 }
@@ -16939,12 +16972,14 @@ class _HeroLiveChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xCC0D0B1A),
+        // Glassy page ink — 0.8 of the opaque bg pins the legacy 0xCC alpha.
+        color: app.fade(app.home.bg, 0.8),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        border: Border.all(color: app.fade(app.core.tx, 0.16)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -16960,11 +16995,11 @@ class _HeroLiveChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             playing ? 'LIVE' : 'TUNING',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
-              color: Colors.white,
+              color: app.core.tx,
             ),
           ),
         ],
@@ -17019,7 +17054,7 @@ class _HeroTitleArtState extends State<_HeroTitleArt> {
       fontWeight: FontWeight.w600,
       letterSpacing: 0,
       height: 1.06,
-      color: Colors.white,
+      color: AppThemeScope.of(context).core.tx,
     ),
   );
 
@@ -17120,13 +17155,14 @@ class _HeroTrailerLoadingPillState extends State<_HeroTrailerLoadingPill>
 
   /// One equalizer bar: bottom-anchored, height riding a phase-shifted sine
   /// so the three bars roll as a wave rather than pumping in unison.
-  Widget _bar(double t, double phase) {
+  /// [color] is passed in, captured once at build — this runs per wave frame.
+  Widget _bar(Color color, double t, double phase) {
     final f = 0.30 + 0.70 * (0.5 + 0.5 * sin(2 * pi * (t + phase)));
     return Container(
       width: 2.5,
       height: 11 * f,
       decoration: BoxDecoration(
-        color: const Color(0xFFF59E0B), // the ambient dot's amber
+        color: color, // the ambient dot's amber
         borderRadius: BorderRadius.circular(1.5),
       ),
     );
@@ -17134,6 +17170,7 @@ class _HeroTrailerLoadingPillState extends State<_HeroTrailerLoadingPill>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final visible = widget.visible;
     return IgnorePointer(
       child: AnimatedSlide(
@@ -17152,10 +17189,11 @@ class _HeroTrailerLoadingPillState extends State<_HeroTrailerLoadingPill>
             child: Container(
               padding: const EdgeInsets.fromLTRB(11, 6, 12, 6),
               decoration: BoxDecoration(
-                color: const Color(0xCC0D0B1A), // glassy HomeTheme.bg
+                // Glassy page ink — fade 0.8 pins the legacy 0xCC alpha.
+                color: app.fade(app.home.bg, 0.8),
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.16),
+                  color: app.fade(app.core.tx, 0.16),
                 ),
               ),
               child: Row(
@@ -17173,9 +17211,9 @@ class _HeroTrailerLoadingPillState extends State<_HeroTrailerLoadingPill>
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            _bar(t, 0.0),
-                            _bar(t, 0.30),
-                            _bar(t, 0.60),
+                            _bar(app.home.highlight, t, 0.0),
+                            _bar(app.home.highlight, t, 0.30),
+                            _bar(app.home.highlight, t, 0.60),
                           ],
                         );
                       },
@@ -17188,7 +17226,7 @@ class _HeroTrailerLoadingPillState extends State<_HeroTrailerLoadingPill>
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.2,
-                      color: Colors.white.withValues(alpha: 0.62),
+                      color: app.fade(app.core.tx, 0.62),
                     ),
                   ),
                 ],
@@ -17261,6 +17299,7 @@ class _HeroAmbientChipState extends State<_HeroAmbientChip>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final visible = widget.visible;
     return IgnorePointer(
       child: AnimatedSlide(
@@ -17275,10 +17314,11 @@ class _HeroAmbientChipState extends State<_HeroAmbientChip>
             child: Container(
               padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
               decoration: BoxDecoration(
-                color: const Color(0xCC0D0B1A), // glassy HomeTheme.bg
+                // Glassy page ink — fade 0.8 pins the legacy 0xCC alpha.
+                color: app.fade(app.home.bg, 0.8),
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.16),
+                  color: app.fade(app.core.tx, 0.16),
                 ),
               ),
               child: Row(
@@ -17286,14 +17326,14 @@ class _HeroAmbientChipState extends State<_HeroAmbientChip>
                 children: [
                   Builder(
                     builder: (context) {
-                      const dot = SizedBox(
+                      final dot = SizedBox(
                         width: 6,
                         height: 6,
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            color: Color(0xFFF59E0B),
+                            color: app.home.highlight,
                             shape: BoxShape.circle,
-                            boxShadow: [
+                            boxShadow: const [
                               BoxShadow(
                                 color: Color(0x8CF59E0B),
                                 blurRadius: 8,
@@ -17322,7 +17362,7 @@ class _HeroAmbientChipState extends State<_HeroAmbientChip>
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.2,
-                      color: Colors.white.withValues(alpha: 0.62),
+                      color: app.fade(app.core.tx, 0.62),
                     ),
                   ),
                 ],
@@ -17425,12 +17465,15 @@ class _CategoryTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(
-        color: kStremioAccent.withValues(alpha: 0.16),
+        color: app.fade(app.home.chromeAccent, 0.16),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: kStremioAccent.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: app.fade(app.home.chromeAccent, 0.35),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -17875,6 +17918,7 @@ class _StageFavIdentity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Column(
       crossAxisAlignment: centered
           ? CrossAxisAlignment.center
@@ -17886,13 +17930,13 @@ class _StageFavIdentity extends StatelessWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           textAlign: centered ? TextAlign.center : TextAlign.start,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: app.core.tx,
             fontSize: 26,
             fontWeight: FontWeight.w900,
             letterSpacing: -0.4,
             height: 1.1,
-            shadows: [Shadow(color: Colors.black54, blurRadius: 14)],
+            shadows: const [Shadow(color: Colors.black54, blurRadius: 14)],
           ),
         ),
         const SizedBox(height: 8),
@@ -17900,7 +17944,7 @@ class _StageFavIdentity extends StatelessWidget {
           fav.subtitle,
           textAlign: centered ? TextAlign.center : TextAlign.start,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.6),
+            color: app.fade(app.core.tx, 0.6),
             fontSize: 12.5,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.4,
@@ -17961,6 +18005,8 @@ class _TonightCardCaption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Hoisted: `fav` fires on every focus move across the Tonight rail.
+    final tx = AppThemeScope.of(context).core.tx;
     return ValueListenableBuilder<_CanvasFavFocus?>(
       valueListenable: fav,
       builder: (context, favFocus, _) {
@@ -17972,12 +18018,12 @@ class _TonightCardCaption extends StatelessWidget {
               favFocus.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: tx,
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
                 letterSpacing: -0.3,
-                shadows: [Shadow(color: Colors.black54, blurRadius: 12)],
+                shadows: const [Shadow(color: Colors.black54, blurRadius: 12)],
               ),
             ),
             line: favFocus.subtitle,
@@ -18068,6 +18114,7 @@ class _TonightCardCaption extends StatelessWidget {
     required String? hold,
     required double? progress,
   }) {
+    final app = AppThemeScope.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -18082,7 +18129,7 @@ class _TonightCardCaption extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.74),
+                  color: app.fade(app.core.tx, 0.74),
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.3,
@@ -18098,14 +18145,14 @@ class _TonightCardCaption extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.30),
+                    color: app.fade(app.core.tx, 0.30),
                   ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   'HOLD  $hold',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.72),
+                    color: app.fade(app.core.tx, 0.72),
                     fontSize: 10.5,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.4,
@@ -18293,6 +18340,7 @@ class _TonightQueueRowState extends State<_TonightQueueRow>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final h = widget.height;
     final thumbW = widget.thumbWidth;
     final art = _wideArtUrl(widget.item);
@@ -18328,12 +18376,12 @@ class _TonightQueueRowState extends State<_TonightQueueRow>
           curve: Curves.easeOutCubic,
           height: h,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: _focused ? 0.10 : 0.045),
+            color: app.fade(app.core.tx, _focused ? 0.10 : 0.045),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: _focused
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.06),
+                  ? app.core.tx
+                  : app.fade(app.core.tx, 0.06),
               width: _focused ? 2.5 : 1,
             ),
           ),
@@ -18358,14 +18406,14 @@ class _TonightQueueRowState extends State<_TonightQueueRow>
                           errorWidget: (_, __, ___) => const SizedBox.shrink(),
                         ),
                       if (widget.hasBoundSource)
-                        const Positioned(
+                        Positioned(
                           top: 6,
                           right: 6,
                           child: Icon(
                             Icons.bookmark_rounded,
                             size: 15,
-                            color: Colors.white,
-                            shadows: [
+                            color: app.core.tx,
+                            shadows: const [
                               Shadow(color: Colors.black, blurRadius: 6),
                             ],
                           ),
@@ -18406,8 +18454,8 @@ class _TonightQueueRowState extends State<_TonightQueueRow>
                           widget.item.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: app.core.tx,
                             fontSize: 13.5,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.1,
@@ -18420,7 +18468,7 @@ class _TonightQueueRowState extends State<_TonightQueueRow>
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.56),
+                              color: app.fade(app.core.tx, 0.56),
                               fontSize: 11.5,
                               fontWeight: FontWeight.w700,
                             ),
@@ -18522,6 +18570,7 @@ class _CanvasArtLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return ValueListenableBuilder<StremioMeta?>(
       valueListenable: item,
       builder: (context, it, _) => ValueListenableBuilder<StremioMeta?>(
@@ -18624,7 +18673,7 @@ class _CanvasArtLayer extends StatelessWidget {
             children: [
               // Opaque floor: the app shell can never show through a missing
               // or still-decoding backdrop.
-              const ColoredBox(color: kStremioBg),
+              ColoredBox(color: app.home.bg),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 240),
                 // AnimatedSwitcher's DEFAULT layout centres its children under
@@ -18866,6 +18915,7 @@ class _CanvasIdentity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final centered = variant == _StageIdentityVariant.centered;
     final narrow = variant == _StageIdentityVariant.narrow;
     final headline = variant == _StageIdentityVariant.headline;
@@ -18922,7 +18972,7 @@ class _CanvasIdentity extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             textAlign: align,
             style: TextStyle(
-              color: Colors.white,
+              color: app.core.tx,
               fontSize: headline ? _kStageHeadlineTitleSize : 30,
               fontWeight: FontWeight.w900,
               letterSpacing: -0.5,
@@ -18945,7 +18995,7 @@ class _CanvasIdentity extends StatelessWidget {
           // first thing ellipsised away.
           final wrapGenres = narrow || headline;
           final metaStyle = TextStyle(
-            color: Colors.white.withValues(alpha: 0.7),
+            color: app.fade(app.core.tx, 0.7),
             fontSize: 12.5,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.2,
@@ -19027,7 +19077,7 @@ class _CanvasIdentity extends StatelessWidget {
                               Text(
                                 rating.toStringAsFixed(1),
                                 style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.9),
+                                  color: app.fade(app.core.tx, 0.9),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -19039,7 +19089,7 @@ class _CanvasIdentity extends StatelessWidget {
                                 child: Text(
                                   '·',
                                   style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.3),
+                                    color: app.fade(app.core.tx, 0.3),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -19066,7 +19116,7 @@ class _CanvasIdentity extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: metaStyle.copyWith(
-                              color: Colors.white.withValues(alpha: 0.46),
+                              color: app.fade(app.core.tx, 0.46),
                             ),
                           ),
                         ),
@@ -19091,9 +19141,7 @@ class _CanvasIdentity extends StatelessWidget {
                                     maxLines: synLines,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.78,
-                                      ),
+                                      color: app.fade(app.core.tx, 0.78),
                                       fontSize: 12.5,
                                       height: 1.5,
                                       fontWeight: FontWeight.w500,
@@ -19242,6 +19290,7 @@ class _StremioCardState extends State<_StremioCard>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final item = widget.item;
     final wide = widget.aspectRatio > 1;
     final poster = widget.artUrl ?? item.poster;
@@ -19270,14 +19319,14 @@ class _StremioCardState extends State<_StremioCard>
         else
           _placeholder(item.name),
         if (widget.hasBoundSource)
-          const Positioned(
+          Positioned(
             top: 8,
             right: 8,
             child: Icon(
               Icons.bookmark_rounded,
               size: 18,
-              color: Colors.white,
-              shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+              color: app.core.tx,
+              shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
             ),
           ),
         // Subtle season/episode badge for a Continue Watching series
@@ -19294,8 +19343,9 @@ class _StremioCardState extends State<_StremioCard>
               ),
               child: Text(
                 widget.episodeLabel!,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  // On the glass, not the page — see AppTheme.onGlass.
+                  color: app.onGlass,
                   fontSize: 10.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.2,
@@ -19476,6 +19526,7 @@ class _StremioCardState extends State<_StremioCard>
   }
 
   Widget _placeholder(String title) {
+    final app = AppThemeScope.of(context);
     return Container(
       // Subtle vertical gradient instead of a flat fill: while art loads the
       // tile reads as a designed surface, not a dead rectangle. Static —
@@ -19497,7 +19548,7 @@ class _StremioCardState extends State<_StremioCard>
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.5),
+            color: app.fade(app.core.tx, 0.5),
             fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
@@ -19525,7 +19576,8 @@ class _SeeAllLinkState extends State<_SeeAllLink> {
 
   @override
   Widget build(BuildContext context) {
-    final color = _hover ? Colors.white : Colors.white.withValues(alpha: 0.5);
+    final app = AppThemeScope.of(context);
+    final color = _hover ? app.core.tx : app.fade(app.core.tx, 0.5);
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -19537,7 +19589,7 @@ class _SeeAllLinkState extends State<_SeeAllLink> {
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
           decoration: BoxDecoration(
             color: _hover
-                ? Colors.white.withValues(alpha: 0.08)
+                ? app.fade(app.core.tx, 0.08)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
           ),
@@ -19754,17 +19806,19 @@ class _ArtPosterState extends State<_ArtPoster> {
   bool get _active => _focused || _hovered;
 
   Widget _glyph() {
+    final app = AppThemeScope.of(context);
     return Center(
       child: Icon(
         Icons.live_tv_rounded,
         size: 40,
-        color: kStremioAccent.withValues(alpha: _active ? 1 : 0.85),
+        color: app.fade(app.home.chromeAccent, _active ? 1 : 0.85),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final url = widget.imageUrl;
     final hasImage = url != null && url.isNotEmpty;
 
@@ -19814,7 +19868,7 @@ class _ArtPosterState extends State<_ArtPoster> {
             child: Text(
               widget.badge!,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.85),
+                color: app.fade(app.core.tx, 0.85),
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.2,
@@ -19845,10 +19899,10 @@ class _ArtPosterState extends State<_ArtPoster> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const Text(
+                  Text(
                     'LIVE',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: app.core.tx,
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.6,
@@ -19943,8 +19997,8 @@ class _ArtPosterState extends State<_ArtPoster> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: _active
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.92),
+                      ? app.core.tx
+                      : app.fade(app.core.tx, 0.92),
                   fontSize: _kArtTitleFontSize,
                   fontWeight: FontWeight.w600,
                   height: _kArtTitleHeight,
@@ -20029,6 +20083,7 @@ class _ModeToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final scheme = Theme.of(context).colorScheme;
     final catalog = _segment(
       context,
@@ -20048,7 +20103,7 @@ class _ModeToggle extends StatelessWidget {
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: app.fade(app.core.tx, 0.08)),
       ),
       child: Row(
         mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
@@ -20068,6 +20123,7 @@ class _ModeToggle extends StatelessWidget {
     String label,
     IconData icon,
   ) {
+    final app = AppThemeScope.of(context);
     final on = mode == value;
     final node = switch (value) {
       _Mode.catalog => catalogNode,
@@ -20079,14 +20135,14 @@ class _ModeToggle extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: isTelevision ? 16 : 12),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: on ? kStremioAccent : Colors.transparent,
+        color: on ? app.home.chromeAccent : Colors.transparent,
         borderRadius: BorderRadius.circular(10),
         // A white ring shows the remote's DPAD position. Drawn whenever the
         // segment is focused — including the selected one, since focus lands
         // there first (its accent fill alone wouldn't signal focus moved).
         border: Border.all(
           color: focused
-              ? Colors.white.withValues(alpha: 0.9)
+              ? app.fade(app.core.tx, 0.9)
               : Colors.transparent,
           width: 2,
         ),
@@ -20856,18 +20912,19 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       _showStreamRowMenu(t, i);
       return;
     }
+    final app = AppThemeScope.of(context);
     final bound = _boundHashes.contains(t.infohash);
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: app.home.sheetBg,
       builder: (sheetCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(
+              leading: Icon(
                 Icons.play_arrow_rounded,
-                color: Colors.white,
+                color: app.core.tx,
               ),
               title: const Text('Play'),
               onTap: () {
@@ -20888,7 +20945,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 bound
                     ? 'Stop reusing this source'
                     : 'Reuse this source for instant playback',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                style: TextStyle(color: app.fade(app.core.tx, 0.5)),
               ),
               onTap: () {
                 DialogTapGuard.markKeyAction();
@@ -20910,10 +20967,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// (external), plus copy the stream URL. No "Pin as source" — streams have no
   /// infohash to bind.
   void _showStreamRowMenu(Torrent t, int i) {
+    final app = AppThemeScope.of(context);
     final external = t.isExternalStream;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: app.home.sheetBg,
       builder: (sheetCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -20921,7 +20979,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             ListTile(
               leading: Icon(
                 external ? Icons.open_in_new_rounded : Icons.play_arrow_rounded,
-                color: Colors.white,
+                color: app.core.tx,
               ),
               title: Text(
                 external ? 'Open externally' : 'Play now',
@@ -20930,7 +20988,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 external
                     ? 'Open this link in your browser'
                     : 'Stream directly — no debrid needed',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                style: TextStyle(color: app.fade(app.core.tx, 0.5)),
               ),
               onTap: () {
                 DialogTapGuard.markKeyAction();
@@ -20965,7 +21023,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               ),
               subtitle: Text(
                 'Save this stream to your device',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                style: TextStyle(color: app.fade(app.core.tx, 0.5)),
               ),
               onTap: () {
                 DialogTapGuard.markKeyAction();
@@ -21119,6 +21177,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// Slim "still searching" strip under the toolbar while engines are in
   /// flight — rows are already usable, this just says more may arrive.
   Widget _searchingStrip() {
+    final app = AppThemeScope.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
       child: Row(
@@ -21133,7 +21192,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             'Still searching sources…',
             style: TextStyle(
               fontSize: 11.5,
-              color: Colors.white.withValues(alpha: 0.55),
+              color: app.fade(app.core.tx, 0.55),
             ),
           ),
         ],
@@ -21144,7 +21203,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// The "+N new sources" pill: tap (or OK on TV) folds the parked arrivals
   /// into the list; DOWN returns to the rows, UP reaches the toolbar funnel.
   Widget _newSourcesPill() {
-    const accent = Color(0xFF7B5CFF);
+    final accent = AppThemeScope.of(context).home.chromeAccent;
     final n = _pendingNewCount;
     return Focus(
       focusNode: _pillFocus,
@@ -21299,9 +21358,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// The redesigned toolbar: source-group pills + sort + filter funnel, then the
   /// active-filter pills row when filters are applied.
   Widget _redesignToolbar(ColorScheme scheme) {
-    const accent = Color(0xFF7B5CFF);
-    final line = Colors.white.withValues(alpha: 0.08);
-    final dim = Colors.white.withValues(alpha: 0.55);
+    final app = AppThemeScope.of(context);
+    final accent = app.home.chromeAccent;
+    final line = app.fade(app.core.tx, 0.08);
+    final dim = app.fade(app.core.tx, 0.55);
 
     final sources = <String>{
       for (final t in _torrents)
@@ -21312,7 +21372,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     Widget pill(String label, bool on, VoidCallback onTap) => Padding(
       padding: const EdgeInsets.only(right: 6),
       child: Material(
-        color: on ? accent : Colors.white.withValues(alpha: 0.05),
+        color: on ? accent : app.fade(app.core.tx, 0.05),
         borderRadius: BorderRadius.circular(999),
         child: InkWell(
           borderRadius: BorderRadius.circular(999),
@@ -21521,17 +21581,21 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     );
   }
 
-  Widget _tbChip(Color border, Color fg, Widget child) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.05),
-      border: Border.all(color: border),
-      borderRadius: BorderRadius.circular(9),
-    ),
-    child: child,
-  );
+  Widget _tbChip(Color border, Color fg, Widget child) {
+    final app = AppThemeScope.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: app.fade(app.core.tx, 0.05),
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: child,
+    );
+  }
 
   Widget _activeFilterPills(Color accent, Color dim) {
+    final app = AppThemeScope.of(context);
     final labels = <String>[
       for (final q in _filters.qualities) 'Quality · ${_qualityFilterLabel(q)}',
       for (final r in _filters.ripSources) 'Source · ${_ripFilterLabel(r)}',
@@ -21551,8 +21615,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                color: app.fade(app.core.tx, 0.06),
+                border: Border.all(color: app.fade(app.core.tx, 0.08)),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
@@ -21878,7 +21942,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// poster, matching the Stremio look. Non-keyword only (keyword search has no
   /// single title to feature).
   Widget _redesignHero(ColorScheme scheme) {
-    const bg = Color(0xFF0D0B1A);
+    final app = AppThemeScope.of(context);
+    final bg = app.home.bg;
     final poster = widget.meta.posterUrl;
     return SizedBox(
       height: 128,
@@ -21897,13 +21962,18 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               gaplessPlayback: true,
               errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
-          const DecoratedBox(
+          DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0x590D0B1A), Color(0x8C0D0B1A), bg],
-                stops: [0.0, 0.55, 1.0],
+                // Byte-exact fades of the page ink: 0x59 and 0x8C of 0xFF.
+                colors: [
+                  app.fade(bg, 0x59 / 0xFF),
+                  app.fade(bg, 0x8C / 0xFF),
+                  bg,
+                ],
+                stops: const [0.0, 0.55, 1.0],
               ),
             ),
           ),
@@ -21919,8 +21989,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                     widget.selection.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: app.core.tx,
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.4,
@@ -21932,7 +22002,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.62),
+                      color: app.fade(app.core.tx, 0.62),
                       fontSize: 12.5,
                       fontWeight: FontWeight.w500,
                     ),
@@ -22066,6 +22136,7 @@ class _SrcMiniToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
       curve: Curves.easeOut,
@@ -22073,7 +22144,9 @@ class _SrcMiniToggle extends StatelessWidget {
       height: 26,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: value ? kStremioAccent : Colors.white.withValues(alpha: 0.16),
+        color: value
+            ? app.home.chromeAccent
+            : app.fade(app.core.tx, 0.16),
         borderRadius: BorderRadius.circular(999),
       ),
       child: AnimatedAlign(
@@ -22119,6 +22192,7 @@ class _SrcToggleRowState extends State<_SrcToggleRow> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final on = widget.enabled;
     return Focus(
       autofocus: widget.autofocus,
@@ -22141,13 +22215,13 @@ class _SrcToggleRowState extends State<_SrcToggleRow> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: _focused
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.white.withValues(alpha: 0.03),
+                ? app.fade(app.core.tx, 0.08)
+                : app.fade(app.core.tx, 0.03),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: _focused
-                  ? Colors.white.withValues(alpha: 0.9)
-                  : Colors.white.withValues(alpha: 0.06),
+                  ? app.fade(app.core.tx, 0.9)
+                  : app.fade(app.core.tx, 0.06),
               width: _focused ? 1.6 : 1,
             ),
           ),
@@ -22159,16 +22233,16 @@ class _SrcToggleRowState extends State<_SrcToggleRow> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: on
-                      ? kStremioAccent.withValues(alpha: 0.18)
-                      : Colors.white.withValues(alpha: 0.05),
+                      ? app.fade(app.home.chromeAccent, 0.18)
+                      : app.fade(app.core.tx, 0.05),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   on ? Icons.check_circle_rounded : Icons.block_rounded,
                   size: 18,
                   color: on
-                      ? kStremioAccent
-                      : Colors.white.withValues(alpha: 0.3),
+                      ? app.home.chromeAccent
+                      : app.fade(app.core.tx, 0.3),
                 ),
               ),
               const SizedBox(width: 12),
@@ -22182,7 +22256,7 @@ class _SrcToggleRowState extends State<_SrcToggleRow> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: on ? 0.95 : 0.55),
+                        color: app.fade(app.core.tx, on ? 0.95 : 0.55),
                         fontSize: 13.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -22194,7 +22268,7 @@ class _SrcToggleRowState extends State<_SrcToggleRow> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.4),
+                          color: app.fade(app.core.tx, 0.4),
                           fontSize: 11,
                         ),
                       ),
@@ -22235,6 +22309,7 @@ class _SrcActionChipState extends State<_SrcActionChip> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final scheme = Theme.of(context).colorScheme;
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
@@ -22254,13 +22329,13 @@ class _SrcActionChipState extends State<_SrcActionChip> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             color: widget.filled
-                ? kStremioAccent.withValues(alpha: _focused ? 1.0 : 0.9)
-                : Colors.white.withValues(alpha: _focused ? 0.14 : 0.06),
+                ? app.fade(app.home.chromeAccent, _focused ? 1.0 : 0.9)
+                : app.fade(app.core.tx, _focused ? 0.14 : 0.06),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
               color: _focused
-                  ? Colors.white.withValues(alpha: 0.9)
-                  : Colors.white.withValues(alpha: 0.12),
+                  ? app.fade(app.core.tx, 0.9)
+                  : app.fade(app.core.tx, 0.12),
               width: _focused ? 1.6 : 1,
             ),
           ),
@@ -22307,6 +22382,7 @@ class _SrcDialogShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
@@ -22314,9 +22390,9 @@ class _SrcDialogShell extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 440, maxHeight: 580),
         child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF16131F),
+            color: app.home.dialogBg,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            border: Border.all(color: app.fade(app.core.tx, 0.08)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.5),
@@ -22342,8 +22418,8 @@ class _SrcDialogShell extends StatelessWidget {
                         height: 42,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF7B5CFF), Color(0xFF9B7BFF)],
+                          gradient: LinearGradient(
+                            colors: [app.seeAll.accent, app.seeAll.accent2],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
@@ -22374,7 +22450,7 @@ class _SrcDialogShell extends StatelessWidget {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.5),
+                                color: app.fade(app.core.tx, 0.5),
                                 fontSize: 12,
                                 height: 1.25,
                               ),
@@ -22429,17 +22505,24 @@ class _SrcDialogShell extends StatelessWidget {
   }
 }
 
-Widget _srcDialogMessage(String text) => Padding(
-  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-  child: Text(
-    text,
-    style: TextStyle(color: Colors.white.withValues(alpha: 0.6), height: 1.4),
-  ),
-);
+Widget _srcDialogMessage(BuildContext context, String text) {
+  final app = AppThemeScope.of(context);
+  return Padding(
+    padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+    child: Text(
+      text,
+      style: TextStyle(color: app.fade(app.core.tx, 0.6), height: 1.4),
+    ),
+  );
+}
 
-Widget _srcDialogLoading() => const SizedBox(
+Widget _srcDialogLoading(BuildContext context) => SizedBox(
   height: 120,
-  child: Center(child: CircularProgressIndicator(color: kStremioAccent)),
+  child: Center(
+    child: CircularProgressIndicator(
+      color: AppThemeScope.of(context).home.chromeAccent,
+    ),
+  ),
 );
 
 /// Enable/disable the search-capable Stremio addons queried by catalog search.
@@ -22500,9 +22583,10 @@ class _CatalogSourcesDialogState extends State<_CatalogSourcesDialog> {
   Widget build(BuildContext context) {
     final Widget body;
     if (_loading) {
-      body = _srcDialogLoading();
+      body = _srcDialogLoading(context);
     } else if (_addons.isEmpty) {
       body = _srcDialogMessage(
+        context,
         'No search-capable addons installed. Add a catalog addon that '
         'supports search (e.g. Cinemeta) from Addons.',
       );
@@ -22593,9 +22677,9 @@ class _KeywordSourcesDialogState extends State<_KeywordSourcesDialog> {
   Widget build(BuildContext context) {
     final Widget body;
     if (_loading) {
-      body = _srcDialogLoading();
+      body = _srcDialogLoading(context);
     } else if (_engines.isEmpty) {
-      body = _srcDialogMessage('No search sources installed.');
+      body = _srcDialogMessage(context, 'No search sources installed.');
     } else {
       body = ListView.builder(
         padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
@@ -22783,16 +22867,21 @@ class _DiscoverStageVeils extends StatelessWidget {
   });
 
   /// Page ink at an alpha walked along the browse→playback→theater ladder by
-  /// [phase] (0..2).
-  static Color _ink(double browse, double play, double deep, double phase) {
+  /// [phase] (0..2). [base] is the page ink, captured once at build — this
+  /// runs per transition frame. withValues (not fade): the ladder's alphas
+  /// are ABSOLUTE, and the ground token is opaque on every theme, so the two
+  /// are equivalent here.
+  static Color _ink(
+      Color base, double browse, double play, double deep, double phase) {
     final a = phase <= 1.0
         ? browse + (play - browse) * phase
         : play + (deep - play) * (phase - 1.0);
-    return const Color(0xFF0D0B1A).withValues(alpha: a);
+    return base.withValues(alpha: a);
   }
 
   @override
   Widget build(BuildContext context) {
+    final ink = AppThemeScope.of(context).home.bg;
     return IgnorePointer(
       child: ValueListenableBuilder<bool>(
         valueListenable: showing,
@@ -22818,8 +22907,8 @@ class _DiscoverStageVeils extends StatelessWidget {
                             begin: Alignment.centerLeft,
                             end: Alignment.centerRight,
                             colors: [
-                              _ink(0.88, 0.56, 0.10, t),
-                              _ink(0.60, 0.34, 0.06, t),
+                              _ink(ink, 0.88, 0.56, 0.10, t),
+                              _ink(ink, 0.60, 0.34, 0.06, t),
                               const Color(0x000D0B1A),
                             ],
                             stops: const [0.0, 0.32, 0.66],
@@ -22835,10 +22924,10 @@ class _DiscoverStageVeils extends StatelessWidget {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                             colors: [
-                              _ink(0.94, 0.70, 0.16, t),
-                              _ink(0.74, 0.46, 0.10, t),
+                              _ink(ink, 0.94, 0.70, 0.16, t),
+                              _ink(ink, 0.74, 0.46, 0.10, t),
                               const Color(0x000D0B1A),
-                              _ink(0.30, 0.14, 0.04, t),
+                              _ink(ink, 0.30, 0.14, 0.04, t),
                             ],
                             stops: const [0.0, 0.20, 0.52, 1.0],
                           ),
@@ -22857,7 +22946,7 @@ class _DiscoverStageVeils extends StatelessWidget {
                             center: const Alignment(-0.72, 0.55),
                             radius: 0.95,
                             colors: [
-                              _ink(0.80, 0.45, 0.06, t),
+                              _ink(ink, 0.80, 0.45, 0.06, t),
                               const Color(0x000D0B1A),
                             ],
                             stops: const [0.12, 1.0],
@@ -22875,14 +22964,14 @@ class _DiscoverStageVeils extends StatelessWidget {
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                       colors: [
-                        _ink(0.58, 0.34, 0.10, t), // art zone / rail text
-                        _ink(0.62, 0.38, 0.12, t),
+                        _ink(ink, 0.58, 0.34, 0.10, t), // art zone / rail text
+                        _ink(ink, 0.62, 0.38, 0.12, t),
                         // Theater goes near-clear on the grid side too — the
                         // panel content fades itself, so the video must not be
                         // buried under ink there ("black right side").
-                        _ink(0.84, 0.68, 0.18, t), // the pane divide
-                        _ink(0.94, 0.86, 0.24, t), // under the grid
-                        _ink(1.0, 0.92, 0.30, t),
+                        _ink(ink, 0.84, 0.68, 0.18, t), // the pane divide
+                        _ink(ink, 0.94, 0.86, 0.24, t), // under the grid
+                        _ink(ink, 1.0, 0.92, 0.30, t),
                       ],
                       stops: const [0.0, 0.34, 0.52, 0.74, 1.0],
                     ),
@@ -22894,10 +22983,10 @@ class _DiscoverStageVeils extends StatelessWidget {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        _ink(0.34, 0.15, 0.06, t), // settle the top edge
+                        _ink(ink, 0.34, 0.15, 0.06, t), // settle the top edge
                         const Color(0x000D0B1A),
                         const Color(0x000D0B1A),
-                        _ink(0.88, 0.58, 0.28, t), // melt into the bottom
+                        _ink(ink, 0.88, 0.58, 0.28, t), // melt into the bottom
                       ],
                       stops: const [0.0, 0.26, 0.55, 0.92],
                     ),
@@ -22932,6 +23021,7 @@ class _DiscoverGridDim extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ink = AppThemeScope.of(context).home.bg;
     return Positioned(
       left: leftInset,
       top: 0,
@@ -22963,9 +23053,12 @@ class _DiscoverGridDim extends StatelessWidget {
                       gradient: LinearGradient(
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
+                        // withValues (not fade): absolute alphas over an
+                        // always-opaque ground token — equivalent, and the
+                        // ramp's 0.0 end must stay a true clear.
                         colors: [
-                          const Color(0xFF0D0B1A).withValues(alpha: 0.0),
-                          const Color(0xFF0D0B1A).withValues(alpha: a),
+                          ink.withValues(alpha: 0.0),
+                          ink.withValues(alpha: a),
                         ],
                         stops: const [0.0, 0.15],
                       ),

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../theme/app_theme_scope.dart';
 import '../catalog_item_tile.dart';
 import 'discover_shelf_scope.dart';
-import 'see_all_theme.dart';
 
 /// The single source of truth for a See-All poster grid's layout maths: column
 /// count, cell size and the spacing/padding constants. Both the real grid
@@ -380,6 +380,7 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
   /// the identity block on the stage names the focused title at full size, and
   /// a caption under every card would just repeat it smaller.
   Widget _buildShelf(DiscoverShelfMetrics m) {
+    final app = AppThemeScope.of(context);
     final items = widget.items;
     return Align(
       alignment: Alignment.bottomLeft,
@@ -394,12 +395,13 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
               child: Row(
                 children: [
                   if (widget.loadingMore)
-                    const SizedBox(
+                    SizedBox(
                       width: 12,
                       height: 12,
                       child: CircularProgressIndicator(
                         strokeWidth: 1.6,
-                        valueColor: AlwaysStoppedAnimation<Color>(kSeeAllAccent),
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(app.seeAll.accent),
                       ),
                     ),
                   const Spacer(),
@@ -415,7 +417,7 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                       return Text(
                         '$at / ${items.length}${widget.exhausted ? '' : '+'}',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
+                          color: app.fade(app.core.tx, 0.6),
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.8,
@@ -507,6 +509,7 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
   Widget build(BuildContext context) {
     final shelf = _shelf;
     if (shelf != null) return _buildShelf(shelf);
+    final app = AppThemeScope.of(context);
     final m = SeeAllGridMetrics.resolve(context, isTelevision: widget.isTelevision);
     final cols = m.columns;
     final titleH = m.titleHeight;
@@ -570,7 +573,7 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
                           overflow: TextOverflow.ellipsis,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.92),
+                            color: app.fade(app.core.tx, 0.92),
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                             height: 1.3,
@@ -589,13 +592,14 @@ class SeeAllPosterGridState extends State<SeeAllPosterGrid> {
           child: SizedBox(
             height: widget.loadingMore ? 72 : 24,
             child: widget.loadingMore
-                ? const Center(
+                ? Center(
                     child: SizedBox(
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(kSeeAllAccent),
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(app.seeAll.accent),
                       ),
                     ),
                   )

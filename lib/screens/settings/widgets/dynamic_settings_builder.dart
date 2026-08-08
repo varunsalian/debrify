@@ -4,6 +4,7 @@ import '../../../models/engine_config/engine_config.dart';
 import '../../../services/engine/settings_manager.dart';
 import '../../../services/engine/engine_registry.dart';
 import 'settings_widgets.dart';
+import '../../../theme/app_theme_scope.dart';
 
 /// Discrete choices replacing a former slider's min..max range. Small ranges
 /// enumerate every value; large ones use a coarse ladder so the dropdown
@@ -41,6 +42,8 @@ Widget _stepDropdown(
   required ValueChanged<int> onChanged,
   String Function(int value)? labelOf,
 }) {
+  final app = AppThemeScope.of(context);
+  final t = app.settings;
   return DropdownButtonFormField<int>(
     value: value,
     isExpanded: true,
@@ -60,10 +63,10 @@ Widget _stepDropdown(
     ],
     style: Theme.of(
       context,
-    ).textTheme.bodyMedium?.copyWith(color: Colors.white),
-    dropdownColor: kSettingsPanel2,
+    ).textTheme.bodyMedium?.copyWith(color: app.core.tx),
+    dropdownColor: t.panel2,
     borderRadius: BorderRadius.circular(14),
-    icon: Icon(Icons.arrow_drop_down, color: kSettingsDim),
+    icon: Icon(Icons.arrow_drop_down, color: t.dim),
   );
 }
 
@@ -191,16 +194,17 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
   }
 
   Widget _buildNoEnginesMessage() {
+    final t = AppThemeScope.of(context).settings;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: kSettingsPanel2,
+        color: t.panel2,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kSettingsLine),
+        border: Border.all(color: t.line),
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline_rounded, color: kSettingsDim, size: 24),
+          Icon(Icons.info_outline_rounded, color: t.dim, size: 24),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -210,7 +214,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                   'No Search Engines Configured',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -218,7 +222,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                   'Search engine configurations will appear here once loaded.',
                   style: Theme.of(
                     context,
-                  ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                  ).textTheme.bodySmall?.copyWith(color: t.dim),
                 ),
               ],
             ),
@@ -229,6 +233,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
   }
 
   Widget _buildEngineCard(EngineConfig config) {
+    final t = AppThemeScope.of(context).settings;
     final engineId = config.metadata.id;
     final displayName = config.metadata.displayName;
     final description = config.metadata.description;
@@ -237,11 +242,11 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
 
     return Card(
       elevation: 0,
-      color: kSettingsPanel,
+      color: t.panel,
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: kSettingsLine),
+        side: BorderSide(color: t.line),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -254,13 +259,13 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: kSettingsAccent.withValues(alpha: 0.1),
+                    color: t.accent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     _getIconForEngine(iconName),
                     size: 22,
-                    color: kSettingsAccent2,
+                    color: t.accent2,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -278,7 +283,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                           description,
                           style: Theme.of(
                             context,
-                          ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                          ).textTheme.bodySmall?.copyWith(color: t.dim),
                         ),
                     ],
                   ),
@@ -326,6 +331,8 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
     String settingId,
     SettingConfig setting,
   ) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final currentValue =
         _settingValues[engineId]?[settingId] as bool? ??
         (setting.defaultValue as bool? ?? false);
@@ -337,15 +344,15 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: currentValue
-              ? kSettingsAccent.withValues(alpha: 0.1)
-              : kSettingsPanel2,
+              ? t.accent.withValues(alpha: 0.1)
+              : t.panel2,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: focused
-                ? kSettingsAccent
+                ? t.accent
                 : (currentValue
-                      ? kSettingsAccent.withValues(alpha: 0.3)
-                      : kSettingsLine),
+                      ? t.accent.withValues(alpha: 0.3)
+                      : t.line),
           ),
         ),
         child: Row(
@@ -354,14 +361,14 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: currentValue
-                    ? kSettingsAccent.withValues(alpha: 0.2)
-                    : Colors.white.withValues(alpha: 0.08),
+                    ? t.accent.withValues(alpha: 0.2)
+                    : app.fade(app.core.tx, 0.08),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Icon(
                 _getIconForSetting(settingId),
                 size: 18,
-                color: currentValue ? kSettingsAccent2 : kSettingsDim,
+                color: currentValue ? t.accent2 : t.dim,
               ),
             ),
             const SizedBox(width: 12),
@@ -373,7 +380,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                     setting.label,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: currentValue ? kSettingsAccent2 : kSettingsDim,
+                      color: currentValue ? t.accent2 : t.dim,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -381,7 +388,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                     currentValue ? 'Enabled' : 'Disabled',
                     style: Theme.of(
                       context,
-                    ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                    ).textTheme.bodySmall?.copyWith(color: t.dim),
                   ),
                 ],
               ),
@@ -408,6 +415,8 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
     String settingId,
     SettingConfig setting,
   ) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final currentValue =
         _settingValues[engineId]?[settingId] as int? ??
         (setting.defaultValue as int? ?? 50);
@@ -441,9 +450,9 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: kSettingsPanel2,
+        color: t.panel2,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: kSettingsLine),
+        border: Border.all(color: t.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -453,13 +462,13 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: app.fade(app.core.tx, 0.08),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Icon(
                   _getIconForSetting(settingId),
                   size: 18,
-                  color: kSettingsDim,
+                  color: t.dim,
                 ),
               ),
               const SizedBox(width: 12),
@@ -471,7 +480,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                       setting.label,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: kSettingsDim,
+                        color: t.dim,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -479,7 +488,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                       'Select how many results to fetch',
                       style: Theme.of(
                         context,
-                      ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                      ).textTheme.bodySmall?.copyWith(color: t.dim),
                     ),
                   ],
                 ),
@@ -511,6 +520,8 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
     String settingId,
     SettingConfig setting,
   ) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final currentValue =
         _settingValues[engineId]?[settingId] as int? ??
         (setting.defaultValue as int? ?? 50);
@@ -524,9 +535,9 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: kSettingsPanel2,
+        color: t.panel2,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: kSettingsLine),
+        border: Border.all(color: t.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -536,13 +547,13 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: app.fade(app.core.tx, 0.08),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Icon(
                   _getIconForSetting(settingId),
                   size: 18,
-                  color: kSettingsDim,
+                  color: t.dim,
                 ),
               ),
               const SizedBox(width: 12),
@@ -551,7 +562,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                   setting.label,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ),
@@ -745,6 +756,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -772,7 +784,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
               'Configure TV mode limits for each search engine',
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: kSettingsDim),
+              ).textTheme.bodyMedium?.copyWith(color: t.dim),
             ),
             const SizedBox(height: 16),
             ..._tvEnabledEngines.map((config) => _buildEngineTvCard(config)),
@@ -784,12 +796,13 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
   }
 
   Widget _buildGlobalTvSettings() {
+    final t = AppThemeScope.of(context).settings;
     return Card(
       elevation: 0,
-      color: kSettingsPanel,
+      color: t.panel,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: kSettingsLine),
+        side: BorderSide(color: t.line),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -801,13 +814,13 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: kSettingsAccent.withValues(alpha: 0.1),
+                    color: t.accent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     Icons.tv_rounded,
                     size: 22,
-                    color: kSettingsAccent2,
+                    color: t.accent2,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -824,7 +837,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                         'Settings that apply to all TV mode searches',
                         style: Theme.of(
                           context,
-                        ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                        ).textTheme.bodySmall?.copyWith(color: t.dim),
                       ),
                     ],
                   ),
@@ -957,6 +970,8 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
     required IconData icon,
     required Function(int) onChanged,
   }) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     // Former slider — sliders trap DPAD focus on TV, so the global limits
     // render as discrete dropdowns over the same min..max range.
     final options = _sliderStepOptions(min, max, value);
@@ -964,9 +979,9 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: kSettingsPanel2,
+        color: t.panel2,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: kSettingsLine),
+        border: Border.all(color: t.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -976,10 +991,10 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: app.fade(app.core.tx, 0.08),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Icon(icon, size: 18, color: kSettingsDim),
+                child: Icon(icon, size: 18, color: t.dim),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -990,14 +1005,14 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                       label,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: kSettingsDim,
+                        color: t.dim,
                       ),
                     ),
                     Text(
                       subtitle,
                       style: Theme.of(
                         context,
-                      ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                      ).textTheme.bodySmall?.copyWith(color: t.dim),
                     ),
                   ],
                 ),
@@ -1023,6 +1038,8 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
     required IconData icon,
     required Function(bool) onChanged,
   }) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     // The Switch is the focusable; the ring goes on the row so DPAD focus is
     // unmissable on TV.
     return _FocusHighlight(
@@ -1030,15 +1047,15 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: value
-              ? kSettingsAccent.withValues(alpha: 0.1)
-              : kSettingsPanel2,
+              ? t.accent.withValues(alpha: 0.1)
+              : t.panel2,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: focused
-                ? kSettingsAccent
+                ? t.accent
                 : (value
-                      ? kSettingsAccent.withValues(alpha: 0.3)
-                      : kSettingsLine),
+                      ? t.accent.withValues(alpha: 0.3)
+                      : t.line),
           ),
         ),
         child: Row(
@@ -1047,14 +1064,14 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: value
-                    ? kSettingsAccent.withValues(alpha: 0.2)
-                    : Colors.white.withValues(alpha: 0.08),
+                    ? t.accent.withValues(alpha: 0.2)
+                    : app.fade(app.core.tx, 0.08),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Icon(
                 icon,
                 size: 18,
-                color: value ? kSettingsAccent2 : kSettingsDim,
+                color: value ? t.accent2 : t.dim,
               ),
             ),
             const SizedBox(width: 12),
@@ -1066,14 +1083,14 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                     label,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: value ? kSettingsAccent2 : kSettingsDim,
+                      color: value ? t.accent2 : t.dim,
                     ),
                   ),
                   Text(
                     subtitle,
                     style: Theme.of(
                       context,
-                    ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                    ).textTheme.bodySmall?.copyWith(color: t.dim),
                   ),
                 ],
               ),
@@ -1086,6 +1103,8 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
   }
 
   Widget _buildEngineTvCard(EngineConfig config) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final engineId = config.metadata.id;
     final displayName = config.metadata.displayName;
     final iconName = config.metadata.icon;
@@ -1095,11 +1114,11 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
 
     return Card(
       elevation: 0,
-      color: kSettingsPanel,
+      color: t.panel,
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: kSettingsLine),
+        side: BorderSide(color: t.line),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1113,14 +1132,14 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: isEnabled
-                        ? kSettingsAccent.withValues(alpha: 0.1)
-                        : Colors.white.withValues(alpha: 0.06),
+                        ? t.accent.withValues(alpha: 0.1)
+                        : app.fade(app.core.tx, 0.06),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     _getIconForEngine(iconName),
                     size: 22,
-                    color: isEnabled ? kSettingsAccent2 : kSettingsDim,
+                    color: isEnabled ? t.accent2 : t.dim,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1133,14 +1152,14 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(
                               fontWeight: FontWeight.bold,
-                              color: isEnabled ? null : kSettingsDim,
+                              color: isEnabled ? null : t.dim,
                             ),
                       ),
                       Text(
                         isEnabled ? 'TV Mode Enabled' : 'TV Mode Disabled',
                         style: Theme.of(
                           context,
-                        ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                        ).textTheme.bodySmall?.copyWith(color: t.dim),
                       ),
                     ],
                   ),
@@ -1153,7 +1172,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: focused ? kSettingsAccent : Colors.transparent,
+                        color: focused ? t.accent : Colors.transparent,
                       ),
                     ),
                     child: Switch(
@@ -1250,6 +1269,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
     required int defaultValue,
     required Function(int) onChanged,
   }) {
+    final t = AppThemeScope.of(context).settings;
     // The stored value is inserted if missing so nothing silently changes.
     var options = [10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500];
     if (!options.contains(currentValue)) {
@@ -1259,9 +1279,9 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: kSettingsPanel2,
+        color: t.panel2,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: kSettingsLine),
+        border: Border.all(color: t.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1276,7 +1296,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                       label,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: kSettingsDim,
+                        color: t.dim,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1284,7 +1304,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                       subtitle,
                       style: Theme.of(
                         context,
-                      ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                      ).textTheme.bodySmall?.copyWith(color: t.dim),
                     ),
                   ],
                 ),
@@ -1305,16 +1325,17 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
   }
 
   Widget _buildNoTvEnginesMessage() {
+    final t = AppThemeScope.of(context).settings;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: kSettingsPanel2,
+        color: t.panel2,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kSettingsLine),
+        border: Border.all(color: t.line),
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline_rounded, color: kSettingsDim, size: 24),
+          Icon(Icons.info_outline_rounded, color: t.dim, size: 24),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -1324,7 +1345,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                   'No TV Mode Engines',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -1332,7 +1353,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                   'No search engines with TV mode configuration found.',
                   style: Theme.of(
                     context,
-                  ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+                  ).textTheme.bodySmall?.copyWith(color: t.dim),
                 ),
               ],
             ),

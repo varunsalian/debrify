@@ -10,6 +10,7 @@ import '../../services/storage_service.dart';
 import '../../services/simkl/simkl_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 class SimklSettingsPage extends StatefulWidget {
   const SimklSettingsPage({super.key});
@@ -232,11 +233,12 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
   }
 
   void _showSnackBar(String message, {bool isError = true}) {
+    final t = AppThemeScope.of(context).settings;
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? kSettingsRed : kSettingsGreen,
+        backgroundColor: isError ? t.danger : t.success,
       ),
     );
   }
@@ -252,6 +254,8 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Simkl Settings',
@@ -292,8 +296,8 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
                                     ? Icons.check_circle
                                     : Icons.circle_outlined,
                                 color: _isConnected
-                                    ? kSettingsGreen
-                                    : kSettingsDim2,
+                                    ? t.success
+                                    : t.dim2,
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -304,10 +308,10 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
                                       _isConnected
                                           ? 'Connected'
                                           : 'Not connected',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 16,
-                                        color: Colors.white,
+                                        color: app.core.tx,
                                       ),
                                     ),
                                     if (_username != null)
@@ -315,7 +319,7 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
                                         _username!,
                                         style: TextStyle(
                                           fontSize: 13,
-                                          color: kSettingsDim,
+                                          color: t.dim,
                                         ),
                                       ),
                                   ],
@@ -336,9 +340,9 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
                                   icon: const Icon(Icons.logout),
                                   label: const Text('Logout'),
                                   style: OutlinedButton.styleFrom(
-                                    foregroundColor: kSettingsRed,
+                                    foregroundColor: t.danger,
                                     side: BorderSide(
-                                      color: kSettingsRed.withValues(
+                                      color: t.danger.withValues(
                                         alpha: 0.4,
                                       ),
                                     ),
@@ -363,7 +367,7 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
                           title: const Text('Sync Catalog Items'),
                           subtitle: Text(
                             'Scrobble playback to Simkl for all content played from addons, not just Simkl items',
-                            style: TextStyle(fontSize: 12, color: kSettingsDim),
+                            style: TextStyle(fontSize: 12, color: t.dim),
                           ),
                           value: _syncCatalogItems,
                           onChanged: (value) {
@@ -393,6 +397,7 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
   }
 
   Widget _buildLoginSection() {
+    final app = AppThemeScope.of(context);
     // Show PIN UI when connecting
     if (_isConnecting && _userCode != null) {
       return _buildPinCard();
@@ -408,12 +413,12 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
           // DPAD focus, which would strand TV users mid-login.
           onPressed: _isConnecting ? () {} : _login,
           icon: _isConnecting
-              ? const SizedBox(
+              ? SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: app.core.tx,
                   ),
                 )
               : const Icon(Icons.login),
@@ -424,6 +429,8 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
   }
 
   Widget _buildPinCard() {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Column(
       children: [
         // User code display
@@ -431,15 +438,15 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
-            color: kSettingsPanel2,
+            color: t.panel2,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: kSettingsLine),
+            border: Border.all(color: t.line),
           ),
           child: Column(
             children: [
               Text(
                 'Enter this code:',
-                style: TextStyle(fontSize: 14, color: kSettingsDim),
+                style: TextStyle(fontSize: 14, color: t.dim),
               ),
               const SizedBox(height: 8),
               // InkWell (not GestureDetector) so the copy action is DPAD
@@ -462,16 +469,16 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
                       children: [
                         Text(
                           _userCode!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 36,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 4,
                             fontFamily: 'monospace',
-                            color: Colors.white,
+                            color: app.core.tx,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Icon(Icons.copy, size: 20, color: kSettingsDim),
+                        Icon(Icons.copy, size: 20, color: t.dim),
                       ],
                     ),
                   ),
@@ -494,12 +501,12 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               child: Text(
                 'Go to ${_verificationUrl ?? 'https://simkl.com/pin'}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
-                  color: kSettingsAccent2,
+                  color: t.accent2,
                   decoration: TextDecoration.underline,
-                  decorationColor: kSettingsAccent2,
+                  decorationColor: t.accent2,
                 ),
               ),
             ),
@@ -508,14 +515,14 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
         const SizedBox(height: 4),
         Text(
           'on your phone or computer',
-          style: TextStyle(fontSize: 13, color: kSettingsDim),
+          style: TextStyle(fontSize: 13, color: t.dim),
         ),
         const SizedBox(height: 12),
 
         // Countdown
         Text(
           'Code expires in ${_formatCountdown()}',
-          style: TextStyle(fontSize: 13, color: kSettingsDim),
+          style: TextStyle(fontSize: 13, color: t.dim),
         ),
         const SizedBox(height: 16),
 
@@ -554,6 +561,7 @@ class _SimklFocusRingState extends State<_SimklFocusRing> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       skipTraversal: true,
       canRequestFocus: false,
@@ -563,7 +571,7 @@ class _SimklFocusRingState extends State<_SimklFocusRing> {
       child: Container(
         decoration: BoxDecoration(
           border: Border.all(
-            color: _focused ? kSettingsAccent : Colors.transparent,
+            color: _focused ? t.accent : Colors.transparent,
             width: 2,
           ),
           borderRadius: BorderRadius.circular(14),

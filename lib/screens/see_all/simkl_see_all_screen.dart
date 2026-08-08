@@ -14,8 +14,8 @@ import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
 import '../../widgets/see_all/see_all_random_button.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../widgets/see_all/see_all_sort.dart';
-import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 
 /// Sort orders for the grid. [natural] keeps the API's own rank/interleave
@@ -433,7 +433,7 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
       );
     }
     return Scaffold(
-      backgroundColor: kSeeAllBg,
+      backgroundColor: AppThemeScope.of(context).seeAll.bg,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -546,6 +546,7 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
       return SkeletonPosterGrid(isTelevision: widget.isTelevision);
     }
     if (_visible.isEmpty) {
+      final app = AppThemeScope.of(context);
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(40),
@@ -555,14 +556,14 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
               Icon(
                 _error ? Icons.cloud_off_rounded : Icons.inbox_rounded,
                 size: 44,
-                color: Colors.white.withValues(alpha: 0.25),
+                color: app.fade(app.core.tx, 0.25),
               ),
               const SizedBox(height: 14),
               Text(
                 _emptyMessage(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
+                  color: app.fade(app.core.tx, 0.7),
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                 ),

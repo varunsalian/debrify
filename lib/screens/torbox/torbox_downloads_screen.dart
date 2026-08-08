@@ -17,6 +17,7 @@ import '../../services/storage_service.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/download_service.dart';
 import '../../services/debrify_tv_channel_add_service.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/formatters.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/series_parser.dart';
@@ -535,16 +536,17 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     showDialog(
       context: context,
       builder: (sheetContext) {
+        final app = AppThemeScope.of(sheetContext);
         return Dialog(
           backgroundColor: Colors.transparent,
           child: _maybeBlur(
             Container(
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                  colors: [const Color(0xFF0F172A), app.cloud.dialogSurface],
                 ),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
@@ -923,6 +925,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     Clipboard.setData(ClipboardData(text: zipLink));
 
     if (!mounted) return;
+    final app = AppThemeScope.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -948,7 +951,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -1394,16 +1397,17 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     showDialog(
       context: context,
       builder: (dialogContext) {
+        final app = AppThemeScope.of(dialogContext);
         return Dialog(
           backgroundColor: Colors.transparent,
           child: _maybeBlur(
             Container(
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                  colors: [const Color(0xFF0F172A), app.cloud.dialogSurface],
                 ),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
@@ -1917,7 +1921,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Delete $count ${count == 1 ? itemType : itemTypePlural}',
@@ -1960,6 +1964,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     List<int> failedDeletes = [];
     StateSetter? setDialogState;
     final nav = Navigator.of(context);
+    final app = AppThemeScope.of(context);
 
     showDialog(
       context: context,
@@ -1968,7 +1973,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         builder: (dialogContext, dialogStateSetter) {
           setDialogState = dialogStateSetter;
           return AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: app.cloud.dialogSurface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
@@ -2481,6 +2486,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     await showDialog<void>(
       context: context,
       builder: (sheetContext) {
+        final app = AppThemeScope.of(sheetContext);
         return Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -2602,7 +2608,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                     end: Alignment.bottomCenter,
                     colors: [
                       const Color(0xFF0F172A).withValues(alpha: 0.98),
-                      const Color(0xFF1E293B).withValues(alpha: 0.98),
+                      app.cloud.dialogSurface.withValues(alpha: 0.98),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(28),
@@ -2629,7 +2635,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                         margin: const EdgeInsets.symmetric(horizontal: 24),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B).withValues(alpha: 0.6),
+                          color: app.cloud.dialogSurface.withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
                             color: const Color(
@@ -3097,16 +3103,17 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     showDialog(
       context: context,
       builder: (dialogContext) {
+        final app = AppThemeScope.of(dialogContext);
         return Dialog(
           backgroundColor: Colors.transparent,
           child: _maybeBlur(
             Container(
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                  colors: [const Color(0xFF0F172A), app.cloud.dialogSurface],
                 ),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
@@ -3284,6 +3291,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     required ValueChanged<int> onToggle,
     Future<void> Function(_TorboxFileEntry entry)? onCopy,
   }) {
+    // Hoisted out of itemBuilder: one theme lookup per list build, not per row.
+    final app = AppThemeScope.of(context);
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       itemCount: entries.length,
@@ -3301,6 +3310,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
             isSelected: isSelected,
             onToggle: () => onToggle(entry.index),
             animationIndex: listIndex,
+            surface: app.cloud.dialogSurface,
             subtitle: subtitle,
             onCopy: onCopy == null ? null : () => onCopy(entry),
           ),
@@ -3319,6 +3329,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       return _buildEmptyFilesState();
     }
 
+    final app = AppThemeScope.of(context);
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
       children: [
@@ -3332,6 +3343,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               isSelected: selectedIndices.contains(entries[i].index),
               onToggle: () => onToggle(entries[i].index),
               animationIndex: i,
+              surface: app.cloud.dialogSurface,
               subtitle: entries[i].file.name != entries[i].file.shortName
                   ? entries[i].file.name
                   : entries[i].file.absolutePath,
@@ -3369,6 +3381,8 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       return _buildEmptyFilesState();
     }
 
+    final app = AppThemeScope.of(context);
+
     Widget buildSection(
       String title,
       List<_TorboxFileEntry> sectionEntries, {
@@ -3388,6 +3402,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 isSelected: selectedIndices.contains(sectionEntries[i].index),
                 onToggle: () => onToggle(sectionEntries[i].index),
                 animationIndex: i,
+                surface: app.cloud.dialogSurface,
                 badge: badge,
                 subtitle:
                     sectionEntries[i].file.name !=
@@ -3421,6 +3436,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     required void Function(int season, List<int> indices) onToggleSeason,
     Future<void> Function(_TorboxFileEntry entry)? onCopy,
   }) {
+    final app = AppThemeScope.of(context);
     final seasonMap = <int, List<_TorboxFileEntry>>{};
     final otherEntries = <_TorboxFileEntry>[];
 
@@ -3459,7 +3475,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    const Color(0xFF1E293B).withValues(alpha: 0.8),
+                    app.cloud.dialogSurface.withValues(alpha: 0.8),
                     const Color(0xFF111827).withValues(alpha: 0.6),
                   ],
                 ),
@@ -3597,6 +3613,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   isSelected: selectedIndices.contains(otherEntries[i].index),
                   onToggle: () => onToggleFile(otherEntries[i].index),
                   animationIndex: i,
+                  surface: app.cloud.dialogSurface,
                   subtitle: otherEntries[i].file.name,
                   badge: 'Extra',
                   onCopy: onCopy == null ? null : () => onCopy(otherEntries[i]),
@@ -3658,6 +3675,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   isSelected: selectedIndices.contains(entry.index),
                   onToggle: () => onToggleFile(entry.index),
                   animationIndex: index,
+                  surface: app.cloud.dialogSurface,
                   badge: badge,
                   onCopy: onCopy == null ? null : () => onCopy(entry),
                 ),
@@ -3674,6 +3692,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
     required bool isSelected,
     required VoidCallback onToggle,
     required int animationIndex,
+    // Hoisted by the caller: this builds once per list item, so the theme
+    // lookup must not happen in here.
+    required Color surface,
     String? badge,
     String? subtitle,
     Future<void> Function()? onCopy,
@@ -3704,7 +3725,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              const Color(0xFF1E293B).withValues(alpha: 0.85),
+              surface.withValues(alpha: 0.85),
               const Color(0xFF111827).withValues(alpha: 0.7),
             ],
           ),
@@ -5422,10 +5443,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       if (!isSeries) {
         // Not a series - show snackbar and fallback to sorted view
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No series detected in this folder. Switching to Sort (A-Z) view.'),
-            duration: Duration(seconds: 3),
-            backgroundColor: Color(0xFF1E293B),
+          SnackBar(
+            content: const Text('No series detected in this folder. Switching to Sort (A-Z) view.'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -5696,6 +5717,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   /// Build the search bar widget
   Widget _buildSearchBar() {
+    final app = AppThemeScope.of(context);
     final hasText = _searchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -5715,7 +5737,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 hintText: 'Search all files...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.06),
+                fillColor: app.fade(app.core.tx, 0.06),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide.none,
@@ -5759,10 +5781,10 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.06),
+                        color: app.fade(app.core.tx, 0.06),
                         borderRadius: BorderRadius.circular(8),
                         border: isFocused
-                            ? Border.all(color: Colors.white, width: 2)
+                            ? Border.all(color: app.core.tx, width: 2)
                             : null,
                       ),
                       child: IconButton(
@@ -6411,6 +6433,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   }
 
   Widget _buildSelectionBar() {
+    final app = AppThemeScope.of(context);
     final theme = Theme.of(context);
     final count = _activeSelectedIds.length;
     return Container(
@@ -6449,7 +6472,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
             ).copyWith(
               side: WidgetStateProperty.resolveWith((states) {
                 if (states.contains(WidgetState.focused)) {
-                  return const BorderSide(color: Colors.white, width: 3);
+                  return BorderSide(color: app.core.tx, width: 3);
                 }
                 return null;
               }),
@@ -6461,6 +6484,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   }
 
   Widget _buildTorrentSearchBar() {
+    final app = AppThemeScope.of(context);
     final hasText = _torrentSearchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -6476,22 +6500,22 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Search your torrents...',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
-                prefixIcon: Icon(Icons.search_rounded, color: Colors.white.withValues(alpha: 0.4), size: 20),
+                hintStyle: TextStyle(color: app.fade(app.core.tx, 0.3)),
+                prefixIcon: Icon(Icons.search_rounded, color: app.fade(app.core.tx, 0.4), size: 20),
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.06),
+                fillColor: app.fade(app.core.tx, 0.06),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                  borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                  borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: CloudTheme.accent),
+                  borderSide: BorderSide(color: app.cloud.accent),
                 ),
               ),
             ),
@@ -6527,7 +6551,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                       },
                       icon: Icon(
                         Icons.clear_rounded,
-                        color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.4),
+                        color: isFocused
+                            ? app.core.tx
+                            : app.fade(app.core.tx, 0.4),
                         size: 18,
                       ),
                     );
@@ -6541,6 +6567,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
   }
 
   Widget _buildTorrentSearchResults() {
+    final app = AppThemeScope.of(context);
     if (_isLoadingTorrentSearch) {
       return const Center(
         child: Column(
@@ -6558,7 +6585,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       return Center(
         child: Text(
           'Type a keyword and press search',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+          style: TextStyle(color: app.fade(app.core.tx, 0.4)),
         ),
       );
     }
@@ -6570,11 +6597,12 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off_rounded, size: 48, color: Colors.white.withValues(alpha: 0.2)),
+            Icon(Icons.search_off_rounded,
+                size: 48, color: app.fade(app.core.tx, 0.2)),
             const SizedBox(height: 12),
             Text(
               'No results for "$_torrentSearchQuery"',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+              style: TextStyle(color: app.fade(app.core.tx, 0.5)),
             ),
           ],
         ),
@@ -6600,6 +6628,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
 
   Widget _buildToolbar() {
     final theme = Theme.of(context);
+    final app = AppThemeScope.of(context);
     final isTorrentsView = _selectedView == _TorboxDownloadsView.torrents;
     final hasItems = isTorrentsView ? _torrents.isNotEmpty : _webDownloads.isNotEmpty;
 
@@ -6616,9 +6645,9 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           margin: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
           padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
+            color: app.fade(app.core.tx, 0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            border: Border.all(color: app.fade(app.core.tx, 0.08)),
           ),
           child: Row(
             children: [

@@ -6,6 +6,7 @@ import '../../utils/platform_util.dart';
 import '../../widgets/detail/theme/detail_theme.dart';
 import '../../widgets/detail/theme/detail_themes.dart';
 import 'detail_page_style_page.dart' show effectiveDetailPageStyle;
+import '../../theme/app_theme_scope.dart';
 import 'widgets/settings_widgets.dart';
 
 /// Every theme this build can actually draw.
@@ -114,6 +115,8 @@ class _DetailThemePageState extends State<DetailThemePage> {
 
   @override
   Widget build(BuildContext context) {
+    // `st` rather than `t`: this page's rows already bind `t` to a DetailTheme.
+    final st = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Details Theme',
@@ -159,7 +162,7 @@ class _DetailThemePageState extends State<DetailThemePage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: st.dim,
                   ),
                 ),
               ],
@@ -173,17 +176,18 @@ class _DetailThemePageState extends State<DetailThemePage> {
   /// Picking a theme while Classic is the layout would appear to do nothing.
   /// Say so rather than let it read as a bug.
   Widget _classicNotice() {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: app.fade(app.core.tx, 0.05),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        border: Border.all(color: app.fade(app.core.tx, 0.10)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline_rounded, size: 17, color: kSettingsDim),
+          Icon(Icons.info_outline_rounded, size: 17, color: app.settings.dim),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -193,7 +197,7 @@ class _DetailThemePageState extends State<DetailThemePage> {
               style: TextStyle(
                 fontSize: 12.5,
                 height: 1.4,
-                color: kSettingsDim,
+                color: app.settings.dim,
               ),
             ),
           ),
@@ -203,6 +207,7 @@ class _DetailThemePageState extends State<DetailThemePage> {
   }
 
   Widget _optionRow(DetailTheme t) {
+    final st = AppThemeScope.of(context).settings;
     final active = _theme == t.id;
     return SettingsTile(
       icon: active
@@ -222,7 +227,7 @@ class _DetailThemePageState extends State<DetailThemePage> {
           _swatch(t.state),
           if (active) ...[
             const SizedBox(width: 10),
-            const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2),
+            Icon(Icons.check_rounded, size: 20, color: st.accent2),
           ],
         ],
       ),

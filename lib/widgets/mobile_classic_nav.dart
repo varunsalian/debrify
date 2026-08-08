@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_theme_scope.dart';
+
 /// The "classic" phone navigation — Concept 2 ("Your Five") from
 /// phone_nav_mockup/: a persistent Material-style bottom bar of
 /// [Home] [three user-chosen slots] [More], with everything else one sheet
@@ -65,6 +67,7 @@ class MobileClassicNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final slots = _barSlots;
     final sheet = _sheetIndices;
     final activeInSheet = sheet.contains(currentIndex);
@@ -72,9 +75,9 @@ class MobileClassicNav extends StatelessWidget {
     return Container(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
       decoration: BoxDecoration(
-        color: const Color(0xF712101F),
+        color: app.shell.barBg,
         border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          top: BorderSide(color: app.fade(app.core.tx, 0.08)),
         ),
       ),
       child: SizedBox(
@@ -113,10 +116,11 @@ class MobileClassicNav extends StatelessWidget {
   // ── More sheet ────────────────────────────────────────────────────────────
 
   void _openMoreSheet(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final sheet = _sheetIndices;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF161327),
+      backgroundColor: app.shell.navSheetBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -134,7 +138,7 @@ class MobileClassicNav extends StatelessWidget {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
+                  color: app.fade(app.core.tx, 0.18),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -146,7 +150,7 @@ class MobileClassicNav extends StatelessWidget {
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.3,
-                      color: Colors.white.withValues(alpha: 0.35),
+                      color: app.fade(app.core.tx, 0.35),
                     ),
                   ),
                   const Spacer(),
@@ -161,7 +165,7 @@ class MobileClassicNav extends StatelessWidget {
                     icon: const Icon(Icons.edit_rounded, size: 14),
                     label: const Text('Edit bar'),
                     style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFFC7BFFF),
+                      foregroundColor: app.shell.navLabel,
                       textStyle: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
@@ -211,6 +215,7 @@ class MobileClassicNav extends StatelessWidget {
   // ── Edit sheet ────────────────────────────────────────────────────────────
 
   void _openEditSheet(BuildContext context) {
+    final app = AppThemeScope.of(context);
     // Working copy; persisted only on Done, and only when TOUCHED — a
     // look-and-close Done must stay a no-op: barIndices is the HEALED bar,
     // and persisting it unchanged would overwrite stored picks for
@@ -224,7 +229,7 @@ class MobileClassicNav extends StatelessWidget {
     ];
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF161327),
+      backgroundColor: app.shell.navSheetBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
@@ -258,7 +263,7 @@ class MobileClassicNav extends StatelessWidget {
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 10),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
+                        color: app.fade(app.core.tx, 0.18),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -271,7 +276,7 @@ class MobileClassicNav extends StatelessWidget {
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 1.3,
-                          color: Colors.white.withValues(alpha: 0.35),
+                          color: app.fade(app.core.tx, 0.35),
                         ),
                       ),
                       const Spacer(),
@@ -281,7 +286,7 @@ class MobileClassicNav extends StatelessWidget {
                           if (dirty) onBarEdited(picks);
                         },
                         style: TextButton.styleFrom(
-                          foregroundColor: const Color(0xFFC7BFFF),
+                          foregroundColor: app.shell.navLabel,
                           textStyle: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
@@ -343,7 +348,7 @@ class MobileClassicNav extends StatelessWidget {
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.1,
-                      color: Colors.white.withValues(alpha: 0.3),
+                      color: app.fade(app.core.tx, 0.3),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -353,7 +358,7 @@ class MobileClassicNav extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.12),
+                        color: app.fade(app.core.tx, 0.12),
                       ),
                     ),
                     child: Wrap(
@@ -378,7 +383,7 @@ class MobileClassicNav extends StatelessWidget {
                       'back to the defaults',
                       style: TextStyle(
                         fontSize: 10,
-                        color: Colors.white.withValues(alpha: 0.3),
+                        color: app.fade(app.core.tx, 0.3),
                       ),
                     ),
                   ),
@@ -411,6 +416,7 @@ class _NavSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Expanded(
       child: InkWell(
         onTap: onTap,
@@ -439,8 +445,8 @@ class _NavSlot extends StatelessWidget {
                   icon,
                   size: 21,
                   color: active
-                      ? const Color(0xFFC7BFFF)
-                      : Colors.white.withValues(alpha: 0.5),
+                      ? app.shell.navLabel
+                      : app.fade(app.core.tx, 0.5),
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -451,8 +457,8 @@ class _NavSlot extends StatelessWidget {
                     fontSize: 9.5,
                     fontWeight: FontWeight.w700,
                     color: active
-                        ? const Color(0xFFC7BFFF)
-                        : Colors.white.withValues(alpha: 0.4),
+                        ? app.shell.navLabel
+                        : app.fade(app.core.tx, 0.4),
                   ),
                 ),
               ],
@@ -463,7 +469,7 @@ class _NavSlot extends StatelessWidget {
                 child: Icon(
                   Icons.keyboard_arrow_up_rounded,
                   size: 11,
-                  color: Colors.white.withValues(alpha: 0.35),
+                  color: app.fade(app.core.tx, 0.35),
                 ),
               ),
           ],
@@ -488,6 +494,7 @@ class _SheetCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -495,12 +502,12 @@ class _SheetCell extends StatelessWidget {
         decoration: BoxDecoration(
           color: active
               ? const Color(0xFF8B5CF6).withValues(alpha: 0.16)
-              : Colors.white.withValues(alpha: 0.045),
+              : app.fade(app.core.tx, 0.045),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: active
                 ? const Color(0xFF8B5CF6).withValues(alpha: 0.5)
-                : Colors.white.withValues(alpha: 0.06),
+                : app.fade(app.core.tx, 0.06),
           ),
         ),
         child: Column(
@@ -510,8 +517,8 @@ class _SheetCell extends StatelessWidget {
               icon,
               size: 20,
               color: active
-                  ? const Color(0xFFC7BFFF)
-                  : Colors.white.withValues(alpha: 0.75),
+                  ? app.shell.navLabel
+                  : app.fade(app.core.tx, 0.75),
             ),
             const SizedBox(height: 5),
             Text(
@@ -522,8 +529,8 @@ class _SheetCell extends StatelessWidget {
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
                 color: active
-                    ? const Color(0xFFC7BFFF)
-                    : Colors.white.withValues(alpha: 0.6),
+                    ? app.shell.navLabel
+                    : app.fade(app.core.tx, 0.6),
               ),
             ),
           ],
@@ -539,6 +546,7 @@ class _RemoteRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -546,16 +554,16 @@ class _RemoteRow extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.045),
+          color: app.fade(app.core.tx, 0.045),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          border: Border.all(color: app.fade(app.core.tx, 0.06)),
         ),
         child: Row(
           children: [
             Icon(
               Icons.settings_remote_rounded,
               size: 18,
-              color: Colors.white.withValues(alpha: 0.75),
+              color: app.fade(app.core.tx, 0.75),
             ),
             const SizedBox(width: 10),
             const Text(
@@ -569,7 +577,7 @@ class _RemoteRow extends StatelessWidget {
             Icon(
               Icons.chevron_right_rounded,
               size: 18,
-              color: Colors.white.withValues(alpha: 0.35),
+              color: app.fade(app.core.tx, 0.35),
             ),
           ],
         ),
@@ -595,13 +603,14 @@ class _EditChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: fixed ? 0.03 : 0.06),
+        color: app.fade(app.core.tx, fixed ? 0.03 : 0.06),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
+          color: app.fade(app.core.tx, 0.1),
           style: fixed ? BorderStyle.none : BorderStyle.solid,
         ),
       ),
@@ -611,7 +620,7 @@ class _EditChip extends StatelessWidget {
           Icon(
             icon,
             size: 14,
-            color: Colors.white.withValues(alpha: fixed ? 0.35 : 0.8),
+            color: app.fade(app.core.tx, fixed ? 0.35 : 0.8),
           ),
           const SizedBox(width: 6),
           Text(
@@ -619,7 +628,7 @@ class _EditChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
-              color: Colors.white.withValues(alpha: fixed ? 0.35 : 0.85),
+              color: app.fade(app.core.tx, fixed ? 0.35 : 0.85),
             ),
           ),
         ],

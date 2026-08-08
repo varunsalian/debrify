@@ -6,6 +6,7 @@ import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 class FilterSettingsPage extends StatefulWidget {
   const FilterSettingsPage({super.key});
@@ -262,6 +263,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Filters',
@@ -295,7 +297,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
               margin: const EdgeInsets.only(right: 8),
               decoration: BoxDecoration(
                 border: _clearAllFocused
-                    ? Border.all(color: kSettingsAccent, width: 2)
+                    ? Border.all(color: t.accent, width: 2)
                     : null,
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -393,26 +395,28 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
     required String subtitle,
     required List<Widget> children,
   }) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kSettingsPanel,
+        color: t.panel,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kSettingsLine),
+        border: Border.all(color: t.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: app.core.tx,
             ),
           ),
           const SizedBox(height: 4),
-          Text(subtitle, style: TextStyle(fontSize: 12, color: kSettingsDim)),
+          Text(subtitle, style: TextStyle(fontSize: 12, color: t.dim)),
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 8, children: children),
         ],
@@ -535,6 +539,7 @@ class _DpadFilterChipState extends State<_DpadFilterChip> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
@@ -548,9 +553,9 @@ class _DpadFilterChipState extends State<_DpadFilterChip> {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: _isFocused ? kSettingsPanel2 : null,
+          color: _isFocused ? t.panel2 : null,
           border: _isFocused
-              ? Border.all(color: kSettingsAccent, width: 2)
+              ? Border.all(color: t.accent, width: 2)
               : null,
           borderRadius: BorderRadius.circular(8),
         ),

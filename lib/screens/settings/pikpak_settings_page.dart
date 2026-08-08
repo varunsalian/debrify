@@ -9,6 +9,7 @@ import '../../utils/platform_util.dart';
 import '../../widgets/pikpak_folder_picker_dialog.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 class PikPakSettingsPage extends StatefulWidget {
   const PikPakSettingsPage({super.key});
@@ -115,6 +116,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   }
 
   Future<void> _login() async {
+    final t = AppThemeScope.of(context).settings;
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       _showSnackBar('Please fill in both email and password');
       return;
@@ -158,7 +160,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
             return AlertDialog(
               title: Row(
                 children: [
-                  const Icon(Icons.folder_special, color: kSettingsAmber),
+                  Icon(Icons.folder_special, color: t.warning),
                   const SizedBox(width: 12),
                   const Expanded(child: Text('Folder Restriction (Optional)')),
                 ],
@@ -375,6 +377,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   }
 
   Future<void> _toggleHideFromNav(bool value) async {
+    final t = AppThemeScope.of(context).settings;
     if (value) {
       // Show confirmation dialog before enabling
       final confirmed = await showDialog<bool>(
@@ -394,20 +397,20 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: kSettingsAmber.withValues(alpha: 0.1),
+                    color: t.warning.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: kSettingsAmber.withValues(alpha: 0.3),
+                      color: t.warning.withValues(alpha: 0.3),
                     ),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.info_outline, size: 18, color: kSettingsAmber),
-                      SizedBox(width: 8),
+                      Icon(Icons.info_outline, size: 18, color: t.warning),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'To show PikPak again, you must logout and login. This is a security measure.',
-                          style: TextStyle(fontSize: 13, color: kSettingsAmber),
+                          style: TextStyle(fontSize: 13, color: t.warning),
                         ),
                       ),
                     ],
@@ -472,17 +475,20 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
   }
 
   void _showSnackBar(String message, {bool isError = true}) {
+    final t = AppThemeScope.of(context).settings;
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? kSettingsRed : kSettingsGreen,
+        backgroundColor: isError ? t.danger : t.success,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'PikPak Settings',
@@ -580,7 +586,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                                   _hiddenFromNav
                                       ? Icons.visibility_off
                                       : Icons.visibility,
-                                  color: _hiddenFromNav ? kSettingsAmber : null,
+                                  color: _hiddenFromNav ? t.warning : null,
                                 ),
                               ),
                             ),
@@ -675,9 +681,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.play_circle_outline,
-                                    color: kSettingsAccent2,
+                                    color: t.accent2,
                                     size: 20,
                                   ),
                                   const SizedBox(width: 8),
@@ -694,7 +700,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                               Text(
                                 'Choose what happens after adding a torrent to PikPak',
                                 style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: kSettingsDim),
+                                    ?.copyWith(color: t.dim),
                               ),
                               const SizedBox(height: 12),
                               SettingsSelectDropdown(
@@ -752,7 +758,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                               leading: Icon(
                                 Icons.folder_special,
                                 color: _restrictedFolderId != null
-                                    ? kSettingsAmber
+                                    ? t.warning
                                     : null,
                               ),
                               title: const Text(
@@ -808,7 +814,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                                             ),
                                             label: const Text('Remove'),
                                             style: OutlinedButton.styleFrom(
-                                              foregroundColor: kSettingsRed,
+                                              foregroundColor: t.danger,
                                             ),
                                           ),
                                         ),
@@ -849,21 +855,21 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                       // Connection status
                       Card(
                         color: _isConnected
-                            ? kSettingsGreen.withValues(alpha: 0.15)
-                            : kSettingsPanel,
+                            ? t.success.withValues(alpha: 0.15)
+                            : t.panel,
                         child: ListTile(
                           leading: Icon(
                             _isConnected
                                 ? Icons.check_circle
                                 : Icons.circle_outlined,
-                            color: _isConnected ? kSettingsGreen : kSettingsDim,
+                            color: _isConnected ? t.success : t.dim,
                           ),
                           title: Text(
                             _isConnected ? 'Connected' : 'Not Connected',
                             style: TextStyle(
                               color: _isConnected
-                                  ? kSettingsGreen
-                                  : Colors.white,
+                                  ? t.success
+                                  : app.core.tx,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -871,7 +877,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                             _isConnected
                                 ? 'Connected as: ${_emailController.text}'
                                 : 'Login with your PikPak account below',
-                            style: TextStyle(color: kSettingsDim),
+                            style: TextStyle(color: t.dim),
                           ),
                         ),
                       ),
@@ -964,9 +970,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                             icon: const Icon(Icons.logout),
                             label: const Text('Logout'),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: kSettingsRed,
+                              foregroundColor: t.danger,
                               side: BorderSide(
-                                color: kSettingsRed.withValues(alpha: 0.5),
+                                color: t.danger.withValues(alpha: 0.5),
                               ),
                             ),
                           ),
@@ -1039,6 +1045,7 @@ class _FocusRingState extends State<_FocusRing> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       skipTraversal: true,
       canRequestFocus: false,
@@ -1047,10 +1054,10 @@ class _FocusRingState extends State<_FocusRing> {
       onFocusChange: (f) => setState(() => _focused = f),
       child: Container(
         decoration: BoxDecoration(
-          color: _focused ? kSettingsPanel2 : Colors.transparent,
+          color: _focused ? t.panel2 : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: _focused ? kSettingsAccent : Colors.transparent,
+            color: _focused ? t.accent : Colors.transparent,
           ),
         ),
         child: widget.child,

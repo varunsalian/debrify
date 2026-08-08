@@ -29,6 +29,7 @@ import '../../widgets/iptv/iptv_startup_channel_picker.dart';
 import '../../widgets/tv_text_field.dart';
 import 'iptv_settings_two_pane.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// The narrow (phone / small-window) layout's destinations. The wide layout
 /// keeps its rail + pane; this is the phone-native equivalent — a hub page of
@@ -1055,11 +1056,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   void _showSnackBar(String message, {bool isError = true}) {
+    final t = AppThemeScope.of(context).settings;
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? kSettingsRed : kSettingsGreen,
+        backgroundColor: isError ? t.danger : t.success,
       ),
     );
   }
@@ -1160,13 +1162,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   /// omitted at the ends rather than shown disabled — a focusable dead
   /// control is worse than an absent one on a remote.
   Future<void> _showListActions(IptvListMeta list) async {
+    final t = AppThemeScope.of(context).settings;
     final lists = _customLists;
     final index = lists.indexWhere((l) => l.id == list.id);
     if (index < 0) return;
 
     final action = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: kSettingsPanel,
+      backgroundColor: t.panel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -1178,7 +1181,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
               child: Row(
                 children: [
-                  Icon(Icons.bookmark_rounded, color: kSettingsAccent2),
+                  Icon(Icons.bookmark_rounded, color: t.accent2),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -1192,7 +1195,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   Text(
                     '${list.channelCount} channel'
                     '${list.channelCount == 1 ? '' : 's'}',
-                    style: TextStyle(fontSize: 12.5, color: kSettingsDim),
+                    style: TextStyle(fontSize: 12.5, color: t.dim),
                   ),
                 ],
               ),
@@ -1217,8 +1220,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                 onTap: () => Navigator.of(context).pop('down'),
               ),
             ListTile(
-              leading: Icon(Icons.delete_outline_rounded, color: kSettingsRed),
-              title: Text('Delete', style: TextStyle(color: kSettingsRed)),
+              leading: Icon(Icons.delete_outline_rounded, color: t.danger),
+              title: Text('Delete', style: TextStyle(color: t.danger)),
               subtitle: const Text('The channels themselves are kept'),
               onTap: () => Navigator.of(context).pop('delete'),
             ),
@@ -1245,6 +1248,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   /// source rather than one combined screen: the hidden set is stored per
   /// catalog, and two providers' identically-named categories are unrelated.
   List<Widget> _buildHiddenCategoriesSection() {
+    final t = AppThemeScope.of(context).settings;
     final sources = _hideableSources;
     return [
       for (var i = 0; i < sources.length; i++)
@@ -1255,8 +1259,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                 ? Icons.visibility_off_rounded
                 : Icons.visibility_rounded,
             color: (_hiddenCounts[sources[i].id] ?? 0) > 0
-                ? kSettingsAccent
-                : kSettingsDim2,
+                ? t.accent
+                : t.dim2,
           ),
           title: Text(
             sources[i].name,
@@ -1268,14 +1272,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             0 => 'Nothing hidden',
             1 => '1 category hidden',
             final n => '$n categories hidden',
-          }, style: TextStyle(fontSize: 12, color: kSettingsDim)),
-          trailing: Icon(Icons.chevron_right_rounded, color: kSettingsDim2),
+          }, style: TextStyle(fontSize: 12, color: t.dim)),
+          trailing: Icon(Icons.chevron_right_rounded, color: t.dim2),
           onTap: () => unawaited(_openHiddenCategories(sources[i])),
         ),
     ];
   }
 
   List<Widget> _buildListsSection() {
+    final t = AppThemeScope.of(context).settings;
     final lists = _customLists;
     if (lists.isEmpty) {
       return [
@@ -1283,12 +1288,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
           child: Row(
             children: [
-              Icon(Icons.bookmark_border_rounded, color: kSettingsDim2),
+              Icon(Icons.bookmark_border_rounded, color: t.dim2),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'No lists yet — Favorites is always there.',
-                  style: TextStyle(fontSize: 13, color: kSettingsDim),
+                  style: TextStyle(fontSize: 13, color: t.dim),
                 ),
               ),
             ],
@@ -1556,18 +1561,19 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   Widget _buildFileTabContent() {
+    final t = AppThemeScope.of(context).settings;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(
           Icons.folder_open,
           size: 48,
-          color: kSettingsAccent2.withValues(alpha: 0.7),
+          color: t.accent2.withValues(alpha: 0.7),
         ),
         const SizedBox(height: 16),
         Text(
           'Select an M3U or M3U8 file from your device',
-          style: TextStyle(fontSize: 14, color: kSettingsDim),
+          style: TextStyle(fontSize: 14, color: t.dim),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 20),
@@ -2007,6 +2013,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   Widget _buildSourcesView() {
+    final t = AppThemeScope.of(context).settings;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -2065,7 +2072,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         const SettingsSectionLabel('Your Playlists'),
         Text(
           'Tap the star to set a default playlist.',
-          style: TextStyle(fontSize: 12, color: kSettingsDim),
+          style: TextStyle(fontSize: 12, color: t.dim),
         ),
         const SizedBox(height: 16),
 
@@ -2075,16 +2082,16 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  Icon(Icons.playlist_add, size: 48, color: kSettingsDim2),
+                  Icon(Icons.playlist_add, size: 48, color: t.dim2),
                   const SizedBox(height: 12),
                   Text(
                     'No playlists yet',
-                    style: TextStyle(fontSize: 14, color: kSettingsDim),
+                    style: TextStyle(fontSize: 14, color: t.dim),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Add an M3U playlist URL above',
-                    style: TextStyle(fontSize: 12, color: kSettingsDim2),
+                    style: TextStyle(fontSize: 12, color: t.dim2),
                   ),
                 ],
               ),
@@ -2103,6 +2110,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   Widget _buildListsView() {
+    final t = AppThemeScope.of(context).settings;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -2110,7 +2118,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         Text(
           'Hold OK (or long-press) any channel to add it to a list. '
           'Deleting a list never deletes its channels.',
-          style: TextStyle(fontSize: 12, color: kSettingsDim),
+          style: TextStyle(fontSize: 12, color: t.dim),
         ),
         const SizedBox(height: 16),
         Card(
@@ -2133,6 +2141,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   // One row per source that stores a catalog. The hub hides its row when no
   // source qualifies, so this view never renders empty.
   Widget _buildHiddenView() {
+    final t = AppThemeScope.of(context).settings;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -2141,7 +2150,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           'Tap the eye (or long-press) on a category in the IPTV page\'s '
           'category picker to hide it. Nothing is deleted — bring it '
           'back here any time.',
-          style: TextStyle(fontSize: 12, color: kSettingsDim),
+          style: TextStyle(fontSize: 12, color: t.dim),
         ),
         const SizedBox(height: 16),
         Card(child: Column(children: _buildHiddenCategoriesSection())),
@@ -2394,6 +2403,7 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
@@ -2423,12 +2433,12 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: _isFocused
-              ? Border.all(color: kSettingsAccent2, width: 2)
+              ? Border.all(color: t.accent2, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: kSettingsAccent.withValues(alpha: 0.3),
+                    color: t.accent.withValues(alpha: 0.3),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -2445,7 +2455,7 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
             icon: Icon(widget.icon),
             label: Text(widget.label),
             style: FilledButton.styleFrom(
-              backgroundColor: _isFocused ? kSettingsAccent2 : null,
+              backgroundColor: _isFocused ? t.accent2 : null,
             ),
           ),
         ),
@@ -2521,13 +2531,15 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final theme = Theme.of(context);
 
     return Container(
       decoration: BoxDecoration(
-        color: kSettingsPanel,
+        color: t.panel,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kSettingsLine),
+        border: Border.all(color: t.line),
       ),
       padding: const EdgeInsets.all(4),
       child: Row(
@@ -2580,16 +2592,16 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? kSettingsAccent.withValues(alpha: 0.22)
+                              ? t.accent.withValues(alpha: 0.22)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                           border: _urlTabFocused
-                              ? Border.all(color: kSettingsAccent, width: 2)
+                              ? Border.all(color: t.accent, width: 2)
                               : null,
                           boxShadow: _urlTabFocused
                               ? [
                                   BoxShadow(
-                                    color: kSettingsAccent.withValues(
+                                    color: t.accent.withValues(
                                       alpha: 0.3,
                                     ),
                                     blurRadius: 4,
@@ -2604,14 +2616,14 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                               Icons.link,
                               size: 18,
                               color: isSelected
-                                  ? kSettingsAccent2
-                                  : kSettingsDim,
+                                  ? t.accent2
+                                  : t.dim,
                             ),
                             const SizedBox(width: 8),
                             Text(
                               'From URL',
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: isSelected ? Colors.white : kSettingsDim,
+                                color: isSelected ? app.core.tx : t.dim,
                                 fontWeight: isSelected
                                     ? FontWeight.bold
                                     : FontWeight.normal,
@@ -2680,16 +2692,16 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? kSettingsAccent.withValues(alpha: 0.22)
+                              ? t.accent.withValues(alpha: 0.22)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                           border: _fileTabFocused
-                              ? Border.all(color: kSettingsAccent, width: 2)
+                              ? Border.all(color: t.accent, width: 2)
                               : null,
                           boxShadow: _fileTabFocused
                               ? [
                                   BoxShadow(
-                                    color: kSettingsAccent.withValues(
+                                    color: t.accent.withValues(
                                       alpha: 0.3,
                                     ),
                                     blurRadius: 4,
@@ -2704,14 +2716,14 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                               Icons.folder_open,
                               size: 18,
                               color: isSelected
-                                  ? kSettingsAccent2
-                                  : kSettingsDim,
+                                  ? t.accent2
+                                  : t.dim,
                             ),
                             const SizedBox(width: 8),
                             Text(
                               'From File',
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: isSelected ? Colors.white : kSettingsDim,
+                                color: isSelected ? app.core.tx : t.dim,
                                 fontWeight: isSelected
                                     ? FontWeight.bold
                                     : FontWeight.normal,
@@ -2775,16 +2787,16 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? kSettingsAccent.withValues(alpha: 0.22)
+                                ? t.accent.withValues(alpha: 0.22)
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(8),
                             border: _xcTabFocused
-                                ? Border.all(color: kSettingsAccent, width: 2)
+                                ? Border.all(color: t.accent, width: 2)
                                 : null,
                             boxShadow: _xcTabFocused
                                 ? [
                                     BoxShadow(
-                                      color: kSettingsAccent.withValues(
+                                      color: t.accent.withValues(
                                         alpha: 0.3,
                                       ),
                                       blurRadius: 4,
@@ -2799,8 +2811,8 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                                 Icons.login,
                                 size: 18,
                                 color: isSelected
-                                    ? kSettingsAccent2
-                                    : kSettingsDim,
+                                    ? t.accent2
+                                    : t.dim,
                               ),
                               const SizedBox(width: 8),
                               Flexible(
@@ -2808,8 +2820,8 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                                   'Xtream Login',
                                   style: theme.textTheme.bodyMedium?.copyWith(
                                     color: isSelected
-                                        ? Colors.white
-                                        : kSettingsDim,
+                                        ? app.core.tx
+                                        : t.dim,
                                     fontWeight: isSelected
                                         ? FontWeight.bold
                                         : FontWeight.normal,
@@ -2955,6 +2967,7 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     final isAnyFocused =
         _starFocused || _refreshFocused || _editFocused || _deleteFocused;
     final canRefresh = widget.onRefresh != null;
@@ -2962,7 +2975,7 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
     // Snap, don't tween — TV GPU rule.
     return Container(
       decoration: BoxDecoration(
-        color: isAnyFocused ? kSettingsPanel2 : null,
+        color: isAnyFocused ? t.panel2 : null,
         borderRadius: BorderRadius.circular(8),
       ),
       child: ListTile(
@@ -2974,7 +2987,7 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
               : (widget.playlist.isLocalFile
                     ? Icons.folder
                     : Icons.playlist_play),
-          color: widget.isDefault ? kSettingsAmber : null,
+          color: widget.isDefault ? t.warning : null,
         ),
         title: Text(widget.playlist.name),
         subtitle: Column(
@@ -2983,22 +2996,22 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
             Row(
               children: [
                 if (widget.playlist.isXtreamCodes) ...[
-                  Icon(Icons.login, size: 12, color: kSettingsDim),
+                  Icon(Icons.login, size: 12, color: t.dim),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       'Xtream Codes - ${widget.playlist.serverUrl}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: kSettingsDim),
+                      style: TextStyle(fontSize: 12, color: t.dim),
                     ),
                   ),
                 ] else if (widget.playlist.isLocalFile) ...[
-                  Icon(Icons.sd_card, size: 12, color: kSettingsDim),
+                  Icon(Icons.sd_card, size: 12, color: t.dim),
                   const SizedBox(width: 4),
                   Text(
                     'Local file',
-                    style: TextStyle(fontSize: 12, color: kSettingsDim),
+                    style: TextStyle(fontSize: 12, color: t.dim),
                   ),
                 ] else
                   Expanded(
@@ -3006,7 +3019,7 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
                       widget.playlist.url,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: kSettingsDim),
+                      style: TextStyle(fontSize: 12, color: t.dim),
                     ),
                   ),
               ],
@@ -3014,12 +3027,12 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
             if ((widget.playlist.epgUrl ?? '').isNotEmpty)
               Text(
                 'Custom EPG URL set',
-                style: TextStyle(color: kSettingsDim, fontSize: 12),
+                style: TextStyle(color: t.dim, fontSize: 12),
               ),
             if (widget.isDefault)
-              const Text(
+              Text(
                 'Default playlist',
-                style: TextStyle(color: kSettingsAmber, fontSize: 12),
+                style: TextStyle(color: t.warning, fontSize: 12),
               ),
           ],
         ),
@@ -3029,7 +3042,7 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
             _FocusableIconButton(
               focusNode: widget.starFocusNode,
               icon: widget.isDefault ? Icons.star : Icons.star_border,
-              color: widget.isDefault ? kSettingsAmber : null,
+              color: widget.isDefault ? t.warning : null,
               tooltip: widget.isDefault ? 'Remove default' : 'Set as default',
               onPressed: widget.onSetDefault,
               onRightArrow: () =>
@@ -3255,6 +3268,7 @@ class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     // The field shells in the order they're shown, so each field's UP/DOWN can
     // point at its real neighbour regardless of type. First-field UP and
     // last-field DOWN stay null: those hops (field↔action-buttons) go through
@@ -3381,7 +3395,7 @@ class _EditPlaylistDialogState extends State<_EditPlaylistDialog> {
                 child: Text(
                   'Changing the server or credentials won\'t be re-checked '
                   'here — use Refresh afterwards to verify the login.',
-                  style: TextStyle(fontSize: 12, color: kSettingsDim),
+                  style: TextStyle(fontSize: 12, color: t.dim),
                 ),
               ),
             ...fields,
@@ -3466,6 +3480,7 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
@@ -3495,12 +3510,12 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: _isFocused
-              ? Border.all(color: kSettingsAccent, width: 2)
+              ? Border.all(color: t.accent, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: kSettingsAccent.withValues(alpha: 0.3),
+                    color: t.accent.withValues(alpha: 0.3),
                     blurRadius: 6,
                     spreadRadius: 1,
                   ),
@@ -3516,18 +3531,18 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: _isFocused ? kSettingsAccent2 : widget.color,
+                      color: _isFocused ? t.accent2 : widget.color,
                     ),
                   )
                 : Icon(
                     widget.icon,
-                    color: _isFocused ? kSettingsAccent2 : widget.color,
+                    color: _isFocused ? t.accent2 : widget.color,
                   ),
             tooltip: widget.tooltip,
             onPressed: widget.isBusy ? null : widget.onPressed,
             style: IconButton.styleFrom(
               backgroundColor: _isFocused
-                  ? kSettingsAccent.withValues(alpha: 0.16)
+                  ? t.accent.withValues(alpha: 0.16)
                   : null,
             ),
           ),
@@ -3589,6 +3604,7 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
@@ -3623,12 +3639,12 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: _isFocused
-              ? Border.all(color: kSettingsAccent, width: 2)
+              ? Border.all(color: t.accent, width: 2)
               : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: kSettingsAccent.withValues(alpha: 0.3),
+                    color: t.accent.withValues(alpha: 0.3),
                     blurRadius: 6,
                     spreadRadius: 1,
                   ),
@@ -3640,13 +3656,13 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
           child: IconButton(
             icon: Icon(
               Icons.arrow_back,
-              color: _isFocused ? kSettingsAccent2 : null,
+              color: _isFocused ? t.accent2 : null,
             ),
             tooltip: 'Go back',
             onPressed: _goBack,
             style: IconButton.styleFrom(
               backgroundColor: _isFocused
-                  ? kSettingsAccent.withValues(alpha: 0.16)
+                  ? t.accent.withValues(alpha: 0.16)
                   : null,
             ),
           ),
@@ -3728,6 +3744,8 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return AlertDialog(
       title: const Text('Name Your Playlist'),
       content: Column(
@@ -3737,17 +3755,17 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: kSettingsGreen.withValues(alpha: 0.08),
+              color: t.success.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: kSettingsGreen.withValues(alpha: 0.22)),
+              border: Border.all(color: t.success.withValues(alpha: 0.22)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.check_circle, color: kSettingsGreen, size: 20),
+                Icon(Icons.check_circle, color: t.success, size: 20),
                 const SizedBox(width: 8),
                 Text(
                   '${widget.channelCount} channels found',
-                  style: const TextStyle(fontSize: 14, color: Colors.white),
+                  style: TextStyle(fontSize: 14, color: app.core.tx),
                 ),
               ],
             ),
@@ -3793,6 +3811,8 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
 
 /// Snap accent border on DPAD focus for the dialog's action buttons — the
 /// stock Material focus overlay is too faint to spot on TV.
+/// TOP-LEVEL final, so it cannot read a BuildContext: this one keeps the
+/// `kSettingsAccent` constant until it becomes a function of context.
 final ButtonStyle _dialogButtonFocusStyle = ButtonStyle(
   side: WidgetStateProperty.resolveWith(
     (states) => states.contains(WidgetState.focused)
@@ -3833,11 +3853,12 @@ class _IptvListSettingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
       child: Row(
         children: [
-          Icon(Icons.bookmark_rounded, size: 20, color: kSettingsDim),
+          Icon(Icons.bookmark_rounded, size: 20, color: t.dim),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -3858,7 +3879,7 @@ class _IptvListSettingsRow extends StatelessWidget {
                   list.channelCount == 1
                       ? '1 channel'
                       : '${list.channelCount} channels',
-                  style: TextStyle(fontSize: 12, color: kSettingsDim2),
+                  style: TextStyle(fontSize: 12, color: t.dim2),
                 ),
               ],
             ),
@@ -3874,14 +3895,14 @@ class _IptvListSettingsRow extends StatelessWidget {
           _FocusableIconButton(
             focusNode: upFocusNode,
             icon: Icons.keyboard_arrow_up_rounded,
-            color: isFirst ? kSettingsDim2 : null,
+            color: isFirst ? t.dim2 : null,
             tooltip: 'Move up',
             onPressed: isFirst ? () {} : onMoveUp,
           ),
           _FocusableIconButton(
             focusNode: downFocusNode,
             icon: Icons.keyboard_arrow_down_rounded,
-            color: isLast ? kSettingsDim2 : null,
+            color: isLast ? t.dim2 : null,
             tooltip: 'Move down',
             onPressed: isLast ? () {} : onMoveDown,
           ),
@@ -3913,9 +3934,10 @@ class _FocusableSettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return ListTile(
       focusNode: focusNode,
-      leading: Icon(icon, color: kSettingsAccent),
+      leading: Icon(icon, color: t.accent),
       title: Text(
         label,
         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),

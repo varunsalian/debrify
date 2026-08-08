@@ -4,6 +4,7 @@ import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// Android TV "Screen Size" picker.
 ///
@@ -81,6 +82,7 @@ class _TvScreenSizePageState extends State<TvScreenSizePage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Screen Size',
@@ -125,7 +127,7 @@ class _TvScreenSizePageState extends State<TvScreenSizePage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ],
@@ -140,6 +142,7 @@ class _TvScreenSizePageState extends State<TvScreenSizePage> {
   /// check on the active one, rather than a dropdown whose overlay would have
   /// to be focus-managed on a remote.
   Widget _optionRow(TvUiScaleChoice choice) {
+    final t = AppThemeScope.of(context).settings;
     final bool active = _percent == choice.percent;
     return SettingsTile(
       icon: active
@@ -148,7 +151,7 @@ class _TvScreenSizePageState extends State<TvScreenSizePage> {
       title: choice.label,
       subtitle: choice.subtitle,
       trailing: active
-          ? const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2)
+          ? Icon(Icons.check_rounded, size: 20, color: t.accent2)
           : const SizedBox.shrink(),
       onTap: () => _select(choice.percent),
     );

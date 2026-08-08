@@ -5,7 +5,8 @@ import '../../models/iptv_playlist.dart';
 import '../../services/iptv_media_store.dart';
 import '../../services/iptv_source_stats.dart';
 import '../../services/storage_service.dart';
-import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// Two-pane IPTV settings for TV and desktop ("Concept A"): a rail of the
 /// user's actual sources on the left, the selected source's detail on the
@@ -229,6 +230,10 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   /// delete) plus headroom for the lists pane, which grows with the user's
   /// lists and is capped by the pool below.
   static const int _panePoolSize = 24;
+
+  /// The active theme, cached by [build] for every `_buildX` helper. Assigned
+  /// before first use because `build` always runs before them.
+  late AppTheme _app;
 
   final ValueNotifier<_Dest> _dest = ValueNotifier(const _AddDest());
 
@@ -467,13 +472,18 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
 
   @override
   Widget build(BuildContext context) {
+    // ONE lookup per build, cached for every _buildX helper below: the pane is
+    // rebuilt from a ValueListenableBuilder on each rail focus move, so a
+    // per-helper lookup would walk the inherited tree on every DPAD step.
+    _app = AppThemeScope.of(context);
+    final t = _app.settings;
     return FocusTraversalGroup(
       policy: WidgetOrderTraversalPolicy(),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildRail(),
-          Container(width: 1, color: kSettingsLine),
+          Container(width: 1, color: t.line),
           Expanded(
             child: ValueListenableBuilder<_Dest>(
               valueListenable: _dest,
@@ -488,6 +498,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   // ---------------------------------------------------------------- rail
 
   Widget _buildRail() {
+    final t = _app.settings;
     final width = MediaQuery.sizeOf(context).width;
     return SizedBox(
       width: width >= 1400 ? 400 : 330,
@@ -511,7 +522,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                       ? Icon(
                           Icons.star_rounded,
                           size: 18,
-                          color: kSettingsAmber,
+                          color: t.warning,
                         )
                       : null,
                   busy: widget.refreshingIds.contains(widget.playlists[i].id),
@@ -526,7 +537,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
                   child: Text(
                     'No sources yet.',
-                    style: TextStyle(fontSize: 13, color: kSettingsDim),
+                    style: TextStyle(fontSize: 13, color: t.dim),
                   ),
                 ),
               _RailEntry(
@@ -548,7 +559,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   horizontal: 6,
                   vertical: 10,
                 ),
-                child: Container(height: 1, color: kSettingsLine),
+                child: Container(height: 1, color: t.line),
               ),
               _RailEntry(
                 focusNode: _railNodes[widget.playlists.length + 1],
@@ -726,6 +737,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   }
 
   Widget _buildSourcePane(String playlistId) {
+    final t = _app.settings;
     // Deleting the last source can leave one frame pointing here before
     // didUpdateWidget re-homes the pane; `.first` on an empty list would
     // throw rather than just render nothing.
@@ -750,23 +762,23 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
           meta: _sourceMeta(playlist),
           badges: [
             if (isDefault)
-              _Badge('Default', kSettingsAmber, Icons.star_rounded),
+              _Badge('Default', t.warning, Icons.star_rounded),
             if (stats.guide == IptvGuideSource.custom)
               _Badge(
                 'Custom guide',
-                kSettingsAccent2,
+                t.accent2,
                 Icons.event_note_rounded,
               ),
             if (stats.guide == IptvGuideSource.provider)
               _Badge(
                 'Provider guide',
-                kSettingsGreen,
+                t.success,
                 Icons.event_available_rounded,
               ),
             if (stats.cached && stats.refreshedAt != null)
               _Badge(
                 'Refreshed ${IptvSourceStatsLoader.ago(stats.refreshedAt)}',
-                kSettingsAccent2,
+                t.accent2,
                 Icons.schedule_rounded,
               ),
           ],
@@ -808,7 +820,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   stats.refreshedAt == null
                       ? 'never'
                       : IptvSourceStatsLoader.ago(stats.refreshedAt),
-                  style: TextStyle(fontSize: 12.5, color: kSettingsDim),
+                  style: TextStyle(fontSize: 12.5, color: t.dim),
                 ),
                 // Stays focusable while busy, with the tap neutered — going
                 // non-focusable mid-refresh would yank the focus out from
@@ -1378,8 +1390,11 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
 
   void _returnToRail() => _focusRail(_selectedRailIndex);
 
-  Widget get _chevron =>
-      Icon(Icons.chevron_right_rounded, size: 20, color: kSettingsDim2);
+  Widget get _chevron => Icon(
+    Icons.chevron_right_rounded,
+    size: 20,
+    color: _app.settings.dim2,
+  );
 }
 
 // ------------------------------------------------------------------ pieces
@@ -1389,18 +1404,21 @@ class _RailHeading extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-    child: Text(
-      text.toUpperCase(),
-      style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.4,
-        color: kSettingsDim2,
+  Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.4,
+          color: t.dim2,
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// One rail entry. Focus selects it (the pane updates live), OK/RIGHT enters
@@ -1445,6 +1463,8 @@ class _RailEntryState extends State<_RailEntry> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final active = _focused || widget.selected;
     return Focus(
       focusNode: widget.focusNode,
@@ -1514,11 +1534,11 @@ class _RailEntryState extends State<_RailEntry> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             decoration: BoxDecoration(
               color: _focused
-                  ? kSettingsPanel2
-                  : (widget.selected ? kSettingsPanel : null),
+                  ? t.panel2
+                  : (widget.selected ? t.panel : null),
               borderRadius: BorderRadius.circular(11),
               border: Border.all(
-                color: _focused ? kSettingsAccent : Colors.transparent,
+                color: _focused ? t.accent : Colors.transparent,
                 width: 2,
               ),
             ),
@@ -1528,7 +1548,7 @@ class _RailEntryState extends State<_RailEntry> {
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: _focused ? kSettingsAccent : kSettingsPanel2,
+                    color: _focused ? t.accent : t.panel2,
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: widget.busy
@@ -1539,7 +1559,9 @@ class _RailEntryState extends State<_RailEntry> {
                       : Icon(
                           widget.icon,
                           size: 18,
-                          color: _focused ? Colors.white : kSettingsAccent2,
+                          // Focused rides an accent fill; unfocused sits on a
+                          // panel, where the accent tint is the right ink.
+                          color: _focused ? app.inkOn(t.accent) : t.accent2,
                         ),
                 ),
                 const SizedBox(width: 12),
@@ -1554,7 +1576,7 @@ class _RailEntryState extends State<_RailEntry> {
                         style: TextStyle(
                           fontSize: 14.5,
                           fontWeight: FontWeight.w600,
-                          color: active ? Colors.white : null,
+                          color: active ? app.core.tx : null,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -1562,7 +1584,7 @@ class _RailEntryState extends State<_RailEntry> {
                         widget.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, color: kSettingsDim),
+                        style: TextStyle(fontSize: 12, color: t.dim),
                       ),
                     ],
                   ),
@@ -1572,7 +1594,7 @@ class _RailEntryState extends State<_RailEntry> {
                   Icon(
                     Icons.chevron_right_rounded,
                     size: 18,
-                    color: kSettingsDim2,
+                    color: t.dim2,
                   ),
               ],
             ),
@@ -1598,6 +1620,7 @@ class _PaneHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1605,10 +1628,10 @@ class _PaneHeader extends StatelessWidget {
           width: 56,
           height: 56,
           decoration: BoxDecoration(
-            color: kSettingsPanel2,
+            color: t.panel2,
             borderRadius: BorderRadius.circular(14),
           ),
-          child: Icon(icon, size: 26, color: kSettingsAccent2),
+          child: Icon(icon, size: 26, color: t.accent2),
         ),
         const SizedBox(width: 16),
         Expanded(
@@ -1630,7 +1653,7 @@ class _PaneHeader extends StatelessWidget {
                 meta,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12.5, color: kSettingsDim),
+                style: TextStyle(fontSize: 12.5, color: t.dim),
               ),
               if (badges.isNotEmpty) ...[
                 const SizedBox(height: 10),
@@ -1680,48 +1703,51 @@ class _StatStrip extends StatelessWidget {
   final List<(String, String)> stats;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      for (var i = 0; i < stats.length; i++) ...[
-        if (i > 0) const SizedBox(width: 10),
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: kSettingsPanel,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: kSettingsLine),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  stats[i].$2,
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.4,
+  Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
+    return Row(
+      children: [
+        for (var i = 0; i < stats.length; i++) ...[
+          if (i > 0) const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: t.panel,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: t.line),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    stats[i].$2,
+                    style: const TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.4,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  stats[i].$1.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.9,
-                    color: kSettingsDim,
+                  const SizedBox(height: 3),
+                  Text(
+                    stats[i].$1.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.9,
+                      color: t.dim,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
+        ],
       ],
-    ],
-  );
+    );
+  }
 }
 
 class _QuietBanner extends StatelessWidget {
@@ -1730,26 +1756,29 @@ class _QuietBanner extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-    decoration: BoxDecoration(
-      color: kSettingsPanel,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: kSettingsLine),
-    ),
-    child: Row(
-      children: [
-        Icon(icon, size: 18, color: kSettingsDim),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(fontSize: 13, color: kSettingsDim),
+  Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: t.panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: t.line),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: t.dim),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 13, color: t.dim),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 class _RowGroup extends StatelessWidget {
@@ -1757,14 +1786,17 @@ class _RowGroup extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      color: kSettingsPanel,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: kSettingsLine),
-    ),
-    child: Column(children: children),
-  );
+  Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
+    return Container(
+      decoration: BoxDecoration(
+        color: t.panel,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: t.line),
+      ),
+      child: Column(children: children),
+    );
+  }
 }
 
 /// One action row in the pane. LEFT hands focus back to the rail; everything
@@ -1801,7 +1833,8 @@ class _PaneRowState extends State<_PaneRow> {
 
   @override
   Widget build(BuildContext context) {
-    final tint = widget.danger ? kSettingsRed : kSettingsAccent2;
+    final t = AppThemeScope.of(context).settings;
+    final tint = widget.danger ? t.danger : t.accent2;
     return Focus(
       focusNode: widget.focusNode,
       canRequestFocus: widget.onTap != null,
@@ -1849,10 +1882,10 @@ class _PaneRowState extends State<_PaneRow> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             decoration: BoxDecoration(
-              color: _focused ? kSettingsPanel2 : null,
+              color: _focused ? t.panel2 : null,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: _focused ? kSettingsAccent : Colors.transparent,
+                color: _focused ? t.accent : Colors.transparent,
                 width: 2,
               ),
             ),
@@ -1869,14 +1902,14 @@ class _PaneRowState extends State<_PaneRow> {
                         style: TextStyle(
                           fontSize: 14.5,
                           fontWeight: FontWeight.w600,
-                          color: widget.danger ? kSettingsRed : null,
+                          color: widget.danger ? t.danger : null,
                         ),
                       ),
                       if (widget.subtitle != null) ...[
                         const SizedBox(height: 2),
                         Text(
                           widget.subtitle!,
-                          style: TextStyle(fontSize: 12, color: kSettingsDim),
+                          style: TextStyle(fontSize: 12, color: t.dim),
                         ),
                       ],
                     ],
@@ -1930,6 +1963,7 @@ class _MethodCardState extends State<_MethodCard> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (has) {
@@ -1971,19 +2005,19 @@ class _MethodCardState extends State<_MethodCard> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
             decoration: BoxDecoration(
               color: _focused
-                  ? kSettingsPanel2
-                  : (widget.selected ? kSettingsPanel : null),
+                  ? t.panel2
+                  : (widget.selected ? t.panel : null),
               borderRadius: BorderRadius.circular(13),
               border: Border.all(
                 color: _focused
-                    ? kSettingsAccent
-                    : (widget.selected ? kSettingsAccent2 : kSettingsLine),
+                    ? t.accent
+                    : (widget.selected ? t.accent2 : t.line),
                 width: 2,
               ),
             ),
             child: Column(
               children: [
-                Icon(widget.icon, size: 24, color: kSettingsAccent2),
+                Icon(widget.icon, size: 24, color: t.accent2),
                 const SizedBox(height: 9),
                 Text(
                   widget.label,
@@ -1997,7 +2031,7 @@ class _MethodCardState extends State<_MethodCard> {
                   widget.hint,
                   textAlign: TextAlign.center,
                   maxLines: 2,
-                  style: TextStyle(fontSize: 11.5, color: kSettingsDim),
+                  style: TextStyle(fontSize: 11.5, color: t.dim),
                 ),
               ],
             ),

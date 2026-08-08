@@ -4,6 +4,7 @@ import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// Android TV "Rendering" picker — whether the UI is drawn at the panel's own
 /// resolution or at a ~720p buffer the TV's scaler blows back up.
@@ -108,6 +109,7 @@ class _TvRenderQualityPageState extends State<TvRenderQualityPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Rendering',
@@ -158,18 +160,18 @@ class _TvRenderQualityPageState extends State<TvRenderQualityPage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
                 if (currently.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Text(
                     currently,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       height: 1.45,
                       fontWeight: FontWeight.w600,
-                      color: kSettingsAccent2,
+                      color: t.accent2,
                     ),
                   ),
                 ],
@@ -182,7 +184,7 @@ class _TvRenderQualityPageState extends State<TvRenderQualityPage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ],
@@ -197,6 +199,7 @@ class _TvRenderQualityPageState extends State<TvRenderQualityPage> {
   /// check on the active one, rather than a dropdown whose overlay would have
   /// to be focus-managed on a remote.
   Widget _optionRow(TvRenderQualityChoice choice) {
+    final t = AppThemeScope.of(context).settings;
     final bool active = _quality == choice.quality;
     return SettingsTile(
       icon: active
@@ -205,7 +208,7 @@ class _TvRenderQualityPageState extends State<TvRenderQualityPage> {
       title: choice.label,
       subtitle: choice.subtitle,
       trailing: active
-          ? const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2)
+          ? Icon(Icons.check_rounded, size: 20, color: t.accent2)
           : const SizedBox.shrink(),
       onTap: () => _select(choice.quality),
     );

@@ -8,6 +8,7 @@ import '../models/rd_torrent.dart';
 import '../models/rd_file_node.dart';
 import '../models/debrid_download.dart';
 import '../services/analytics_service.dart';
+import '../theme/app_theme_scope.dart';
 import '../services/debrid_service.dart';
 import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
@@ -816,7 +817,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Delete Torrent',
@@ -846,9 +847,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => const AlertDialog(
-            backgroundColor: Color(0xFF1E293B),
-            content: Row(
+          builder: (context) => AlertDialog(
+            backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
+            content: const Row(
               children: [
                 CircularProgressIndicator(),
                 SizedBox(width: 16),
@@ -896,7 +897,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Delete All Torrents',
@@ -932,6 +933,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     String phase = 'Fetching all torrents...';
     List<String> failedDeletes = [];
     StateSetter? setDialogState;
+    final app = AppThemeScope.of(context);
 
     // Show progress dialog
     showDialog(
@@ -941,7 +943,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         builder: (context, dialogStateSetter) {
           setDialogState = dialogStateSetter;
           return AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: app.cloud.dialogSurface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
@@ -1093,7 +1095,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Delete All Downloads',
@@ -1129,6 +1131,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     String phase = 'Fetching all downloads...';
     List<String> failedDeletes = [];
     StateSetter? setDialogState;
+    final app = AppThemeScope.of(context);
 
     // Show progress dialog
     showDialog(
@@ -1138,7 +1141,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         builder: (context, dialogStateSetter) {
           setDialogState = dialogStateSetter;
           return AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: app.cloud.dialogSurface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
@@ -1290,7 +1293,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Delete Download',
@@ -1320,9 +1323,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => const AlertDialog(
-            backgroundColor: Color(0xFF1E293B),
-            content: Row(
+          builder: (context) => AlertDialog(
+            backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
+            content: const Row(
               children: [
                 CircularProgressIndicator(),
                 SizedBox(width: 16),
@@ -1429,7 +1432,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Delete $count ${count == 1 ? itemType : itemTypePlural}',
@@ -1472,6 +1475,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     List<String> failedDeletes = [];
     StateSetter? setDialogState;
     final nav = Navigator.of(context);
+    final app = AppThemeScope.of(context);
 
     showDialog(
       context: context,
@@ -1480,7 +1484,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         builder: (dialogContext, dialogStateSetter) {
           setDialogState = dialogStateSetter;
           return AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: app.cloud.dialogSurface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
@@ -1601,7 +1605,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   void _showSuccess(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    // Messenger lookup first: it is the pre-existing liveness check on this
+    // context, so an unmounted caller fails exactly where it always did.
+    final messenger = ScaffoldMessenger.of(context);
+    final app = AppThemeScope.of(context);
+    messenger.showSnackBar(
       SnackBar(
         content: Row(
           children: [
@@ -1622,7 +1630,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -1704,7 +1712,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    // Messenger lookup first: it is the pre-existing liveness check on this
+    // context, so an unmounted caller fails exactly where it always did.
+    final messenger = ScaffoldMessenger.of(context);
+    final app = AppThemeScope.of(context);
+    messenger.showSnackBar(
       SnackBar(
         content: Row(
           children: [
@@ -1725,7 +1737,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -1786,7 +1798,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           await showDialog(
             context: context,
             builder: (ctx) => AlertDialog(
-              backgroundColor: const Color(0xFF1E293B),
+              backgroundColor: AppThemeScope.of(ctx).cloud.dialogSurface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Row(
                 children: [
@@ -2265,7 +2277,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           SnackBar(
             content: const Text('No series detected in this folder. Switching to Sort (A-Z) view.'),
             duration: const Duration(seconds: 3),
-            backgroundColor: const Color(0xFF1E293B),
+            backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -2346,6 +2358,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Build the search bar widget
   Widget _buildSearchBar() {
+    final app = AppThemeScope.of(context);
     final hasText = _searchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -2365,7 +2378,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 hintText: 'Search all files...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.06),
+                fillColor: app.fade(app.core.tx, 0.06),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide.none,
@@ -2839,6 +2852,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Widget _buildSelectionBar() {
+    final app = AppThemeScope.of(context);
     final theme = Theme.of(context);
     final count = _activeSelectedIds.length;
     return Container(
@@ -2877,7 +2891,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             ).copyWith(
               side: WidgetStateProperty.resolveWith((states) {
                 if (states.contains(WidgetState.focused)) {
-                  return const BorderSide(color: Colors.white, width: 3);
+                  return BorderSide(color: app.core.tx, width: 3);
                 }
                 return null;
               }),
@@ -2897,6 +2911,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   Widget _buildTorrentToolbar() {
     final theme = Theme.of(context);
+    final app = AppThemeScope.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final isCompact = constraints.maxWidth < 480;
@@ -2910,9 +2925,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           margin: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
           padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
+            color: app.fade(app.core.tx, 0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            border: Border.all(color: app.fade(app.core.tx, 0.08)),
           ),
           child: Row(
             children: [
@@ -2999,6 +3014,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   Widget _buildDownloadToolbar() {
     final theme = Theme.of(context);
+    final app = AppThemeScope.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final isCompact = constraints.maxWidth < 480;
@@ -3012,9 +3028,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           margin: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
           padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
+            color: app.fade(app.core.tx, 0.05),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            border: Border.all(color: app.fade(app.core.tx, 0.08)),
           ),
           child: Row(
             children: [
@@ -3207,6 +3223,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   final FocusNode _torrentSearchClearFocusNode = FocusNode(debugLabel: 'rd-torrent-search-clear');
 
   Widget _buildTorrentSearchBar() {
+    final app = AppThemeScope.of(context);
     final hasText = _torrentSearchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -3222,22 +3239,22 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 style: const TextStyle(fontSize: 14),
                 decoration: InputDecoration(
                   hintText: 'Search your torrents...',
-                  hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
-                  prefixIcon: Icon(Icons.search_rounded, color: Colors.white.withValues(alpha: 0.4), size: 20),
+                  hintStyle: TextStyle(color: app.fade(app.core.tx, 0.3)),
+                  prefixIcon: Icon(Icons.search_rounded, color: app.fade(app.core.tx, 0.4), size: 20),
                   filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.06),
+                  fillColor: app.fade(app.core.tx, 0.06),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                    borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                    borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: CloudTheme.accent),
+                    borderSide: BorderSide(color: app.cloud.accent),
                   ),
                 ),
               ),
@@ -3274,7 +3291,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                       },
                       icon: Icon(
                         Icons.clear_rounded,
-                        color: isFocused ? Colors.white : Colors.white.withValues(alpha: 0.4),
+                        color: isFocused
+                            ? app.core.tx
+                            : app.fade(app.core.tx, 0.4),
                         size: 18,
                       ),
                     );
@@ -3288,6 +3307,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   }
 
   Widget _buildTorrentSearchResults() {
+    final app = AppThemeScope.of(context);
     if (_isLoadingSearch) {
       return const Center(
         child: Column(
@@ -3307,7 +3327,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       return Center(
         child: Text(
           'Type a keyword and press search',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+          style: TextStyle(color: app.fade(app.core.tx, 0.4)),
         ),
       );
     }
@@ -3317,11 +3337,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off_rounded, size: 48, color: Colors.white.withValues(alpha: 0.2)),
+            Icon(Icons.search_off_rounded,
+                size: 48, color: app.fade(app.core.tx, 0.2)),
             const SizedBox(height: 12),
             Text(
               'No results',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+              style: TextStyle(color: app.fade(app.core.tx, 0.5)),
             ),
           ],
         ),
@@ -3753,9 +3774,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          backgroundColor: Color(0xFF1E293B),
-          content: Row(
+        builder: (context) => AlertDialog(
+          backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
+          content: const Row(
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 16),
@@ -4418,102 +4439,105 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Add Link',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Enter a link to unrestrict:',
-              style: TextStyle(color: Colors.grey, fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            Focus(
-              onKeyEvent: (node, event) {
-                if (event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                  node.nextFocus();
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: TextField(
-                controller: _linkController,
-                autofocus: true,
-                decoration: InputDecoration(
-                  hintText: 'https://example.com/file.zip',
-                  hintStyle: TextStyle(color: Colors.grey[600]),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF475569)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Color(0xFF475569)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: CloudTheme.accent),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
-                  ),
-                ),
-                maxLines: 3,
-                minLines: 1,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Supported: Direct download links, file hosting services, etc.',
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-            ),
-          ],
-        ),
-        actions: [
-          Row(
+      builder: (context) {
+        final app = AppThemeScope.of(context);
+        return AlertDialog(
+          backgroundColor: app.cloud.dialogSurface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Add Link',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    side: const BorderSide(color: Color(0xFF475569)),
+              const Text(
+                'Enter a link to unrestrict:',
+                style: TextStyle(color: Colors.grey, fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                    node.nextFocus();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: TextField(
+                  controller: _linkController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'https://example.com/file.zip',
+                    hintStyle: TextStyle(color: Colors.grey[600]),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF475569)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFF475569)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: app.cloud.accent),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
                   ),
-                  child: const Text('Cancel'),
+                  maxLines: 3,
+                  minLines: 1,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _isAddingLink ? null : _addLink,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    backgroundColor: const Color(0xFF6366F1),
-                  ),
-                  child: _isAddingLink
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Add'),
-                ),
+              const SizedBox(height: 8),
+              Text(
+                'Supported: Direct download links, file hosting services, etc.',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
             ],
           ),
-        ],
-      ),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: Color(0xFF475569)),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _isAddingLink ? null : _addLink,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: const Color(0xFF6366F1),
+                    ),
+                    child: _isAddingLink
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Add'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -4555,7 +4579,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Unrestricting Link',
@@ -4830,6 +4854,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     required VoidCallback onCopy,
     required VoidCallback onSelect,
     required int index,
+    // Hoisted by the caller: this builds once per list item and again on every
+    // animation tick, so the theme lookup must not happen in here.
+    required Color surface,
     String? episodeInfo,
   }) {
     return TweenAnimationBuilder<double>(
@@ -4846,7 +4873,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    const Color(0xFF1E293B).withValues(alpha: 0.8),
+                    surface.withValues(alpha: 0.8),
                     const Color(0xFF334155).withValues(alpha: 0.4),
                   ],
                 ),
@@ -5295,6 +5322,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     required int? currentSeason,
     required Function(int?) onSeasonChanged,
   }) {
+    final app = AppThemeScope.of(context);
     // Use the passed currentSeason instead of defining a local one
     final _currentSeason = currentSeason;
     // Group files by season
@@ -5328,7 +5356,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+              color: app.cloud.dialogSurface.withValues(alpha: 0.5),
               border: Border(
                 bottom: BorderSide(
                   color: const Color(0xFF475569).withValues(alpha: 0.3),
@@ -5454,6 +5482,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     required StateSetter setBrowserState,
     required Function(int?) onSeasonChanged,
   }) {
+    // Hoisted out of the itemBuilders below: one theme lookup per list build.
+    final app = AppThemeScope.of(context);
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
       shrinkWrap: true,
@@ -5484,7 +5514,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           key: ValueKey('season-$seasonNumber'),
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E293B).withValues(alpha: 0.3),
+            color: app.cloud.dialogSurface.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: const Color(0xFF475569).withValues(alpha: 0.3),
@@ -5597,6 +5627,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     required RDTorrent torrent,
     required StateSetter setLocal,
   }) {
+    // Hoisted out of itemBuilder: one theme lookup per list build, not per row.
+    final app = AppThemeScope.of(context);
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
       shrinkWrap: true,
@@ -5628,6 +5660,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             isSelected: isSelected,
             isUnrestricting: isUnrestricting,
             showPlayButtons: showPlayButtons,
+            surface: app.cloud.dialogSurface,
             onPlay: () => _playFileOnDemand(
               torrent,
               fileIndex,

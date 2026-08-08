@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/mdblist/mdblist_list_source.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../widgets/see_all/mdblist_list_card.dart';
 
 /// Full-screen grid of the MDBList lists that matched a search — the "See All"
@@ -30,10 +31,11 @@ class MdblistListsSeeAllScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0910),
+      backgroundColor: app.seeAll.listBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B0910),
+        backgroundColor: app.seeAll.listBg,
         elevation: 0,
         title: Text(
           query.isEmpty ? 'MDBList Lists' : 'Lists matching "$query"',
@@ -42,13 +44,13 @@ class MdblistListsSeeAllScreen extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: app.core.tx),
       ),
       body: lists.isEmpty
           ? Center(
               child: Text(
                 'No lists to show.',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+                style: TextStyle(color: app.fade(app.core.tx, 0.6)),
               ),
             )
           : GridView.builder(

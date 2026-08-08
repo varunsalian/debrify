@@ -72,6 +72,62 @@ void main() {
             'tab-boundary factory: $offenders');
   });
 
+  test('frozen surfaces never read the app theme', () {
+    // The freeze is structural (LegacyThemeBoundary shadows the scope), so a
+    // read here would still RESOLVE — to legacy — and look fine today. It
+    // would only bite later, when someone moves the widget or lifts the
+    // boundary. Cheaper to forbid the read outright.
+    const frozen = [
+      'lib/widgets/iptv/',
+      'lib/widgets/youtube/',
+      'lib/screens/stremio_tv/',
+      'lib/screens/browse_screen.dart',
+      'lib/screens/magic_tv_screen.dart',
+      'lib/screens/playlist_screen.dart',
+      'lib/screens/downloads_screen.dart',
+      'lib/screens/video_player_screen.dart',
+      'lib/screens/video_player/',
+    ];
+    final offenders = <String>[];
+    for (final file in _libDartFiles()) {
+      final rel = _rel(file);
+      if (!frozen.any(rel.startsWith)) continue;
+      if (_code(file).contains('AppThemeScope')) offenders.add(rel);
+    }
+    expect(offenders, isEmpty,
+        reason: 'excluded surfaces must not consume the app theme: $offenders');
+  });
+
+  test('the split kept its constants alive for frozen callers', () {
+    // The whole point of splitting rather than converting: frozen surfaces go
+    // on importing these. Deleting one because "nothing themed uses it any
+    // more" would break IPTV/YouTube/Stremio TV.
+    for (final entry in {
+      'lib/widgets/home/home_theme.dart': ['focusGold', 'chromeAccent', 'bg'],
+      'lib/widgets/see_all/see_all_theme.dart': [
+        'kSeeAllBg',
+        'kSeeAllAccent',
+        'kSeeAllPanel',
+      ],
+    }.entries) {
+      final source = _code(File(entry.key));
+      for (final symbol in entry.value) {
+        // A DECLARATION, not a mention: a bare `contains` stays green when
+        // the name survives only in a doc comment or an unrelated reference,
+        // which is exactly the state that would break frozen callers.
+        final declared = RegExp(
+          r'(?:^|\s)(?:static\s+)?const\s+(?:Color\s+)?' +
+              RegExp.escape(symbol) +
+              r'\s*=',
+          multiLine: true,
+        );
+        expect(declared.hasMatch(source), isTrue,
+            reason: '${entry.key} must still DECLARE $symbol — frozen '
+                'surfaces import it');
+      }
+    }
+  });
+
   test('main.dart routes tabs through the boundary factory', () {
     final source = _code(File('lib/main.dart'));
     expect(source.contains('AppSurfaces.wrapTab('), isTrue,

@@ -10,8 +10,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../services/youtube_service.dart';
-import '../home/home_theme.dart';
-import 'see_all_theme.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// How the reactive detail block is drawn.
 enum DiscoverDetailLayout {
@@ -548,6 +547,7 @@ class _RailContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final rating = item.imdbRating;
     final runtime = item.runtimeDisplay;
     final year = item.year;
@@ -629,7 +629,7 @@ class _RailContent extends StatelessWidget {
                             // under a much thinner veil (~.35) than the browse
                             // tint — invisible against the dark browse state.
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.72),
+                              color: app.fade(app.core.tx, 0.72),
                               fontSize: 13.5,
                               height: 1.5,
                               shadows: const [
@@ -642,7 +642,7 @@ class _RailContent extends StatelessWidget {
                         Text(
                           'No description available.',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.35),
+                            color: app.fade(app.core.tx, 0.35),
                             fontSize: 13,
                             fontStyle: FontStyle.italic,
                           ),
@@ -702,6 +702,7 @@ class _StageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final rating = item.imdbRating;
     final runtime = item.runtimeDisplay;
     final year = item.year;
@@ -755,7 +756,7 @@ class _StageContent extends StatelessWidget {
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.75),
+                    color: app.fade(app.core.tx, 0.75),
                     fontSize: 13,
                     height: 1.5,
                     fontWeight: FontWeight.w500,
@@ -887,7 +888,7 @@ class _RailTitleArtState extends State<_RailTitleArt> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white,
+              color: AppThemeScope.of(context).core.tx,
               fontSize: widget.textSize,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.4,
@@ -943,22 +944,25 @@ class _TypeBadge extends StatelessWidget {
   const _TypeBadge(this.label);
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.32)),
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: app.fade(app.core.tx, 0.32)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: app.fade(app.core.tx, 0.82),
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.82),
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-          ),
-        ),
-      );
+      ),
+    );
+  }
 }
 
 /// The gold IMDb mark + rating (mock grammar) — replaces the generic ★.
@@ -989,8 +993,8 @@ class _ImdbChip extends StatelessWidget {
           const SizedBox(width: 5),
           Text(
             rating.toStringAsFixed(1),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: AppThemeScope.of(context).core.tx,
               fontSize: 12.5,
               fontWeight: FontWeight.w700,
             ),
@@ -1004,16 +1008,19 @@ class _MetaText extends StatelessWidget {
   const _MetaText(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(
-        text,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.85),
-          fontSize: 12.5,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.2,
-          shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
-        ),
-      );
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    return Text(
+      text,
+      style: TextStyle(
+        color: app.fade(app.core.tx, 0.85),
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.2,
+        shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
+      ),
+    );
+  }
 }
 
 class _GenreChip extends StatelessWidget {
@@ -1021,57 +1028,63 @@ class _GenreChip extends StatelessWidget {
   const _GenreChip(this.label);
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: kSeeAllAccent.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: kSeeAllAccentBorder, width: 1),
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: app.fade(app.seeAll.accent, 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: app.seeAll.accentBorder, width: 1),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: app.seeAll.accent2,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
         ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: kSeeAllAccent2,
-            fontSize: 11.5,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      );
+      ),
+    );
+  }
 }
 
 class _RailEmpty extends StatelessWidget {
   const _RailEmpty();
 
   @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.travel_explore_rounded,
-                  size: 40, color: HomeTheme.focusGold.withValues(alpha: 0.55)),
-              const SizedBox(height: 14),
-              Text(
-                'Browse to preview',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.travel_explore_rounded,
+                size: 40, color: app.fade(app.home.focus, 0.55)),
+            const SizedBox(height: 14),
+            Text(
+              'Browse to preview',
+              style: TextStyle(
+                color: app.fade(app.core.tx, 0.7),
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Highlight a title on the right to see its backdrop, plot and details here.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
-                  fontSize: 12.5,
-                  height: 1.4,
-                ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Highlight a title on the right to see its backdrop, plot and details here.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: app.fade(app.core.tx, 0.4),
+                fontSize: 12.5,
+                height: 1.4,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      );
+      ),
+    );
+  }
 }

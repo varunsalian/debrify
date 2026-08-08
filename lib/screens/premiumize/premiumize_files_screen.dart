@@ -21,6 +21,8 @@ import '../../widgets/cloud/cloud_theme.dart';
 import '../../widgets/file_selection_dialog.dart';
 import '../../widgets/tv_text_field.dart';
 import '../debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 
 /// Cloud-library browser for Premiumize, mirroring the Torbox/PikPak navigation
@@ -1109,7 +1111,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Add to Premiumize',
@@ -1317,6 +1319,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   void _showSnackBar(String message, {bool isError = true, Duration? duration}) {
     if (!mounted) return;
+    final app = AppThemeScope.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -1344,7 +1347,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -1714,6 +1717,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   }
 
   Widget _buildSearchBar() {
+    final app = AppThemeScope.of(context);
     final hasText = _searchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -1739,7 +1743,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                     : 'Search files...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.06),
+                fillColor: app.fade(app.core.tx, 0.06),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide.none,
@@ -1778,10 +1782,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.06),
+                        color: app.fade(app.core.tx, 0.06),
                         borderRadius: BorderRadius.circular(8),
                         border: isFocused
-                            ? Border.all(color: Colors.white, width: 2)
+                            ? Border.all(color: app.core.tx, width: 2)
                             : null,
                       ),
                       child: IconButton(
@@ -1986,6 +1990,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       );
     }
 
+    final app = AppThemeScope.of(context);
     final hasFinished = _transfers.any((t) => t.isFinished);
     return Column(
       children: [
@@ -2006,14 +2011,14 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             padding: const EdgeInsets.all(16),
             itemCount: _transfers.length,
             itemBuilder: (context, index) =>
-                _buildTransferCard(_transfers[index]),
+                _buildTransferCard(_transfers[index], app),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildTransferCard(PremiumizeTransfer transfer) {
+  Widget _buildTransferCard(PremiumizeTransfer transfer, AppTheme app) {
     Color statusColor;
     IconData statusIcon;
     if (transfer.isFinished) {
@@ -2032,9 +2037,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
+          color: app.fade(app.core.tx, 0.05),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+          border: Border.all(color: app.fade(app.core.tx, 0.07)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2067,7 +2072,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 child: LinearProgressIndicator(
                   value: transfer.progress > 0 ? transfer.progress : null,
                   minHeight: 5,
-                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                  backgroundColor: app.fade(app.core.tx, 0.08),
                   valueColor: AlwaysStoppedAnimation(statusColor),
                 ),
               ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/trakt/trakt_calendar_entry.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_theme_scope.dart';
 
 /// Bottom sheet showing all episodes airing on a specific day.
 ///
@@ -20,6 +22,7 @@ class TraktCalendarDaySheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final sorted = [...entries]
       ..sort((a, b) => a.firstAiredLocal.compareTo(b.firstAiredLocal));
 
@@ -48,6 +51,8 @@ class TraktCalendarDaySheet extends StatelessWidget {
                 itemCount: sorted.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 4),
                 itemBuilder: (ctx, i) => _EpisodeRow(
+                  // Captured from this build — never read inside the builder.
+                  app: app,
                   entry: sorted[i],
                   onTap: () {
                     if (sorted[i].showImdbId == null) return;
@@ -92,8 +97,13 @@ class TraktCalendarDaySheet extends StatelessWidget {
 }
 
 class _EpisodeRow extends StatelessWidget {
-  const _EpisodeRow({required this.entry, required this.onTap});
+  const _EpisodeRow({
+    required this.app,
+    required this.entry,
+    required this.onTap,
+  });
 
+  final AppTheme app;
   final TraktCalendarEntry entry;
   final VoidCallback onTap;
 
@@ -149,7 +159,13 @@ class _EpisodeRow extends StatelessWidget {
                     '${entry.episodeTitle != null ? ' · ${entry.episodeTitle}' : ''}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    // Colors.white70 is white at 0xB3/0xFF — the sheet's own
+                    // ground is calendar.sheetBg, so this ink may follow the
+                    // theme.
+                    style: TextStyle(
+                      color: app.fade(app.core.tx, 0xB3 / 0xFF),
+                      fontSize: 12,
+                    ),
                   ),
                   if (badge != null) ...[
                     const SizedBox(height: 4),

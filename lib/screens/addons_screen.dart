@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../services/analytics_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
-import '../widgets/see_all/see_all_theme.dart';
+import '../theme/app_theme_scope.dart';
 import 'addons/addon_hub_screen.dart';
 import 'settings/stremio_addons_page.dart';
 import 'settings/engine_import_page.dart';
@@ -40,11 +40,12 @@ class _AddonsSwitcherState extends State<AddonsScreen> {
   Widget build(BuildContext context) {
     final useHub = _useHub;
     if (useHub == null) {
-      return const Scaffold(
-        backgroundColor: kSeeAllBg,
+      final app = AppThemeScope.of(context);
+      return Scaffold(
+        backgroundColor: app.seeAll.bg,
         body: Center(
-          child:
-              CircularProgressIndicator(color: kSeeAllAccent, strokeWidth: 2),
+          child: CircularProgressIndicator(
+              color: app.seeAll.accent, strokeWidth: 2),
         ),
       );
     }

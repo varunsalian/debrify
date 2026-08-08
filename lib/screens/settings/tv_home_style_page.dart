@@ -5,6 +5,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// One selectable TV Home layout.
 class TvHomeStyleChoice {
@@ -127,6 +128,7 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Home Layout',
@@ -169,7 +171,7 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ],
@@ -184,6 +186,7 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
   /// check on the active one, rather than a dropdown whose overlay would have
   /// to be focus-managed on a remote.
   Widget _optionRow(TvHomeStyleChoice choice) {
+    final t = AppThemeScope.of(context).settings;
     final bool active = _style == choice.value;
     return SettingsTile(
       icon: active
@@ -192,7 +195,7 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
       title: choice.label,
       subtitle: choice.subtitle,
       trailing: active
-          ? const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2)
+          ? Icon(Icons.check_rounded, size: 20, color: t.accent2)
           : const SizedBox.shrink(),
       onTap: () => _select(choice.value),
     );

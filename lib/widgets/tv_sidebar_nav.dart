@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/main_page_bridge.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_theme_scope.dart';
 
 /// Cyan pole of the liquid-glass chromatic accents (edge rim + focus ring).
 const _kRimCyan = Color(0xFF54D6FF);
@@ -61,9 +63,6 @@ class TvSidebarNav extends StatefulWidget {
 
 class TvSidebarNavState extends State<TvSidebarNav>
     with SingleTickerProviderStateMixin {
-  static const _accent = Color(0xFF7B5CFF); // kStremioAccent
-  static const _accentSoft = Color(0xFFA78BFA);
-
   final List<FocusNode> _focusNodes = [];
   int _focusedIndex = 0;
   bool _hasSidebarFocus = false;
@@ -283,6 +282,10 @@ class TvSidebarNavState extends State<TvSidebarNav>
 
   @override
   Widget build(BuildContext context) {
+    // Read ONCE here and captured by the builders below: the shell's builders
+    // rerun every frame of the expand tween, so a scope lookup inside one
+    // would be a per-frame inherited-widget walk.
+    final app = AppThemeScope.of(context);
     // Only the width-bearing shell rebuilds each animation frame; the item list
     // is passed as `child` so it isn't rebuilt during the expand tween.
     return AnimatedBuilder(
@@ -408,7 +411,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
                               offset: const Offset(10, 0),
                             ),
                             BoxShadow(
-                              color: tinted(_accent, 0.5)
+                              color: tinted(app.shell.navAccent, 0.5)
                                   .withValues(alpha: 0.10 * t),
                               blurRadius: 40,
                               offset: const Offset(2, 0),
@@ -433,7 +436,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                Colors.white.withValues(alpha: 0.10 * t),
+                                app.fade(app.core.tx, 0.10 * t),
                                 paneMid.withValues(alpha: 0.36 * t),
                                 paneDeep.withValues(alpha: 0.46 * t),
                               ],
@@ -455,10 +458,10 @@ class TvSidebarNavState extends State<TvSidebarNav>
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                                 colors: [
-                                  Colors.white.withValues(alpha: 0.0),
-                                  Colors.white.withValues(alpha: 0.10 * t),
-                                  Colors.white.withValues(alpha: 0.02 * t),
-                                  Colors.white.withValues(alpha: 0.0),
+                                  app.fade(app.core.tx, 0.0),
+                                  app.fade(app.core.tx, 0.10 * t),
+                                  app.fade(app.core.tx, 0.02 * t),
+                                  app.fade(app.core.tx, 0.0),
                                 ],
                                 stops: const [0.30, 0.42, 0.55, 0.62],
                               ),
@@ -481,9 +484,11 @@ class TvSidebarNavState extends State<TvSidebarNav>
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
-                                  _accentSoft.withValues(alpha: 0.70 * t),
+                                  app.shell.navFocus
+                                      .withValues(alpha: 0.70 * t),
                                   _kRimCyan.withValues(alpha: 0.40 * t),
-                                  _accentSoft.withValues(alpha: 0.15 * t),
+                                  app.shell.navFocus
+                                      .withValues(alpha: 0.15 * t),
                                 ],
                               ),
                             ),
@@ -536,15 +541,16 @@ class TvSidebarNavState extends State<TvSidebarNav>
                               if (_style == 'island')
                                 _IslandCapsule(
                                   expand: _expand,
+                                  app: app,
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
-                                    children: _buildNavItems(),
+                                    children: _buildNavItems(app),
                                   ),
                                 )
                               else
-                                ..._buildNavItems(),
+                                ..._buildNavItems(app),
                             ],
                           ),
                         ),
@@ -564,26 +570,29 @@ class TvSidebarNavState extends State<TvSidebarNav>
   /// resting rail (dimmed when idle, the current one in its accent pill); labels
   /// and section headers fade/slide in only when the rail opens. Centring keeps
   /// the rail balanced rather than top-clustered or a bottom-heavy wall.
-  List<Widget> _buildNavItems() {
+  /// [app] is passed in, never read here: this runs inside the width-sensitive
+  /// LayoutBuilder, which re-inflates on every frame of the expand tween.
+  List<Widget> _buildNavItems(AppTheme app) {
     final widgets = <Widget>[];
     for (int index = 0; index < widget.items.length; index++) {
       final item = widget.items[index];
       final startsSection = item.section != null &&
           (index == 0 || widget.items[index - 1].section != item.section);
       if (startsSection) {
-        widgets.add(_SectionHeader(item.section!, _expand));
+        widgets.add(_SectionHeader(item.section!, _expand, app));
       }
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: _TvNavItemWidget(
+            app: app,
             item: item,
             index: index,
             isSelected: index == widget.currentIndex,
             isFocused: index == _focusedIndex && _hasSidebarFocus,
             expand: _expand,
-            accent: _accent,
-            accentSoft: _accentSoft,
+            accent: app.shell.navAccent,
+            accentSoft: app.shell.navFocus,
             focusNode: _focusNodes[index],
             onTap: () => _selectMenuItem(index),
             onKeyEvent: (e) => _handleKeyEvent(index, e),
@@ -647,6 +656,9 @@ class TvSidebarNavState extends State<TvSidebarNav>
 /// animation — animated blur janks a weak TV GPU). No per-item
 /// AnimationController.
 class _TvNavItemWidget extends StatelessWidget {
+  /// Passed down, never looked up here — see [TvSidebarNavState._buildNavItems].
+  final AppTheme app;
+
   final TvNavItem item;
 
   /// Position in the menu — drives the label's slide-in stagger on expand.
@@ -665,6 +677,7 @@ class _TvNavItemWidget extends StatelessWidget {
   final String style;
 
   const _TvNavItemWidget({
+    required this.app,
     required this.item,
     required this.index,
     required this.isSelected,
@@ -677,8 +690,6 @@ class _TvNavItemWidget extends StatelessWidget {
     required this.onKeyEvent,
     this.style = 'classic',
   });
-
-  static const _ink = Color(0xFF0A0910);
 
   double get _rowH {
     switch (style) {
@@ -729,10 +740,10 @@ class _TvNavItemWidget extends StatelessWidget {
       animation: expand,
       builder: (context, _) {
         final iconColor = isSelected
-            ? _ink
+            ? app.shell.railInk
             : isFocused
-            ? Colors.white
-            : Colors.white.withValues(alpha: 0.45);
+            ? app.core.tx
+            : app.fade(app.core.tx, 0.45);
         return Row(
           children: [
             SizedBox(
@@ -748,7 +759,7 @@ class _TvNavItemWidget extends StatelessWidget {
                       ? BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.9),
+                            color: app.fade(app.core.tx, 0.9),
                             width: 2,
                           ),
                         )
@@ -760,10 +771,10 @@ class _TvNavItemWidget extends StatelessWidget {
                       decoration: isSelected
                           ? BoxDecoration(
                               shape: BoxShape.circle,
-                              color: Colors.white,
+                              color: app.core.tx,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.white.withValues(alpha: 0.30),
+                                  color: app.fade(app.core.tx, 0.30),
                                   blurRadius: 18,
                                 ),
                               ],
@@ -789,10 +800,10 @@ class _TvNavItemWidget extends StatelessWidget {
                     overflow: TextOverflow.clip,
                     style: TextStyle(
                       color: isFocused
-                          ? Colors.white
+                          ? app.core.tx
                           : isSelected
-                          ? Colors.white.withValues(alpha: 0.95)
-                          : Colors.white.withValues(alpha: marquee ? 0.4 : 0.55),
+                          ? app.fade(app.core.tx, 0.95)
+                          : app.fade(app.core.tx, marquee ? 0.4 : 0.55),
                       fontSize: marquee ? (isFocused ? 23 : 18) : 14,
                       fontWeight: (isFocused || isSelected)
                           ? FontWeight.w800
@@ -820,11 +831,13 @@ class _TvNavItemWidget extends StatelessWidget {
         final open = t > 0.5;
         final iconColor = open
             ? (isFocused
-                  ? _ink
+                  ? app.shell.railInk
                   : isSelected
-                  ? Colors.white.withValues(alpha: 0.95)
-                  : Colors.white.withValues(alpha: 0.5))
-            : (isSelected ? _ink : Colors.white.withValues(alpha: 0.5));
+                  ? app.fade(app.core.tx, 0.95)
+                  : app.fade(app.core.tx, 0.5))
+            : (isSelected
+                  ? app.shell.railInk
+                  : app.fade(app.core.tx, 0.5));
         return Stack(
           children: [
             // Collapsed coin (dissolves as the capsule opens).
@@ -842,7 +855,7 @@ class _TvNavItemWidget extends StatelessWidget {
                     height: 36,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: k),
+                      color: app.fade(app.core.tx, k),
                     ),
                   );
                 },
@@ -856,8 +869,8 @@ class _TvNavItemWidget extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
                     color: isFocused
-                        ? Colors.white.withValues(alpha: t)
-                        : Colors.white.withValues(alpha: 0.10 * t),
+                        ? app.fade(app.core.tx, t)
+                        : app.fade(app.core.tx, 0.10 * t),
                   ),
                 ),
               ),
@@ -881,10 +894,10 @@ class _TvNavItemWidget extends StatelessWidget {
                         overflow: TextOverflow.clip,
                         style: TextStyle(
                           color: isFocused
-                              ? _ink
+                              ? app.shell.railInk
                               : isSelected
-                              ? Colors.white.withValues(alpha: 0.95)
-                              : Colors.white.withValues(alpha: 0.55),
+                              ? app.fade(app.core.tx, 0.95)
+                              : app.fade(app.core.tx, 0.55),
                           fontSize: 13,
                           fontWeight: (isFocused || isSelected)
                               ? FontWeight.w800
@@ -914,11 +927,13 @@ class _TvNavItemWidget extends StatelessWidget {
         final open = t > 0.5;
         final iconColor = open
             ? (isSelected
-                  ? _ink
+                  ? app.shell.railInk
                   : isFocused
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.5))
-            : (isSelected ? _ink : Colors.white.withValues(alpha: 0.48));
+                  ? app.core.tx
+                  : app.fade(app.core.tx, 0.5))
+            : (isSelected
+                  ? app.shell.railInk
+                  : app.fade(app.core.tx, 0.48));
         return Stack(
           children: [
             // Collapsed: white squircle behind the selected icon.
@@ -931,7 +946,7 @@ class _TvNavItemWidget extends StatelessWidget {
                   height: 32,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    color: Colors.white.withValues(alpha: k),
+                    color: app.fade(app.core.tx, k),
                   ),
                 ),
               ),
@@ -948,8 +963,9 @@ class _TvNavItemWidget extends StatelessWidget {
                   overflow: TextOverflow.clip,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: Colors.white.withValues(
-                      alpha: (isSelected ? 0.95 : 0.5) * k,
+                    color: app.fade(
+                      app.core.tx,
+                      (isSelected ? 0.95 : 0.5) * k,
                     ),
                     fontSize: 8.5,
                     fontWeight: FontWeight.w700,
@@ -964,12 +980,10 @@ class _TvNavItemWidget extends StatelessWidget {
                   margin: const EdgeInsets.only(right: 6, top: 4, bottom: 4),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
-                    color: isSelected
-                        ? Colors.white.withValues(alpha: t)
-                        : null,
+                    color: isSelected ? app.fade(app.core.tx, t) : null,
                     border: isFocused
                         ? Border.all(
-                            color: Colors.white.withValues(alpha: 0.9 * t),
+                            color: app.fade(app.core.tx, 0.9 * t),
                             width: 1.6,
                           )
                         : null,
@@ -1007,10 +1021,10 @@ class _TvNavItemWidget extends StatelessWidget {
                       overflow: TextOverflow.clip,
                       style: TextStyle(
                         color: isSelected
-                            ? _ink
+                            ? app.shell.railInk
                             : isFocused
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.55),
+                            ? app.core.tx
+                            : app.fade(app.core.tx, 0.55),
                         fontSize: 13,
                         fontWeight: (isFocused || isSelected)
                             ? FontWeight.w800
@@ -1031,17 +1045,17 @@ class _TvNavItemWidget extends StatelessWidget {
   Widget _classicBody() {
     final bool active = isFocused || isSelected;
     final Color iconColor = isFocused
-        ? Colors.white
+        ? app.core.tx
         : isSelected
         // Light lavender: legible both on the lit puck (collapsed) and the
         // faint glass pill (expanded).
         ? const Color(0xFFD8CDFF)
-        : Colors.white.withValues(alpha: 0.42);
+        : app.fade(app.core.tx, 0.42);
     final Color labelColor = isFocused
-        ? Colors.white
+        ? app.core.tx
         : isSelected
-        ? Colors.white.withValues(alpha: 0.94)
-        : Colors.white.withValues(alpha: 0.5);
+        ? app.fade(app.core.tx, 0.94)
+        : app.fade(app.core.tx, 0.5);
 
     // Highlights snap instantly as focus moves between items (no per-move
     // animation — animated blur is what made item-to-item navigation
@@ -1076,14 +1090,14 @@ class _TvNavItemWidget extends StatelessWidget {
                                   accent.withValues(alpha: 0.18 * k),
                                 ]
                               : [
-                                  Colors.white.withValues(alpha: 0.10 * k),
-                                  Colors.white.withValues(alpha: 0.03 * k),
+                                  app.fade(app.core.tx, 0.10 * k),
+                                  app.fade(app.core.tx, 0.03 * k),
                                 ],
                         ),
                         border: Border.all(
                           color: isSelected
                               ? accentSoft.withValues(alpha: 0.55 * k)
-                              : Colors.white.withValues(alpha: 0.10 * k),
+                              : app.fade(app.core.tx, 0.10 * k),
                         ),
                         boxShadow: isSelected
                             ? [
@@ -1156,8 +1170,8 @@ class _TvNavItemWidget extends StatelessWidget {
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
                           colors: [
-                            Colors.white.withValues(alpha: 0.08 * t),
-                            Colors.white.withValues(alpha: 0.02 * t),
+                            app.fade(app.core.tx, 0.08 * t),
+                            app.fade(app.core.tx, 0.02 * t),
                           ],
                         ),
                       ),
@@ -1268,7 +1282,15 @@ class _TvNavItemWidget extends StatelessWidget {
 class _IslandCapsule extends StatelessWidget {
   final Animation<double> expand;
   final Widget child;
-  const _IslandCapsule({required this.expand, required this.child});
+
+  /// Passed down, never looked up here — see [TvSidebarNavState._buildNavItems].
+  final AppTheme app;
+
+  const _IslandCapsule({
+    required this.expand,
+    required this.child,
+    required this.app,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1285,11 +1307,12 @@ class _IslandCapsule extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24 - 6 * t),
             color: Color.lerp(
-              const Color(0xA30D0B1A),
-              const Color(0xC90D0B1A),
+              // Exact eighth-bit fractions — see tv_ambient_art_stage.
+              app.fade(app.shell.ink, 0xA3 / 0xFF), // was 0xA30D0B1A
+              app.fade(app.shell.ink, 0xC9 / 0xFF), // was 0xC90D0B1A
               t,
             ),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+            border: Border.all(color: app.fade(app.core.tx, 0.09)),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x8C000000),
@@ -1354,7 +1377,11 @@ class _StaggeredLabel extends StatelessWidget {
 class _SectionHeader extends StatelessWidget {
   final String text;
   final Animation<double> expand;
-  const _SectionHeader(this.text, this.expand);
+
+  /// Passed down, never looked up here — see [TvSidebarNavState._buildNavItems].
+  final AppTheme app;
+
+  const _SectionHeader(this.text, this.expand, this.app);
 
   @override
   Widget build(BuildContext context) {
@@ -1372,7 +1399,7 @@ class _SectionHeader extends StatelessWidget {
               softWrap: false,
               overflow: TextOverflow.clip,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.4),
+                color: app.fade(app.core.tx, 0.4),
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.4,

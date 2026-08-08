@@ -79,6 +79,7 @@ import 'settings/mdblist_settings_page.dart';
 import 'settings/webdav_settings_page.dart';
 import 'settings/stremio_tv_settings_page.dart';
 import '../widgets/remote/remote_role_picker_screen.dart';
+import '../theme/app_theme_scope.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -2704,6 +2705,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _createBackup() async {
+    final app = AppThemeScope.of(context);
     // Build the payload first so we can warn if it's empty.
     final Map<String, dynamic> payload;
     try {
@@ -2751,7 +2753,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   '${iptvProviders.fileImported == 1 ? '' : 's'} imported from '
                   'a file won\'t be included — re-import the file on the other '
                   'device. Starred channels from them still travel.',
-                  style: const TextStyle(fontSize: 12, color: Colors.white60),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: app.fade(app.core.tx, 0x99 / 0xFF),
+                  ),
                 ),
               ),
             const SizedBox(height: 12),
@@ -2845,6 +2850,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _restoreBackup() async {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final FilePickerResult? pick;
     try {
       // FileType.any instead of custom: Android's MIME mapping for `json` is
@@ -2930,7 +2937,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   'Created: ${summary.createdAt}',
-                  style: const TextStyle(fontSize: 12, color: Colors.white60),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: app.fade(app.core.tx, 0x99 / 0xFF),
+                  ),
                 ),
               ),
             const Text('This backup contains:'),
@@ -2946,22 +2956,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(fontSize: 12),
             ),
             if (summary.addonCount > 0 || summary.searchEngineCount > 0)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'Restoring addons and search engines needs a network '
                   'connection.',
-                  style: TextStyle(fontSize: 12, color: Colors.white60),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: app.fade(app.core.tx, 0x99 / 0xFF),
+                  ),
                 ),
               ),
             if (summary.webDavServerCount > 0 ||
                 summary.indexerManagerCount > 0)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'WebDAV and Jackett/Prowlarr URLs may be local-network '
                   'only — they won\'t work on a different network.',
-                  style: TextStyle(fontSize: 12, color: Colors.white60),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: app.fade(app.core.tx, 0x99 / 0xFF),
+                  ),
                 ),
               ),
           ],
@@ -3024,7 +3040,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
-        backgroundColor: report.hasAnyFailure ? kSettingsAmber : null,
+        backgroundColor: report.hasAnyFailure ? t.warning : null,
         duration: const Duration(seconds: 5),
       ),
     );
@@ -3218,7 +3234,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF0B1220),
+      backgroundColor: AppThemeScope.of(context).settings.sheetBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -3562,6 +3578,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showReleaseDetails(UpdateSummary summary) async {
+    final app = AppThemeScope.of(context);
     if (!mounted) return;
     final release = summary.release;
     final theme = Theme.of(context);
@@ -3590,25 +3607,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (sheetContext) {
         final baseTheme = Theme.of(sheetContext);
         final textTheme = baseTheme.textTheme;
-        final Color bodyColor = Colors.white.withValues(alpha: 0.85);
+        final Color bodyColor = app.fade(app.core.tx, 0.85);
         final markdownStyle = MarkdownStyleSheet.fromTheme(baseTheme).copyWith(
           h1: textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w700,
-            color: Colors.white,
+            color: app.core.tx,
           ),
           h2: textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w700,
-            color: Colors.white,
+            color: app.core.tx,
           ),
           h3: textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w600,
-            color: Colors.white,
+            color: app.core.tx,
           ),
           p: textTheme.bodyMedium?.copyWith(color: bodyColor, height: 1.45),
           strong: const TextStyle(fontWeight: FontWeight.w700),
           listBullet: textTheme.bodyMedium?.copyWith(color: bodyColor),
           blockquote: textTheme.bodyMedium?.copyWith(
-            color: Colors.white.withValues(alpha: 0.7),
+            color: app.fade(app.core.tx, 0.7),
           ),
         );
         return FractionallySizedBox(
@@ -3624,7 +3641,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
+                        color: app.fade(app.core.tx, 0.2),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -3642,14 +3659,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Text(
                     'Installed: $_appVersion',
                     style: textTheme.bodyMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: app.fade(app.core.tx, 0.6),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Latest: $latestLabel',
                     style: textTheme.bodyMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: app.fade(app.core.tx, 0.6),
                     ),
                   ),
                   if (publishedLabel != null) ...[
@@ -3657,7 +3674,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       'Published $publishedLabel',
                       style: textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.5),
+                        color: app.fade(app.core.tx, 0.5),
                       ),
                     ),
                   ],
@@ -4169,6 +4186,7 @@ class _SettingsLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return SettingsBackground(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
@@ -4412,7 +4430,7 @@ class _SettingsLayout extends StatelessWidget {
                 // the page, isolated in their own red section on purpose.
                 SettingsSection(
                   title: 'Danger Zone',
-                  accentColor: kSettingsRed.withValues(alpha: 0.85),
+                  accentColor: t.danger.withValues(alpha: 0.85),
                   children: [
                     SettingsTile.spec(
                       SettingsRows.resetDebrify,
@@ -4447,6 +4465,7 @@ class _SettingsSearchBarState extends State<_SettingsSearchBar> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     final bool lit = _focused || _hovered;
     return Material(
       color: Colors.transparent,
@@ -4459,10 +4478,10 @@ class _SettingsSearchBarState extends State<_SettingsSearchBar> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
-            color: lit ? kSettingsPanel2 : kSettingsPanel,
+            color: lit ? t.panel2 : t.panel,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: _focused ? kSettingsAccent : kSettingsLine,
+              color: _focused ? t.accent : t.line,
               width: _focused ? 1.5 : 1,
             ),
           ),
@@ -4471,12 +4490,12 @@ class _SettingsSearchBarState extends State<_SettingsSearchBar> {
               Icon(
                 Icons.search_rounded,
                 size: 20,
-                color: lit ? kSettingsAccent2 : kSettingsDim,
+                color: lit ? t.accent2 : t.dim,
               ),
               const SizedBox(width: 12),
               Text(
                 'Search settings',
-                style: TextStyle(fontSize: 13.5, color: kSettingsDim),
+                style: TextStyle(fontSize: 13.5, color: t.dim),
               ),
             ],
           ),

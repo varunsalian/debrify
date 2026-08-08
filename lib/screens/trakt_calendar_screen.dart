@@ -9,6 +9,8 @@ import '../services/simkl/simkl_calendar_service.dart';
 import '../services/simkl/simkl_service.dart';
 import '../services/trakt/trakt_calendar_service.dart';
 import '../services/trakt/trakt_service.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_theme_scope.dart';
 import '../widgets/trakt_calendar_day_sheet.dart';
 import '../utils/tv_keys.dart';
 
@@ -20,8 +22,6 @@ class TraktCalendarScreen extends StatefulWidget {
 }
 
 class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
-  static const Color _kNetflixRed = Color(0xFFE50914);
-
   final FocusNode _yearFocusNode = FocusNode(debugLabel: 'trakt-year-selector');
   final FocusNode _monthFocusNode = FocusNode(
     debugLabel: 'trakt-month-selector',
@@ -294,7 +294,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
   void _openDaySheet(DateTime day, List<TraktCalendarEntry> entries) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF0C1222),
+      backgroundColor: AppThemeScope.of(context).calendar.sheetBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -332,10 +332,11 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final isWide = MediaQuery.of(context).size.width >= 900;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF060816),
+      backgroundColor: app.calendar.bg,
       appBar: _isTelevision
           ? null
           : AppBar(
@@ -345,19 +346,23 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
               title: Text('$_sourceName Calendar'),
             ),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF171B30), Color(0xFF0B1020), Color(0xFF060816)],
+            colors: [
+              const Color(0xFF171B30),
+              const Color(0xFF0B1020),
+              app.calendar.bg,
+            ],
           ),
         ),
-        child: SafeArea(top: false, child: _buildBody(isWide)),
+        child: SafeArea(top: false, child: _buildBody(isWide, app)),
       ),
     );
   }
 
-  Widget _buildBody(bool isWide) {
+  Widget _buildBody(bool isWide, AppTheme app) {
     if (!_isAuth) {
       // Only reachable when neither tracker is connected (the default source is
       // whichever IS connected), so phrase it for both.
@@ -379,7 +384,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
 
     final days = _visibleDays;
 
-    if (_isTelevision) return _buildTvBody(days, isWide);
+    if (_isTelevision) return _buildTvBody(days, isWide, app);
 
     return Center(
       child: ConstrainedBox(
@@ -393,7 +398,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
           ),
           child: Column(
             children: [
-              _buildHeaderSurface(days, isWide),
+              _buildHeaderSurface(days, isWide, app),
               const SizedBox(height: 16),
               Expanded(
                 child: AnimatedSwitcher(
@@ -411,7 +416,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
                           monthLabel: _monthName(_selectedMonth),
                           year: _selectedYear,
                         )
-                      : _buildDayList(days, isWide),
+                      : _buildDayList(days, isWide, app),
                 ),
               ),
             ],
@@ -421,7 +426,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     );
   }
 
-  Widget _buildTvBody(List<_AiringDay> days, bool isWide) {
+  Widget _buildTvBody(List<_AiringDay> days, bool isWide, AppTheme app) {
     final dayListWidget = AnimatedSwitcher(
       duration: const Duration(milliseconds: 160),
       switchInCurve: Curves.easeOutCubic,
@@ -438,7 +443,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
               year: _selectedYear,
               compact: true,
             )
-          : _buildDayList(days, isWide),
+          : _buildDayList(days, isWide, app),
     );
 
     return Padding(
@@ -449,7 +454,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
           SizedBox(
             width: 340,
             child: SingleChildScrollView(
-              child: _buildTvHeaderSurface(days),
+              child: _buildTvHeaderSurface(days, app),
             ),
           ),
           const SizedBox(width: 20),
@@ -478,7 +483,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     );
   }
 
-  Widget _buildTvHeaderSurface(List<_AiringDay> days) {
+  Widget _buildTvHeaderSurface(List<_AiringDay> days, AppTheme app) {
     final monthLabel = '${_monthName(_selectedMonth)} $_selectedYear';
     final summary = days.isEmpty
         ? 'No episodes this month.'
@@ -496,7 +501,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
         border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
         boxShadow: [
           BoxShadow(
-            color: _kNetflixRed.withValues(alpha: 0.12),
+            color: app.fade(app.calendar.accent, 0.12),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -510,7 +515,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(999),
-              color: _kNetflixRed.withValues(alpha: 0.14),
+              color: app.fade(app.calendar.accent, 0.14),
             ),
             child: Text(
               'YOUR ${_sourceName.toUpperCase()} SCHEDULE',
@@ -593,9 +598,9 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(999),
-              color: _kNetflixRed.withValues(alpha: 0.14),
+              color: app.fade(app.calendar.accent, 0.14),
               border: Border.all(
-                color: _kNetflixRed.withValues(alpha: 0.22),
+                color: app.fade(app.calendar.accent, 0.22),
               ),
             ),
             child: Row(
@@ -624,7 +629,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     );
   }
 
-  Widget _buildHeaderSurface(List<_AiringDay> days, bool isWide) {
+  Widget _buildHeaderSurface(List<_AiringDay> days, bool isWide, AppTheme app) {
     final isCompact = MediaQuery.of(context).size.width < 560;
     final monthLabel = '${_monthName(_selectedMonth)} $_selectedYear';
     final summary = days.isEmpty
@@ -648,7 +653,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
         border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
         boxShadow: [
           BoxShadow(
-            color: _kNetflixRed.withValues(alpha: 0.12),
+            color: app.fade(app.calendar.accent, 0.12),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -661,7 +666,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(999),
-              color: _kNetflixRed.withValues(alpha: 0.14),
+              color: app.fade(app.calendar.accent, 0.14),
             ),
             child: Text(
               'YOUR ${_sourceName.toUpperCase()} SCHEDULE',
@@ -809,9 +814,9 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
                 ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(999),
-                  color: _kNetflixRed.withValues(alpha: 0.14),
+                  color: app.fade(app.calendar.accent, 0.14),
                   border: Border.all(
-                    color: _kNetflixRed.withValues(alpha: 0.22),
+                    color: app.fade(app.calendar.accent, 0.22),
                   ),
                 ),
                 child: Row(
@@ -840,7 +845,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     );
   }
 
-  Widget _buildDayList(List<_AiringDay> days, bool isWide) {
+  Widget _buildDayList(List<_AiringDay> days, bool isWide, AppTheme app) {
     return ListView.separated(
       key: ValueKey('list-$_selectedYear-$_selectedMonth'),
       padding: EdgeInsets.zero,
@@ -849,6 +854,9 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       itemBuilder: (context, index) {
         final airingDay = days[index];
         return _AiringDayCard(
+          // Captured from the enclosing build, never read per item: this list
+          // scrolls a month of days on TV.
+          app: app,
           day: airingDay.day,
           entries: airingDay.entries,
           isWide: isWide,
@@ -910,6 +918,7 @@ class _SelectorField<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return DropdownButtonFormField<T>(
       value: value,
       focusNode: focusNode,
@@ -932,7 +941,7 @@ class _SelectorField<T> extends StatelessWidget {
         focusedBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(18)),
           borderSide: BorderSide(
-            color: _TraktCalendarScreenState._kNetflixRed,
+            color: app.calendar.accent,
             width: 2,
           ),
         ),
@@ -963,6 +972,7 @@ class _AiringDay {
 
 class _AiringDayCard extends StatelessWidget {
   const _AiringDayCard({
+    required this.app,
     required this.day,
     required this.entries,
     required this.isWide,
@@ -973,6 +983,9 @@ class _AiringDayCard extends StatelessWidget {
     this.isTelevision = false,
   });
 
+  /// Handed down from the list's build — the card is created inside a
+  /// `ListView.separated` itemBuilder, which must not read the scope itself.
+  final AppTheme app;
   final DateTime day;
   final List<TraktCalendarEntry> entries;
   final bool isWide;
@@ -984,7 +997,10 @@ class _AiringDayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = _accentFor(entries.first.showTitle);
+    final accent = _accentFor(
+      entries.first.showTitle,
+      app.calendar.accentPalette,
+    );
     return Focus(
       focusNode: focusNode,
       onFocusChange: (focused) {
@@ -1034,8 +1050,8 @@ class _AiringDayCard extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFF141219).withValues(alpha: 0.98),
-                  const Color(0xFF0A0B12).withValues(alpha: 0.98),
+                  app.fade(app.calendar.card, 0.98),
+                  app.fade(app.calendar.card2, 0.98),
                 ],
               ),
               boxShadow: [
@@ -1046,7 +1062,7 @@ class _AiringDayCard extends StatelessWidget {
                 ),
                 if (isFocused)
                   BoxShadow(
-                    color: const Color(0xFFE50914).withValues(alpha: 0.22),
+                    color: app.fade(app.calendar.accent, 0.22),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -1075,13 +1091,19 @@ class _AiringDayCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _DayHeaderStrip(
+          app: app,
           posterUrl: entries.first.posterUrl,
           accent: accent,
           compact: true,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _DateBadge(day: day, accent: accent, compact: true),
+              _DateBadge(
+                day: day,
+                accent: accent,
+                badgeGround: app.calendar.badgeGround,
+                compact: true,
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -1106,7 +1128,11 @@ class _AiringDayCard extends StatelessWidget {
                               ? 'One episode scheduled'
                               : '${entries.length} episodes scheduled',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.62),
+                            // Inside _DayHeaderStrip, whose ground IS
+                            // calendar.panel — so this ink may follow the
+                            // theme. The rows below sit on hardcoded darks
+                            // and deliberately do not.
+                            color: app.fade(app.core.tx, 0.62),
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -1123,7 +1149,14 @@ class _AiringDayCard extends StatelessWidget {
         for (final entry in entries.take(3))
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: _EpisodeRow(entry: entry, roomy: true),
+            child: _EpisodeRow(
+              entry: entry,
+              app: app,
+              palette: app.calendar.accentPalette,
+              rowGround: app.calendar.row,
+              rowLine: app.calendar.line,
+              roomy: true,
+            ),
           ),
         if (entries.length > 3)
           Padding(
@@ -1131,7 +1164,7 @@ class _AiringDayCard extends StatelessWidget {
             child: Text(
               '+${entries.length - 3} more episodes',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.58),
+                color: app.fade(app.core.tx, 0.58),
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -1146,12 +1179,18 @@ class _AiringDayCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _DayHeaderStrip(
+          app: app,
           posterUrl: entries.first.posterUrl,
           accent: accent,
           compact: true,
           child: Row(
             children: [
-              _DateBadge(day: day, accent: accent, compact: true),
+              _DateBadge(
+                day: day,
+                accent: accent,
+                badgeGround: app.calendar.badgeGround,
+                compact: true,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1183,13 +1222,19 @@ class _AiringDayCard extends StatelessWidget {
         for (final entry in entries.take(3))
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: _EpisodeRow(entry: entry),
+            child: _EpisodeRow(
+              entry: entry,
+              app: app,
+              palette: app.calendar.accentPalette,
+              rowGround: app.calendar.row,
+              rowLine: app.calendar.line,
+            ),
           ),
         if (entries.length > 3)
           Text(
             '+${entries.length - 3} more episodes',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.58),
+              color: app.fade(app.core.tx, 0.58),
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -1202,7 +1247,13 @@ class _AiringDayCard extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _DateBadge(day: day, accent: accent, compact: true, tv: true),
+        _DateBadge(
+          day: day,
+          accent: accent,
+          badgeGround: app.calendar.badgeGround,
+          compact: true,
+          tv: true,
+        ),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -1226,13 +1277,20 @@ class _AiringDayCard extends StatelessWidget {
               for (final entry in entries.take(3))
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
-                  child: _EpisodeRow(entry: entry, compact: true),
+                  child: _EpisodeRow(
+                    entry: entry,
+                    app: app,
+              palette: app.calendar.accentPalette,
+              rowGround: app.calendar.row,
+              rowLine: app.calendar.line,
+                    compact: true,
+                  ),
                 ),
               if (entries.length > 3)
                 Text(
                   '+${entries.length - 3} more',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.58),
+                    color: app.fade(app.core.tx, 0.58),
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1271,15 +1329,12 @@ class _AiringDayCard extends StatelessWidget {
     return '${weekdays[day.weekday - 1]}, ${months[day.month - 1]} ${day.day}';
   }
 
-  static Color _accentFor(String title) {
-    const palette = [
-      Color(0xFFE50914),
-      Color(0xFFF97316),
-      Color(0xFFFB7185),
-      Color(0xFFDC2626),
-      Color(0xFFEF4444),
-      Color(0xFFB91C1C),
-    ];
+  /// The per-title tone, hashed into [palette] (`calendar.accentPalette`).
+  ///
+  /// The palette arrives as an argument because a static cannot read the
+  /// theme scope — and its ORDER is part of the contract: the hash indexes
+  /// it, so reordering silently recolours every show.
+  static Color _accentFor(String title, List<Color> palette) {
     var hash = 0;
     for (final code in title.codeUnits) {
       hash = (hash * 31 + code) & 0x7fffffff;
@@ -1292,12 +1347,17 @@ class _DateBadge extends StatelessWidget {
   const _DateBadge({
     required this.day,
     required this.accent,
+    required this.badgeGround,
     this.compact = false,
     this.tv = false,
   });
 
   final DateTime day;
   final Color accent;
+
+  /// `calendar.badgeGround`, threaded like [accent] rather than read here —
+  /// these badges are built per day inside the list.
+  final Color badgeGround;
   final bool compact;
   final bool tv;
 
@@ -1316,7 +1376,7 @@ class _DateBadge extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [accent.withValues(alpha: 0.22), const Color(0xFF191B23)],
+          colors: [accent.withValues(alpha: 0.22), badgeGround],
         ),
         border: Border.all(color: accent.withValues(alpha: 0.32)),
         boxShadow: [
@@ -1385,15 +1445,38 @@ class _CountPill extends StatelessWidget {
 }
 
 class _EpisodeRow extends StatelessWidget {
-  const _EpisodeRow({required this.entry, this.roomy = false, this.compact = false});
+  const _EpisodeRow({
+    required this.entry,
+    required this.app,
+    required this.palette,
+    required this.rowGround,
+    required this.rowLine,
+    this.roomy = false,
+    this.compact = false,
+  });
 
   final TraktCalendarEntry entry;
+
+  /// Threaded, not read here — these rows are built inside the day list, and
+  /// the row's INK has to move with [rowGround] for the same reason the
+  /// palette does.
+  final AppTheme app;
+
+  /// `calendar.accentPalette`, handed down rather than read here — these rows
+  /// are built inside the day list.
+  final List<Color> palette;
+
+  /// `calendar.row` / `calendar.line`. Threaded WITH the palette because the
+  /// palette colours the text that sits on this ground: migrate one without
+  /// the other and a light theme puts deep ink on a dark row.
+  final Color rowGround;
+  final Color rowLine;
   final bool roomy;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final accent = _AiringDayCard._accentFor(entry.showTitle);
+    final accent = _AiringDayCard._accentFor(entry.showTitle, palette);
     final time = _formatTime(entry.firstAiredLocal);
     final code =
         'S${entry.seasonNumber.toString().padLeft(2, '0')}'
@@ -1407,8 +1490,8 @@ class _EpisodeRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
-          color: const Color(0xFF181922),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
+          color: rowGround,
+          border: Border.all(color: rowLine),
         ),
         child: Row(
           children: [
@@ -1433,7 +1516,7 @@ class _EpisodeRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.68),
+                      color: app.fade(app.core.tx, 0.68),
                       fontSize: 10,
                       height: 1.2,
                     ),
@@ -1463,8 +1546,8 @@ class _EpisodeRow extends StatelessWidget {
       padding: EdgeInsets.all(roomy ? 12 : 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: const Color(0xFF181922),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
+        color: rowGround,
+        border: Border.all(color: rowLine),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1524,7 +1607,7 @@ class _EpisodeRow extends StatelessWidget {
                   maxLines: roomy ? 2 : 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.68),
+                    color: app.fade(app.core.tx, 0.68),
                     fontSize: roomy ? 12.5 : 12,
                     height: 1.25,
                   ),
@@ -1591,12 +1674,15 @@ class _PosterThumb extends StatelessWidget {
 
 class _DayHeaderStrip extends StatelessWidget {
   const _DayHeaderStrip({
+    required this.app,
     required this.posterUrl,
     required this.accent,
     required this.child,
     this.compact = false,
   });
 
+  /// Handed down from the card, which is itself built inside the day list.
+  final AppTheme app;
   final String? posterUrl;
   final Color accent;
   final Widget child;
@@ -1663,9 +1749,9 @@ class _DayHeaderStrip extends StatelessWidget {
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    const Color(0xFF11131B),
-                    const Color(0xFF11131B).withValues(alpha: 0.82),
-                    const Color(0xFF11131B).withValues(alpha: 0.48),
+                    app.calendar.panel,
+                    app.fade(app.calendar.panel, 0.82),
+                    app.fade(app.calendar.panel, 0.48),
                   ],
                 ),
               ),

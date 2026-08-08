@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../services/trakt/trakt_episode_model.dart';
 import '../utils/tv_keys.dart';
+import 'detail/theme/detail_theme.dart';
 import 'trakt/trakt_menu_helpers.dart';
 import 'home/home_theme.dart';
 
@@ -48,6 +49,20 @@ class _EpisodeTileState extends State<EpisodeTile> {
   bool _focused = false;
   bool _hovered = false;
   bool get _active => _focused || _hovered;
+
+  /// Resolved once per dependency change, never inside the LayoutBuilder below
+  /// — `_still` and `_actionRow` run inside that callback, and a long episode
+  /// list on a TV box cannot afford a lookup per row per layout pass.
+  ///
+  /// Signal today: no caller wraps this tile in a [DetailThemeScope], so the
+  /// fallback IS the shipped gold.
+  late DetailTheme _t;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _t = DetailThemeScope.maybeOf(context);
+  }
 
   /// D-pad selection within the action row while the card holds focus.
   int _sel = 0;
@@ -156,7 +171,7 @@ class _EpisodeTileState extends State<EpisodeTile> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: _active
-                      ? HomeTheme.focusGold
+                      ? _t.focus
                       : Colors.white.withValues(alpha: 0.06),
                   width: _active ? 2.5 : 1,
                 ),
@@ -168,7 +183,7 @@ class _EpisodeTileState extends State<EpisodeTile> {
                   ),
                   if (_active)
                     BoxShadow(
-                      color: HomeTheme.focusGold.withValues(alpha: 0.38),
+                      color: _t.fade(_t.focus, 0.38),
                       blurRadius: 32,
                       spreadRadius: 1,
                     ),
@@ -274,7 +289,7 @@ class _EpisodeTileState extends State<EpisodeTile> {
               color: Colors.black.withValues(alpha: 0.42),
               border: Border.all(
                 color: _active
-                    ? HomeTheme.focusGold
+                    ? _t.focus
                     : Colors.white.withValues(alpha: 0.85),
                 width: 2,
               ),
@@ -353,6 +368,10 @@ class _EpisodeTileState extends State<EpisodeTile> {
           meta,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          // Deliberately NOT the theme's focus: this is gold INK, and the card
+          // it sits on is pinned to a dark literal (see `build`). A light
+          // theme's focus colour here would be dark-on-dark. Migrate the two
+          // together, or not at all.
           style: TextStyle(
             color: HomeTheme.focusGold.withValues(alpha: 0.95),
             fontSize: 11,
@@ -408,6 +427,7 @@ class _EpisodeTileState extends State<EpisodeTile> {
             action: acts[i],
             selected: _focused && i == sel,
             compact: compact,
+            theme: _t,
             onTap: acts[i].onTap,
           );
           children.add(acts[i].iconOnly ? chip : Flexible(child: chip));
@@ -526,18 +546,23 @@ class _ActionChip extends StatelessWidget {
   final _EpAction action;
   final bool selected;
   final bool compact;
+
+  /// Passed down rather than looked up: the parent already resolved it, and
+  /// this chip is rebuilt for every action of every visible episode row.
+  final DetailTheme theme;
   final VoidCallback onTap;
 
   const _ActionChip({
     required this.action,
     required this.selected,
+    required this.theme,
     required this.onTap,
     this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final gold = HomeTheme.focusGold;
+    final gold = theme.focus;
     final border = selected
         ? gold
         : (action.primary
@@ -546,7 +571,7 @@ class _ActionChip extends StatelessWidget {
     final glow = selected
         ? [
             BoxShadow(
-              color: gold.withValues(alpha: 0.4),
+              color: theme.fade(gold, 0.4),
               blurRadius: 16,
               spreadRadius: 1,
             ),

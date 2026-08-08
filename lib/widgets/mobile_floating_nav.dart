@@ -2,6 +2,9 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_theme.dart';
+import '../theme/app_theme_scope.dart';
+
 /// A premium glassmorphic floating action button menu for mobile navigation
 /// Features frosted glass effect, smooth animations, and elegant reveals
 class MobileFloatingNav extends StatefulWidget {
@@ -127,6 +130,9 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
 
   @override
   Widget build(BuildContext context) {
+    // Read ONCE: the FAB's AnimatedBuilder rides a repeating pulse controller,
+    // so anything read inside it would be a per-frame scope walk.
+    final app = AppThemeScope.of(context);
     final bottomPadding = MediaQuery.of(context).padding.bottom;
     final topPadding = MediaQuery.of(context).padding.top;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -196,10 +202,10 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                     width: 220,
                     constraints: BoxConstraints(maxHeight: maxMenuHeight),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
+                      color: app.fade(app.core.tx, 0.08),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.12),
+                        color: app.fade(app.core.tx, 0.12),
                         width: 1,
                       ),
                       boxShadow: [
@@ -264,11 +270,11 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                           padding: const EdgeInsets.symmetric(horizontal: 14),
                           decoration: BoxDecoration(
                             color: _isExpanded
-                                ? Colors.white.withValues(alpha: 0.12)
-                                : Colors.white.withValues(alpha: 0.1),
+                                ? app.fade(app.core.tx, 0.12)
+                                : app.fade(app.core.tx, 0.1),
                             borderRadius: BorderRadius.circular(22),
                             border: Border.all(
-                              color: Colors.white.withValues(alpha: _isExpanded ? 0.25 : 0.15),
+                              color: app.fade(app.core.tx, _isExpanded ? 0.25 : 0.15),
                               width: 1,
                             ),
                           ),
@@ -279,13 +285,14 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                               _SimpleAnimatedIcon(
                                 isExpanded: _isExpanded,
                                 pulseValue: pulseValue,
+                                app: app,
                               ),
                               const SizedBox(width: 8),
                               // Text label
                               Text(
                                 _isExpanded ? 'Close' : 'Menu',
                                 style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.8),
+                                  color: app.fade(app.core.tx, 0.8),
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                   letterSpacing: 0.3,
@@ -363,6 +370,7 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: Stack(
@@ -400,7 +408,7 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
                       child: Divider(
                         height: 1,
                         thickness: 0.5,
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: app.fade(app.core.tx, 0.08),
                       ),
                     ),
                 ],
@@ -411,7 +419,7 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
                     child: Divider(
                       height: 1,
                       thickness: 0.5,
-                      color: Colors.white.withValues(alpha: 0.1),
+                      color: app.fade(app.core.tx, 0.1),
                     ),
                   ),
                   _RemoteControlMenuItem(
@@ -447,7 +455,7 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
                   child: Center(
                     child: Icon(
                       Icons.keyboard_arrow_up_rounded,
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: app.fade(app.core.tx, 0.6),
                       size: 18,
                     ),
                   ),
@@ -480,7 +488,7 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
                   child: Center(
                     child: Icon(
                       Icons.keyboard_arrow_down_rounded,
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: app.fade(app.core.tx, 0.6),
                       size: 18,
                     ),
                   ),
@@ -502,12 +510,13 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(14, first ? 6 : 16, 12, 6),
       child: Text(
         text.toUpperCase(),
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.38),
+          color: app.fade(app.core.tx, 0.38),
           fontSize: 11,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.1,
@@ -540,6 +549,7 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
       onTapUp: (_) => setState(() => _isPressed = false),
@@ -604,7 +614,7 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                 widget.item.icon,
                 size: 18,
                 color: widget.isSelected
-                    ? Colors.white
+                    ? app.core.tx
                     : widget.gradient[0].withValues(alpha: 0.9),
               ),
             ),
@@ -619,8 +629,8 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                       widget.item.label,
                       style: TextStyle(
                         color: widget.isSelected
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.85),
+                            ? app.core.tx
+                            : app.fade(app.core.tx, 0.85),
                         fontSize: 14,
                         fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w500,
                         letterSpacing: 0.2,
@@ -680,17 +690,23 @@ class _SimpleAnimatedIcon extends StatelessWidget {
   final bool isExpanded;
   final double pulseValue;
 
+  /// Passed down rather than read here: this widget rebuilds on every frame of
+  /// the FAB's repeating pulse, so a scope lookup in its build would be one
+  /// per frame. The host reads it once.
+  final AppTheme app;
+
   const _SimpleAnimatedIcon({
     required this.isExpanded,
     required this.pulseValue,
+    required this.app,
   });
 
   @override
   Widget build(BuildContext context) {
     if (isExpanded) {
-      return const Icon(
+      return Icon(
         Icons.close_rounded,
-        color: Colors.white,
+        color: app.core.tx,
         size: 18,
       );
     }
@@ -705,15 +721,15 @@ class _SimpleAnimatedIcon extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _Dot(opacity: 0.9 + 0.1 * pulseValue),
-              _Dot(opacity: 0.7 + 0.3 * (1 - pulseValue)),
+              _Dot(opacity: 0.9 + 0.1 * pulseValue, app: app),
+              _Dot(opacity: 0.7 + 0.3 * (1 - pulseValue), app: app),
             ],
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _Dot(opacity: 0.7 + 0.3 * (1 - pulseValue)),
-              _Dot(opacity: 0.9 + 0.1 * pulseValue),
+              _Dot(opacity: 0.7 + 0.3 * (1 - pulseValue), app: app),
+              _Dot(opacity: 0.9 + 0.1 * pulseValue, app: app),
             ],
           ),
         ],
@@ -725,7 +741,10 @@ class _SimpleAnimatedIcon extends StatelessWidget {
 class _Dot extends StatelessWidget {
   final double opacity;
 
-  const _Dot({required this.opacity});
+  /// See [_SimpleAnimatedIcon.app] — per-frame widget, token passed in.
+  final AppTheme app;
+
+  const _Dot({required this.opacity, required this.app});
 
   @override
   Widget build(BuildContext context) {
@@ -733,7 +752,7 @@ class _Dot extends StatelessWidget {
       width: 5,
       height: 5,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: opacity),
+        color: app.fade(app.core.tx, opacity),
         borderRadius: BorderRadius.circular(1.5),
       ),
     );
@@ -757,6 +776,7 @@ class _RemoteControlMenuItemState extends State<_RemoteControlMenuItem> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
       onTapUp: (_) => setState(() => _isPressed = false),
@@ -794,7 +814,7 @@ class _RemoteControlMenuItemState extends State<_RemoteControlMenuItem> {
                   Text(
                     'Remote',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: _isPressed ? 1.0 : 0.7),
+                      color: app.fade(app.core.tx, _isPressed ? 1.0 : 0.7),
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -802,7 +822,7 @@ class _RemoteControlMenuItemState extends State<_RemoteControlMenuItem> {
                   Text(
                     'Control your TV',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
+                      color: app.fade(app.core.tx, 0.4),
                       fontSize: 10,
                     ),
                   ),

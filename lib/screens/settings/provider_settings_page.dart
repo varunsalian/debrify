@@ -6,6 +6,7 @@ import '../../services/pikpak_api_service.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// Provider settings page for configuring default torrent provider.
 class ProviderSettingsPage extends StatefulWidget {
@@ -219,26 +220,28 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     required String subtitle,
     required List<Widget> children,
   }) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kSettingsPanel,
+        color: t.panel,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kSettingsLine),
+        border: Border.all(color: t.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: app.core.tx,
             ),
           ),
           const SizedBox(height: 4),
-          Text(subtitle, style: TextStyle(fontSize: 12, color: kSettingsDim)),
+          Text(subtitle, style: TextStyle(fontSize: 12, color: t.dim)),
           const SizedBox(height: 16),
           ...children,
         ],
@@ -352,18 +355,20 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
   }
 
   Widget _buildNoProvidersMessage(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: kSettingsRed.withValues(alpha: 0.08),
+        color: t.danger.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kSettingsRed.withValues(alpha: 0.3)),
+        border: Border.all(color: t.danger.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.warning_amber_rounded,
-            color: kSettingsRed,
+            color: t.danger,
             size: 32,
           ),
           const SizedBox(width: 16),
@@ -371,12 +376,12 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'No providers connected',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: kSettingsRed,
+                    color: t.danger,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -385,7 +390,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
                   style: TextStyle(
                     fontSize: 13,
                     height: 1.4,
-                    color: Colors.white.withValues(alpha: 0.72),
+                    color: app.fade(app.core.tx, 0.72),
                   ),
                 ),
               ],
@@ -419,6 +424,8 @@ class _ProviderOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Focus(
       focusNode: focusNode,
       onKeyEvent: (node, event) {
@@ -434,15 +441,15 @@ class _ProviderOption extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: selected
-              ? kSettingsAccent.withValues(alpha: 0.15)
+              ? t.accent.withValues(alpha: 0.15)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isFocused
-                ? kSettingsAccent
+                ? t.accent
                 : selected
-                ? kSettingsAccent.withValues(alpha: 0.5)
-                : kSettingsLine,
+                ? t.accent.withValues(alpha: 0.5)
+                : t.line,
             width: isFocused ? 2 : 1,
           ),
         ),
@@ -461,15 +468,15 @@ class _ProviderOption extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.055),
+                      color: app.fade(app.core.tx, 0.055),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: kSettingsLine),
+                      border: Border.all(color: t.line),
                     ),
                     child: Icon(
                       icon,
                       color: selected || isFocused
-                          ? kSettingsAccent2
-                          : kSettingsDim,
+                          ? t.accent2
+                          : t.dim,
                       size: 22,
                     ),
                   ),
@@ -480,16 +487,16 @@ class _ProviderOption extends StatelessWidget {
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14.5,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                            color: app.core.tx,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           subtitle,
-                          style: TextStyle(fontSize: 12, color: kSettingsDim),
+                          style: TextStyle(fontSize: 12, color: t.dim),
                         ),
                       ],
                     ),
@@ -497,13 +504,14 @@ class _ProviderOption extends StatelessWidget {
                   if (selected)
                     Container(
                       padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: kSettingsAccent,
+                      decoration: BoxDecoration(
+                        color: t.accent,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.check_rounded,
-                        color: Colors.white,
+                        // Glyph inside an accent-FILLED circle.
+                        color: app.inkOn(t.accent),
                         size: 16,
                       ),
                     )
@@ -513,7 +521,7 @@ class _ProviderOption extends StatelessWidget {
                       height: 24,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: kSettingsDim2, width: 2),
+                        border: Border.all(color: t.dim2, width: 2),
                       ),
                     ),
                 ],

@@ -286,6 +286,104 @@ than nuanced.
 
 ---
 
+## Outcome (2026-08-09) — all four waves executed
+
+Wave 0 committed (`6c9597d`); waves 1–4 uncommitted, ~82 files.
+
+| wave | tracks | agents |
+|---|---|---|
+| 1 | Home/Search/Discover + see-all; nav chrome; `main.dart` shell | 2 |
+| 2 | Cloud ∥ Settings ∥ Calendar | 3 |
+| 3 | Addons ∥ themed details; Cloud dialog surfaces | 3 |
+| 4 | wiring, copy, docs, final review | — |
+
+The vocabulary grew from 5 subprofiles to 6 plus two cross-cutting members
+(`sheetSurface`, `inkOn`) — every addition triggered by an agent hitting a
+need and escalating rather than inventing, which is the one process rule
+everything else depended on.
+
+### How light-theme legibility is actually enforced
+
+The pin tests prove a token equals a literal; the hand-written contrast tests
+compared token PAIRS. Neither can see the defect that recurred in every wave —
+themed ink placed on a surface that stayed dark — because that is a property
+of the COMPOSED tree, not of any token. A review put it bluntly: every theme
+test passed while two light themes had unreadable screens.
+
+So `test/theme/surface_gallery.dart` composes the REAL widgets
+(`SettingsTile`, `CloudSegmentedTabs`, `DesktopSidebarNav`, every tokenised
+surface) with fixture data, and `contrast_audit_test.dart` walks the rendered
+tree: for each `Text` it resolves the effective colour — including ink
+inherited from `ThemeData`, which is the path that broke — finds the nearest
+ancestor that actually paints an opaque fill, composites any translucent
+layers in between, and measures. Across all 20 themes. No human has to look.
+
+**The bar is relative to legacy, not absolute**, and that matters: an absolute
+3:1 rule fails legacy itself at one site (the calendar's darkest per-title red
+on its own tint chip, 2.53:1 as shipped). That is a pre-existing product
+decision. A test that reddened over it would either sit permanently failing or
+push someone to change today's pixels to satisfy a bar the app never claimed.
+So each site is measured under legacy first, and every other theme must either
+clear 3:1 or at least match legacy there. Legacy's weak sites are printed on
+every run rather than silently exempted.
+
+Goldens now cover the gallery too (legacy / broadsheet / concrete / noir), so
+there is a human-inspectable artifact alongside the automated check.
+
+**Still not covered:** whole screens that need services, a database or
+platform channels — Home, Search, IPTV, the player. Those need integration
+tests or device time, not a widget test with mocks that prove nothing.
+
+### The rules that emerged, each paid for once
+
+1. **Compose a pin the way the source composes it.** Hex ARGB source →
+   `0xNN / 0xFF`; decimal source → the decimal. `Color` stores alpha as a
+   double, so `0x0AFFFFFF` (0.0392) and `withValues(alpha: 0.04)` differ.
+   Both directions were caught by tests, in opposite waves.
+2. **Surface and ink move together — in BOTH directions.** Migrating ink over
+   a pinned-dark surface gives black-on-black on light themes; migrating a
+   surface under pinned-white ink gives white-on-paper. The second mistake was
+   made inside the edit fixing the first.
+3. **Preserve, don't optimise.** `inkOn` keeps page ink unless it is genuinely
+   poor. A "maximise contrast" rule flipped today's shipped white button label
+   to near-black over 0.1 of a contrast point.
+4. **Derive from what is guaranteed to vary.** A ramp spanning
+   accent/callout/state collapses on themes that set them equal; HSL lightness
+   is not perceptual (a saturated blue at L=0.46 lands at luminance 0.09), so
+   ramps bisect toward target LUMINANCE.
+5. **Separation is directional per theme.** Dark themes step lighter, paper
+   themes darker — use `core.pane`/`core.railBg`, never a hand-rolled lerp.
+6. **Some swaps create the defect.** Four Cloud grounds were left dark because
+   their foregrounds are pinned light; tokenising them would have made a
+   spinner or a button vanish on paper.
+
+## Carried into wave 4 (QA) — found during wave 1
+
+**Dark surfaces whose ink now follows the theme.** A container pinned to a
+dark literal whose CONTENTS were migrated to `core.tx` is fine under legacy
+and unreadable under a light theme — near-black ink on a near-black sheet.
+Surface and ink cannot be migrated independently. `cw_card_menu`'s dialog was
+fixed in wave 1 (`home.menuSurface`); the remaining known instances are
+`search_screen.dart`'s one-off sheets/dialogs (`0xFF0F172A`, `0xFF16131F`,
+`0xFF1E293B`, `0xFF171426`). Each needs a surface token before light themes
+are called done.
+
+**Glass over artwork is the OPPOSITE case.** Chips and badges sitting on
+black-at-55% glass over a poster should keep near-white ink on every theme —
+their `tx` reads must become an "on-glass ink" role, NOT be reverted to a
+literal and NOT follow a light theme's dark text. Wave 1 migrated these to
+`tx`; they are correct under legacy and wrong under Broadsheet.
+
+**Static-const scrim stacks** (`search_screen`'s `_CanvasScrims`,
+`_centeredLayers`, `_seamLayers`, `_kPromRestVeil`, the Atrium dossier veils)
+are baked `const` deliberately for TV paint cost. They are ink-derived, so
+they stay dark under a light theme. Converting them means either a
+build-time fade or a const-preserving derived token — a central decision,
+not a per-site one.
+
+**Role review:** the takeover rating star maps to `home.focus`; `core.rating`
+may be the truer role.
+
 ## Open decisions before wave 0
 
 1. **Playlist (index 1) and Downloads (index 2)** — still frozen-by-default in

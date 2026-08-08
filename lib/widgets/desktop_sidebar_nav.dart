@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme_scope.dart';
 import 'window_drag_area.dart';
-
-/// Stremio-style indigo accent + purple-tinted rail background.
-const Color _kAccent = Color(0xFF7B5CFF);
-const Color _kRailBg = Color(0xFF120F24);
 
 /// One entry in the desktop sidebar. [section] groups consecutive entries; a
 /// small divider is inserted whenever the section changes.
@@ -47,6 +44,7 @@ class DesktopSidebarNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final children = <Widget>[];
     String? lastSection;
     for (var i = 0; i < entries.length; i++) {
@@ -67,10 +65,10 @@ class DesktopSidebarNav extends StatelessWidget {
 
     return Container(
       width: expanded ? expandedWidth : width,
-      decoration: const BoxDecoration(color: _kRailBg),
+      decoration: BoxDecoration(color: app.shell.railBg),
       foregroundDecoration: BoxDecoration(
         border: Border(
-          right: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+          right: BorderSide(color: app.fade(app.core.tx, 0.05)),
         ),
       ),
       child: Column(
@@ -106,11 +104,12 @@ class _GroupDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
       child: Container(
         height: 1,
-        color: Colors.white.withValues(alpha: 0.06),
+        color: app.fade(app.core.tx, 0.06),
       ),
     );
   }
@@ -138,14 +137,15 @@ class _SidebarItemState extends State<_SidebarItem> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final cs = Theme.of(context).colorScheme;
     final selected = widget.selected;
     final Color fg = selected
-        ? _kAccent
-        : (_hovered ? cs.onSurface : Colors.white.withValues(alpha: 0.6));
+        ? app.shell.navAccent
+        : (_hovered ? cs.onSurface : app.fade(app.core.tx, 0.6));
     final Color bg = selected
-        ? _kAccent.withValues(alpha: 0.16)
-        : (_hovered ? Colors.white.withValues(alpha: 0.05) : Colors.transparent);
+        ? app.shell.navAccent.withValues(alpha: 0.16)
+        : (_hovered ? app.fade(app.core.tx, 0.05) : Colors.transparent);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),

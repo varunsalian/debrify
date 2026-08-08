@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
-import 'see_all_theme.dart';
 
 /// The Discover filter bar's "Random" action: picks a random item matching the
 /// current Type/Catalog/Genre selection and Quick-Plays it. Styled to sit
@@ -98,28 +98,31 @@ class _SeeAllRandomButtonState extends State<SeeAllRandomButton> {
 
   /// Boxed pill matching StremioDropdown's non-quiet chip.
   Widget _buildBoxed(bool active) {
+    final app = AppThemeScope.of(context);
     final dim = widget.enabled ? 1.0 : 0.4;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
       decoration: BoxDecoration(
-        color: kSeeAllPanel,
+        color: app.seeAll.panel,
         borderRadius: BorderRadius.circular(11),
         border: Border.all(
           width: 2,
           color: _focused
-              ? kSeeAllAccent
-              : (active && widget.enabled ? kSeeAllAccentBorder : kSeeAllLine),
+              ? app.seeAll.accent
+              : (active && widget.enabled
+                  ? app.seeAll.accentBorder
+                  : app.seeAll.line),
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _leadingIcon(16, kSeeAllAccent2.withValues(alpha: dim)),
+          _leadingIcon(16, app.fade(app.seeAll.accent2, dim)),
           const SizedBox(width: 8),
           Text(
             'Random',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: dim),
+              color: app.fade(app.core.tx, dim),
               fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
@@ -132,29 +135,30 @@ class _SeeAllRandomButtonState extends State<SeeAllRandomButton> {
   /// Quiet segment matching StremioDropdown's Discover-TV styling — icon-only
   /// (the die reads on its own, and the single-row bar must stay tight).
   Widget _buildQuiet(bool active) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: _focused
-            ? kSeeAllAccent.withValues(alpha: 0.30)
+            ? app.fade(app.seeAll.accent, 0.30)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
           width: 1.2,
           color: _focused
-              ? kSeeAllAccent2.withValues(alpha: 0.45)
+              ? app.fade(app.seeAll.accent2, 0.45)
               : (active && widget.enabled
-                  ? kSeeAllAccentBorder
+                  ? app.seeAll.accentBorder
                   : Colors.transparent),
         ),
       ),
       child: _leadingIcon(
         15,
         !widget.enabled
-            ? kSeeAllAccent2.withValues(alpha: 0.4)
+            ? app.fade(app.seeAll.accent2, 0.4)
             : _focused
-                ? Colors.white
-                : kSeeAllAccent2,
+                ? app.core.tx
+                : app.seeAll.accent2,
       ),
     );
   }

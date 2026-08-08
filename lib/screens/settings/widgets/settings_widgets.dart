@@ -5,6 +5,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../services/main_page_bridge.dart';
 import '../../../services/storage_service.dart';
+import '../../../theme/app_theme.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../../../widgets/shimmer.dart';
 
 /// Shared visual tokens for the Settings screens.
@@ -293,48 +295,59 @@ Future<void> launchSettingsUrl(String url) async {
 /// — or just use [SettingsPageScaffold], which does it for you.
 ThemeData settingsPageTheme(BuildContext context) {
   final base = Theme.of(context);
-  // Memoized: the theme is a pure transform of the (static) app theme, and
-  // rebuilding ~25 sub-theme objects on every page build — including every
-  // focus-move setState on TV — is pure waste.
-  if (!identical(base, _settingsThemeBase)) {
+  final app = AppThemeScope.of(context);
+  // Memoized: the theme is a pure transform of its two inputs, and rebuilding
+  // ~25 sub-theme objects on every page build — including every focus-move
+  // setState on TV — is pure waste. BOTH inputs key the cache: a frozen
+  // boundary can hand us a legacy ThemeData under a themed app profile (and
+  // vice versa), so identity on `base` alone would serve a stale palette.
+  if (!identical(base, _settingsThemeBase) ||
+      !identical(app, _settingsThemeApp)) {
     _settingsThemeBase = base;
-    _settingsThemeCache = _buildSettingsPageTheme(base);
+    _settingsThemeApp = app;
+    _settingsThemeCache = _buildSettingsPageTheme(base, app);
   }
   return _settingsThemeCache!;
 }
 
 ThemeData? _settingsThemeBase;
+AppTheme? _settingsThemeApp;
 ThemeData? _settingsThemeCache;
 
-ThemeData _buildSettingsPageTheme(ThemeData base) {
+ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
+  final t = app.settings;
   // Primary text follows the BASE theme, not a hardcoded white: the base
   // carries the Appearance → Text Brightness preset in its onSurface (white
-  // on Bright, so nothing changes there). On-accent colors stay white — a
-  // button label on the purple accent needs its designed contrast.
+  // on Bright, so nothing changes there). On-accent colors take `onAccent`,
+  // NOT page ink: a label on a FILLED swatch is decided by the swatch, and
+  // under legacy that resolves to the same white this used to hardcode.
   final Color text = base.colorScheme.onSurface;
+  // Against the SETTINGS accent — the swatch these controls are actually
+  // filled with, which under legacy is violet rather than the core's olive.
+  final onAccent = app.inkOn(t.accent);
   final scheme = base.colorScheme.copyWith(
-    primary: kSettingsAccent2,
-    onPrimary: Colors.white,
-    primaryContainer: kSettingsPanel2,
-    onPrimaryContainer: Colors.white,
-    secondary: kSettingsAccent2,
-    onSecondary: Colors.white,
-    secondaryContainer: kSettingsPanel2,
-    onSecondaryContainer: Colors.white,
-    surface: kSettingsBg,
+    primary: t.accent2,
+    onPrimary: onAccent,
+    primaryContainer: t.panel2,
+    onPrimaryContainer: onAccent,
+    secondary: t.accent2,
+    onSecondary: onAccent,
+    secondaryContainer: t.panel2,
+    onSecondaryContainer: onAccent,
+    surface: t.bg,
     onSurface: text,
-    surfaceContainerHighest: kSettingsPanel,
-    surfaceContainerHigh: kSettingsPanel,
-    surfaceContainer: kSettingsPanel2,
-    surfaceContainerLow: kSettingsPanel2,
-    error: kSettingsRed,
+    surfaceContainerHighest: t.panel,
+    surfaceContainerHigh: t.panel,
+    surfaceContainer: t.panel2,
+    surfaceContainerLow: t.panel2,
+    error: t.danger,
     outline: const Color(0xFF6E6395),
     outlineVariant: const Color(0xFF3A3158),
     surfaceTint: Colors.transparent,
   );
   return base.copyWith(
     colorScheme: scheme,
-    scaffoldBackgroundColor: kSettingsBg,
+    scaffoldBackgroundColor: t.bg,
     appBarTheme: base.appBarTheme.copyWith(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -348,53 +361,53 @@ ThemeData _buildSettingsPageTheme(ThemeData base) {
       ),
     ),
     cardTheme: base.cardTheme.copyWith(
-      color: kSettingsPanel,
+      color: t.panel,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: kSettingsLine),
+        side: BorderSide(color: t.line),
       ),
     ),
-    dividerTheme: DividerThemeData(color: kSettingsLine, thickness: 1),
+    dividerTheme: DividerThemeData(color: t.line, thickness: 1),
     listTileTheme: base.listTileTheme.copyWith(
-      iconColor: kSettingsDim,
+      iconColor: t.dim,
       textColor: text,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: kSettingsPanel,
-      hintStyle: TextStyle(color: kSettingsDim2, fontSize: 13.5),
-      labelStyle: TextStyle(color: kSettingsDim, fontSize: 13.5),
-      prefixIconColor: kSettingsDim,
-      suffixIconColor: kSettingsDim,
+      fillColor: t.panel,
+      hintStyle: TextStyle(color: t.dim2, fontSize: 13.5),
+      labelStyle: TextStyle(color: t.dim, fontSize: 13.5),
+      prefixIconColor: t.dim,
+      suffixIconColor: t.dim,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: kSettingsLine),
+        borderSide: BorderSide(color: t.line),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: kSettingsLine),
+        borderSide: BorderSide(color: t.line),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: kSettingsAccent, width: 1.5),
+        borderSide: BorderSide(color: t.accent, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: kSettingsRed, width: 1.5),
+        borderSide: BorderSide(color: t.danger, width: 1.5),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: kSettingsRed, width: 1.5),
+        borderSide: BorderSide(color: t.danger, width: 1.5),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: kSettingsAccent,
-        foregroundColor: Colors.white,
-        disabledBackgroundColor: kSettingsPanel2,
-        disabledForegroundColor: kSettingsDim2,
+        backgroundColor: t.accent,
+        foregroundColor: onAccent,
+        disabledBackgroundColor: t.panel2,
+        disabledForegroundColor: t.dim2,
         elevation: 0,
         textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -403,8 +416,8 @@ ThemeData _buildSettingsPageTheme(ThemeData base) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: kSettingsAccent,
-        foregroundColor: Colors.white,
+        backgroundColor: t.accent,
+        foregroundColor: onAccent,
         textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
@@ -412,7 +425,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base) {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
+        foregroundColor: app.core.tx,
         side: BorderSide(color: const Color(0xFFB4A0FF).withValues(alpha: 0.3)),
         textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -421,7 +434,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base) {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: kSettingsAccent2,
+        foregroundColor: t.accent2,
         textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -430,101 +443,108 @@ ThemeData _buildSettingsPageTheme(ThemeData base) {
     // tell an inert toggle from an active one — see the hide-from-nav
     // switches, which are disabled until the provider is logged in.
     switchTheme: SwitchThemeData(
-      thumbColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.disabled)
-            ? Colors.white.withValues(alpha: 0.35)
-            : Colors.white,
-      ),
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        // The thumb sits ON the track, so SELECTED (an accent track) takes
+        // on-accent ink; unselected rides a faint neutral track, where page
+        // ink is right. Under legacy both resolve to white, as before.
+        final base = states.contains(WidgetState.selected)
+            ? onAccent
+            : app.core.tx;
+        return states.contains(WidgetState.disabled)
+            ? base.withValues(alpha: 0.35)
+            : base;
+      }),
       trackColor: WidgetStateProperty.resolveWith((states) {
         final bool selected = states.contains(WidgetState.selected);
         if (states.contains(WidgetState.disabled)) {
           return selected
-              ? kSettingsAccent.withValues(alpha: 0.3)
-              : Colors.white.withValues(alpha: 0.05);
+              ? t.accent.withValues(alpha: 0.3)
+              : app.fade(app.core.tx, 0.05);
         }
         return selected
-            ? kSettingsAccent
-            : Colors.white.withValues(alpha: 0.12);
+            ? t.accent
+            : app.fade(app.core.tx, 0.12);
       }),
       trackOutlineColor: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.selected)
             ? Colors.transparent
-            : kSettingsLine,
+            : t.line,
       ),
     ),
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith((states) {
         if (!states.contains(WidgetState.selected)) return Colors.transparent;
         return states.contains(WidgetState.disabled)
-            ? kSettingsAccent.withValues(alpha: 0.35)
-            : kSettingsAccent;
+            ? t.accent.withValues(alpha: 0.35)
+            : t.accent;
       }),
-      side: BorderSide(color: kSettingsDim2, width: 1.5),
+      side: BorderSide(color: t.dim2, width: 1.5),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
     ),
     radioTheme: RadioThemeData(
       fillColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.disabled)) {
-          return Colors.white.withValues(alpha: 0.18);
+          return app.fade(app.core.tx, 0.18);
         }
         return states.contains(WidgetState.selected)
-            ? kSettingsAccent2
-            : kSettingsDim2;
+            ? t.accent2
+            : t.dim2;
       }),
     ),
     sliderTheme: base.sliderTheme.copyWith(
-      activeTrackColor: kSettingsAccent,
-      inactiveTrackColor: Colors.white.withValues(alpha: 0.12),
-      thumbColor: Colors.white,
-      overlayColor: kSettingsAccent.withValues(alpha: 0.15),
+      activeTrackColor: t.accent,
+      inactiveTrackColor: app.fade(app.core.tx, 0.12),
+      // Rides the ACTIVE (accent) track.
+      thumbColor: onAccent,
+      overlayColor: t.accent.withValues(alpha: 0.15),
     ),
     progressIndicatorTheme: base.progressIndicatorTheme.copyWith(
-      color: kSettingsAccent2,
+      color: t.accent2,
     ),
     tabBarTheme: base.tabBarTheme.copyWith(
-      indicatorColor: kSettingsAccent,
+      indicatorColor: t.accent,
       labelColor: text,
-      unselectedLabelColor: kSettingsDim,
-      dividerColor: kSettingsLine,
+      unselectedLabelColor: t.dim,
+      dividerColor: t.line,
     ),
     dialogTheme: base.dialogTheme.copyWith(
-      backgroundColor: kSettingsPanel2,
+      backgroundColor: t.panel2,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: kSettingsLine),
+        side: BorderSide(color: t.line),
       ),
     ),
     popupMenuTheme: base.popupMenuTheme.copyWith(
-      color: kSettingsPanel2,
+      color: t.panel2,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: kSettingsLine),
+        side: BorderSide(color: t.line),
       ),
     ),
     bottomSheetTheme: base.bottomSheetTheme.copyWith(
-      backgroundColor: kSettingsPanel2,
+      backgroundColor: t.panel2,
       surfaceTintColor: Colors.transparent,
     ),
     snackBarTheme: base.snackBarTheme.copyWith(
-      backgroundColor: kSettingsPanel2,
+      backgroundColor: t.panel2,
     ),
     chipTheme: base.chipTheme.copyWith(
-      backgroundColor: Colors.white.withValues(alpha: 0.06),
-      selectedColor: kSettingsAccent.withValues(alpha: 0.25),
+      backgroundColor: app.fade(app.core.tx, 0.06),
+      selectedColor: t.accent.withValues(alpha: 0.25),
       labelStyle: TextStyle(color: text, fontSize: 12.5),
-      side: BorderSide(color: kSettingsLine),
+      side: BorderSide(color: t.line),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     ),
     dropdownMenuTheme: base.dropdownMenuTheme.copyWith(
       menuStyle: MenuStyle(
-        backgroundColor: const WidgetStatePropertyAll(kSettingsPanel2),
+        backgroundColor: WidgetStatePropertyAll(t.panel2),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
-            side: BorderSide(color: kSettingsLine),
+            side: BorderSide(color: t.line),
           ),
         ),
       ),
@@ -631,6 +651,7 @@ class SettingsPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -638,10 +659,10 @@ class SettingsPageHeader extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: kSettingsAccent.withValues(alpha: 0.14),
+            color: t.accent.withValues(alpha: 0.14),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, color: kSettingsAccent2, size: 22),
+          child: Icon(icon, color: t.accent2, size: 22),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -664,7 +685,7 @@ class SettingsPageHeader extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12.5,
                   height: 1.4,
-                  color: kSettingsDim,
+                  color: t.dim,
                 ),
               ),
             ],
@@ -693,11 +714,13 @@ class SettingsInfoBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final Color c = switch (tone) {
-      SettingsBannerTone.info => kSettingsAccent2,
-      SettingsBannerTone.warning => kSettingsAmber,
-      SettingsBannerTone.danger => kSettingsRed,
-      SettingsBannerTone.success => kSettingsGreen,
+      SettingsBannerTone.info => t.accent2,
+      SettingsBannerTone.warning => t.warning,
+      SettingsBannerTone.danger => t.danger,
+      SettingsBannerTone.success => t.success,
     };
     return Container(
       padding: const EdgeInsets.all(12),
@@ -717,7 +740,7 @@ class SettingsInfoBanner extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 height: 1.45,
-                color: Colors.white.withValues(alpha: 0.72),
+                color: app.fade(app.core.tx, 0.72),
               ),
             ),
           ),
@@ -735,18 +758,23 @@ class SettingsBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Container(
-      color: kSettingsBg,
+      color: t.bg,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          const IgnorePointer(
+          IgnorePointer(
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: RadialGradient(
-                  center: Alignment(0.85, -1.0),
+                  center: const Alignment(0.85, -1.0),
                   radius: 1.2,
-                  colors: [Color(0x297B5CFF), Colors.transparent],
+                  colors: [
+                    app.fade(t.accent, 0x29 / 0xFF),
+                    Colors.transparent,
+                  ],
                 ),
               ),
             ),
@@ -792,7 +820,10 @@ class SettingsHeader extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           'Manage connections, search & playback',
-          style: TextStyle(fontSize: 13, color: kSettingsDim),
+          style: TextStyle(
+            fontSize: 13,
+            color: AppThemeScope.of(context).settings.dim,
+          ),
         ),
       ],
     );
@@ -815,7 +846,7 @@ class SettingsSectionLabel extends StatelessWidget {
           fontSize: 12,
           fontWeight: FontWeight.w800,
           letterSpacing: 0.7,
-          color: color ?? kSettingsDim,
+          color: color ?? AppThemeScope.of(context).settings.dim,
         ),
       ),
     );
@@ -1224,13 +1255,15 @@ class _ConnectionCardState extends State<ConnectionCard> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final info = widget.info;
     final String statusLower = info.status.toLowerCase();
     final bool active = info.connected && statusLower == 'active';
     // One color for both the dot and the status text so they can't disagree.
     final Color stateColor = info.connected
-        ? (active ? kSettingsGreen : kSettingsRed)
-        : kSettingsDim2;
+        ? (active ? t.success : t.danger)
+        : t.dim2;
     final bool lit = _focused || _hovered;
 
     return Focus(
@@ -1246,16 +1279,16 @@ class _ConnectionCardState extends State<ConnectionCard> {
         // tv_sidebar_nav.dart for the same rule).
         child: Container(
           decoration: BoxDecoration(
-            color: lit ? kSettingsPanel2 : kSettingsPanel,
+            color: lit ? t.panel2 : t.panel,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: _focused ? kSettingsAccent : kSettingsLine,
+              color: _focused ? t.accent : t.line,
               width: 1,
             ),
             boxShadow: _focused
                 ? [
                     BoxShadow(
-                      color: kSettingsAccent.withValues(alpha: 0.28),
+                      color: t.accent.withValues(alpha: 0.28),
                       blurRadius: 18,
                       offset: const Offset(0, 6),
                     ),
@@ -1283,9 +1316,9 @@ class _ConnectionCardState extends State<ConnectionCard> {
                       height: 40,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.055),
+                        color: app.fade(app.core.tx, 0.055),
                         borderRadius: BorderRadius.circular(11),
-                        border: Border.all(color: kSettingsLine),
+                        border: Border.all(color: t.line),
                       ),
                       child: Text(
                         settingsInitialsFor(info.title),
@@ -1293,7 +1326,7 @@ class _ConnectionCardState extends State<ConnectionCard> {
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.3,
-                          color: lit ? kSettingsAccent2 : kSettingsDim,
+                          color: lit ? t.accent2 : t.dim,
                         ),
                       ),
                     ),
@@ -1319,7 +1352,7 @@ class _ConnectionCardState extends State<ConnectionCard> {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 11.5,
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                         ],
@@ -1355,7 +1388,7 @@ class _ConnectionCardState extends State<ConnectionCard> {
                     Icon(
                       Icons.chevron_right_rounded,
                       size: 20,
-                      color: kSettingsDim2,
+                      color: t.dim2,
                     ),
                   ],
                 ),
@@ -1384,15 +1417,16 @@ class SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (title.isNotEmpty) SettingsSectionLabel(title, color: accentColor),
         Container(
           decoration: BoxDecoration(
-            color: kSettingsPanel,
+            color: t.panel,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: kSettingsLine, width: 1),
+            border: Border.all(color: t.line, width: 1),
           ),
           clipBehavior: Clip.antiAlias,
           child: Material(
@@ -1401,7 +1435,7 @@ class SettingsSection extends StatelessWidget {
               children: [
                 for (int i = 0; i < children.length; i++) ...[
                   if (i != 0)
-                    Divider(height: 1, thickness: 1, color: kSettingsLine),
+                    Divider(height: 1, thickness: 1, color: t.line),
                   children[i],
                 ],
               ],
@@ -1478,17 +1512,18 @@ class _SettingsTileState extends State<SettingsTile> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     final bool lit = _focused || _hovered;
     final Color iconColor = widget.destructive
-        ? kSettingsRed
-        : (lit ? kSettingsAccent2 : kSettingsDim);
+        ? t.danger
+        : (lit ? t.accent2 : t.dim);
     // Snap, don't tween — per-keypress decoration lerps add cost on TV.
     return Container(
       decoration: BoxDecoration(
-        color: lit ? kSettingsPanel2 : Colors.transparent,
+        color: lit ? t.panel2 : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _focused ? kSettingsAccent : Colors.transparent,
+          color: _focused ? t.accent : Colors.transparent,
           width: 1,
         ),
       ),
@@ -1524,7 +1559,7 @@ class _SettingsTileState extends State<SettingsTile> {
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
                               color: widget.destructive
-                                  ? kSettingsRed
+                                  ? t.danger
                                   : Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
@@ -1537,13 +1572,13 @@ class _SettingsTileState extends State<SettingsTile> {
                               vertical: 2.5,
                             ),
                             decoration: BoxDecoration(
-                              color: kSettingsAccent.withValues(alpha: 0.16),
+                              color: t.accent.withValues(alpha: 0.16),
                               borderRadius: BorderRadius.circular(7),
                             ),
                             child: Text(
                               widget.tag!,
-                              style: const TextStyle(
-                                color: kSettingsAccent2,
+                              style: TextStyle(
+                                color: t.accent2,
                                 fontWeight: FontWeight.w800,
                                 fontSize: 9.5,
                                 letterSpacing: 0.4,
@@ -1558,7 +1593,7 @@ class _SettingsTileState extends State<SettingsTile> {
                       widget.subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11.5, color: kSettingsDim),
+                      style: TextStyle(fontSize: 11.5, color: t.dim),
                     ),
                   ],
                 ),
@@ -1567,7 +1602,7 @@ class _SettingsTileState extends State<SettingsTile> {
                   Icon(
                     Icons.chevron_right_rounded,
                     size: 20,
-                    color: kSettingsDim2,
+                    color: t.dim2,
                   ),
             ],
           ),
@@ -1629,14 +1664,15 @@ class _SettingsToggleTileState extends State<SettingsToggleTile> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     final bool lit = _focused || _hovered;
     // Snap, don't tween — per-keypress decoration lerps add cost on TV.
     return Container(
       decoration: BoxDecoration(
-        color: lit ? kSettingsPanel2 : Colors.transparent,
+        color: lit ? t.panel2 : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: _focused ? kSettingsAccent : Colors.transparent,
+          color: _focused ? t.accent : Colors.transparent,
           width: 1,
         ),
       ),
@@ -1654,7 +1690,7 @@ class _SettingsToggleTileState extends State<SettingsToggleTile> {
                 width: 34,
                 child: Icon(
                   widget.icon,
-                  color: lit ? kSettingsAccent2 : kSettingsDim,
+                  color: lit ? t.accent2 : t.dim,
                   size: 22,
                 ),
               ),
@@ -1676,7 +1712,7 @@ class _SettingsToggleTileState extends State<SettingsToggleTile> {
                       widget.subtitle,
                       maxLines: widget.subtitleMaxLines,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11.5, color: kSettingsDim),
+                      style: TextStyle(fontSize: 11.5, color: t.dim),
                     ),
                   ],
                 ),
@@ -1799,6 +1835,7 @@ class SettingsSelectDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     final SettingsSelectOption? selected = options
         .cast<SettingsSelectOption?>()
         .firstWhere((o) => o!.value == value, orElse: () => null);
@@ -1812,12 +1849,12 @@ class SettingsSelectDropdown extends StatelessWidget {
           isExpanded: true,
           // Variable item heights so subtitles fit in the open menu.
           itemHeight: null,
-          dropdownColor: kSettingsPanel2,
+          dropdownColor: t.panel2,
           borderRadius: BorderRadius.circular(14),
           // No focusColor: with an InputDecoration the SDK swaps the fill
           // color for it on focus, which would blank the panel fill. Focus
           // is carried by the themed focusedBorder instead.
-          icon: Icon(Icons.keyboard_arrow_down_rounded, color: kSettingsDim),
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: t.dim),
           decoration: const InputDecoration(),
           // Explicit color (not inherit): the dropdown renders its menu items
           // with this style directly, outside the page's DefaultTextStyle.
@@ -1847,7 +1884,7 @@ class SettingsSelectDropdown extends StatelessWidget {
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: o.value == value
-                              ? kSettingsAccent2
+                              ? t.accent2
                               : Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
@@ -1858,7 +1895,7 @@ class SettingsSelectDropdown extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11.5,
                             height: 1.35,
-                            color: kSettingsDim,
+                            color: t.dim,
                           ),
                         ),
                       ],
@@ -1880,7 +1917,7 @@ class SettingsSelectDropdown extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11.5,
                 height: 1.4,
-                color: kSettingsDim,
+                color: t.dim,
               ),
             ),
           ),
@@ -1918,11 +1955,13 @@ class SettingsInfoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       child: Row(
         children: [
-          SizedBox(width: 34, child: Icon(icon, color: kSettingsDim, size: 22)),
+          SizedBox(width: 34, child: Icon(icon, color: t.dim, size: 22)),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -1937,16 +1976,16 @@ class SettingsInfoTile extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: app.fade(app.core.tx, 0.05),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: kSettingsLine),
+              border: Border.all(color: t.line),
             ),
             child: Text(
               value,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: kSettingsDim,
+                color: t.dim,
               ),
             ),
           ),
@@ -2008,6 +2047,7 @@ class _SkeletonSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2015,14 +2055,14 @@ class _SkeletonSection extends StatelessWidget {
         const SizedBox(height: 12),
         Container(
           decoration: BoxDecoration(
-            color: kSettingsPanel,
+            color: t.panel,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: kSettingsLine),
+            border: Border.all(color: t.line),
           ),
           child: Column(
             children: [
               const _SkeletonTile(),
-              Divider(height: 1, color: kSettingsLine),
+              Divider(height: 1, color: t.line),
               const _SkeletonTile(),
             ],
           ),

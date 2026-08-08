@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
-import 'see_all_theme.dart';
 
 /// The Discover filter bar's "Save" action for an MDBList list opened from
 /// search. Saves the list into the user's own MDBList "My Lists" by CLONING it
@@ -102,20 +102,21 @@ class _MdblistSaveButtonState extends State<MdblistSaveButton> {
   }
 
   /// A saved bookmark reads in the accent; unsaved follows the same accent.
-  Color get _iconColor => kSeeAllAccent2;
+  Color get _iconColor => AppThemeScope.of(context).seeAll.accent2;
 
   /// Boxed pill matching StremioDropdown's non-quiet chip.
   Widget _buildBoxed(bool active) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
       decoration: BoxDecoration(
-        color: kSeeAllPanel,
+        color: app.seeAll.panel,
         borderRadius: BorderRadius.circular(11),
         border: Border.all(
           width: 2,
           color: _focused
-              ? kSeeAllAccent
-              : (active ? kSeeAllAccentBorder : kSeeAllLine),
+              ? app.seeAll.accent
+              : (active ? app.seeAll.accentBorder : app.seeAll.line),
         ),
       ),
       child: Row(
@@ -125,8 +126,8 @@ class _MdblistSaveButtonState extends State<MdblistSaveButton> {
           const SizedBox(width: 8),
           Text(
             widget.saved ? 'Saved' : 'Save',
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: app.core.tx,
               fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
@@ -138,21 +139,22 @@ class _MdblistSaveButtonState extends State<MdblistSaveButton> {
 
   /// Quiet segment matching the Discover-TV styling — icon-only.
   Widget _buildQuiet(bool active) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: _focused
-            ? kSeeAllAccent.withValues(alpha: 0.30)
+            ? app.fade(app.seeAll.accent, 0.30)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
           width: 1.2,
           color: _focused
-              ? kSeeAllAccent2.withValues(alpha: 0.45)
-              : (active ? kSeeAllAccentBorder : Colors.transparent),
+              ? app.fade(app.seeAll.accent2, 0.45)
+              : (active ? app.seeAll.accentBorder : Colors.transparent),
         ),
       ),
-      child: _leadingIcon(15, _focused ? Colors.white : _iconColor),
+      child: _leadingIcon(15, _focused ? app.core.tx : _iconColor),
     );
   }
 }

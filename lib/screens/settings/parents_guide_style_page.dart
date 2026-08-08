@@ -4,6 +4,7 @@ import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 class ParentsGuideStyleChoice {
   final String value;
@@ -83,6 +84,7 @@ class _ParentsGuideStylePageState extends State<ParentsGuideStylePage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Parents Guide',
@@ -125,7 +127,7 @@ class _ParentsGuideStylePageState extends State<ParentsGuideStylePage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ],
@@ -137,6 +139,7 @@ class _ParentsGuideStylePageState extends State<ParentsGuideStylePage> {
   }
 
   Widget _optionRow(ParentsGuideStyleChoice choice) {
+    final t = AppThemeScope.of(context).settings;
     final active = _style == choice.value;
     return SettingsTile(
       icon: active
@@ -145,7 +148,7 @@ class _ParentsGuideStylePageState extends State<ParentsGuideStylePage> {
       title: choice.label,
       subtitle: choice.subtitle,
       trailing: active
-          ? const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2)
+          ? Icon(Icons.check_rounded, size: 20, color: t.accent2)
           : const SizedBox.shrink(),
       onTap: () => _select(choice.value),
     );

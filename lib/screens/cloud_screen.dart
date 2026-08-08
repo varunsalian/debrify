@@ -4,11 +4,8 @@ import 'package:flutter/services.dart';
 import '../services/analytics_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
-
-/// Stremio-style palette shared with the Search tab: an indigo/purple accent
-/// over a deep near-black indigo base.
-const Color _kStremioAccent = Color(0xFF7B5CFF);
-const Color _kStremioBg = Color(0xFF0D0B1A);
+import '../theme/app_theme.dart';
+import '../theme/app_theme_scope.dart';
 
 /// Consolidated "Cloud" hub. Replaces the six separate provider nav tabs
 /// (Real Debrid / Torbox / PikPak / Premiumize / AllDebrid / WebDAV) with a
@@ -227,36 +224,25 @@ class _CloudScreenState extends State<CloudScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Scaffold(
-      backgroundColor: _kStremioBg,
+      backgroundColor: app.cloud.bg,
       // Same soft purple bloom over deep indigo the Search tab uses.
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0, -0.75),
-            radius: 1.35,
-            colors: [
-              Color(0xFF322A6B),
-              Color(0xFF1A1734),
-              Color(0xFF100E20),
-              _kStremioBg,
-            ],
-            stops: [0.0, 0.42, 0.72, 1.0],
-          ),
-        ),
+        decoration: BoxDecoration(gradient: app.cloud.hubWash),
         child: SafeArea(
           child: _loading
-              ? const Center(
-                  child: CircularProgressIndicator(color: _kStremioAccent))
+              ? Center(
+                  child: CircularProgressIndicator(color: app.cloud.accent))
               : _providers.isEmpty
-                  ? _emptyState()
-                  : _providerList(),
+                  ? _emptyState(app)
+                  : _providerList(app),
         ),
       ),
     );
   }
 
-  Widget _emptyState() {
+  Widget _emptyState(AppTheme app) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -269,18 +255,17 @@ class _CloudScreenState extends State<CloudScreen> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    _kStremioAccent.withValues(alpha: 0.22),
-                    _kStremioAccent.withValues(alpha: 0.06),
+                    app.fade(app.cloud.accent, 0.22),
+                    app.fade(app.cloud.accent, 0.06),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 shape: BoxShape.circle,
-                border: Border.all(
-                    color: _kStremioAccent.withValues(alpha: 0.35)),
+                border: Border.all(color: app.fade(app.cloud.accent, 0.35)),
               ),
-              child: const Icon(Icons.cloud_off_rounded,
-                  size: 40, color: _kStremioAccent),
+              child: Icon(Icons.cloud_off_rounded,
+                  size: 40, color: app.cloud.accent),
             ),
             const SizedBox(height: 20),
             const Text(
@@ -299,7 +284,7 @@ class _CloudScreenState extends State<CloudScreen> {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.4,
-                color: Colors.white.withValues(alpha: 0.55),
+                color: app.fade(app.core.tx, 0.55),
               ),
             ),
           ],
@@ -308,7 +293,7 @@ class _CloudScreenState extends State<CloudScreen> {
     );
   }
 
-  Widget _providerList() {
+  Widget _providerList(AppTheme app) {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640),
@@ -332,12 +317,12 @@ class _CloudScreenState extends State<CloudScreen> {
                 'Choose a provider to manage its files',
                 style: TextStyle(
                   fontSize: 14.5,
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: app.fade(app.core.tx, 0.5),
                 ),
               ),
             ),
             for (var i = 0; i < _providers.length; i++) ...[
-              _providerTile(_providers[i], i),
+              _providerTile(_providers[i], i, app),
               const SizedBox(height: 14),
             ],
           ],
@@ -346,7 +331,7 @@ class _CloudScreenState extends State<CloudScreen> {
     );
   }
 
-  Widget _providerTile(_CloudProviderInfo p, int index) {
+  Widget _providerTile(_CloudProviderInfo p, int index, AppTheme app) {
     return Focus(
       focusNode: index < _nodes.length ? _nodes[index] : null,
       onKeyEvent: (node, event) => _onTileKey(node, event, index),
@@ -365,7 +350,7 @@ class _CloudScreenState extends State<CloudScreen> {
               // focus traversal so it doesn't create a competing focus node.
               canRequestFocus: false,
               borderRadius: BorderRadius.circular(18),
-              hoverColor: Colors.white.withValues(alpha: 0.03),
+              hoverColor: app.fade(app.core.tx, 0.03),
               onTap: () => _openProvider(p.key),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 140),
@@ -376,12 +361,12 @@ class _CloudScreenState extends State<CloudScreen> {
                   gradient: LinearGradient(
                     colors: focused
                         ? [
-                            _kStremioAccent.withValues(alpha: 0.22),
-                            _kStremioAccent.withValues(alpha: 0.07),
+                            app.fade(app.cloud.accent, 0.22),
+                            app.fade(app.cloud.accent, 0.07),
                           ]
                         : [
-                            Colors.white.withValues(alpha: 0.055),
-                            Colors.white.withValues(alpha: 0.02),
+                            app.fade(app.core.tx, 0.055),
+                            app.fade(app.core.tx, 0.02),
                           ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -389,14 +374,14 @@ class _CloudScreenState extends State<CloudScreen> {
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
                     color: focused
-                        ? _kStremioAccent
-                        : Colors.white.withValues(alpha: 0.08),
+                        ? app.cloud.accent
+                        : app.fade(app.core.tx, 0.08),
                     width: focused ? 1.6 : 1,
                   ),
                   boxShadow: focused
                       ? [
                           BoxShadow(
-                            color: _kStremioAccent.withValues(alpha: 0.30),
+                            color: app.fade(app.cloud.accent, 0.30),
                             blurRadius: 22,
                             spreadRadius: -6,
                           ),
@@ -424,7 +409,7 @@ class _CloudScreenState extends State<CloudScreen> {
                       ),
                       child: Icon(
                         p.icon,
-                        color: Colors.white.withValues(alpha: 0.92),
+                        color: app.fade(app.core.tx, 0.92),
                         size: 25,
                       ),
                     ),
@@ -446,7 +431,7 @@ class _CloudScreenState extends State<CloudScreen> {
                             p.subtitle,
                             style: TextStyle(
                               fontSize: 12.5,
-                              color: Colors.white.withValues(alpha: 0.45),
+                              color: app.fade(app.core.tx, 0.45),
                             ),
                           ),
                         ],
@@ -454,8 +439,7 @@ class _CloudScreenState extends State<CloudScreen> {
                     ),
                     Icon(
                       Icons.chevron_right_rounded,
-                      color: Colors.white
-                          .withValues(alpha: focused ? 0.7 : 0.32),
+                      color: app.fade(app.core.tx, focused ? 0.7 : 0.32),
                     ),
                   ],
                 ),
