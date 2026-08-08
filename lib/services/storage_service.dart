@@ -760,7 +760,7 @@ class StorageService {
   static const String _detailPageStyleKey = 'detail_page_style';
 
   /// Every value storage will persist for the merged details page look
-  /// (Appearance → Details Page). All seven are accepted from day one — a
+  /// (Appearance → Details Page). Every known layout is accepted — a
   /// choice written by a newer build has to survive a downgrade rather than be
   /// silently rewritten to the default the first time an older build reads it.
   ///
@@ -775,6 +775,11 @@ class StorageService {
     'stage',
     'filmstrip',
     'console',
+    'vista',
+    'monolith',
+    'mosaic',
+    'halo',
+    'premiere',
   };
 
   /// Synchronous mirror, warmed in main() before runApp: `MergedDetailScreen`

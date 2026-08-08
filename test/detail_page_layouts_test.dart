@@ -106,6 +106,11 @@ void main() {
         'stage',
         'filmstrip',
         'console',
+        'vista',
+        'monolith',
+        'mosaic',
+        'halo',
+        'premiere',
       ]) {
         expect(StorageService.kDetailPageStyles.contains(s), isTrue);
       }

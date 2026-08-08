@@ -786,7 +786,10 @@ class DetailActionRow extends StatelessWidget {
 
     if (key == LogicalKeyboardKey.arrowRight) {
       if (xi < line.length - 1) {
-        line[xi + 1].requestFocus();
+        _focusAndReveal(
+          line[xi + 1],
+          ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        );
       } else {
         onRightEdge?.call();
       }
@@ -795,7 +798,12 @@ class DetailActionRow extends StatelessWidget {
     if (key == LogicalKeyboardKey.arrowLeft) {
       // Dead stop at a line's start: UP is the way out, and a geometric
       // fallback would dive into whatever sits below-left.
-      if (xi > 0) line[xi - 1].requestFocus();
+      if (xi > 0) {
+        _focusAndReveal(
+          line[xi - 1],
+          ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+        );
+      }
       return handled;
     }
 
@@ -821,8 +829,30 @@ class DetailActionRow extends StatelessWidget {
         nearest = n;
       }
     }
-    nearest.requestFocus();
+    _focusAndReveal(
+      nearest,
+      down
+          ? ScrollPositionAlignmentPolicy.keepVisibleAtEnd
+          : ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+    );
     return handled;
+  }
+
+  void _focusAndReveal(
+    FocusNode target,
+    ScrollPositionAlignmentPolicy alignmentPolicy,
+  ) {
+    target.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final targetContext = target.context;
+      if (targetContext == null) return;
+      Scrollable.ensureVisible(
+        targetContext,
+        alignment: 0.5,
+        alignmentPolicy: alignmentPolicy,
+        duration: Duration.zero,
+      );
+    });
   }
 }
 

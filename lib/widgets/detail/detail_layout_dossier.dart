@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../services/debrify_image_cache.dart';
 import '../../services/imdb_enrichment_service.dart';
 import '../episodes_panel.dart';
+import '../horizontal_mouse_wheel.dart';
 import '../parents_guide_section.dart';
 import 'detail_episode_cells.dart';
 import 'detail_identity.dart';
@@ -54,6 +55,9 @@ class _DetailDossierState extends State<DetailDossier> {
     debugLabel: 'dossier-right',
   );
   final ScrollController _listScroll = ScrollController();
+  final ScrollController _identityCastScroll = ScrollController();
+  final ScrollController _referenceCastScroll = ScrollController();
+  final ScrollController _referenceRecScroll = ScrollController();
 
   @override
   void dispose() {
@@ -63,6 +67,9 @@ class _DetailDossierState extends State<DetailDossier> {
     _leftScope.dispose();
     _rightScope.dispose();
     _listScroll.dispose();
+    _identityCastScroll.dispose();
+    _referenceCastScroll.dispose();
+    _referenceRecScroll.dispose();
     super.dispose();
   }
 
@@ -252,11 +259,15 @@ class _DetailDossierState extends State<DetailDossier> {
             const SizedBox(height: 9),
             SizedBox(
               height: 74,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: cast.length.clamp(0, 8),
-                separatorBuilder: (_, __) => const SizedBox(width: 11),
-                itemBuilder: (context, i) => _CastChip(member: cast[i]),
+              child: HorizontalMouseWheel(
+                controller: _identityCastScroll,
+                child: ListView.separated(
+                  controller: _identityCastScroll,
+                  scrollDirection: Axis.horizontal,
+                  itemCount: cast.length.clamp(0, 8),
+                  separatorBuilder: (_, __) => const SizedBox(width: 11),
+                  itemBuilder: (context, i) => _CastChip(member: cast[i]),
+                ),
               ),
             ),
           ],
@@ -394,11 +405,15 @@ class _DetailDossierState extends State<DetailDossier> {
           const SizedBox(height: 10),
           SizedBox(
             height: 74,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: cast.length.clamp(0, 12),
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, i) => _CastChip(member: cast[i]),
+            child: HorizontalMouseWheel(
+              controller: _referenceCastScroll,
+              child: ListView.separated(
+                controller: _referenceCastScroll,
+                scrollDirection: Axis.horizontal,
+                itemCount: cast.length.clamp(0, 12),
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, i) => _CastChip(member: cast[i]),
+              ),
             ),
           ),
           const SizedBox(height: 22),
@@ -435,13 +450,17 @@ class _DetailDossierState extends State<DetailDossier> {
           const SizedBox(height: 10),
           SizedBox(
             height: 156,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: recs.length.clamp(0, 12),
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (context, i) => _RecPoster(
-                rec: recs[i],
-                onTap: () => m.onRecommendationTap!(recs[i]),
+            child: HorizontalMouseWheel(
+              controller: _referenceRecScroll,
+              child: ListView.separated(
+                controller: _referenceRecScroll,
+                scrollDirection: Axis.horizontal,
+                itemCount: recs.length.clamp(0, 12),
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemBuilder: (context, i) => _RecPoster(
+                  rec: recs[i],
+                  onTap: () => m.onRecommendationTap!(recs[i]),
+                ),
               ),
             ),
           ),

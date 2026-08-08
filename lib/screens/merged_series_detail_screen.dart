@@ -21,6 +21,7 @@ import '../services/youtube_service.dart';
 import '../widgets/detail/detail_layout_console.dart';
 import '../widgets/detail/detail_layout_dossier.dart';
 import '../widgets/detail/detail_layout_marquee.dart';
+import '../widgets/detail/detail_layout_premium.dart';
 import '../widgets/detail/detail_layout_stage.dart';
 import '../widgets/detail/detail_style.dart';
 import '../widgets/detail/detail_model.dart';
@@ -28,6 +29,7 @@ import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/detail/theme/detail_themes.dart';
 import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/episodes_panel.dart';
+import '../widgets/horizontal_mouse_wheel.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../services/trakt/trakt_episode_model.dart';
@@ -234,6 +236,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// title/meta/summary above it), and focusing a lower section brings it fully
   /// into view — fixing the "can't scroll back up to the details" DPAD bug.
   final ScrollController _infoScroll = ScrollController();
+  final ScrollController _castRailScroll = ScrollController();
+  final ScrollController _recommendationRailScroll = ScrollController();
 
   /// The stable LEFT-crossing target for episodes: the info column's primary
   /// action (Play/Resume, or the source pill when Play is hidden). Pressing LEFT
@@ -513,6 +517,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     appRouteObserver.unsubscribe(this);
     MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     _infoScroll.dispose();
+    _castRailScroll.dispose();
+    _recommendationRailScroll.dispose();
     _leftEntryFocusNode.dispose();
     _infoPaneScope.dispose();
     _episodesPaneScope.dispose();
@@ -1026,7 +1032,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   DetailBodySpec get _bodySpec => switch (_style) {
     // Marquee and Stage are showcase layouts — the artwork is the point, and
     // each already paints the gradient its own identity block sits on.
-    'marquee' || 'stage' => const DetailBodySpec(ownScrim: true),
+    'marquee' || 'stage' || 'vista' || 'halo' => const DetailBodySpec(ownScrim: true),
     // A light theme cannot sit on the artwork at all: its own ground has to
     // cover it, or black-on-paper text lands on a photograph.
     _ => DetailBodySpec(inkGround: _themedBody && _theme.lightGround),
@@ -1074,6 +1080,46 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       case 'console':
         return themed(
           DetailConsole(
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'vista':
+        return themed(
+          DetailPremium(
+            kind: PremiumDetailKind.vista,
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'monolith':
+        return themed(
+          DetailPremium(
+            kind: PremiumDetailKind.monolith,
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'mosaic':
+        return themed(
+          DetailPremium(
+            kind: PremiumDetailKind.mosaic,
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'halo':
+        return themed(
+          DetailPremium(
+            kind: PremiumDetailKind.halo,
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'premiere':
+        return themed(
+          DetailPremium(
+            kind: PremiumDetailKind.premiere,
             model: _buildDetailModel(),
             episodesHost: _episodesHost,
           ),
@@ -2170,6 +2216,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             child: SizedBox(
               height: 92,
               child: _focusRail(
+                controller: _castRailScroll,
                 gap: 14,
                 cards: [for (final m in cast) _castTile(m)],
               ),
@@ -2193,6 +2240,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             child: SizedBox(
               height: 168,
               child: _focusRail(
+                controller: _recommendationRailScroll,
                 gap: 11,
                 cards: [for (final r in recs) _recCard(r)],
               ),
@@ -2228,22 +2276,30 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// RIGHT crosses deterministically into the episodes pane in the series
   /// two-pane layout (dead stop otherwise) — RIGHT is the sanctioned pane
   /// crossing, so it should work from a rail end too.
-  Widget _focusRail({required List<Widget> cards, required double gap}) {
+  Widget _focusRail({
+    required ScrollController controller,
+    required List<Widget> cards,
+    required double gap,
+  }) {
     final crossRight = (!_isMovie && _wide) ? _focusEpisodesPane : null;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            if (i > 0) SizedBox(width: gap),
-            _RailEdgeTrap(
-              trapLeft: i == 0,
-              trapRight: i == cards.length - 1,
-              onTrapRight: crossRight,
-              child: cards[i],
-            ),
+    return HorizontalMouseWheel(
+      controller: controller,
+      child: SingleChildScrollView(
+        controller: controller,
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (var i = 0; i < cards.length; i++) ...[
+              if (i > 0) SizedBox(width: gap),
+              _RailEdgeTrap(
+                trapLeft: i == 0,
+                trapRight: i == cards.length - 1,
+                onTrapRight: crossRight,
+                child: cards[i],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

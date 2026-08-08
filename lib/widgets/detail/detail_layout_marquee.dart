@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/debrify_image_cache.dart';
 import '../episodes_panel.dart';
+import '../horizontal_mouse_wheel.dart';
 import 'detail_episode_cells.dart';
 import 'detail_identity.dart';
 import 'detail_model.dart';
@@ -260,35 +261,42 @@ class _DetailMarqueeState extends State<DetailMarquee> {
           ),
         SizedBox(
           height: railH,
-          child: ListView.separated(
+          child: HorizontalMouseWheel(
             controller: _rail,
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: gutter),
-            itemCount: episodes.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 11),
-            itemBuilder: (context, i) {
-              final e = episodes[i];
-              return DetailEdgeTrap(
-                // Dead-stop at both ends: without this the cursor escapes to
-                // whatever is geometrically nearest, which is the action row.
-                trapLeft: i == 0,
-                trapRight: i == episodes.length - 1,
-                trapUp: true,
-                onUp: () =>
-                    many ? _seasonNode.requestFocus() : m.focus.focusEntry(),
-                child: DetailEpisodeCard(
-                  episode: e,
-                  fallbackImage: view.showImageUrl,
-                  progress: view.progressOf(e),
-                  isNext: view.isNext(e),
-                  focusNode: _cellNodes.of(view.generation, e.season, e.number),
-                  onPlay: () => view.play(e),
-                  onOptions: () => view.options(e),
-                  width: cardW,
-                  captionHeight: captionH,
-                ),
-              );
-            },
+            child: ListView.separated(
+              controller: _rail,
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: gutter),
+              itemCount: episodes.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 11),
+              itemBuilder: (context, i) {
+                final e = episodes[i];
+                return DetailEdgeTrap(
+                  // Dead-stop at both ends: without this the cursor escapes to
+                  // whatever is geometrically nearest, which is the action row.
+                  trapLeft: i == 0,
+                  trapRight: i == episodes.length - 1,
+                  trapUp: true,
+                  onUp: () =>
+                      many ? _seasonNode.requestFocus() : m.focus.focusEntry(),
+                  child: DetailEpisodeCard(
+                    episode: e,
+                    fallbackImage: view.showImageUrl,
+                    progress: view.progressOf(e),
+                    isNext: view.isNext(e),
+                    focusNode: _cellNodes.of(
+                      view.generation,
+                      e.season,
+                      e.number,
+                    ),
+                    onPlay: () => view.play(e),
+                    onOptions: () => view.options(e),
+                    width: cardW,
+                    captionHeight: captionH,
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -356,22 +364,25 @@ class _DetailMarqueeState extends State<DetailMarquee> {
         ),
         SizedBox(
           height: cardW * 3 / 2 + 6 + captionH,
-          child: ListView.separated(
+          child: HorizontalMouseWheel(
             controller: _rail,
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: gutter),
-            itemCount: recs.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (context, i) => DetailEdgeTrap(
-              trapLeft: i == 0,
-              trapRight: i == recs.length - 1,
-              trapUp: true,
-              onUp: () => m.focus.focusEntry(),
-              child: _RecCard(
-                rec: recs[i],
-                width: cardW,
-                focusNode: _recNode(i),
-                onTap: () => m.onRecommendationTap!(recs[i]),
+            child: ListView.separated(
+              controller: _rail,
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: gutter),
+              itemCount: recs.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) => DetailEdgeTrap(
+                trapLeft: i == 0,
+                trapRight: i == recs.length - 1,
+                trapUp: true,
+                onUp: () => m.focus.focusEntry(),
+                child: _RecCard(
+                  rec: recs[i],
+                  width: cardW,
+                  focusNode: _recNode(i),
+                  onTap: () => m.onRecommendationTap!(recs[i]),
+                ),
               ),
             ),
           ),

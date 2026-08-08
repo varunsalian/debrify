@@ -188,8 +188,8 @@ class _DetailThemePageState extends State<DetailThemePage> {
           Expanded(
             child: Text(
               'Your details page is set to Classic, which keeps its own look. '
-              'Pick Marquee, Dossier, Stage or Console under Details Page to '
-              'see a theme applied.',
+              'Pick any alternate layout under Details Page to see a theme '
+              'applied.',
               style: TextStyle(
                 fontSize: 12.5,
                 height: 1.4,

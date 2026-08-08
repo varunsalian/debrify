@@ -16,7 +16,7 @@ class DetailPageStyleChoice {
 /// Every look this build can actually draw.
 ///
 /// Deliberately narrower than [StorageService.kDetailPageStyles], which accepts
-/// all seven so a choice written by a newer build survives a downgrade. This set
+/// every known value so a choice written by a newer build survives a downgrade. This set
 /// grows as each layout lands; the picker lists only these, and dispatch, the
 /// Settings row subtitle and the picker's own selected state all read
 /// [effectiveDetailPageStyle] rather than the raw stored value — otherwise a
@@ -27,6 +27,11 @@ const Set<String> kDetailPageStylesShipped = {
   'dossier',
   'stage',
   'console',
+  'vista',
+  'monolith',
+  'mosaic',
+  'halo',
+  'premiere',
 };
 
 /// The stored value narrowed to what this build can render. Never persists —
@@ -69,6 +74,31 @@ const List<DetailPageStyleChoice> kDetailPageStyleChoices = [
     'console',
     'Console',
     'Resume first — a big continue card, then the season as a grid',
+  ),
+  DetailPageStyleChoice(
+    'vista',
+    'Vista',
+    'Cinematic artwork above a polished, glass-like episode shelf',
+  ),
+  DetailPageStyleChoice(
+    'monolith',
+    'Monolith',
+    'A monumental title canvas beside a deep vertical season deck',
+  ),
+  DetailPageStyleChoice(
+    'mosaic',
+    'Mosaic',
+    'Premium bento tiles for identity, metadata, guide and episodes',
+  ),
+  DetailPageStyleChoice(
+    'halo',
+    'Halo',
+    'Centered cinematic identity with a luminous floating content dock',
+  ),
+  DetailPageStyleChoice(
+    'premiere',
+    'Premiere',
+    'Editorial opening-night typography with an episode ledger',
   ),
 ];
 
