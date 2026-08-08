@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../services/storage_service.dart';
 import '../services/tv_voice_input.dart';
+import '../services/tvos_keyboard_signal.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import 'tv_keyboard.dart';
@@ -294,9 +295,19 @@ class TvTextFieldState extends State<TvTextField> {
       StorageService.tvKeyboardEnabledCached &&
       widget.enabled;
 
+  /// Cancels the Apple TV "editing finished" subscription.
+  VoidCallback? _tvosEndEditing;
+
+  /// Text at the moment the platform keyboard opened, so a dismissal that
+  /// changed nothing doesn't fire a submit.
+  String? _tvosTextAtEditStart;
+
   @override
   void initState() {
     super.initState();
+    if (PlatformUtil.isTvOS) {
+      _tvosEndEditing = TvosKeyboardSignal.listen(_handleTvosEndEditing);
+    }
     _shellNode.addListener(_handleFocusChange);
     _editNode.addListener(_handleFocusChange);
   }
@@ -314,6 +325,7 @@ class TvTextFieldState extends State<TvTextField> {
 
   @override
   void dispose() {
+    _tvosEndEditing?.call();
     _popGuardTimer?.cancel();
     _noticeTimer?.cancel();
     _cancelVoiceSession();
@@ -328,6 +340,9 @@ class TvTextFieldState extends State<TvTextField> {
   }
 
   void _handleFocusChange() {
+    if (PlatformUtil.isTvOS && _shellNode.hasFocus && !_tvShell) {
+      _tvosTextAtEditStart = widget.controller.text;
+    }
     // Editing must not outlive the editor's focus: if a background focus grab
     // (or a route push) moves focus elsewhere, take the keyboard down instead
     // of leaving a zombie overlay. hasFocus on the shell includes the editor
@@ -443,6 +458,7 @@ class TvTextFieldState extends State<TvTextField> {
     _removeOverlay();
     _kb?.dispose();
     _kb = null;
+    _tvosTextAtEditStart = widget.controller.text;
     setState(() => _useSystemIme = true);
     _imeSwitch = true;
     _editNode.unfocus();
@@ -724,14 +740,24 @@ class TvTextFieldState extends State<TvTextField> {
   /// phone-remote app) — treat it like our Search key: session over, back to
   /// the shell.
   void _onFieldSubmitted(String text) {
-    if (_tvShell) {
-      _endEdit();
-      if (_useSystemIme) {
-        setState(() => _useSystemIme = false);
-        _shellNode.requestFocus();
-      }
-    }
+    _endPlatformImeSession();
     widget.onSubmitted?.call(text);
+  }
+
+  /// Close out a platform-IME hand-off and hand the shell back its focus.
+  ///
+  /// Separate from [_onFieldSubmitted] because the session can end WITHOUT a
+  /// submission — on Apple TV the keyboard can be dismissed having changed
+  /// nothing — and that still has to unwind, or the field stays in hand-off
+  /// mode with the in-app keyboard gone. Nothing else unwinds it there: the
+  /// dismissal produces no Dart focus change.
+  void _endPlatformImeSession() {
+    if (!_tvShell) return;
+    _endEdit();
+    if (_useSystemIme) {
+      setState(() => _useSystemIme = false);
+      _shellNode.requestFocus();
+    }
   }
 
   // ------------------------------------------------------------------- keys
@@ -965,6 +991,49 @@ class TvTextFieldState extends State<TvTextField> {
       },
       child: field,
     );
+  }
+
+  /// Apple TV finished a platform-keyboard session — the only "submit" signal
+  /// the OS gives us (see [TvosKeyboardSignal]).
+  ///
+  /// Deliberately narrow, because the signal is app-wide and cannot tell a
+  /// commit from a cancel:
+  /// * only the field actually being edited reacts, so one keyboard session
+  ///   can't submit every mounted field;
+  /// * only when the platform keyboard was really in play — with the Debrify
+  ///   keyboard on, the field is `readOnly` and never opens a platform
+  ///   session, so this must not fire there;
+  /// * only when the text CHANGED during the session, so backing out of a
+  ///   field you merely looked at stays silent.
+  void _handleTvosEndEditing() {
+    if (!mounted || !PlatformUtil.isTvOS) return;
+    final usingPlatformKeyboard = !_tvShell || _useSystemIme;
+    if (!usingPlatformKeyboard) return;
+    final node = _tvShell ? _editNode : _shellNode;
+    if (!node.hasFocus) return;
+    final text = widget.controller.text;
+    final changed = text != _tvosTextAtEditStart;
+    // This notification IS the session boundary, so the baseline moves whether
+    // or not we submit. Updating it only on submit left it stale: tvOS closes
+    // its keyboard without changing Flutter focus, so nothing else would have
+    // re-seeded it before the next session.
+    _tvosTextAtEditStart = text;
+    if (!changed) {
+      // Nothing typed, so nothing to submit — but a hand-off still has to be
+      // closed out, or it stays stuck with the in-app keyboard gone.
+      _endPlatformImeSession();
+      return;
+    }
+    // Deliberately no "text is empty" test. Clearing a field and confirming is
+    // a real submission — it's how you reset a search — and skipping it also
+    // used to leave the baseline behind.
+    //
+    // Route through the normal editor-action path rather than calling the
+    // caller's onSubmitted directly: that is what ends the edit session and
+    // drops _useSystemIme. Without it a hand-off to the platform IME never
+    // came back, because the dismissal produces no Dart focus change to
+    // unwind it.
+    _onFieldSubmitted(text);
   }
 
   @override

@@ -5,6 +5,7 @@ import Flutter
 class AppDelegate: FlutterAppDelegate {
     /// Retained so the channel outlives `application(_:didFinishLaunchingWithOptions:)`.
     private var logChannel: FlutterMethodChannel?
+    private var keyboardChannel: FlutterMethodChannel?
 
     override func application(
         _ application: UIApplication,
@@ -45,6 +46,37 @@ class AppDelegate: FlutterAppDelegate {
         self.logChannel = logChannel
 
         GeneratedPluginRegistrant.register(with: self)
+
+        // Apple TV's keyboard never tells Flutter the user finished.
+        //
+        // The engine raises a submit action from exactly one place — when the
+        // platform inserts a literal "\n" (FlutterTextInputPlugin.mm,
+        // -shouldChangeTextInRange:replacementText:). That is the iOS inline
+        // keyboard's contract. tvOS presents a full-screen keyboard whose
+        // action button commits and dismisses WITHOUT inserting anything, so
+        // the trigger never fires and `onSubmitted` never runs: every text
+        // field on the platform is a dead end.
+        //
+        // UIKit does post the fact, though — verified on an Apple TV 4K
+        // (tvOS 26.6): pressing the action key emits exactly one
+        // UITextFieldTextDidEndEditingNotification, and typing emits none.
+        // Bridge it to Dart, which treats it as "editing finished".
+        //
+        // Caveat, measured rather than assumed: dismissing with the remote's
+        // BACK button emits the SAME notification, so commit and cancel are
+        // indistinguishable here. Dart side decides what that's worth.
+        let keyboardChannel = FlutterMethodChannel(
+            name: "debrify/tvkeyboard",
+            binaryMessenger: flutterViewController.binaryMessenger)
+        self.keyboardChannel = keyboardChannel
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("UITextFieldTextDidEndEditingNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak keyboardChannel] _ in
+            keyboardChannel?.invokeMethod("endEditing", arguments: nil)
+        }
+
 
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
