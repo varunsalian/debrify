@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../models/gesture_state.dart';
+import '../services/playback_ui_clock.dart';
 
 /// The television transport bar for the Flutter player.
 ///
@@ -20,8 +22,7 @@ class TvControls extends StatefulWidget {
     super.key,
     required this.title,
     required this.subtitle,
-    required this.duration,
-    required this.position,
+    required this.clock,
     required this.isPlaying,
     required this.isLive,
     required this.isTransitioning,
@@ -63,8 +64,7 @@ class TvControls extends StatefulWidget {
 
   final String title;
   final String? subtitle;
-  final Duration duration;
-  final Duration position;
+  final ValueListenable<PlaybackUiClockValue> clock;
   final bool isPlaying;
 
   /// Live streams have nothing to seek and no meaningful speed, so the bar
@@ -196,60 +196,63 @@ class _TvControlsState extends State<TvControls> {
       child: Align(
         alignment: Alignment.bottomCenter,
         child: Container(
-        // A real scrim. The bar is only as tall as its content, so without
-        // generous top padding inside the gradient the title lands on bright
-        // video and the whole thing reads as unfinished.
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0x00000000),
-              Color(0x66000000),
-              Color(0xD9000000),
-              Color(0xF2000000),
-            ],
-            stops: [0.0, 0.28, 0.62, 1.0],
+          // A real scrim. The bar is only as tall as its content, so without
+          // generous top padding inside the gradient the title lands on bright
+          // video and the whole thing reads as unfinished.
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0x00000000),
+                Color(0x66000000),
+                Color(0xD9000000),
+                Color(0xF2000000),
+              ],
+              stops: [0.0, 0.28, 0.62, 1.0],
+            ),
           ),
-        ),
-        padding: const EdgeInsets.fromLTRB(56, 52, 56, 18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (widget.infoPanel != null) widget.infoPanel!,
-            _identityRow(),
-            if (showProgress) ...[
-              const SizedBox(height: 6),
-              _TvProgressRow(
-                focusNode: widget.progressFocusNode,
-                focusable: widget.progressFocusable,
-                position: widget.position,
-                duration: widget.duration,
-                preview: widget.scrubPreview,
-                accent: accent,
-                format: _fmt,
-              ),
-            ],
-            const SizedBox(height: 8),
-            _transportRow(),
-            // Fixed height so the row never jumps as the label appears.
-            // Reserved height so the row never shifts as the label fades in.
-            SizedBox(
-              height: 14,
-              child: AnimatedOpacity(
-                opacity: _focusedLabel == null ? 0 : 1,
-                duration: const Duration(milliseconds: 120),
-                child: Text(
-                  _focusedLabel ?? '',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 11.5,
-                    letterSpacing: 0.3,
+          padding: const EdgeInsets.fromLTRB(56, 52, 56, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.infoPanel != null) widget.infoPanel!,
+              _identityRow(),
+              if (showProgress) ...[
+                const SizedBox(height: 6),
+                ValueListenableBuilder<PlaybackUiClockValue>(
+                  valueListenable: widget.clock,
+                  builder: (context, value, _) => _TvProgressRow(
+                    focusNode: widget.progressFocusNode,
+                    focusable: widget.progressFocusable,
+                    position: value.position,
+                    duration: value.duration,
+                    preview: widget.scrubPreview,
+                    accent: accent,
+                    format: _fmt,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              _transportRow(),
+              // Fixed height so the row never jumps as the label appears.
+              // Reserved height so the row never shifts as the label fades in.
+              SizedBox(
+                height: 14,
+                child: AnimatedOpacity(
+                  opacity: _focusedLabel == null ? 0 : 1,
+                  duration: const Duration(milliseconds: 120),
+                  child: Text(
+                    _focusedLabel ?? '',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11.5,
+                      letterSpacing: 0.3,
+                    ),
                   ),
                 ),
               ),
-            ),
             ],
           ),
         ),
@@ -306,8 +309,11 @@ class _TvControlsState extends State<TvControls> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.bedtime_rounded,
-                    size: 13, color: Colors.white70),
+                const Icon(
+                  Icons.bedtime_rounded,
+                  size: 13,
+                  color: Colors.white70,
+                ),
                 const SizedBox(width: 5),
                 Text(
                   widget.sleepTimerLabel!,
@@ -352,8 +358,11 @@ class _TvControlsState extends State<TvControls> {
     if (widget.isLive) {
       // Live dock order follows the native player: identity/tracks first, the
       // channel pair around play/pause, then the live-only tools.
-      add(Icons.skip_previous_rounded, 'Channel −',
-          widget.onPreviousChannel ?? widget.onPrevious);
+      add(
+        Icons.skip_previous_rounded,
+        'Channel −',
+        widget.onPreviousChannel ?? widget.onPrevious,
+      );
       add(
         widget.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
         widget.isPlaying ? 'Pause' : 'Play',
@@ -361,15 +370,30 @@ class _TvControlsState extends State<TvControls> {
         primary: true,
         node: widget.playPauseFocusNode,
       );
-      add(Icons.skip_next_rounded, 'Channel +',
-          widget.onNextChannel ?? widget.onNext);
-      add(Icons.subtitles_rounded, 'Subtitles & Audio', widget.onShowTracks,
-          option: true);
-      add(Icons.grid_view_rounded, 'Guide',
-          widget.onShowGuide ?? widget.onShowIptvChannels, option: true);
+      add(
+        Icons.skip_next_rounded,
+        'Channel +',
+        widget.onNextChannel ?? widget.onNext,
+      );
+      add(
+        Icons.subtitles_rounded,
+        'Subtitles & Audio',
+        widget.onShowTracks,
+        option: true,
+      );
+      add(
+        Icons.grid_view_rounded,
+        'Guide',
+        widget.onShowGuide ?? widget.onShowIptvChannels,
+        option: true,
+      );
       add(Icons.dns_rounded, 'Sources', widget.onShowSources, option: true);
-      add(Icons.aspect_ratio_rounded, _aspectLabel(), widget.onAspect,
-          option: true);
+      add(
+        Icons.aspect_ratio_rounded,
+        _aspectLabel(),
+        widget.onAspect,
+        option: true,
+      );
       if (widget.hasRecord) {
         add(
           widget.isRecording
@@ -381,8 +405,12 @@ class _TvControlsState extends State<TvControls> {
           option: true,
         );
       }
-      add(Icons.bedtime_rounded, 'Sleep timer', widget.onSleepTimer,
-          option: true);
+      add(
+        Icons.bedtime_rounded,
+        'Sleep timer',
+        widget.onSleepTimer,
+        option: true,
+      );
     } else {
       add(Icons.skip_previous_rounded, 'Previous', widget.onPrevious);
       add(Icons.replay_10_rounded, 'Back 10s', () => _nudge(-10));
@@ -395,17 +423,37 @@ class _TvControlsState extends State<TvControls> {
       );
       add(Icons.forward_10_rounded, 'Forward 10s', () => _nudge(10));
       add(Icons.skip_next_rounded, 'Next', widget.onNext);
-      add(Icons.subtitles_rounded, 'Subtitles & Audio', widget.onShowTracks,
-          option: true);
-      add(Icons.playlist_play_rounded, 'Episodes', widget.onShowPlaylist,
-          option: true);
+      add(
+        Icons.subtitles_rounded,
+        'Subtitles & Audio',
+        widget.onShowTracks,
+        option: true,
+      );
+      add(
+        Icons.playlist_play_rounded,
+        'Episodes',
+        widget.onShowPlaylist,
+        option: true,
+      );
       add(Icons.dns_rounded, 'Sources', widget.onShowSources, option: true);
-      add(Icons.speed_rounded, '${widget.speed}x speed', widget.onSpeed,
-          option: true);
-      add(Icons.aspect_ratio_rounded, _aspectLabel(), widget.onAspect,
-          option: true);
-      add(Icons.bedtime_rounded, 'Sleep timer', widget.onSleepTimer,
-          option: true);
+      add(
+        Icons.speed_rounded,
+        '${widget.speed}x speed',
+        widget.onSpeed,
+        option: true,
+      );
+      add(
+        Icons.aspect_ratio_rounded,
+        _aspectLabel(),
+        widget.onAspect,
+        option: true,
+      );
+      add(
+        Icons.bedtime_rounded,
+        'Sleep timer',
+        widget.onSleepTimer,
+        option: true,
+      );
     }
 
     // Transport on the left, options on the right — the layout every OTT player
@@ -422,9 +470,9 @@ class _TvControlsState extends State<TvControls> {
           const Spacer(),
           if (!widget.hideOptions)
             for (int i = 0; i < options.length; i++) ...[
-            if (i > 0) const SizedBox(width: 10),
-            options[i],
-          ],
+              if (i > 0) const SizedBox(width: 10),
+              options[i],
+            ],
         ],
       ),
     );
@@ -433,26 +481,27 @@ class _TvControlsState extends State<TvControls> {
   /// Same wording the touch bar uses, so the two never disagree about what a
   /// mode is called.
   String _aspectLabel() => switch (widget.aspectMode) {
-        AspectMode.contain => 'Contain',
-        AspectMode.cover => 'Cover',
-        AspectMode.fitWidth => 'Fit Width',
-        AspectMode.fitHeight => 'Fit Height',
-        AspectMode.aspect16_9 => '16:9',
-        AspectMode.aspect4_3 => '4:3',
-        AspectMode.aspect21_9 => '21:9',
-        AspectMode.aspect1_1 => '1:1',
-        AspectMode.aspect3_2 => '3:2',
-        AspectMode.aspect5_4 => '5:4',
-      };
+    AspectMode.contain => 'Contain',
+    AspectMode.cover => 'Cover',
+    AspectMode.fitWidth => 'Fit Width',
+    AspectMode.fitHeight => 'Fit Height',
+    AspectMode.aspect16_9 => '16:9',
+    AspectMode.aspect4_3 => '4:3',
+    AspectMode.aspect21_9 => '21:9',
+    AspectMode.aspect1_1 => '1:1',
+    AspectMode.aspect3_2 => '3:2',
+    AspectMode.aspect5_4 => '5:4',
+  };
 
   /// The ±10 buttons exist for discoverability; the remote's LEFT/RIGHT does
   /// the same thing without raising the bar. Routed through the screen's seek
   /// so trackers and resume see one seek, not two.
   void _nudge(int seconds) {
-    final target = widget.position + Duration(seconds: seconds);
+    final value = widget.clock.value;
+    final target = value.position + Duration(seconds: seconds);
     final clamped = target < Duration.zero
         ? Duration.zero
-        : (target > widget.duration ? widget.duration : target);
+        : (target > value.duration ? value.duration : target);
     _TvControlsSeek.of(context)?.call(clamped);
   }
 }
@@ -464,9 +513,8 @@ class _TvControlsSeek extends InheritedWidget {
 
   final ValueChanged<Duration> seek;
 
-  static ValueChanged<Duration>? of(BuildContext context) => context
-      .dependOnInheritedWidgetOfExactType<_TvControlsSeek>()
-      ?.seek;
+  static ValueChanged<Duration>? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_TvControlsSeek>()?.seek;
 
   @override
   bool updateShouldNotify(_TvControlsSeek oldWidget) => seek != oldWidget.seek;
@@ -474,11 +522,7 @@ class _TvControlsSeek extends InheritedWidget {
 
 /// Wraps [TvControls] with the seek callback its ±10 buttons need.
 class TvControlsScope extends StatelessWidget {
-  const TvControlsScope({
-    super.key,
-    required this.seek,
-    required this.child,
-  });
+  const TvControlsScope({super.key, required this.seek, required this.child});
 
   final ValueChanged<Duration> seek;
   final Widget child;
@@ -554,7 +598,8 @@ class _TvIconButtonState extends State<_TvIconButton> {
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
           final k = event.logicalKey;
-          final activates = k == LogicalKeyboardKey.enter ||
+          final activates =
+              k == LogicalKeyboardKey.enter ||
               k == LogicalKeyboardKey.numpadEnter ||
               k == LogicalKeyboardKey.select ||
               k == LogicalKeyboardKey.gameButtonA ||
@@ -589,7 +634,9 @@ class _TvIconButtonState extends State<_TvIconButton> {
                 shape: BoxShape.circle,
                 color: _focused
                     ? Colors.white
-                    : Colors.white.withValues(alpha: widget.primary ? 0.20 : 0.12),
+                    : Colors.white.withValues(
+                        alpha: widget.primary ? 0.20 : 0.12,
+                      ),
                 border: _focused
                     ? Border.all(color: Colors.white, width: 2)
                     : null,
@@ -608,7 +655,9 @@ class _TvIconButtonState extends State<_TvIconButton> {
                 size: widget.primary ? 24 : 18,
                 color: _focused
                     ? const Color(0xFF0B0B0F)
-                    : (widget.active ? accent : Colors.white.withValues(alpha: 0.92)),
+                    : (widget.active
+                          ? accent
+                          : Colors.white.withValues(alpha: 0.92)),
               ),
             ),
           ),
@@ -670,8 +719,10 @@ class _TvProgressRowState extends State<_TvProgressRow> {
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.72),
                   borderRadius: BorderRadius.circular(16),

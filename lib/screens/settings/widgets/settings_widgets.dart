@@ -145,6 +145,11 @@ abstract final class SettingsRows {
     title: 'Rendering',
     subtitle: '',
   );
+  static const tvHeroArtworkQuality = SettingsRowContent(
+    icon: Icons.photo_size_select_large_rounded,
+    title: 'Hero Artwork Quality',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen layout) — passed per call site.
   static const tvHomeStyle = SettingsRowContent(
     icon: Icons.view_quilt_rounded,
@@ -179,6 +184,12 @@ abstract final class SettingsRows {
   static const iptvAppearance = SettingsRowContent(
     icon: Icons.style_rounded,
     title: 'IPTV Appearance',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (style + palette) — passed per call site.
+  static const playerDock = SettingsRowContent(
+    icon: Icons.tune_rounded,
+    title: 'Player Controls',
     subtitle: '',
   );
   // Subtitle is dynamic (the chosen style) — passed per call site.

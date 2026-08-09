@@ -63,6 +63,7 @@ import 'video_player/widgets/vertical_hud.dart';
 import 'video_player/widgets/aspect_ratio_hud.dart';
 import 'video_player/widgets/netflix_radio_tile.dart';
 import 'video_player/widgets/controls.dart';
+import 'video_player/widgets/dock_style.dart';
 import 'video_player/widgets/tv_controls.dart';
 import 'video_player/widgets/tv_tappable.dart';
 import 'video_player/widgets/channel_badge.dart';
@@ -82,12 +83,16 @@ import 'video_player/widgets/source_sheet.dart';
 import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
+import 'video_player/services/playback_ui_clock.dart';
+import 'video_player/services/skip_segment_ui_controller.dart';
+import 'video_player/services/android_renderer_startup_fallback.dart';
 import 'video_player/widgets/subtitle_line_picker_overlay.dart';
 import 'video_player/widgets/skip_segment_button.dart';
 import 'video_player/widgets/sleep_timer_sheet.dart';
 import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
+import '../models/android_video_renderer_mode.dart';
 import '../services/series_source_fetcher.dart';
 import '../services/stremio_service.dart';
 import '../services/stremio_subtitle_service.dart';
@@ -332,6 +337,13 @@ class VideoPlayerScreen extends StatefulWidget {
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     with TickerProviderStateMixin {
+  static const MethodChannel _tvReleaseLogChannel = MethodChannel(
+    'debrify/tvlog',
+  );
+  static const MethodChannel _androidPlayerDiagnosticChannel = MethodChannel(
+    'debrify/player_diagnostics',
+  );
+
   late mk.Player _player;
   // _player is assigned partway through the async _initializePlayer(); if the
   // user backs out before that (or init throws first), dispose() must not
@@ -343,6 +355,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// [_attachAudioEffectSession] / [_releaseAudioEffectSession].
   int? _audioEffectSessionId;
   late mkv.VideoController _videoController;
+  AndroidVideoRendererMode _androidVideoRendererMode =
+      AndroidVideoRendererMode.automatic;
+  int _playerInstanceGeneration = 0;
+  bool _playerPresentationInitialized = false;
+
+  // Direct Surface is the efficient Android default, but a vendor codec or
+  // surface implementation may reject it. The startup guard is deliberately
+  // limited to the first successfully decoded item in this screen: once the
+  // output has attached, later network/media failures must not be blamed on the
+  // renderer. A confirmed renderer failure recreates the whole player once.
+  bool _directSurfaceValidatedForSession = false;
+  bool _rendererFallbackInProgress = false;
+  int _rendererStartupGuardToken = 0;
+  int _rendererStartupValidationGeneration = -1;
+  mk.Media? _activeOpenedMedia;
+  bool _activeMediaShouldPlay = false;
+  bool _activeMediaUserPaused = false;
   final math.Random _random = math.Random();
   SeriesPlaylist? _cachedSeriesPlaylist;
   List<PlaylistEntry>? _activePlaylist;
@@ -455,7 +484,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Timer? _hideTimer;
 
-
   // ---- Television transport bar -------------------------------------------
   // The TV bar is a separate widget with real focus; these are the pieces the
   // SCREEN has to own, because raising the bar, restoring focus and deciding
@@ -476,7 +504,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _iptvZapBannerOwnsIdentity ||
       widget.hideSeekbar ||
       _duration <= Duration.zero;
-
 
   /// Cinema scrub, matching the native TV player: holding LEFT/RIGHT pauses
   /// playback and previews a destination that OK confirms and BACK cancels.
@@ -579,6 +606,113 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// The in-player IPTV guide look, read once at launch (see
   /// [PlayerGuideStyle]). Classic keeps every legacy paint path verbatim.
   PlayerGuideStyle _playerGuideStyle = PlayerGuideStyle.classic;
+
+  // Player dock prefs, read once at launch alongside the guide style.
+  PlayerDockStyle _dockStyle = PlayerDockStyle.classic;
+  PlayerDockPalette _dockPalette = PlayerDockPalette.ultraviolet;
+  PlayerDockSize _dockSize = PlayerDockSize.auto;
+
+  /// The styled dock's measured height. Six host behaviours below assume a
+  /// FIXED dock height (the skip button's 160/28, four 72lp gesture bands and
+  /// the PikPak overlay's 80); under `two_tier` the dock is variable, so they
+  /// read this instead. Seeded to the full viewport height so the very first
+  /// frame can only over-protect — under-protection is the actual bug.
+  /// `classic` never publishes and every consumer keeps its literal.
+  final ValueNotifier<double> _dockExtent = ValueNotifier<double>(0);
+
+  /// Measured height of the IPTV info panel, which the dock's vertical budget
+  /// must reserve. Starts at the conservative bound and is corrected by the
+  /// panel's own reporter on the next frame.
+  double _infoPanelHeight = DockLayoutInput.kInfoPanelBound;
+
+  /// The panel's STRUCTURAL signature — which rows exist, not what they say.
+  /// Every row is bounded to one line, so content cannot change the height;
+  /// only presence can. Recomputed each build, and a change resets the cached
+  /// height so a taller panel can never be under-reserved.
+  ///
+  /// Deliberately excludes `_iptvZapClock`: that ticks every second and would
+  /// otherwise reset the cache continuously.
+  String get _infoPanelSignature {
+    final channel = _iptvZapChannel;
+    if (channel == null || !_iptvZapBannerOwnsIdentity) return '-';
+    final epg = _iptvZapEpg;
+    return [
+      _playerGuideStyle.name,
+      channel.channelNumber != null ? 'n' : '',
+      (channel.group?.isNotEmpty ?? false) ? 'g' : '',
+      channel.logoUrl != null ? 'l' : '',
+      epg?.now != null ? 'w' : '',
+      epg?.next != null ? 'x' : '',
+      _iptvZapEpgLoading ? 'L' : '',
+      _recordingActiveNow ? 'r' : '',
+    ].join('|');
+  }
+
+  String _lastInfoPanelSignature = '';
+
+  /// Bumped on a panel STRUCTURE change. Separate from the dock generation:
+  /// resetting `_infoPanelHeight` alone was not enough — if the newly measured
+  /// height happened to equal the reporter's cached value it would suppress
+  /// the callback and the budget would stay stuck at the 200lp bound.
+  int _infoPanelGeneration = 0;
+
+  /// Bumped whenever the dock's geometry inputs change. A measurement
+  /// callback captures this and is discarded if it comes back stale, so a
+  /// post-frame report from the previous layout cannot overwrite a newer one.
+  int _dockGeometryGeneration = 0;
+
+  /// Everything that can change the dock's height without the dock itself
+  /// changing: the viewport, the safe-area insets, the text scaler, the
+  /// chosen style and size, and the two flags that add or remove whole rows.
+  String _dockGeometrySignature(MediaQueryData media) => [
+    media.size.width.round(),
+    media.size.height.round(),
+    media.padding.top.round(),
+    media.padding.bottom.round(),
+    media.textScaler.scale(100).round(),
+    _dockStyle.name,
+    _dockSize.name,
+    widget.hideOptions,
+    widget.hideSeekbar,
+  ].join('|');
+
+  String _lastDockGeometrySignature = '';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _refreshDockGeometry();
+  }
+
+  /// Drops the cached dock geometry whenever anything that can change the
+  /// dock's height changes.
+  void _refreshDockGeometry() {
+    // Rotation, window resize, split-screen, a safe-area change or a font-size
+    // change all land here. Any of them can make the cached extent wrong, and
+    // a stale extent means a tap near the bottom is judged against the wrong
+    // band — so drop back to the legacy constants until a fresh measurement
+    // arrives, rather than trusting the old number for a frame.
+    final signature = _dockGeometrySignature(MediaQuery.of(context));
+    if (signature == _lastDockGeometrySignature) return;
+    _lastDockGeometrySignature = signature;
+    _dockGeometryGeneration++;
+    _dockExtent.value = 0;
+    _infoPanelGeneration++;
+    _infoPanelHeight = DockLayoutInput.kInfoPanelBound;
+    _lastInfoPanelSignature = '';
+  }
+
+  /// Reserved panel height for this build. Resets to the bound (or 0 when no
+  /// panel is mounted) the moment the structure changes.
+  double get _reservedInfoPanelHeight {
+    final signature = _infoPanelSignature;
+    if (signature != _lastInfoPanelSignature) {
+      _lastInfoPanelSignature = signature;
+      _infoPanelGeneration++;
+      _infoPanelHeight = signature == '-' ? 0 : DockLayoutInput.kInfoPanelBound;
+    }
+    return _infoPanelHeight;
+  }
 
   /// Tokens for [_playerGuideStyle], derived once with it — null for classic.
   IptvStyleTokens? _playerGuideTokens;
@@ -841,8 +975,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _isPipActive = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  final PlaybackUiClockController _playbackUiClock =
+      PlaybackUiClockController();
+  final SkipSegmentUiController _activeSkipSegmentUi =
+      SkipSegmentUiController();
   bool _isTransitioning = false; // Show black screen during transitions
-
 
   /// One-shot guard set the moment we pop to hand the next episode back to the
   /// host for Quick Play. End-of-video auto-advance (_onPlaybackEnded) and a
@@ -859,6 +996,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   StreamSubscription? _completedSub;
   StreamSubscription? _bufferingSub;
   StreamSubscription? _iptvErrorSub;
+  StreamSubscription? _rendererStartupErrorSub;
+
+  /// Runtime hardware-decoder probe. mpv's configured `hwdec=auto-safe` only
+  /// describes what it should try; `hwdec-current` is the decoder that actually
+  /// opened for this item. Generations are advanced by every app-owned open,
+  /// while property observers catch a decoder/output transition mid-stream.
+  int _decoderProbeGeneration = 0;
+  int _decoderProbeToken = 0;
+  mk.VideoParams? _decoderProbeParams;
+  Timer? _decoderProbeTimer;
+  String? _lastDecoderDiagnosticSignature;
 
   // Buffering indicator
   final ValueNotifier<bool> _showBufferingIndicator = ValueNotifier(false);
@@ -1250,6 +1398,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _skipSegments = cached;
           _loadedSkipSegmentsKey = request.key;
         });
+        _syncActiveSkipSegmentUi();
       }
       return;
     }
@@ -1271,6 +1420,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             _skipSegments = segments;
             _loadedSkipSegmentsKey = request.key;
           });
+          _syncActiveSkipSegmentUi();
         })
         .catchError((Object error) {
           // Missing skip data must never affect playback. Cache the miss for
@@ -1286,6 +1436,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             _skipSegments = SkipSegments.empty;
             _loadedSkipSegmentsKey = request.key;
           });
+          _syncActiveSkipSegmentUi();
         })
         .whenComplete(() {
           if (_loadingSkipSegmentsKey == request.key) {
@@ -1306,12 +1457,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _loadedSkipSegmentsKey = null;
     _skipSegments = SkipSegments.empty;
     _skipSegmentsMediaReady = false;
+    _activeSkipSegmentUi.clear();
   }
 
   SkipSegment? get _activeSkipSegment {
     final request = _currentSkipSegmentRequest();
     if (request == null || request.key != _loadedSkipSegmentsKey) return null;
     return _skipSegments.segmentAt(_position);
+  }
+
+  void _syncActiveSkipSegmentUi() {
+    _activeSkipSegmentUi.update(_activeSkipSegment);
   }
 
   void _skipActiveSegment() {
@@ -1321,11 +1477,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? _duration
         : segment.end;
     _position = target;
+    _playbackUiClock.updatePosition(target, immediate: true);
+    _syncActiveSkipSegmentUi();
     unawaited(_player.seek(target));
     _traktScrobbleSeek(target);
     _simklScrobbleSeek(target);
     HapticFeedback.selectionClick();
-    if (mounted) setState(() {});
   }
 
   Future<void> _initTraktScrobble() async {
@@ -1835,9 +1992,75 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     AudioEffectSessionService.close(sessionId);
   }
 
+  void _createPlayerInstance(AndroidVideoRendererMode rendererMode) {
+    final instanceGeneration = ++_playerInstanceGeneration;
+    _isReady = false;
+    final player = mk.Player(
+      configuration: mk.PlayerConfiguration(
+        logLevel: mk.MPVLogLevel.error,
+        ready: () => _onPlayerInstanceReady(instanceGeneration),
+      ),
+    );
+    _player = player;
+    _playerCreated = true;
+    _videoController = mkv.VideoController(
+      player,
+      configuration: mkv.VideoControllerConfiguration(
+        vo: rendererMode.videoOutput,
+        hwdec: rendererMode.hardwareDecoder,
+      ),
+    );
+    _bindPlayerInstanceSubscriptions(instanceGeneration, player);
+    unawaited(_installDecoderObservers(instanceGeneration, player));
+  }
+
+  void _onPlayerInstanceReady(int instanceGeneration) {
+    if (!mounted || instanceGeneration != _playerInstanceGeneration) return;
+    _isReady = true;
+    _armPipAutoEnter();
+    if (PlatformUtil.isTelevision && _controlsVisible.value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            instanceGeneration == _playerInstanceGeneration &&
+            _controlsVisible.value &&
+            !_tvBarScope.hasFocus) {
+          _tvPlayPauseFocus.requestFocus();
+        }
+      });
+    }
+    setState(() {});
+
+    // These are screen-presentation side effects, not player-instance setup.
+    // Re-running them during the compatibility restart would re-raise launch
+    // banners and reset guide context while preserving the same media item.
+    if (_playerPresentationInitialized) return;
+    _playerPresentationInitialized = true;
+    final iptvChannel = _currentIptvChannel;
+    if (iptvChannel != null && iptvChannel.isLive) {
+      _hideTimer?.cancel();
+      _controlsVisible.value = false;
+      _prepareIptvBannerData(iptvChannel);
+      _raiseIptvZapBanner();
+      _anchorIptvGuideCategory(iptvChannel);
+      _ensureIptvZapPagingArmed();
+    } else {
+      if (widget.showChannelName && _channelBadgeText != null) {
+        _showChannelBadgeWithTimer();
+      }
+      if (widget.showVideoTitle && widget.showChannelName) {
+        _showTitleBadgeWithTimer();
+      }
+    }
+  }
+
   Future<void> _initializePlayer() async {
     // Load default player settings
     await _loadPlayerDefaults();
+    unawaited(_loadDockPrefs());
+    if (Platform.isAndroid && !PlatformUtil.isAndroidTvCached) {
+      _androidVideoRendererMode =
+          await StorageService.getAndroidVideoRendererMode();
+    }
 
     // Determine the initial URL and index
     String initialUrl = widget.videoUrl;
@@ -1979,66 +2202,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _currentIndex = initialIndex;
     _dynamicTitle = widget.title;
-    _player = mk.Player(
-      configuration: mk.PlayerConfiguration(
-        logLevel: mk.MPVLogLevel.error, // Suppress verbose subtitle logging
-        ready: () {
-          _isReady = true;
-          // Now that there's a real video frame, arm PiP auto-enter (no-op
-          // unless this screen is the active, supported PiP owner).
-          _armPipAutoEnter();
-          // The bar is mounted only once ready, and _controlsVisible starts
-          // true — so on a television it appears with focus still on the
-          // player root, where OK does nothing. Claim it now. Live force-hides
-          // the bar just below, and that path parks focus on the root itself.
-          if (PlatformUtil.isTelevision && _controlsVisible.value) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && _controlsVisible.value && !_tvBarScope.hasFocus) {
-                _tvPlayPauseFocus.requestFocus();
-              }
-            });
-          }
-          if (mounted) {
-            setState(() {});
-            // First tune on a live channel: the zap banner doubles as the
-            // "here's what's on" card, and it owns the identity instead of
-            // the corner badges.
-            final iptvChannel = _currentIptvChannel;
-            if (iptvChannel != null && iptvChannel.isLive) {
-              // The dock opens visible and nothing on this path auto-hides
-              // it, so it would both cover the banner and leave a live
-              // channel presenting a seek bar it cannot use. The banner is
-              // this tune's presentation; one tap brings the dock back.
-              _hideTimer?.cancel();
-              _controlsVisible.value = false;
-              _prepareIptvBannerData(iptvChannel);
-              _raiseIptvZapBanner();
-              // Anchor the browsing context to what is playing, the way the
-              // native player bootstraps it. Both halves matter: the category
-              // alone would label the guide with a group the launch window
-              // does not match, and the list would then shrink to it the
-              // moment anything re-filtered.
-              _anchorIptvGuideCategory(iptvChannel);
-              // Arms the zap ladder for the launch channel. Routed through the
-              // shared helper so a zap arriving before this lands re-arms it
-              // instead of leaving the ladder inactive for the session.
-              _ensureIptvZapPagingArmed();
-            } else {
-              // Show channel badge when player is ready (if enabled)
-              if (widget.showChannelName && _channelBadgeText != null) {
-                _showChannelBadgeWithTimer();
-              }
-              // Show title badge when player is ready (if enabled and in Debrify TV)
-              if (widget.showVideoTitle && widget.showChannelName) {
-                _showTitleBadgeWithTimer();
-              }
-            }
-          }
-        },
-      ),
-    );
-    _playerCreated = true;
-    _videoController = mkv.VideoController(_player);
+    _createPlayerInstance(_androidVideoRendererMode);
     // libmpv exposes `stream-record`; the web backend does not. Gate the
     // record control on having a native player — and, on Android, on the
     // finished file being publishable at all. Below API 29 there is no
@@ -2121,10 +2285,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // of A/V drift.)
         final hasExternalAudio =
             widget.audioUrl != null && widget.audioUrl!.isNotEmpty;
-        _player
-            .open(
+        _openMedia(
               mk.Media(initialUrl, httpHeaders: widget.httpHeaders),
               play: !hasExternalAudio,
+              desiredPlay: true,
             )
             .then((_) async {
               // Wait for the video to load and duration to be available
@@ -2166,43 +2330,71 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _loadPlaylistIndex(_currentIndex, autoplay: false);
       }
     }
-    _posSub = _player.stream.position.listen((d) {
+    _autosaveTimer = Timer.periodic(
+      const Duration(seconds: 6),
+      (_) => _saveResume(debounced: true),
+    );
+
+    // Preload episode information if this is a series
+    _preloadEpisodeInfo();
+  }
+
+  void _bindPlayerInstanceSubscriptions(
+    int instanceGeneration,
+    mk.Player player,
+  ) {
+    bool isCurrent() =>
+        mounted && instanceGeneration == _playerInstanceGeneration;
+
+    // Subscribe before open() so fast local media and immediate renderer
+    // failures are visible to both diagnostics and the startup guard.
+    _paramsSub = player.stream.videoParams.listen((params) {
+      if (!isCurrent()) return;
+      _handleDecoderProbeParams(params);
+    });
+    _rendererStartupErrorSub = player.stream.error.listen((error) {
+      if (!isCurrent() ||
+          !AndroidRendererStartupFallback.isRendererFailure(error)) {
+        return;
+      }
+      unawaited(
+        _fallbackDirectSurfaceToAutomatic(
+          instanceGeneration: instanceGeneration,
+          mediaGeneration: _decoderProbeGeneration,
+          reason: 'renderer_error',
+        ),
+      );
+    });
+    _posSub = player.stream.position.listen((d) {
+      if (!isCurrent()) return;
       _position = d;
+      _playbackUiClock.updatePosition(d);
       _syncSkipSegmentsForCurrentContent();
-      // throttle UI updates
-      if (mounted) setState(() {});
-      // Check if episode should be marked as finished (for manual seeking)
+      _syncActiveSkipSegmentUi();
       _checkAndMarkEpisodeAsFinished();
     });
-    _durSub = _player.stream.duration.listen((d) {
+    _durSub = player.stream.duration.listen((d) {
+      if (!isCurrent()) return;
       _duration = d;
-      // A real duration means the incoming media has opened, so the clock the
-      // skip lookup reads is finally the new item's.
+      _playbackUiClock.updateDuration(d);
       if (d > Duration.zero) _skipSegmentsMediaReady = true;
       _syncSkipSegmentsForCurrentContent();
-      if (mounted) setState(() {});
+      _syncActiveSkipSegmentUi();
+      setState(() {});
     });
-    _playSub = _player.stream.playing.listen((p) {
-      // Backgrounded via the lifecycle pause, yet something started playing:
-      // an open(play: true) that was already in flight when Home was pressed
-      // (a zap, an episode load) landing after the pause. Re-pause instead of
-      // letting it decode invisibly — the exact drain the lifecycle pause
-      // exists to stop. Early return, before any scrobble/heartbeat side
-      // effects can arm off a playback that is being taken back down.
+    _playSub = player.stream.playing.listen((p) {
+      if (!isCurrent()) return;
       if (p && _pausedByLifecycle && !_isPipActive) {
-        unawaited(_player.pause());
+        unawaited(player.pause());
         return;
       }
       final wasPlaying = _isPlaying;
       _isPlaying = p;
       _syncWakelock(p);
       _pushPipState();
-      // Startup-channel memory — armed only by real playback, never by a tune.
       if (p) _noteLiveChannelPlaying();
-      // Trakt scrobble on play/pause
       if (p && _duration > Duration.zero) {
         _traktScrobble('start');
-        // Only start heartbeat if scrobble wasn't converted to stop (>80%)
         if (_traktLastScrobbleAction == 'start') {
           _startTraktHeartbeat();
         }
@@ -2213,14 +2405,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _traktScrobble('pause');
         _stopTraktHeartbeat();
       }
-      // Simkl scrobble on play/pause — parallel to the Trakt block above, but
-      // pause-centric: NO 'start' POST on play (it wipes the Simkl resume
-      // point; see _initSimklScrobble). We DO stamp the marker 'start' (no POST)
-      // so it reads "playing" — otherwise a leftover 'pause'/'stop' marker (from
-      // the heartbeat or an episode-switch stop) would dedup-suppress this
-      // episode's user-pause and exit-stop. Then run the pause-based heartbeat.
-      // Gated on _simklScrobbleEnabled (the old _simklScrobble('start') call did
-      // this implicitly) so a non-Simkl session doesn't leak an idle heartbeat.
       if (_simklScrobbleEnabled && p && _duration > Duration.zero) {
         _simklLastScrobbleAction = 'start';
         _startSimklHeartbeat();
@@ -2232,7 +2416,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _stopSimklHeartbeat();
       }
       if (p && _transitionRunning) {
-        // Total 3s: 1.5s static (phase 1) + 1.5s reveal (phase 2)
         _transitionStopTimer?.cancel();
         _transitionPhaseTimer?.cancel();
         _transitionPhase = 1;
@@ -2241,34 +2424,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           'Player: Playback started; overlay phase 1 (static) 1500ms.',
         );
         _transitionPhaseTimer = Timer(const Duration(milliseconds: 1500), () {
+          if (!isCurrent()) return;
           _transitionPhase = 2;
           _transitionPhase2Started = DateTime.now();
-          if (mounted) setState(() {});
+          setState(() {});
           debugPrint('Player: Overlay phase 2 (cinematic bars) 1500ms.');
         });
         _transitionStopTimer = Timer(const Duration(milliseconds: 3000), () {
+          if (!isCurrent()) return;
           _rainbowController.stop();
           _transitionRunning = false;
           _rainbowActive = false;
-          if (mounted) setState(() {});
+          setState(() {});
           debugPrint('Player: Transition overlay stopped (3s complete).');
         });
       }
-      if (mounted) setState(() {});
+      setState(() {});
     });
-    // No need to observe video params for sizing; we use a fixed logical surface
-    _completedSub = _player.stream.completed.listen((done) {
-      if (done) _onPlaybackEnded();
+    _completedSub = player.stream.completed.listen((done) {
+      if (done && isCurrent()) _onPlaybackEnded();
     });
-    _bufferingSub = _player.stream.buffering.listen((isBuffering) {
-      if (!_isReady || _isTransitioning) return;
+    _bufferingSub = player.stream.buffering.listen((isBuffering) {
+      if (!isCurrent() || !_isReady || _isTransitioning) return;
       if (isBuffering) {
         _bufferingDebounceTimer?.cancel();
         _bufferingDebounceTimer = Timer(
           VideoPlayerTimingConstants.bufferingDebounceDelay,
           () {
-            if (mounted &&
-                _player.state.buffering &&
+            if (isCurrent() &&
+                player.state.buffering &&
                 _isReady &&
                 !_isTransitioning &&
                 !_isPikPakRetrying) {
@@ -2281,27 +2465,479 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _showBufferingIndicator.value = false;
       }
     });
-
-    // Plain IPTV channels had no error path at all: a refused or dead stream
-    // just left a black screen with a spinner, indistinguishable from "the app
-    // is broken". (The Stremio ladder reports for itself — see the probing
-    // guard in the handler.)
     if (_effectiveIptvChannels != null) {
-      _iptvErrorSub = _player.stream.error.listen(_onIptvStreamError);
+      _iptvErrorSub = player.stream.error.listen((error) {
+        if (isCurrent()) _onIptvStreamError(error);
+      });
+    }
+  }
+
+  Future<void> _cancelPlayerInstanceSubscriptions() async {
+    final subscriptions = <StreamSubscription?>[
+      _posSub,
+      _durSub,
+      _playSub,
+      _paramsSub,
+      _completedSub,
+      _bufferingSub,
+      _iptvErrorSub,
+      _rendererStartupErrorSub,
+    ];
+    _posSub = null;
+    _durSub = null;
+    _playSub = null;
+    _paramsSub = null;
+    _completedSub = null;
+    _bufferingSub = null;
+    _iptvErrorSub = null;
+    _rendererStartupErrorSub = null;
+    for (final subscription in subscriptions) {
+      if (subscription == null) continue;
+      try {
+        await subscription.cancel();
+      } catch (_) {
+        // A broken listener must not strand the old native player during the
+        // compatibility restart.
+      }
+    }
+  }
+
+  void _handleDecoderProbeParams(mk.VideoParams params) {
+    final width = params.dw ?? params.w ?? 0;
+    final height = params.dh ?? params.h ?? 0;
+    if (width <= 0 || height <= 0) {
+      // Player.open() normally resets VideoParams before loading the next item.
+      // Treat it as an extra invalidation signal, but do not require it: the
+      // app-owned generation started in _openMedia is the session boundary.
+      _decoderProbeToken++;
+      _decoderProbeTimer?.cancel();
+      _decoderProbeTimer = null;
+      _decoderProbeParams = null;
+      _rendererStartupGuardToken++;
+      _rendererStartupValidationGeneration = -1;
+      return;
+    }
+    _decoderProbeParams = params;
+    _scheduleDecoderProbe();
+    _scheduleDirectSurfaceStartupValidation();
+  }
+
+  Future<void> _installDecoderObservers(
+    int instanceGeneration,
+    mk.Player player,
+  ) async {
+    final platform = player.platform;
+    if (platform is! mk.NativePlayer) return;
+
+    try {
+      await platform.observeProperty('hwdec-current', (value) async {
+        if (mounted && instanceGeneration == _playerInstanceGeneration) {
+          _scheduleDecoderProbe();
+        }
+      });
+    } catch (_) {
+      // The one-shot query below still works if this property is unavailable.
+    }
+    try {
+      await platform.observeProperty('current-vo', (value) async {
+        if (mounted && instanceGeneration == _playerInstanceGeneration) {
+          _scheduleDecoderProbe();
+        }
+      });
+    } catch (_) {
+      // Keep the independent hwdec observer when only current-vo is unavailable.
+    }
+  }
+
+  void _scheduleDirectSurfaceStartupValidation() {
+    if (!AndroidRendererStartupFallback.shouldArm(
+          isAndroid: Platform.isAndroid,
+          isAndroidTv: PlatformUtil.isAndroidTvCached,
+          mode: _androidVideoRendererMode,
+          alreadyValidated: _directSurfaceValidatedForSession,
+          fallbackInProgress: _rendererFallbackInProgress,
+        ) ||
+        _iptvErrorsMuted ||
+        _rendererStartupValidationGeneration == _decoderProbeGeneration) {
+      return;
+    }
+    _rendererStartupValidationGeneration = _decoderProbeGeneration;
+    final guardToken = ++_rendererStartupGuardToken;
+    final instanceGeneration = _playerInstanceGeneration;
+    final mediaGeneration = _decoderProbeGeneration;
+    final player = _player;
+    unawaited(
+      _validateDirectSurfaceStartup(
+        guardToken: guardToken,
+        instanceGeneration: instanceGeneration,
+        mediaGeneration: mediaGeneration,
+        player: player,
+      ),
+    );
+  }
+
+  Future<void> _validateDirectSurfaceStartup({
+    required int guardToken,
+    required int instanceGeneration,
+    required int mediaGeneration,
+    required mk.Player player,
+  }) async {
+    final platform = player.platform;
+    if (platform is! mk.NativePlayer) return;
+
+    // VideoParams is already positive at this point, so this is not a network
+    // startup timeout. Give Android's SurfaceProducer/codec bridge three seconds
+    // to attach the requested output and require two matching reads.
+    var previousOutput = '';
+    for (var attempt = 0; attempt < 12; attempt++) {
+      if (!mounted ||
+          guardToken != _rendererStartupGuardToken ||
+          instanceGeneration != _playerInstanceGeneration ||
+          mediaGeneration != _decoderProbeGeneration) {
+        return;
+      }
+      try {
+        final output = await platform.getProperty('current-vo');
+        if (AndroidRendererStartupFallback.isExpectedOutput(output) &&
+            output == previousOutput) {
+          _directSurfaceValidatedForSession = true;
+          _rendererStartupGuardToken++;
+          return;
+        }
+        previousOutput = output;
+      } catch (_) {
+        // A transient property-query failure gets the remainder of the window.
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
     }
 
-    _autosaveTimer = Timer.periodic(
-      const Duration(seconds: 6),
-      (_) => _saveResume(debounced: true),
+    await _fallbackDirectSurfaceToAutomatic(
+      instanceGeneration: instanceGeneration,
+      mediaGeneration: mediaGeneration,
+      reason: 'surface_output_not_ready',
+    );
+  }
+
+  Future<void> _fallbackDirectSurfaceToAutomatic({
+    required int instanceGeneration,
+    required int mediaGeneration,
+    required String reason,
+  }) async {
+    if (!AndroidRendererStartupFallback.shouldArm(
+          isAndroid: Platform.isAndroid,
+          isAndroidTv: PlatformUtil.isAndroidTvCached,
+          mode: _androidVideoRendererMode,
+          alreadyValidated: _directSurfaceValidatedForSession,
+          fallbackInProgress: _rendererFallbackInProgress,
+        ) ||
+        !mounted ||
+        instanceGeneration != _playerInstanceGeneration ||
+        mediaGeneration != _decoderProbeGeneration ||
+        _activeOpenedMedia == null ||
+        _isRecording ||
+        _iptvErrorsMuted ||
+        _isTransitioning) {
+      return;
+    }
+
+    _rendererFallbackInProgress = true;
+    _rendererStartupGuardToken++;
+    final media = _activeOpenedMedia!;
+    final oldPlayer = _player;
+    final oldState = oldPlayer.state;
+    final resumePosition = _position > Duration.zero
+        ? _position
+        : oldState.position;
+    final shouldResumePlayback =
+        _activeMediaShouldPlay && !_activeMediaUserPaused && !_sleepStopLatched;
+    final rate = oldState.rate;
+    final volume = oldState.volume;
+    final isLive = _currentIptvChannel?.isLive == true;
+    final externalAudio = widget.audioUrl;
+    final hasExternalAudio = externalAudio != null && externalAudio.isNotEmpty;
+
+    _releasePlayerDiagnostic(
+      'generation=$mediaGeneration phase=fallback '
+      'status=renderer_startup_failed platform=android backend=libmpv '
+      'requested_renderer=direct_surface fallback=automatic reason=$reason',
     );
 
-    // Preload episode information if this is a series
-    _preloadEpisodeInfo();
+    // Invalidate every old callback before the first await. Only one native
+    // player may own audio and the Android surface during the restart.
+    _playerInstanceGeneration++;
+    _playerCreated = false;
+    _isReady = false;
+    _isPlaying = false;
+    _showBufferingIndicator.value = false;
+    setState(() {});
+
+    try {
+      await _cancelPlayerInstanceSubscriptions();
+      _releaseAudioEffectSession();
+      try {
+        await oldPlayer.pause();
+      } catch (_) {}
+      try {
+        await oldPlayer.dispose();
+      } catch (_) {
+        // Disposal normally succeeds, but retain ownership if the native
+        // backend throws so route teardown can make one final cleanup attempt.
+        _playerCreated = true;
+        rethrow;
+      }
+      if (!mounted) return;
+
+      // Remember the compatibility result. The setting now visibly reads
+      // Automatic, and choosing Direct Surface again is the explicit retry.
+      _androidVideoRendererMode = AndroidVideoRendererMode.automatic;
+      try {
+        await StorageService.setAndroidVideoRendererMode(
+          AndroidVideoRendererMode.automatic,
+        );
+      } catch (_) {
+        // Playback can still recover for this session if preferences are full
+        // or unavailable.
+      }
+      if (!mounted) return;
+
+      _duration = Duration.zero;
+      _position = Duration.zero;
+      _createPlayerInstance(AndroidVideoRendererMode.automatic);
+      await _attachAudioEffectSession();
+      if (!mounted) return;
+      setState(() {});
+
+      final needsPreparation =
+          hasExternalAudio || (!isLive && resumePosition > Duration.zero);
+      final playOnOpen =
+          shouldResumePlayback && !_pausedByLifecycle && !needsPreparation;
+      await _openMedia(
+        media,
+        play: playOnOpen,
+        desiredPlay: shouldResumePlayback,
+      );
+      if (needsPreparation) await _waitForVideoReady();
+      if (!mounted) return;
+      await _player.setRate(rate);
+      await _player.setVolume(volume);
+      if (hasExternalAudio) {
+        await _setExternalAudioTrack(externalAudio);
+      }
+      if (!isLive && resumePosition > Duration.zero) {
+        await _player.seek(resumePosition);
+      }
+      unawaited(_restoreTrackPreferences());
+      if (shouldResumePlayback && !_pausedByLifecycle && !playOnOpen) {
+        await _player.play();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Direct Surface was unavailable. Using Automatic renderer.',
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (_) {
+      _releasePlayerDiagnostic(
+        'generation=$mediaGeneration phase=fallback '
+        'status=failed platform=android backend=libmpv '
+        'requested_renderer=direct_surface fallback=automatic',
+      );
+    } finally {
+      _rendererFallbackInProgress = false;
+    }
+  }
+
+  void _scheduleDecoderProbe() {
+    final params = _decoderProbeParams;
+    if (params == null) return;
+    _decoderProbeTimer?.cancel();
+    final generation = _decoderProbeGeneration;
+    final token = ++_decoderProbeToken;
+    _decoderProbeTimer = Timer(const Duration(milliseconds: 150), () {
+      unawaited(
+        _reportActiveVideoDecoder(
+          params: params,
+          generation: generation,
+          token: token,
+        ),
+      );
+    });
+  }
+
+  Future<void> _reportActiveVideoDecoder({
+    required mk.VideoParams params,
+    required int generation,
+    required int token,
+  }) async {
+    final platform = _player.platform;
+    if (platform is! mk.NativePlayer) {
+      _emitDecoderDiagnosticOnce(
+        generation: generation,
+        signature: 'web',
+        fields:
+            'phase=stable status=unavailable platform=web backend=web '
+            'reason=no_native_decoder',
+      );
+      return;
+    }
+
+    var decoder = '';
+    var codec = '';
+    var output = '';
+    var previousDecoder = '';
+    var previousOutput = '';
+    var stable = false;
+
+    try {
+      // VideoParams means a decoder has produced metadata, not necessarily
+      // that the output surface has finished attaching. Require two matching
+      // reads so an early `current-vo=null` is never presented as the verdict.
+      for (var attempt = 0; attempt < 12; attempt++) {
+        if (!mounted ||
+            generation != _decoderProbeGeneration ||
+            token != _decoderProbeToken) {
+          return;
+        }
+        decoder = await platform.getProperty('hwdec-current');
+        output = await platform.getProperty('current-vo');
+        final outputReady = output.isNotEmpty && output != 'null';
+        final decoderReady = decoder.isNotEmpty;
+        if (decoderReady &&
+            outputReady &&
+            decoder == previousDecoder &&
+            output == previousOutput) {
+          stable = true;
+          break;
+        }
+        previousDecoder = decoder;
+        previousOutput = output;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      if (!mounted ||
+          generation != _decoderProbeGeneration ||
+          token != _decoderProbeToken) {
+        return;
+      }
+      codec = await platform.getProperty('video-codec');
+    } catch (_) {
+      if (!mounted || generation != _decoderProbeGeneration) return;
+      _emitDecoderDiagnosticOnce(
+        generation: generation,
+        signature: 'error',
+        fields:
+            'phase=error status=unavailable '
+            'platform=${Platform.operatingSystem} reason=property_query_failed',
+      );
+      return;
+    }
+
+    final width = params.dw ?? params.w ?? 0;
+    final height = params.dh ?? params.h ?? 0;
+    final status = decoder == 'no'
+        ? 'software'
+        : decoder.isEmpty
+        ? 'unavailable'
+        : 'hardware';
+    final normalizedOutput = output.isEmpty || output == 'null'
+        ? 'unknown'
+        : output;
+    final requestedRenderer = Platform.isAndroid
+        ? _androidVideoRendererMode.storageKey
+        : 'platform_default';
+    final signature = '$decoder|$normalizedOutput|$codec|${width}x$height';
+    _emitDecoderDiagnosticOnce(
+      generation: generation,
+      signature: signature,
+      fields:
+          'phase=${stable ? 'stable' : 'partial'} status=$status '
+          'platform=${Platform.operatingSystem} backend=libmpv '
+          'codec=${codec.isEmpty ? 'unknown' : codec} '
+          'decoder=${decoder.isEmpty ? 'unknown' : decoder} '
+          'output=$normalizedOutput '
+          'requested_renderer=$requestedRenderer '
+          'resolution=${width}x$height',
+    );
+  }
+
+  void _emitDecoderDiagnosticOnce({
+    required int generation,
+    required String signature,
+    required String fields,
+  }) {
+    if (generation != _decoderProbeGeneration) return;
+    final taggedSignature = '$generation|$signature';
+    if (_lastDecoderDiagnosticSignature == taggedSignature) return;
+    _lastDecoderDiagnosticSignature = taggedSignature;
+    _releasePlayerDiagnostic('generation=$generation $fields');
+  }
+
+  void _beginMediaGeneration() {
+    _decoderProbeGeneration++;
+    _decoderProbeToken++;
+    _rendererStartupGuardToken++;
+    _rendererStartupValidationGeneration = -1;
+    _decoderProbeTimer?.cancel();
+    _decoderProbeTimer = null;
+    _decoderProbeParams = null;
+    _lastDecoderDiagnosticSignature = null;
+    _playbackUiClock.beginMedia();
+    _activeSkipSegmentUi.clear();
+  }
+
+  Future<void> _openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+  }) {
+    _activeOpenedMedia = media;
+    _activeMediaShouldPlay = desiredPlay ?? play;
+    _activeMediaUserPaused = false;
+    _beginMediaGeneration();
+    return _player.open(media, play: play);
+  }
+
+  void _releasePlayerDiagnostic(String fields) {
+    final message = 'DEBRIFY_PLAYER_DECODER $fields';
+    if (Platform.isAndroid) {
+      // A dedicated native tag lets release captures select only this
+      // privacy-safe line. Capturing Flutter's general stdout exposed unrelated
+      // service logs and must not be required for decoder diagnostics.
+      unawaited(
+        _androidPlayerDiagnosticChannel
+            .invokeMethod<void>('logDecoder', {'message': fields})
+            .catchError((_) {}),
+      );
+      return;
+    }
+    if (PlatformUtil.isTvOS) {
+      // tvOS release builds deliberately do not bridge every debugPrint call,
+      // because unrelated logs can contain private playback data. This narrow,
+      // privacy-safe diagnostic still needs to reach the Xcode/device console.
+      unawaited(
+        _tvReleaseLogChannel
+            .invokeMethod<void>('log', message)
+            .catchError((_) {}),
+      );
+      return;
+    }
+
+    // Intentional: print reaches desktop process consoles in release builds.
+    // Keep this payload free of titles, URLs and account IDs.
+    // ignore: avoid_print
+    print(message);
   }
 
   @override
   void didUpdateWidget(covariant VideoPlayerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // `hideOptions` / `hideSeekbar` arrive through the widget, not through an
+    // inherited dependency, so didChangeDependencies never fires for them.
+    _refreshDockGeometry();
     if (widget.channelName != oldWidget.channelName) {
       final String? trimmed = widget.channelName?.trim();
       if ((trimmed == null || trimmed.isEmpty) && _currentChannelName != null) {
@@ -2409,6 +3045,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_sleepTimerMode == SleepTimerMode.endOfItem) {
       _cancelSleepTimer();
       _sleepStopLatched = true;
+      _activeMediaShouldPlay = false;
       _showSleepTimerToast('Sleep timer — stopping here');
       return;
     }
@@ -3042,7 +3679,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           } else {
             // Cancel any ongoing PikPak retry when switching to non-PikPak video
             _pikPakRetryId++;
-            await _player.open(
+            await _openMedia(
               mk.Media(url, httpHeaders: widget.httpHeaders),
               play: true,
             );
@@ -3198,6 +3835,62 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Load default player settings (aspect)
+  /// The vertical band at the bottom of the screen the dock occupies.
+  ///
+  /// `classic` keeps the literal each consumer has always used; only the
+  /// styled dock, whose height is variable, reports a measured value. The
+  /// branch at six call sites is deliberate — one uniform value is impossible,
+  /// since the consumers' legacy constants are 160/28, 72 and 80.
+  double _dockBand(double legacy) =>
+      _dockStyle.isStyled ? math.max(legacy, _dockExtent.value) : legacy;
+
+  /// Where the skip-segment button sits above the bottom edge.
+  ///
+  /// The legacy value is not simply "160": it is 160 only while controls are
+  /// visible AND (television OR options shown), else 28. Televisions build
+  /// `TvControls`, so the styled path never engages there.
+  double _skipButtonBottom(
+    BuildContext context,
+    bool controlsVisible,
+    double dockExtent,
+  ) {
+    if (!_dockStyle.isStyled) {
+      return controlsVisible &&
+              (PlatformUtil.isTelevision || !widget.hideOptions)
+          ? 160
+          : 28;
+    }
+    // `infoPanel` mounts OUTSIDE the hideOptions guard, so a live panel can be
+    // on screen while `!hideOptions` is false.
+    final dockVisible =
+        controlsVisible &&
+        (_buildIptvInfoPanel(flush: true) != null || !widget.hideOptions);
+    if (!dockVisible) return 28;
+    final inset = MediaQuery.paddingOf(context).bottom;
+    return math.max(28.0, dockExtent + 8 - inset);
+  }
+
+  Future<void> _loadDockPrefs() async {
+    final style = await StorageService.getPlayerDockStyle();
+    final palette = await StorageService.getPlayerDockPalette();
+    final size = await StorageService.getPlayerDockSize();
+    if (!mounted) return;
+    setState(() {
+      _dockStyle = PlayerDockStyle.fromPref(style);
+      _dockPalette = PlayerDockPalette.fromPref(palette);
+      _dockSize = PlayerDockSize.fromPref(size);
+      // Style/size are part of the geometry signature but arrive here, not
+      // through an inherited dependency.
+      _lastDockGeometrySignature = '';
+      // Deliberately NOT seeded to the viewport height. Over-protecting the
+      // whole screen kills every gesture until the first measurement, and it
+      // also strands the fallback case: when DockMetrics.compute returns null
+      // the classic subtree renders and no reporter is ever mounted, so the
+      // seed would never be corrected. 0 means `_dockBand` yields the legacy
+      // constant, which is exactly right for both.
+    });
+  }
+
   Future<void> _loadPlayerDefaults() async {
     // Load default aspect index
     final aspectIndex = await StorageService.getPlayerDefaultAspectIndex();
@@ -5053,12 +5746,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     Directory dir;
     if (Platform.isAndroid) {
       dir =
-          (await getExternalStorageDirectory()) ??
-          await AppStorage.documents();
+          (await getExternalStorageDirectory()) ?? await AppStorage.documents();
     } else {
-      dir =
-          (await getDownloadsDirectory()) ??
-          await AppStorage.documents();
+      dir = (await getDownloadsDirectory()) ?? await AppStorage.documents();
     }
     final sep = Platform.pathSeparator;
     final prefix = '${dir.path}${sep}Debrify${sep}Recordings$sep${base}_$stamp';
@@ -5204,7 +5894,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // reports from here is this channel's, including a fast failure that
         // lands while open() is still awaiting.
         _iptvErrorsMuted = false;
-        await _player.open(media, play: true);
+        await _openMedia(media, play: true);
       } catch (e) {
         debugPrint('Player: IPTV channel switch failed: $e');
       }
@@ -5282,7 +5972,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }),
     ];
     try {
-      await _player.open(mk.Media(url), play: true);
+      await _openMedia(mk.Media(url), play: true);
       openDone = true;
     } catch (e) {
       debugPrint('Player: stremio candidate failed to open: $e');
@@ -5533,7 +6223,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     try {
-      await _player.open(mk.Media(url), play: !hasExternalAudio);
+      await _openMedia(
+        mk.Media(url),
+        play: !hasExternalAudio,
+        desiredPlay: true,
+      );
       // Wait for the new media to load before seeking
       await _waitForVideoReady();
       if (!mounted) return;
@@ -5713,7 +6407,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     try {
       _pikPakRetryId++;
-      await _player.open(mk.Media(url), play: true);
+      await _openMedia(mk.Media(url), play: true);
       _currentStreamUrl = url;
       await _player.setSubtitleTrack(mk.SubtitleTrack.no());
       if (startAtPercent != null && startAtPercent > 0) {
@@ -5921,7 +6615,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     try {
       _pikPakRetryId++;
-      await _player.open(
+      await _openMedia(
         mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
         play: true,
       );
@@ -6050,7 +6744,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       // Cancel any ongoing PikPak retry when switching channels
       _pikPakRetryId++;
-      await _player.open(
+      await _openMedia(
         mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
         play: true,
       );
@@ -6334,13 +7028,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       } else {
         // Still use retry but without autoplay
         await _playPikPakVideoWithRetry(videoUrl);
+        _activeMediaShouldPlay = false;
         await _player.pause(); // Pause after loading if not autoplaying
       }
     } else {
       // Non-PikPak videos play normally
       // Cancel any ongoing PikPak retry when switching to non-PikPak video
       _pikPakRetryId++;
-      await _player.open(
+      await _openMedia(
         mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
         play: autoplay,
       );
@@ -6676,7 +7371,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (!isPikPak) {
       // Not a PikPak video, play normally
-      await _player.open(
+      await _openMedia(
         mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
         play: true,
       );
@@ -6706,7 +7401,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // This prevents resetting the video to 0:00 if it loads during a retry delay
     print('PikPak: Initial playback attempt - opening media...');
     try {
-      await _player.open(
+      await _openMedia(
         mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
         play: true,
       );
@@ -6854,7 +7549,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Try reopening the player (might help reactivate cold storage file)
         try {
-          await _player.open(
+          await _openMedia(
             mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
             play: true,
           );
@@ -6955,7 +7650,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Try reopening the player for next attempt
         try {
-          await _player.open(
+          await _openMedia(
             mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
             play: true,
           );
@@ -7253,6 +7948,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// visible PiP activity stays at `inactive` (see [_lifecycle]).
   void _pauseForBackground() {
     if (!Platform.isAndroid && !Platform.isIOS) return;
+    // A renderer restart has intentionally invalidated the old player and may
+    // not have created the replacement yet. Preserve playback intent without
+    // requiring either instance to be live at this exact lifecycle callback.
+    if (_rendererFallbackInProgress) {
+      _pausedByLifecycle = true;
+      if (_playerCreated) unawaited(_player.pause());
+      return;
+    }
     // _isTransitioning too, not just _isPlaying: mid-switch (next episode, a
     // zap) `playing` is briefly false while an open(play: true) is in flight.
     // Backgrounding in that window must still arm the flag, or the open lands
@@ -7272,6 +7975,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // "playback restarted behind a backgrounded app" to the guard in the
     // playing listener.
     _pausedByLifecycle = false;
+    // The replacement player will read the cleared lifecycle flag immediately
+    // before open/play. Calling play on the disposing instance would race the
+    // one-player ownership guarantee.
+    if (_rendererFallbackInProgress) return;
     if (!_playerCreated || !mounted) return;
     // Coming back from the background is not a request to un-stop the night:
     // if the sleep timer fired while we were away, stay paused until someone
@@ -7394,6 +8101,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _iptvZapTicker?.cancel();
     _tvScrubGeneration++; // invalidate any scrub still in flight
     _tvBarScope.dispose();
+    _dockExtent.dispose();
     _tvPlayPauseFocus.dispose();
     _tvProgressFocus.dispose();
     _tvRootFocus.dispose();
@@ -7403,14 +8111,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _verticalHud.dispose();
     _speedHoldHud.dispose();
     _recordLogSub?.cancel();
+    _decoderProbeGeneration++;
+    _decoderProbeToken++;
+    _rendererStartupGuardToken++;
+    _playerInstanceGeneration++;
+    _decoderProbeTimer?.cancel();
+    _decoderProbeTimer = null;
     _posSub?.cancel();
     _durSub?.cancel();
+    _playbackUiClock.dispose();
+    _activeSkipSegmentUi.dispose();
     _playSub?.cancel();
     _lastLiveChannelTimer?.cancel();
     _paramsSub?.cancel();
     _completedSub?.cancel();
     _bufferingSub?.cancel();
     _iptvErrorSub?.cancel();
+    _rendererStartupErrorSub?.cancel();
     _bufferingDebounceTimer?.cancel();
     _showBufferingIndicator.dispose();
     _releaseAudioEffectSession();
@@ -8049,8 +8766,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final step = _tvScrubRepeats < 8
         ? 10
         : _tvScrubRepeats < 16
-            ? 30
-            : 60;
+        ? 30
+        : 60;
     _tvScrubRepeats++;
     final next = base + Duration(seconds: step * direction);
     setState(() {
@@ -8104,7 +8821,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// The television bar. Reuses every flag the touch call site already
   /// computes, so the two stay in step: live comes from the same
   /// zap-banner signal, sources/guide/record from the same capability checks.
-  Widget _buildTvControls(Duration duration, Duration pos) {
+  Widget _buildTvControls() {
     // Live means a live CHANNEL — it decides which button set the dock shows.
     // `hideSeekbar` is a different thing entirely: Magic/Debrify TV sets it on
     // ordinary seekable VOD to hide the scrub bar, and treating it as live
@@ -8123,7 +8840,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // player. Menu on tvOS arrives here rather than as a key event (measured),
     // so this — not the key handler — is what makes BACK behave.
     return PopScope(
-      canPop: _tvScrubTarget == null &&
+      canPop:
+          _tvScrubTarget == null &&
           !_controlsVisible.value &&
           !_anyPlayerOverlayOpen,
       onPopInvokedWithResult: (didPop, _) {
@@ -8139,73 +8857,73 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         if (_controlsVisible.value) _tvHideBar();
       },
       child: TvControlsScope(
-      seek: (target) {
-        _player.seek(target);
-        _traktScrobbleSeek(target);
-        _simklScrobbleSeek(target);
-        _scheduleAutoHide();
-      },
-      child: TvControls(
-        title: widget.showVideoTitle && !widget.showChannelName
-            ? _getCurrentEpisodeTitle()
-            : '',
-        subtitle: widget.showVideoTitle && !widget.showChannelName
-            ? _getCurrentEpisodeSubtitle()
-            : null,
-        infoPanel: _buildIptvInfoPanel(flush: true),
-        duration: duration,
-        position: pos,
-        isPlaying: _isPlaying,
-        isLive: isLive,
-        isTransitioning: _isTransitioning,
-        scopeNode: _tvBarScope,
-        playPauseFocusNode: _tvPlayPauseFocus,
-        progressFocusNode: _tvProgressFocus,
-        // Dead controls are never focusable: a live stream or an unknown
-        // duration has nothing to scrub, so traversal skips the row entirely
-        // rather than parking the remote on it.
-        progressFocusable: !_tvNoTimeline,
-        // OK is claimed by the dock's own buttons, so those presses never
-        // reach _handleTvKey and never restarted the countdown.
-        onInteract: _scheduleAutoHide,
-        scrubPreview: _tvScrubTarget,
-        onPlayPause: _togglePlay,
-        onShowTracks: () => _showTracksSheet(context),
-        onSpeed: _changeSpeed,
-        onAspect: _cycleAspectMode,
-        onSleepTimer: _showSleepTimerSheet,
-        sleepTimerLabel: _sleepTimerButtonLabel,
-        speed: _playbackSpeed,
-        aspectMode: _aspectMode,
-        hideOptions: widget.hideOptions,
-        onNext: _hasIptvNext
-            ? () => _switchToIptvChannel(_currentIptvIndex + 1)
-            : _canZapIptvChannel
-            ? () => _zapIptvChannel(1)
-            : (_hasAnyNext ? _goToNextEpisode : null),
-        onPrevious: _hasIptvPrevious
-            ? () => _switchToIptvChannel(_currentIptvIndex - 1)
-            : _canZapIptvChannel
-            ? () => _zapIptvChannel(-1)
-            : (_hasPreviousEpisode() ? _goToPreviousEpisode : null),
-        onNextChannel:
-            widget.requestNextChannel != null ? _goToNextChannel : null,
-        onShowPlaylist: _activePlaylist != null && _activePlaylist!.isNotEmpty
-            ? () => _showPlaylistSheet(context)
-            : null,
-        onShowSources: hasSources ? _showSourceSheetOverlay : null,
-        onShowGuide: hasGuide
-            ? (_channelEntries.isNotEmpty && widget.requestChannelById != null
-                  ? _showChannelGuideOverlay
-                  : _showStremioTvGuideOverlay)
-            : null,
-        onShowIptvChannels: _effectiveIptvChannels?.isNotEmpty == true
-            ? _showIptvChannelSheetOverlay
-            : null,
-        hasRecord: _canRecord,
-        isRecording: _recordingActiveNow,
-        onRecord: _canRecord ? _toggleRecording : null,
-      ),
+        seek: (target) {
+          _player.seek(target);
+          _traktScrobbleSeek(target);
+          _simklScrobbleSeek(target);
+          _scheduleAutoHide();
+        },
+        child: TvControls(
+          title: widget.showVideoTitle && !widget.showChannelName
+              ? _getCurrentEpisodeTitle()
+              : '',
+          subtitle: widget.showVideoTitle && !widget.showChannelName
+              ? _getCurrentEpisodeSubtitle()
+              : null,
+          infoPanel: _buildIptvInfoPanel(flush: true),
+          clock: _playbackUiClock,
+          isPlaying: _isPlaying,
+          isLive: isLive,
+          isTransitioning: _isTransitioning,
+          scopeNode: _tvBarScope,
+          playPauseFocusNode: _tvPlayPauseFocus,
+          progressFocusNode: _tvProgressFocus,
+          // Dead controls are never focusable: a live stream or an unknown
+          // duration has nothing to scrub, so traversal skips the row entirely
+          // rather than parking the remote on it.
+          progressFocusable: !_tvNoTimeline,
+          // OK is claimed by the dock's own buttons, so those presses never
+          // reach _handleTvKey and never restarted the countdown.
+          onInteract: _scheduleAutoHide,
+          scrubPreview: _tvScrubTarget,
+          onPlayPause: _togglePlay,
+          onShowTracks: () => _showTracksSheet(context),
+          onSpeed: _changeSpeed,
+          onAspect: _cycleAspectMode,
+          onSleepTimer: _showSleepTimerSheet,
+          sleepTimerLabel: _sleepTimerButtonLabel,
+          speed: _playbackSpeed,
+          aspectMode: _aspectMode,
+          hideOptions: widget.hideOptions,
+          onNext: _hasIptvNext
+              ? () => _switchToIptvChannel(_currentIptvIndex + 1)
+              : _canZapIptvChannel
+              ? () => _zapIptvChannel(1)
+              : (_hasAnyNext ? _goToNextEpisode : null),
+          onPrevious: _hasIptvPrevious
+              ? () => _switchToIptvChannel(_currentIptvIndex - 1)
+              : _canZapIptvChannel
+              ? () => _zapIptvChannel(-1)
+              : (_hasPreviousEpisode() ? _goToPreviousEpisode : null),
+          onNextChannel: widget.requestNextChannel != null
+              ? _goToNextChannel
+              : null,
+          onShowPlaylist: _activePlaylist != null && _activePlaylist!.isNotEmpty
+              ? () => _showPlaylistSheet(context)
+              : null,
+          onShowSources: hasSources ? _showSourceSheetOverlay : null,
+          onShowGuide: hasGuide
+              ? (_channelEntries.isNotEmpty && widget.requestChannelById != null
+                    ? _showChannelGuideOverlay
+                    : _showStremioTvGuideOverlay)
+              : null,
+          onShowIptvChannels: _effectiveIptvChannels?.isNotEmpty == true
+              ? _showIptvChannelSheetOverlay
+              : null,
+          hasRecord: _canRecord,
+          isRecording: _recordingActiveNow,
+          onRecord: _canRecord ? _toggleRecording : null,
+        ),
       ),
     );
   }
@@ -8369,8 +9087,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         final last = _tvLastArrowAt;
         _tvScrubRepeats =
             (last != null && now.difference(last).inMilliseconds < 400)
-                ? _tvScrubRepeats + 1
-                : 0;
+            ? _tvScrubRepeats + 1
+            : 0;
         _tvLastArrowAt = now;
         if (_tvScrubRepeats >= 2 && _duration > Duration.zero) {
           _tvScrubRepeats = 0;
@@ -8486,6 +9204,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _onControlsVisibilityChanged() {
+    _playbackUiClock.setVisible(_controlsVisible.value);
     // The dock carries its own copy of the panel, so the floating one goes the
     // instant the dock opens. Fading it would cross-dissolve two copies of the
     // same panel at two different heights.
@@ -8612,7 +9331,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // If controls visible, ignore double-taps near top/bottom bars to not clash with buttons/slider
     if (_controlsVisible.value) {
       const topBar = 72.0;
-      const bottomBar = 72.0;
+      final bottomBar = _dockBand(72.0);
       if (localPos.dy < topBar || localPos.dy > size.height - bottomBar) return;
     }
 
@@ -8646,7 +9365,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (box != null) {
         final size = box.size;
         const topBar = 72.0;
-        const bottomBar = 72.0;
+        final bottomBar = _dockBand(72.0);
         final dy = details.localPosition.dy;
         if (dy < topBar || dy > size.height - bottomBar) {
           _panIgnore = true;
@@ -8746,10 +9465,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _togglePlay() {
     if (!_isReady) return;
     if (_isPlaying) {
+      _activeMediaUserPaused = true;
+      _activeMediaShouldPlay = false;
       _player.pause();
     } else {
       // An explicit press is the one thing that clears a sleep stop.
       _sleepStopLatched = false;
+      _activeMediaUserPaused = false;
+      _activeMediaShouldPlay = true;
       _player.play();
     }
     _scheduleAutoHide();
@@ -8930,6 +9653,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _fireSleepTimer() async {
     _cancelSleepTimer();
     _sleepStopLatched = true;
+    _activeMediaShouldPlay = false;
     if (!_playerCreated) return;
     await _saveResume();
     await _player.pause();
@@ -8974,7 +9698,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // When controls are visible, skip top/bottom bar regions so buttons/slider win
       if (_controlsVisible.value) {
         const topBar = 72.0;
-        const bottomBar = 72.0;
+        final bottomBar = _dockBand(72.0);
         if (localPos.dy < topBar || localPos.dy > size.height - bottomBar) {
           return;
         }
@@ -9158,9 +9882,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   Widget build(BuildContext context) {
     final isReady = _isReady;
-    final duration = _duration;
-    final pos = _position;
-    final activeSkipSegment = _activeSkipSegment;
     final String? channelBadgeText = _channelBadgeText;
     // In the PiP window, hide every interactive/decorative layer so only the
     // video texture (and the buffering spinner) shows. Restores on exit.
@@ -9686,6 +10407,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         pos,
                         size,
                         controlsVisible: _controlsVisible.value,
+                        bottomBar: _dockBand(72.0),
                       )) {
                         _toggleControls();
                       }
@@ -9716,149 +10438,196 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                           child: PlatformUtil.isTelevision
                               ? ExcludeFocus(
                                   excluding: !visible,
-                                  child: _buildTvControls(duration, pos),
+                                  child: _buildTvControls(),
                                 )
                               : Controls(
-                            // Live IPTV leaves the top bar empty on purpose:
-                            // its identity is in the info panel below, and
-                            // repeating the channel in both corners is the
-                            // duplication this redesign set out to remove.
-                            title:
-                                widget.showVideoTitle && !widget.showChannelName
-                                ? _getCurrentEpisodeTitle()
-                                : '',
-                            subtitle:
-                                widget.showVideoTitle && !widget.showChannelName
-                                ? _getCurrentEpisodeSubtitle()
-                                : null,
-                            // Merged into the dock: the channel panel rides on
-                            // top of the transport bar as one surface.
-                            infoPanel: _buildIptvInfoPanel(flush: true),
-                            enhancedMetadata: _getEnhancedMetadata(),
-                            duration: duration,
-                            position: pos,
-                            isPlaying: _isPlaying,
-                            isReady: isReady,
-                            onPlayPause: _togglePlay,
-                            onBack: () => Navigator.of(context).pop(),
-                            onAspect: _cycleAspectMode,
-                            onSpeed: _changeSpeed,
-                            onSleepTimer: _showSleepTimerSheet,
-                            sleepTimerLabel: _sleepTimerButtonLabel,
-                            speed: _playbackSpeed,
-                            aspectMode: _aspectMode,
-                            isLandscape: _landscapeLocked,
-                            onRotate: _toggleOrientation,
-                            hasPlaylist:
-                                _activePlaylist != null &&
-                                _activePlaylist!.isNotEmpty,
-                            onShowPlaylist: () => _showPlaylistSheet(context),
-                            onShowTracks: () => _showTracksSheet(context),
-                            onSeekBarChangedStart: () {
-                              _isSeekingWithSlider = true;
-                            },
-                            onSeekBarChanged: (v) {
-                              final newPos = duration * v;
-                              _player.seek(newPos);
-                              _lastSliderSeekPos = newPos;
-                            },
-                            onSeekBarChangeEnd: () {
-                              _isSeekingWithSlider = false;
-                              _scheduleAutoHide();
-                              if (_lastSliderSeekPos != null) {
-                                _traktScrobbleSeek(_lastSliderSeekPos!);
-                                _simklScrobbleSeek(_lastSliderSeekPos!);
-                                _lastSliderSeekPos = null;
-                              }
-                            },
-                            // IPTV episode list (series/VOD) gets Next/Previous
-                            // that walk the season; a live channel gets the
-                            // same pair as previous/next channel, which is the
-                            // only way to zap without a CH +/- key. Falls back
-                            // to the Debrify-TV episode/playlist flow.
-                            onNext: _hasIptvNext
-                                ? () => _switchToIptvChannel(
-                                    _currentIptvIndex + 1,
-                                  )
-                                : _canZapIptvChannel
-                                ? () => _zapIptvChannel(1)
-                                : (_hasAnyNext ? _goToNextEpisode : null),
-                            onNextChannel: widget.requestNextChannel != null
-                                ? _goToNextChannel
-                                : null,
-                            onPrevious: _hasIptvPrevious
-                                ? () => _switchToIptvChannel(
-                                    _currentIptvIndex - 1,
-                                  )
-                                : _canZapIptvChannel
-                                ? () => _zapIptvChannel(-1)
-                                : (_hasPreviousEpisode()
-                                      ? _goToPreviousEpisode
-                                      : null),
-                            hasNext:
-                                _hasAnyNext ||
-                                _hasIptvNext ||
-                                _canZapIptvChannel,
-                            hasNextChannel: widget.requestNextChannel != null,
-                            hasGuide:
-                                (_channelEntries.isNotEmpty &&
-                                    widget.requestChannelById != null) ||
-                                _hasStremioTvGuide,
-                            onShowGuide:
-                                _channelEntries.isNotEmpty &&
-                                    widget.requestChannelById != null
-                                ? _showChannelGuideOverlay
-                                : _hasStremioTvGuide
-                                ? _showStremioTvGuideOverlay
-                                : null,
-                            hasPrevious:
-                                _hasPreviousEpisode() ||
-                                _hasIptvPrevious ||
-                                _canZapIptvChannel,
-                            // A live channel has no timeline to scrub: the
-                            // position/duration mpv reports is just the HLS
-                            // rolling window, so the bar counts something
-                            // meaningless and sits under the programme rule,
-                            // which is the progress that actually means
-                            // something here. Derived, not a launch arg, so
-                            // zapping to on-demand brings it straight back.
-                            hideSeekbar:
-                                widget.hideSeekbar ||
-                                _iptvZapBannerOwnsIdentity,
-                            // Same call the native dock makes for live.
-                            hideSpeed: _iptvZapBannerOwnsIdentity,
-                            // Shuffle picks from _activePlaylist, which an
-                            // IPTV session never has — the button could only
-                            // ever open a menu that does nothing.
-                            hideRandom: _effectiveIptvChannels != null,
-                            hideOptions: widget.hideOptions,
-                            hideBackButton: widget.hideBackButton,
-                            onRandom: () =>
-                                unawaited(_showRandomPlaybackMenu()),
-                            hasIptvChannels:
-                                _effectiveIptvChannels?.isNotEmpty == true,
-                            onShowIptvChannels:
-                                _effectiveIptvChannels?.isNotEmpty == true
-                                ? _showIptvChannelSheetOverlay
-                                : null,
-                            hasStremioSources:
-                                _effectiveSources != null &&
-                                _effectiveSources!.isNotEmpty &&
-                                (_effectiveResolver != null ||
-                                    widget.resolveSourceToPlaylist != null),
-                            onShowStremioSources:
-                                _effectiveSources != null &&
-                                    _effectiveSources!.isNotEmpty &&
-                                    (_effectiveResolver != null ||
-                                        widget.resolveSourceToPlaylist != null)
-                                ? _showSourceSheetOverlay
-                                : null,
-                            showPipButton: PipService.isOwner(this),
-                            onPip: PipService.isOwner(this) ? _enterPip : null,
-                            hasRecord: _canRecord,
-                            isRecording: _recordingActiveNow,
-                            onRecord: _canRecord ? _toggleRecording : null,
-                          ),
+                                  // Live IPTV leaves the top bar empty on purpose:
+                                  // its identity is in the info panel below, and
+                                  // repeating the channel in both corners is the
+                                  // duplication this redesign set out to remove.
+                                  title:
+                                      widget.showVideoTitle &&
+                                          !widget.showChannelName
+                                      ? _getCurrentEpisodeTitle()
+                                      : '',
+                                  subtitle:
+                                      widget.showVideoTitle &&
+                                          !widget.showChannelName
+                                      ? _getCurrentEpisodeSubtitle()
+                                      : null,
+                                  // Merged into the dock: the channel panel rides on
+                                  // top of the transport bar as one surface.
+                                  infoPanel: _buildIptvInfoPanel(flush: true),
+                                  infoPanelHeight: _reservedInfoPanelHeight,
+                                  geometryGeneration: _dockGeometryGeneration,
+                                  infoPanelGeneration: _infoPanelGeneration,
+                                  onInfoPanelExtent: (h, generation) {
+                                    // A report from a previous layout is
+                                    // stale by definition — drop it.
+                                    if (generation != _infoPanelGeneration) {
+                                      return;
+                                    }
+                                    // Publish increases exactly; only ignore
+                                    // sub-pixel shrinkage.
+                                    if (h > _infoPanelHeight ||
+                                        (_infoPanelHeight - h) >= 1.0) {
+                                      setState(() => _infoPanelHeight = h);
+                                    }
+                                  },
+                                  dockStyle: _dockStyle,
+                                  dockPalette: _dockPalette,
+                                  dockSize: _dockSize,
+                                  // Rotation only means something in the hand.
+                                  showRotate: PlatformUtil.isPhone,
+                                  onDockExtent: (h, generation) {
+                                    if (generation != _dockGeometryGeneration) {
+                                      return;
+                                    }
+                                    // Publish every increase exactly; only
+                                    // suppress sub-pixel shrinkage.
+                                    final prev = _dockExtent.value;
+                                    if (h > prev || (prev - h) >= 1.0) {
+                                      _dockExtent.value = h;
+                                    }
+                                  },
+                                  enhancedMetadata: _getEnhancedMetadata(),
+                                  clock: _playbackUiClock,
+                                  isPlaying: _isPlaying,
+                                  isReady: isReady,
+                                  onPlayPause: _togglePlay,
+                                  onBack: () => Navigator.of(context).pop(),
+                                  onAspect: _cycleAspectMode,
+                                  onSpeed: _changeSpeed,
+                                  onSleepTimer: _showSleepTimerSheet,
+                                  sleepTimerLabel: _sleepTimerButtonLabel,
+                                  speed: _playbackSpeed,
+                                  aspectMode: _aspectMode,
+                                  isLandscape: _landscapeLocked,
+                                  onRotate: _toggleOrientation,
+                                  hasPlaylist:
+                                      _activePlaylist != null &&
+                                      _activePlaylist!.isNotEmpty,
+                                  onShowPlaylist: () =>
+                                      _showPlaylistSheet(context),
+                                  onShowTracks: () => _showTracksSheet(context),
+                                  onSeekBarChangedStart: () {
+                                    _isSeekingWithSlider = true;
+                                  },
+                                  onSeekBarChanged: (v) {
+                                    final newPos = _duration * v;
+                                    _playbackUiClock.updatePosition(
+                                      newPos,
+                                      immediate: true,
+                                    );
+                                    _player.seek(newPos);
+                                    _lastSliderSeekPos = newPos;
+                                  },
+                                  onSeekBarChangeEnd: () {
+                                    _isSeekingWithSlider = false;
+                                    _scheduleAutoHide();
+                                    if (_lastSliderSeekPos != null) {
+                                      _traktScrobbleSeek(_lastSliderSeekPos!);
+                                      _simklScrobbleSeek(_lastSliderSeekPos!);
+                                      _lastSliderSeekPos = null;
+                                    }
+                                  },
+                                  // IPTV episode list (series/VOD) gets Next/Previous
+                                  // that walk the season; a live channel gets the
+                                  // same pair as previous/next channel, which is the
+                                  // only way to zap without a CH +/- key. Falls back
+                                  // to the Debrify-TV episode/playlist flow.
+                                  onNext: _hasIptvNext
+                                      ? () => _switchToIptvChannel(
+                                          _currentIptvIndex + 1,
+                                        )
+                                      : _canZapIptvChannel
+                                      ? () => _zapIptvChannel(1)
+                                      : (_hasAnyNext ? _goToNextEpisode : null),
+                                  onNextChannel:
+                                      widget.requestNextChannel != null
+                                      ? _goToNextChannel
+                                      : null,
+                                  onPrevious: _hasIptvPrevious
+                                      ? () => _switchToIptvChannel(
+                                          _currentIptvIndex - 1,
+                                        )
+                                      : _canZapIptvChannel
+                                      ? () => _zapIptvChannel(-1)
+                                      : (_hasPreviousEpisode()
+                                            ? _goToPreviousEpisode
+                                            : null),
+                                  hasNext:
+                                      _hasAnyNext ||
+                                      _hasIptvNext ||
+                                      _canZapIptvChannel,
+                                  hasNextChannel:
+                                      widget.requestNextChannel != null,
+                                  hasGuide:
+                                      (_channelEntries.isNotEmpty &&
+                                          widget.requestChannelById != null) ||
+                                      _hasStremioTvGuide,
+                                  onShowGuide:
+                                      _channelEntries.isNotEmpty &&
+                                          widget.requestChannelById != null
+                                      ? _showChannelGuideOverlay
+                                      : _hasStremioTvGuide
+                                      ? _showStremioTvGuideOverlay
+                                      : null,
+                                  hasPrevious:
+                                      _hasPreviousEpisode() ||
+                                      _hasIptvPrevious ||
+                                      _canZapIptvChannel,
+                                  // A live channel has no timeline to scrub: the
+                                  // position/duration mpv reports is just the HLS
+                                  // rolling window, so the bar counts something
+                                  // meaningless and sits under the programme rule,
+                                  // which is the progress that actually means
+                                  // something here. Derived, not a launch arg, so
+                                  // zapping to on-demand brings it straight back.
+                                  hideSeekbar:
+                                      widget.hideSeekbar ||
+                                      _iptvZapBannerOwnsIdentity,
+                                  // Same call the native dock makes for live.
+                                  hideSpeed: _iptvZapBannerOwnsIdentity,
+                                  // Shuffle picks from _activePlaylist, which an
+                                  // IPTV session never has — the button could only
+                                  // ever open a menu that does nothing.
+                                  hideRandom: _effectiveIptvChannels != null,
+                                  hideOptions: widget.hideOptions,
+                                  hideBackButton: widget.hideBackButton,
+                                  onRandom: () =>
+                                      unawaited(_showRandomPlaybackMenu()),
+                                  hasIptvChannels:
+                                      _effectiveIptvChannels?.isNotEmpty ==
+                                      true,
+                                  onShowIptvChannels:
+                                      _effectiveIptvChannels?.isNotEmpty == true
+                                      ? _showIptvChannelSheetOverlay
+                                      : null,
+                                  hasStremioSources:
+                                      _effectiveSources != null &&
+                                      _effectiveSources!.isNotEmpty &&
+                                      (_effectiveResolver != null ||
+                                          widget.resolveSourceToPlaylist !=
+                                              null),
+                                  onShowStremioSources:
+                                      _effectiveSources != null &&
+                                          _effectiveSources!.isNotEmpty &&
+                                          (_effectiveResolver != null ||
+                                              widget.resolveSourceToPlaylist !=
+                                                  null)
+                                      ? _showSourceSheetOverlay
+                                      : null,
+                                  showPipButton: PipService.isOwner(this),
+                                  onPip: PipService.isOwner(this)
+                                      ? _enterPip
+                                      : null,
+                                  hasRecord: _canRecord,
+                                  isRecording: _recordingActiveNow,
+                                  onRecord: _canRecord
+                                      ? _toggleRecording
+                                      : null,
+                                ),
                         ),
                       );
                     },
@@ -9866,28 +10635,48 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 // Manual OTT-style skip action. It stays available even when
                 // the main controls are hidden, and lifts above the dock when
                 // they are visible so neither control intercepts the other.
-                if (activeSkipSegment != null && !inPip)
-                  ValueListenableBuilder<bool>(
-                    valueListenable: _controlsVisible,
-                    builder: (context, controlsVisible, _) {
-                      return AnimatedPositioned(
-                        duration: const Duration(milliseconds: 150),
-                        curve: Curves.easeOut,
-                        right: 24,
-                        bottom: controlsVisible &&
-                                (PlatformUtil.isTelevision ||
-                                    !widget.hideOptions)
-                            ? 160
-                            : 28,
-                        child: SafeArea(
-                          top: false,
-                          left: false,
-                          child: SkipSegmentButton(
-                            key: ValueKey(activeSkipSegment.type),
-                            type: activeSkipSegment.type,
-                            onPressed: _skipActiveSegment,
-                          ),
-                        ),
+                if (!inPip)
+                  ValueListenableBuilder<SkipSegment?>(
+                    valueListenable: _activeSkipSegmentUi,
+                    builder: (context, activeSkipSegment, _) {
+                      if (activeSkipSegment == null) {
+                        return const SizedBox.shrink();
+                      }
+                      return ValueListenableBuilder<bool>(
+                        valueListenable: _controlsVisible,
+                        builder: (context, controlsVisible, _) {
+                          // Rebuilds when the styled dock's height changes;
+                          // otherwise the button would keep a stale position
+                          // until some unrelated rebuild happened to occur.
+                          return ValueListenableBuilder<double>(
+                            valueListenable: _dockExtent,
+                            builder: (context, dockExtent, _) {
+                              return AnimatedPositioned(
+                                duration: const Duration(milliseconds: 150),
+                                curve: Curves.easeOut,
+                                right: 24,
+                                // Classic keeps the exact legacy ternary. The
+                                // styled dock is variable-height, so it uses the
+                                // measured band and subtracts this button's OWN
+                                // bottom SafeArea inset, which the child re-adds.
+                                bottom: _skipButtonBottom(
+                                  context,
+                                  controlsVisible,
+                                  dockExtent,
+                                ),
+                                child: SafeArea(
+                                  top: false,
+                                  left: false,
+                                  child: SkipSegmentButton(
+                                    key: ValueKey(activeSkipSegment.type),
+                                    type: activeSkipSegment.type,
+                                    onPressed: _skipActiveSegment,
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
                       );
                     },
                   ),
@@ -9961,7 +10750,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ),
                 // PikPak retry overlay - non-blocking, positioned at bottom right
                 if (_isPikPakRetrying && _pikPakRetryMessage != null && !inPip)
-                  PikPakRetryOverlay(message: _pikPakRetryMessage!),
+                  ValueListenableBuilder<double>(
+                    valueListenable: _dockExtent,
+                    builder: (context, dockExtent, _) =>
+                        ValueListenableBuilder<bool>(
+                          valueListenable: _controlsVisible,
+                          builder: (context, controlsVisible, _) {
+                            // Only lifts while the dock is actually on screen:
+                            // Controls stays mounted under AnimatedOpacity when
+                            // hidden, so the extent alone is not enough.
+                            final dockVisible =
+                                _dockStyle.isStyled &&
+                                controlsVisible &&
+                                (_buildIptvInfoPanel(flush: true) != null ||
+                                    !widget.hideOptions);
+                            return PikPakRetryOverlay(
+                              message: _pikPakRetryMessage!,
+                              bottom: dockVisible
+                                  ? math.max(80.0, dockExtent + 12)
+                                  : 80.0,
+                            );
+                          },
+                        ),
+                  ),
                 // Channel guide overlay
                 if (_showChannelGuide && _channelEntries.isNotEmpty && !inPip)
                   Positioned.fill(

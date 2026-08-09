@@ -71,10 +71,10 @@ class HomeTheme {
   static const Color progressTrack = Color(0x24FFFFFF);
 
   // ── Image decode caps ─────────────────────────────────────────────────────
-  /// memCacheWidth for a full-bleed hero/stage backdrop. One cap shared by
-  /// every cinematic backdrop (Home/Search hero, Stremio TV stage) so tuning
-  /// it for weak TV hardware happens in exactly one place.
+  /// Default cap for TV cinematic backdrops outside the configurable Home
+  /// hero/stage. Home resolves its own TV-only artwork-quality preference.
   static const int heroBackdropCacheWidthTv = 1080;
+  static const int heroBackdropCacheHeightTv = 1080;
   static const int heroBackdropCacheWidth = 1280;
 
   /// CachedNetworkImage fade durations for TV-visible surfaces: package

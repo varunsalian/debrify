@@ -8,6 +8,7 @@ import '../../services/android_native_downloader.dart';
 import '../../services/subtitle_font_service.dart';
 import '../../services/analytics_service.dart';
 import '../../services/skip_segment_service.dart';
+import '../../models/android_video_renderer_mode.dart';
 import '../../utils/deovr_utils.dart' as deovr;
 import '../video_player/services/subtitle_settings_service.dart';
 import '../../utils/platform_util.dart';
@@ -82,6 +83,8 @@ class _ExternalPlayerSettingsPageState
   int _defaultAspectIndex = 2; // Fit Width (mobile) / Fill (TV)
   int _nightModeIndex = 0; // Off
   bool _systemAudioEffects = false; // Android only, opt-in
+  AndroidVideoRendererMode _androidVideoRendererMode =
+      AndroidVideoRendererMode.automatic;
   bool _startPortrait = false; // Phone only, opt-in
   bool _subtitleAutoSync = true; // Android TV only, ON by default (opt-out)
   bool _skipSegmentsEnabled = true;
@@ -108,6 +111,7 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _defaultAudioLangFocusNode = FocusNode();
   final FocusNode _defaultSubtitleLangFocusNode = FocusNode();
   final FocusNode _systemAudioEffectsFocusNode = FocusNode();
+  final FocusNode _androidVideoRendererFocusNode = FocusNode();
   final FocusNode _startPortraitFocusNode = FocusNode();
   final FocusNode _subtitleAutoSyncFocusNode = FocusNode();
   final FocusNode _skipSegmentsEnabledFocusNode = FocusNode();
@@ -122,6 +126,7 @@ class _ExternalPlayerSettingsPageState
   bool _defaultAudioLangFocused = false;
   bool _defaultSubtitleLangFocused = false;
   bool _systemAudioEffectsFocused = false;
+  bool _androidVideoRendererFocused = false;
   bool _startPortraitFocused = false;
   bool _subtitleAutoSyncFocused = false;
   bool _skipSegmentsEnabledFocused = false;
@@ -221,6 +226,12 @@ class _ExternalPlayerSettingsPageState
         _systemAudioEffectsFocused = _systemAudioEffectsFocusNode.hasFocus;
       });
     });
+    _androidVideoRendererFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _androidVideoRendererFocused = _androidVideoRendererFocusNode.hasFocus;
+      });
+    });
     _startPortraitFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -303,6 +314,7 @@ class _ExternalPlayerSettingsPageState
     _defaultAudioLangFocusNode.dispose();
     _defaultSubtitleLangFocusNode.dispose();
     _systemAudioEffectsFocusNode.dispose();
+    _androidVideoRendererFocusNode.dispose();
     _startPortraitFocusNode.dispose();
     _subtitleAutoSyncFocusNode.dispose();
     _skipSegmentsEnabledFocusNode.dispose();
@@ -411,8 +423,11 @@ class _ExternalPlayerSettingsPageState
       final nightModeIndex = await StorageService.getPlayerNightModeIndex();
       final systemAudioEffects =
           await StorageService.getPlayerSystemAudioEffects();
+      final androidVideoRendererMode =
+          await StorageService.getAndroidVideoRendererMode();
       final startPortrait = await StorageService.getPlayerStartPortrait();
-      final subtitleAutoSync = await StorageService.getSubtitleAutoSyncEnabled();
+      final subtitleAutoSync =
+          await StorageService.getSubtitleAutoSyncEnabled();
       final skipSegmentsEnabled = await StorageService.getSkipSegmentsEnabled();
       final storedSkipSegmentProvider =
           await StorageService.getSkipSegmentProvider();
@@ -462,6 +477,7 @@ class _ExternalPlayerSettingsPageState
         _defaultAspectIndex = defaultAspectIndex;
         _nightModeIndex = nightModeIndex;
         _systemAudioEffects = systemAudioEffects;
+        _androidVideoRendererMode = androidVideoRendererMode;
         _startPortrait = startPortrait;
         _subtitleAutoSync = subtitleAutoSync;
         _skipSegmentsEnabled = skipSegmentsEnabled;
@@ -921,6 +937,12 @@ class _ExternalPlayerSettingsPageState
     await StorageService.setPlayerSystemAudioEffects(enabled);
   }
 
+  Future<void> _setAndroidVideoRendererMode(String storageKey) async {
+    final mode = AndroidVideoRendererMode.fromStorage(storageKey);
+    setState(() => _androidVideoRendererMode = mode);
+    await StorageService.setAndroidVideoRendererMode(mode);
+  }
+
   Future<void> _setStartPortrait(bool enabled) async {
     setState(() => _startPortrait = enabled);
     await StorageService.setPlayerStartPortrait(enabled);
@@ -1016,7 +1038,9 @@ class _ExternalPlayerSettingsPageState
           !lowerName.endsWith('.otf')) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please select a .ttf or .otf font file')),
+            const SnackBar(
+              content: Text('Please select a .ttf or .otf font file'),
+            ),
           );
         }
         return;
@@ -1255,10 +1279,7 @@ class _ExternalPlayerSettingsPageState
           color: t.accent.withValues(alpha: 0.14),
           borderRadius: app.shape.br(10),
         ),
-        child: Icon(
-          player.icon,
-          color: canSelect ? t.accent : t.dim2,
-        ),
+        child: Icon(player.icon, color: canSelect ? t.accent : t.dim2),
       ),
       title: Text(
         player.displayName,
@@ -1485,9 +1506,7 @@ class _ExternalPlayerSettingsPageState
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: isFocused || isSelected
-                        ? t.accent
-                        : t.line,
+                    color: isFocused || isSelected ? t.accent : t.line,
                     width: isFocused || isSelected ? 2 : 1,
                   ),
                   boxShadow: isFocused
@@ -1549,9 +1568,7 @@ class _ExternalPlayerSettingsPageState
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: t.accent.withValues(
-                                      alpha: 0.16,
-                                    ),
+                                    color: t.accent.withValues(alpha: 0.16),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
@@ -1639,9 +1656,7 @@ class _ExternalPlayerSettingsPageState
                   color: t.panel2,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: enabled && isFocused
-                        ? t.accent
-                        : t.line,
+                    color: enabled && isFocused ? t.accent : t.line,
                     width: enabled && isFocused ? 2 : 1,
                   ),
                   boxShadow: enabled && isFocused
@@ -1728,9 +1743,7 @@ class _ExternalPlayerSettingsPageState
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             color: isFocused ? t.panel2 : null,
-            border: isFocused
-                ? Border.all(color: t.accent, width: 2)
-                : null,
+            border: isFocused ? Border.all(color: t.accent, width: 2) : null,
             boxShadow: isFocused
                 ? [
                     BoxShadow(
@@ -2099,6 +2112,40 @@ class _ExternalPlayerSettingsPageState
                             ),
                           ],
 
+                          // Android phone/tablet only. Android TV already uses
+                          // native Media3 + SurfaceView; Apple and desktop
+                          // platforms have different decoder APIs entirely.
+                          if (Platform.isAndroid && !_isAndroidTv) ...[
+                            const SizedBox(height: 12),
+                            _buildDropdownSetting(
+                              context,
+                              label: 'Video renderer',
+                              value: _androidVideoRendererMode.storageKey,
+                              items: {
+                                for (final mode
+                                    in AndroidVideoRendererMode.values)
+                                  mode.storageKey: mode.label,
+                              },
+                              onChanged: _setAndroidVideoRendererMode,
+                              focusNode: _androidVideoRendererFocusNode,
+                              isFocused: _androidVideoRendererFocused,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '${_androidVideoRendererMode.description} '
+                              'Restart playback to apply. Use Automatic if a '
+                              'video is black, has incorrect colors, or loses '
+                              'a feature.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color:
+                                    _androidVideoRendererMode ==
+                                        AndroidVideoRendererMode.automatic
+                                    ? t.dim
+                                    : t.warning,
+                              ),
+                            ),
+                          ],
+
                           // System audio effects (Android only). Off by
                           // default because enabling it switches the audio
                           // output backend — see _attachAudioEffectSession in
@@ -2310,10 +2357,7 @@ class _ExternalPlayerSettingsPageState
                                     ),
                                 side: WidgetStateProperty.resolveWith(
                                   (s) => s.contains(WidgetState.focused)
-                                      ? BorderSide(
-                                          color: t.accent,
-                                          width: 2,
-                                        )
+                                      ? BorderSide(color: t.accent, width: 2)
                                       : null,
                                 ),
                               ),
@@ -2398,8 +2442,7 @@ class _ExternalPlayerSettingsPageState
                                                         WidgetState.focused,
                                                       )
                                                       ? BorderSide(
-                                                          color:
-                                                              t.accent,
+                                                          color: t.accent,
                                                           width: 2,
                                                         )
                                                       : null,
@@ -2425,7 +2468,8 @@ class _ExternalPlayerSettingsPageState
                             child: Center(
                               child: Builder(
                                 builder: (context) {
-                                  final previewSize = SubtitleSize
+                                  final previewSize =
+                                      SubtitleSize
                                           .options[_subtitleSizeIndex]
                                           .sizePx *
                                       0.4;
@@ -2601,10 +2645,9 @@ class _ExternalPlayerSettingsPageState
                                                         vertical: 2,
                                                       ),
                                                   decoration: BoxDecoration(
-                                                    color: t.accent
-                                                        .withValues(
-                                                          alpha: 0.16,
-                                                        ),
+                                                    color: t.accent.withValues(
+                                                      alpha: 0.16,
+                                                    ),
                                                     borderRadius:
                                                         BorderRadius.circular(
                                                           4,
@@ -2616,8 +2659,7 @@ class _ExternalPlayerSettingsPageState
                                                         .textTheme
                                                         .labelSmall
                                                         ?.copyWith(
-                                                          color:
-                                                              t.accent,
+                                                          color: t.accent,
                                                           fontWeight:
                                                               FontWeight.w600,
                                                         ),
@@ -2650,7 +2692,8 @@ class _ExternalPlayerSettingsPageState
                 ],
 
                 // iOS-specific player selection
-                if (PlatformUtil.isIosMobile && _defaultPlayerMode == 'external') ...[
+                if (PlatformUtil.isIosMobile &&
+                    _defaultPlayerMode == 'external') ...[
                   const SizedBox(height: 16),
                   Card(
                     child: Column(
@@ -2731,9 +2774,7 @@ class _ExternalPlayerSettingsPageState
                               boxShadow: _iosSchemeFocused
                                   ? [
                                       BoxShadow(
-                                        color: t.accent.withValues(
-                                          alpha: 0.25,
-                                        ),
+                                        color: t.accent.withValues(alpha: 0.25),
                                         blurRadius: 18,
                                         offset: const Offset(0, 8),
                                       ),
@@ -2833,7 +2874,8 @@ class _ExternalPlayerSettingsPageState
                 ],
 
                 // iOS external player info
-                if (PlatformUtil.isIosMobile && _defaultPlayerMode == 'external') ...[
+                if (PlatformUtil.isIosMobile &&
+                    _defaultPlayerMode == 'external') ...[
                   const SizedBox(height: 16),
                   SettingsInfoBanner(
                     text:
@@ -2902,10 +2944,7 @@ class _ExternalPlayerSettingsPageState
                         children: [
                           Row(
                             children: [
-                              Icon(
-                                Icons.terminal_rounded,
-                                color: t.accent,
-                              ),
+                              Icon(Icons.terminal_rounded, color: t.accent),
                               const SizedBox(width: 8),
                               Text(
                                 'Custom Command',
@@ -2929,9 +2968,7 @@ class _ExternalPlayerSettingsPageState
                               boxShadow: _linuxCommandFocused
                                   ? [
                                       BoxShadow(
-                                        color: t.accent.withValues(
-                                          alpha: 0.25,
-                                        ),
+                                        color: t.accent.withValues(alpha: 0.25),
                                         blurRadius: 18,
                                         offset: const Offset(0, 8),
                                       ),
@@ -3103,10 +3140,7 @@ class _ExternalPlayerSettingsPageState
                         children: [
                           Row(
                             children: [
-                              Icon(
-                                Icons.terminal_rounded,
-                                color: t.accent,
-                              ),
+                              Icon(Icons.terminal_rounded, color: t.accent),
                               const SizedBox(width: 8),
                               Text(
                                 'Custom Command',
@@ -3130,9 +3164,7 @@ class _ExternalPlayerSettingsPageState
                               boxShadow: _windowsCommandFocused
                                   ? [
                                       BoxShadow(
-                                        color: t.accent.withValues(
-                                          alpha: 0.25,
-                                        ),
+                                        color: t.accent.withValues(alpha: 0.25),
                                         blurRadius: 18,
                                         offset: const Offset(0, 8),
                                       ),
@@ -3291,10 +3323,7 @@ class _ExternalPlayerSettingsPageState
                         children: [
                           Row(
                             children: [
-                              Icon(
-                                Icons.folder_open_rounded,
-                                color: t.accent,
-                              ),
+                              Icon(Icons.folder_open_rounded, color: t.accent),
                               const SizedBox(width: 8),
                               Text(
                                 'Custom App',
@@ -3321,10 +3350,7 @@ class _ExternalPlayerSettingsPageState
                               ),
                               child: Row(
                                 children: [
-                                  Icon(
-                                    Icons.apps_rounded,
-                                    color: t.accent,
-                                  ),
+                                  Icon(Icons.apps_rounded, color: t.accent),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
@@ -3416,17 +3442,12 @@ class _ExternalPlayerSettingsPageState
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
                               border: _commandFocused
-                                  ? Border.all(
-                                      color: t.accent,
-                                      width: 1.8,
-                                    )
+                                  ? Border.all(color: t.accent, width: 1.8)
                                   : null,
                               boxShadow: _commandFocused
                                   ? [
                                       BoxShadow(
-                                        color: t.accent.withValues(
-                                          alpha: 0.25,
-                                        ),
+                                        color: t.accent.withValues(alpha: 0.25),
                                         blurRadius: 18,
                                         offset: const Offset(0, 8),
                                       ),
@@ -3454,9 +3475,7 @@ class _ExternalPlayerSettingsPageState
                                     'Use {url} for video URL, {title} for title',
                                 helperMaxLines: 2,
                                 errorText: _commandError,
-                                prefixIcon: const Icon(
-                                  Icons.terminal_rounded,
-                                ),
+                                prefixIcon: const Icon(Icons.terminal_rounded),
                               ),
                               onChanged: (_) {
                                 if (_commandError != null) {
@@ -3556,11 +3575,7 @@ class _ExternalPlayerSettingsPageState
                           padding: const EdgeInsets.all(16),
                           child: Row(
                             children: [
-                              Icon(
-                                Icons.vrpano,
-                                color: t.accent,
-                                size: 24,
-                              ),
+                              Icon(Icons.vrpano, color: t.accent, size: 24),
                               const SizedBox(width: 12),
                               Text(
                                 'DeoVR Settings',

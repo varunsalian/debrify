@@ -36,6 +36,7 @@ import '../services/stremio_iptv_service.dart';
 import '../services/stremio_service.dart';
 import '../services/next_episode_service.dart';
 import '../services/storage_service.dart';
+import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/torbox_service.dart';
 import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
@@ -1360,6 +1361,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (widget.isTelevision) {
         unawaited(_loadTvHomeStyle());
         MainPageBridge.tvHomeStyleChanged = _onTvHomeStyleChanged;
+        MainPageBridge.tvHeroArtworkQualityChanged =
+            _onTvHeroArtworkQualityChanged;
         // Canvas theater mode: a dwell after trailer frames land recedes the
         // shelf so the video owns the screen; any key wakes it. Observe-only
         // handler (the key still performs its normal action) — same rule as
@@ -1618,6 +1621,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
     if (MainPageBridge.tvHomeStyleChanged == _onTvHomeStyleChanged) {
       MainPageBridge.tvHomeStyleChanged = null;
+    }
+    if (MainPageBridge.tvHeroArtworkQualityChanged ==
+        _onTvHeroArtworkQualityChanged) {
+      MainPageBridge.tvHeroArtworkQualityChanged = null;
     }
     if (widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
       _heroTrailerShowing.removeListener(_onCanvasTrailerShowingChanged);
@@ -4582,6 +4589,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   bool get _homeBoardMode =>
       widget.isTelevision && !widget.searchMode && !widget.discoverMode;
 
+  int get _tvHeroArtworkCacheWidth =>
+      TvHeroArtworkQualityController.decodeSize.landscapeWidth;
+  int get _tvHeroArtworkCacheHeight =>
+      TvHeroArtworkQualityController.decodeSize.posterHeight;
+
   /// The layout the CURRENT surface should render (guards non-home surfaces).
   String get _homeStyleEffective => _homeBoardMode ? _tvHomeStyle : 'classic';
 
@@ -4783,6 +4795,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   void _onTvHomeStyleChanged() {
     if (!mounted) return;
     unawaited(_loadTvHomeStyle());
+  }
+
+  void _onTvHeroArtworkQualityChanged() {
+    if (!mounted || !_homeBoardMode) return;
+    setState(() {});
   }
 
   // ── CANVAS view ──────────────────────────────────────────────────────────
@@ -5419,6 +5436,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               item: _heroItem,
               enriched: _heroEnriched,
               fav: _canvasFavFocus,
+              cacheWidth: _tvHeroArtworkCacheWidth,
+              cacheHeight: _tvHeroArtworkCacheHeight,
             ),
             // Full-bleed ambient trailer: same engine, whole-canvas region.
             if (_heroTrailerActive)
@@ -5861,6 +5880,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               item: _heroItem,
               enriched: _heroEnriched,
               fav: _canvasFavFocus,
+              cacheWidth: _tvHeroArtworkCacheWidth,
+              cacheHeight: _tvHeroArtworkCacheHeight,
             ),
             if (_heroTrailerActive)
               _HeroTrailerLayer(
@@ -6265,6 +6286,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     item: _heroItem,
                     enriched: _heroEnriched,
                     fav: _canvasFavFocus,
+                    cacheWidth: _tvHeroArtworkCacheWidth,
+                    cacheHeight: _tvHeroArtworkCacheHeight,
                   ),
                   if (_heroTrailerActive)
                     _HeroTrailerLayer(
@@ -6606,6 +6629,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               item: _heroItem,
               enriched: _heroEnriched,
               fav: _canvasFavFocus,
+              cacheWidth: _tvHeroArtworkCacheWidth,
+              cacheHeight: _tvHeroArtworkCacheHeight,
             ),
             // Constant veil. It SNAPS (no tween): a full-screen gradient
             // tween is the single most expensive thing this board could do.
@@ -7008,6 +7033,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     item: _heroItem,
                     enriched: _heroEnriched,
                     fav: _canvasFavFocus,
+                    cacheWidth: _tvHeroArtworkCacheWidth,
+                    cacheHeight: _tvHeroArtworkCacheHeight,
                   ),
                   if (_heroTrailerActive)
                     _HeroTrailerLayer(
@@ -7534,6 +7561,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     item: _heroItem,
                     enriched: _heroEnriched,
                     fav: _canvasFavFocus,
+                    cacheWidth: _tvHeroArtworkCacheWidth,
+                    cacheHeight: _tvHeroArtworkCacheHeight,
                   ),
                   if (_heroTrailerActive)
                     _HeroTrailerLayer(
@@ -14044,6 +14073,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               compact: widget.searchMode,
                               isTelevision: tv,
                               height: heroH,
+                              artworkCacheWidth: tv
+                                  ? (_homeBoardMode
+                                        ? _tvHeroArtworkCacheWidth
+                                        : HomeTheme.heroBackdropCacheWidthTv)
+                                  : HomeTheme.heroBackdropCacheWidth,
+                              artworkCacheHeight: tv
+                                  ? (_homeBoardMode
+                                        ? _tvHeroArtworkCacheHeight
+                                        : HomeTheme.heroBackdropCacheHeightTv)
+                                  : null,
                               tint: _heroTint,
                               // The Concept-5 stage (region key art + colour
                               // field, text capped at the region's left edge)
@@ -15482,6 +15521,8 @@ class _HeroSpotlight extends StatefulWidget {
   final String? description;
   final bool isTelevision;
   final double height;
+  final int artworkCacheWidth;
+  final int? artworkCacheHeight;
 
   /// IMDb rating to show in the meta line (resolved by the host from the item
   /// or its enriched /meta details, since catalog list items often omit it).
@@ -15538,6 +15579,8 @@ class _HeroSpotlight extends StatefulWidget {
     required this.description,
     required this.isTelevision,
     required this.height,
+    required this.artworkCacheWidth,
+    required this.artworkCacheHeight,
     this.rating,
     this.runtime,
     this.logo,
@@ -15849,7 +15892,8 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
     final rating = widget.rating;
     final compact = widget.compact;
     final scheme = Theme.of(context).colorScheme;
-    final bg = (background != null && background.isNotEmpty)
+    final hasBackgroundArtwork = background != null && background.isNotEmpty;
+    final bg = hasBackgroundArtwork
         ? background
         : (item.poster ?? '');
     final runtime = widget.runtime;
@@ -15935,9 +15979,12 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                             imageUrl: bg,
                             fit: BoxFit.cover,
                             alignment: Alignment.topCenter,
-                            memCacheWidth: isTelevision
-                                ? HomeTheme.heroBackdropCacheWidthTv
-                                : HomeTheme.heroBackdropCacheWidth,
+                            memCacheWidth: hasBackgroundArtwork
+                                ? widget.artworkCacheWidth
+                                : null,
+                            memCacheHeight: hasBackgroundArtwork
+                                ? null
+                                : widget.artworkCacheHeight,
                             fadeInDuration: HomeTheme.imageFadeIn(isTelevision),
                             fadeOutDuration: HomeTheme.imageFadeOut(
                               isTelevision,
@@ -16012,9 +16059,12 @@ class _HeroSpotlightState extends State<_HeroSpotlight>
                         // decode at native res, but keep it generous — it's a single
                         // full-width image (crisp matters, and one instance is cheap;
                         // the memory win is the many small rail posters, not this).
-                        memCacheWidth: isTelevision
-                            ? HomeTheme.heroBackdropCacheWidthTv
-                            : HomeTheme.heroBackdropCacheWidth,
+                        memCacheWidth: hasBackgroundArtwork
+                            ? widget.artworkCacheWidth
+                            : null,
+                        memCacheHeight: hasBackgroundArtwork
+                            ? null
+                            : widget.artworkCacheHeight,
                         errorWidget: (_, __, ___) => const SizedBox.shrink(),
                       ),
                     ),
@@ -18587,6 +18637,8 @@ void _rememberDeadBackdrop(String url) {
 class _CanvasArtLayer extends StatelessWidget {
   final ValueListenable<StremioMeta?> item;
   final ValueListenable<StremioMeta?> enriched;
+  final int cacheWidth;
+  final int cacheHeight;
 
   /// Non-null while a favourites cell has focus: its art overrides the hero
   /// pipeline's (contain-fit logos render centred over the floor instead of
@@ -18597,6 +18649,8 @@ class _CanvasArtLayer extends StatelessWidget {
     required this.item,
     required this.enriched,
     required this.fav,
+    required this.cacheWidth,
+    required this.cacheHeight,
   });
 
   @override
@@ -18656,11 +18710,13 @@ class _CanvasArtLayer extends StatelessWidget {
               );
             } else {
               art = CachedNetworkImage(
-                key: ValueKey('canvas-fav-art-$favArt'),
+                key: ValueKey(
+                  'canvas-fav-art-$favArt-${cacheWidth}x$cacheHeight',
+                ),
                 imageUrl: favArt,
                 fit: BoxFit.cover,
                 alignment: Alignment.topCenter,
-                memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
+                memCacheWidth: cacheWidth,
                 fadeInDuration: Duration.zero,
                 fadeOutDuration: Duration.zero,
                 errorWidget: (_, __, ___) => const SizedBox.shrink(),
@@ -18675,11 +18731,12 @@ class _CanvasArtLayer extends StatelessWidget {
             final derived = wide != null && wide != enr?.background &&
                 wide != it?.background;
             art = CachedNetworkImage(
-              key: ValueKey(bg),
+              key: ValueKey('$bg-${cacheWidth}x$cacheHeight'),
               imageUrl: bg,
               fit: BoxFit.cover,
               alignment: Alignment.topCenter,
-              memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
+              memCacheWidth: wide != null ? cacheWidth : null,
+              memCacheHeight: wide == null ? cacheHeight : null,
               fadeInDuration: Duration.zero,
               fadeOutDuration: Duration.zero,
               errorWidget: (_, __, ___) {
@@ -18691,7 +18748,7 @@ class _CanvasArtLayer extends StatelessWidget {
                   imageUrl: posterUrl,
                   fit: BoxFit.cover,
                   alignment: Alignment.topCenter,
-                  memCacheWidth: HomeTheme.heroBackdropCacheWidthTv,
+                  memCacheHeight: cacheHeight,
                   fadeInDuration: Duration.zero,
                   fadeOutDuration: Duration.zero,
                   errorWidget: (_, __, ___) => const SizedBox.shrink(),
