@@ -203,7 +203,16 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
   }
 
   void _showResetConfirmation(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
+    // The ring is drawn ON the filled button, whose fill is
+    // `colorScheme.primary` — the theme's accent. Legacy keeps the shipped
+    // white: its filled buttons are indigo #818CF8, where white scores 2.98
+    // and `inkOn` would return near-black, a visible change to today's app.
+    // Every other theme must score, because a white ring is invisible on
+    // Noir's and Frost's literal-white accents and barely there on
+    // Broadcast's yellow.
+    final ringInk = app.isLegacy ? app.core.tx : app.inkOn(app.core.accent);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -235,11 +244,12 @@ class _DebrifyTvSettingsPageState extends State<DebrifyTvSettingsPage> {
               Navigator.of(context).pop();
               _resetToDefaults();
             },
-            // Focused ring on the filled (accent) button reads as white.
+            // Focused ring on the filled (accent) button, scored against that
+            // fill so it stays visible on light accents.
             style: ButtonStyle(
               side: WidgetStateProperty.resolveWith(
                 (states) => states.contains(WidgetState.focused)
-                    ? const BorderSide(color: Colors.white, width: 2)
+                    ? BorderSide(color: ringInk, width: 2)
                     : null,
               ),
             ),

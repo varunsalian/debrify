@@ -1980,6 +1980,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                           focusNode: channelNameFocus,
                           autofocus: _isAndroidTv,
                           textCapitalization: TextCapitalization.words,
+                          // The shared TV shell/keyboard chrome follows
+                          // settings.accent. NOT debrifyTv.accent: legacy
+                          // paints that the channel grid's Netflix red, while
+                          // the keyboard's highlight has always been violet.
+                          accent: app.settings.accent,
+                          keyboardGround: app.youtube.keyboardPanel,
+                          keyboardInk: app.core.tx,
+                          keyboardInkOnAccent: app.inkOn(app.settings.accent),
                           decoration: const InputDecoration(
                             labelText: 'Channel name',
                             prefixIcon: Icon(Icons.label_rounded),
@@ -2040,6 +2048,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                                   prefixIcon: Icon(Icons.add_rounded),
                                 ),
                                 style: TextStyle(color: app.core.tx),
+                                // Shared TV shell/keyboard chrome — see the
+                                // channel-name field above.
+                                accent: app.settings.accent,
+                                keyboardGround: app.youtube.keyboardPanel,
+                                keyboardInk: app.core.tx,
+                                keyboardInkOnAccent: app.inkOn(
+                                  app.settings.accent,
+                                ),
                                 onUpArrow: () =>
                                     channelNameFocus?.requestFocus(),
                                 onDownArrow: () {
@@ -8002,6 +8018,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               focusNode: _channelSearchFocusNode,
               controller: _channelSearchController,
               style: TextStyle(color: app.core.tx),
+              // Shared TV shell/keyboard chrome — settings.accent, with the
+              // keyboard's own panel ground and ink.
+              accent: app.settings.accent,
+              keyboardGround: app.youtube.keyboardPanel,
+              keyboardInk: app.core.tx,
+              keyboardInkOnAccent: app.inkOn(app.settings.accent),
               onLeftArrow: () => MainPageBridge.focusTvSidebar?.call(),
               onRightArrow: () {
                 if (_channelSearchController.text.isNotEmpty) {
@@ -8992,7 +9014,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       // The "import" action tone: deliberately literal (see
                       // DebrifyTvTokens' header).
                       backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: app.core.tx,
+                      // Ink on a FILLED swatch, scored against that swatch —
+                      // the rule every other fill on this screen already runs.
+                      // Page ink was wrong here: on a paper theme `core.tx` is
+                      // near-black and scores 3.83 on this blue, on Phosphor
+                      // its amber scores 2.7. White clears it at 5.17, so
+                      // `inkOn` returns `core.tx` unchanged under legacy and
+                      // every dark theme — today's pixel does not move.
+                      foregroundColor: app.inkOn(const Color(0xFF2563EB)),
                       padding: buttonPadding,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -9077,6 +9106,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           TvTextField(
             controller: _channelSearchController,
             focusNode: _isAndroidTv ? _channelSearchFocusNode : null,
+            // Shared TV shell/keyboard chrome — settings.accent, with the
+            // keyboard's own panel ground and ink.
+            accent: appTheme.settings.accent,
+            keyboardGround: appTheme.youtube.keyboardPanel,
+            keyboardInk: appTheme.core.tx,
+            keyboardInkOnAccent: appTheme.inkOn(appTheme.settings.accent),
             onChanged: (value) {
               setState(() {
                 _channelSearchTerm = value;
@@ -9138,7 +9173,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final tv = AppThemeScope.of(context).debrifyTv;
+            final app = AppThemeScope.of(context);
+            final tv = app.debrifyTv;
             return AlertDialog(
               backgroundColor: tv.dialogBg,
               shape: RoundedRectangleBorder(
@@ -9156,6 +9192,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       autofocus: true,
                       focusNode: keywordFocusNode,
                       textInputAction: TextInputAction.search,
+                      // Shared TV shell/keyboard chrome — settings.accent,
+                      // with the keyboard's own panel ground and ink.
+                      accent: app.settings.accent,
+                      keyboardGround: app.youtube.keyboardPanel,
+                      keyboardInk: app.core.tx,
+                      keyboardInkOnAccent: app.inkOn(app.settings.accent),
                       decoration: const InputDecoration(
                         labelText: 'Keywords',
                         hintText: 'Comma separated keywords',

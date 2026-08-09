@@ -3184,12 +3184,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         break;
       case 'view_files':
         await Navigator.of(context).push(
-          // Same freeze the Playlist tab applies (playlist_screen.dart:231).
-          // Search is themed and this screen belongs to a frozen surface, so
-          // without the wrapper it would render themed from here and legacy
-          // from Playlist — the same screen, two palettes, decided by which
-          // door the user came through.
-          FrozenLegacyPageRoute(
+          // Both doors are themed now (Search always was, Playlist since
+          // phase two), so this screen resolves the same palette either way —
+          // which is what the freeze was here to guarantee while they
+          // disagreed.
+          MaterialPageRoute(
             builder: (_) => PlaylistContentViewScreen(playlistItem: item),
           ),
         );
@@ -12582,7 +12581,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         child: Text(
           label,
           style: TextStyle(
-            color: on ? Colors.white : dim,
+            // Scored against the fill the selected tab actually paints.
+            // `accent` IS the theme accent, and white fails on 17 of the 18
+            // selectable themes (Noir's and Frost's are #FFFFFF), so a
+            // hardcoded white label vanished into its own pill. Legacy's
+            // #7B5CFF scores 4.36 against white, so inkOn still returns white
+            // there — no visual change to today's app.
+            color: on ? app.inkOn(accent) : dim,
             fontSize: 12.5,
             fontWeight: FontWeight.w600,
           ),
@@ -12760,7 +12765,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// The "+N new results" pill: tap (or OK on TV) folds the parked arrivals
   /// into the list; DOWN returns to the rows, UP reaches the toolbar.
   Widget _kwNewResultsPill() {
-    final accent = AppThemeScope.of(context).home.chromeAccent;
+    final app = AppThemeScope.of(context);
+    final accent = app.home.chromeAccent;
     final n = _kwPendingNewCount;
     return Focus(
       focusNode: _kwPillFocus,
@@ -12810,7 +12816,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   Icon(
                     Icons.arrow_upward_rounded,
                     size: 14,
-                    color: focused ? const Color(0xFF17131F) : Colors.white,
+                    // Unfocused the pill is FILLED with the accent, so its ink
+                    // has to be scored against it — white is invisible on the
+                    // near-white accents (Noir, Frost, Vault). The focused
+                    // branch keeps its dark ink on the white focus fill.
+                    color: focused
+                        ? const Color(0xFF17131F)
+                        : app.inkOn(accent),
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -12818,7 +12830,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w700,
-                      color: focused ? const Color(0xFF17131F) : Colors.white,
+                      color: focused
+                          ? const Color(0xFF17131F)
+                          : app.inkOn(accent),
                     ),
                   ),
                 ],
@@ -13202,14 +13216,22 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 children: [
                   Icon(
                     Icons.playlist_add_rounded,
-                    color: count > 0 ? Colors.white : Colors.white38,
+                    // Enabled, this chip is filled with the OPAQUE accent, so
+                    // its ink is scored against it (white disappears on Noir's
+                    // and Frost's #FFFFFF accent). Disabled, the fill is a 0.3
+                    // wash over the dark bar, where white38 still reads.
+                    color: count > 0
+                        ? app.inkOn(app.home.chromeAccent)
+                        : Colors.white38,
                     size: 16,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     'Add',
                     style: TextStyle(
-                      color: count > 0 ? Colors.white : Colors.white38,
+                      color: count > 0
+                          ? app.inkOn(app.home.chromeAccent)
+                          : Colors.white38,
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),
@@ -20159,8 +20181,14 @@ class _ModeToggle extends StatelessWidget {
           Icon(
             icon,
             size: 16,
+            // Scored against the fill, not hardcoded white: chromeAccent IS
+            // the accent, and 17 of the 18 selectable themes have one where
+            // white fails — Noir's and Frost's are pure #FFFFFF, so the
+            // selected segment was a white label on a white bar. inkOn
+            // returns white on legacy's #7B5CFF (4.36, over the threshold),
+            // so this is a no-op today.
             color: on
-                ? Colors.white
+                ? app.inkOn(app.home.chromeAccent)
                 : Theme.of(context).colorScheme.onSurfaceVariant,
           ),
           const SizedBox(width: 6),
@@ -20170,7 +20198,7 @@ class _ModeToggle extends StatelessWidget {
               fontSize: isTelevision ? 14 : 13,
               fontWeight: FontWeight.w700,
               color: on
-                  ? Colors.white
+                  ? app.inkOn(app.home.chromeAccent)
                   : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
@@ -21209,7 +21237,8 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// The "+N new sources" pill: tap (or OK on TV) folds the parked arrivals
   /// into the list; DOWN returns to the rows, UP reaches the toolbar funnel.
   Widget _newSourcesPill() {
-    final accent = AppThemeScope.of(context).home.chromeAccent;
+    final app = AppThemeScope.of(context);
+    final accent = app.home.chromeAccent;
     final n = _pendingNewCount;
     return Focus(
       focusNode: _pillFocus,
@@ -21267,7 +21296,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                   Icon(
                     Icons.arrow_upward_rounded,
                     size: 14,
-                    color: focused ? const Color(0xFF17131F) : Colors.white,
+                    // Same rule as the keyword pill: unfocused the fill is the
+                    // accent, so the ink is scored against it rather than
+                    // hardcoded white.
+                    color: focused
+                        ? const Color(0xFF17131F)
+                        : app.inkOn(accent),
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -21275,7 +21309,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w700,
-                      color: focused ? const Color(0xFF17131F) : Colors.white,
+                      color: focused
+                          ? const Color(0xFF17131F)
+                          : app.inkOn(accent),
                     ),
                   ),
                 ],
@@ -21388,7 +21424,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             child: Text(
               label,
               style: TextStyle(
-                color: on ? Colors.white : dim,
+                // Selected = filled with the accent, so the label is scored
+                // against that fill instead of being hardcoded white.
+                color: on ? app.inkOn(accent) : dim,
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
               ),
@@ -22162,8 +22200,12 @@ class _SrcMiniToggle extends StatelessWidget {
         child: Container(
           width: 20,
           height: 20,
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            // ON, the knob sits on the OPAQUE accent track — a hardcoded white
+            // knob is invisible on Noir's/Frost's #FFFFFF accent, so it is
+            // scored like ink. OFF, the track is a dim wash over the dialog,
+            // where page ink is what reads.
+            color: value ? app.inkOn(app.home.chromeAccent) : app.core.tx,
             shape: BoxShape.circle,
           ),
         ),
@@ -22351,13 +22393,20 @@ class _SrcActionChipState extends State<_SrcActionChip> {
               Icon(
                 widget.icon,
                 size: 16,
-                color: widget.filled ? Colors.white : scheme.onSurfaceVariant,
+                // Filled = the accent at 0.9–1.0 alpha over an opaque dialog,
+                // i.e. effectively the accent itself; score the ink against it
+                // (alpha is ignored by inkOn) instead of assuming white.
+                color: widget.filled
+                    ? app.inkOn(app.home.chromeAccent)
+                    : scheme.onSurfaceVariant,
               ),
               const SizedBox(width: 7),
               Text(
                 widget.label,
                 style: TextStyle(
-                  color: widget.filled ? Colors.white : scheme.onSurface,
+                  color: widget.filled
+                      ? app.inkOn(app.home.chromeAccent)
+                      : scheme.onSurface,
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                 ),

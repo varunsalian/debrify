@@ -315,8 +315,14 @@ class _FiltersButtonState extends State<_FiltersButton> {
                   ),
                   child: Text(
                     '${widget.count}',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    // Ink chosen against the fill actually painted: this badge
+                    // is a SOLID accent swatch, and half the themes' accents
+                    // are light (Noir/Frost are literally #FFFFFF), where a
+                    // hardcoded white count is invisible. Legacy's violet keeps
+                    // white — it scores 4.36, above inkOn's threshold — so the
+                    // shipped look is unchanged.
+                    style: TextStyle(
+                      color: app.inkOn(app.seeAll.accent),
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),

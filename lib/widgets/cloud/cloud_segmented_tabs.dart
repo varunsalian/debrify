@@ -15,8 +15,8 @@ class CloudSegment<T> {
 }
 
 /// Pill segmented control matching the Search screen's Catalog/Keyword toggle:
-/// accent-filled active segment, constant-width 2px white ring on DPAD focus
-/// (so focus never shifts layout). Shared by the cloud screens' view
+/// accent-filled active segment, constant-width 2px ring on DPAD focus (so
+/// focus never shifts layout). Shared by the cloud screens' view
 /// selectors (My Files / Transfers etc.).
 class CloudSegmentedTabs<T> extends StatelessWidget {
   final List<CloudSegment<T>> segments;
@@ -74,7 +74,19 @@ class CloudSegmentedTabs<T> extends StatelessWidget {
                 borderRadius: BorderRadius.circular(9),
                 border: Border.all(
                   color: focused
-                      ? app.fade(app.core.tx, 0.9)
+                      ? app.fade(
+                          // The SELECTED segment's ring is drawn ON the accent
+                          // fill, so it is ink-on-fill like the label — not
+                          // page ink. Noir, Frost and Vault set `accent` to
+                          // the same white/off-white as `tx`, where a page-ink
+                          // ring over the fill disappears and the focused
+                          // segment shows no focus at all. Unselected segments
+                          // sit on the page and keep page ink.
+                          isSelected
+                              ? app.inkOn(app.cloud.accent)
+                              : app.core.tx,
+                          0.9,
+                        )
                       : Colors.transparent,
                   width: 2,
                 ),
