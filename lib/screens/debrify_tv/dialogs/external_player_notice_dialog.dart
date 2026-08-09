@@ -187,6 +187,13 @@ class _DontShowAgainRowState extends State<_DontShowAgainRow> {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     final tv = app.debrifyTv;
+    // LEFT LITERAL: the resting ground 0xFF141418 has no token — `controlBg`
+    // is 0xFF141414, four steps off, and a near-miss is exactly what must not
+    // be substituted. Needs its own role before this row can follow a light
+    // theme. Hoisted so the label below can be scored against whichever of the
+    // two grounds is actually painted.
+    final Color background =
+        _isFocused ? tv.cardFocusBg : tv.controlResting;
     return Focus(
       onFocusChange: (focused) => setState(() => _isFocused = focused),
       onKeyEvent: (node, event) {
@@ -206,11 +213,7 @@ class _DontShowAgainRowState extends State<_DontShowAgainRow> {
               : const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            // LEFT LITERAL: the resting ground 0xFF141418 has no token —
-            // `controlBg` is 0xFF141414, four steps off, and a near-miss is
-            // exactly what must not be substituted. Needs its own role before
-            // this row can follow a light theme.
-            color: _isFocused ? tv.cardFocusBg : const Color(0xFF141418),
+            color: background,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isFocused ? tv.focusRing : tv.hairline,
@@ -229,7 +232,13 @@ class _DontShowAgainRowState extends State<_DontShowAgainRow> {
               Expanded(
                 child: Text(
                   "Don't show this again",
-                  style: TextStyle(color: app.core.tx),
+                  // Ink on a filled swatch, scored against that swatch — the
+                  // same rule `_DialogButton` runs. Page ink was wrong here:
+                  // the resting ground stays a pinned dark literal on every
+                  // theme, so a paper theme's near-black label vanished into
+                  // it. Both grounds clear white by a wide margin under
+                  // legacy (18.4:1 and 14.0:1), so today's pixel is unchanged.
+                  style: TextStyle(color: app.inkOn(background)),
                 ),
               ),
             ],

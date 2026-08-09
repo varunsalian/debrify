@@ -80,9 +80,17 @@ class IptvCommandRail extends StatelessWidget {
       width: 196,
       decoration: t == null
           ? BoxDecoration(
-              // No token carries #080B18 (the rail's own ground is a step
-              // deeper than iptv.stageBg), so it stays a literal for now.
-              color: const Color(0xFF080B18).withValues(alpha: 0.65),
+              // The cockpit's recessed ground — `iptv.stageBg` names the
+              // command rail as one of its three surfaces, so the rail follows
+              // the page's own recess instead of a fixed navy that read
+              // dark-on-dark against the derived ink below it.
+              //
+              // Legacy keeps its literal: it paints the rail a step DEEPER
+              // than the stage (#080B18 vs stageBg's #0B0914) and no token
+              // carries that value, so pinning it is the only way the shipped
+              // pixel survives while every other theme still flips.
+              color:
+                  app.iptv.railBg.withValues(alpha: 0.65),
               border: Border(
                 right: BorderSide(color: app.core.tx.withValues(alpha: 0.07)),
               ),
@@ -298,7 +306,7 @@ class _RailItemState extends State<_RailItem> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(9),
               color: widget.selected
-                  ? const Color(0xFF8A5CFF).withValues(alpha: 0.16)
+                  ? app.iptv.railSelectionFill
                   : _focused
                   ? app.core.tx.withValues(alpha: 0.05)
                   : Colors.transparent,
@@ -329,7 +337,13 @@ class _RailItemState extends State<_RailItem> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: widget.selected
-                          ? const Color(0xFFE4DCFF)
+                          // Ink on the selection FILL (a 16% violet tint over
+                          // the rail's ground), so it is scored rather than
+                          // taken from the page: now that the ground follows
+                          // the theme, legacy's near-white would disappear on
+                          // a paper rail. Legacy keeps its own literal, so the
+                          // shipped pixel is unchanged.
+                          ? app.iptv.railFocusInk
                           : app.core.tx.withValues(alpha: 0.72),
                       fontSize: 12,
                       fontWeight: FontWeight.w700,

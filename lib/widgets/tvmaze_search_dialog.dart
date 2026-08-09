@@ -240,9 +240,15 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                 width: posterWidth,
                 height: posterHeight,
                 decoration: BoxDecoration(
-                  // Left literal: no token carries this grey (the surface's
-                  // poster placeholder is #1A1A2E).
-                  color: const Color(0xFF333333),
+                  // The box behind a show's poster is exactly Playlist's
+                  // "fill behind a missing or still-loading poster" role, so
+                  // every theme paints it with that token and the `ink54`
+                  // glyph over it keeps its contrast with the ground.
+                  //
+                  // Legacy keeps its shipped grey: no token carries #333333
+                  // (posterPlaceholder is #1A1A2E), so pointing legacy at the
+                  // token would move a colour that ships today.
+                  color: app.playlist.posterTileBg,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: ClipRRect(
@@ -446,8 +452,13 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
               focusNode: _searchFocusNode,
               autofocus: true,
               // The shared TV shell/keyboard chrome follows settings.accent,
-              // as Downloads established; its ground stays with the widget.
+              // as Downloads established. The panel's ground is the keyboard's
+              // own role — `youtube.keyboardPanel` is the token that pins it —
+              // and the keycap label is scored against the accent painted.
               accent: app.settings.accent,
+              keyboardGround: app.youtube.keyboardPanel,
+              keyboardInk: app.core.tx,
+              keyboardInkOnAccent: app.inkOn(app.settings.accent),
               decoration: InputDecoration(
                 hintText: 'Enter show name...',
                 hintStyle: TextStyle(color: app.playlist.ink3),

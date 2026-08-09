@@ -1275,8 +1275,14 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               onRightArrow:
                   hasText ? () => _searchClearFocusNode.requestFocus() : null,
               // The shared TV shell/keyboard chrome follows settings.accent,
-              // as Downloads established.
+              // as Downloads established. The panel's ground and ink are the
+              // keyboard's own roles rather than this surface's, so they come
+              // from `youtube.keyboardPanel` / `core.tx`; the keycap label is
+              // scored against the accent actually being painted.
               accent: app.settings.accent,
+              keyboardGround: app.youtube.keyboardPanel,
+              keyboardInk: app.core.tx,
+              keyboardInkOnAccent: app.inkOn(app.settings.accent),
               decoration: InputDecoration(
                 hintText: 'Search all files...',
                 // Colors.grey left literal: no token carries it.
@@ -1725,16 +1731,22 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         child: Text(
                           isFinished ? 'DONE' : '${(progress * 100).round()}%',
                           style: TextStyle(
-                            // Scored against the badge it sits on, not page
-                            // ink: this fill is a semantic green / progress
-                            // gold, and white on derived success is ~1.9:1.
-                            // Legacy keeps its shipped white because that is
-                            // what inkOn returns for the legacy fills.
-                            color: app.inkOn(
-                              isFinished
-                                  ? app.playlist.statusWatched
-                                  : app.playlist.progressPlayed,
-                            ),
+                            // Legacy keeps its shipped WHITE explicitly. It
+                            // cannot be left to inkOn: white scores 3.77 on
+                            // legacy's #059669 and 3.12 on Colors.blue, both
+                            // under the 4.0 threshold, so inkOn returns
+                            // core.ground and the badge would flip to
+                            // near-black — a visible change to today's app.
+                            //
+                            // Every other theme scores, because white on a
+                            // DERIVED success green is ~1.9:1 and unreadable.
+                            color: app.isLegacy
+                                ? app.core.tx
+                                : app.inkOn(
+                                    isFinished
+                                        ? app.playlist.statusWatched
+                                        : app.playlist.progressPlayed,
+                                  ),
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                           ),

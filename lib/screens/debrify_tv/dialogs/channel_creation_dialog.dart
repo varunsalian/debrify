@@ -75,8 +75,15 @@ class _ChannelCreationDialogState extends State<ChannelCreationDialog> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           gradient: LinearGradient(
-            // 0xFF101014 is the gradient's deep stop and no role holds it.
-            colors: [tv.noticeBg, const Color(0xFF101014)],
+            // 0xFF101014 is the gradient's deep stop and no role holds it —
+            // nearest are `controlBg` 0xFF141414 and `dialogBg` 0xFF0F0F0F,
+            // both different colours. So the card is HALF themed: top stop
+            // follows the theme, bottom stop is pinned dark. The title and
+            // body ink below stay theme ink for that reason — on a paper
+            // theme no single ink reads over both halves, and scoring against
+            // one stop would only relocate the unreadable half. Fixing this
+            // properly needs a deep-stop role in DebrifyTvTokens.
+            colors: [tv.noticeBg, tv.dialogDeep],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),

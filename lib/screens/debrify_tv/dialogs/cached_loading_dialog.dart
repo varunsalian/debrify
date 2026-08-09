@@ -55,8 +55,15 @@ class _CachedLoadingDialogState extends State<CachedLoadingDialog> {
               borderRadius: BorderRadius.circular(24),
               gradient: LinearGradient(
                 // 0xFF101014 is the gradient's deep stop and no role holds it
-                // — left literal rather than mapped to a near-miss.
-                colors: [tv.noticeBg, const Color(0xFF101014)],
+                // — left literal rather than mapped to a near-miss. (Nearest
+                // are `controlBg` 0xFF141414 and `dialogBg` 0xFF0F0F0F, both
+                // different colours.) The card is therefore HALF themed: the
+                // top stop follows the theme, the bottom is pinned dark. The
+                // ink below is deliberately NOT scored against a stop — on a
+                // paper theme no single ink reads over both halves, so
+                // scoring would only move the unreadable half rather than fix
+                // it. This needs a deep-stop role in DebrifyTvTokens first.
+                colors: [tv.noticeBg, tv.dialogDeep],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),

@@ -456,10 +456,18 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
     // `Colors.white24` spelled off the page ink at its exact alpha (0x3D/255),
     // so it stays byte-identical under legacy and inverts on a light ground.
     final placeholderInk = app.core.tx.withValues(alpha: 0x3D / 255);
-    // Only the TOP stop has a token; the deep stop below it has no role in the
-    // layer, so it is left literal rather than pointed at a near-miss.
+    // The artwork fill falls from `playlist.posterPlaceholder` to the page's
+    // own ground, which is the relationship legacy already paints (#1A1A2E
+    // down to a near-ground black). Legacy keeps its shipped deep stop
+    // EXACTLY — no token carries #06080F, and `core.ground` is #0B0B0E, a
+    // near-miss — but every other theme has to fall to its own ground: a fixed
+    // dark slab under `placeholderInk`, which is page ink, is the spinner and
+    // the glyph disappearing on any light theme.
     final loadingGradient = LinearGradient(
-      colors: [app.playlist.posterPlaceholder, const Color(0xFF06080F)],
+      colors: [
+        app.playlist.posterPlaceholder,
+        app.playlist.posterFallbackDeep,
+      ],
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
     );
@@ -490,12 +498,22 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
               ),
             )
           : Container(
-              // Both stops left literal: they are value-equal to
-              // cloud.dialogSurface / home.sheetBg, but those are a MODAL
-              // ground and a dialog ground — not a poster fill.
-              decoration: const BoxDecoration(
+              // The no-poster case is the same ROLE as the loading one, so it
+              // derives the same way: the placeholder falling to the ground.
+              //
+              // Legacy's two stops stay literal in the legacy branch on
+              // purpose. Neither has a token at its exact value — they are
+              // value-equal to cloud.dialogSurface / home.sheetBg, but those
+              // are a MODAL ground and a dialog ground, not a poster fill, and
+              // `playlist.posterPlaceholder` is #1A1A2E, a near-miss. Pinning
+              // the pair here keeps today's pixels while the themed branch
+              // stops painting a dark slab under page ink.
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                  colors: [
+                    app.playlist.noPosterBg,
+                    app.playlist.noPosterDeep,
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
