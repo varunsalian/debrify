@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../theme/app_theme_scope.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../widgets/tv_text_field.dart';
 import '../../../services/catalog_repo_service.dart';
@@ -543,6 +544,7 @@ class _StremioTvRepoBrowserDialogState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final app = AppThemeScope.of(context);
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Material(
@@ -592,6 +594,10 @@ class _StremioTvRepoBrowserDialogState
                     child: TvTextField(
                       controller: _urlController,
                       focusNode: _urlFocusNode,
+                      accent: app.youtube.focus,
+                      keyboardGround: app.youtube.keyboardPanel,
+                      keyboardInk: app.core.tx,
+                      keyboardInkOnAccent: app.inkOn(app.youtube.focus),
                       // Same exits the deleted node handler provided: Close
                       // above, the Add button next in the DPAD order below.
                       onUpArrow: () => _closeFocusNode.requestFocus(),
@@ -945,11 +951,11 @@ class _StremioTvRepoBrowserDialogState
             onPressed:
                 _importing || _selectedPaths.isEmpty ? null : _importSelected,
             icon: _importing
-                ? const SizedBox(
+                ? SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
+                        strokeWidth: 2, color: theme.colorScheme.onPrimary))
                 : const Icon(Icons.download_rounded, size: 18),
             label: Text(_importing
                 ? 'Importing...'

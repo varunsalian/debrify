@@ -3,7 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../see_all/see_all_theme.dart';
+import '../../theme/app_theme_scope.dart';
 
 typedef IptvCenteredItemBuilder =
     Widget Function(
@@ -175,6 +175,7 @@ class _IptvCenteredSelectorState extends State<IptvCenteredSelector> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
         final centerPadding = math.max(
@@ -216,24 +217,24 @@ class _IptvCenteredSelectorState extends State<IptvCenteredSelector> {
                   width: 28,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: kSeeAllAccent.withValues(alpha: 0.18),
+                    color: app.seeAll.accent.withValues(alpha: 0.18),
                     borderRadius: const BorderRadius.horizontal(
                       right: Radius.circular(14),
                     ),
                     border: Border.all(
-                      color: kSeeAllAccent2.withValues(alpha: 0.54),
+                      color: app.seeAll.accent2.withValues(alpha: 0.54),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: kSeeAllAccent.withValues(alpha: 0.28),
+                        color: app.seeAll.accent.withValues(alpha: 0.28),
                         blurRadius: 18,
                         spreadRadius: 1,
                       ),
                     ],
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.arrow_right_rounded,
-                    color: kSeeAllAccent2,
+                    color: app.seeAll.accent2,
                     size: 27,
                   ),
                 ),

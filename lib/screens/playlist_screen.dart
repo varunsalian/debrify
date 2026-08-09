@@ -7,6 +7,7 @@ import '../services/analytics_service.dart';
 import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
 import '../theme/app_surfaces.dart';
+import '../theme/app_theme_scope.dart';
 import '../services/playlist_player_service.dart';
 import '../widgets/adaptive_playlist_section.dart';
 import '../widgets/tv_text_field.dart';
@@ -251,14 +252,19 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     // Prevent concurrent deletions
     if (_isDeletionInProgress) return;
 
+    // Read from the surface that opens the dialog, as Downloads does: the
+    // sheet is themed by the subtree that raised it, and reading here keeps
+    // the BuildContext use out of the async gap below.
+    final app = AppThemeScope.of(context);
+
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: app.home.sheetBg,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: Colors.white.withOpacity(0.08)),
+          side: BorderSide(color: app.fade(app.core.tx, 0.08)),
         ),
         title: const Text(
           'Remove from playlist?',
@@ -266,14 +272,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         ),
         content: Text(
           '"${item['title'] ?? 'This item'}" will be removed from your playlist. You can always add it again later.',
-          style: const TextStyle(color: Colors.white70, fontSize: 15),
+          style: TextStyle(color: app.playlist.ink2, fontSize: 15),
         ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
             style: TextButton.styleFrom(
-              foregroundColor: Colors.white70,
+              foregroundColor: app.playlist.ink2,
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
             child: const Text('Keep'),
@@ -281,6 +287,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(
+              // Netflix red, and NOT playlist.destructive (#FF6B6B) — no token
+              // carries this value, so substituting one would move the pixel.
               foregroundColor: const Color(0xFFE50914),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
@@ -348,14 +356,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Future<void> _clearPlaylistProgress(Map<String, dynamic> item) async {
+    final app = AppThemeScope.of(context);
+
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: app.home.sheetBg,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: Colors.white.withOpacity(0.08)),
+          side: BorderSide(color: app.fade(app.core.tx, 0.08)),
         ),
         title: const Text(
           'Clear watch progress?',
@@ -363,14 +373,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         ),
         content: Text(
           'All watch progress for "${item['title'] ?? 'this playlist'}" will be cleared. This cannot be undone.',
-          style: const TextStyle(color: Colors.white70, fontSize: 15),
+          style: TextStyle(color: app.playlist.ink2, fontSize: 15),
         ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
             style: TextButton.styleFrom(
-              foregroundColor: Colors.white70,
+              foregroundColor: app.playlist.ink2,
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
             child: const Text('Cancel'),
@@ -378,7 +388,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFFF9800),
+              // Same value as the Fix Metadata chip's Colors.orange.
+              foregroundColor: app.playlist.warning,
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
             child: const Text('Clear Progress'),
@@ -412,16 +423,17 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: FutureBuilder<void>(
         future: _initFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
+            return Center(
               child: CircularProgressIndicator(
                 strokeWidth: 2.5,
-                valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
+                valueColor: AlwaysStoppedAnimation(app.playlist.accent),
               ),
             );
           }
@@ -454,8 +466,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 policy: _PlaylistFocusTraversalPolicy(),
                 child: RefreshIndicator(
                   onRefresh: _refresh,
-                  backgroundColor: const Color(0xFF1E293B),
-                  color: const Color(0xFF6366F1),
+                  backgroundColor: app.cloud.dialogSurface,
+                  color: app.playlist.accent,
                   child: CustomScrollView(
                     physics: const AlwaysScrollableScrollPhysics(
                       parent: BouncingScrollPhysics(),
@@ -473,7 +485,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                               key: _favoritesSectionKey,
                               sectionTitle: 'Favorites',
                               sectionIcon: Icons.star_rounded,
-                              sectionIconColor: const Color(0xFFFFD700),
+                              sectionIconColor: app.playlist.favoriteAccent,
                               items: favoriteItems,
                               progressMap: _progressMap,
                               favoriteKeys: _favoriteKeys,
@@ -518,7 +530,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                             sectionIcon: favoriteItems.isNotEmpty
                                 ? Icons.grid_view_rounded
                                 : null,
-                            sectionIconColor: const Color(0xFF6366F1),
+                            sectionIconColor: app.playlist.accent,
                             items: allItems,
                             progressMap: _progressMap,
                             favoriteKeys: _favoriteKeys,
@@ -567,6 +579,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Widget _buildSearchArea(String currentQuery) {
+    final app = AppThemeScope.of(context);
     final hasActiveSearch = currentQuery.isNotEmpty;
 
     return Padding(
@@ -597,11 +610,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         decoration: InputDecoration(
                           hintText: 'Search...',
                           hintStyle: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.3),
+                            color: app.core.tx.withValues(alpha: 0.3),
                           ),
                           prefixIcon: Icon(
                             Icons.search_rounded,
-                            color: Colors.white.withValues(alpha: 0.35),
+                            color: app.core.tx.withValues(alpha: 0.35),
                           ),
                           suffixIcon: ValueListenableBuilder<TextEditingValue>(
                             valueListenable: _searchController,
@@ -611,7 +624,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                               return IconButton(
                                 icon: Icon(
                                   Icons.close_rounded,
-                                  color: Colors.white.withValues(alpha: 0.5),
+                                  color: app.core.tx.withValues(alpha: 0.5),
                                 ),
                                 onPressed: () {
                                   _searchController.clear();
@@ -620,7 +633,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                             },
                           ),
                           filled: true,
-                          fillColor: Colors.white.withValues(alpha: 0.07),
+                          // NOT playlist.fieldFill: legacy paints this well as
+                          // a 0.07 white veil, not the opaque slate that token
+                          // pins, so it stays a veil off the page ink.
+                          fillColor: app.fade(app.core.tx, 0.07),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide.none,
@@ -632,7 +648,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.15),
+                              // A line, so it derives off the ink and not off
+                              // playlist.controlFill (same value under legacy,
+                              // but that role is a FILL).
+                              color: app.fade(app.core.tx, 0.15),
                               width: 1,
                             ),
                           ),
@@ -657,6 +676,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Widget _buildSearchButton(bool hasActiveSearch) {
+    final app = AppThemeScope.of(context);
     return Focus(
       focusNode: _searchFocusNode,
       autofocus: true,
@@ -705,12 +725,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
               width: 40,
               decoration: BoxDecoration(
                 color: isFocused
-                    ? Colors.white.withValues(alpha: 0.15)
+                    ? app.playlist.controlFill
+                    // No token carries this near-black; left literal.
                     : const Color(0xFF141414),
                 borderRadius: BorderRadius.circular(20),
                 border: isFocused
                     ? Border.all(
-                        color: Colors.white.withValues(alpha: 0.6),
+                        color: app.fade(app.core.tx, 0.6),
                         width: 2,
                       )
                     : null,
@@ -719,8 +740,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 Icons.search_rounded,
                 size: 20,
                 color: (isFocused || hasActiveSearch || _showSearchField)
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.5),
+                    ? app.core.tx
+                    : app.core.tx.withValues(alpha: 0.5),
               ),
             ),
           );
@@ -730,6 +751,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Widget _buildEmptyState() {
+    final app = AppThemeScope.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -737,20 +759,20 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+              color: app.fade(app.playlist.card, 0.5),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.video_library_outlined,
               size: 56,
-              color: Colors.white.withValues(alpha: 0.3),
+              color: app.core.tx.withValues(alpha: 0.3),
             ),
           ),
           const SizedBox(height: 20),
           Text(
             'No items in playlist',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
+              color: app.core.tx.withValues(alpha: 0.6),
               fontSize: 17,
               fontWeight: FontWeight.w500,
             ),
@@ -759,7 +781,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           Text(
             'Add items from your debrid downloads',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.35),
+              color: app.core.tx.withValues(alpha: 0.35),
               fontSize: 14,
             ),
           ),
@@ -769,6 +791,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   }
 
   Widget _buildNoResultsState(String query) {
+    final app = AppThemeScope.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -776,20 +799,20 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withValues(alpha: 0.5),
+              color: app.fade(app.playlist.card, 0.5),
               shape: BoxShape.circle,
             ),
             child: Icon(
               Icons.search_off_rounded,
               size: 56,
-              color: Colors.white.withValues(alpha: 0.3),
+              color: app.core.tx.withValues(alpha: 0.3),
             ),
           ),
           const SizedBox(height: 20),
           Text(
             'No results found',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
+              color: app.core.tx.withValues(alpha: 0.6),
               fontSize: 17,
               fontWeight: FontWeight.w500,
             ),
@@ -798,7 +821,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
           Text(
             'Try searching for "$query" differently',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.35),
+              color: app.core.tx.withValues(alpha: 0.35),
               fontSize: 14,
             ),
           ),

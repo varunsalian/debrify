@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../services/community/community_channel_model.dart';
 import '../../../services/community/community_channels_service.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../widgets/tv_text_field.dart';
 
@@ -434,7 +435,9 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
           value: channel.isSelected,
           onChanged: widget.isAndroidTv ? null : (_) => _toggleChannelSelection(channel),
           activeColor: Theme.of(context).primaryColor,
-          checkColor: Colors.white,
+          // Ink on the filled box, scored against the fill above it.
+          checkColor: AppThemeScope.of(context)
+              .inkOn(Theme.of(context).primaryColor),
           dense: true,
           visualDensity: VisualDensity.compact,
           title: Text(channel.name),
@@ -506,6 +509,11 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
       },
       child: Builder(
         builder: (context) {
+          final app = AppThemeScope.of(context);
+          // The Community dialog runs its own focus grammar (3px border, 0.25
+          // fill, 0.5 glow) — legacy's cyan. Real themes converge it with the
+          // house ring.
+          final focusAlt = app.debrifyTv.focusRingAlt;
           final hasFocus = Focus.of(context).hasFocus;
           final categoryColor = getCategoryColor(channel.category);
 
@@ -514,11 +522,11 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
             margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
             decoration: BoxDecoration(
               color: hasFocus
-                  ? const Color(0xFF00E5FF).withOpacity(0.25)
+                  ? focusAlt.withAlpha(64)
                   : Theme.of(context).colorScheme.surface,
               border: Border.all(
                 color: hasFocus
-                    ? const Color(0xFF00E5FF)
+                    ? focusAlt
                     : Theme.of(context).dividerColor.withOpacity(0.3),
                 width: hasFocus ? 3 : 1,
               ),
@@ -526,7 +534,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
               boxShadow: hasFocus
                   ? [
                       BoxShadow(
-                        color: const Color(0xFF00E5FF).withOpacity(0.5),
+                        color: focusAlt.withAlpha(128),
                         blurRadius: 12,
                         spreadRadius: 2,
                       ),
@@ -543,7 +551,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
               value: channel.isSelected,
               onChanged: widget.isAndroidTv ? null : (_) => _toggleChannelSelection(channel),
               activeColor: Theme.of(context).primaryColor,
-              checkColor: Colors.white,
+              checkColor: app.inkOn(Theme.of(context).primaryColor),
               dense: true,
               visualDensity: VisualDensity.compact,
               title: Text(
@@ -758,6 +766,8 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                     focusNode: _fetchButtonFocusNode,
                     child: Builder(
                       builder: (context) {
+                        final focusAlt =
+                            AppThemeScope.of(context).debrifyTv.focusRingAlt;
                         final hasFocus = Focus.of(context).hasFocus;
                         return AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
@@ -774,13 +784,13 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                               end: Alignment.bottomRight,
                             ),
                             border: hasFocus ? Border.all(
-                              color: const Color(0xFF00E5FF),
+                              color: focusAlt,
                               width: 3,
                             ) : null,
                             boxShadow: hasFocus
                                 ? [
                                     BoxShadow(
-                                      color: const Color(0xFF00E5FF).withOpacity(0.5),
+                                      color: focusAlt.withAlpha(128),
                                       blurRadius: 12,
                                       spreadRadius: 2,
                                     ),
@@ -798,6 +808,10 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                             style: IconButton.styleFrom(
                               padding: const EdgeInsets.all(12),
                               backgroundColor: Colors.transparent,
+                              // LEFT LITERAL: this ink sits on the literal
+                              // blue/grey gradient above, which is not a token
+                              // — `inkOn` scored against it would flip today's
+                              // white glyph to near-black.
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
@@ -829,16 +843,18 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                 focusNode: _selectAllFocusNode,
                 child: Builder(
                   builder: (context) {
+                    final app = AppThemeScope.of(context);
+                    final focusAlt = app.debrifyTv.focusRingAlt;
                     final hasFocus = Focus.of(context).hasFocus;
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       decoration: BoxDecoration(
                         color: hasFocus
-                            ? const Color(0xFF00E5FF).withOpacity(0.25)
+                            ? focusAlt.withAlpha(64)
                             : Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
                         border: Border.all(
                           color: hasFocus
-                              ? const Color(0xFF00E5FF)
+                              ? focusAlt
                               : Theme.of(context).dividerColor.withOpacity(0.3),
                           width: hasFocus ? 3 : 1,
                         ),
@@ -846,7 +862,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                         boxShadow: hasFocus
                             ? [
                                 BoxShadow(
-                                  color: const Color(0xFF00E5FF).withOpacity(0.5),
+                                  color: focusAlt.withAlpha(128),
                                   blurRadius: 12,
                                   spreadRadius: 2,
                                 ),
@@ -857,7 +873,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                         value: _selectAll,
                         onChanged: widget.isAndroidTv ? null : (_) => _toggleSelectAll(),
                         activeColor: Theme.of(context).primaryColor,
-                        checkColor: Colors.white,
+                        checkColor: app.inkOn(Theme.of(context).primaryColor),
                         dense: true,
                         visualDensity: VisualDensity.compact,
                         title: Row(
@@ -994,14 +1010,16 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                       focusNode: _cancelButtonFocusNode,
                       child: Builder(
                         builder: (context) {
+                          final focusAlt =
+                              AppThemeScope.of(context).debrifyTv.focusRingAlt;
                           final hasFocus = Focus.of(context).hasFocus;
                           return Container(
                             decoration: hasFocus ? BoxDecoration(
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0xFF00E5FF), width: 3),
+                              border: Border.all(color: focusAlt, width: 3),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF00E5FF).withOpacity(0.5),
+                                  color: focusAlt.withAlpha(128),
                                   blurRadius: 12,
                                   spreadRadius: 2,
                                 ),
@@ -1011,6 +1029,8 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                               onPressed: () => Navigator.of(context).pop(),
                               style: TextButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                // LEFT LITERAL: disabled/neutral greys and
+                                // the ink on them — no role holds either.
                                 backgroundColor: Colors.grey.shade600,
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1032,16 +1052,18 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                       focusNode: _importButtonFocusNode,
                       child: Builder(
                         builder: (context) {
+                          final focusAlt =
+                              AppThemeScope.of(context).debrifyTv.focusRingAlt;
                           final hasFocus = Focus.of(context).hasFocus;
                           final hasSelection = selectedCount > 0;
 
                           return Container(
                             decoration: hasFocus ? BoxDecoration(
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0xFF00E5FF), width: 3),
+                              border: Border.all(color: focusAlt, width: 3),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF00E5FF).withOpacity(0.5),
+                                  color: focusAlt.withAlpha(128),
                                   blurRadius: 12,
                                   spreadRadius: 2,
                                 ),
@@ -1056,6 +1078,9 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                                 backgroundColor: hasSelection
                                     ? const Color(0xFF4CAF50)
                                     : Colors.grey.shade400,
+                                // LEFT LITERAL: `inkOn(0xFF4CAF50)` returns
+                                // near-black, so it would change the shipped
+                                // label.
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),

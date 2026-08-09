@@ -3,7 +3,7 @@ import '../services/analytics_service.dart';
 import '../services/main_page_bridge.dart';
 import '../widgets/browse/browse_results_focus.dart';
 import '../widgets/browse/browse_search_header.dart';
-import '../widgets/see_all/see_all_theme.dart';
+import '../theme/app_theme_scope.dart';
 
 /// Arguments handed to a [BrowseScreen.viewBuilder] to construct its result
 /// view. The builder must attach [resultKey] to the view (its state must
@@ -128,14 +128,19 @@ class _BrowseScreenState extends State<BrowseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Scaffold(
-      backgroundColor: kSeeAllBg,
+      backgroundColor: app.seeAll.bg,
       body: SafeArea(
         child: Column(
           children: [
             BrowseSearchHeader(
               controller: _searchController,
               focusNode: _searchFocusNode,
+              // The header strikes every alpha it paints (hint, glyphs, fill,
+              // ring) from this one ink, so the page's text colour carries the
+              // whole set instead of a hardcoded white that vanishes on paper.
+              ink: app.core.tx,
               hintText: widget.hintText,
               onChanged: widget.submitOnly ? null : _onChanged,
               onSubmitted: widget.submitOnly ? _onSubmitted : null,

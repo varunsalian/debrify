@@ -8,7 +8,7 @@ import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/download_service.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
-import '../see_all/see_all_theme.dart';
+import '../../theme/app_theme_scope.dart';
 import 'youtube_filters.dart';
 import 'youtube_video_card.dart';
 import 'youtube_empty_state.dart';
@@ -383,9 +383,10 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
   }
 
   Widget _buildContent() {
+    final app = AppThemeScope.of(context);
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: kSeeAllAccent),
+      return Center(
+        child: CircularProgressIndicator(color: app.seeAll.accent),
       );
     }
 
@@ -397,7 +398,8 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
             Icon(
               Icons.error_outline,
               size: 64,
-              color: Colors.white.withValues(alpha: 0.55),
+              // Off-rung: the dim rung struck up to its shipped 0.55.
+              color: app.fade(app.youtube.textDim, 1.1),
             ),
             const SizedBox(height: 16),
             Padding(
@@ -405,7 +407,7 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
               child: Text(
                 _errorMessage!,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.8),
+                  color: app.youtube.textBody,
                   fontSize: 16,
                 ),
                 textAlign: TextAlign.center,
@@ -414,7 +416,9 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: _performSearch,
-              style: FilledButton.styleFrom(backgroundColor: kSeeAllAccent),
+              style: FilledButton.styleFrom(
+                backgroundColor: app.seeAll.accent,
+              ),
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),
             ),
@@ -434,7 +438,7 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
             Icon(
               Icons.video_library_outlined,
               size: 64,
-              color: Colors.white.withValues(alpha: 0.35),
+              color: app.youtube.textFaint,
             ),
             const SizedBox(height: 16),
             const Text(
@@ -448,7 +452,7 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
             Text(
               'Try a different search term',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: app.youtube.textDim,
                 fontSize: 14,
               ),
             ),
@@ -516,7 +520,9 @@ class YoutubeResultsViewState extends State<YoutubeResultsView>
       padding: const EdgeInsets.all(16),
       alignment: Alignment.center,
       child: _isLoadingMore
-          ? const CircularProgressIndicator(color: kSeeAllAccent)
+          ? CircularProgressIndicator(
+              color: AppThemeScope.of(context).seeAll.accent,
+            )
           : const SizedBox.shrink(),
     );
   }

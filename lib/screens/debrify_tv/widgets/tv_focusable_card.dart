@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 
@@ -41,6 +42,8 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     return Focus(
       onFocusChange: (focused) {
         setState(() {
@@ -132,13 +135,17 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
+                  // The resting gradient's deep stop is `dialogBg` — the only
+                  // role holding this value. A role stretch (it is a card
+                  // gradient, not a dialog ground), taken because the
+                  // alternative is a near-black bottom edge on a paper theme.
                   colors: _isFocused
-                      ? [const Color(0xFF2A2A2A), const Color(0xFF1A1A1A)]
-                      : [const Color(0xFF1A1A1A), const Color(0xFF0F0F0F)],
+                      ? [tv.cardFocusBg, tv.cardBg]
+                      : [tv.cardBg, tv.dialogBg],
                 ),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _isFocused ? Colors.white : Colors.white12,
+                  color: _isFocused ? tv.focusRing : tv.hairline,
                   width: _isFocused ? 3 : 1,
                 ),
                 // TV: the 3px white border is the focus cue; blurred shadows
@@ -148,7 +155,9 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                     : _isFocused
                     ? [
                         BoxShadow(
-                          color: Colors.white.withOpacity(0.2),
+                          // The focus ring bled out. 51 = the source's
+                          // `withOpacity(0.2)` (see TvFocusableButton).
+                          color: tv.focusRing.withAlpha(51),
                           blurRadius: 24,
                           spreadRadius: 0,
                         ),
@@ -179,10 +188,12 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
+                      // Black glass floating over the card's artwork — it stays
+                      // black on every theme, so its ink is `onGlass`.
                       color: Colors.black.withOpacity(0.7),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
+                        color: app.onGlass.withAlpha(77),
                         width: 1,
                       ),
                     ),
@@ -192,13 +203,13 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                         Icon(
                           Icons.more_vert_rounded,
                           size: 14,
-                          color: Colors.white.withOpacity(0.9),
+                          color: app.onGlass.withAlpha(230),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           'Long press for options',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: app.onGlass.withAlpha(230),
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                           ),

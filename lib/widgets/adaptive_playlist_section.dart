@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme_scope.dart';
 import '../utils/platform_util.dart';
 import 'playlist_grid_card.dart';
 import 'horizontal_mouse_wheel.dart';
@@ -213,6 +214,8 @@ String _getDedupeKey(Map<String, dynamic> item) {
   }
 
   Widget _buildSectionHeader() {
+    final app = AppThemeScope.of(context);
+    final iconColor = widget.sectionIconColor ?? app.playlist.favoriteAccent;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -222,11 +225,11 @@ String _getDedupeKey(Map<String, dynamic> item) {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: (widget.sectionIconColor ?? const Color(0xFFFFD700)).withValues(alpha: 0.15),
+                color: iconColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: [
                   BoxShadow(
-                    color: (widget.sectionIconColor ?? const Color(0xFFFFD700)).withValues(alpha: 0.2),
+                    color: iconColor.withValues(alpha: 0.2),
                     blurRadius: 12,
                     spreadRadius: 0,
                   ),
@@ -234,7 +237,7 @@ String _getDedupeKey(Map<String, dynamic> item) {
               ),
               child: Icon(
                 widget.sectionIcon,
-                color: widget.sectionIconColor ?? const Color(0xFFFFD700),
+                color: iconColor,
                 size: 20,
               ),
             ),
@@ -244,14 +247,14 @@ String _getDedupeKey(Map<String, dynamic> item) {
           ShaderMask(
             shaderCallback: (bounds) => LinearGradient(
               colors: [
-                Colors.white,
-                Colors.white.withValues(alpha: 0.85),
+                app.core.tx,
+                app.core.tx.withValues(alpha: 0.85),
               ],
             ).createShader(bounds),
             child: Text(
               widget.sectionTitle,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: app.core.tx,
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 letterSpacing: -0.5,
@@ -265,20 +268,20 @@ String _getDedupeKey(Map<String, dynamic> item) {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  Colors.white.withValues(alpha: 0.12),
-                  Colors.white.withValues(alpha: 0.06),
+                  app.fade(app.core.tx, 0.12),
+                  app.fade(app.core.tx, 0.06),
                 ],
               ),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1),
+                color: app.playlist.hairline,
                 width: 1,
               ),
             ),
             child: Text(
               '${widget.items.length}',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.8),
+                color: app.core.tx.withValues(alpha: 0.8),
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -296,6 +299,8 @@ String _getDedupeKey(Map<String, dynamic> item) {
     if (PlatformUtil.isTelevision) return child;
     return ShaderMask(
       shaderCallback: (Rect bounds) {
+        // An ALPHA MASK under BlendMode.dstIn, not paint: these stops are
+        // opacity, so they stay transparent/white on every theme.
         return LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,

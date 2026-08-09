@@ -23,12 +23,30 @@ import '../models/torbox_torrent.dart';
 import '../models/torbox_file.dart';
 import '../models/webdav_item.dart';
 import '../screens/video_player/models/playlist_entry.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_theme_scope.dart';
 
 /// Standalone service for playing playlist items.
 /// Extracted from PlaylistScreen so it can be called from any screen.
 /// All methods accept BuildContext for UI operations (dialogs, snackbars, navigation).
 class PlaylistPlayerService {
   PlaylistPlayerService._();
+
+  /// The surface's blocking "Preparing playlist…" modal, raised from seven
+  /// provider paths with the same two colours each time.
+  ///
+  /// The ground is `cloud.dialogSurface` — a MODAL ground, which is what this
+  /// is — and not `playlist.card`, though legacy spells both `#1E293B`.
+  static Widget _preparingDialog(AppTheme app, String message) => AlertDialog(
+        backgroundColor: app.cloud.dialogSurface,
+        content: Row(
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 16),
+            Text(message, style: TextStyle(color: app.core.tx)),
+          ],
+        ),
+      );
 
   /// Play a playlist item. Routes to the correct provider handler.
   /// When [playRandom] is true and the item is a multi-file collection, the
@@ -186,22 +204,11 @@ class PlaylistPlayerService {
 
       try {
         if (!context.mounted) return;
+        final app = AppThemeScope.of(context);
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => const AlertDialog(
-            backgroundColor: Color(0xFF1E293B),
-            content: Row(
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(width: 16),
-                Text(
-                  'Preparing playlist…',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ],
-            ),
-          ),
+          builder: (context) => _preparingDialog(app, 'Preparing playlist…'),
         );
 
         final info = await DebridService.getTorrentInfo(apiKey, rdTorrentId);
@@ -509,19 +516,11 @@ class PlaylistPlayerService {
     }
 
     if (!context.mounted) return;
+    final app = AppThemeScope.of(context);
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        backgroundColor: Color(0xFF1E293B),
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 16),
-            Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
-          ],
-        ),
-      ),
+      builder: (context) => _preparingDialog(app, 'Preparing playlist…'),
     );
 
     AllDebridAddResult result;
@@ -745,25 +744,14 @@ class PlaylistPlayerService {
 
     // Collection
     if (!context.mounted) return;
+    final app = AppThemeScope.of(context);
     bool dialogOpen = false;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
         dialogOpen = true;
-        return const AlertDialog(
-          backgroundColor: Color(0xFF1E293B),
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text(
-                'Preparing playlist…',
-                style: TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-        );
+        return _preparingDialog(app, 'Preparing playlist…');
       },
     );
 
@@ -1068,6 +1056,7 @@ class PlaylistPlayerService {
     final bool hasStoredMetadata =
         pikpakFiles != null && pikpakFiles.isNotEmpty;
     if (!context.mounted) return;
+    final app = AppThemeScope.of(context);
     bool dialogOpen = false;
 
     if (!hasStoredMetadata) {
@@ -1076,19 +1065,7 @@ class PlaylistPlayerService {
         barrierDismissible: false,
         builder: (ctx) {
           dialogOpen = true;
-          return const AlertDialog(
-            backgroundColor: Color(0xFF1E293B),
-            content: Row(
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(width: 16),
-                Text(
-                  'Preparing playlist...',
-                  style: TextStyle(color: Colors.white),
-                ),
-              ],
-            ),
-          );
+          return _preparingDialog(app, 'Preparing playlist...');
         },
       );
     }
@@ -1371,22 +1348,14 @@ class PlaylistPlayerService {
     final String kind = (item['kind'] as String?) ?? 'single';
 
     if (!context.mounted) return;
+    final app = AppThemeScope.of(context);
     bool dialogOpen = false;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
         dialogOpen = true;
-        return const AlertDialog(
-          backgroundColor: Color(0xFF1E293B),
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
-            ],
-          ),
-        );
+        return _preparingDialog(app, 'Preparing playlist…');
       },
     );
 
@@ -1625,22 +1594,14 @@ class PlaylistPlayerService {
     final String kind = (item['kind'] as String?) ?? 'single';
 
     if (!context.mounted) return;
+    final app = AppThemeScope.of(context);
     bool dialogOpen = false;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
         dialogOpen = true;
-        return const AlertDialog(
-          backgroundColor: Color(0xFF1E293B),
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Preparing playlist…', style: TextStyle(color: Colors.white)),
-            ],
-          ),
-        );
+        return _preparingDialog(app, 'Preparing playlist…');
       },
     );
 
@@ -2237,22 +2198,11 @@ class PlaylistPlayerService {
     }
 
     if (!context.mounted) return;
+    final app = AppThemeScope.of(context);
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        backgroundColor: Color(0xFF1E293B),
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 16),
-            Text(
-              'Reconstructing playlist...',
-              style: TextStyle(color: Colors.white),
-            ),
-          ],
-        ),
-      ),
+      builder: (ctx) => _preparingDialog(app, 'Reconstructing playlist...'),
     );
 
     try {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_theme_scope.dart';
+
 // Constants for random start percentage limits
 const int randomStartPercentMin = 10;
 const int randomStartPercentMax = 90;
@@ -40,12 +42,13 @@ class RandomStartSlider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tv = AppThemeScope.of(context).debrifyTv;
     final textStyle = theme.textTheme.bodyMedium?.copyWith(
-      color: Colors.white70,
+      color: tv.textDim,
       fontWeight: FontWeight.w600,
     );
     final helperStyle = theme.textTheme.bodySmall?.copyWith(
-      color: Colors.white60,
+      color: tv.textMeta,
     );
 
     final current = clampRandomStartPercent(value);
@@ -67,9 +70,9 @@ class RandomStartSlider extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: tv.cardBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: tv.hairline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,23 +82,25 @@ class RandomStartSlider extends StatelessWidget {
           DropdownButtonFormField<int>(
             value: current,
             isExpanded: true,
-            dropdownColor: const Color(0xFF1A1A1A),
+            dropdownColor: tv.cardBg,
             borderRadius: BorderRadius.circular(12),
-            icon: const Icon(Icons.arrow_drop_down, color: Colors.white60),
+            icon: Icon(Icons.arrow_drop_down, color: tv.textMeta),
             style: textStyle,
             decoration: InputDecoration(
               isDense: true,
               filled: true,
-              fillColor: const Color(0xFF2A2A2A),
+              // The field is a STEP off the card it sits in — the same step
+              // `cardFocusBg` is, and the only role holding this value.
+              fillColor: tv.cardFocusBg,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 14,
                 vertical: 10,
               ),
               // Visible accent border on focus so the remote's position is
               // obvious — the whole reason for the slider→dropdown swap.
-              enabledBorder: border(Colors.white12, 1),
-              focusedBorder: border(Colors.white, 2),
-              border: border(Colors.white12, 1),
+              enabledBorder: border(tv.hairline, 1),
+              focusedBorder: border(tv.focusRing, 2),
+              border: border(tv.hairline, 1),
             ),
             items: [
               for (final v in options)

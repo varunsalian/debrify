@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../../../utils/tv_keys.dart';
 
 /// Import mode selection for channels
@@ -96,6 +97,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
     required VoidCallback onSelect,
     required bool isFocused,
   }) {
+    final app = AppThemeScope.of(context);
     return Focus(
       focusNode: focusNode,
       onKeyEvent: (node, event) {
@@ -118,13 +120,17 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
           margin: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
+            // LEFT LITERAL: the focused slate 0xFF1E293B is not a Debrify TV
+            // role — the only sanctioned cross-profile reads for this surface
+            // are `core.tx`, `home.sheetBg` and `inkOn`, and 0xFF1E293B lives
+            // in Cloud / Stremio TV / Playlist. Needs its own token.
             color: isFocused
                 ? const Color(0xFF1E293B).withOpacity(0.8)
-                : const Color(0xFF0F172A).withOpacity(0.6),
+                : app.home.sheetBg.withAlpha(153),
             border: Border.all(
               color: isFocused
                   ? accentColor.withOpacity(0.4)
-                  : Colors.white.withOpacity(0.05),
+                  : app.core.tx.withAlpha(13),
               width: 1,
             ),
             boxShadow: isFocused
@@ -194,7 +200,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                             size: 28,
                             color: isFocused
                                 ? accentColor
-                                : Colors.white.withOpacity(0.7),
+                                : app.debrifyTv.textDim,
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -214,7 +220,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                                   subtitle,
                                   style: TextStyle(
                                     fontSize: widget.isAndroidTv ? 13 : 12,
-                                    color: Colors.white.withOpacity(0.65),
+                                    color: app.core.tx.withAlpha(166),
                                     height: 1.3,
                                     letterSpacing: 0.1,
                                   ),
@@ -246,6 +252,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final dialogWidth = widget.isAndroidTv ? 540.0 : 500.0;
 
     // Wrap in GestureDetector to absorb taps that land outside the dialog content
@@ -262,10 +269,12 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
           maxHeight: MediaQuery.of(context).size.height * 0.85,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
+          // The shared slate this dialog has always used — the one
+          // cross-profile ground Debrify TV is sanctioned to read.
+          color: app.home.sheetBg,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: Colors.white.withOpacity(0.08),
+            color: app.core.tx.withAlpha(20),
             width: 1,
           ),
           boxShadow: [
@@ -285,7 +294,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(
-                    color: Colors.white.withOpacity(0.06),
+                    color: app.core.tx.withAlpha(15),
                     width: 1,
                   ),
                 ),
@@ -294,7 +303,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                 children: [
                   Icon(
                     Icons.download_rounded,
-                    color: Colors.white.withOpacity(0.9),
+                    color: app.core.tx.withAlpha(230),
                     size: widget.isAndroidTv ? 24 : 22,
                   ),
                   const SizedBox(width: 12),
@@ -384,7 +393,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
               decoration: BoxDecoration(
                 border: Border(
                   top: BorderSide(
-                    color: Colors.white.withOpacity(0.06),
+                    color: app.core.tx.withAlpha(15),
                     width: 1,
                   ),
                 ),
@@ -408,12 +417,15 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
                       color: _focusedIndex == 3
-                          ? Colors.white.withOpacity(0.08)
+                          ? app.core.tx.withAlpha(20)
                           : Colors.transparent,
                       border: Border.all(
+                        // A LINE, so it takes the ink at its own alpha rather
+                        // than `fillWeak` (same 26, but a fill role) or
+                        // `hairline` (a line role, but 31).
                         color: _focusedIndex == 3
-                            ? Colors.white.withOpacity(0.2)
-                            : Colors.white.withOpacity(0.1),
+                            ? app.core.tx.withAlpha(51)
+                            : app.core.tx.withAlpha(26),
                         width: 1,
                       ),
                     ),
@@ -436,8 +448,8 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                               Icon(
                                 Icons.close_rounded,
                                 color: _focusedIndex == 3
-                                    ? Colors.white.withOpacity(0.9)
-                                    : Colors.white.withOpacity(0.6),
+                                    ? app.core.tx.withAlpha(230)
+                                    : app.debrifyTv.textMeta,
                                 size: 18,
                               ),
                               const SizedBox(width: 8),
@@ -447,8 +459,8 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                                   fontSize: widget.isAndroidTv ? 16 : 15,
                                   fontWeight: FontWeight.w500,
                                   color: _focusedIndex == 3
-                                      ? Colors.white.withOpacity(0.9)
-                                      : Colors.white.withOpacity(0.6),
+                                      ? app.core.tx.withAlpha(230)
+                                      : app.debrifyTv.textMeta,
                                   letterSpacing: 0.2,
                                 ),
                               ),

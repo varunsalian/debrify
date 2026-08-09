@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
-import '../see_all/see_all_theme.dart';
 
 /// Opens the playlist picker bottom sheet (the same sheet the classic filter
 /// bar's dropdown shows) and returns the chosen playlist, or null on dismiss.
@@ -232,7 +232,7 @@ class _RecordingsButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const rec = Color(0xFFF43F5E);
+    final rec = AppThemeScope.of(context).iptv.recordAccent;
     return IconButton(
       tooltip: live ? 'Recording now — open Recordings' : 'Recordings',
       visualDensity: VisualDensity.compact,
@@ -324,6 +324,7 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -365,11 +366,11 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
           // House glass chip (kSeeAll board language). Constant border width —
           // a 1→2px focus ring resizes the chip and reflows the whole bar.
           decoration: BoxDecoration(
-            color: kSeeAllPanel,
+            color: app.seeAll.panel,
             borderRadius: BorderRadius.circular(11),
             border: Border.all(
               width: 2,
-              color: _isFocused ? kSeeAllAccent : kSeeAllLine,
+              color: _isFocused ? app.seeAll.accent : app.seeAll.line,
             ),
           ),
           child: Row(
@@ -386,7 +387,7 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
                     ? Icons.folder
                     : Icons.playlist_play,
                 size: 16,
-                color: kSeeAllAccent2,
+                color: app.seeAll.accent2,
               ),
               const SizedBox(width: 6),
               Flexible(
@@ -486,6 +487,7 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -531,11 +533,11 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: kSeeAllPanel,
+            color: app.seeAll.panel,
             borderRadius: BorderRadius.circular(11),
             border: Border.all(
               width: 2,
-              color: _isFocused ? kSeeAllAccent : kSeeAllLine,
+              color: _isFocused ? app.seeAll.accent : app.seeAll.line,
             ),
           ),
           child: Row(
@@ -630,29 +632,31 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
     required IconData icon,
     required String label,
   }) {
+    final app = AppThemeScope.of(context);
     final selected = widget.selectedContentType == value;
+    // Ink on the FILLED segment is chosen against the accent swatch, not the
+    // page — white under legacy, readable on a light accent later.
+    final segmentInk = selected
+        ? app.inkOn(app.seeAll.accent)
+        : colorScheme.onSurfaceVariant;
     return GestureDetector(
       onTap: () => widget.onChanged(value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: selected ? kSeeAllAccent : Colors.transparent,
+          color: selected ? app.seeAll.accent : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 14,
-              color: selected ? Colors.white : colorScheme.onSurfaceVariant,
-            ),
+            Icon(icon, size: 14, color: segmentInk),
             const SizedBox(width: 4),
             Text(
               label,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: selected ? Colors.white : colorScheme.onSurfaceVariant,
+                color: segmentInk,
                 fontWeight: selected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
@@ -664,6 +668,7 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -713,11 +718,11 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           decoration: BoxDecoration(
-            color: kSeeAllPanel,
+            color: app.seeAll.panel,
             borderRadius: BorderRadius.circular(11),
             border: Border.all(
               width: 2,
-              color: _isFocused ? kSeeAllAccent : kSeeAllLine,
+              color: _isFocused ? app.seeAll.accent : app.seeAll.line,
             ),
           ),
           child: Row(

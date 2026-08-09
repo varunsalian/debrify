@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/iptv_playlist.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 import 'iptv_stage_panel.dart' show IptvMonogram;
 import 'styles/iptv_style.dart';
@@ -65,6 +66,7 @@ class IptvCommandRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final favorites = playlists.where((p) => p.isFavorites).toList();
     final continueWatching = playlists
         .where((p) => p.isContinueWatching)
@@ -78,9 +80,11 @@ class IptvCommandRail extends StatelessWidget {
       width: 196,
       decoration: t == null
           ? BoxDecoration(
+              // No token carries #080B18 (the rail's own ground is a step
+              // deeper than iptv.stageBg), so it stays a literal for now.
               color: const Color(0xFF080B18).withValues(alpha: 0.65),
               border: Border(
-                right: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+                right: BorderSide(color: app.core.tx.withValues(alpha: 0.07)),
               ),
             )
           : BoxDecoration(
@@ -120,7 +124,7 @@ class IptvCommandRail extends StatelessWidget {
               _RailItem(
                 tokens: t,
                 icon: Icons.fiber_manual_record_rounded,
-                iconColor: const Color(0xFFF43F5E),
+                iconColor: app.iptv.recordAccent,
                 label: 'Recordings',
                 count: scheduledCount,
                 selected: false,
@@ -166,7 +170,7 @@ class IptvCommandRail extends StatelessWidget {
             Container(
               height: 1,
               margin: const EdgeInsets.fromLTRB(10, 14, 10, 10),
-              color: t?.hairline ?? Colors.white.withValues(alpha: 0.08),
+              color: t?.hairline ?? app.iptv.hairline,
             ),
             _RailItem(
               tokens: t,
@@ -207,6 +211,7 @@ class _RailHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final t = tokens;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,7 +220,7 @@ class _RailHeader extends StatelessWidget {
           Container(
             height: 1,
             margin: const EdgeInsets.fromLTRB(10, 14, 10, 0),
-            color: t?.hairline ?? Colors.white.withValues(alpha: 0.08),
+            color: t?.hairline ?? app.iptv.hairline,
           ),
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 12, 10, 6),
@@ -223,7 +228,7 @@ class _RailHeader extends StatelessWidget {
             text,
             style: t == null
                 ? TextStyle(
-                    color: Colors.white.withValues(alpha: 0.55),
+                    color: app.iptv.inkDim,
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.6,
@@ -280,6 +285,9 @@ class _RailItemState extends State<_RailItem> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    // The rail's own focus gold: NOT home.focus (#FBBF24) — a different
+    // literal, so no token can carry it without shifting the cursor's colour.
     const gold = Color(0xFFF5C042);
     final row = widget.tokens != null
         ? _styledRow(widget.tokens!)
@@ -292,7 +300,7 @@ class _RailItemState extends State<_RailItem> {
               color: widget.selected
                   ? const Color(0xFF8A5CFF).withValues(alpha: 0.16)
                   : _focused
-                  ? Colors.white.withValues(alpha: 0.05)
+                  ? app.core.tx.withValues(alpha: 0.05)
                   : Colors.transparent,
               border: Border.all(
                 color: _focused ? gold : Colors.transparent,
@@ -309,7 +317,7 @@ class _RailItemState extends State<_RailItem> {
                     size: 16,
                     color:
                         widget.iconColor ??
-                        Colors.white.withValues(
+                        app.core.tx.withValues(
                           alpha: widget.selected ? 0.9 : 0.55,
                         ),
                   ),
@@ -322,7 +330,7 @@ class _RailItemState extends State<_RailItem> {
                     style: TextStyle(
                       color: widget.selected
                           ? const Color(0xFFE4DCFF)
-                          : Colors.white.withValues(alpha: 0.72),
+                          : app.core.tx.withValues(alpha: 0.72),
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
@@ -333,16 +341,16 @@ class _RailItemState extends State<_RailItem> {
                     width: 7,
                     height: 7,
                     margin: const EdgeInsets.only(left: 5),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Color(0xFFF43F5E),
+                      color: app.iptv.recordAccent,
                     ),
                   )
                 else if (widget.count != null)
                   Text(
                     _fmtCount(widget.count!),
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.34),
+                      color: app.core.tx.withValues(alpha: 0.34),
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                       fontFeatures: const [FontFeature.tabularFigures()],
@@ -352,7 +360,7 @@ class _RailItemState extends State<_RailItem> {
                   Icon(
                     Icons.chevron_right_rounded,
                     size: 15,
-                    color: Colors.white.withValues(alpha: 0.3),
+                    color: app.core.tx.withValues(alpha: 0.3),
                   ),
               ],
             ),

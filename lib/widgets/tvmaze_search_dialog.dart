@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/tvmaze_service.dart';
+import '../theme/app_theme_scope.dart';
 import '../utils/tv_keys.dart';
 import 'tv_text_field.dart';
 
@@ -28,9 +29,6 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
   bool _isSearching = false;
   String? _errorMessage;
   int _selectedIndex = -1;
-
-  // Premium blue accent color
-  static const Color kPremiumBlue = Color(0xFF6366F1);
 
   @override
   void initState() {
@@ -192,6 +190,13 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
   }
 
   Widget _buildShowTile(Map<String, dynamic> show, int index, bool isSelected) {
+    final app = AppThemeScope.of(context);
+    // The dialog's chrome — legacy's "premium blue" is Playlist's accent.
+    final accent = app.playlist.accent;
+    // `Colors.white54` / `white60` re-spelled off the page ink at their EXACT
+    // alphas, so legacy is byte-identical and a light theme inverts them.
+    final ink54 = app.core.tx.withValues(alpha: 0x8A / 255);
+    final ink60 = app.core.tx.withValues(alpha: 0x99 / 255);
     final name = show['name'] ?? 'Unknown Show';
     final premiered = show['premiered'] ?? '';
     final network = show['network']?['name'] ?? show['webChannel']?['name'] ?? '';
@@ -220,9 +225,9 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
         child: Container(
           padding: EdgeInsets.all(isCompact ? 8 : 12),
           decoration: BoxDecoration(
-            color: isSelected ? kPremiumBlue.withOpacity(0.1) : Colors.transparent,
+            color: isSelected ? accent.withValues(alpha: 0.1) : Colors.transparent,
             border: Border.all(
-              color: isSelected ? kPremiumBlue : Colors.white.withOpacity(0.1),
+              color: isSelected ? accent : app.playlist.hairline,
               width: isSelected ? 2 : 1,
             ),
             borderRadius: BorderRadius.circular(8),
@@ -235,6 +240,8 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                 width: posterWidth,
                 height: posterHeight,
                 decoration: BoxDecoration(
+                  // Left literal: no token carries this grey (the surface's
+                  // poster placeholder is #1A1A2E).
                   color: const Color(0xFF333333),
                   borderRadius: BorderRadius.circular(4),
                 ),
@@ -245,15 +252,15 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                           imageUrl: imageUrl,
                           memCacheWidth: 200,
                           fit: BoxFit.cover,
-                          placeholder: (context, url) => const Center(
-                            child: Icon(Icons.tv, color: Colors.white54, size: 32),
+                          placeholder: (context, url) => Center(
+                            child: Icon(Icons.tv, color: ink54, size: 32),
                           ),
-                          errorWidget: (context, url, error) => const Center(
-                            child: Icon(Icons.tv, color: Colors.white54, size: 32),
+                          errorWidget: (context, url, error) => Center(
+                            child: Icon(Icons.tv, color: ink54, size: 32),
                           ),
                         )
-                      : const Center(
-                          child: Icon(Icons.tv, color: Colors.white54, size: 32),
+                      : Center(
+                          child: Icon(Icons.tv, color: ink54, size: 32),
                         ),
                 ),
               ),
@@ -283,13 +290,13 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: kPremiumBlue.withOpacity(0.2),
+                              color: accent.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
                               premiered.substring(0, 4),
-                              style: const TextStyle(
-                                color: kPremiumBlue,
+                              style: TextStyle(
+                                color: accent,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -321,8 +328,8 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                               const SizedBox(width: 2),
                               Text(
                                 rating.toString(),
-                                style: const TextStyle(
-                                  color: Colors.white70,
+                                style: TextStyle(
+                                  color: app.playlist.ink2,
                                   fontSize: 11,
                                 ),
                               ),
@@ -334,8 +341,8 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                       const SizedBox(height: 4),
                       Text(
                         network,
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: app.playlist.ink2,
                           fontSize: 12,
                         ),
                         maxLines: 1,
@@ -346,8 +353,8 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                       const SizedBox(height: 4),
                       Text(
                         genres,
-                        style: const TextStyle(
-                          color: Colors.white54,
+                        style: TextStyle(
+                          color: ink54,
                           fontSize: 11,
                         ),
                         maxLines: 1,
@@ -358,8 +365,8 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                       const SizedBox(height: 6),
                       Text(
                         summary,
-                        style: const TextStyle(
-                          color: Colors.white60,
+                        style: TextStyle(
+                          color: ink60,
                           fontSize: 11,
                           height: 1.3,
                         ),
@@ -379,11 +386,16 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final accent = app.playlist.accent;
+    // `Colors.white54` / `white24` at their exact alphas — see _buildShowTile.
+    final ink54 = app.core.tx.withValues(alpha: 0x8A / 255);
+    final ink24 = app.core.tx.withValues(alpha: 0x3D / 255);
     final screenWidth = MediaQuery.of(context).size.width;
     final isCompact = screenWidth < 500;
 
     return Dialog(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: app.home.sheetBg,
       insetPadding: EdgeInsets.symmetric(
         horizontal: isCompact ? 12 : 40,
         vertical: isCompact ? 24 : 40,
@@ -403,7 +415,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
               children: [
                 Icon(
                   Icons.search,
-                  color: kPremiumBlue,
+                  color: accent,
                   size: isCompact ? 22 : 28,
                 ),
                 const SizedBox(width: 8),
@@ -420,7 +432,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                 // Close button
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, color: Colors.white70),
+                  icon: Icon(Icons.close, color: app.playlist.ink2),
                   constraints: const BoxConstraints(),
                   padding: const EdgeInsets.all(4),
                 ),
@@ -433,32 +445,36 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
               controller: _searchController,
               focusNode: _searchFocusNode,
               autofocus: true,
+              // The shared TV shell/keyboard chrome follows settings.accent,
+              // as Downloads established; its ground stays with the widget.
+              accent: app.settings.accent,
               decoration: InputDecoration(
                 hintText: 'Enter show name...',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                hintStyle: TextStyle(color: app.playlist.ink3),
                 filled: true,
-                fillColor: Colors.white.withOpacity(0.1),
+                // A veil, not playlist.fieldFill (that role is opaque slate).
+                fillColor: app.fade(app.core.tx, 0.1),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: BorderSide.none,
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: kPremiumBlue, width: 2),
+                  borderSide: BorderSide(color: accent, width: 2),
                 ),
-                prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                prefixIcon: Icon(Icons.search, color: ink54),
                 suffixIcon: IconButton(
                   onPressed: _isSearching ? null : _performSearch,
                   icon: _isSearching
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
-                            color: kPremiumBlue,
+                            color: accent,
                             strokeWidth: 2,
                           ),
                         )
-                      : const Icon(Icons.arrow_forward, color: kPremiumBlue),
+                      : Icon(Icons.arrow_forward, color: accent),
                 ),
               ),
               onSubmitted: (_) => _performSearch(),
@@ -475,8 +491,8 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
             // Search results
             Expanded(
               child: _isSearching
-                  ? const Center(
-                      child: CircularProgressIndicator(color: kPremiumBlue),
+                  ? Center(
+                      child: CircularProgressIndicator(color: accent),
                     )
                   : _errorMessage != null
                       ? Center(
@@ -491,8 +507,8 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                               const SizedBox(height: 12),
                               Text(
                                 _errorMessage!,
-                                style: const TextStyle(
-                                  color: Colors.white70,
+                                style: TextStyle(
+                                  color: app.playlist.ink2,
                                   fontSize: 16,
                                 ),
                               ),
@@ -506,14 +522,14 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                                 children: [
                                   Icon(
                                     Icons.tv_off,
-                                    color: Colors.white.withOpacity(0.3),
+                                    color: app.core.tx.withValues(alpha: 0.3),
                                     size: 64,
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
                                     'Search for a TV show to fix metadata',
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.5),
+                                      color: app.playlist.ink3,
                                       fontSize: 16,
                                     ),
                                   ),
@@ -549,9 +565,9 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                       return OutlinedButton(
                         onPressed: () => Navigator.of(context).pop(),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white70,
+                          foregroundColor: app.playlist.ink2,
                           side: BorderSide(
-                            color: isFocused ? kPremiumBlue : Colors.white24,
+                            color: isFocused ? accent : ink24,
                             width: isFocused ? 2 : 1,
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 12),

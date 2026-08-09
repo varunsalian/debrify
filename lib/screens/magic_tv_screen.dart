@@ -45,6 +45,7 @@ import '../services/community/community_channel_model.dart';
 import '../services/community/community_channels_service.dart';
 import '../services/main_page_bridge.dart';
 import '../theme/app_surfaces.dart';
+import '../theme/app_theme_scope.dart';
 import '../theme/overlay_theme.dart';
 import '../utils/file_utils.dart';
 import '../utils/nsfw_filter.dart';
@@ -1615,7 +1616,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
     final labelStyle = Theme.of(
       context,
-    ).textTheme.bodySmall?.copyWith(color: Colors.white60);
+    ).textTheme.bodySmall?.copyWith(color: AppThemeScope.of(context).debrifyTv.textMeta);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1670,6 +1671,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _SettingsScope scope, {
     StateSetter? dialogSetState,
   }) {
+    final tv = AppThemeScope.of(context).debrifyTv;
     final bool isQuickScope = scope == _SettingsScope.quickPlay;
     final String currentProvider = isQuickScope ? _quickProvider : _provider;
 
@@ -1709,7 +1711,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           child: ChoiceChip(
             label: const Text('Real Debrid'),
             selected: currentProvider == _providerRealDebrid,
-            disabledColor: Colors.white12,
+            disabledColor: tv.hairline,
             onSelected: (!_rdAvailable || _isBusy)
                 ? null
                 : (selected) {
@@ -1726,7 +1728,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           child: ChoiceChip(
             label: const Text('Torbox'),
             selected: currentProvider == _providerTorbox,
-            disabledColor: Colors.white12,
+            disabledColor: tv.hairline,
             onSelected: (!_torboxAvailable || _isBusy)
                 ? null
                 : (selected) {
@@ -1743,7 +1745,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           child: ChoiceChip(
             label: const Text('PikPak'),
             selected: currentProvider == _providerPikPak,
-            disabledColor: Colors.white12,
+            disabledColor: tv.hairline,
             onSelected: (!_pikpakAvailable || _isBusy)
                 ? null
                 : (selected) {
@@ -1760,7 +1762,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           child: ChoiceChip(
             label: const Text('Premiumize'),
             selected: currentProvider == _providerPremiumize,
-            disabledColor: Colors.white12,
+            disabledColor: tv.hairline,
             onSelected: (!_premiumizeAvailable || _isBusy)
                 ? null
                 : (selected) {
@@ -1777,7 +1779,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           child: ChoiceChip(
             label: const Text('AllDebrid'),
             selected: currentProvider == _providerAllDebrid,
-            disabledColor: Colors.white12,
+            disabledColor: tv.hairline,
             onSelected: (!_allDebridAvailable || _isBusy)
                 ? null
                 : (selected) {
@@ -1854,6 +1856,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         builder: (dialogContext) {
           return StatefulBuilder(
             builder: (context, setModalState) {
+              final app = AppThemeScope.of(context);
+              final tv = app.debrifyTv;
               Future<void> submit() async {
                 final pendingRaw = keywordInputController.text.trim();
                 if (pendingRaw.isNotEmpty) {
@@ -1928,7 +1932,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               }
 
               return Dialog(
-                backgroundColor: const Color(0xFF0F0F0F),
+                backgroundColor: tv.dialogBg,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
                 ),
@@ -1948,12 +1952,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFE50914).withOpacity(0.2),
+                                color: tv.accent.withAlpha(51),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.tv_rounded,
-                                color: Color(0xFFE50914),
+                                color: tv.accent,
                                 size: 20,
                               ),
                             ),
@@ -1962,8 +1966,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                               existing == null
                                   ? 'Create Channel'
                                   : 'Edit Channel',
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: app.core.tx,
                                 fontWeight: FontWeight.w800,
                                 fontSize: 18,
                               ),
@@ -1992,16 +1996,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         const SizedBox(height: 12),
                         Text(
                           'Keywords (${keywordList.length}/$_maxChannelKeywords)',
-                          style: const TextStyle(
-                            color: Colors.white70,
+                          style: TextStyle(
+                            color: tv.textDim,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 4),
-                        const Text(
+                        Text(
                           'Tip: type a keyword and press Enter. Add multiples by separating with commas.',
-                          style: TextStyle(color: Colors.white54, fontSize: 11),
+                          style: TextStyle(color: tv.textFaint, fontSize: 11),
                         ),
                         const SizedBox(height: 8),
                         Wrap(
@@ -2035,7 +2039,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                                   hintText: 'Add keyword',
                                   prefixIcon: Icon(Icons.add_rounded),
                                 ),
-                                style: const TextStyle(color: Colors.white),
+                                style: TextStyle(color: app.core.tx),
                                 onUpArrow: () =>
                                     channelNameFocus?.requestFocus(),
                                 onDownArrow: () {
@@ -2107,8 +2111,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                               icon: const Icon(Icons.save_rounded, size: 18),
                               label: const Text('Save Channel'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFE50914),
-                                foregroundColor: Colors.white,
+                                backgroundColor: tv.accent,
+                                foregroundColor: app.inkOn(tv.accent),
                               ),
                             ),
                           ],
@@ -3332,6 +3336,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       await showDialog(
         context: context,
         builder: (dialogContext) {
+          final tv = AppThemeScope.of(dialogContext).debrifyTv;
           return AlertDialog(
             title: const Text('Share Channel'),
             content: SizedBox(
@@ -3365,13 +3370,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   Text(
                     'Size: ${_formatBytes(estimatedSize)} • '
                     'Compression: ${compressionRatio.toStringAsFixed(1)}x',
-                    style: const TextStyle(fontSize: 11, color: Colors.white60),
+                    style: TextStyle(fontSize: 11, color: tv.textMeta),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Channel: ${channel.name}\n'
                     'Keywords: ${channel.keywords.length}',
-                    style: const TextStyle(fontSize: 11, color: Colors.white60),
+                    style: TextStyle(fontSize: 11, color: tv.textMeta),
                   ),
                 ],
               ),
@@ -4020,7 +4025,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return WillPopScope(
           onWillPop: () async => false, // Prevent dismissing with back button
           child: Dialog(
-            backgroundColor: const Color(0xFF0F0F0F),
+            backgroundColor: AppThemeScope.of(ctx).debrifyTv.dialogBg,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
             ),
@@ -4031,6 +4036,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               ),
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  final app = AppThemeScope.of(context);
+                  final tv = app.debrifyTv;
                   Widget content = Column(
                     mainAxisSize: MainAxisSize.max,
                     mainAxisAlignment: MainAxisAlignment.start,
@@ -4043,33 +4050,33 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFE50914), Color(0xFFB71C1C)],
+                              gradient: LinearGradient(
+                                // 0xFFB71C1C is the accent's deep companion —
+                                // no role holds it, so it stays literal.
+                                colors: [tv.accent, const Color(0xFFB71C1C)],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(
-                                    0xFFE50914,
-                                  ).withOpacity(0.3),
+                                  color: tv.accent.withAlpha(77),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.tv_rounded,
-                              color: Colors.white,
+                              color: app.inkOn(tv.accent),
                               size: 20,
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Text(
+                          Text(
                             'Debrify TV',
                             style: TextStyle(
-                              color: Colors.white,
+                              color: app.core.tx,
                               fontWeight: FontWeight.w800,
                               fontSize: 18,
                             ),
@@ -4079,8 +4086,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       const SizedBox(height: 24),
                       Text(
                         'Provider: $providerLabel',
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: tv.textDim,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
@@ -4092,27 +4099,29 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         width: 60,
                         height: 60,
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFE50914), Color(0xFFFF6B6B)],
+                          gradient: LinearGradient(
+                            // 0xFFFF6B6B: the accent's light companion, no
+                            // role holds it.
+                            colors: [tv.accent, const Color(0xFFFF6B6B)],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
                           borderRadius: BorderRadius.circular(30),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFE50914).withOpacity(0.4),
+                              color: tv.accent.withAlpha(102),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
                           ],
                         ),
-                        child: const Center(
+                        child: Center(
                           child: SizedBox(
                             width: 30,
                             height: 30,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.5,
-                              color: Colors.white,
+                              color: app.inkOn(tv.accent),
                             ),
                           ),
                         ),
@@ -4120,10 +4129,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       const SizedBox(height: 20),
 
                       // Compact message
-                      const Text(
+                      Text(
                         'Debrify TV is working its magic...',
                         style: TextStyle(
-                          color: Colors.white70,
+                          color: tv.textDim,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
@@ -4184,8 +4193,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             _cancelActiveWatch(dialogContext: context);
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.1),
-                            foregroundColor: Colors.white70,
+                            backgroundColor: tv.fillWeak,
+                            foregroundColor: tv.textDim,
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(6),
@@ -7718,7 +7727,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     required String tooltip,
     required VoidCallback? onPressed,
     required Color activeColor,
-    Color inactiveColor = const Color(0xFF141414),
+    /// Defaults to the surface's resting control fill (`controlBg`). Nullable
+    /// rather than a const default because a token is not a constant.
+    Color? inactiveColor,
     bool isActive = false,
     FocusNode? leftFocusNode,
     FocusNode? rightFocusNode,
@@ -7760,6 +7771,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       child: ListenableBuilder(
         listenable: focusNode,
         builder: (context, _) {
+          final app = AppThemeScope.of(context);
+          final tv = app.debrifyTv;
           final disabled = onPressed == null;
           final focused = focusNode.hasFocus;
           final highlighted = !disabled && (focused || isActive);
@@ -7773,13 +7786,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 height: 40,
                 width: 40,
                 decoration: BoxDecoration(
+                  // LEFT LITERAL: the disabled greys. No role holds
+                  // `Colors.grey` / grey-at-0.3, and a disabled tone is not
+                  // one of this surface's fills.
                   color: disabled
                       ? Colors.grey.withValues(alpha: 0.3)
-                      : (focused ? activeColor : inactiveColor),
+                      : (focused ? activeColor : (inactiveColor ?? tv.controlBg)),
                   borderRadius: BorderRadius.circular(20),
                   border: focused && !disabled
                       ? Border.all(
-                          color: Colors.white.withValues(alpha: 0.6),
+                          color: tv.focusRing.withValues(alpha: 0.6),
                           width: 2,
                         )
                       : null,
@@ -7790,8 +7806,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   color: disabled
                       ? Colors.grey
                       : (highlighted
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.5)),
+                            ? app.core.tx
+                            : app.core.tx.withValues(alpha: 0.5)),
                 ),
               ),
             ),
@@ -7875,6 +7891,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ),
           ],
           builder: (context, controller, child) {
+            final app = AppThemeScope.of(context);
+            final tv = app.debrifyTv;
             final focused = _channelMenuFocusNode.hasFocus;
 
             return Tooltip(
@@ -7892,13 +7910,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   height: 40,
                   width: 40,
                   decoration: BoxDecoration(
-                    color: focused
-                        ? Colors.white.withValues(alpha: 0.15)
-                        : const Color(0xFF141414),
+                    color: focused ? tv.fillStrong : tv.controlBg,
                     borderRadius: BorderRadius.circular(20),
                     border: focused
                         ? Border.all(
-                            color: Colors.white.withValues(alpha: 0.6),
+                            color: tv.focusRing.withValues(alpha: 0.6),
                             width: 2,
                           )
                         : null,
@@ -7907,8 +7923,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     Icons.more_vert_rounded,
                     size: 20,
                     color: focused
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.5),
+                        ? app.core.tx
+                        : app.core.tx.withValues(alpha: 0.5),
                   ),
                 ),
               ),
@@ -7920,6 +7936,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Widget _buildTopActions() {
+    final tv = AppThemeScope.of(context).debrifyTv;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -7928,7 +7945,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           icon: Icons.play_arrow_rounded,
           tooltip: 'Play',
           onPressed: _isBusy ? null : _showQuickPlayDialog,
-          activeColor: Colors.white.withValues(alpha: 0.15),
+          activeColor: tv.fillStrong,
           leftToSidebar: true,
           rightFocusNode: _channelSearchButtonFocusNode,
         ),
@@ -7938,7 +7955,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           icon: Icons.search_rounded,
           tooltip: _showSearchBar ? 'Close search' : 'Search channels',
           onPressed: _toggleChannelSearchBar,
-          activeColor: Colors.white.withValues(alpha: 0.15),
+          activeColor: tv.fillStrong,
           isActive: _showSearchBar || _channelSearchTerm.isNotEmpty,
           leftFocusNode: _quickPlayFocusNode,
           rightFocusNode: _channelMenuFocusNode,
@@ -7952,6 +7969,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // Grid Layout for all devices (responsive)
   Widget _buildTvGridLayout(double bottomInset) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     final searchTerm = _channelSearchTerm.trim().toLowerCase();
     final filteredChannels = searchTerm.isEmpty
         ? _channels
@@ -7982,7 +8001,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               child: TvTextField(
               focusNode: _channelSearchFocusNode,
               controller: _channelSearchController,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: app.core.tx),
               onLeftArrow: () => MainPageBridge.focusTvSidebar?.call(),
               onRightArrow: () {
                 if (_channelSearchController.text.isNotEmpty) {
@@ -7999,11 +8018,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               decoration: InputDecoration(
                 hintText: 'Search channels...',
                 hintStyle: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: app.core.tx.withValues(alpha: 0.3),
                 ),
                 prefixIcon: Icon(
                   Icons.search_rounded,
-                  color: Colors.white.withValues(alpha: 0.35),
+                  color: app.core.tx.withValues(alpha: 0.35),
                 ),
                 suffixIcon: _channelSearchTerm.isNotEmpty
                     ? Focus(
@@ -8035,13 +8054,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         },
                         child: Builder(
                           builder: (context) {
+                            final ink = AppThemeScope.of(context).core.tx;
                             final focused = Focus.of(context).hasFocus;
                             return Container(
                               decoration: focused
                                   ? BoxDecoration(
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
-                                        color: Colors.white.withValues(alpha: 0.3),
+                                        color: ink.withValues(alpha: 0.3),
                                         width: 1.5,
                                       ),
                                     )
@@ -8050,8 +8070,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                                 icon: Icon(
                                   Icons.close_rounded,
                                   color: focused
-                                      ? Colors.white
-                                      : Colors.white.withValues(alpha: 0.5),
+                                      ? ink
+                                      : ink.withValues(alpha: 0.5),
                                 ),
                                 onPressed: _clearChannelSearchAndRefocus,
                               ),
@@ -8071,12 +8091,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.15),
+                    // The search field's focused border is `fillStrong` by
+                    // design — see the token's own doc.
+                    color: tv.fillStrong,
                     width: 1,
                   ),
                 ),
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.07),
+                fillColor: app.core.tx.withValues(alpha: 0.07),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 14,
@@ -8103,7 +8125,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   Icon(
                     Icons.grid_view_rounded,
                     size: 18,
-                    color: Colors.white.withValues(alpha: 0.7),
+                    color: app.core.tx.withValues(alpha: 0.7),
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -8111,7 +8133,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.7),
+                      color: app.core.tx.withValues(alpha: 0.7),
                     ),
                   ),
                 ],
@@ -8180,6 +8202,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // TV Empty State
   Widget _buildTvEmptyState() {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -8187,28 +8211,28 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           Icon(
             Icons.tv_rounded,
             size: 120,
-            color: Colors.white.withOpacity(0.2),
+            color: app.core.tx.withAlpha(51),
           ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'No channels yet',
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w600,
-              color: Colors.white70,
+              color: tv.textDim,
             ),
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Import channels or create your first channel to get started',
-            style: TextStyle(fontSize: 16, color: Colors.white54),
+            style: TextStyle(fontSize: 16, color: tv.textFaint),
           ),
           const SizedBox(height: 32),
           TvFocusableButton(
             onPressed: _handleAddChannel,
             icon: Icons.add_rounded,
             label: 'Add Channel',
-            backgroundColor: const Color(0xFFE50914),
+            backgroundColor: tv.accent,
             width: 200,
           ),
         ],
@@ -8218,6 +8242,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // Favorite Channels Section (horizontal row)
   Widget _buildFavoriteChannelsSection() {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     // Get favorite channels from the channels list
     final favoriteChannels = _channels
         .where((channel) => _favoriteChannelIds.contains(channel.id))
@@ -8239,7 +8265,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               Icon(
                 Icons.star_rounded,
                 size: 18,
-                color: const Color(0xFFFFD700).withValues(alpha: 0.9),
+                color: tv.favorite.withValues(alpha: 0.9),
               ),
               const SizedBox(width: 8),
               Text(
@@ -8247,7 +8273,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.7),
+                  color: app.core.tx.withValues(alpha: 0.7),
                 ),
               ),
             ],
@@ -8274,6 +8300,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // Favorite Channel Card (compact horizontal card)
   Widget _buildFavoriteChannelCard(DebrifyTvChannel channel) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     return SizedBox(
       width: 160,
       height: 100,
@@ -8291,13 +8319,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE50914),
+                      color: tv.accent,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       'CH ${channel.channelNumber > 0 ? channel.channelNumber : _channels.indexOf(channel) + 1}',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: app.inkOn(tv.accent),
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -8312,10 +8340,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: app.core.tx,
                         height: 1.2,
                       ),
                     ),
@@ -8330,7 +8358,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               child: Icon(
                 Icons.star_rounded,
                 size: 14,
-                color: const Color(0xFFFFD700),
+                color: tv.favorite,
                 shadows: [
                   Shadow(
                     color: Colors.black.withValues(alpha: 0.5),
@@ -8347,6 +8375,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // TV Channel Card (Grid item)
   Widget _buildTvChannelCard(DebrifyTvChannel channel) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     final isFavorited = _favoriteChannelIds.contains(channel.id);
 
     return TvFocusableCard(
@@ -8367,7 +8397,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               child: Icon(
                 Icons.star_rounded,
                 size: 20,
-                color: const Color(0xFFFFD700),
+                color: tv.favorite,
                 shadows: [
                   Shadow(
                     color: Colors.black.withValues(alpha: 0.5),
@@ -8386,13 +8416,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE50914),
+                    color: tv.accent,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     'CH ${channel.channelNumber > 0 ? channel.channelNumber : _channels.indexOf(channel) + 1}',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: app.inkOn(tv.accent),
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                     ),
@@ -8407,10 +8437,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: app.core.tx,
                       height: 1.2,
                       letterSpacing: 0.5,
                     ),
@@ -8434,11 +8464,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 child: PopupMenuButton<String>(
                   icon: Icon(
                     Icons.more_vert,
-                    color: Colors.white.withValues(alpha: 0.9),
+                    // Sits on the black plate above, so it takes glass ink.
+                    color: app.onGlass.withValues(alpha: 0.9),
                     size: 16,
                   ),
                   padding: EdgeInsets.zero,
                   tooltip: 'Options',
+                // LEFT LITERAL: 0xFF1F1F1F, the popup-menu ground, has no role.
                 color: const Color(0xFF1F1F1F),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -8462,7 +8494,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         Icon(
                           isFavorited ? Icons.star_rounded : Icons.star_outline_rounded,
                           size: 18,
-                          color: const Color(0xFFFFD700),
+                          color: tv.favorite,
                         ),
                         const SizedBox(width: 12),
                         Text(isFavorited ? 'Remove Favorite' : 'Add to Favorites'),
@@ -8515,8 +8547,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
+        final tv = AppThemeScope.of(dialogContext).debrifyTv;
         return AlertDialog(
-          backgroundColor: const Color(0xFF0F0F0F),
+          backgroundColor: tv.dialogBg,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
@@ -8533,7 +8566,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 },
                 icon: isFavorited ? Icons.star_rounded : Icons.star_outline_rounded,
                 label: isFavorited ? 'Remove Favorite' : 'Add to Favorites',
-                backgroundColor: const Color(0xFFFFD700),
+                backgroundColor: tv.favorite,
               ),
               const SizedBox(height: 16),
               // Edit button
@@ -8577,6 +8610,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   // TV "Add Channel" Card
   Widget _buildTvAddChannelCard() {
+    final tv = AppThemeScope.of(context).debrifyTv;
     return TvFocusableCard(
       onPressed: _handleAddChannel,
       child: SizedBox(
@@ -8589,22 +8623,22 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               width: 60,
               height: 60,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: tv.fillWeak,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.add_rounded,
                 size: 32,
-                color: Colors.white70,
+                color: tv.textDim,
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'Add Channel',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
-                color: Colors.white70,
+                color: tv.textDim,
               ),
             ),
           ],
@@ -8619,6 +8653,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     required String title,
     StateSetter? dialogSetState,
   }) {
+    final tv = AppThemeScope.of(context).debrifyTv;
     final bool isQuickScope = scope == _SettingsScope.quickPlay;
 
     final bool startRandom = isQuickScope ? _quickStartRandom : _startRandom;
@@ -8705,9 +8740,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       constraints: const BoxConstraints(maxWidth: 900),
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF0F0F0F).withOpacity(0.8),
+          // The surface's dialog ground at 0.8 — see `dialogBg`'s own doc.
+          color: tv.dialogBg.withAlpha(204),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white12, width: 1),
+          border: Border.all(color: tv.hairline, width: 1),
         ),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         child: Column(
@@ -8715,16 +8751,16 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           children: [
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.settings_rounded,
-                  color: Colors.white70,
+                  color: tv.textDim,
                   size: 18,
                 ),
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: tv.textDim,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -8848,8 +8884,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 icon: const Icon(Icons.restore_rounded, size: 18),
                 label: const Text('Reset to Defaults'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white.withOpacity(0.1),
-                  foregroundColor: Colors.white70,
+                  backgroundColor: tv.fillWeak,
+                  foregroundColor: tv.textDim,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -8864,6 +8900,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Widget _buildChannelsTab(double bottomInset) {
+    final appTheme = AppThemeScope.of(context);
+    final tvTokens = appTheme.debrifyTv;
     final searchTerm = _channelSearchTerm.trim().toLowerCase();
     final filteredChannels = searchTerm.isEmpty
         ? _channels
@@ -8881,6 +8919,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           const SizedBox(height: 24),
           LayoutBuilder(
             builder: (context, constraints) {
+              final app = AppThemeScope.of(context);
+              final tv = app.debrifyTv;
               final width = constraints.maxWidth;
 
               double horizontal = 20;
@@ -8935,8 +8975,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     icon: const Icon(Icons.play_arrow_rounded),
                     label: const Text('Play'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFE50914),
-                      foregroundColor: Colors.white,
+                      backgroundColor: tv.accent,
+                      foregroundColor: app.inkOn(tv.accent),
                       padding: buttonPadding,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -8949,8 +8989,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     icon: const Icon(Icons.cloud_download_rounded),
                     label: const Text('Import'),
                     style: FilledButton.styleFrom(
+                      // The "import" action tone: deliberately literal (see
+                      // DebrifyTvTokens' header).
                       backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
+                      foregroundColor: app.core.tx,
                       padding: buttonPadding,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -8967,8 +9009,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     onPressed: _handleAddChannel,
                     icon: const Icon(Icons.add_rounded),
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withOpacity(0.1),
-                      foregroundColor: Colors.white,
+                      backgroundColor: tv.fillWeak,
+                      foregroundColor: app.core.tx,
                       minimumSize: iconSize,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -8983,7 +9025,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         : _handleDeleteAllChannels,
                     icon: const Icon(Icons.delete_outline_rounded),
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withOpacity(0.08),
+                      backgroundColor: app.core.tx.withAlpha(20),
                       foregroundColor: Colors.redAccent,
                       minimumSize: iconSize,
                       shape: RoundedRectangleBorder(
@@ -8997,8 +9039,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     onPressed: _showGlobalSettingsDialog,
                     icon: const Icon(Icons.settings_rounded),
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withOpacity(0.08),
-                      foregroundColor: Colors.white70,
+                      backgroundColor: app.core.tx.withAlpha(20),
+                      foregroundColor: tv.textDim,
                       minimumSize: iconSize,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -9042,19 +9084,19 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             },
             decoration: InputDecoration(
               hintText: 'Search channels...',
-              hintStyle: const TextStyle(color: Colors.white54),
-              prefixIcon: const Icon(
+              hintStyle: TextStyle(color: tvTokens.textFaint),
+              prefixIcon: Icon(
                 Icons.search_rounded,
-                color: Colors.white60,
+                color: tvTokens.textMeta,
               ),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.08),
+              fillColor: appTheme.core.tx.withAlpha(20),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
             ),
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: appTheme.core.tx),
           ),
           const SizedBox(height: 24),
           Expanded(
@@ -9096,8 +9138,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final tv = AppThemeScope.of(context).debrifyTv;
             return AlertDialog(
-              backgroundColor: const Color(0xFF0F0F0F),
+              backgroundColor: tv.dialogBg,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -9138,7 +9181,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     const SizedBox(height: 12),
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
-                      activeColor: const Color(0xFFE50914),
+                      activeColor: tv.accent,
                       title: const Text('Avoid NSFW content'),
                       subtitle: const Text(
                         'Applies a best-effort filter while searching',
@@ -9219,7 +9262,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return Dialog(
-              backgroundColor: const Color(0xFF0F0F0F),
+              backgroundColor: AppThemeScope.of(context).debrifyTv.dialogBg,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -9240,31 +9283,33 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Widget _buildEmptyChannelsState() {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     return Center(
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
+          color: app.core.tx.withAlpha(10),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white12, width: 1),
+          border: Border.all(color: tv.hairline, width: 1),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.tv_rounded, color: Colors.white54, size: 36),
-            SizedBox(height: 12),
+          children: [
+            Icon(Icons.tv_rounded, color: tv.textFaint, size: 36),
+            const SizedBox(height: 12),
             Text(
               'No channels yet',
               style: TextStyle(
-                color: Colors.white,
+                color: app.core.tx,
                 fontWeight: FontWeight.w600,
                 fontSize: 16,
               ),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               'Save your favorite keyword combos so Debrify TV can play them on demand.',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
+              style: TextStyle(color: tv.textDim, fontSize: 13),
               textAlign: TextAlign.center,
             ),
           ],
@@ -9274,24 +9319,26 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Widget _buildNoChannelResultsState() {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(Icons.search_off_rounded, color: Colors.white54, size: 36),
-          SizedBox(height: 12),
+        children: [
+          Icon(Icons.search_off_rounded, color: tv.textFaint, size: 36),
+          const SizedBox(height: 12),
           Text(
             'No channels match your search',
             style: TextStyle(
-              color: Colors.white,
+              color: app.core.tx,
               fontWeight: FontWeight.w600,
               fontSize: 16,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'Try a different name or clear the filter to see all channels.',
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+            style: TextStyle(color: tv.textDim, fontSize: 13),
             textAlign: TextAlign.center,
           ),
         ],
@@ -9300,6 +9347,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Widget _buildChannelCard(DebrifyTvChannel channel) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     final cacheEntry = _channelCache[channel.id];
     final int cachedCount = cacheEntry?.torrents.length ?? 0;
     final String? channelNumberLabel = channel.channelNumber > 0
@@ -9311,9 +9360,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final cardContent = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
+        // LEFT LITERAL: 0xFF101010 is this list card's ground and no role
+        // holds it (`dialogBg` is 0xFF0F0F0F, one step off).
         color: const Color(0xFF101010),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12, width: 1),
+        border: Border.all(color: tv.hairline, width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.25),
@@ -9334,8 +9385,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   children: [
                     Text(
                       channel.name,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: app.core.tx,
                         fontWeight: FontWeight.w700,
                         fontSize: 18,
                       ),
@@ -9344,8 +9395,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       const SizedBox(height: 4),
                       Text(
                         channelNumberLabel,
-                        style: const TextStyle(
-                          color: Colors.white60,
+                        style: TextStyle(
+                          color: tv.textMeta,
                           fontSize: 11,
                           letterSpacing: 0.4,
                         ),
@@ -9365,8 +9416,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     FilledButton(
                       onPressed: _isBusy ? null : () => _watchChannel(channel),
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFE50914),
-                        foregroundColor: Colors.white,
+                        backgroundColor: tv.accent,
+                        foregroundColor: app.inkOn(tv.accent),
                         padding: const EdgeInsets.all(12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -9378,7 +9429,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     IconButton(
                       tooltip: 'Edit channel',
                       onPressed: () => _handleEditChannel(channel),
-                      icon: const Icon(Icons.edit_rounded, color: Colors.white70),
+                      icon: Icon(Icons.edit_rounded, color: tv.textDim),
                     ),
                     IconButton(
                       tooltip: 'Delete channel',
@@ -9414,8 +9465,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       cachedCount > 0
                           ? '$cachedCount cached torrent${cachedCount == 1 ? '' : 's'} ready'
                           : 'Cache will refresh on edit.',
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: tv.textDim,
                         fontSize: 12,
                       ),
                     ),
@@ -9446,36 +9497,40 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   }
 
   Widget _buildKeywordChip(String keyword) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: app.core.tx.withAlpha(20),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12, width: 1),
+        border: Border.all(color: tv.hairline, width: 1),
       ),
       child: Text(
         keyword,
-        style: const TextStyle(color: Colors.white, fontSize: 13),
+        style: TextStyle(color: app.core.tx, fontSize: 13),
       ),
     );
   }
 
   Widget _buildOptionChip(IconData icon, String label) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: app.core.tx.withAlpha(15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12, width: 1),
+        border: Border.all(color: tv.hairline, width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white70, size: 14),
+          Icon(icon, color: tv.textDim, size: 14),
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: TextStyle(color: tv.textDim, fontSize: 12),
           ),
         ],
       ),

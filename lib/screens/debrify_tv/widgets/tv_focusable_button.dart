@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 
@@ -32,6 +33,8 @@ class _TvFocusableButtonState extends State<TvFocusableButton> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     return Focus(
       onFocusChange: (focused) {
         setState(() {
@@ -62,14 +65,18 @@ class _TvFocusableButtonState extends State<TvFocusableButton> {
             boxShadow: _isFocused && !PlatformUtil.isTelevision
                 ? [
                     BoxShadow(
-                      color: Colors.white.withOpacity(0.3),
+                      // The glow is the focus ring bled out. 77, not
+                      // `withValues(alpha: 0.3)`: the source composed this
+                      // with `withOpacity`, which rounds to an 8-bit alpha
+                      // (77/255 = 0.3020) — 0.3 exactly is a different colour.
+                      color: tv.focusRing.withAlpha(77),
                       blurRadius: 20,
                       spreadRadius: 2,
                     ),
                   ]
                 : null,
             border: _isFocused
-                ? Border.all(color: Colors.white, width: 3)
+                ? Border.all(color: tv.focusRing, width: 3)
                 : null,
           ),
           child: FilledButton.icon(
@@ -81,7 +88,19 @@ class _TvFocusableButtonState extends State<TvFocusableButton> {
             ),
             style: FilledButton.styleFrom(
               backgroundColor: widget.backgroundColor,
-              foregroundColor: Colors.white,
+              // Legacy keeps the shipped white: call sites pass literal action
+              // tones (gold, green, blue), and contrast-scoring against the
+              // gold would flip today's label to near-black — a visible change
+              // to an app that has always been white-on-gold here.
+              //
+              // Every OTHER theme must score, though. `core.tx` unconditionally
+              // is white-on-white on Noir and Frost (white accents) and
+              // amber-on-amber on Phosphor — 1:1, an invisible label. The
+              // split is the point: preserve the shipped pixel exactly, and
+              // stop pretending page ink is legible on an arbitrary fill.
+              foregroundColor: app.isLegacy
+                  ? app.core.tx
+                  : app.inkOn(widget.backgroundColor),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),

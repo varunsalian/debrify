@@ -10,15 +10,13 @@ import '../../models/iptv_playlist.dart';
 import '../../services/debrify_image_cache.dart';
 import '../../services/iptv_epg_service.dart';
 import '../browse/brand_accent.dart';
-import '../home/home_theme.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import 'styles/iptv_style.dart';
 
 /// Matches a trailing resolution the M3U names embed, e.g. "(1080p)" / "(576i)".
 final RegExp _resExp = RegExp(r'\((\d{3,4}[pi])\)', caseSensitive: false);
-
-const Color _liveDot = Color(0xFF34D399); // emerald — a calm "on air" cue
 
 /// Row heights for live channels (a square logo chip) and on-demand items
 /// (a 2:3 poster). Narrow live rows get a little more height so a wrapped
@@ -167,8 +165,6 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   bool get _active => _focused || _hovered || widget.isPreviewSelected;
   bool get _tabletPreviewActive =>
       widget.isPreviewSelected && !_focused && !_hovered;
-  Color get _activeAccent =>
-      _tabletPreviewActive ? HomeTheme.chromeAccent : HomeTheme.focusGold;
 
   /// Touch phones/tablets have no hover, so the favourite affordance can't hide
   /// behind one — keep it visible there. Desktop reveals it on hover, TV on
@@ -237,6 +233,13 @@ class _IptvChannelRowState extends State<IptvChannelRow>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    // Was HomeTheme.chromeAccent / HomeTheme.focusGold. The chrome violet is
+    // value-identical to seeAll.accent, which is IPTV's own accent role, so the
+    // pinned-preview cue rides this surface's accent rather than Home's.
+    final activeAccent = _tabletPreviewActive
+        ? app.seeAll.accent
+        : app.home.focus;
     final ch = widget.channel;
     final isLive = ch.isLive;
     final tokens = IptvStyleTokens.of(widget.style);
@@ -286,19 +289,23 @@ class _IptvChannelRowState extends State<IptvChannelRow>
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
             decoration: BoxDecoration(
               color: _active
+                  // The preview-pinned variant is a DIFFERENT literal from
+                  // iptv.rowFocusFill and no token carries it (seeAll.panel is
+                  // value-equal but is an elevated container ground, which the
+                  // token's own doc rules out for a transient row tint).
                   ? (_tabletPreviewActive
                         ? const Color(0xFF17132E)
-                        : const Color(0xFF141824))
+                        : app.iptv.rowFocusFill)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: _active ? _activeAccent : Colors.transparent,
+                color: _active ? activeAccent : Colors.transparent,
                 width: 2,
               ),
               boxShadow: _active
                   ? [
                       BoxShadow(
-                        color: _activeAccent.withValues(alpha: 0.28),
+                        color: activeAccent.withValues(alpha: 0.28),
                         blurRadius: 20,
                         spreadRadius: 1,
                       ),
@@ -317,8 +324,8 @@ class _IptvChannelRowState extends State<IptvChannelRow>
                       overflow: TextOverflow.fade,
                       style: TextStyle(
                         color: _active
-                            ? _activeAccent
-                            : Colors.white.withValues(alpha: 0.42),
+                            ? activeAccent
+                            : app.core.tx.withValues(alpha: 0.42),
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
                         fontFeatures: const [FontFeature.tabularFigures()],
@@ -350,11 +357,13 @@ class _IptvChannelRowState extends State<IptvChannelRow>
                               width: 7,
                               height: 7,
                               decoration: BoxDecoration(
-                                color: _liveDot,
+                                color: app.iptv.liveDot,
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: _liveDot.withValues(alpha: 0.6),
+                                    color: app.iptv.liveDot.withValues(
+                                      alpha: 0.6,
+                                    ),
                                     blurRadius: 7,
                                     spreadRadius: 1,
                                   ),
@@ -375,7 +384,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
                                   : 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: Colors.white.withValues(
+                                color: app.core.tx.withValues(
                                   alpha: _active ? 1.0 : 0.94,
                                 ),
                                 fontSize: 14.5,
@@ -399,7 +408,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.52),
+                            color: app.core.tx.withValues(alpha: 0.52),
                             fontSize: 12.5,
                             fontWeight: FontWeight.w500,
                             fontFeatures: const [FontFeature.tabularFigures()],
@@ -738,7 +747,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         icon: Icon(
           Icons.calendar_view_day_rounded,
           size: 18,
-          color: Colors.white.withValues(alpha: 0.55),
+          color: AppThemeScope.of(context).iptv.inkDim,
         ),
       ),
     );
@@ -751,6 +760,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
   ///   always on touch (no hover there). Tapping it opens the list picker so
   ///   the channel's destination is a choice, not an assumption.
   Widget _buildFavTrailing() {
+    final app = AppThemeScope.of(context);
     // Describes what HOLD OK will actually do, so the hint can't promise a
     // picker on a remote that is really going to toggle the favorite.
     final picksList = widget.onOpenListPicker != null && widget.hasCustomLists;
@@ -780,12 +790,12 @@ class _IptvChannelRowState extends State<IptvChannelRow>
         );
       }
       if (widget.isFavorited) {
-        return const Padding(
-          padding: EdgeInsets.only(left: 8),
+        return Padding(
+          padding: const EdgeInsets.only(left: 8),
           child: Icon(
             Icons.favorite_rounded,
             size: 18,
-            color: Color(0xFFF43F5E),
+            color: app.iptv.favoriteAccent,
           ),
         );
       }
@@ -795,7 +805,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
           child: Icon(
             Icons.bookmark_rounded,
             size: 16,
-            color: Colors.white.withValues(alpha: 0.55),
+            color: app.iptv.inkDim,
           ),
         );
       }
@@ -809,7 +819,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
               child: Icon(
                 Icons.bookmark_rounded,
                 size: 16,
-                color: Colors.white.withValues(alpha: 0.55),
+                color: app.iptv.inkDim,
               ),
             )
           : const SizedBox.shrink();
@@ -1069,6 +1079,7 @@ class _RowEpgState extends State<_RowEpg> {
     final t = widget.tokens;
     if (t != null) return _buildStyled(context, t);
 
+    final app = AppThemeScope.of(context);
     final now = _data?.now;
     final next = _data?.next;
     if (now == null && next == null) {
@@ -1081,7 +1092,7 @@ class _RowEpgState extends State<_RowEpg> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.52),
+            color: app.core.tx.withValues(alpha: 0.52),
             fontSize: 12.5,
             fontWeight: FontWeight.w500,
             fontFeatures: const [FontFeature.tabularFigures()],
@@ -1102,7 +1113,7 @@ class _RowEpgState extends State<_RowEpg> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.74),
+              color: app.core.tx.withValues(alpha: 0.74),
               fontSize: 12.5,
               fontWeight: FontWeight.w500,
             ),
@@ -1117,14 +1128,14 @@ class _RowEpgState extends State<_RowEpg> {
                 children: [
                   Expanded(
                     flex: (now.progressAt(at) * 1000).round().clamp(0, 1000),
-                    child: const ColoredBox(color: HomeTheme.focusGold),
+                    child: ColoredBox(color: app.home.focus),
                   ),
                   Expanded(
                     flex:
                         1000 -
                         (now.progressAt(at) * 1000).round().clamp(0, 1000),
                     child: ColoredBox(
-                      color: Colors.white.withValues(alpha: 0.12),
+                      color: app.core.tx.withValues(alpha: 0.12),
                     ),
                   ),
                 ],
@@ -1140,7 +1151,7 @@ class _RowEpgState extends State<_RowEpg> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.42),
+              color: app.core.tx.withValues(alpha: 0.42),
               fontSize: 11,
               fontWeight: FontWeight.w500,
               fontFeatures: const [FontFeature.tabularFigures()],
@@ -1327,16 +1338,13 @@ class _FavHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = accent ?? HomeTheme.focusGold;
+    final app = AppThemeScope.of(context);
+    final chrome = accent ?? app.home.focus;
     final holding = progress > 0.02 && progress < 1.0;
     final done = favorited || progress >= 1.0;
     final heartColor = done
-        ? const Color(0xFFF43F5E)
-        : Color.lerp(
-            Colors.white.withValues(alpha: 0.7),
-            const Color(0xFFF43F5E),
-            progress,
-          )!;
+        ? app.iptv.favoriteAccent
+        : Color.lerp(app.iptv.inkMid, app.iptv.favoriteAccent, progress)!;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1368,7 +1376,7 @@ class _FavHint extends StatelessWidget {
                     value: progress,
                     strokeWidth: 2,
                     color: chrome,
-                    backgroundColor: Colors.white.withValues(alpha: 0.12),
+                    backgroundColor: app.core.tx.withValues(alpha: 0.12),
                   ),
                 ),
               Icon(
@@ -1379,11 +1387,7 @@ class _FavHint extends StatelessWidget {
                     : Icons.favorite_border_rounded,
                 size: 16,
                 color: picksList
-                    ? Color.lerp(
-                        Colors.white.withValues(alpha: 0.7),
-                        chrome,
-                        progress,
-                      )!
+                    ? Color.lerp(app.iptv.inkMid, chrome, progress)!
                     : heartColor,
               ),
             ],
@@ -1431,6 +1435,7 @@ class _LogoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final t = tokens;
     final hasArt = logoUrl != null && logoUrl!.isNotEmpty;
     return Container(
@@ -1447,15 +1452,18 @@ class _LogoChip extends StatelessWidget {
             )
           : BoxDecoration(
               borderRadius: BorderRadius.circular(poster ? 7 : 11),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+              border: Border.all(color: app.core.tx.withValues(alpha: 0.06)),
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
                   Color.alphaBlend(
                     brand.withValues(alpha: 0.16),
-                    const Color(0xFF1E2030),
+                    app.iptv.logoPlate,
                   ),
+                  // The plate's lower stop. Value-equal to iptv.modalBg, but
+                  // that role is a dialog ground — borrowing it would repaint
+                  // every logo when a theme moved its sheets.
                   const Color(0xFF14141D),
                 ],
               ),
@@ -1525,7 +1533,7 @@ class _ResumeBar extends StatelessWidget {
       child: FractionallySizedBox(
         alignment: Alignment.centerLeft,
         widthFactor: progress,
-        child: Container(color: HomeTheme.focusGold),
+        child: Container(color: AppThemeScope.of(context).home.focus),
       ),
     );
   }
@@ -1572,8 +1580,8 @@ class _FavButton extends StatelessWidget {
                   : Icons.favorite_border_rounded,
               size: 18,
               color: favorited
-                  ? const Color(0xFFF43F5E)
-                  : Colors.white.withValues(alpha: 0.55),
+                  ? AppThemeScope.of(context).iptv.favoriteAccent
+                  : AppThemeScope.of(context).iptv.inkDim,
             ),
           ),
         ),

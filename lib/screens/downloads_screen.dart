@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import '../services/analytics_service.dart';
 import '../services/download_service.dart';
 import '../theme/app_surfaces.dart';
+import '../theme/app_theme_scope.dart';
 import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
 import '../services/main_page_bridge.dart';
@@ -332,6 +333,11 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   }
 
   Future<void> _showAddDialog({String? initialUrl}) async {
+    // Read before the awaits below: the sheet is themed from the surface that
+    // opened it (a modal captures this subtree's InheritedThemes, the freeze
+    // included), and reading here keeps the BuildContext use out of an async
+    // gap.
+    final app = AppThemeScope.of(context);
     try {
       await _ensureDefaultLocationOrRedirect();
     } catch (_) {
@@ -454,7 +460,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       isScrollControlled: true,
       useRootNavigator: true,
       barrierColor: Colors.black.withValues(alpha: 0.4),
-      backgroundColor: const Color(0xFF0B1220),
+      backgroundColor: app.settings.sheetBg,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
@@ -482,7 +488,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                         width: 44,
                         height: 5,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF334155),
+                          color: app.home.controlBg,
                           borderRadius: BorderRadius.circular(999),
                         ),
                       ),
@@ -492,8 +498,8 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                        gradient: LinearGradient(
+                          colors: [app.downloads.accent, app.downloads.accent2],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -501,12 +507,12 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.download_for_offline_rounded, color: Colors.white),
+                          Icon(Icons.download_for_offline_rounded, color: app.downloads.onAccent),
                           const SizedBox(width: 10),
-                          const Expanded(
+                          Expanded(
                             child: Text('Add Download',
                                 style: TextStyle(
-                                    color: Colors.white,
+                                    color: app.downloads.onAccent,
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold)),
                           ),
@@ -518,7 +524,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                                 await recompute(setLocal);
                               }
                             },
-                            icon: const Icon(Icons.paste, color: Colors.white),
+                            icon: Icon(Icons.paste, color: app.downloads.onAccent),
                             tooltip: 'Paste',
                           )
                         ],
@@ -572,7 +578,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                             onPressed: () => Navigator.of(context).pop(false),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              side: const BorderSide(color: Color(0xFF334155)),
+                              side: BorderSide(color: app.downloads.line),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                             ),
                             child: const Text('Cancel'),
@@ -588,8 +594,8 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                             label: const Text('Download'),
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              backgroundColor: const Color(0xFF6366F1),
-                              foregroundColor: Colors.white,
+                              backgroundColor: app.downloads.accent,
+                              foregroundColor: app.downloads.onAccent,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               elevation: 2,
                             ),
@@ -619,6 +625,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final groups = buildTorrentGroups(
       records: _records,
       detailsByRecordId: _recordDetails,
@@ -768,18 +775,18 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                 duration: const Duration(milliseconds: 150),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
+                  color: app.cloud.dialogSurface,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: _addButtonFocused
-                        ? const Color(0xFF10B981)
-                        : const Color(0xFF10B981).withValues(alpha: 0.5),
+                        ? app.downloads.addAccent
+                        : app.downloads.addAccent.withValues(alpha: 0.5),
                     width: _addButtonFocused ? 2 : 1,
                   ),
                   boxShadow: [
                     BoxShadow(
                       color: _addButtonFocused
-                          ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                          ? app.downloads.addAccent.withValues(alpha: 0.4)
                           : Colors.black.withValues(alpha: 0.3),
                       blurRadius: _addButtonFocused ? 12 : 8,
                       offset: const Offset(0, 2),
@@ -791,14 +798,14 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                   children: [
                     Icon(
                       Icons.add_rounded,
-                      color: const Color(0xFF10B981),
+                      color: app.downloads.addAccent,
                       size: 18,
                     ),
                     const SizedBox(width: 6),
-                    const Text(
+                    Text(
                       'Add',
                       style: TextStyle(
-                        color: Color(0xFF10B981),
+                        color: app.downloads.addAccent,
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
                       ),
@@ -814,17 +821,18 @@ class _DownloadsScreenState extends State<DownloadsScreen>
   }
 
   Widget _chip(IconData icon, String text) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: app.cloud.dialogSurface,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFF334155)),
+        border: Border.all(color: app.downloads.line),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: const Color(0xFF94A3B8)),
+          Icon(icon, size: 14, color: app.downloads.metaIcon),
           const SizedBox(width: 6),
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
@@ -857,6 +865,7 @@ class _StyledField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return TvTextField(
       controller: controller,
       onChanged: onChanged,
@@ -865,14 +874,14 @@ class _StyledField extends StatelessWidget {
         hintText: hint,
         prefixIcon: Icon(icon),
         filled: true,
-        fillColor: const Color(0xFF111827),
+        fillColor: app.downloads.fieldFill,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF334155)),
+          borderSide: BorderSide(color: app.downloads.line),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF6366F1)),
+          borderSide: BorderSide(color: app.downloads.accent),
         ),
         contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       ),
@@ -888,13 +897,14 @@ class _PreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (filename.isEmpty && host.isEmpty) return const SizedBox.shrink();
+    final app = AppThemeScope.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0x141E293B),
+        color: app.downloads.previewCard,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF334155)),
+        border: Border.all(color: app.downloads.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -910,14 +920,14 @@ class _PreviewCard extends StatelessWidget {
             const SizedBox(height: 4),
             Row(
               children: [
-                const Icon(Icons.public, size: 14, color: Color(0xFF94A3B8)),
+                Icon(Icons.public, size: 14, color: app.downloads.metaIcon),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     host,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12),
+                    style: TextStyle(color: app.core.tx.withValues(alpha: 0.7), fontSize: 12),
                   ),
                 ),
               ],
@@ -1853,6 +1863,7 @@ class _TorrentGroupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final app = AppThemeScope.of(context);
     final Color stateColor = _groupStateColor(theme, group.state);
     final textTheme = theme.textTheme;
 
@@ -2072,13 +2083,13 @@ class _TorrentGroupCard extends StatelessWidget {
                   padding: EdgeInsets.only(bottom: actions.isNotEmpty ? 8 : 0),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline_rounded, size: 14, color: Colors.white.withValues(alpha: 0.5)),
+                      Icon(Icons.info_outline_rounded, size: 14, color: app.core.tx.withValues(alpha: 0.5)),
                       const SizedBox(width: 6),
                       Text(
                         'Pause unavailable for TorBox',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.white.withValues(alpha: 0.5),
+                          color: app.core.tx.withValues(alpha: 0.5),
                         ),
                       ),
                     ],
@@ -2204,6 +2215,7 @@ class _DownloadTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     // Prefer live progress if available
     final double rawProgress = progress?.progress ?? record.progress;
     final name = record.task.filename;
@@ -2251,14 +2263,14 @@ class _DownloadTile extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                    color: app.downloads.accent.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     record.status == TaskStatus.complete && (moveProgress == null || moveProgress == 1.0)
                         ? Icons.check_circle
                         : Icons.download_rounded,
-                    color: const Color(0xFF6366F1),
+                    color: app.downloads.accent,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2282,7 +2294,7 @@ class _DownloadTile extends StatelessWidget {
                                       : 'Completed'))
                               : _statusText(record.status),
                           style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
+                              color: app.core.tx.withValues(alpha: 0.8),
                               fontSize: 12)),
                     ],
                   ),
@@ -2304,7 +2316,7 @@ class _DownloadTile extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text('Moving ${(moveProgress! * 100).toStringAsFixed(0)}%',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
+                  style: TextStyle(color: app.core.tx.withValues(alpha: 0.7), fontSize: 12)),
             ],
             const SizedBox(height: 10),
             // Rich stats row
@@ -2405,7 +2417,7 @@ class _DownloadTile extends StatelessWidget {
                 if (isActive)
                   Text('${(shownProgress * 100).toStringAsFixed(0)}%',
                       style:
-                          TextStyle(color: Colors.white.withValues(alpha: 0.7))),
+                          TextStyle(color: app.core.tx.withValues(alpha: 0.7))),
               ],
             ),
           ],
@@ -2440,17 +2452,18 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF334155),
+        color: app.home.controlBg,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFF475569).withValues(alpha: 0.3)),
+        border: Border.all(color: app.downloads.chipBorder),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: const Color(0xFF94A3B8)),
+          Icon(icon, size: 14, color: app.downloads.metaIcon),
           const SizedBox(width: 6),
           Text(
             label,

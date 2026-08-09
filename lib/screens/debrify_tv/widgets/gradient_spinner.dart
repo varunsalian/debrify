@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_theme_scope.dart';
+
 /// An animated gradient spinner widget.
 ///
 /// Displays a rotating circular gradient with a play icon in the center.
@@ -32,6 +34,7 @@ class _GradientSpinnerState extends State<GradientSpinner>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return SizedBox(
       width: 56,
       height: 56,
@@ -44,16 +47,21 @@ class _GradientSpinnerState extends State<GradientSpinner>
           );
         },
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: SweepGradient(
               colors: [
-                Color(0x00FFFFFF),
-                Color(0xFFE50914),
-                Color(0xFFB71C1C),
-                Color(0x00FFFFFF),
+                // The two fade-out stops stay transparent WHITE: a sweep
+                // interpolates unpremultiplied, so swapping the invisible ends
+                // for a themed hue would change the colours in between.
+                // 0xFFB71C1C likewise has no token — it is the arc's deep
+                // companion tone, and no role holds that value.
+                const Color(0x00FFFFFF),
+                app.debrifyTv.accent,
+                const Color(0xFFB71C1C),
+                const Color(0x00FFFFFF),
               ],
-              stops: [0.15, 0.45, 0.85, 1.0],
+              stops: const [0.15, 0.45, 0.85, 1.0],
             ),
           ),
           child: Center(
@@ -61,13 +69,13 @@ class _GradientSpinnerState extends State<GradientSpinner>
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: app.debrifyTv.fillWeak,
                 shape: BoxShape.circle,
               ),
-              child: const Center(
+              child: Center(
                 child: Icon(
                   Icons.play_arrow_rounded,
-                  color: Colors.white70,
+                  color: app.debrifyTv.textDim,
                   size: 22,
                 ),
               ),

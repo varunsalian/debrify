@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../see_all/see_all_theme.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// Empty state for the YouTube source before a search is run.
 class YoutubeEmptyState extends StatelessWidget {
@@ -8,6 +8,7 @@ class YoutubeEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -17,13 +18,13 @@ class YoutubeEmptyState extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: kSeeAllAccent.withValues(alpha: 0.15),
+                color: app.seeAll.accent.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.smart_display_outlined,
                 size: 64,
-                color: kSeeAllAccent,
+                color: app.seeAll.accent,
               ),
             ),
             const SizedBox(height: 24),
@@ -38,7 +39,7 @@ class YoutubeEmptyState extends StatelessWidget {
             Text(
               'Search for any video — streamed on-device, no account needed',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: app.youtube.textDim,
                 fontSize: 14,
               ),
               textAlign: TextAlign.center,

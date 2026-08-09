@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_theme_scope.dart';
 import '../../utils/dialog_tap_guard.dart';
 import '../../utils/tv_keys.dart';
 import '../tv_text_field.dart';
@@ -93,9 +94,10 @@ class _IptvListNameDialogState extends State<_IptvListNameDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final width = MediaQuery.of(context).size.width;
     return Dialog(
-      backgroundColor: const Color(0xFF141019),
+      backgroundColor: app.sheetSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: width < 480 ? width : 420),
@@ -107,8 +109,8 @@ class _IptvListNameDialogState extends State<_IptvListNameDialog> {
             children: [
               Text(
                 widget.title,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: app.core.tx,
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                 ),
@@ -134,24 +136,27 @@ class _IptvListNameDialogState extends State<_IptvListNameDialog> {
                 child: TvTextField(
                   controller: _controller,
                   focusNode: _fieldNode,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: app.core.tx),
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _submit(),
                   decoration: InputDecoration(
                     labelText: 'List name',
-                    labelStyle: const TextStyle(color: Colors.white60),
+                    // 0x99 / 0x61 are Colors.white60 / white38 exactly — the
+                    // shorthands' alphas are 8-bit, so `withValues(0.6)` would
+                    // be a different value, not the same colour.
+                    labelStyle: TextStyle(color: app.core.tx.withAlpha(0x99)),
                     hintText: 'e.g. Kids, Sports, Weekend',
-                    hintStyle: const TextStyle(color: Colors.white38),
+                    hintStyle: TextStyle(color: app.core.tx.withAlpha(0x61)),
                     errorText: _error,
                     filled: true,
-                    fillColor: const Color(0xFF0F0B14),
+                    fillColor: app.iptv.fieldFill,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF2A2233)),
+                      borderSide: BorderSide(color: app.iptv.fieldBorder),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF2A2233)),
+                      borderSide: BorderSide(color: app.iptv.fieldBorder),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -210,6 +215,7 @@ class _NameDialogButtonState extends State<_NameDialogButton> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (value) => setState(() => _focused = value),
@@ -234,19 +240,22 @@ class _NameDialogButtonState extends State<_NameDialogButton> {
           decoration: BoxDecoration(
             color: widget.filled
                 ? _accent.withValues(alpha: _focused ? 1 : 0.85)
-                : Colors.white.withValues(alpha: _focused ? 0.16 : 0.06),
+                : app.core.tx.withValues(alpha: _focused ? 0.16 : 0.06),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: _focused
-                  ? Colors.white.withValues(alpha: 0.9)
+                  ? app.core.tx.withValues(alpha: 0.9)
                   : Colors.transparent,
               width: 2,
             ),
           ),
           child: Text(
             widget.label,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              // On the filled variant the label sits ON the accent, so the
+              // swatch picks the ink; the ghost variant is page ink. Both are
+              // white under legacy.
+              color: widget.filled ? app.inkOn(_accent) : app.core.tx,
               fontSize: 13.5,
               fontWeight: FontWeight.w700,
             ),

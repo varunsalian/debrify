@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/iptv_playlist.dart';
 import '../../services/iptv_epg_service.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 import 'styles/iptv_style.dart';
 import '../browse/brand_accent.dart';
@@ -192,6 +193,7 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final channel = widget.channel;
     final now = DateTime.now();
     final schedule = _schedule;
@@ -253,7 +255,7 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
                           'TODAY',
                           style: widget.tokens == null
                               ? TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.35),
+                                  color: app.iptv.inkFaint,
                                   fontSize: 9.5,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: 1.4,
@@ -278,7 +280,7 @@ class _IptvStagePanelState extends State<IptvStagePanel> {
                                 style: TextStyle(
                                   color:
                                       widget.tokens?.fgFaint ??
-                                      Colors.white.withValues(alpha: 0.30),
+                                      app.core.tx.withValues(alpha: 0.30),
                                   fontSize: 11.5,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -392,6 +394,7 @@ class _StageActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final console = tokens != null && tokens!.monoFamily.isNotEmpty;
     // Content-sized buttons at one shared height, no stretching: an Expanded
     // Watch next to icon squares read lopsided. Styled buttons are wider
@@ -424,7 +427,7 @@ class _StageActions extends StatelessWidget {
                 icon: isRecordingThis
                     ? Icons.stop_rounded
                     : Icons.fiber_manual_record_rounded,
-                iconColor: tokens?.rec ?? const Color(0xFFF43F5E),
+                iconColor: tokens?.rec ?? app.iptv.recordAccent,
                 emphasized: isRecordingThis,
                 onPressed: onRecordNow!,
                 swallowDown: swallowDown,
@@ -442,7 +445,11 @@ class _StageActions extends StatelessWidget {
                     ? Icons.star_rounded
                     : Icons.star_border_rounded,
                 iconColor: tokens == null
-                    ? (isFavorited ? const Color(0xFFF5C042) : Colors.white70)
+                    // 0xB3 is Colors.white70 exactly (8-bit alpha), so
+                    // `withValues(0.7)` would be a different value.
+                    ? (isFavorited
+                          ? const Color(0xFFF5C042)
+                          : app.core.tx.withAlpha(0xB3))
                     : (isFavorited ? tokens!.accent : tokens!.fgMid),
                 onPressed: onToggleFavorite!,
                 swallowDown: swallowDown,
@@ -514,7 +521,12 @@ class _StageButtonState extends State<_StageButton> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     const gold = Color(0xFFF5C042);
+    // The primary button keeps its own literal gradient, so its content takes
+    // ink chosen against THAT swatch rather than page ink. White under legacy.
+    const primaryFill = Color(0xFF8A5CFF);
+    final contentInk = widget.primary ? app.inkOn(primaryFill) : app.core.tx;
     final body = widget.tokens != null
         ? _styledBody(widget.tokens!)
         : Container(
@@ -532,14 +544,14 @@ class _StageButtonState extends State<_StageButton> {
               color: widget.primary
                   ? null
                   : widget.emphasized
-                  ? const Color(0xFFF43F5E).withValues(alpha: 0.14)
-                  : Colors.white.withValues(alpha: 0.06),
+                  ? app.iptv.recordAccent.withValues(alpha: 0.14)
+                  : app.core.tx.withValues(alpha: 0.06),
               border: Border.all(
                 color: _focused
                     ? gold
                     : widget.emphasized
-                    ? const Color(0xFFF43F5E).withValues(alpha: 0.55)
-                    : Colors.white.withValues(
+                    ? app.iptv.recordAccent.withValues(alpha: 0.55)
+                    : app.core.tx.withValues(
                         alpha: widget.primary ? 0.0 : 0.10,
                       ),
                 width: _focused ? 2 : 1,
@@ -552,14 +564,14 @@ class _StageButtonState extends State<_StageButton> {
                 Icon(
                   widget.icon,
                   size: 17,
-                  color: widget.iconColor ?? Colors.white,
+                  color: widget.iconColor ?? contentInk,
                 ),
                 if (widget.label != null) ...[
                   const SizedBox(width: 6),
                   Text(
                     widget.label!,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: contentInk,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w800,
                     ),
@@ -724,6 +736,7 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final p = widget.programme;
     final actionable = widget.isNow || widget.replayable || widget.recordable;
     final titleAlpha = widget.isPast
@@ -739,9 +752,11 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
           ? BoxDecoration(
               borderRadius: BorderRadius.circular(7),
               color: _focused
+                  // Not iptv.rowFocusFill (#141824) — the stage's schedule
+                  // row paints a different literal, so no token carries it.
                   ? const Color(0xFF1A1F35)
                   : widget.isNow
-                  ? Colors.white.withValues(alpha: 0.04)
+                  ? app.iptv.surfaceTint
                   : Colors.transparent,
               border: Border.all(
                 color: _focused ? const Color(0xFFF5C042) : Colors.transparent,
@@ -768,7 +783,7 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
                   ? TextStyle(
                       color: widget.isNow
                           ? const Color(0xFFF5C042)
-                          : Colors.white.withValues(
+                          : app.core.tx.withValues(
                               alpha: widget.isPast ? 0.3 : 0.5,
                             ),
                       fontSize: 11,
@@ -793,7 +808,7 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
               overflow: TextOverflow.ellipsis,
               style: t == null
                   ? TextStyle(
-                      color: Colors.white.withValues(alpha: titleAlpha),
+                      color: app.core.tx.withValues(alpha: titleAlpha),
                       fontSize: 12,
                       fontWeight: widget.isNow
                           ? FontWeight.w700
@@ -819,7 +834,7 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
                   : (mono != null ? t.accent : t.live),
             ),
           if (widget.replayable)
-            _Tag('REPLAY', t?.fgDim ?? Colors.white.withValues(alpha: 0.55)),
+            _Tag('REPLAY', t?.fgDim ?? app.iptv.inkDim),
           // A chip that reads as the button it is — the old 8px "REC" text
           // looked like metadata, so nobody knew the rows record. On the
           // NOW row it sits beside the NOW tag: "record the rest".
@@ -881,7 +896,7 @@ class _RecordChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rec = recColor ?? const Color(0xFFF43F5E);
+    final rec = recColor ?? AppThemeScope.of(context).iptv.recordAccent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
       decoration: BoxDecoration(
@@ -954,6 +969,7 @@ class IptvMonogram extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final brand = brandAccentFor(name);
     return Container(
       width: size,
@@ -962,15 +978,17 @@ class IptvMonogram extends StatelessWidget {
         borderRadius: BorderRadius.circular(size * 0.24),
         color: Color.alphaBlend(
           brand.withValues(alpha: 0.22),
+          // Not iptv.logoPlate (#1E2030) — the monogram's own mat is a
+          // different literal, so no token carries it.
           const Color(0xFF141828),
         ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: app.iptv.hairline),
       ),
       alignment: Alignment.center,
       child: Text(
         name.isEmpty ? '?' : name.characters.first.toUpperCase(),
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.85),
+          color: app.core.tx.withValues(alpha: 0.85),
           fontSize: size * 0.42,
           fontWeight: FontWeight.w800,
         ),
