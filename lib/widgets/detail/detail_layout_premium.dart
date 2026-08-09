@@ -630,6 +630,14 @@ class _DetailPremiumState extends State<DetailPremium> {
     );
   }
 
+  /// Whether this kind lays the episode collection out as a side pane to the
+  /// RIGHT of the identity column. Those layouts must honor RIGHT as the pane
+  /// crossing — on a two-pane page that is the key everyone presses first, and
+  /// dead-stopping it reads as "the arrows don't reach the episodes".
+  bool get _sidePane =>
+      widget.kind == PremiumDetailKind.monolith ||
+      widget.kind == PremiumDetailKind.premiere;
+
   Widget _actionsAndGuide({
     required bool center,
     bool includeGuide = true,
@@ -641,15 +649,33 @@ class _DetailPremiumState extends State<DetailPremium> {
       alignment: center ? MainAxisAlignment.center : MainAxisAlignment.start,
       compactTrackers: MediaQuery.sizeOf(context).width < 700,
       onUpEdge: () => _m.focus.backNode.requestFocus(),
+      // Side-pane layouts cross RIGHT into the collection; the rest send RIGHT
+      // to the guide when one exists (it sits beside or above the rail there).
       onRightEdge:
           onRightEdge ??
-          (_hasGuide
-              ? () => _focusAndReveal(
+          (_sidePane
+              ? _focusCollection
+              : (_hasGuide
+                    ? () => _focusAndReveal(
+                        _guideNode,
+                        ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+                      )
+                    : null)),
+      // In the side-pane layouts the guide button sits directly below the
+      // actions, so DOWN reaches it on the way to the collection — RIGHT is
+      // the pane crossing there, so DOWN is the only road to the guide.
+      onDownEdge: (_sidePane && _hasGuide && includeGuide)
+          ? () {
+              if (_guideNode.context != null) {
+                _focusAndReveal(
                   _guideNode,
                   ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-                )
-              : null),
-      onDownEdge: _focusCollection,
+                );
+              } else {
+                _focusCollection();
+              }
+            }
+          : _focusCollection,
     );
     return Column(
       crossAxisAlignment: center
@@ -682,6 +708,9 @@ class _DetailPremiumState extends State<DetailPremium> {
     onLeft: _focusEntryAndReveal,
     onUp: onUp ?? _focusEntryAndReveal,
     onDown: _focusCollection,
+    // Side-pane layouts: the collection is to the right of the whole identity
+    // column, so RIGHT crosses from here too instead of dead-stopping.
+    onRight: _sidePane ? _focusCollection : null,
     child: DetailGhostButton(
       label: 'Parents Guide',
       icon: Icons.family_restroom_rounded,
