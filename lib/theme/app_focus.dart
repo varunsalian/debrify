@@ -26,6 +26,22 @@ enum FocusExpression {
 
   /// A bar under the item only.
   underline,
+
+  /// The item lifts, tilts on a perspective, and catches a specular
+  /// highlight — the tvOS focus effect.
+  ///
+  /// Distinct from [lift], which is a rise and a shadow and nothing else:
+  /// this adds rotation about both axes on a 700px perspective, a shift and
+  /// shadow that travel with the tilt, and a moving white glare. It is also
+  /// the only expression driven by a **spring** rather than a curve, because
+  /// its defining property is overshoot-and-settle — a curve decelerates into
+  /// its target and stops, which is what reads as mechanical when you hold a
+  /// direction down and travel through a row.
+  ///
+  /// The per-shape scale lives in `ParallaxFocus`, NOT in the theme's
+  /// [FocusTokens.scale] — a poster lifts 1.1 and a 432-wide episode still
+  /// cannot, or it eats its neighbour.
+  parallax,
 }
 
 /// The cursor's character.
@@ -89,6 +105,9 @@ class FocusTokens {
     FocusExpression.flood ||
     FocusExpression.scale ||
     FocusExpression.lift ||
+    // Borderless by definition: the reference draws no ring on anything, and
+    // the lift IS the signal. A ring here would be the second cursor again.
+    FocusExpression.parallax ||
     FocusExpression.underline => false,
   };
 

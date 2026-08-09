@@ -4,12 +4,13 @@ import '../../utils/platform_util.dart';
 import '../app_focus.dart';
 import '../app_motion.dart';
 import '../app_theme_scope.dart';
+import 'parallax_focus.dart';
 
 /// The cursor, as the theme expresses it.
 ///
 /// On a TV this is what the user looks at essentially all of the time, and
 /// every theme currently expresses it identically — a ring, sometimes with a
-/// glow. Six expressions is the single highest feel-per-line change in the
+/// glow. Seven expressions is the single highest feel-per-line change in the
 /// vocabulary, and it is cheap because focus is already centralised in a
 /// handful of widgets.
 ///
@@ -68,6 +69,23 @@ class FocusExpressionBox extends StatelessWidget {
     final expression = replacesSurface && inverted == null
         ? FocusExpression.ring
         : f.expression;
+
+    // Parallax owns the whole treatment — lift, tilt, shift, shadow and glare,
+    // on its own spring — so it returns BEFORE this widget's ring/bloom/scale
+    // stack rather than composing with it. Composing would give the card two
+    // cursors and two scales: `FocusTokens.scale` is applied at the bottom of
+    // this method, and the per-shape scale already lives in ParallaxFocus.
+    //
+    // Without this arm the expression would fall through every branch below
+    // and paint NOTHING — the theme would silently have no cursor at
+    // `card_focus_rise` and `source_row`, which both route through here.
+    if (f.expression == FocusExpression.parallax) {
+      return ParallaxFocus(
+        focused: focused,
+        radius: app.shape.br(radius),
+        child: child,
+      );
+    }
 
     Widget body = child;
 

@@ -29,6 +29,22 @@ enum MotionCharacter {
   settle,
 }
 
+/// The focus spring for [MotionCharacter.settle].
+///
+/// `damping` is spelled out rather than built with
+/// `SpringDescription.withDampingRatio` because that factory is not `const`,
+/// and [MotionTokens.of] must stay const. It is the same number:
+/// `2ζ√(k·m)` = `2 × 0.82 × √210` ≈ 23.77.
+///
+/// ζ = 0.82 is the reference's damping, and it is under 1 on purpose — at 1.0
+/// the spring is critically damped and settles without ever passing its mark,
+/// which is exactly the "it moved" feeling this is meant to replace.
+const SpringDescription kSettleFocusSpring = SpringDescription(
+  mass: 1,
+  stiffness: 210,
+  damping: 23.77,
+);
+
 /// How a page's content arrives.
 enum EntranceStyle {
   /// It is simply there. Today's app on TV, and the legacy pin.
@@ -78,6 +94,19 @@ class MotionTokens {
   /// the catalog detail's reveal controller already does by hand.
   final EntranceStyle entrance;
 
+  /// Physics for focus travel, when the character has any.
+  ///
+  /// Null everywhere except [MotionCharacter.settle], whose whole definition
+  /// is that things have mass — every other character keeps the curve path and
+  /// `ParallaxFocus` falls back to [emphasized].
+  ///
+  /// A spring rather than a curve because of ONE property: it can be re-seeded
+  /// mid-flight with its current velocity. Hold a direction down and travel
+  /// six cards and a curve restarts from zero at each one; a spring carries
+  /// through. That is the difference the reference has and an eased scale
+  /// does not.
+  final SpringDescription? focusSpring;
+
   const MotionTokens({
     required this.fast,
     required this.base,
@@ -87,6 +116,7 @@ class MotionTokens {
     required this.scale,
     this.character = MotionCharacter.standard,
     this.entrance = EntranceStyle.none,
+    this.focusSpring,
   });
 
   /// [character] resolved into the pair of curves and the tempo it implies.
@@ -127,6 +157,10 @@ class MotionTokens {
       emphasized: Curves.easeOutBack,
       scale: 1,
       character: MotionCharacter.settle,
+      // ζ 0.82 — under-damped on purpose. At 1.0 the spring is critically
+      // damped and never overshoots, which is the whole property `settle`
+      // names.
+      focusSpring: kSettleFocusSpring,
     ),
   };
 
@@ -137,6 +171,10 @@ class MotionTokens {
   /// Lives here rather than as a private extension elsewhere: a reconstruction
   /// helper that sits away from the constructor silently resets any field
   /// added later, and still compiles.
+  /// NOTE: every field must be carried here. `ThemeSpec` builds its motion as
+  /// `MotionTokens.of(character).copyWith(entrance: …)`, so a field this
+  /// method forgets is silently dropped for every themed surface in the app —
+  /// no error, just the feature quietly not working.
   MotionTokens copyWith({EntranceStyle? entrance, double? scale}) =>
       MotionTokens(
         fast: fast,
@@ -147,6 +185,7 @@ class MotionTokens {
         scale: scale ?? this.scale,
         character: character,
         entrance: entrance ?? this.entrance,
+        focusSpring: focusSpring,
       );
 
   static const MotionTokens legacy = MotionTokens(
