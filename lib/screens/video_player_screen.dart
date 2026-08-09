@@ -2532,6 +2532,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final platform = player.platform;
     if (platform is! mk.NativePlayer) return;
 
+    // ANDROID ONLY, deliberately.
+    //
+    // These observers exist to feed the Android direct-surface renderer
+    // fallback (`_scheduleDirectSurfaceStartupValidation`), which is itself
+    // gated on `Platform.isAndroid` — so everywhere else they were pure cost.
+    //
+    // They are also `mpv_observe_property` calls issued unawaited, at the same
+    // moment the video controller is building the native render context on its
+    // own worker — which is the window a tvOS SIGABRT was landing in.
+    //
+    // NOT confirmed as the cause: the crash stopped after this change AND a
+    // reinstall that wiped the device's preferences, and either could have
+    // done it. Kept regardless, because a probe that only feeds an
+    // Android-gated fallback has no business running anywhere else.
+    if (!Platform.isAndroid) return;
+
     try {
       await platform.observeProperty('hwdec-current', (value) async {
         if (mounted && instanceGeneration == _playerInstanceGeneration) {
