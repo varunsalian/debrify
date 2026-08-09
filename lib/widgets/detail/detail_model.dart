@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/imdb_enrichment_service.dart';
 import '../../services/imdb_parents_guide_service.dart';
+import 'detail_style.dart';
 
 /// Screen-owned focus anchors, handed to whichever body is drawing.
 ///
@@ -29,7 +30,7 @@ class DetailFocusCoordinator {
   /// cast tile or a recommendation sitting below-left of the list, which is
   /// what "LEFT lands somewhere random" was.
   void focusEntry() {
-    if (primaryEntry.context != null) {
+    if (detailNodeMounted(primaryEntry)) {
       primaryEntry.requestFocus();
     } else {
       backNode.requestFocus();

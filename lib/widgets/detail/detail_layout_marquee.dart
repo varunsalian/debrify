@@ -119,11 +119,11 @@ class _DetailMarqueeState extends State<DetailMarquee> {
   }
 
   void _focusCollection() {
-    if (_seasonNode.context != null) {
+    if (detailNodeMounted(_seasonNode)) {
       _seasonNode.requestFocus();
       return;
     }
-    if (_retryNode.context != null) {
+    if (detailNodeMounted(_retryNode)) {
       _retryNode.requestFocus();
       return;
     }
@@ -132,7 +132,7 @@ class _DetailMarqueeState extends State<DetailMarquee> {
       cell.requestFocus();
       return;
     }
-    final rec = _recNodes.where((n) => n.context != null).firstOrNull;
+    final rec = _recNodes.where(detailNodeMounted).firstOrNull;
     // Still nothing (a movie with no recommendations) — DOWN dead-stops on the
     // action row rather than dropping the cursor into a region that isn't
     // there.
@@ -318,7 +318,7 @@ class _DetailMarqueeState extends State<DetailMarquee> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (intent == EpisodeFocusIntent.seasonControl) {
-        if (_seasonNode.context != null) _seasonNode.requestFocus();
+        if (detailNodeMounted(_seasonNode)) _seasonNode.requestFocus();
         return;
       }
       final landing = view.landing;

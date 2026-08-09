@@ -422,6 +422,16 @@ class DetailEdgeTrap extends StatelessWidget {
   }
 }
 
+/// Whether [node] is attached to a LIVE element.
+///
+/// `FocusNode.context` is never cleared on detach — after the hosting `Focus`
+/// widget unmounts (a lazy list scrolling a row out of its cache extent, a
+/// status widget being replaced by content), it still points at the defunct
+/// element. So `context != null` is NOT a mounted check, and `requestFocus()`
+/// on such a node is a silent no-op that also arms the node to steal focus if
+/// it ever remounts. Every "can I hand focus to this node" test must use this.
+bool detailNodeMounted(FocusNode? node) => node?.context?.mounted ?? false;
+
 /// Per-episode FocusNodes owned by a layout, keyed by view generation.
 ///
 /// Layouts must not borrow the engine's nodes — those are disposed and rebuilt
@@ -456,8 +466,13 @@ class DetailCellNodes {
 
   /// The first node that is actually mounted — layouts use this to hand focus
   /// into the collection without assuming an index exists.
+  ///
+  /// "Mounted" is [detailNodeMounted], not `context != null`: after a landing
+  /// reveal scrolls a lazy list, the earliest cells are unmounted but their
+  /// nodes still hold stale contexts, and returning one of those makes the
+  /// hand-off a dead key.
   FocusNode? get firstMounted =>
-      _live.values.where((n) => n.context != null).firstOrNull;
+      _live.values.where(detailNodeMounted).firstOrNull;
 
   void dispose() {
     for (final n in _live.values) {

@@ -666,7 +666,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // The left-entry node only has a holder when Play or the source pill is
         // present; if neither is (edge config), fall back to traversal so the
         // remote isn't stranded rather than no-op on an unattached node.
-        if (_leftEntryFocusNode.context != null) {
+        if (detailNodeMounted(_leftEntryFocusNode)) {
           _leftEntryFocusNode.requestFocus();
         } else {
           FocusScope.of(context).nextFocus();
@@ -1284,7 +1284,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     }
     if (key == LogicalKeyboardKey.arrowLeft) {
       if (!primary.focusInDirection(TraversalDirection.left) &&
-          _leftEntryFocusNode.context != null) {
+          detailNodeMounted(_leftEntryFocusNode)) {
         _leftEntryFocusNode.requestFocus();
       }
       return KeyEventResult.handled;

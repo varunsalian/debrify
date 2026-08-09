@@ -14,6 +14,7 @@ import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../theme/app_theme_scope.dart';
+import 'detail/detail_style.dart';
 import 'detail/theme/detail_theme.dart';
 import 'episode_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
@@ -1115,7 +1116,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       if (!mounted || generation != _episodeModeGeneration) return;
       if (epIndex < 0 || epIndex >= _episodeFocusNodes.length) return;
       final node = _episodeFocusNodes[epIndex];
-      if (node.context != null) {
+      // Once a tile has been built and scrolled back out, the node keeps a
+      // stale context; treating that as "present" would stop converging and
+      // focus/scroll a defunct element.
+      if (detailNodeMounted(node)) {
         if (widget.isTelevision) {
           node.requestFocus();
         } else {

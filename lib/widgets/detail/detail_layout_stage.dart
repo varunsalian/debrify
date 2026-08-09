@@ -86,9 +86,9 @@ class _DetailStageState extends State<DetailStage> {
   FocusNode? _firstTabNodeFor(DetailModel m) {
     for (final t in _tabsFor(m)) {
       final n = _tabNodes[t];
-      if (n != null && n.context != null) return n;
+      if (n != null && detailNodeMounted(n)) return n;
     }
-    return _sourcesNode.context != null ? _sourcesNode : null;
+    return detailNodeMounted(_sourcesNode) ? _sourcesNode : null;
   }
 
   /// Only tabs that actually have something to show.
@@ -247,11 +247,11 @@ class _DetailStageState extends State<DetailStage> {
 
   void _focusPanel() {
     if (_active == _Tab.episodes) {
-      if (_seasonNode.context != null) {
+      if (detailNodeMounted(_seasonNode)) {
         _seasonNode.requestFocus();
         return;
       }
-      if (_retryNode.context != null) {
+      if (detailNodeMounted(_retryNode)) {
         _retryNode.requestFocus();
         return;
       }
@@ -489,7 +489,7 @@ class _DetailStageState extends State<DetailStage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (intent == EpisodeFocusIntent.seasonControl) {
-        if (_seasonNode.context != null) _seasonNode.requestFocus();
+        if (detailNodeMounted(_seasonNode)) _seasonNode.requestFocus();
         return;
       }
       final landing = view.landing;

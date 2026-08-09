@@ -39,29 +39,44 @@ TraktEpisode _ep(int n) => TraktEpisode(
 
 final _episodes = [for (var i = 1; i <= 8; i++) _ep(i)];
 
-EpisodesPanelView _view({required bool manySeasons}) => EpisodesPanelView(
-  seasons: [
-    if (manySeasons) const TraktSeason(number: 4, episodeCount: 8, episodes: []),
-    TraktSeason(number: 5, episodeCount: 8, episodes: _episodes),
-  ],
-  selectedSeasonNumber: 5,
-  episodes: _episodes,
-  loading: false,
-  unavailable: false,
-  showImageUrl: null,
-  generation: 1,
-  landing: _episodes[0],
-  focusIntent: EpisodeFocusIntent.none,
-  progressOf: (_) => null,
-  isNext: (e) => e.number == 1,
-  play: (_) {},
-  options: (_) {},
-  stepSeason: (_) {},
-  selectSeason: (_) {},
-  onLeftEdge: null,
-  onRetry: () {},
-  onSearchForSources: () {},
-);
+EpisodesPanelView _view({
+  required bool manySeasons,
+  int episodeCount = 8,
+  int landingNumber = 1,
+  EpisodeFocusIntent focusIntent = EpisodeFocusIntent.none,
+}) {
+  final episodes = episodeCount == 8
+      ? _episodes
+      : [for (var i = 1; i <= episodeCount; i++) _ep(i)];
+  return EpisodesPanelView(
+    seasons: [
+      if (manySeasons)
+        const TraktSeason(number: 4, episodeCount: 8, episodes: []),
+      TraktSeason(
+        number: 5,
+        episodeCount: episodeCount,
+        episodes: episodes,
+      ),
+    ],
+    selectedSeasonNumber: 5,
+    episodes: episodes,
+    loading: false,
+    unavailable: false,
+    showImageUrl: null,
+    generation: 1,
+    landing: episodes[landingNumber - 1],
+    focusIntent: focusIntent,
+    progressOf: (_) => null,
+    isNext: (e) => e.number == landingNumber,
+    play: (_) {},
+    options: (_) {},
+    stepSeason: (_) {},
+    selectSeason: (_) {},
+    onLeftEdge: null,
+    onRetry: () {},
+    onSearchForSources: () {},
+  );
+}
 
 DetailModel _model({bool withParentsGuide = false}) {
   final item = StremioMeta(
@@ -126,9 +141,25 @@ DetailModel _model({bool withParentsGuide = false}) {
   );
 }
 
-Widget _layout(String id, DetailModel m, {required bool manySeasons}) {
-  Widget host(Widget Function(BuildContext, EpisodesPanelView) b) =>
-      Builder(builder: (c) => b(c, _view(manySeasons: manySeasons)));
+Widget _layout(
+  String id,
+  DetailModel m, {
+  required bool manySeasons,
+  int episodeCount = 8,
+  int landingNumber = 1,
+  EpisodeFocusIntent focusIntent = EpisodeFocusIntent.none,
+}) {
+  Widget host(Widget Function(BuildContext, EpisodesPanelView) b) => Builder(
+    builder: (c) => b(
+      c,
+      _view(
+        manySeasons: manySeasons,
+        episodeCount: episodeCount,
+        landingNumber: landingNumber,
+        focusIntent: focusIntent,
+      ),
+    ),
+  );
   return switch (id) {
     'marquee' => DetailMarquee(model: m, episodesHost: host),
     'dossier' => DetailDossier(model: m, episodesHost: host),
@@ -168,6 +199,9 @@ Future<DetailModel> _pump(
   String layoutId, {
   required bool manySeasons,
   bool withParentsGuide = false,
+  int episodeCount = 8,
+  int landingNumber = 1,
+  EpisodeFocusIntent focusIntent = EpisodeFocusIntent.none,
 }) async {
   tester.view.physicalSize = _tv;
   tester.view.devicePixelRatio = 1.0;
@@ -181,7 +215,14 @@ Future<DetailModel> _pump(
           backgroundColor: DetailThemes.signal.ground,
           body: DetailThemeScope(
             theme: DetailThemes.signal,
-            child: _layout(layoutId, model, manySeasons: manySeasons),
+            child: _layout(
+              layoutId,
+              model,
+              manySeasons: manySeasons,
+              episodeCount: episodeCount,
+              landingNumber: landingNumber,
+              focusIntent: focusIntent,
+            ),
           ),
         ),
       ),
@@ -269,6 +310,78 @@ void main() {
         final presses = await _downToEpisodes(tester);
         expect(presses, greaterThan(0),
             reason: 'never reached an episode cell; stuck on ${_focusLabel()}');
+      });
+    }
+  });
+
+  group('episodes stay reachable after a Continue Watching landing reveal', () {
+    // The engine lands a resumed series deep in the season (S5E18 of 24) and
+    // the layout scrolls the list there before the user touches the remote.
+    // That unmounts the earliest cells — but their FocusNodes keep a STALE
+    // context (detach never clears it), so a `context != null` "mounted" check
+    // returns a dead node and the hand-off into the collection becomes a dead
+    // key. This is the on-device bug the 8-episode fixtures could never hit.
+    Future<void> settleReveal(WidgetTester tester) async {
+      // revealDetailLanding converges over up to 8 post-frame retries.
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+    }
+
+    for (final manySeasons in [true, false]) {
+      final label = manySeasons ? 'multi-season' : 'single season';
+      for (final id in layouts) {
+        testWidgets('$id ($label)', (tester) async {
+          final m = await _pump(
+            tester,
+            id,
+            manySeasons: manySeasons,
+            episodeCount: 24,
+            landingNumber: 18,
+            focusIntent: EpisodeFocusIntent.landing,
+          );
+          await settleReveal(tester);
+          m.focus.primaryEntry.requestFocus();
+          await tester.pump();
+          if (id == 'dossier') {
+            await _key(tester, LogicalKeyboardKey.arrowRight);
+            if (!_onEpisodeCell()) {
+              await _key(tester, LogicalKeyboardKey.arrowDown);
+            }
+            expect(_onEpisodeCell(), isTrue,
+                reason: 'RIGHT/DOWN landed on ${_focusLabel()}');
+            return;
+          }
+          final presses = await _downToEpisodes(tester);
+          expect(presses, greaterThan(0),
+              reason:
+                  'never reached an episode cell; stuck on ${_focusLabel()}');
+        });
+      }
+    }
+
+    for (final id in ['monolith', 'premiere']) {
+      testWidgets('$id: RIGHT still crosses into the scrolled pane',
+          (tester) async {
+        final m = await _pump(
+          tester,
+          id,
+          manySeasons: false,
+          episodeCount: 24,
+          landingNumber: 18,
+          focusIntent: EpisodeFocusIntent.landing,
+        );
+        await settleReveal(tester);
+        m.focus.primaryEntry.requestFocus();
+        await tester.pump();
+        // Walk the action line; onRightEdge fires at its end and must cross
+        // into the pane even though the pane has scrolled deep.
+        var crossed = false;
+        for (var i = 0; i < 8 && !crossed; i++) {
+          await _key(tester, LogicalKeyboardKey.arrowRight);
+          crossed = _onEpisodeCell();
+        }
+        expect(crossed, isTrue, reason: 'RIGHT landed on ${_focusLabel()}');
       });
     }
   });

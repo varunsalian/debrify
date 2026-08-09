@@ -332,11 +332,11 @@ class _DetailConsoleState extends State<DetailConsole> {
   }
 
   void _focusCollection() {
-    if (_seasonNode.context != null) {
+    if (detailNodeMounted(_seasonNode)) {
       _seasonNode.requestFocus();
       return;
     }
-    if (_retryNode.context != null) {
+    if (detailNodeMounted(_retryNode)) {
       _retryNode.requestFocus();
       return;
     }
@@ -345,7 +345,7 @@ class _DetailConsoleState extends State<DetailConsole> {
       cell.requestFocus();
       return;
     }
-    final rec = _recNodes.where((n) => n.context != null).firstOrNull;
+    final rec = _recNodes.where(detailNodeMounted).firstOrNull;
     rec?.requestFocus();
   }
 
@@ -830,7 +830,7 @@ class _DetailConsoleState extends State<DetailConsole> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (intent == EpisodeFocusIntent.seasonControl) {
-        if (_seasonNode.context != null) _seasonNode.requestFocus();
+        if (detailNodeMounted(_seasonNode)) _seasonNode.requestFocus();
         return;
       }
       final landing = view.landing;

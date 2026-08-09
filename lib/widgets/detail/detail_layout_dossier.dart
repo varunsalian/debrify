@@ -554,7 +554,7 @@ class _DetailDossierState extends State<DetailDossier> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (intent == EpisodeFocusIntent.seasonControl) {
-        if (_seasonNode.context != null) _seasonNode.requestFocus();
+        if (detailNodeMounted(_seasonNode)) _seasonNode.requestFocus();
         return;
       }
       final landing = view.landing;

@@ -666,7 +666,7 @@ class _DetailPremiumState extends State<DetailPremium> {
       // the pane crossing there, so DOWN is the only road to the guide.
       onDownEdge: (_sidePane && _hasGuide && includeGuide)
           ? () {
-              if (_guideNode.context != null) {
+              if (detailNodeMounted(_guideNode)) {
                 _focusAndReveal(
                   _guideNode,
                   ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
@@ -759,7 +759,7 @@ class _DetailPremiumState extends State<DetailPremium> {
 
   void _focusEntryAndReveal() {
     _m.focus.focusEntry();
-    final target = _m.focus.primaryEntry.context != null
+    final target = detailNodeMounted(_m.focus.primaryEntry)
         ? _m.focus.primaryEntry
         : _m.focus.backNode;
     _reveal(target, ScrollPositionAlignmentPolicy.keepVisibleAtStart);
@@ -940,12 +940,12 @@ class _DetailPremiumState extends State<DetailPremium> {
   }
 
   void _focusCollection() {
-    if (_seasonNode.context != null) return _seasonNode.requestFocus();
-    if (_retryNode.context != null) return _retryNode.requestFocus();
+    if (detailNodeMounted(_seasonNode)) return _seasonNode.requestFocus();
+    if (detailNodeMounted(_retryNode)) return _retryNode.requestFocus();
     final cell = _cells.firstMounted;
     if (cell != null) return cell.requestFocus();
     for (final node in _recNodes) {
-      if (node.context != null) return node.requestFocus();
+      if (detailNodeMounted(node)) return node.requestFocus();
     }
   }
 
@@ -1147,7 +1147,7 @@ class _DetailPremiumState extends State<DetailPremium> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (view.focusIntent == EpisodeFocusIntent.seasonControl) {
-        if (_seasonNode.context != null) _seasonNode.requestFocus();
+        if (detailNodeMounted(_seasonNode)) _seasonNode.requestFocus();
         return;
       }
       final landing = view.landing;
