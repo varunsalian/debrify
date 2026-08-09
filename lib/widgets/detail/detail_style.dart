@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_texture.dart';
 import '../../utils/platform_util.dart';
 import 'theme/detail_theme.dart';
 
@@ -156,7 +157,9 @@ class DetailFocusRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = DetailThemeScope.of(context);
-    final tv = PlatformUtil.isAndroidTvCached;
+    // `isTelevision`, so the Apple TV port gets the same policy — see the
+    // note in theme/app_texture.dart.
+    final tv = PlatformUtil.isTelevision;
     // An outward ring cannot be a foreground decoration — it has to be drawn
     // outside the child's bounds, which only a non-layout-affecting overlay
     // can do. Signal's offset is 0, so Signal keeps the in-bounds path exactly.
@@ -481,6 +484,31 @@ class DetailWash extends StatelessWidget {
 /// rather than by each layout. Grain is a foreground layer and is forced off on
 /// TV by [DetailTheme.grainFor] — a per-frame blend over a full screen is not
 /// something a 2 GB box should be asked to do.
+///
+/// ## The app-wide texture owns the page; this is the fallback
+///
+/// `AppTexture` (theme/app_texture.dart) paints the same two textures for the
+/// whole app, above the root Navigator. Without a rule, a details page under a
+/// grain theme would be grained TWICE — once by the shell and once here —
+/// doubling the speck density and, on Blueprint, drawing the rule over itself.
+///
+/// The rule is: **whenever the APP theme declares a texture, it owns every
+/// page, including this one**, and this widget stands down. When the app theme
+/// declares none — which includes legacy, and is the common case — the details
+/// page's own `detail_theme` texture paints here as it always has.
+///
+/// The consequence worth stating: a user on app-theme Blueprint and
+/// detail-theme Sepia sees Blueprint's grid on the details page, not Sepia's
+/// grain. That is deliberate. Grain and grid are properties of the PAGE, not
+/// of a palette, and two whole-page textures fighting over one page is worse
+/// than either of them winning. The details theme still owns everything else
+/// it always did — its palette, geometry and type are untouched by this.
+///
+/// ## Both painters are the batched ones
+///
+/// The originals issued up to 3,000 `drawRect` calls per repaint. They now
+/// come from `app_texture.dart`, which computes the speck field once into a
+/// reused buffer and emits it as a single `drawRawPoints`.
 class DetailAtmosphere extends StatelessWidget {
   final Widget child;
 
@@ -491,64 +519,27 @@ class DetailAtmosphere extends StatelessWidget {
     final t = DetailThemeScope.of(context);
     final tv = PlatformUtil.isAndroidTvCached;
     final grain = t.grainFor(tv);
-    if (!t.grid && grain <= 0) return child;
+    // The grid follows grain's platform policy here too.
+    //
+    // It did not before, and that was an inconsistency rather than a decision:
+    // a full-screen 32px rule composited over a scrolling episode list is not
+    // free on a 2 GB box, which is precisely why grain is gated. It also left
+    // a hole in the ownership rule below — on TV the app-wide layer suppresses
+    // itself, so no marker is installed, so this widget would have gone on
+    // painting the very overlay the platform policy exists to prevent.
+    //
+    // Visible effect: Blueprint's details page loses its rule ON ANDROID TV
+    // only. Every other platform, and every other theme, is unchanged.
+    final grid = tv ? false : t.grid;
+    if (!grid && grain <= 0) return child;
+    if (AppTexturePainting.of(context)) return child;
     return CustomPaint(
-      painter: t.grid ? _GridPainter(t.hair) : null,
+      painter: grid ? GridPainter(t.hair) : null,
       // Grain takes the theme's own ink, so a light theme gets dark specks
       // rather than a white haze over its paper.
-      foregroundPainter: grain > 0 ? _GrainPainter(grain, t.tx) : null,
+      foregroundPainter: grain > 0 ? GrainPainter(grain, t.tx) : null,
       child: child,
     );
   }
 }
 
-class _GridPainter extends CustomPainter {
-  final Color color;
-  const _GridPainter(this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = color
-      ..strokeWidth = 1;
-    for (var x = 0.0; x < size.width; x += 32) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), p);
-    }
-    for (var y = 0.0; y < size.height; y += 32) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GridPainter old) => old.color != color;
-}
-
-class _GrainPainter extends CustomPainter {
-  final double strength;
-  final Color ink;
-  const _GrainPainter(this.strength, this.ink);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // A FIXED seed: grain that reshuffles on every repaint reads as noise on a
-    // broken signal rather than as film.
-    final rnd = math.Random(7);
-    final p = Paint()..color = ink.withValues(alpha: strength);
-    final count = (size.width * size.height / 900).clamp(0, 3000).toInt();
-    for (var i = 0; i < count; i++) {
-      canvas.drawRect(
-        Rect.fromLTWH(
-          rnd.nextDouble() * size.width,
-          rnd.nextDouble() * size.height,
-          1,
-          1,
-        ),
-        p,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GrainPainter old) =>
-      old.strength != strength || old.ink != ink;
-}

@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
 
 /// Utility class for platform-specific detection and helpers
@@ -18,6 +18,16 @@ class PlatformUtil {
   /// most callers actually mean. [isAndroidTV] short-circuits to false when
   /// `!Platform.isAndroid`, so this is always false on Apple TV.
   static bool get isAndroidTvCached => _isAndroidTVCached ?? false;
+
+  /// TEST-ONLY: force the cached TV verdict.
+  ///
+  /// The TV policies in the theme layer (grain off, grid off, shadows capped,
+  /// focus floor) are all reads of this, and a test that cannot flip it can
+  /// only ever verify the phone branch — which is how the details page ended
+  /// up painting a full-screen rule on TV unnoticed.
+  @visibleForTesting
+  static void debugSetAndroidTvCached(bool? value) =>
+      _isAndroidTVCached = value;
 
   /// Whether this build is running on Apple TV.
   ///
