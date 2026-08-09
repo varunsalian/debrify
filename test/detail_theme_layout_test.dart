@@ -503,7 +503,7 @@ void main() {
       expect(find.text('Some stylized action violence.'), findsOneWidget);
       expect(
         tester.widget<Text>(find.text('AT A GLANCE')).style!.fontFamily,
-        'monospace',
+        DetailFontRole.mono.family,
       );
     });
 

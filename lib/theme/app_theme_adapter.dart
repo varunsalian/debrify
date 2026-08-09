@@ -6,6 +6,7 @@ import '../services/text_brightness.dart';
 import '../utils/platform_util.dart';
 import '../widgets/detail/theme/detail_theme.dart';
 import 'app_theme.dart';
+import 'app_type.dart';
 
 /// TV-aware page transition: on Android TV every push/pop animates a
 /// full-screen layer, and the default Material zoom transition (scale + fade +
@@ -81,6 +82,44 @@ abstract final class AppThemeAdapter {
   static TextTheme get _textTheme => debugUseTestTypography
       ? _textSkeleton
       : GoogleFonts.interTextTheme(_textSkeleton);
+
+  /// The shipped type scale wearing a theme's faces.
+  ///
+  /// Built from [_textTheme] rather than replacing it, so the SIZES, weights
+  /// and tracking of the shipped scale survive and only what the theme
+  /// declares changes. `TextStyle.copyWith` keeps the existing value for any
+  /// null argument, so a `sans` theme — which declares no family — gets the
+  /// Inter skeleton back byte-for-byte and pays only the copy.
+  ///
+  /// The split is display-vs-body, not style-by-style: a theme's display face
+  /// is its identity (Broadsheet's serif, Phosphor's mono) and its body face
+  /// is a readability decision most themes decline to make. Eighteen of the
+  /// twenty declare `bodyFont: sans`, so this touches body text on two.
+  ///
+  /// LEGACY NEVER REACHES HERE. `legacy()` keeps its verbatim construction and
+  /// its own `_textTheme` read.
+  static TextTheme _themedTextTheme(TypeTokens type) {
+    final b = _textTheme;
+    TextStyle? d(TextStyle? s) => s == null ? null : type.display(s);
+    TextStyle? y(TextStyle? s) => s == null ? null : type.body(s);
+    return b.copyWith(
+      displayLarge: d(b.displayLarge),
+      displayMedium: d(b.displayMedium),
+      displaySmall: d(b.displaySmall),
+      headlineLarge: d(b.headlineLarge),
+      headlineMedium: d(b.headlineMedium),
+      headlineSmall: d(b.headlineSmall),
+      titleLarge: d(b.titleLarge),
+      titleMedium: d(b.titleMedium),
+      titleSmall: d(b.titleSmall),
+      bodyLarge: y(b.bodyLarge),
+      bodyMedium: y(b.bodyMedium),
+      bodySmall: y(b.bodySmall),
+      labelLarge: y(b.labelLarge),
+      labelMedium: y(b.labelMedium),
+      labelSmall: y(b.labelSmall),
+    );
+  }
 
   // ───────────────────────────── legacy path ─────────────────────────────
 
@@ -339,8 +378,9 @@ abstract final class AppThemeAdapter {
       brightness: theme.brightness,
       pageTransitionsTheme: pageTransitions,
       colorScheme: colorScheme,
-      // Same Inter skeleton as legacy; colours derive from onSurface.
-      textTheme: _textTheme,
+      // The shipped scale wearing this theme's faces; colours still derive
+      // from onSurface. `sans` themes get the Inter skeleton back unchanged.
+      textTheme: _themedTextTheme(theme.type),
       scaffoldBackgroundColor: ground,
       cardTheme: CardThemeData(
         elevation: 8,
@@ -396,10 +436,12 @@ abstract final class AppThemeAdapter {
         backgroundColor: surface,
         foregroundColor: tx,
         centerTitle: true,
-        titleTextStyle: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: tx,
+        // Built here rather than inherited, so it needs the theme's display
+        // face applied explicitly — `textTheme` does not reach a component
+        // style a ThemeData constructs for itself. This was the one family
+        // path outside `_textTheme`.
+        titleTextStyle: theme.type.display(
+          TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: tx),
         ),
       ),
       dialogTheme: DialogThemeData(

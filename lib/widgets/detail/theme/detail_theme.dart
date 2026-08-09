@@ -11,16 +11,50 @@ enum DetailFontRole { sans, serif, mono }
 extension DetailFontRoleX on DetailFontRole {
   /// Null means "the platform default", which is what every Signal text style
   /// resolves to today — so Signal keeps its exact metrics.
+  ///
+  /// The two non-sans roles name BUNDLED faces rather than the CSS generics
+  /// `serif`/`monospace` they used to. Three reasons, in order of weight:
+  ///
+  ///  * a generic family resolves to whatever the platform decides, so the
+  ///    same theme was a different typeface on Android, on desktop and on the
+  ///    Apple TV port — the exact opposite of a designed look;
+  ///  * both faces are ALREADY in the bundle for the IPTV premium styles
+  ///    (`pubspec.yaml`), so this costs no download and no APK growth;
+  ///  * promoting type app-wide (`theme/app_type.dart`) makes the difference
+  ///    visible on every screen rather than one, which is precisely when
+  ///    "whatever the platform decides" stops being acceptable.
+  ///
+  /// **Why Fraunces and not Source Serif**, which the picker also names:
+  /// `assets/fonts/SourceSerifPro-Regular.ttf` and `Merriweather-Regular.ttf`
+  /// are not fonts. Both files — and both Roboto faces — are HTML error pages
+  /// saved with a `.ttf` extension (they begin `<!DOCTYPE html>`), so anything
+  /// asking for them silently falls back to the platform default. That is a
+  /// pre-existing bug with its own blast radius (the subtitle font picker
+  /// offers all three), and replacing them means adding megabytes of variable
+  /// font to the bundle — a size decision, not a theming one. Fraunces is
+  /// real, licensed (`assets/fonts/licenses/OFL-Fraunces.txt`) and already
+  /// shipping, so the theme layer uses what actually exists.
+  ///
+  /// `sans` stays null, so **Signal — the shipped look — does not move**, and
+  /// neither does any site that resolves to it.
   String? get family => switch (this) {
     DetailFontRole.sans => null,
-    DetailFontRole.serif => 'serif',
-    DetailFontRole.mono => 'monospace',
+    DetailFontRole.serif => 'Fraunces72',
+    DetailFontRole.mono => 'JetBrainsMono',
   };
 
+  /// Genuinely a fallback now: the named face is bundled and real, so these
+  /// only matter if an asset fails to load. Deliberately does NOT list
+  /// Merriweather or Source Serif — see the note above.
   List<String>? get fallback => switch (this) {
     DetailFontRole.sans => null,
-    DetailFontRole.serif => const ['Georgia', 'Times New Roman', 'Noto Serif'],
-    DetailFontRole.mono => const ['Menlo', 'Courier New', 'Noto Sans Mono'],
+    DetailFontRole.serif => const ['Georgia', 'Times New Roman', 'serif'],
+    DetailFontRole.mono => const [
+      'FiraMono',
+      'Menlo',
+      'Courier New',
+      'monospace',
+    ],
   };
 }
 

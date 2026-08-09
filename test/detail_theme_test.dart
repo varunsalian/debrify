@@ -155,12 +155,56 @@ void main() {
       }
     });
 
-    test('font roles resolve to a family or the platform default', () {
+    test('font roles resolve to a BUNDLED family or the platform default', () {
+      // Deliberate change from the CSS generics ('serif'/'monospace') these
+      // used to return. A generic resolves to whatever the platform picks, so
+      // one theme was three different typefaces across Android, desktop and
+      // the Apple TV port — unacceptable once type went app-wide
+      // (`theme/app_type.dart`). Both faces are already bundled for the IPTV
+      // premium styles, so this costs nothing.
+      //
+      // `sans` stays null: Signal is the shipped look and must not move.
       expect(DetailFontRole.sans.family, isNull);
-      expect(DetailFontRole.serif.family, 'serif');
-      expect(DetailFontRole.mono.family, 'monospace');
+      // Fraunces, not Source Serif: `SourceSerifPro-Regular.ttf`,
+      // `Merriweather-Regular.ttf` and both Roboto files in assets/fonts are
+      // HTML error pages saved with a .ttf extension, so anything naming them
+      // silently falls back. See the note on `DetailFontRoleX.family`.
+      expect(DetailFontRole.serif.family, 'Fraunces72');
+      expect(DetailFontRole.mono.family, 'JetBrainsMono');
       expect(DetailFontRole.sans.fallback, isNull);
       expect(DetailFontRole.serif.fallback, isNotEmpty);
+      expect(DetailFontRole.mono.fallback, isNotEmpty);
+    });
+
+    test('every font-role family is actually declared in pubspec.yaml', () {
+      // The whole point of naming bundled faces is determinism; a family
+      // string with no asset behind it silently falls back to the platform
+      // default and reintroduces exactly the bug this replaced.
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      for (final role in DetailFontRole.values) {
+        final names = <String?>[role.family, ...?role.fallback];
+        for (final name in names) {
+          if (name == null) continue;
+          // Generic CSS families and system faces are legitimate LAST-resort
+          // fallbacks and are not expected to be bundled.
+          const systemOk = {
+            'serif',
+            'monospace',
+            'Georgia',
+            'Times New Roman',
+            'Menlo',
+            'Courier New',
+          };
+          if (systemOk.contains(name)) continue;
+          expect(
+            pubspec.contains('family: $name'),
+            isTrue,
+            reason: '$name is named by DetailFontRole.${role.name} but is not '
+                'declared in pubspec.yaml — it would silently resolve to the '
+                'platform default',
+          );
+        }
+      }
     });
 
     test('display sizes stay inside a sane band', () {

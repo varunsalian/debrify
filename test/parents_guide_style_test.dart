@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:debrify/screens/settings/parents_guide_style_page.dart';
 import 'package:debrify/services/imdb_parents_guide_service.dart';
 import 'package:debrify/services/storage_service.dart';
+import 'package:debrify/widgets/detail/theme/detail_theme.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/parents_guide_section.dart';
 
@@ -148,15 +149,15 @@ void main() {
             .widget<Text>(find.text('Know before you watch.'))
             .style!
             .fontFamily,
-        'serif',
+        DetailFontRole.serif.family,
       );
       expect(
         tester.widget<Text>(find.text('AT A GLANCE')).style!.fontFamily,
-        'monospace',
+        DetailFontRole.mono.family,
       );
       expect(
         tester.widget<Text>(find.text('Select a category')).style!.fontFamily,
-        'serif',
+        DetailFontRole.serif.family,
       );
     });
 
