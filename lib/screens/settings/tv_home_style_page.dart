@@ -18,6 +18,11 @@ class TvHomeStyleChoice {
 
 const List<TvHomeStyleChoice> kTvHomeStyleChoices = [
   TvHomeStyleChoice(
+    'spotlight',
+    'Spotlight',
+    'Full-bleed hero you can page through, shelves on a flat ground',
+  ),
+  TvHomeStyleChoice(
     'canvas',
     'Canvas',
     'Full-screen art and trailers, one bottom shelf — the default',

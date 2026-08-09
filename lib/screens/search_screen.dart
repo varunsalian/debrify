@@ -59,6 +59,7 @@ import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/home/cw_card_menu.dart';
 import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
+import '../widgets/home/spotlight_board.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
 import '../widgets/source_row.dart';
@@ -1561,6 +1562,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   @override
   void dispose() {
+    _spotlightHeroNode.dispose();
     // Preserve a COMPLETED keyword search so returning to this tab restores
     // results + scroll instead of the blank prompt (the nav rebuilds us fresh).
     // A still-streaming search is NOT preserved: its batches die with this
@@ -4257,7 +4259,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_searchFocusNode.hasFocus ||
         _modeCatalogNode.hasFocus ||
         _modeKeywordNode.hasFocus ||
-        _discSourceNode.hasFocus) {
+        _discSourceNode.hasFocus ||
+        // Spotlight's hero is a focus target the rail lists know nothing
+        // about; without this the arrival machinery thinks the board is
+        // unfocused while the hero holds the cursor and steals it back.
+        _spotlightHeroNode.hasFocus) {
       return true;
     }
     if (anyOf(_listsNodes)) return true;
@@ -4614,7 +4620,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// out — it has no stage, only a heavily-veiled art wash behind a grid, so
   /// a video there would be invisible AND the most expensive thing on screen.
   bool get _stageWantsAmbient => switch (_homeStyleEffective) {
-    'canvas' || 'promenade' || 'deck' || 'atrium' || 'tonight' => true,
+    'canvas' || 'promenade' || 'deck' || 'atrium' || 'tonight' ||
+    'spotlight' => true,
     _ => false,
   };
 
@@ -4629,7 +4636,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// case where lighting the app shell behind the ghost rail continues the
   /// board instead of cutting across it. See [_publishAmbientArt].
   bool get _stagePublishesShellArt => switch (_homeStyleEffective) {
-    'canvas' || 'promenade' => true,
+    // Spotlight's hero IS the ground, edge to edge, so lighting the shell
+    // behind the rail continues the board rather than cutting across it.
+    'canvas' || 'promenade' || 'spotlight' => true,
     _ => false,
   };
 
@@ -4637,7 +4646,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// sense where the video IS the frame. Atrium's art is a column, Tonight's
   /// is a card among panels, and Mosaic has none.
   bool get _theaterEligible => switch (_homeStyleEffective) {
-    'canvas' || 'promenade' || 'deck' => true,
+    'canvas' || 'promenade' || 'deck' || 'spotlight' => true,
     _ => false,
   };
 
@@ -5149,10 +5158,117 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return null;
   }
 
+
+  // ── Spotlight ───────────────────────────────────────────────────────────
+
+  final GlobalKey<SpotlightBoardState> _spotlightKey =
+      GlobalKey<SpotlightBoardState>();
+  final FocusNode _spotlightHeroNode = FocusNode(debugLabel: 'spotlight-hero');
+
+  /// The hero reel.
+  ///
+  /// NOT `_stageRails[0]`: that list is ordered Continue Watching → Favourites
+  /// (which include IPTV channels and playlists, not `StremioMeta` at all) →
+  /// catalog sections, and it re-orders as tracker data lands. The hero needs a
+  /// stable list of real catalog titles, so it takes the first section that has
+  /// any and caps it — a reel longer than about eight is a list, not a hero.
+  CatalogSection? get _spotlightHeroSection {
+    for (final section in _sections) {
+      if (section.items.isNotEmpty) return section;
+    }
+    return null;
+  }
+
+  List<StremioMeta> get _spotlightHero =>
+      _spotlightHeroSection?.items.take(8).toList() ?? const [];
+
+  /// Continue Watching first, then the catalog shelves — the order the other
+  /// boards already use, and the order someone opening Home actually wants.
+  ///
+  /// Built as descriptors rather than handing the board `_sections`, because
+  /// CW carries progress and a context menu that a `CatalogSection` has no
+  /// room for. Favourites rails are still absent; they are not `StremioMeta`.
+  List<SpotlightShelf> get _spotlightShelves => [
+    for (final row in _cwRows)
+      SpotlightShelf(
+        title: row.tag == null ? row.title : '${row.title} · ${row.tag}',
+        items: row.items,
+        nodes: row.nodes,
+        onOpen: row.onOpen,
+        // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
+        progressOf: (m) {
+          final p = row.progressOf(m);
+          return p == null ? null : p * 100;
+        },
+        onOptions: row.onQuickPlay,
+      ),
+    for (var i = 0; i < _sections.length; i++)
+      SpotlightShelf(
+        title: _sections[i].title,
+        items: _sections[i].items,
+        nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
+        onOpen: (item) => _openItem(item, _sections[i].addon),
+      ),
+  ];
+
+  Widget _buildSpotlightBoard() {
+    final cwCount = _cwRows.length;
+    return SpotlightBoard(
+      key: _spotlightKey,
+      hero: _spotlightHero,
+      sections: _spotlightShelves,
+      heroNode: _spotlightHeroNode,
+      heroAddon: _spotlightHeroSection?.addon,
+      onHeroOpen: _openItem,
+      // Row indices here are SHELF indices, and the CW shelves sit in front
+      // of the catalog ones — so the catalog row this maps to is offset by
+      // however many CW shelves are showing.
+      //
+      // SNAPSHOT, not `_cwRows.length` read at callback time: `_cwRows` is a
+      // computed getter, and a CW row appearing or disappearing between this
+      // build and the callback would page the wrong catalog row.
+      onLoadMoreRow: (row) {
+        final catalogRow = row - cwCount;
+        if (catalogRow >= 0) unawaited(_loadMoreRow(catalogRow));
+      },
+      onLoadMoreShelves: () => unawaited(_loadMoreBoard()),
+      // The board owns the CADENCE; the resolve and the video stay here.
+      //
+      // Every other entry into `_scheduleHeroTrailer` is still excluded for
+      // this style — init, section loads, focus changes, `_applyHero`, route
+      // return, sidebar return — so the board's clock is the single owner and
+      // the two cannot start a trailer under different titles.
+      trailersEnabled: _heroTrailerEnabled && !_heroTrailerSuppressed,
+      onDwell: (item) => _scheduleHeroTrailer(item, fromSpotlight: true),
+      onTrailerStop: _clearHeroTrailer,
+      trailer: _heroTrailerActive
+          ? _HeroTrailerLayer(
+              trailer: _heroTrailer,
+              heroHeight: 540,
+              fullBleed: true,
+              volume: _heroTrailerVolume,
+              loading: _heroTrailerLoading,
+              onPlayingChanged: _onHeroTrailerPlaying,
+              takeover: _heroTrailerTakeover,
+            )
+          : null,
+      onAmbient: (art, tint) {
+        if (!mounted) return;
+        MainPageBridge.tvAmbientArt.value = art;
+        MainPageBridge.tvHeroTint.value = tint;
+      },
+    );
+  }
+
   /// The displayed Canvas rail's best focus target (sidebar hand-off, tab
   /// re-entry, auto-focus and dead-focus reclaim all route through this via
   /// [_topBoardFocusNode]).
   FocusNode? _stageFocusTarget() {
+    // Spotlight owns its own cursor — the hero is a focusable row, which the
+    // rail-based resolution below cannot describe.
+    if (_homeStyleEffective == 'spotlight') {
+      return _spotlightKey.currentState?.focusTarget() ?? _spotlightHeroNode;
+    }
     // Tonight parks focus in its vertical queue until the user walks down
     // into the rail zone; the rail resolution below is only right for the
     // rail zone.
@@ -8199,10 +8315,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// nothing but a timer reset, never a resolve or a decoder spin-up. Both
   /// lookups (Cinemeta /meta for the YouTube id, then the stream resolve) are
   /// cached in their services, so re-resting on a recent card starts fast.
-  void _scheduleHeroTrailer(StremioMeta item) {
+  void _scheduleHeroTrailer(StremioMeta item, {bool fromSpotlight = false}) {
     if (!_heroTrailerActive || !_heroTrailerEnabled || _heroTrailerSuppressed) {
       return;
     }
+    // Spotlight owns its own hero cadence, so the shared scheduler must not
+    // also drive it — two systems interleaving on one hero is how a trailer
+    // starts under the wrong title.
+    //
+    // The guard lives HERE rather than at the call sites: scheduling reaches
+    // this method from init, section loads, focus changes, `_applyHero`,
+    // route return and sidebar return, and a per-site exclusion would miss
+    // one. `_heroTrailerActive` is deliberately left style-blind — it governs
+    // listener registration across an asynchronously loaded style, and gating
+    // it leaks or double-registers listeners.
+    if (_homeStyleEffective == 'spotlight' && !fromSpotlight) return;
     // A layout with no place to put moving picture (Mosaic) never resolves a
     // trailer at all — the resolve is a network + engine cost for something
     // that would be invisible under its veil.
@@ -13982,6 +14109,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         return _buildDeckBoard();
       case 'tonight':
         return _buildTonightBoard();
+      case 'spotlight':
+        // The shared guard above lets dispatch through whenever ANY rail has
+        // content — including favourites, which Spotlight still does not draw
+        // (they are not `StremioMeta`). So test what this board will actually
+        // render, not what the screen has: a stylish empty board is worse than
+        // classic.
+        if (_spotlightShelves.every((s) => s.items.isEmpty)) break;
+        return _buildSpotlightBoard();
     }
 
     final tv = widget.isTelevision;
