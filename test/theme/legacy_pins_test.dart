@@ -290,4 +290,319 @@ void main() {
       expect(core.lightGround, light, reason: core.id);
     }
   });
+
+  test('downloads subprofile pins the slate/indigo ramp', () {
+    // Downloads is the one surface not painted in the app's purple. These are
+    // repeated-literal pins (the inline sources are gone), so they fix the
+    // values going forward rather than proving the swap — see the header note.
+    final d = legacy.downloads;
+    expect(d.fieldFill, const Color(0xFF111827));
+    expect(d.previewCard, const Color(0x141E293B));
+    expect(d.line, const Color(0xFF334155));
+    expect(d.chipBorder, const Color(0xFF475569).withValues(alpha: 0.3));
+    expect(d.metaIcon, const Color(0xFF94A3B8));
+    expect(d.accent, const Color(0xFF6366F1));
+    expect(d.accent2, const Color(0xFF8B5CF6));
+    expect(d.addAccent, const Color(0xFF10B981));
+    expect(d.onAccent, Colors.white);
+    expect(d.shimmerBase, const Color(0xFF223049));
+    expect(d.shimmerHighlight, const Color(0xFF2A3A55));
+  });
+
+  test('downloads reuses existing roles rather than re-declaring them', () {
+    // Two roles that LOOK reusable are deliberately NOT: downloads.line is
+    // value-equal to home.controlBg but is a hairline, not a filled control,
+    // and downloads.addAccent is value-equal to cloud.statusSuccess but is a
+    // button's identity, not a status. Value equality under legacy is not
+    // role equality under a theme.
+    expect(legacy.downloads.line, legacy.home.controlBg);
+    expect(legacy.downloads.addAccent, legacy.cloud.statusSuccess);
+    // Five Downloads roles were EXACTLY equal to roles that already existed.
+    // Duplicating them into DownloadsTokens would let the two copies drift,
+    // so the surface reads them from their owning profile instead. If one of
+    // these ever stops matching, the surface must grow its own token — not be
+    // left silently pointing at a colour that moved.
+    expect(legacy.settings.sheetBg, const Color(0xFF0B1220)); // sheet ground
+    expect(legacy.home.controlBg, const Color(0xFF334155)); // chip fill only
+    expect(legacy.cloud.dialogSurface, const Color(0xFF1E293B)); // raised pill
+    expect(legacy.settings.accent, const Color(0xFF7B5CFF)); // keyboard latch
+  });
+
+test('youtube subprofile pins the Browse shell and the grid ink ladder', () {
+    final y = legacy.youtube;
+    // Live-source pins: both shared widgets still carry these literals as
+    // their own defaults, so these catch drift on EITHER side.
+    expect(y.focus, const Color(0xFF7B5CFF)); // TvTextField.accent
+    expect(y.keyboardPanel, const Color(0xF01A1630)); // TvKeyboardPanel._bg
+    expect(y.onFocus, Colors.white); // TvKeyboardPanel.inkOnAccent
+    // Repeated-literal pins: the grid's ink was inline alphas struck from
+    // `Colors.white`, so these fix the ladder going forward rather than
+    // proving the swap — see the header note.
+    expect(y.textBody, Colors.white.withValues(alpha: 0.8));
+    expect(y.textDim, Colors.white.withValues(alpha: 0.5));
+    expect(y.textFaint, Colors.white.withValues(alpha: 0.35));
+    // The rungs must stay ordered or "dim" and "faint" have swapped meaning —
+    // a silent inversion no dark theme would reveal.
+    expect(y.textBody.a, greaterThan(y.textDim.a));
+    expect(y.textDim.a, greaterThan(y.textFaint.a));
+  });
+
+  test('youtube reads existing roles rather than re-declaring them', () {
+    // `youtube.focus` is value-equal to `seeAll.accent` under legacy and is
+    // deliberately NOT it: a DPAD cursor and a surface accent answer
+    // different questions. The surface still reads `seeAll.accent` for the
+    // spinners, the Retry fill and the empty-state glyph.
+    expect(legacy.youtube.focus, legacy.seeAll.accent);
+    // Roles that were EXACTLY equal to ones that already existed, so the
+    // surface reads them from their owning profile instead of holding a
+    // second copy. If one of these ever stops matching, YouTube must grow its
+    // own token — not be left silently pointing at a colour that moved.
+    expect(legacy.seeAll.bg, kSeeAllBg); // Browse's Scaffold ground
+    expect(legacy.core.tx, Colors.white); // full-strength panel/field ink
+    expect(legacy.settings.sheetBg, const Color(0xFF0B1220)); // battery sheet
+    expect(legacy.downloads.line, const Color(0xFF334155)); // handle + button
+    expect(legacy.downloads.accent, const Color(0xFF6366F1)); // banner + Allow
+    expect(legacy.downloads.accent2, const Color(0xFF8B5CF6)); // banner stop 2
+  });
+
+test('playlist subprofile pins the surface literals', () {
+    // Repeated-literal pins: these fix the values going forward rather than
+    // proving the swap — see the header note.
+    final p = legacy.playlist;
+    expect(p.card, const Color(0xFF1E293B));
+    expect(p.fieldFill, const Color(0xFF1E293B));
+    expect(p.sheetPanel, const Color(0xF5181820));
+    expect(p.posterPlaceholder, const Color(0xFF1A1A2E));
+    expect(p.accent, const Color(0xFF6366F1));
+    expect(p.controlFill, Colors.white.withValues(alpha: 0.15));
+    expect(p.rowFill, Colors.white.withValues(alpha: 0.03));
+    expect(p.hairline, Colors.white.withValues(alpha: 0.1));
+    expect(p.focusRing, Colors.white.withValues(alpha: 0.3));
+    expect(p.favoriteAccent, const Color(0xFFFFD700));
+    expect(p.ink2, Colors.white70);
+    expect(p.ink3, Colors.white.withValues(alpha: 0.5));
+    expect(p.statusWatched, const Color(0xFF059669));
+    expect(p.destructive, const Color(0xFFFF6B6B));
+    // Pinned to the SWATCH, because that is what the screens write today.
+    // `Color.==` is runtimeType-sensitive and `Colors.blue` / `Colors.orange`
+    // are `MaterialColor`s, so a bare hex would not compare equal even though
+    // the painted ARGB is identical — hence `isSameColorAs` for the value.
+    expect(p.progressPlayed, Colors.blue);
+    expect(p.progressPlayed, isSameColorAs(const Color(0xFF2196F3)));
+    expect(p.warning, Colors.orange);
+    // The Clear Progress confirm button spells this colour as a hex. Same
+    // value, so the chip and the button collapse onto one token without
+    // moving a pixel — assert that rather than assume it.
+    expect(p.warning, isSameColorAs(const Color(0xFFFF9800)));
+  });
+
+  test('playlist reuses existing roles rather than re-declaring them', () {
+    // Four roles were EXACTLY equal to roles that already existed, so the
+    // surface reads them from their owning profile instead of carrying a
+    // second copy that can drift. If one of these stops matching, Playlist
+    // must grow its own token — not be left pointing at a colour that moved.
+    expect(legacy.cloud.dialogSurface, const Color(0xFF1E293B)); // 7 dialogs
+    expect(legacy.home.sheetBg, const Color(0xFF0F172A)); // confirm dialogs
+    expect(legacy.core.tx, Colors.white); // explicit page ink
+    expect(legacy.settings.accent, const Color(0xFF7B5CFF)); // TV input chrome
+    // Deliberate NON-reuse, both value-equal under legacy. The row Card is not
+    // `cloud.dialogSurface` (that is a MODAL ground, and a list of modals is
+    // not a list), and the recessed search field is not one either.
+    expect(legacy.playlist.card, legacy.cloud.dialogSurface);
+    expect(legacy.playlist.fieldFill, legacy.cloud.dialogSurface);
+    // The episode rating star is value-equal to the DPAD cursor and is left a
+    // literal rather than borrowing it; its real destination is `core.rating`,
+    // which is a different value (#F5C518) and therefore a sweep decision.
+    expect(legacy.home.focus, const Color(0xFFFBBF24)); // == the rating star
+    expect(legacy.core.rating, isNot(legacy.home.focus));
+  });
+
+test('stremioTv subprofile pins the tuner literals', () {
+    // Repeated-literal pins: the inline sources are gone, so these fix the
+    // values going forward rather than proving the swap — see the header note.
+    final s = legacy.stremioTv;
+    // Composed, not hex-pinned: `Color` stores alpha as a double, so
+    // `0x0AFFFFFF` (0.0392) is not `withValues(alpha: 0.04)`.
+    expect(s.surfaceFill, Colors.white.withValues(alpha: 0.04));
+    expect(s.hairline, Colors.white.withValues(alpha: 0.06));
+    expect(s.focusRing, Colors.white.withValues(alpha: 0.9));
+    expect(s.glass, Colors.black.withValues(alpha: 0.55));
+    expect(s.progressTrack, Colors.white.withValues(alpha: 0.12));
+    expect(s.progressFill, Colors.white.withValues(alpha: 0.95));
+    expect(s.sheetBg, const Color(0xFF101015));
+    expect(s.starAccent, const Color(0xFFFFC107));
+    expect(s.toggleOn, const Color(0xFF34D399));
+    expect(s.toggleOff, const Color(0xFF4B465F));
+    expect(s.loaderAccent, const Color(0xFF8B6BFF));
+    expect(s.loaderAccent2, const Color(0xFFB9A6FF));
+    expect(s.loaderGround, const Color(0xFF201636));
+    expect(s.inkOnFill, const Color(0xFF0A0712));
+    // ORDER matters in both ramps: the channel id hashes into the first and the
+    // quality tier indexes the second, so a reorder recolours the surface while
+    // leaving the SET unchanged.
+    expect(s.channelIdent, const [
+      Color(0xFF6C5CE7),
+      Color(0xFFE84393),
+      Color(0xFF00B894),
+      Color(0xFFE17055),
+      Color(0xFF0984E3),
+      Color(0xFFFDCB6E),
+      Color(0xFF00CEC9),
+      Color(0xFFA29BFE),
+    ]);
+    expect(s.qualityTier, const [
+      Color(0xFFFFD600), // 4K
+      Color(0xFF536DFE), // 1080p
+      Color(0xFF00BFA5), // 720p
+      Color(0xFF78909C), // 480p
+      Color(0xFF90A4AE), // HD
+    ]);
+  });
+
+  test('stremioTv keeps the fill/hairline split that legacy hides', () {
+    // surfaceFill is byte-identical to calendar.line and is NOT the same role:
+    // one is a control's FILL, the other a grid HAIRLINE. Reusing calendar.line
+    // would repaint every tuner header button on any theme that moves its
+    // hairlines. Value equality under legacy is not role equality under a theme.
+    expect(legacy.stremioTv.surfaceFill, legacy.calendar.line);
+    expect(legacy.stremioTv.hairline, isNot(legacy.stremioTv.surfaceFill),
+        reason: 'this surface uses white at 0.04 AND 0.06 as both fill and '
+            'border — only the roles separate them');
+    // Roles this surface deliberately does NOT re-declare. If one of these ever
+    // stops matching, the tuner must grow its own token, not be left silently
+    // pointing at a colour that moved.
+    expect(legacy.home.posterPlaceholder, const Color(0xFF111118));
+    expect(legacy.downloads.shimmerBase, const Color(0xFF223049));
+    expect(legacy.downloads.shimmerHighlight, const Color(0xFF2A3A55));
+    expect(legacy.home.chromeAccent, const Color(0xFF7B5CFF));
+    // One literal, two roles: the tuner's LIVE badge is home.highlight and the
+    // focus bloom is home.focusDeep. They agree under legacy and must stay
+    // separate tokens so a theme can split them.
+    expect(legacy.home.highlight, legacy.home.focusDeep);
+  });
+
+  test('stremioTv derived: ramps stay sized and distinct, glass stays black, '
+      'the loader check glyph stays readable', () {
+    double contrast(Color a, Color b) {
+      final la = a.withValues(alpha: 1).computeLuminance();
+      final lb = b.withValues(alpha: 1).computeLuminance();
+      final hi = la > lb ? la : lb, lo = la > lb ? lb : la;
+      return (hi + 0.05) / (lo + 0.05);
+    }
+
+    for (final core in DetailThemes.all) {
+      final s = AppTheme.fromDetail(core).stremioTv;
+      expect(s.channelIdent, isNotEmpty, reason: core.id);
+      expect(s.channelIdent.toSet().length, s.channelIdent.length,
+          reason: '${core.id}: idents exist to tell channels apart');
+      expect(s.qualityTier, hasLength(5), reason: core.id);
+      expect(s.qualityTier.toSet().length, 5,
+          reason: '${core.id}: the five tiers must stay tellable apart');
+      // The glass is legibility over an arbitrary poster, so it follows no
+      // ground — a theme-tinted glass on paper defeats the whole point.
+      expect(s.glass, Colors.black.withValues(alpha: 0.55), reason: core.id);
+      // 4.0: the same bar as `inkOn`, and the glyph is on a filled swatch.
+      expect(contrast(s.inkOnFill, s.loaderAccent), greaterThanOrEqualTo(4.0),
+          reason: '${core.id}: check glyph on the loader step dot');
+    }
+  });
+
+test('debrify_tv subprofile pins the magic_tv literals', () {
+    // Repeated-literal pins (the inline sources are gone), so they fix the
+    // values going forward rather than proving the swap — see the header note.
+    final tv = legacy.debrifyTv;
+    expect(tv.accent, const Color(0xFFE50914));
+    expect(tv.dialogBg, const Color(0xFF0F0F0F));
+    expect(tv.noticeBg, const Color(0xFF1B1B1F));
+    expect(tv.cardBg, const Color(0xFF1A1A1A));
+    expect(tv.cardFocusBg, const Color(0xFF2A2A2A));
+    expect(tv.controlBg, const Color(0xFF141414));
+    expect(tv.fillStrong, Colors.white.withValues(alpha: 0.15));
+    // withOpacity ROUNDS to an 8-bit alpha: the sources'
+    // `Colors.white.withOpacity(0.1)` is 26/255 = 0.1020, not 0.1. Asserting
+    // against `withValues(alpha: 0.1)` here would happily pass a different
+    // colour, which is exactly how the calendar hairline nearly shipped wrong.
+    expect(tv.fillWeak, Colors.white.withAlpha(26));
+    expect(tv.fillWeak.a, closeTo(26 / 255, 1e-9));
+    expect(tv.hairline, Colors.white12);
+    expect(tv.focusRing, Colors.white);
+    expect(tv.focusRingAlt, const Color(0xFF00E5FF));
+    expect(tv.textDim, Colors.white70);
+    expect(tv.textMeta, Colors.white60);
+    expect(tv.textFaint, Colors.white54);
+    expect(tv.favorite, const Color(0xFFFFD700));
+
+    // Roles Debrify TV reads from elsewhere instead of re-declaring. If one of
+    // these ever stops matching, the surface must grow its own token — not be
+    // left silently pointing at a colour that moved.
+    expect(legacy.core.tx, Colors.white); // page ink
+    expect(legacy.home.sheetBg, const Color(0xFF0F172A)); // Import dialog slate
+    expect(legacy.inkOn(tv.accent), Colors.white); // ink on the red fill
+
+    // Two deliberate NON-reuses. Value equality under legacy is not role
+    // equality under a theme.
+    expect(tv.accent, legacy.calendar.accent); // same tin, different identity
+    expect(tv.focusRingAlt, isNot(tv.focusRing)); // legacy runs two grammars
+
+    for (final core in DetailThemes.all) {
+      final t = AppTheme.fromDetail(core).debrifyTv;
+      // Focus must stay a visible STEP off the row it lands on. This is the
+      // failure a borrowed dialog ground would have caused: two roles that
+      // derive to `core.pane` collapse, and the cursor stops being visible.
+      expect(t.cardFocusBg, isNot(t.cardBg), reason: core.id);
+      expect(t.cardBg, isNot(t.controlBg), reason: core.id);
+      // …and real themes converge the two focus colours legacy split, so the
+      // cyan never propagates past the compatibility profile.
+      expect(t.focusRingAlt, t.focusRing, reason: core.id);
+    }
+  });
+
+test('iptv subprofile pins the Command Center palette', () {
+    // The Command Center look takes the UNTOUCHED legacy paint path today
+    // (`IptvStyleTokens.of(command)` is null and every widget branches on the
+    // style first), so these are repeated-literal pins in the header's second
+    // sense: they fix the values going forward, they do not prove the swap.
+    final i = legacy.iptv;
+    expect(i.stageBg, const Color(0xFF0B0914));
+    expect(i.rowFocusFill, const Color(0xFF141824));
+    expect(i.modalBg, const Color(0xFF14141D));
+    expect(i.logoPlate, const Color(0xFF1E2030));
+    expect(i.chipSurface, const Color(0xF0141225));
+    expect(i.fieldFill, const Color(0xFF0F0B14));
+    expect(i.fieldBorder, const Color(0xFF2A2233));
+    // Composed, not hexed — see the calendar note about alpha as a double.
+    expect(i.hairline, Colors.white.withValues(alpha: 0.08));
+    expect(i.surfaceTint, Colors.white.withValues(alpha: 0.04));
+    expect(i.inkMid, Colors.white.withValues(alpha: 0.7));
+    expect(i.inkDim, Colors.white.withValues(alpha: 0.55));
+    expect(i.inkFaint, Colors.white.withValues(alpha: 0.35));
+    expect(i.recordAccent, const Color(0xFFF43F5E));
+    expect(i.favoriteAccent, const Color(0xFFF43F5E));
+    expect(i.liveDot, const Color(0xFF34D399));
+  });
+
+  test('iptv reuses existing roles rather than re-declaring them', () {
+    // Ten IPTV roles were EXACTLY equal to roles that already existed, so the
+    // surface reads them from their owning profile. If one of these ever stops
+    // matching, IPTV must grow its own token — not be left silently pointing
+    // at a colour that moved.
+    expect(legacy.seeAll.bg, kSeeAllBg); // the IPTV tab's ground
+    expect(legacy.seeAll.accent, kSeeAllAccent); // chip focus, Watch fill
+    expect(legacy.seeAll.accent2, kSeeAllAccent2); // dropdown glyphs, hints
+    expect(legacy.seeAll.panel, kSeeAllPanel); // chip / dropdown ground
+    expect(legacy.seeAll.line, kSeeAllLine); // filter-chip border
+    expect(legacy.home.focus, HomeTheme.focusGold); // the DPAD cursor
+    expect(legacy.sheetSurface, const Color(0xFF141019)); // list dialogs
+    // Full-strength IPTV ink is `core.tx` and gets no field. That borrow is
+    // only byte-identical because Signal's text really is pure white — assert
+    // it, because the whole ink ramp rests on it.
+    expect(legacy.core.tx, const Color(0xFFFFFFFF));
+
+    // Value equality is not role equality. These two pairs are identical under
+    // legacy and are deliberately NOT collapsed: `favoriteAccent` is a saved
+    // preference rather than the DVR's `recordAccent` state, and `surfaceTint`
+    // is a wash under content rather than the calendar's grid RULE.
+    expect(legacy.iptv.favoriteAccent, legacy.iptv.recordAccent);
+    expect(legacy.iptv.surfaceTint, legacy.calendar.line);
+  });
 }
