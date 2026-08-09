@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+
+import 'dock_style.dart';
+import 'styled_dock.dart';
 import '../models/gesture_state.dart';
 import '../services/playback_ui_clock.dart';
 import 'netflix_control_button.dart';
@@ -72,6 +75,35 @@ class Controls extends StatelessWidget {
   /// fighting it for the space.
   final Widget? infoPanel;
 
+  /// Which dock to build. `classic` takes the legacy tree below, verbatim —
+  /// the styled branch is a different widget entirely and cannot touch it.
+  final PlayerDockStyle dockStyle;
+  final PlayerDockPalette dockPalette;
+  final PlayerDockSize dockSize;
+
+  /// Measured info-panel height, or [DockLayoutInput.kInfoPanelBound] before
+  /// the first measurement. Owned by the host, which builds the panel.
+  final double infoPanelHeight;
+
+  /// Rotation only means something in the hand. Passed in rather than read
+  /// from `PlatformUtil` here so a desktop test host can still exercise it.
+  final bool showRotate;
+
+  /// Styled dock only: reports the bottom unit's height so the host can move
+  /// the skip button and the gesture bands off their hardcoded constants.
+  final void Function(double, int)? onDockExtent;
+
+  /// The host's geometry generation, forwarded to both reporters.
+  final int geometryGeneration;
+
+  /// Separate from [geometryGeneration]: the panel's structure can change
+  /// without the dock's geometry inputs changing, and vice versa.
+  final int infoPanelGeneration;
+
+  /// Styled dock only: reports the info panel's measured height, so the
+  /// vertical budget can stop reserving the conservative bound.
+  final void Function(double, int)? onInfoPanelExtent;
+
   const Controls({
     Key? key,
     required this.title,
@@ -120,6 +152,15 @@ class Controls extends StatelessWidget {
     this.isRecording = false,
     this.onRecord,
     this.infoPanel,
+    this.dockStyle = PlayerDockStyle.classic,
+    this.dockPalette = PlayerDockPalette.ultraviolet,
+    this.dockSize = PlayerDockSize.auto,
+    this.infoPanelHeight = DockLayoutInput.kInfoPanelBound,
+    this.showRotate = true,
+    this.onDockExtent,
+    this.onInfoPanelExtent,
+    this.geometryGeneration = 0,
+    this.infoPanelGeneration = 0,
   }) : super(key: key);
 
   String _getAspectRatioName() {
@@ -145,6 +186,81 @@ class Controls extends StatelessWidget {
       case AspectMode.aspect5_4:
         return '5:4';
     }
+  }
+
+  /// The `two_tier` dock, or null when the viewport cannot seat one row.
+  Widget? _buildStyled(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final arrangement = DockArrangement.forViewport(media.size);
+    final metrics = DockMetrics.compute(
+      DockLayoutInput(
+        viewport: media.size,
+        safeArea: media.padding,
+        arrangement: arrangement,
+        infoPanelH: infoPanel == null ? 0 : infoPanelHeight,
+        textScale: media.textScaler.scale(1),
+        size: dockSize,
+      ),
+    );
+    if (metrics == null) return null;
+
+    final dock = StyledDock(
+      metrics: metrics,
+      palette: DockPalettes.of(dockPalette),
+      arrangement: arrangement,
+      title: title,
+      subtitle: subtitle,
+      infoPanel: infoPanel,
+      clock: clock,
+      isPlaying: isPlaying,
+      onPlayPause: onPlayPause,
+      onBack: onBack,
+      onAspect: onAspect,
+      onSpeed: onSpeed,
+      onSleepTimer: onSleepTimer,
+      onShowTracks: onShowTracks,
+      onShowPlaylist: onShowPlaylist,
+      onRandom: onRandom,
+      onRotate: onRotate,
+      onSeekBarChangedStart: onSeekBarChangedStart,
+      onSeekBarChanged: onSeekBarChanged,
+      onSeekBarChangeEnd: onSeekBarChangeEnd,
+      onNext: onNext,
+      onPrevious: onPrevious,
+      onNextChannel: onNextChannel,
+      onShowGuide: onShowGuide,
+      onShowIptvChannels: onShowIptvChannels,
+      onShowStremioSources: onShowStremioSources,
+      onRecord: onRecord,
+      onPip: onPip,
+      hasNext: hasNext,
+      hasPrevious: hasPrevious,
+      hasNextChannel: hasNextChannel,
+      hasGuide: hasGuide,
+      hasIptvChannels: hasIptvChannels,
+      hasStremioSources: hasStremioSources,
+      hasPlaylist: hasPlaylist,
+      hasRecord: hasRecord,
+      isRecording: isRecording,
+      showPipButton: showPipButton,
+      hideSeekbar: hideSeekbar,
+      hideOptions: hideOptions,
+      hideBackButton: hideBackButton,
+      hideSpeed: hideSpeed,
+      hideRandom: hideRandom,
+      showRotate: showRotate,
+      isLandscape: isLandscape,
+      sleepTimerLabel: sleepTimerLabel,
+      speed: speed,
+      aspectMode: aspectMode,
+      // Reported from inside, around the bottom unit only. Wrapping the whole
+      // StyledDock would measure its full-screen Stack.
+      onDockExtent: onDockExtent,
+      onInfoPanelExtent: onInfoPanelExtent,
+      geometryGeneration: geometryGeneration,
+      infoPanelGeneration: infoPanelGeneration,
+    );
+    return dock;
   }
 
   String _format(Duration d) {
@@ -193,6 +309,14 @@ class Controls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Branch FIRST. Everything below this line is the legacy tree, reached
+    // only by `classic`, which is what makes it provably unchanged.
+    if (dockStyle.isStyled) {
+      final styled = _buildStyled(context);
+      if (styled != null) return styled;
+      // The viewport cannot seat a 44lp row — fall through to classic rather
+      // than shipping an overflowing dock.
+    }
     return Stack(
       children: [
         // Non-interactive gradient overlay

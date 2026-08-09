@@ -972,6 +972,71 @@ class StorageService {
     await prefs.setString(_iptvStyleKey, normalized);
   }
 
+  // ── Player dock (touch/desktop transport controls) ──────────────────────
+  //
+  // Three independent prefs so any style works in any palette at any size;
+  // bundling them into one "look" would only remove combinations. Palette and
+  // size are inert under `classic`, whose values are still preserved so
+  // switching to a styled dock restores the user's choices.
+  //
+  // Read once at player launch. Televisions never consult these — they build
+  // `TvControls`, not `Controls`.
+  static const String _playerDockStyleKey = 'player_dock_style';
+  static const Set<String> _playerDockStyles = {'classic', 'two_tier'};
+
+  static Future<String> getPlayerDockStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_playerDockStyleKey);
+    return _playerDockStyles.contains(raw) ? raw! : 'classic';
+  }
+
+  static Future<void> setPlayerDockStyle(String style) async {
+    final normalized = _playerDockStyles.contains(style) ? style : 'classic';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playerDockStyleKey, normalized);
+  }
+
+  static const String _playerDockPaletteKey = 'player_dock_palette';
+  static const Set<String> _playerDockPalettes = {
+    'ultraviolet',
+    'crimson',
+    'aurum',
+    'ice',
+  };
+
+  static Future<String> getPlayerDockPalette() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_playerDockPaletteKey);
+    return _playerDockPalettes.contains(raw) ? raw! : 'ultraviolet';
+  }
+
+  static Future<void> setPlayerDockPalette(String palette) async {
+    final normalized =
+        _playerDockPalettes.contains(palette) ? palette : 'ultraviolet';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playerDockPaletteKey, normalized);
+  }
+
+  static const String _playerDockSizeKey = 'player_dock_size';
+  static const Set<String> _playerDockSizes = {
+    'auto',
+    'small',
+    'medium',
+    'large',
+  };
+
+  static Future<String> getPlayerDockSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_playerDockSizeKey);
+    return _playerDockSizes.contains(raw) ? raw! : 'auto';
+  }
+
+  static Future<void> setPlayerDockSize(String size) async {
+    final normalized = _playerDockSizes.contains(size) ? size : 'auto';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playerDockSizeKey, normalized);
+  }
+
   static const String _iptvPlayerGuideStyleKey = 'iptv_player_guide_style';
   static const Set<String> _iptvPlayerGuideStyles = {
     'classic',

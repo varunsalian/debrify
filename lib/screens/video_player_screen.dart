@@ -63,6 +63,7 @@ import 'video_player/widgets/vertical_hud.dart';
 import 'video_player/widgets/aspect_ratio_hud.dart';
 import 'video_player/widgets/netflix_radio_tile.dart';
 import 'video_player/widgets/controls.dart';
+import 'video_player/widgets/dock_style.dart';
 import 'video_player/widgets/tv_controls.dart';
 import 'video_player/widgets/tv_tappable.dart';
 import 'video_player/widgets/channel_badge.dart';
@@ -605,6 +606,113 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// The in-player IPTV guide look, read once at launch (see
   /// [PlayerGuideStyle]). Classic keeps every legacy paint path verbatim.
   PlayerGuideStyle _playerGuideStyle = PlayerGuideStyle.classic;
+
+  // Player dock prefs, read once at launch alongside the guide style.
+  PlayerDockStyle _dockStyle = PlayerDockStyle.classic;
+  PlayerDockPalette _dockPalette = PlayerDockPalette.ultraviolet;
+  PlayerDockSize _dockSize = PlayerDockSize.auto;
+
+  /// The styled dock's measured height. Six host behaviours below assume a
+  /// FIXED dock height (the skip button's 160/28, four 72lp gesture bands and
+  /// the PikPak overlay's 80); under `two_tier` the dock is variable, so they
+  /// read this instead. Seeded to the full viewport height so the very first
+  /// frame can only over-protect — under-protection is the actual bug.
+  /// `classic` never publishes and every consumer keeps its literal.
+  final ValueNotifier<double> _dockExtent = ValueNotifier<double>(0);
+
+  /// Measured height of the IPTV info panel, which the dock's vertical budget
+  /// must reserve. Starts at the conservative bound and is corrected by the
+  /// panel's own reporter on the next frame.
+  double _infoPanelHeight = DockLayoutInput.kInfoPanelBound;
+
+  /// The panel's STRUCTURAL signature — which rows exist, not what they say.
+  /// Every row is bounded to one line, so content cannot change the height;
+  /// only presence can. Recomputed each build, and a change resets the cached
+  /// height so a taller panel can never be under-reserved.
+  ///
+  /// Deliberately excludes `_iptvZapClock`: that ticks every second and would
+  /// otherwise reset the cache continuously.
+  String get _infoPanelSignature {
+    final channel = _iptvZapChannel;
+    if (channel == null || !_iptvZapBannerOwnsIdentity) return '-';
+    final epg = _iptvZapEpg;
+    return [
+      _playerGuideStyle.name,
+      channel.channelNumber != null ? 'n' : '',
+      (channel.group?.isNotEmpty ?? false) ? 'g' : '',
+      channel.logoUrl != null ? 'l' : '',
+      epg?.now != null ? 'w' : '',
+      epg?.next != null ? 'x' : '',
+      _iptvZapEpgLoading ? 'L' : '',
+      _recordingActiveNow ? 'r' : '',
+    ].join('|');
+  }
+
+  String _lastInfoPanelSignature = '';
+
+  /// Bumped on a panel STRUCTURE change. Separate from the dock generation:
+  /// resetting `_infoPanelHeight` alone was not enough — if the newly measured
+  /// height happened to equal the reporter's cached value it would suppress
+  /// the callback and the budget would stay stuck at the 200lp bound.
+  int _infoPanelGeneration = 0;
+
+  /// Bumped whenever the dock's geometry inputs change. A measurement
+  /// callback captures this and is discarded if it comes back stale, so a
+  /// post-frame report from the previous layout cannot overwrite a newer one.
+  int _dockGeometryGeneration = 0;
+
+  /// Everything that can change the dock's height without the dock itself
+  /// changing: the viewport, the safe-area insets, the text scaler, the
+  /// chosen style and size, and the two flags that add or remove whole rows.
+  String _dockGeometrySignature(MediaQueryData media) => [
+    media.size.width.round(),
+    media.size.height.round(),
+    media.padding.top.round(),
+    media.padding.bottom.round(),
+    media.textScaler.scale(100).round(),
+    _dockStyle.name,
+    _dockSize.name,
+    widget.hideOptions,
+    widget.hideSeekbar,
+  ].join('|');
+
+  String _lastDockGeometrySignature = '';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _refreshDockGeometry();
+  }
+
+  /// Drops the cached dock geometry whenever anything that can change the
+  /// dock's height changes.
+  void _refreshDockGeometry() {
+    // Rotation, window resize, split-screen, a safe-area change or a font-size
+    // change all land here. Any of them can make the cached extent wrong, and
+    // a stale extent means a tap near the bottom is judged against the wrong
+    // band — so drop back to the legacy constants until a fresh measurement
+    // arrives, rather than trusting the old number for a frame.
+    final signature = _dockGeometrySignature(MediaQuery.of(context));
+    if (signature == _lastDockGeometrySignature) return;
+    _lastDockGeometrySignature = signature;
+    _dockGeometryGeneration++;
+    _dockExtent.value = 0;
+    _infoPanelGeneration++;
+    _infoPanelHeight = DockLayoutInput.kInfoPanelBound;
+    _lastInfoPanelSignature = '';
+  }
+
+  /// Reserved panel height for this build. Resets to the bound (or 0 when no
+  /// panel is mounted) the moment the structure changes.
+  double get _reservedInfoPanelHeight {
+    final signature = _infoPanelSignature;
+    if (signature != _lastInfoPanelSignature) {
+      _lastInfoPanelSignature = signature;
+      _infoPanelGeneration++;
+      _infoPanelHeight = signature == '-' ? 0 : DockLayoutInput.kInfoPanelBound;
+    }
+    return _infoPanelHeight;
+  }
 
   /// Tokens for [_playerGuideStyle], derived once with it — null for classic.
   IptvStyleTokens? _playerGuideTokens;
@@ -1948,6 +2056,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _initializePlayer() async {
     // Load default player settings
     await _loadPlayerDefaults();
+    unawaited(_loadDockPrefs());
     if (Platform.isAndroid && !PlatformUtil.isAndroidTvCached) {
       _androidVideoRendererMode =
           await StorageService.getAndroidVideoRendererMode();
@@ -2826,6 +2935,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void didUpdateWidget(covariant VideoPlayerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // `hideOptions` / `hideSeekbar` arrive through the widget, not through an
+    // inherited dependency, so didChangeDependencies never fires for them.
+    _refreshDockGeometry();
     if (widget.channelName != oldWidget.channelName) {
       final String? trimmed = widget.channelName?.trim();
       if ((trimmed == null || trimmed.isEmpty) && _currentChannelName != null) {
@@ -3723,6 +3835,62 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Load default player settings (aspect)
+  /// The vertical band at the bottom of the screen the dock occupies.
+  ///
+  /// `classic` keeps the literal each consumer has always used; only the
+  /// styled dock, whose height is variable, reports a measured value. The
+  /// branch at six call sites is deliberate — one uniform value is impossible,
+  /// since the consumers' legacy constants are 160/28, 72 and 80.
+  double _dockBand(double legacy) =>
+      _dockStyle.isStyled ? math.max(legacy, _dockExtent.value) : legacy;
+
+  /// Where the skip-segment button sits above the bottom edge.
+  ///
+  /// The legacy value is not simply "160": it is 160 only while controls are
+  /// visible AND (television OR options shown), else 28. Televisions build
+  /// `TvControls`, so the styled path never engages there.
+  double _skipButtonBottom(
+    BuildContext context,
+    bool controlsVisible,
+    double dockExtent,
+  ) {
+    if (!_dockStyle.isStyled) {
+      return controlsVisible &&
+              (PlatformUtil.isTelevision || !widget.hideOptions)
+          ? 160
+          : 28;
+    }
+    // `infoPanel` mounts OUTSIDE the hideOptions guard, so a live panel can be
+    // on screen while `!hideOptions` is false.
+    final dockVisible =
+        controlsVisible &&
+        (_buildIptvInfoPanel(flush: true) != null || !widget.hideOptions);
+    if (!dockVisible) return 28;
+    final inset = MediaQuery.paddingOf(context).bottom;
+    return math.max(28.0, dockExtent + 8 - inset);
+  }
+
+  Future<void> _loadDockPrefs() async {
+    final style = await StorageService.getPlayerDockStyle();
+    final palette = await StorageService.getPlayerDockPalette();
+    final size = await StorageService.getPlayerDockSize();
+    if (!mounted) return;
+    setState(() {
+      _dockStyle = PlayerDockStyle.fromPref(style);
+      _dockPalette = PlayerDockPalette.fromPref(palette);
+      _dockSize = PlayerDockSize.fromPref(size);
+      // Style/size are part of the geometry signature but arrive here, not
+      // through an inherited dependency.
+      _lastDockGeometrySignature = '';
+      // Deliberately NOT seeded to the viewport height. Over-protecting the
+      // whole screen kills every gesture until the first measurement, and it
+      // also strands the fallback case: when DockMetrics.compute returns null
+      // the classic subtree renders and no reporter is ever mounted, so the
+      // seed would never be corrected. 0 means `_dockBand` yields the legacy
+      // constant, which is exactly right for both.
+    });
+  }
+
   Future<void> _loadPlayerDefaults() async {
     // Load default aspect index
     final aspectIndex = await StorageService.getPlayerDefaultAspectIndex();
@@ -7933,6 +8101,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _iptvZapTicker?.cancel();
     _tvScrubGeneration++; // invalidate any scrub still in flight
     _tvBarScope.dispose();
+    _dockExtent.dispose();
     _tvPlayPauseFocus.dispose();
     _tvProgressFocus.dispose();
     _tvRootFocus.dispose();
@@ -9162,7 +9331,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // If controls visible, ignore double-taps near top/bottom bars to not clash with buttons/slider
     if (_controlsVisible.value) {
       const topBar = 72.0;
-      const bottomBar = 72.0;
+      final bottomBar = _dockBand(72.0);
       if (localPos.dy < topBar || localPos.dy > size.height - bottomBar) return;
     }
 
@@ -9196,7 +9365,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (box != null) {
         final size = box.size;
         const topBar = 72.0;
-        const bottomBar = 72.0;
+        final bottomBar = _dockBand(72.0);
         final dy = details.localPosition.dy;
         if (dy < topBar || dy > size.height - bottomBar) {
           _panIgnore = true;
@@ -9529,7 +9698,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // When controls are visible, skip top/bottom bar regions so buttons/slider win
       if (_controlsVisible.value) {
         const topBar = 72.0;
-        const bottomBar = 72.0;
+        final bottomBar = _dockBand(72.0);
         if (localPos.dy < topBar || localPos.dy > size.height - bottomBar) {
           return;
         }
@@ -10238,6 +10407,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         pos,
                         size,
                         controlsVisible: _controlsVisible.value,
+                        bottomBar: _dockBand(72.0),
                       )) {
                         _toggleControls();
                       }
@@ -10288,6 +10458,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   // Merged into the dock: the channel panel rides on
                                   // top of the transport bar as one surface.
                                   infoPanel: _buildIptvInfoPanel(flush: true),
+                                  infoPanelHeight: _reservedInfoPanelHeight,
+                                  geometryGeneration: _dockGeometryGeneration,
+                                  infoPanelGeneration: _infoPanelGeneration,
+                                  onInfoPanelExtent: (h, generation) {
+                                    // A report from a previous layout is
+                                    // stale by definition — drop it.
+                                    if (generation != _infoPanelGeneration) {
+                                      return;
+                                    }
+                                    // Publish increases exactly; only ignore
+                                    // sub-pixel shrinkage.
+                                    if (h > _infoPanelHeight ||
+                                        (_infoPanelHeight - h) >= 1.0) {
+                                      setState(() => _infoPanelHeight = h);
+                                    }
+                                  },
+                                  dockStyle: _dockStyle,
+                                  dockPalette: _dockPalette,
+                                  dockSize: _dockSize,
+                                  // Rotation only means something in the hand.
+                                  showRotate: PlatformUtil.isPhone,
+                                  onDockExtent: (h, generation) {
+                                    if (generation != _dockGeometryGeneration) {
+                                      return;
+                                    }
+                                    // Publish every increase exactly; only
+                                    // suppress sub-pixel shrinkage.
+                                    final prev = _dockExtent.value;
+                                    if (h > prev || (prev - h) >= 1.0) {
+                                      _dockExtent.value = h;
+                                    }
+                                  },
                                   enhancedMetadata: _getEnhancedMetadata(),
                                   clock: _playbackUiClock,
                                   isPlaying: _isPlaying,
@@ -10443,25 +10645,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       return ValueListenableBuilder<bool>(
                         valueListenable: _controlsVisible,
                         builder: (context, controlsVisible, _) {
-                          return AnimatedPositioned(
-                            duration: const Duration(milliseconds: 150),
-                            curve: Curves.easeOut,
-                            right: 24,
-                            bottom:
-                                controlsVisible &&
-                                    (PlatformUtil.isTelevision ||
-                                        !widget.hideOptions)
-                                ? 160
-                                : 28,
-                            child: SafeArea(
-                              top: false,
-                              left: false,
-                              child: SkipSegmentButton(
-                                key: ValueKey(activeSkipSegment.type),
-                                type: activeSkipSegment.type,
-                                onPressed: _skipActiveSegment,
-                              ),
-                            ),
+                          // Rebuilds when the styled dock's height changes;
+                          // otherwise the button would keep a stale position
+                          // until some unrelated rebuild happened to occur.
+                          return ValueListenableBuilder<double>(
+                            valueListenable: _dockExtent,
+                            builder: (context, dockExtent, _) {
+                              return AnimatedPositioned(
+                                duration: const Duration(milliseconds: 150),
+                                curve: Curves.easeOut,
+                                right: 24,
+                                // Classic keeps the exact legacy ternary. The
+                                // styled dock is variable-height, so it uses the
+                                // measured band and subtracts this button's OWN
+                                // bottom SafeArea inset, which the child re-adds.
+                                bottom: _skipButtonBottom(
+                                  context,
+                                  controlsVisible,
+                                  dockExtent,
+                                ),
+                                child: SafeArea(
+                                  top: false,
+                                  left: false,
+                                  child: SkipSegmentButton(
+                                    key: ValueKey(activeSkipSegment.type),
+                                    type: activeSkipSegment.type,
+                                    onPressed: _skipActiveSegment,
+                                  ),
+                                ),
+                              );
+                            },
                           );
                         },
                       );
@@ -10537,7 +10750,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ),
                 // PikPak retry overlay - non-blocking, positioned at bottom right
                 if (_isPikPakRetrying && _pikPakRetryMessage != null && !inPip)
-                  PikPakRetryOverlay(message: _pikPakRetryMessage!),
+                  ValueListenableBuilder<double>(
+                    valueListenable: _dockExtent,
+                    builder: (context, dockExtent, _) =>
+                        ValueListenableBuilder<bool>(
+                          valueListenable: _controlsVisible,
+                          builder: (context, controlsVisible, _) {
+                            // Only lifts while the dock is actually on screen:
+                            // Controls stays mounted under AnimatedOpacity when
+                            // hidden, so the extent alone is not enough.
+                            final dockVisible =
+                                _dockStyle.isStyled &&
+                                controlsVisible &&
+                                (_buildIptvInfoPanel(flush: true) != null ||
+                                    !widget.hideOptions);
+                            return PikPakRetryOverlay(
+                              message: _pikPakRetryMessage!,
+                              bottom: dockVisible
+                                  ? math.max(80.0, dockExtent + 12)
+                                  : 80.0,
+                            );
+                          },
+                        ),
+                  ),
                 // Channel guide overlay
                 if (_showChannelGuide && _channelEntries.isNotEmpty && !inPip)
                   Positioned.fill(
