@@ -1,3 +1,4 @@
+import '../theme/app_surfaces.dart';
 import 'dart:async';
 import 'dart:math';
 
@@ -3183,7 +3184,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         break;
       case 'view_files':
         await Navigator.of(context).push(
-          MaterialPageRoute(
+          // Same freeze the Playlist tab applies (playlist_screen.dart:231).
+          // Search is themed and this screen belongs to a frozen surface, so
+          // without the wrapper it would render themed from here and legacy
+          // from Playlist — the same screen, two palettes, decided by which
+          // door the user came through.
+          FrozenLegacyPageRoute(
             builder: (_) => PlaylistContentViewScreen(playlistItem: item),
           ),
         );

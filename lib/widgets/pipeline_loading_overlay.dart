@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_theme.dart';
+import '../theme/app_theme_scope.dart';
 import '../theme/overlay_theme.dart';
 import '../utils/platform_util.dart';
 
@@ -18,6 +20,27 @@ enum PlayLoadStage { searching, cacheCheck, preparing, starting }
 ///
 /// Handle-based like the poster overlay: [dismiss] pops exactly once, and
 /// [setStage] advances the checklist live as the play flow progresses.
+
+/// The overlay's legacy palette, standing in for the reads it used to make.
+///
+/// It is rendered by themed Search AND by the still-frozen Stremio TV, so it
+/// cannot resolve `AppThemeScope` — that themed Search the moment the file was
+/// converted, before Stremio's boundary was lifted. Values are the legacy ones
+/// verbatim, so rendering is unchanged.
+class _LegacyLoaderPalette {
+  const _LegacyLoaderPalette();
+  Color get onGlass => Colors.white;
+  _LegacyStremioTv get stremioTv => const _LegacyStremioTv();
+}
+
+class _LegacyStremioTv {
+  const _LegacyStremioTv();
+  Color get loaderAccent => const Color(0xFF8B6BFF);
+  Color get loaderAccent2 => const Color(0xFFB9A6FF);
+  Color get loaderGround => const Color(0xFF201636);
+  Color get inkOnFill => const Color(0xFF0A0712);
+}
+
 class PipelineLoadingOverlay {
   static const Color accent = Color(0xFF8B6BFF);
 
@@ -182,6 +205,17 @@ class _PlContent extends StatefulWidget {
   final String providerCode;
   final Color providerColor;
   final bool isTv;
+
+  /// Caller-supplied palette, each defaulting to the literal it replaces.
+  ///
+  /// This overlay is rendered by BOTH themed Search (via
+  /// `torrent_playback_service`) and the still-frozen Stremio TV, so it must
+  /// not read `AppThemeScope` itself: doing so themed Search immediately,
+  /// before Stremio's boundary was lifted. Same contract as the other
+  /// straddling widgets — omit them and it renders exactly as it shipped.
+  final Color? loaderGround;
+  final Color? loaderAccent;
+  final Color? ink;
   final VoidCallback? onCancel;
 
   const _PlContent({
@@ -195,6 +229,9 @@ class _PlContent extends StatefulWidget {
     required this.providerColor,
     required this.isTv,
     required this.onCancel,
+    this.loaderGround,
+    this.loaderAccent,
+    this.ink,
   });
 
   @override
@@ -205,8 +242,6 @@ class _PlContentState extends State<_PlContent>
     with SingleTickerProviderStateMixin {
   late final AnimationController _kb;
   bool _reduceMotion = false;
-
-  static const _accent = PipelineLoadingOverlay.accent;
 
   @override
   void initState() {
@@ -240,6 +275,9 @@ class _PlContentState extends State<_PlContent>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final landscape = widget.isTv || size.width >= 880;
+    // This surface stays a dark cinematic plate on every theme (its Material
+    // ground, scrims and vignettes are all black at alpha), so its ink is
+    // `onGlass` — page ink would go near-black on a paper theme and vanish.
     return Material(
       color: Colors.black,
       child: Stack(
@@ -263,12 +301,15 @@ class _PlContentState extends State<_PlContent>
     // gradient (the no-poster look) is free; the foreground poster card still
     // carries the artwork.
     if (!_hasPoster || widget.isTv) {
-      return const DecoratedBox(
+      return DecoratedBox(
         decoration: BoxDecoration(
           gradient: RadialGradient(
-            center: Alignment(0, -0.3),
+            center: const Alignment(0, -0.3),
             radius: 1.1,
-            colors: [Color(0xFF201636), Color(0xFF08060D)],
+            colors: [
+              widget.loaderGround ?? const Color(0xFF201636),
+              const Color(0xFF08060D),
+            ],
           ),
         ),
       );
@@ -323,13 +364,17 @@ class _PlContentState extends State<_PlContent>
 
   // ── Poster card ─────────────────────────────────────────────────────────
   Widget _posterCard(double width) {
+    final loaderAccent = widget.loaderAccent ?? const Color(0xFF8B6BFF);
     return Container(
       width: width,
       height: width * 1.5,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: _accent.withValues(alpha: 0.32), blurRadius: 34, spreadRadius: 1),
+          BoxShadow(
+              color: loaderAccent.withValues(alpha: 0.32),
+              blurRadius: 34,
+              spreadRadius: 1),
           const BoxShadow(color: Colors.black54, blurRadius: 24, offset: Offset(0, 14)),
         ],
       ),
@@ -344,15 +389,20 @@ class _PlContentState extends State<_PlContent>
     );
   }
 
-  Widget _posterFallback() => ColoredBox(
-        color: Colors.white.withValues(alpha: 0.06),
-        child: const Center(
-          child: Icon(Icons.movie_rounded, color: Colors.white24, size: 34),
-        ),
-      );
+  Widget _posterFallback() {
+    final ink = widget.ink ?? Colors.white;
+    return ColoredBox(
+      color: ink.withValues(alpha: 0.06),
+      child: Center(
+        child:
+            Icon(Icons.movie_rounded, color: ink.withAlpha(0x3D), size: 34),
+      ),
+    );
+  }
 
   // ── Layouts ─────────────────────────────────────────────────────────────
   Widget _portrait() {
+    final ink = widget.ink ?? Colors.white;
     // Centered when it fits, scrollable when it doesn't (short / split-screen
     // phones), so the checklist + poster can never RenderFlex-overflow.
     return LayoutBuilder(
@@ -384,7 +434,7 @@ class _PlContentState extends State<_PlContent>
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.66), fontSize: 12.5),
+              style: TextStyle(color: ink.withValues(alpha: 0.66), fontSize: 12.5),
             ),
           ],
           const SizedBox(height: 26),
@@ -413,6 +463,11 @@ class _PlContentState extends State<_PlContent>
   }
 
   Widget _landscape(Size size) {
+    // Legacy values, pinned: this widget must not read the app theme (see
+    // the token fields above). Threading these to the constructor params
+    // is follow-up work — until then the overlay is fixed-palette, which
+    // is what it was before the conversion.
+    const app = _LegacyLoaderPalette();
     final tv = widget.isTv;
     final scale = tv ? (size.width / 960).clamp(1.0, 1.7).toDouble() : 1.0;
     final posterW = tv ? 150.0 * scale : 130.0;
@@ -427,7 +482,7 @@ class _PlContentState extends State<_PlContent>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: const Color(0xFFB9A6FF),
+              color: app.stremioTv.loaderAccent2,
               fontSize: 12.5 * scale,
               fontWeight: FontWeight.w700,
               letterSpacing: tv ? 1.2 : 0.2,
@@ -498,10 +553,10 @@ class _PlContentState extends State<_PlContent>
               colors: [Color(0xD1221A34), Color(0xCC0F0B19)],
             ),
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            border: Border.all(color: app.onGlass.withValues(alpha: 0.12)),
             boxShadow: [
               const BoxShadow(color: Colors.black, blurRadius: 90, offset: Offset(0, 40), spreadRadius: -46),
-              BoxShadow(color: _accent.withValues(alpha: 0.32), blurRadius: 70, offset: const Offset(0, 22), spreadRadius: -46),
+              BoxShadow(color: const Color(0xFF8B6BFF).withValues(alpha: 0.32), blurRadius: 70, offset: const Offset(0, 22), spreadRadius: -46),
             ],
           ),
           child: row,
@@ -512,12 +567,13 @@ class _PlContentState extends State<_PlContent>
 
   // ── Provider chip ───────────────────────────────────────────────────────
   Widget _providerChip() {
+    final ink = widget.ink ?? Colors.white;
     return Container(
       padding: const EdgeInsets.fromLTRB(6, 5, 12, 5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: ink.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
+        border: Border.all(color: ink.withValues(alpha: 0.13)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -559,6 +615,7 @@ class _TopRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const accent = Color(0xFF8B6BFF); // legacy stremioTv.loaderAccent
     return Positioned(
       top: 0,
       left: 0,
@@ -578,12 +635,12 @@ class _TopRail extends StatelessWidget {
               child: FractionallySizedBox(
                 widthFactor: (0.08 + 0.9 * frac).clamp(0.08, 1.0),
                 child: Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [PipelineLoadingOverlay.accent, Color(0xFFC4B2FF)],
+                      colors: [accent, const Color(0xFFC4B2FF)],
                     ),
                     boxShadow: [
-                      BoxShadow(color: PipelineLoadingOverlay.accent, blurRadius: 10),
+                      BoxShadow(color: accent, blurRadius: 10),
                     ],
                   ),
                 ),
@@ -602,8 +659,6 @@ class _StepsList extends StatelessWidget {
   final List<PlayLoadStage> steps;
   final double scale;
   const _StepsList({required this.state, required this.steps, required this.scale});
-
-  static const _accent = PipelineLoadingOverlay.accent;
 
   String _label(PlayLoadStage s) {
     switch (s) {
@@ -630,6 +685,11 @@ class _StepsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Legacy values, pinned: this widget must not read the app theme (see
+    // the token fields above). Threading these to the constructor params
+    // is follow-up work — until then the overlay is fixed-palette, which
+    // is what it was before the conversion.
+    const app = _LegacyLoaderPalette();
     return ValueListenableBuilder<_PlState>(
       valueListenable: state,
       builder: (context, st, _) {
@@ -639,21 +699,24 @@ class _StepsList extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (var i = 0; i < steps.length; i++)
-              _row(steps[i], i, active, st, i == steps.length - 1),
+              _row(app, steps[i], i, active, st, i == steps.length - 1),
           ],
         );
       },
     );
   }
 
-  Widget _row(PlayLoadStage s, int i, int active, _PlState st, bool last) {
+  Widget _row(_LegacyLoaderPalette app, PlayLoadStage s, int i, int active, _PlState st,
+      bool last) {
+    final accent = app.stremioTv.loaderAccent;
+    final ink = app.onGlass;
     final done = i < active;
     final isActive = i == active;
     final labelColor = done
-        ? Colors.white.withValues(alpha: 0.85)
+        ? ink.withValues(alpha: 0.85)
         : isActive
-            ? Colors.white
-            : Colors.white.withValues(alpha: 0.5);
+            ? ink
+            : ink.withValues(alpha: 0.5);
     final count = _count(s, st);
     final iconSize = 22.0 * scale;
 
@@ -665,14 +728,16 @@ class _StepsList extends StatelessWidget {
             width: iconSize,
             child: Column(
               children: [
-                _icon(done, isActive, iconSize, i),
+                _icon(app, done, isActive, iconSize, i),
                 if (!last)
                   Container(
                     margin: EdgeInsets.only(top: 3 * scale),
                     width: 2,
                     height: 8 * scale,
                     decoration: BoxDecoration(
-                      color: done ? _accent.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.15),
+                      color: done
+                          ? accent.withValues(alpha: 0.6)
+                          : ink.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -699,7 +764,7 @@ class _StepsList extends StatelessWidget {
               child: Text(
                 count,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: ink.withValues(alpha: 0.5),
                   fontSize: 11.5 * scale,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -711,14 +776,17 @@ class _StepsList extends StatelessWidget {
     );
   }
 
-  Widget _icon(bool done, bool active, double size, int i) {
+  Widget _icon(_LegacyLoaderPalette app, bool done, bool active, double size, int i) {
+    final accent = app.stremioTv.loaderAccent;
+    final ink = app.onGlass;
     if (done) {
       return Container(
         width: size,
         height: size,
         alignment: Alignment.center,
-        decoration: const BoxDecoration(color: _accent, shape: BoxShape.circle),
-        child: Icon(Icons.check_rounded, size: size * 0.62, color: const Color(0xFF0A0712)),
+        decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+        child: Icon(Icons.check_rounded,
+            size: size * 0.62, color: app.stremioTv.inkOnFill),
       );
     }
     if (active) {
@@ -728,15 +796,15 @@ class _StepsList extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: _accent, width: 2),
-          boxShadow: [BoxShadow(color: _accent.withValues(alpha: 0.16), blurRadius: 0, spreadRadius: 4)],
+          border: Border.all(color: accent, width: 2),
+          boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.16), blurRadius: 0, spreadRadius: 4)],
         ),
         child: SizedBox(
           width: size * 0.5,
           height: size * 0.5,
-          child: const CircularProgressIndicator(
+          child: CircularProgressIndicator(
             strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation(_accent),
+            valueColor: AlwaysStoppedAnimation(accent),
           ),
         ),
       );
@@ -747,12 +815,12 @@ class _StepsList extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 2),
+        border: Border.all(color: ink.withValues(alpha: 0.18), width: 2),
       ),
       child: Text(
         '${i + 1}',
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.42),
+          color: ink.withValues(alpha: 0.42),
           fontSize: size * 0.42,
           fontWeight: FontWeight.w700,
         ),
@@ -771,6 +839,11 @@ class _NoteLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Legacy values, pinned: this widget must not read the app theme (see
+    // the token fields above). Threading these to the constructor params
+    // is follow-up work — until then the overlay is fixed-palette, which
+    // is what it was before the conversion.
+    const app = _LegacyLoaderPalette();
     return ValueListenableBuilder<_PlState>(
       valueListenable: state,
       builder: (context, st, _) {
@@ -784,7 +857,7 @@ class _NoteLine extends StatelessWidget {
               Icon(
                 Icons.filter_alt_rounded,
                 size: 13 * scale,
-                color: const Color(0xFFB9A6FF).withValues(alpha: 0.85),
+                color: app.stremioTv.loaderAccent2.withValues(alpha: 0.85),
               ),
               SizedBox(width: 6 * scale),
               Flexible(
@@ -793,7 +866,7 @@ class _NoteLine extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.62),
+                    color: app.onGlass.withValues(alpha: 0.62),
                     fontSize: 11.5 * scale,
                     height: 1.35,
                   ),
@@ -839,6 +912,13 @@ class _CancelButtonState extends State<_CancelButton> {
 
   @override
   Widget build(BuildContext context) {
+    // Legacy values, pinned: this widget must not read the app theme (see
+    // the token fields above). Threading these to the constructor params
+    // is follow-up work — until then the overlay is fixed-palette, which
+    // is what it was before the conversion.
+    const app = _LegacyLoaderPalette();
+    final accent = app.stremioTv.loaderAccent;
+    final ink = app.onGlass;
     final tvFocused = widget.isTv && _focused;
     final s = widget.scale;
     return Focus(
@@ -860,22 +940,24 @@ class _CancelButtonState extends State<_CancelButton> {
           duration: const Duration(milliseconds: 140),
           padding: EdgeInsets.symmetric(horizontal: 18 * s, vertical: 8 * s),
           decoration: BoxDecoration(
-            color: tvFocused ? Colors.white : Colors.white.withValues(alpha: 0.05),
+            color: tvFocused ? ink : ink.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: tvFocused ? Colors.white : Colors.white.withValues(alpha: 0.22),
+              color: tvFocused ? ink : ink.withValues(alpha: 0.22),
             ),
             boxShadow: tvFocused
                 ? [
-                    BoxShadow(color: PipelineLoadingOverlay.accent.withValues(alpha: 0.6), blurRadius: 0, spreadRadius: 3),
-                    BoxShadow(color: PipelineLoadingOverlay.accent.withValues(alpha: 0.5), blurRadius: 24, offset: const Offset(0, 8)),
+                    BoxShadow(color: accent.withValues(alpha: 0.6), blurRadius: 0, spreadRadius: 3),
+                    BoxShadow(color: accent.withValues(alpha: 0.5), blurRadius: 24, offset: const Offset(0, 8)),
                   ]
                 : null,
           ),
           child: Text(
             'Cancel',
             style: TextStyle(
-              color: tvFocused ? const Color(0xFF17131F) : Colors.white.withValues(alpha: 0.82),
+              color: tvFocused
+                  ? const Color(0xFF17131F)
+                  : ink.withValues(alpha: 0.82),
               fontSize: 12.5 * s,
               fontWeight: FontWeight.w700,
             ),
