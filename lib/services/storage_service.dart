@@ -8,6 +8,7 @@ import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/webdav_item.dart';
 import '../models/android_video_renderer_mode.dart';
+import '../models/tv_hero_artwork_quality.dart';
 import '../utils/json_isolate.dart';
 import '../utils/platform_util.dart';
 
@@ -537,6 +538,25 @@ class StorageService {
   static Future<bool?> getTvLowResRenderActive() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool('tv_low_res_render_active');
+  }
+
+  static const String _tvHeroArtworkQualityKey = 'tv_hero_artwork_quality';
+
+  /// Maximum decode quality for Home hero/stage artwork on Android TV and
+  /// tvOS. Unknown values coerce to Automatic so a removed experimental mode
+  /// can never strand an installation on an unsupported policy.
+  static Future<TvHeroArtworkQuality> getTvHeroArtworkQuality() async {
+    final prefs = await SharedPreferences.getInstance();
+    return TvHeroArtworkQuality.fromStorage(
+      prefs.getString(_tvHeroArtworkQualityKey),
+    );
+  }
+
+  static Future<void> setTvHeroArtworkQuality(
+    TvHeroArtworkQuality quality,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tvHeroArtworkQualityKey, quality.storageValue);
   }
 
   /// Show the new Stremio-styled Addons hub (single list + source/type filters,

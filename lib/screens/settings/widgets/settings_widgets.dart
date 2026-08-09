@@ -145,6 +145,11 @@ abstract final class SettingsRows {
     title: 'Rendering',
     subtitle: '',
   );
+  static const tvHeroArtworkQuality = SettingsRowContent(
+    icon: Icons.photo_size_select_large_rounded,
+    title: 'Hero Artwork Quality',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen layout) — passed per call site.
   static const tvHomeStyle = SettingsRowContent(
     icon: Icons.view_quilt_rounded,

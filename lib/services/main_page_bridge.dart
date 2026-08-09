@@ -24,6 +24,11 @@ class MainPageBridge {
   /// the HOME SearchScreen instance only (not the Search tab's).
   static VoidCallback? tvHomeStyleChanged;
 
+  /// Fired after the TV Hero Artwork Quality picker updates the process-scoped
+  /// decode policy. The live Home board rebuilds its image widgets so the new
+  /// ResizeImage cache key takes effect without an app restart.
+  static VoidCallback? tvHeroArtworkQualityChanged;
+
   /// Fired by the Discover Layout picker after writing `discover_layout`, so
   /// the live Discover tab re-reads the pref and swaps between the grid and
   /// the stage without a restart. Set by the DISCOVER SearchScreen instance

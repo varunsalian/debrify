@@ -36,6 +36,7 @@ import 'services/android_native_downloader.dart';
 import 'services/discover_prefs.dart';
 import 'services/iptv_catalog_db.dart';
 import 'services/storage_service.dart';
+import 'services/tv_hero_artwork_quality_controller.dart';
 import 'services/simkl/simkl_service.dart';
 import 'services/trakt/trakt_service.dart';
 import 'widgets/app_initializer.dart';
@@ -111,11 +112,10 @@ Future<void> _capImageCache() async {
   }
   final cache = PaintingBinding.instance.imageCache;
   cache.maximumSize = 140;
-  // 56 MB: the Home hero decodes 1080-wide backdrops (~2.6 MB each) per rest
-  // — at 40 MB the cache held only ~12 backdrop-equivalents alongside the
-  // posters, so long browse sessions were evicting and re-decoding posters
-  // on every scroll-back (decode churn + texture re-uploads). Still well
-  // under the largeHeap budget on a 2 GB box.
+  // 56 MB bounds the decoded-image working set. Hero Artwork Quality can use
+  // an ~8 MB Full HD landscape texture, but only the active/outgoing hero pair
+  // overlaps; the cache evicts older artwork rather than expanding resident
+  // memory on a constrained TV box.
   cache.maximumSizeBytes = 56 << 20; // 56 MB
 }
 
@@ -213,6 +213,12 @@ Future<void> main() async {
   // Compass for one frame.
   try {
     await StorageService.getParentsGuideStyle();
+  } catch (_) {}
+  // Resolve TV hero decode bounds before first paint. Otherwise a stored Full
+  // HD choice would first decode the default smaller image, then immediately
+  // throw it away and upload a second texture when the async preference lands.
+  try {
+    await TvHeroArtworkQualityController.warm();
   } catch (_) {}
   await _capImageCache();
   await _resolveStartupChannel();

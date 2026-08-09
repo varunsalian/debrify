@@ -74,6 +74,8 @@ class SettingsTvLayout extends StatefulWidget {
   // captions the row.
   final String tvRenderQualityLabel;
   final Future<void> Function() onOpenTvRenderQuality;
+  final String tvHeroArtworkQualityLabel;
+  final Future<void> Function() onOpenTvHeroArtworkQuality;
   final String tvSidebarStyleLabel;
   final Future<void> Function() onOpenTvSidebarStyle;
   final String discoverLayoutLabel;
@@ -139,6 +141,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenTvScreenSize,
     required this.tvRenderQualityLabel,
     required this.onOpenTvRenderQuality,
+    required this.tvHeroArtworkQualityLabel,
+    required this.onOpenTvHeroArtworkQuality,
     required this.tvSidebarStyleLabel,
     required this.onOpenTvSidebarStyle,
     required this.discoverLayoutLabel,
@@ -230,17 +234,15 @@ const List<_Category> _kCategories = [
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
   /// written out here rather than driven by a provider list (Appearance has
-  /// exactly 14 since Looks joined it; About up to 6 with the conditional
-  /// donation row;
+  /// 15; About has up to 6 with the conditional donation row;
   /// Data & Backup up to 5). Connections and Trackers are sized from their
   /// own lists; see the pool computation in [initState].
   ///
   /// MUST cover the largest category: the pane indexes [_paneNodes] directly,
   /// so a row added past the pool throws on build.
-  /// Appearance is the longest fixed category: fourteen rows since Looks
-  /// joined it at index 0. The pool must cover the longest one, or the
+  /// Appearance is the longest fixed category. The pool must cover it, or the
   /// last row of that category has no node and cannot be reached.
-  static const int _kMaxCategoryRows = 14;
+  static const int _kMaxCategoryRows = 15;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -673,22 +675,28 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 focusNode: _paneNodes[7],
               ),
               SettingsTile.spec(
+                SettingsRows.tvHeroArtworkQuality,
+                subtitle: widget.tvHeroArtworkQualityLabel,
+                onTap: widget.onOpenTvHeroArtworkQuality,
+                focusNode: _paneNodes[8],
+              ),
+              SettingsTile.spec(
                 SettingsRows.iptvAppearance,
                 subtitle: widget.iptvStyleLabel,
                 onTap: widget.onOpenIptvStyle,
-                focusNode: _paneNodes[8],
+                focusNode: _paneNodes[9],
               ),
               SettingsTile.spec(
                 SettingsRows.playerGuideStyle,
                 subtitle: widget.playerGuideStyleLabel,
                 onTap: widget.onOpenPlayerGuideStyle,
-                focusNode: _paneNodes[9],
+                focusNode: _paneNodes[10],
               ),
               SettingsTile.spec(
                 SettingsRows.detailPageStyle,
                 subtitle: widget.detailPageStyleLabel,
                 onTap: widget.onOpenDetailPageStyle,
-                focusNode: _paneNodes[10],
+                focusNode: _paneNodes[11],
               ),
               // Node indices MUST stay contiguous in visual order: _paneKey
               // hand-wires Up/Down as node index ± 1, so a row numbered out
@@ -698,19 +706,19 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.appTheme,
                 subtitle: widget.appThemeLabel,
                 onTap: widget.onOpenAppTheme,
-                focusNode: _paneNodes[11],
+                focusNode: _paneNodes[12],
               ),
               SettingsTile.spec(
                 SettingsRows.detailTheme,
                 subtitle: widget.detailThemeLabel,
                 onTap: widget.onOpenDetailTheme,
-                focusNode: _paneNodes[12],
+                focusNode: _paneNodes[13],
               ),
               SettingsTile.spec(
                 SettingsRows.parentsGuideStyle,
                 subtitle: widget.parentsGuideStyleLabel,
                 onTap: widget.onOpenParentsGuideStyle,
-                focusNode: _paneNodes[13],
+                focusNode: _paneNodes[14],
               ),
             ],
           ),
