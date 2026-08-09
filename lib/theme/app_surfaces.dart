@@ -18,20 +18,20 @@ abstract final class AppSurfaces {
 
   static const Map<int, SurfaceKind> tabs = {
     0: SurfaceKind.frozen, //  inert slot (deprecated old Home)
-    1: SurfaceKind.frozen, //  Playlist        — deferred, user call 2026-08-08
-    2: SurfaceKind.frozen, //  Downloads       — deferred, user call 2026-08-08
-    3: SurfaceKind.frozen, //  Debrify TV
+    1: SurfaceKind.themed, //  Playlist
+    2: SurfaceKind.themed, //  Downloads
+    3: SurfaceKind.themed, //  Debrify TV
     4: SurfaceKind.themed, //  Real-Debrid     (Cloud family)
     5: SurfaceKind.themed, //  TorBox          (Cloud family)
     6: SurfaceKind.themed, //  PikPak          (Cloud family)
     7: SurfaceKind.themed, //  Addons
     8: SurfaceKind.themed, //  Settings
-    9: SurfaceKind.frozen, //  Stremio TV
+    9: SurfaceKind.themed, //  Stremio TV
     10: SurfaceKind.themed, // WebDAV          (Cloud family)
     11: SurfaceKind.themed, // Premiumize      (Cloud family)
     12: SurfaceKind.themed, // AllDebrid       (Cloud family)
-    13: SurfaceKind.frozen, // IPTV
-    14: SurfaceKind.frozen, // YouTube
+    13: SurfaceKind.themed, // IPTV
+    14: SurfaceKind.themed, // YouTube
     15: SurfaceKind.themed, // Home
     16: SurfaceKind.themed, // Cloud hub
     17: SurfaceKind.themed, // Search

@@ -114,12 +114,9 @@ class _AppThemePageState extends State<AppThemePage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Text(
-                      'One look for the whole app — experimental. Applies to '
-                      'Home, Search, Discover, the navigation, Cloud, '
-                      'Settings, Addons, Calendar and movie/series pages. '
-                      'IPTV, YouTube, Stremio TV, Debrify TV, Playlist, '
-                      'Downloads and the player deliberately keep the classic '
-                      'look.',
+                      'One look for the whole app — experimental. The video '
+                      'player keeps its own dark theme, so controls stay '
+                      'readable over any video.',
                       style: TextStyle(
                         fontSize: 12.5,
                         height: 1.45,

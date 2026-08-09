@@ -114,7 +114,7 @@ callers:
 | `shimmer.dart` | 3 | Settings, Cloud | player, Classic details |
 | `browse_search_header.dart` | 2 | — | — |
 | `brand_accent.dart` | 2 | — | — |
-| `download_service.dart` | 2 | — | — |
+| `download_service.dart` | 2 | **Cloud ×6** | — |
 
 A shared widget cannot be "tokenised for the frozen side", and a binary
 "token-driven everywhere or literal everywhere" is not sufficient — `tv_text_field`
@@ -122,6 +122,23 @@ alone must satisfy themed Settings, six scheduled surfaces, and the permanently
 frozen player *simultaneously*. `parents_guide_section.dart:17` demonstrates the
 shape that works: **caller-supplied tokens**, so the widget renders under
 whichever palette its host resolves.
+
+**`download_service.dart` is the trap in this table**, and its row said `—`
+until an independent verification pass caught it. The file paints exactly one
+thing — the battery-exemption bottom sheet — and it renders that sheet with the
+*caller's* `BuildContext`: `enqueueDownload(..., BuildContext? context)`
+(`:1584`) stores it, and `_ensureBatteryExemptions(p.context)` (`:2904`) shows
+the sheet at `:909`. Six phase-one **themed** Cloud screens pass their own
+context: `debrid_downloads_screen.dart:797`, `torbox_downloads_screen.dart:1692`,
+`pikpak_files_screen.dart:900`, `premiumize_files_screen.dart:778`,
+`alldebrid_files_screen.dart:581`, `webdav_files_screen.dart:560`.
+
+So tokenising it during step 1 — Downloads, the surface billed as "plausibly one
+commit end to end" — would change the battery sheet inside six already-themed
+Cloud screens. Running this plan's own `theme_rendered_set.py` over the
+phase-one Cloud roots returns `download_service.dart` as the one painting file in
+Cloud's rendered set that phase one does not own: **the tool contradicted the
+table, and the table was wrong.**
 
 Stage 0b's deliverable is therefore a **migration matrix**, not a yes/no: for
 each shared widget, the token parameter, **and the default it takes when a
@@ -146,10 +163,29 @@ Un-freezing Downloads while `downloads_screen.dart:244` still pushes a
 `FrozenLegacyPageRoute` ships a themed list with a legacy child, and nothing in
 `test/theme/` catches it.
 
-**Required before the first landing:** extend `source_guard_test.dart` with the
-inverse assertion — a `FrozenLegacyPageRoute` inside a *themed* surface fails
-unless it is in an explicit player-only allow-list. Without it the ratchet is
-not a ratchet.
+**There is a second direction, and it is already broken today.** A themed
+surface can push a *frozen* surface's screen with a plain `MaterialPageRoute`,
+and then that screen renders themed from one entry point and legacy from
+another. `PlaylistContentViewScreen` was live proof: wrapped in
+`FrozenLegacyPageRoute` from the Playlist tab (`playlist_screen.dart:231`), but
+pushed bare from Search (`search_screen.dart:3184`), so its two
+`Theme.of(context)` reads resolved differently depending on which door the user
+came through. A guard that only looks for stale freezes inside themed files
+cannot see this.
+
+**Both assertions now exist** in `source_guard_test.dart`, and the Search push is
+fixed:
+
+* *a themed surface never pushes a frozen child route* — with an allow-list for
+  the two legitimate cases: playback, and a themed surface pushing into a frozen
+  surface's screen;
+* *a frozen surface's child screen is never pushed unwrapped* — checked **per
+  push**, not per file, since a themed screen legitimately uses
+  `MaterialPageRoute` for its own destinations.
+
+`kThemingPrepared` was also added, listing files converted ahead of their root's
+flip — without it the frozen-surface guard forbids preparatory work and every
+surface would have to move in one unreviewable diff.
 
 ## The three hazards
 
