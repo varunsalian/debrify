@@ -227,9 +227,10 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
   Future<void> _viewItem(Map<String, dynamic> item) async {
     await Navigator.of(context).push(
-      // Playlist is a frozen surface; its pushed content view must carry the
-      // freeze too — pushed routes inherit from ABOVE the tab boundary.
-      FrozenLegacyPageRoute(
+      // Playlist is themed as of phase two, so its content view is themed
+      // too. It was FrozenLegacyPageRoute while the tab was frozen; leaving
+      // the wrapper here would have kept the child legacy under every theme.
+      MaterialPageRoute(
         builder: (context) => PlaylistContentViewScreen(
           playlistItem: item,
           onPlaybackStarted: () => Navigator.of(context).pop(),
@@ -607,6 +608,14 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                         onLeftArrow: () =>
                             MainPageBridge.focusTvSidebar?.call(),
                         onRightArrow: () {},
+                        // The shared TV shell/keyboard chrome follows
+                        // settings.accent, as PlaylistTokens' doc records; the
+                        // panel's ground belongs to the keyboard's own role,
+                        // not to this surface.
+                        accent: app.settings.accent,
+                        keyboardGround: app.youtube.keyboardPanel,
+                        keyboardInk: app.core.tx,
+                        keyboardInkOnAccent: app.inkOn(app.settings.accent),
                         decoration: InputDecoration(
                           hintText: 'Search...',
                           hintStyle: TextStyle(

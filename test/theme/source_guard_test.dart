@@ -171,9 +171,6 @@ void main() {
       'lib/screens/magic_tv_screen.dart', // 12 player pushes
       'lib/screens/playlist_screen.dart', // player push
       'lib/screens/downloads_screen.dart', // player push
-      // Themed, and correctly pushes a FROZEN surface's screen: Search opens
-      // PlaylistContentViewScreen, which belongs to the frozen Playlist tab.
-      'lib/screens/search_screen.dart',
     };
     const stillFrozen = [
       // Phase two flipped Playlist, Downloads, Debrify TV, Stremio TV, IPTV
@@ -201,54 +198,14 @@ void main() {
             'another frozen surface\'s screen: $offenders');
   });
 
-  test('a frozen surface\'s child screen is never pushed unwrapped', () {
-    // The OTHER direction, and the guard above cannot see it. That one asks
-    // "does a themed file still push a freeze?"; this asks "does a themed file
-    // push a FROZEN surface's screen without one?".
-    //
-    // Live example this was written for: PlaylistContentViewScreen is wrapped
-    // in FrozenLegacyPageRoute when opened from the Playlist tab
-    // (playlist_screen.dart:231) but pushed with a plain MaterialPageRoute
-    // from Search (search_screen.dart:3184). The same screen therefore renders
-    // legacy from one entry point and themed from another — a half-frozen
-    // surface reached by the back door, which is exactly what the containment
-    // model is supposed to make impossible.
-    //
-    // Keyed by screen rather than by file because the hazard is the
-    // DESTINATION: a frozen surface's screen must resolve the same palette
-    // however it was reached.
-    const frozenChildScreens = {
-      'PlaylistContentViewScreen': 'lib/screens/playlist_content_view_screen.dart',
-    };
-    final offenders = <String>[];
-    for (final file in _libDartFiles()) {
-      final rel = _rel(file);
-      final code = _code(file);
-      for (final entry in frozenChildScreens.entries) {
-        if (rel == entry.value) continue; // its own defining file
-        if (!RegExp('(?<![A-Za-z0-9_])${entry.key}\\(').hasMatch(code)) {
-          continue;
-        }
-        // Per PUSH, not per file: a themed screen legitimately uses
-        // MaterialPageRoute for its own destinations, so "the file mentions
-        // MaterialPageRoute" proves nothing. Look at the route wrapping THIS
-        // construction — the builder that yields it sits a short way above.
-        for (final m
-            in RegExp('(?<![A-Za-z0-9_])${entry.key}\\(').allMatches(code)) {
-          final from = (m.start - 240).clamp(0, code.length);
-          final preceding = code.substring(from, m.start);
-          if (!preceding.contains('FrozenLegacyPageRoute')) {
-            final line = '\n'.allMatches(code.substring(0, m.start)).length + 1;
-            offenders.add('$rel:$line → ${entry.key}(');
-          }
-        }
-      }
-    }
-    expect(offenders, isEmpty,
-        reason: 'a frozen surface\'s child screen is pushed without the '
-            'legacy freeze, so it renders themed from that entry point and '
-            'legacy from another: $offenders');
-  });
+  // NOTE: the "frozen surface's child screen is never pushed unwrapped" test
+  // lived here. It existed because PlaylistContentViewScreen was wrapped from
+  // the Playlist tab and pushed bare from Search, so the same screen resolved
+  // two different palettes depending on the route. Phase two themed Playlist,
+  // both doors now agree, and playback — the only remaining frozen surface —
+  // is already covered by the VideoPlayerScreen guards above.
+  //
+  // Restore this if a surface is ever frozen again with a pushable child.
 
   test('the split kept its constants alive for frozen callers', () {
     // The whole point of splitting rather than converting: frozen surfaces go

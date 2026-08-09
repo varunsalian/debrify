@@ -240,9 +240,9 @@ class _DownloadsScreenState extends State<DownloadsScreen>
 
   Future<void> _openGroupDetail(TorrentDownloadGroup group) async {
     await Navigator.of(context).push(
-      // Downloads is a frozen surface; its pushed detail screen must carry
-      // the freeze too — pushed routes inherit from ABOVE the tab boundary.
-      FrozenLegacyPageRoute(
+      // Downloads is themed as of phase two, so its detail screen is themed
+      // too. The freeze here was correct only while the tab was frozen.
+      MaterialPageRoute(
         builder: (_) => TorrentDownloadDetailScreen(
           groupId: group.id,
           groupTitle: group.title,
@@ -869,6 +869,17 @@ class _StyledField extends StatelessWidget {
     return TvTextField(
       controller: controller,
       onChanged: onChanged,
+      // The shared TV shell/keyboard chrome follows settings.accent — the rule
+      // DownloadsTokens' own doc states ("the keyboard highlight is
+      // settings.accent"). NOT downloads.accent: legacy paints that indigo
+      // while the keyboard's highlight has always been the violet
+      // settings.accent pins. The panel ground and its ink stay with the
+      // keyboard's own roles, which is why they come from youtube/core rather
+      // than from this surface.
+      accent: app.settings.accent,
+      keyboardGround: app.youtube.keyboardPanel,
+      keyboardInk: app.core.tx,
+      keyboardInkOnAccent: app.inkOn(app.settings.accent),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
