@@ -218,7 +218,10 @@ void main() {
         reason: 'popping the frozen route must hand back to the themed tab');
 
     // A frozen TAB decides at stack root too.
-    AppSurfaceState.instance.publishTab(13); // IPTV — frozen
+    // Tab 0 — the inert deprecated-Home slot, the only tab still frozen after
+    // phase two. It is used here purely as "a frozen tab"; what is being
+    // tested is the classification path, not that particular screen.
+    AppSurfaceState.instance.publishTab(0);
     expect(AppSurfaceState.instance.active, SurfaceKind.frozen);
   });
 
@@ -239,7 +242,7 @@ void main() {
           child: child!,
         ),
         home: AppSurfaces.wrapTab(
-          13, // IPTV — frozen
+          0, // the inert slot — the only tab still frozen after phase two
           Scaffold(body: Builder(builder: (context) {
             frozenBody = context;
             return const SizedBox.shrink();

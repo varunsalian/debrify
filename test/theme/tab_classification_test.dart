@@ -29,7 +29,12 @@ void main() {
     ]..sort();
     // 0 inert slot, 1 Playlist (deferred), 2 Downloads (deferred),
     // 3 Debrify TV, 9 Stremio TV, 13 IPTV, 14 YouTube.
-    expect(frozen, [0, 1, 2, 3, 9, 13, 14]);
+    // Phase two flipped 1/2/3/9/13/14 (Playlist, Downloads, Debrify TV,
+    // Stremio TV, IPTV, YouTube). Index 0 is the inert deprecated-Home slot
+    // and stays frozen — it is unreachable, not deferred, so the end state is
+    // [0] rather than empty. Playback is excluded at its ENTRY POINTS rather
+    // than by tab, so it does not appear here.
+    expect(frozen, [0]);
   });
 
   test('tabCount matches the registry length in main.dart', () {

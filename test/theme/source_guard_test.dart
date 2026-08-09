@@ -2,6 +2,23 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+/// Files inside a still-frozen surface that have been converted to the token
+/// layer ahead of their root's classification flip.
+///
+/// Phase two lands a surface in two parts: preparatory commits that tokenise
+/// leaves while the root stays frozen, then one small commit that lifts the
+/// boundary and flips `AppSurfaces.tabs`. Without this list the frozen-surface
+/// guard below forbids the first part, so the whole surface would have to move
+/// in one unreviewable diff — which is exactly what phase one warned against
+/// (`APP_THEME_ROLLOUT_PLAN.md:417`).
+///
+/// A file listed here reads the app theme but is STILL SHADOWED by its root's
+/// `LegacyThemeBoundary`, so it resolves to legacy and renders unchanged until
+/// the flip. Entries are removed when their surface lands — the list should be
+/// empty between surfaces, and a stale entry means a migration was abandoned
+/// half-done.
+const Set<String> kThemingPrepared = {};
+
 /// Source-level tripwires for the containment rules a type system can't see.
 ///
 /// A hand-maintained allow-list cannot notice the next excluded-screen
@@ -77,14 +94,14 @@ void main() {
     // read here would still RESOLVE — to legacy — and look fine today. It
     // would only bite later, when someone moves the widget or lifts the
     // boundary. Cheaper to forbid the read outright.
+    // Must cover every file a frozen surface RENDERS, not just its tab root.
+    // Fifteen kThemingPrepared entries were previously invisible to this guard
+    // because their paths were absent here — the allow-list looked like it was
+    // doing work while the guard could not see the files at all.
     const frozen = [
-      'lib/widgets/iptv/',
-      'lib/widgets/youtube/',
-      'lib/screens/stremio_tv/',
-      'lib/screens/browse_screen.dart',
-      'lib/screens/magic_tv_screen.dart',
-      'lib/screens/playlist_screen.dart',
-      'lib/screens/downloads_screen.dart',
+      // Phase two flipped Playlist, Downloads, Debrify TV, Stremio TV, IPTV
+      // and YouTube. What remains frozen is PLAYBACK, permanently — it has its
+      // own stable theme and does not follow the app palette.
       'lib/screens/video_player_screen.dart',
       'lib/screens/video_player/',
     ];
@@ -92,10 +109,145 @@ void main() {
     for (final file in _libDartFiles()) {
       final rel = _rel(file);
       if (!frozen.any(rel.startsWith)) continue;
+      if (kThemingPrepared.contains(rel)) continue;
       if (_code(file).contains('AppThemeScope')) offenders.add(rel);
     }
     expect(offenders, isEmpty,
-        reason: 'excluded surfaces must not consume the app theme: $offenders');
+        reason: 'excluded surfaces must not consume the app theme '
+            '(add the file to kThemingPrepared if it is mid-migration): '
+            '$offenders');
+  });
+
+  test('every kThemingPrepared entry is actually inside a frozen surface', () {
+    // Without this, an entry can sit in the allow-list doing nothing because
+    // the guard's prefix list never reaches its path — the allow-list appears
+    // to be holding a file back while the guard is blind to it. Fifteen
+    // entries were in exactly that state.
+    const frozen = [
+      'lib/widgets/iptv/',
+      'lib/screens/iptv/',
+      'lib/widgets/youtube/',
+      'lib/screens/stremio_tv/',
+      'lib/screens/browse_screen.dart',
+      'lib/screens/magic_tv_screen.dart',
+      'lib/screens/debrify_tv/',
+      'lib/screens/playlist_screen.dart',
+      'lib/screens/playlist_content_view_screen.dart',
+      'lib/services/playlist_player_service.dart',
+      'lib/widgets/adaptive_playlist_section.dart',
+      'lib/widgets/playlist_grid_card.dart',
+      'lib/widgets/tvmaze_search_dialog.dart',
+      'lib/screens/downloads_screen.dart',
+      'lib/screens/video_player_screen.dart',
+      'lib/screens/video_player/',
+    ];
+    final stray = kThemingPrepared
+        .where((f) => !frozen.any(f.startsWith))
+        .toList();
+    expect(stray, isEmpty,
+        reason: 'kThemingPrepared entry outside every frozen prefix, so the '
+            'frozen-surface guard cannot see it: $stray');
+  });
+
+  test('a themed surface never pushes a frozen child route', () {
+    // The inverse of the guard above, and the one that would otherwise ship a
+    // half-frozen tab. Flipping a tab's classification does NOT theme the
+    // routes it pushes — Navigator.push does not inherit from below, which is
+    // why phase one wrapped exclusions at their entry points rather than
+    // wrapping the themed side.
+    //
+    // So a surface that has LEFT the frozen set must not still push
+    // FrozenLegacyPageRoute, or its list is themed while its detail is legacy.
+    // Two deliberate exceptions, both allow-listed by name:
+    //   * playback, which stays outside the app palette permanently (see
+    //     plan/APP_THEME_PHASE_TWO_PLAN.md hazard 2);
+    //   * a themed surface pushing INTO a frozen surface's own screen, which
+    //     is not a leftover but the correct containment — see the sibling test
+    //     below, which enforces the other direction.
+    const frozenDestinationPushers = {
+      'lib/theme/legacy_theme_boundary.dart', // defines it
+      'lib/theme/app_surfaces.dart', // the boundary factory that vends it
+      'lib/services/video_player_launcher.dart', // the shared player factory
+      'lib/screens/magic_tv_screen.dart', // 12 player pushes
+      'lib/screens/playlist_screen.dart', // player push
+      'lib/screens/downloads_screen.dart', // player push
+      // Themed, and correctly pushes a FROZEN surface's screen: Search opens
+      // PlaylistContentViewScreen, which belongs to the frozen Playlist tab.
+      'lib/screens/search_screen.dart',
+    };
+    const stillFrozen = [
+      // Phase two flipped Playlist, Downloads, Debrify TV, Stremio TV, IPTV
+      // and YouTube. What remains frozen is PLAYBACK, permanently — it has its
+      // own stable theme and does not follow the app palette.
+      'lib/screens/video_player_screen.dart',
+      'lib/screens/video_player/',
+    ];
+    final offenders = <String>[];
+    for (final file in _libDartFiles()) {
+      final rel = _rel(file);
+      if (frozenDestinationPushers.contains(rel)) continue;
+      if (stillFrozen.any(rel.startsWith)) continue;
+      // Both spellings: pushExcluded is the factory wrapper over the route,
+      // so searching only for the route class misses half the call sites.
+      final code = _code(file);
+      if (code.contains('FrozenLegacyPageRoute') ||
+          code.contains('pushExcluded')) {
+        offenders.add(rel);
+      }
+    }
+    expect(offenders, isEmpty,
+        reason: 'a themed surface still pushes a frozen child route — remove '
+            'the freeze, or allow-list it if the destination is playback or '
+            'another frozen surface\'s screen: $offenders');
+  });
+
+  test('a frozen surface\'s child screen is never pushed unwrapped', () {
+    // The OTHER direction, and the guard above cannot see it. That one asks
+    // "does a themed file still push a freeze?"; this asks "does a themed file
+    // push a FROZEN surface's screen without one?".
+    //
+    // Live example this was written for: PlaylistContentViewScreen is wrapped
+    // in FrozenLegacyPageRoute when opened from the Playlist tab
+    // (playlist_screen.dart:231) but pushed with a plain MaterialPageRoute
+    // from Search (search_screen.dart:3184). The same screen therefore renders
+    // legacy from one entry point and themed from another — a half-frozen
+    // surface reached by the back door, which is exactly what the containment
+    // model is supposed to make impossible.
+    //
+    // Keyed by screen rather than by file because the hazard is the
+    // DESTINATION: a frozen surface's screen must resolve the same palette
+    // however it was reached.
+    const frozenChildScreens = {
+      'PlaylistContentViewScreen': 'lib/screens/playlist_content_view_screen.dart',
+    };
+    final offenders = <String>[];
+    for (final file in _libDartFiles()) {
+      final rel = _rel(file);
+      final code = _code(file);
+      for (final entry in frozenChildScreens.entries) {
+        if (rel == entry.value) continue; // its own defining file
+        if (!RegExp('(?<![A-Za-z0-9_])${entry.key}\\(').hasMatch(code)) {
+          continue;
+        }
+        // Per PUSH, not per file: a themed screen legitimately uses
+        // MaterialPageRoute for its own destinations, so "the file mentions
+        // MaterialPageRoute" proves nothing. Look at the route wrapping THIS
+        // construction — the builder that yields it sits a short way above.
+        for (final m
+            in RegExp('(?<![A-Za-z0-9_])${entry.key}\\(').allMatches(code)) {
+          final from = (m.start - 240).clamp(0, code.length);
+          final preceding = code.substring(from, m.start);
+          if (!preceding.contains('FrozenLegacyPageRoute')) {
+            final line = '\n'.allMatches(code.substring(0, m.start)).length + 1;
+            offenders.add('$rel:$line → ${entry.key}(');
+          }
+        }
+      }
+    }
+    expect(offenders, isEmpty,
+        reason: 'a frozen surface\'s child screen is pushed without the '
+            'legacy freeze, so it renders themed from that entry point and '
+            'legacy from another: $offenders');
   });
 
   test('the split kept its constants alive for frozen callers', () {
