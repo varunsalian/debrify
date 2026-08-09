@@ -9,6 +9,60 @@ import '../../services/debrify_image_cache.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/dominant_color.dart';
 
+/// What a card is, once a shelf stops being a list of TITLES.
+///
+/// Continue Watching and the catalog are `StremioMeta`; the favourites rails
+/// are not. A playlist is a container, not a title — it has no poster of its
+/// own, which is why poster OVERRIDES exist — and an IPTV channel's logo is a
+/// wide, often transparent mark that a 2:3 crop destroys. Forcing all four
+/// through a poster model is how they end up looking wrong in four different
+/// ways.
+class SpotlightCard {
+  /// Poster, channel logo, or a user override. Null draws the placeholder.
+  final String? image;
+  final String title;
+
+  /// Item count, "LIVE", a genre — whatever this KIND of thing is identified
+  /// by beyond its name.
+  final String? subtitle;
+
+  /// 0..100, or null.
+  final double? progress;
+
+  final VoidCallback onOpen;
+  final VoidCallback? onOptions;
+  final SpotlightCardShape shape;
+
+  const SpotlightCard({
+    required this.title,
+    required this.onOpen,
+    this.image,
+    this.subtitle,
+    this.progress,
+    this.onOptions,
+    this.shape = SpotlightCardShape.poster,
+  });
+}
+
+/// Aspect and fit, per kind.
+enum SpotlightCardShape {
+  /// 2:3, art cropped to fill. Titles.
+  poster(2 / 3, BoxFit.cover),
+
+  /// 1:1, art CONTAINED on a plate. A channel logo is a mark, not a still:
+  /// cropping it to fill cuts the wordmark in half.
+  channel(1, BoxFit.contain),
+
+  /// 16:9, cropped. Containers and wide art.
+  wide(16 / 9, BoxFit.cover);
+
+  const SpotlightCardShape(this.aspect, this.fit);
+
+  /// width ÷ height.
+  final double aspect;
+  final BoxFit fit;
+}
+
 /// One row on the board.
 ///
 /// [progressOf] is what makes Continue Watching possible without the board
@@ -16,30 +70,17 @@ import '../../utils/dominant_color.dart';
 /// item simply draws no bars.
 class SpotlightShelf {
   final String title;
-  final List<StremioMeta> items;
+  final List<SpotlightCard> items;
 
   /// This shelf's focus nodes, owned by the host so focus survives a rebuild.
   /// Carried HERE rather than in a parallel list, because two lists that must
   /// stay the same length eventually will not be.
   final List<FocusNode> nodes;
 
-  /// Opens an item. Carries its own addon, so a shelf assembled from several
-  /// catalogs still opens each title against the right one.
-  final void Function(StremioMeta) onOpen;
-
-  /// 0..100, or null. Drives the progress bar on a card.
-  final double? Function(StremioMeta)? progressOf;
-
-  /// Long-press / OK-hold, where the shelf has one.
-  final void Function(StremioMeta)? onOptions;
-
   const SpotlightShelf({
     required this.title,
     required this.items,
     required this.nodes,
-    required this.onOpen,
-    this.progressOf,
-    this.onOptions,
   });
 }
 
@@ -813,17 +854,14 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             padding: EdgeInsets.symmetric(horizontal: m.gutter),
             itemCount: section.items.length,
             separatorBuilder: (_, __) => SizedBox(width: m.gap),
-            itemBuilder: (context, c) => _Poster(
-              width: m.poster,
+            itemBuilder: (context, c) => _Card(
+              card: section.items[c],
+              node: c < nodes.length ? nodes[c] : null,
+              // Every shape shares the ROW's height and takes the width its
+              // aspect implies, so a shelf that mixes posters and channel
+              // tiles sits on one baseline instead of stepping up and down.
               height: m.posterH,
               caption: m.caption,
-              item: section.items[c],
-              node: c < nodes.length ? nodes[c] : null,
-              progress: section.progressOf?.call(section.items[c]),
-              onTap: () => section.onOpen(section.items[c]),
-              onOptions: section.onOptions == null
-                  ? null
-                  : () => section.onOptions!(section.items[c]),
             ),
           ),
         ),
@@ -872,79 +910,80 @@ class _LogoOrTitle extends StatelessWidget {
   }
 }
 
-class _Poster extends StatefulWidget {
-  final StremioMeta item;
+class _Card extends StatefulWidget {
+  final SpotlightCard card;
   final FocusNode? node;
-  final VoidCallback onTap;
 
-  /// 0..100. A Continue Watching card without one is just a poster.
-  final double? progress;
-  final VoidCallback? onOptions;
-
-  /// Sized by the shelf from the viewport, not by a constant here — see [_M].
-  final double width;
+  /// The ROW's height. Width follows from the shape's aspect, so a shelf that
+  /// mixes posters and channel tiles keeps one baseline.
   final double height;
   final double caption;
 
-  const _Poster({
-    required this.item,
+  const _Card({
+    required this.card,
     required this.node,
-    required this.onTap,
-    required this.width,
     required this.height,
     required this.caption,
-    this.progress,
-    this.onOptions,
   });
 
   @override
-  State<_Poster> createState() => _PosterState();
+  State<_Card> createState() => _CardState();
 }
 
-class _PosterState extends State<_Poster> {
+class _CardState extends State<_Card> {
   bool _f = false;
 
   @override
   Widget build(BuildContext context) {
-    final url = widget.item.poster;
+    final c = widget.card;
+    final w = widget.height * c.shape.aspect;
+    final url = c.image;
+    final contained = c.shape.fit == BoxFit.contain;
+
     final card = ParallaxFocus(
       focused: _f,
       radius: BorderRadius.circular(7),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(7),
         child: SizedBox(
-          width: widget.width,
+          width: w,
           height: widget.height,
           child: Stack(
             fit: StackFit.expand,
             children: [
+              // A contained mark needs a plate behind it: channel logos are
+              // frequently light-on-transparent and vanish on the ground.
+              ColoredBox(
+                color: contained
+                    ? const Color(0xFF26272A)
+                    : const Color(0xFF17171A),
+              ),
               if (url != null && url.isNotEmpty)
-                CachedNetworkImage(
-                  imageUrl: url,
-                  fit: BoxFit.cover,
-                  cacheManager: DebrifyImageCache.manager,
-                  memCacheWidth: 300,
-                  placeholder: (_, __) =>
-                      const ColoredBox(color: Color(0xFF17171A)),
-                  errorWidget: (_, __, ___) =>
-                      const ColoredBox(color: Color(0xFF17171A)),
-                )
-              else
-                const ColoredBox(color: Color(0xFF17171A)),
-              if ((widget.progress ?? 0) > 0 && (widget.progress ?? 0) < 100)
+                Padding(
+                  padding: EdgeInsets.all(contained ? w * 0.14 : 0),
+                  child: CachedNetworkImage(
+                    imageUrl: url,
+                    fit: c.shape.fit,
+                    cacheManager: DebrifyImageCache.manager,
+                    memCacheWidth: 400,
+                    placeholder: (_, __) => const SizedBox.shrink(),
+                    errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+              if ((c.progress ?? 0) > 0 && (c.progress ?? 0) < 100)
                 Positioned(
                   left: 0,
                   right: 0,
                   bottom: 0,
                   child: LinearProgressIndicator(
-                    value: widget.progress! / 100,
+                    value: c.progress! / 100,
                     minHeight: 2,
                     backgroundColor: Colors.black.withValues(alpha: 0.45),
                     valueColor: const AlwaysStoppedAnimation(Colors.white),
                   ),
                 ),
-              // The caption sits INSIDE a poster, over a gradient bed — below
-              // it only on a 16:9 cell. That is a rule, not a preference.
+              // The caption sits INSIDE over a gradient bed — below the card
+              // only on a 16:9 episode cell, which this is not.
               Positioned(
                 left: 0,
                 right: 0,
@@ -959,15 +998,31 @@ class _PosterState extends State<_Poster> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(7, 26, 7, 7),
-                    child: Text(
-                      widget.item.name,
-                      maxLines: 1,
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: widget.caption,
-                        color: Colors.white.withValues(alpha: 0.78),
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          c.title,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: widget.caption,
+                            color: Colors.white.withValues(alpha: 0.86),
+                          ),
+                        ),
+                        if ((c.subtitle ?? '').isNotEmpty)
+                          Text(
+                            c.subtitle!,
+                            maxLines: 1,
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: widget.caption * 0.85,
+                              color: Colors.white.withValues(alpha: 0.58),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -977,21 +1032,19 @@ class _PosterState extends State<_Poster> {
         ),
       ),
     );
+
     if (widget.node == null) return card;
     return Focus(
       focusNode: widget.node,
       onFocusChange: (v) {
         setState(() => _f = v);
-        if (v) {
-          final ctx = context;
-          if (ctx.findRenderObject() is RenderBox) {
-            Scrollable.ensureVisible(
-              ctx,
-              alignment: 0.5,
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-            );
-          }
+        if (v && context.findRenderObject() is RenderBox) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+          );
         }
       },
       onKeyEvent: (_, e) {
@@ -1000,14 +1053,14 @@ class _PosterState extends State<_Poster> {
         if (k == LogicalKeyboardKey.enter ||
             k == LogicalKeyboardKey.select ||
             k == LogicalKeyboardKey.gameButtonA) {
-          widget.onTap();
+          c.onOpen();
           return KeyEventResult.handled;
         }
         return KeyEventResult.ignored;
       },
       child: GestureDetector(
-        onTap: widget.onTap,
-        onLongPress: widget.onOptions,
+        onTap: c.onOpen,
+        onLongPress: c.onOptions,
         child: card,
       ),
     );

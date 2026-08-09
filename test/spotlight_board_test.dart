@@ -38,13 +38,17 @@ SpotlightShelf _section(String title, List<StremioMeta> items,
         {List<FocusNode>? nodes}) =>
     SpotlightShelf(
       title: title,
-      items: items,
       nodes: nodes ?? _rowNodes(items.length),
-      onOpen: (_) {},
+      items: [
+        for (final m in items)
+          SpotlightCard(image: m.poster, title: m.name, onOpen: () {}),
+      ],
     );
 
 List<FocusNode> _rowNodes(int n) =>
     [for (var i = 0; i < n; i++) FocusNode(debugLabel: 'cell$i')];
+
+void _noop() {}
 
 void main() {
   late FocusNode hero;
@@ -245,10 +249,15 @@ void main() {
     await tester.pumpWidget(host([a], [
       SpotlightShelf(
         title: 'Continue Watching',
-        items: [a],
         nodes: _rowNodes(1),
-        onOpen: (_) {},
-        progressOf: (_) => 40,
+        items: [
+          SpotlightCard(
+            image: a.poster,
+            title: a.name,
+            progress: 40,
+            onOpen: () {},
+          ),
+        ],
       ),
       _section('Popular', [a]),
     ]));
@@ -399,6 +408,34 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byKey(marker), findsNothing);
+  });
+
+  testWidgets('a channel tile CONTAINS its logo; a poster fills', (tester) async {
+    // The reason the card model generalised at all: a channel logo is a wide,
+    // often transparent mark. A 2:3 crop cuts the wordmark in half, so channel
+    // cards are square and contain their art on a plate.
+    final a = _meta('tt1', 'Alpha');
+    await tester.pumpWidget(host([a], [
+      SpotlightShelf(
+        title: 'IPTV Favourites',
+        nodes: _rowNodes(1),
+        items: const [
+          SpotlightCard(
+            title: 'A Channel',
+            subtitle: 'LIVE',
+            shape: SpotlightCardShape.channel,
+            onOpen: _noop,
+          ),
+        ],
+      ),
+    ]));
+    await tester.pumpAndSettle();
+    expect(find.text('A Channel'), findsOneWidget);
+    expect(find.text('LIVE'), findsOneWidget);
+    expect(SpotlightCardShape.channel.fit, BoxFit.contain);
+    expect(SpotlightCardShape.poster.fit, BoxFit.cover);
+    // Square, so the mark is not cropped to a portrait slot.
+    expect(SpotlightCardShape.channel.aspect, 1);
   });
 
   testWidgets('a single-item reel shows no dots', (tester) async {

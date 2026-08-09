@@ -5192,27 +5192,129 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     for (final row in _cwRows)
       SpotlightShelf(
         title: row.tag == null ? row.title : '${row.title} · ${row.tag}',
-        items: row.items,
         nodes: row.nodes,
-        onOpen: row.onOpen,
-        // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
-        progressOf: (m) {
-          final p = row.progressOf(m);
-          return p == null ? null : p * 100;
-        },
-        onOptions: row.onQuickPlay,
+        items: [
+          for (final m in row.items)
+            SpotlightCard(
+              image: m.poster,
+              title: m.name,
+              // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
+              progress: (row.progressOf(m) ?? 0) * 100,
+              onOpen: () => row.onOpen(m),
+              onOptions: () => row.onQuickPlay(m),
+            ),
+        ],
       ),
+    for (final ref in _favRowKinds) _spotlightFavShelf(ref),
     for (var i = 0; i < _sections.length; i++)
       SpotlightShelf(
         title: _sections[i].title,
-        items: _sections[i].items,
         nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
-        onOpen: (item) => _openItem(item, _sections[i].addon),
+        items: [
+          for (final m in _sections[i].items)
+            SpotlightCard(
+              image: m.poster,
+              title: m.name,
+              onOpen: () => _openItem(m, _sections[i].addon),
+            ),
+        ],
       ),
   ];
 
+  /// A favourites rail as Spotlight cards.
+  ///
+  /// The four kinds are NOT the same shape. A playlist is a container rather
+  /// than a title, so it keeps the poster it was given (or its override) and
+  /// says how many items it holds. The three channel kinds carry LOGOS — wide,
+  /// frequently transparent marks — which a 2:3 crop cuts in half, so they get
+  /// a square tile that contains the art on a plate instead of filling with it.
+  SpotlightShelf _spotlightFavShelf(_FavRowRef ref) {
+    final nodes = _favNodesFor(ref);
+    if (ref.isIptvList) {
+      final row = _iptvListRows[ref.list];
+      return SpotlightShelf(
+        title: row.title,
+        nodes: nodes,
+        items: [
+          for (final ch in row.channels)
+            SpotlightCard(
+              image: ch.logoUrl,
+              title: ch.name,
+              subtitle: 'LIVE',
+              shape: SpotlightCardShape.channel,
+              onOpen: () => _playIptvListChannel(ch),
+            ),
+        ],
+      );
+    }
+    switch (ref.kind) {
+      case _FavKind.playlist:
+        return SpotlightShelf(
+          title: 'Playlists',
+          nodes: nodes,
+          items: [
+            for (final item in _playlistItems)
+              SpotlightCard(
+                image: item['posterUrl'] as String?,
+                title: (item['title'] as String?) ?? 'Unknown',
+                progress: _playlistProgressFor(item),
+                onOpen: () => _onPlaylistItemTap(item),
+              ),
+          ],
+        );
+      case _FavKind.iptv:
+        return SpotlightShelf(
+          title: 'IPTV Favourites',
+          nodes: nodes,
+          items: [
+            for (final ch in _iptvFavChannels)
+              SpotlightCard(
+                image: ch.logoUrl,
+                title: ch.name,
+                subtitle: 'LIVE',
+                shape: SpotlightCardShape.channel,
+                onOpen: () => _playIptvChannel(ch),
+              ),
+          ],
+        );
+      case _FavKind.debrify:
+        return SpotlightShelf(
+          title: 'Debrify TV',
+          nodes: nodes,
+          items: [
+            for (final ch in _tvFavChannels)
+              SpotlightCard(
+                title: ch.name,
+                subtitle: 'CHANNEL ${ch.channelNumber}',
+                shape: SpotlightCardShape.channel,
+                onOpen: () => _playChannel(ch),
+              ),
+          ],
+        );
+      case _FavKind.stremio:
+        return SpotlightShelf(
+          title: 'Stremio TV',
+          nodes: nodes,
+          items: [
+            for (final ch in _stvFavChannels)
+              SpotlightCard(
+                title: ch.displayName,
+                subtitle: 'STREMIO TV',
+                shape: SpotlightCardShape.channel,
+                onOpen: () => _playStremioTvChannel(ch),
+              ),
+          ],
+        );
+    }
+  }
+
   Widget _buildSpotlightBoard() {
-    final cwCount = _cwRows.length;
+    // Shelf indices are CW, then favourites, then catalog — so the catalog
+    // row a shelf index maps to is offset by BOTH leading groups. Snapshotted
+    // rather than recomputed in the callback: both getters can change between
+    // this build and the callback firing, and paging the wrong row (or one out
+    // of range) is the result.
+    final leading = _cwRows.length + _favRowKinds.length;
     return SpotlightBoard(
       key: _spotlightKey,
       hero: _spotlightHero,
@@ -5220,15 +5322,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       heroNode: _spotlightHeroNode,
       heroAddon: _spotlightHeroSection?.addon,
       onHeroOpen: _openItem,
-      // Row indices here are SHELF indices, and the CW shelves sit in front
-      // of the catalog ones — so the catalog row this maps to is offset by
-      // however many CW shelves are showing.
-      //
-      // SNAPSHOT, not `_cwRows.length` read at callback time: `_cwRows` is a
-      // computed getter, and a CW row appearing or disappearing between this
-      // build and the callback would page the wrong catalog row.
       onLoadMoreRow: (row) {
-        final catalogRow = row - cwCount;
+        final catalogRow = row - leading;
         if (catalogRow >= 0) unawaited(_loadMoreRow(catalogRow));
       },
       onLoadMoreShelves: () => unawaited(_loadMoreBoard()),
