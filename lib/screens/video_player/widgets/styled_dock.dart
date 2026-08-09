@@ -572,7 +572,11 @@ class StyledDock extends StatelessWidget {
     );
   }
 
-  /// Centred transport above the scrubber, tools wrapping below.
+  /// Centred transport above the scrubber, tools below — capped at two rows.
+  ///
+  /// An uncapped `Wrap` is a wall: a session with every capability produced
+  /// six rows of chips and a dock that ate the screen. Anything past two rows
+  /// goes to More, the same escape the narrow arrangement uses.
   Widget _twoTier(BuildContext context, List<_Tool> tools) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -584,34 +588,69 @@ class StyledDock extends StatelessWidget {
         SizedBox(height: metrics.gap),
         if (!hideSeekbar) _scrubber(context),
         SizedBox(height: metrics.gap),
-        Wrap(
-          spacing: metrics.gap,
-          runSpacing: metrics.gap,
-          alignment: arrangement == DockArrangement.wide
-              ? WrapAlignment.center
-              : WrapAlignment.start,
-          children: [
-            for (final tool in tools)
-              DockChip(
-                icon: tool.icon,
-                label: tool.value == null
-                    ? tool.label
-                    : '${tool.label} · ${tool.value}',
-                active: tool.active,
-                tint: tool.tint,
-                onPressed: tool.onPressed,
-                metrics: metrics,
-                palette: palette,
-              ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final scaledLabel = MediaQuery.textScalerOf(
+              context,
+            ).scale(metrics.label);
+            String labelFor(_Tool t) =>
+                t.value == null ? t.label : '${t.label} · ${t.value}';
+            double chipWidth(String text) =>
+                metrics.icon +
+                metrics.padX * 2 +
+                metrics.gap * 0.75 +
+                text.length * scaledLabel * 0.62;
+
+            // Budget every slot against the WIDEST chip rather than each
+            // chip's own estimate. `Wrap` re-lays by real width, so a
+            // per-chip estimate that runs even slightly short yields a third
+            // row — which is what shipped. Budgeting uniformly by the widest
+            // can only ever show too few, never too many.
+            var widest = metrics.icon + metrics.padX * 2 + 40;
+            for (final tool in tools) {
+              final w = chipWidth(labelFor(tool));
+              if (w > widest) widest = w;
+            }
+            final perRow = (constraints.maxWidth / (widest + metrics.gap))
+                .floor()
+                .clamp(1, tools.length + 1);
+            final capacity = perRow * 2;
+            final shown = tools.length <= capacity
+                ? tools
+                : tools.take(capacity - 1).toList();
+
+            return Wrap(
+              spacing: metrics.gap,
+              runSpacing: metrics.gap,
+              alignment: WrapAlignment.center,
+              children: [
+                for (final tool in shown)
+                  DockChip(
+                    icon: tool.icon,
+                    label: labelFor(tool),
+                    active: tool.active,
+                    tint: tool.tint,
+                    onPressed: tool.onPressed,
+                    metrics: metrics,
+                    palette: palette,
+                  ),
+                if (shown.length < tools.length)
+                  DockChip(
+                    icon: Icons.more_horiz_rounded,
+                    label: 'More',
+                    active: true,
+                    onPressed: () => _openOverflow(context, tools),
+                    metrics: metrics,
+                    palette: palette,
+                  ),
+              ],
+            );
+          },
         ),
       ],
     );
   }
 
-  /// Zones: transport + time on the left, what's playing centred, icon-only
-  /// tools on the right. Nothing scrolls, and the labels move into tooltips
-  /// because a pointer can hover but a thumb cannot.
   Widget _wide(BuildContext context, List<_Tool> tools) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -629,36 +668,48 @@ class StyledDock extends StatelessWidget {
             Expanded(child: _nowPlaying()),
             SizedBox(width: metrics.gap * 1.5),
             Flexible(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                reverse: true,
-                child: Row(
-                  children: [
-                    for (final tool in tools) ...[
-                      DockChip(
-                        icon: tool.icon,
-                        label: tool.value == null
-                            ? tool.label
-                            : '${tool.label} · ${tool.value}',
-                        showLabel: false,
-                        active: tool.active,
-                        tint: tool.tint,
-                        onPressed: tool.onPressed,
-                        metrics: metrics,
-                        palette: palette,
-                      ),
-                      SizedBox(width: metrics.gap * 0.75),
+              // reverse: true keeps the last tools visible, so anything that
+              // does not fit is cut at the LEFT. Without a fade that reads as
+              // a rendering fault rather than "there is more".
+              child: ShaderMask(
+                shaderCallback: (rect) => const LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [Color(0x00000000), Color(0xFF000000)],
+                  stops: [0.0, 0.05],
+                ).createShader(rect),
+                blendMode: BlendMode.dstIn,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  reverse: true,
+                  child: Row(
+                    children: [
+                      for (final tool in tools) ...[
+                        DockChip(
+                          icon: tool.icon,
+                          label: tool.value == null
+                              ? tool.label
+                              : '${tool.label} · ${tool.value}',
+                          showLabel: false,
+                          active: tool.active,
+                          tint: tool.tint,
+                          onPressed: tool.onPressed,
+                          metrics: metrics,
+                          palette: palette,
+                        ),
+                        SizedBox(width: metrics.gap * 0.75),
+                      ],
+                      if (showFullscreen && onFullscreen != null)
+                        DockChip(
+                          icon: Icons.fullscreen_rounded,
+                          label: 'Fullscreen',
+                          showLabel: false,
+                          onPressed: onFullscreen!,
+                          metrics: metrics,
+                          palette: palette,
+                        ),
                     ],
-                    if (showFullscreen && onFullscreen != null)
-                      DockChip(
-                        icon: Icons.fullscreen_rounded,
-                        label: 'Fullscreen',
-                        showLabel: false,
-                        onPressed: onFullscreen!,
-                        metrics: metrics,
-                        palette: palette,
-                      ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -684,7 +735,7 @@ class StyledDock extends StatelessWidget {
           color: palette.ink,
         ),
         SizedBox(
-          width: metrics.target * 1.6,
+          width: metrics.target * 2.4,
           child: SliderTheme(
             data: SliderTheme.of(context).copyWith(
               trackHeight: metrics.trackHeight * 0.75,

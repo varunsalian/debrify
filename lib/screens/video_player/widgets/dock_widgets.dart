@@ -41,6 +41,11 @@ class DockChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = Row(
       mainAxisSize: MainAxisSize.min,
+      // Centred so an icon-only chip sits in the middle of its minWidth box.
+      // The Container must NOT use `alignment` for this: a Container with an
+      // alignment expands to fill bounded constraints, which made every chip
+      // in the tools Wrap a full-width row.
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(
           icon,
@@ -104,7 +109,6 @@ class DockChip extends StatelessWidget {
                   width: 1,
                 ),
               ),
-              alignment: Alignment.center,
               child: content,
             ),
           ),
