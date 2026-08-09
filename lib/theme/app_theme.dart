@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/detail/theme/detail_themes.dart';
+import 'app_motion.dart';
+import 'app_shape.dart';
+import 'app_type.dart';
 
 /// App-wide theme: the details-page token core plus the per-surface role
 /// tokens the chrome needs.
@@ -46,6 +49,19 @@ class AppTheme {
   final IptvTokens iptv;
   final ShellTokens shell;
 
+  /// The non-colour half of the look — corner scale, focus ring, elevation,
+  /// texture. See `app_shape.dart` for why this is a SCALE and not five named
+  /// radii.
+  final ShapeTokens shape;
+
+  /// Typography. Read only by `AppThemeAdapter.themed`; the legacy path keeps
+  /// its verbatim construction.
+  final TypeTokens type;
+
+  /// Tempo. Sites resolve it through `AppMotion.of(context)`, never directly —
+  /// reduced motion needs a context.
+  final MotionTokens motion;
+
   /// Light chrome ⇔ the ground reads light. One stated threshold, everywhere:
   /// `ground.computeLuminance() > 0.5`. Broadsheet (≈0.86) and Concrete
   /// (≈0.57) land light; every other shipped theme lands dark.
@@ -68,6 +84,9 @@ class AppTheme {
     required this.debrifyTv,
     required this.iptv,
     required this.shell,
+    required this.shape,
+    required this.type,
+    required this.motion,
     required this.brightness,
     required this.sheetSurface,
   });
@@ -183,6 +202,13 @@ class AppTheme {
       isLegacy: false,
       core: core,
       brightness: light ? Brightness.light : Brightness.dark,
+      // The non-colour half. All three derive from the SAME core the colours
+      // do, so a theme cannot end up with one palette's shape and another's
+      // ink — and all three are pure functions of it, so they cost nothing
+      // beyond the memoized derivation the controller already does.
+      shape: ShapeTokens.fromDetail(core),
+      type: TypeTokens.fromDetail(core),
+      motion: MotionTokens.fromDetail(core),
       sheetSurface: mix(ground, tx, 0.08),
       home: HomeTokens(
         bg: ground,
@@ -1763,6 +1789,15 @@ abstract final class AppThemes {
     isLegacy: true,
     core: DetailThemes.signal,
     brightness: Brightness.dark,
+    // Every one of these is a NO-OP by construction, which is what makes the
+    // shape sweep safe: `scale: 1` means `shape.br(12)` IS
+    // `BorderRadius.circular(12)`, a null family means Inter, and `scale: 1`
+    // motion means the literal a site already had. Legacy cannot drift here
+    // the way it can on a colour, because there is no legacy geometry token
+    // to disagree with — only arithmetic identity.
+    shape: ShapeTokens.legacy,
+    type: TypeTokens.legacy,
+    motion: MotionTokens.legacy,
     // cw_card_menu, the two detail quick-action sheets, the episode sheet
     sheetSurface: const Color(0xFF141019),
     home: HomeTokens(
