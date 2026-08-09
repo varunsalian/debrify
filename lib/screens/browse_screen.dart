@@ -141,6 +141,15 @@ class _BrowseScreenState extends State<BrowseScreen> {
               // ring) from this one ink, so the page's text colour carries the
               // whole set instead of a hardcoded white that vanishes on paper.
               ink: app.core.tx,
+              // The in-app keyboard this header raises. `youtube.focus` is the
+              // token that pins `TvTextField.accent` — the DPAD cursor role,
+              // which is what a highlighted keycap is — and it themes IPTV's
+              // header too: both sources reach this one widget, and the
+              // keyboard is the same surface whichever raised it.
+              accent: app.youtube.focus,
+              keyboardGround: app.youtube.keyboardPanel,
+              keyboardInk: app.core.tx,
+              keyboardInkOnAccent: app.inkOn(app.youtube.focus),
               hintText: widget.hintText,
               onChanged: widget.submitOnly ? null : _onChanged,
               onSubmitted: widget.submitOnly ? _onSubmitted : null,

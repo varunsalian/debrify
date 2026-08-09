@@ -46,6 +46,34 @@ class BrowseSearchHeader extends StatefulWidget {
   /// edge.
   final Color? focusedBorderColor;
 
+  // ───────────────────────────────────── the in-app TV keyboard this raises
+  //
+  // Pure pass-throughs to [TvTextField]: this header owns none of the
+  // keyboard's look, it only forwards the caller's tokens so the panel it
+  // raises is themed by the same surface that themes the field. Null on every
+  // one — [TvTextField] and [TvKeyboardPanel] then land on the literals that
+  // shipped, which is what keeps a caller that passes nothing (and the
+  // permanently-legacy player) byte-identical.
+
+  /// The keyboard's filled accent: highlighted keycap, latched shift, mic
+  /// disc.
+  ///
+  /// Distinct from [focusedBorderColor] even though `TvTextField.accent` can
+  /// also paint a shell ring: this header always supplies a `focusedBorder`,
+  /// so the ring comes from that and this value reaches the keyboard only.
+  final Color? accent;
+
+  /// The keyboard panel's ground.
+  final Color? keyboardGround;
+
+  /// The keyboard panel's foreground; its alphas ride on top.
+  final Color? keyboardInk;
+
+  /// Keycap label ON the filled [accent]. Must be contrast-scored against that
+  /// accent, not taken from page ink — light accents make a white label
+  /// invisible.
+  final Color? keyboardInkOnAccent;
+
   const BrowseSearchHeader({
     super.key,
     required this.controller,
@@ -58,6 +86,10 @@ class BrowseSearchHeader extends StatefulWidget {
     this.ink = Colors.white,
     this.fillColor,
     this.focusedBorderColor,
+    this.accent,
+    this.keyboardGround,
+    this.keyboardInk,
+    this.keyboardInkOnAccent,
   });
 
   @override
@@ -104,6 +136,10 @@ class _BrowseSearchHeaderState extends State<BrowseSearchHeader> {
         onSubmitted: widget.onSubmitted,
         onDownArrow: widget.onDownArrow,
         textInputAction: TextInputAction.search,
+        accent: widget.accent,
+        keyboardGround: widget.keyboardGround,
+        keyboardInk: widget.keyboardInk,
+        keyboardInkOnAccent: widget.keyboardInkOnAccent,
         decoration: InputDecoration(
           hintText: widget.hintText,
           hintStyle: TextStyle(color: ink.withValues(alpha: 0.3)),

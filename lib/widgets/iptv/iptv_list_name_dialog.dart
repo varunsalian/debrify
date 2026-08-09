@@ -139,6 +139,16 @@ class _IptvListNameDialogState extends State<_IptvListNameDialog> {
                   style: TextStyle(color: app.core.tx),
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _submit(),
+                  // The shared TV shell/keyboard chrome follows
+                  // settings.accent. NOT this dialog's `_accent` (#8B5CF6):
+                  // that literal is the dialog's own violet and is a different
+                  // colour from the keyboard's, so passing it would move a
+                  // shipped pixel. IptvTokens carries no accent role of its
+                  // own, so the shared one is the nearest correct answer.
+                  accent: app.settings.accent,
+                  keyboardGround: app.youtube.keyboardPanel,
+                  keyboardInk: app.core.tx,
+                  keyboardInkOnAccent: app.inkOn(app.settings.accent),
                   decoration: InputDecoration(
                     labelText: 'List name',
                     // 0x99 / 0x61 are Colors.white60 / white38 exactly — the

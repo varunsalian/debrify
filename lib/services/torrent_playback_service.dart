@@ -16,6 +16,7 @@ import '../models/torbox_file.dart';
 import '../models/torrent.dart';
 import '../screens/video_player/models/playlist_entry.dart';
 import '../models/torrent_filter_state.dart';
+import '../theme/app_theme_scope.dart';
 import '../utils/deovr_utils.dart' as deovr;
 import '../utils/dialog_tap_guard.dart';
 import '../utils/filter_ladder.dart';
@@ -4562,6 +4563,7 @@ class TorrentPlaybackService {
     final sub = (meta != null && meta.season != null && meta.episode != null)
         ? _seLabel(meta.season!, meta.episode!)
         : null;
+    final app = AppThemeScope.of(context);
     return PipelineLoadingOverlay.show(
       context,
       posterUrl: meta?.posterUrl,
@@ -4572,6 +4574,15 @@ class TorrentPlaybackService {
       providerColor: _providerGradient(provider).first,
       bound: bound,
       hasCacheCheck: provider == 'torbox' || provider == 'premiumize',
+      // The loader is a dark cinematic plate on every theme (black Material,
+      // black-at-alpha scrims), so its ink is `onGlass`, never page ink.
+      // `inkOnFill` is already contrast-scored against the accent it sits on.
+      loaderGround: app.stremioTv.loaderGround,
+      loaderAccent: app.stremioTv.loaderAccent,
+      loaderAccent2: app.stremioTv.loaderAccent2,
+      railFar: app.stremioTv.loaderRailFar,
+      ink: app.onGlass,
+      inkOnFill: app.stremioTv.inkOnFill,
       onCancel: onCancel,
     );
   }

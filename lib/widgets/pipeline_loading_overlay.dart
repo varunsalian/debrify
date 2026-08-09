@@ -3,8 +3,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../theme/app_theme.dart';
-import '../theme/app_theme_scope.dart';
 import '../theme/overlay_theme.dart';
 import '../utils/platform_util.dart';
 
@@ -20,26 +18,6 @@ enum PlayLoadStage { searching, cacheCheck, preparing, starting }
 ///
 /// Handle-based like the poster overlay: [dismiss] pops exactly once, and
 /// [setStage] advances the checklist live as the play flow progresses.
-
-/// The overlay's legacy palette, standing in for the reads it used to make.
-///
-/// It is rendered by themed Search AND by the still-frozen Stremio TV, so it
-/// cannot resolve `AppThemeScope` — that themed Search the moment the file was
-/// converted, before Stremio's boundary was lifted. Values are the legacy ones
-/// verbatim, so rendering is unchanged.
-class _LegacyLoaderPalette {
-  const _LegacyLoaderPalette();
-  Color get onGlass => Colors.white;
-  _LegacyStremioTv get stremioTv => const _LegacyStremioTv();
-}
-
-class _LegacyStremioTv {
-  const _LegacyStremioTv();
-  Color get loaderAccent => const Color(0xFF8B6BFF);
-  Color get loaderAccent2 => const Color(0xFFB9A6FF);
-  Color get loaderGround => const Color(0xFF201636);
-  Color get inkOnFill => const Color(0xFF0A0712);
-}
 
 class PipelineLoadingOverlay {
   static const Color accent = Color(0xFF8B6BFF);
@@ -62,6 +40,12 @@ class PipelineLoadingOverlay {
     required Color providerColor,
     bool bound = false,
     bool hasCacheCheck = false,
+    Color? loaderGround,
+    Color? loaderAccent,
+    Color? loaderAccent2,
+    Color? railFar,
+    Color? ink,
+    Color? inkOnFill,
     VoidCallback? onCancel,
   }) {
     final steps = <PlayLoadStage>[
@@ -113,6 +97,12 @@ class PipelineLoadingOverlay {
           providerCode: providerCode,
           providerColor: providerColor,
           isTv: tv,
+          loaderGround: loaderGround,
+          loaderAccent: loaderAccent,
+          loaderAccent2: loaderAccent2,
+          railFar: railFar,
+          ink: ink,
+          inkOnFill: inkOnFill,
           onCancel: onCancel == null
               ? null
               : () {
@@ -208,14 +198,20 @@ class _PlContent extends StatefulWidget {
 
   /// Caller-supplied palette, each defaulting to the literal it replaces.
   ///
-  /// This overlay is rendered by BOTH themed Search (via
-  /// `torrent_playback_service`) and the still-frozen Stremio TV, so it must
-  /// not read `AppThemeScope` itself: doing so themed Search immediately,
-  /// before Stremio's boundary was lifted. Same contract as the other
-  /// straddling widgets — omit them and it renders exactly as it shipped.
+  /// This overlay is pushed as a `RawDialogRoute`, so it deliberately does not
+  /// resolve `AppThemeScope` itself — its launcher passes the tokens down and
+  /// `captureAppThemes` carries the rest. Both launchers (Stremio TV and the
+  /// Search/Home play path in `torrent_playback_service`) now pass real
+  /// `stremioTv.loader*` tokens; omit them and it renders exactly as it
+  /// shipped, which is what the overlay's own tests pump.
   final Color? loaderGround;
   final Color? loaderAccent;
+  final Color? loaderAccent2;
   final Color? ink;
+  final Color? inkOnFill;
+
+  /// The progress rail's far gradient stop, paired with [loaderAccent].
+  final Color? railFar;
   final VoidCallback? onCancel;
 
   const _PlContent({
@@ -231,7 +227,10 @@ class _PlContent extends StatefulWidget {
     required this.onCancel,
     this.loaderGround,
     this.loaderAccent,
+    this.loaderAccent2,
     this.ink,
+    this.inkOnFill,
+    this.railFar,
   });
 
   @override
@@ -271,6 +270,14 @@ class _PlContentState extends State<_PlContent>
 
   bool get _hasPoster => widget.posterUrl != null && widget.posterUrl!.isNotEmpty;
 
+  // The palette, resolved once: each falls back to the literal it replaced, so
+  // a caller that passes nothing renders exactly as this overlay shipped.
+  Color get _ground => widget.loaderGround ?? const Color(0xFF201636);
+  Color get _accent => widget.loaderAccent ?? const Color(0xFF8B6BFF);
+  Color get _accent2 => widget.loaderAccent2 ?? const Color(0xFFB9A6FF);
+  Color get _ink => widget.ink ?? Colors.white;
+  Color get _inkOnFill => widget.inkOnFill ?? const Color(0xFF0A0712);
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -285,7 +292,12 @@ class _PlContentState extends State<_PlContent>
         children: [
           _backdrop(),
           _scrim(landscape),
-          _TopRail(state: widget.state, steps: widget.steps),
+          _TopRail(
+            state: widget.state,
+            steps: widget.steps,
+            accent: _accent,
+            railFar: widget.railFar ?? const Color(0xFFC4B2FF),
+          ),
           SafeArea(
             child: landscape ? _landscape(size) : _portrait(),
           ),
@@ -307,7 +319,8 @@ class _PlContentState extends State<_PlContent>
             center: const Alignment(0, -0.3),
             radius: 1.1,
             colors: [
-              widget.loaderGround ?? const Color(0xFF201636),
+              _ground,
+              // No token holds this near-black far stop; it stays a literal.
               const Color(0xFF08060D),
             ],
           ),
@@ -364,7 +377,7 @@ class _PlContentState extends State<_PlContent>
 
   // ── Poster card ─────────────────────────────────────────────────────────
   Widget _posterCard(double width) {
-    final loaderAccent = widget.loaderAccent ?? const Color(0xFF8B6BFF);
+    final loaderAccent = _accent;
     return Container(
       width: width,
       height: width * 1.5,
@@ -390,7 +403,7 @@ class _PlContentState extends State<_PlContent>
   }
 
   Widget _posterFallback() {
-    final ink = widget.ink ?? Colors.white;
+    final ink = _ink;
     return ColoredBox(
       color: ink.withValues(alpha: 0.06),
       child: Center(
@@ -402,7 +415,7 @@ class _PlContentState extends State<_PlContent>
 
   // ── Layouts ─────────────────────────────────────────────────────────────
   Widget _portrait() {
-    final ink = widget.ink ?? Colors.white;
+    final ink = _ink;
     // Centered when it fits, scrollable when it doesn't (short / split-screen
     // phones), so the checklist + poster can never RenderFlex-overflow.
     return LayoutBuilder(
@@ -443,8 +456,20 @@ class _PlContentState extends State<_PlContent>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _StepsList(state: widget.state, steps: widget.steps, scale: 1),
-                _NoteLine(state: widget.state, scale: 1),
+                _StepsList(
+                  state: widget.state,
+                  steps: widget.steps,
+                  scale: 1,
+                  accent: _accent,
+                  ink: ink,
+                  inkOnFill: _inkOnFill,
+                ),
+                _NoteLine(
+                  state: widget.state,
+                  scale: 1,
+                  accent2: _accent2,
+                  ink: ink,
+                ),
               ],
             ),
           ),
@@ -452,7 +477,13 @@ class _PlContentState extends State<_PlContent>
           _providerChip(),
                 if (widget.onCancel != null) ...[
                   const SizedBox(height: 26),
-                  _CancelButton(onCancel: widget.onCancel!, isTv: false, scale: 1),
+                  _CancelButton(
+                    onCancel: widget.onCancel!,
+                    isTv: false,
+                    scale: 1,
+                    accent: _accent,
+                    ink: ink,
+                  ),
                 ],
               ],
             ),
@@ -463,11 +494,6 @@ class _PlContentState extends State<_PlContent>
   }
 
   Widget _landscape(Size size) {
-    // Legacy values, pinned: this widget must not read the app theme (see
-    // the token fields above). Threading these to the constructor params
-    // is follow-up work — until then the overlay is fixed-palette, which
-    // is what it was before the conversion.
-    const app = _LegacyLoaderPalette();
     final tv = widget.isTv;
     final scale = tv ? (size.width / 960).clamp(1.0, 1.7).toDouble() : 1.0;
     final posterW = tv ? 150.0 * scale : 130.0;
@@ -482,7 +508,7 @@ class _PlContentState extends State<_PlContent>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: app.stremioTv.loaderAccent2,
+              color: _accent2,
               fontSize: 12.5 * scale,
               fontWeight: FontWeight.w700,
               letterSpacing: tv ? 1.2 : 0.2,
@@ -501,15 +527,33 @@ class _PlContentState extends State<_PlContent>
           ),
         ),
         SizedBox(height: (tv ? 20 : 16) * scale),
-        _StepsList(state: widget.state, steps: widget.steps, scale: tv ? 1.15 * scale : 1),
-        _NoteLine(state: widget.state, scale: tv ? 1.15 * scale : 1),
+        _StepsList(
+          state: widget.state,
+          steps: widget.steps,
+          scale: tv ? 1.15 * scale : 1,
+          accent: _accent,
+          ink: _ink,
+          inkOnFill: _inkOnFill,
+        ),
+        _NoteLine(
+          state: widget.state,
+          scale: tv ? 1.15 * scale : 1,
+          accent2: _accent2,
+          ink: _ink,
+        ),
         SizedBox(height: (tv ? 22 : 16) * scale),
         Row(
           children: [
             _providerChip(),
             const Spacer(),
             if (widget.onCancel != null)
-              _CancelButton(onCancel: widget.onCancel!, isTv: tv, scale: scale),
+              _CancelButton(
+                onCancel: widget.onCancel!,
+                isTv: tv,
+                scale: scale,
+                accent: _accent,
+                ink: _ink,
+              ),
           ],
         ),
       ],
@@ -547,16 +591,18 @@ class _PlContentState extends State<_PlContent>
           margin: const EdgeInsets.symmetric(horizontal: 24),
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
+            // The card's own two-stop plate: no token holds either literal, so
+            // both stay pinned.
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [Color(0xD1221A34), Color(0xCC0F0B19)],
             ),
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: app.onGlass.withValues(alpha: 0.12)),
+            border: Border.all(color: _ink.withValues(alpha: 0.12)),
             boxShadow: [
               const BoxShadow(color: Colors.black, blurRadius: 90, offset: Offset(0, 40), spreadRadius: -46),
-              BoxShadow(color: const Color(0xFF8B6BFF).withValues(alpha: 0.32), blurRadius: 70, offset: const Offset(0, 22), spreadRadius: -46),
+              BoxShadow(color: _accent.withValues(alpha: 0.32), blurRadius: 70, offset: const Offset(0, 22), spreadRadius: -46),
             ],
           ),
           child: row,
@@ -567,7 +613,7 @@ class _PlContentState extends State<_PlContent>
 
   // ── Provider chip ───────────────────────────────────────────────────────
   Widget _providerChip() {
-    final ink = widget.ink ?? Colors.white;
+    final ink = _ink;
     return Container(
       padding: const EdgeInsets.fromLTRB(6, 5, 12, 5),
       decoration: BoxDecoration(
@@ -611,11 +657,22 @@ class _PlContentState extends State<_PlContent>
 class _TopRail extends StatelessWidget {
   final ValueNotifier<_PlState> state;
   final List<PlayLoadStage> steps;
-  const _TopRail({required this.state, required this.steps});
+
+  /// Both gradient stops. Previously pinned because the far stop had no token;
+  /// it has one now (`stremioTv.loaderRailFar`), so the rail themes with the
+  /// rest of the loader instead of running from a themed accent into a fixed
+  /// violet.
+  final Color accent;
+  final Color railFar;
+  const _TopRail({
+    required this.state,
+    required this.steps,
+    required this.accent,
+    required this.railFar,
+  });
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFF8B6BFF); // legacy stremioTv.loaderAccent
     return Positioned(
       top: 0,
       left: 0,
@@ -637,7 +694,7 @@ class _TopRail extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [accent, const Color(0xFFC4B2FF)],
+                      colors: [accent, railFar],
                     ),
                     boxShadow: [
                       BoxShadow(color: accent, blurRadius: 10),
@@ -658,7 +715,23 @@ class _StepsList extends StatelessWidget {
   final ValueNotifier<_PlState> state;
   final List<PlayLoadStage> steps;
   final double scale;
-  const _StepsList({required this.state, required this.steps, required this.scale});
+
+  /// Threaded down from [_PlContent] rather than read off `AppThemeScope`:
+  /// the overlay's route skips ambient inheritance, so its launcher owns the
+  /// palette. [inkOnFill] is the check glyph sitting ON the accent dot — a
+  /// contrast-scored token, never page ink.
+  final Color accent;
+  final Color ink;
+  final Color inkOnFill;
+
+  const _StepsList({
+    required this.state,
+    required this.steps,
+    required this.scale,
+    required this.accent,
+    required this.ink,
+    required this.inkOnFill,
+  });
 
   String _label(PlayLoadStage s) {
     switch (s) {
@@ -685,11 +758,6 @@ class _StepsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Legacy values, pinned: this widget must not read the app theme (see
-    // the token fields above). Threading these to the constructor params
-    // is follow-up work — until then the overlay is fixed-palette, which
-    // is what it was before the conversion.
-    const app = _LegacyLoaderPalette();
     return ValueListenableBuilder<_PlState>(
       valueListenable: state,
       builder: (context, st, _) {
@@ -699,17 +767,14 @@ class _StepsList extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (var i = 0; i < steps.length; i++)
-              _row(app, steps[i], i, active, st, i == steps.length - 1),
+              _row(steps[i], i, active, st, i == steps.length - 1),
           ],
         );
       },
     );
   }
 
-  Widget _row(_LegacyLoaderPalette app, PlayLoadStage s, int i, int active, _PlState st,
-      bool last) {
-    final accent = app.stremioTv.loaderAccent;
-    final ink = app.onGlass;
+  Widget _row(PlayLoadStage s, int i, int active, _PlState st, bool last) {
     final done = i < active;
     final isActive = i == active;
     final labelColor = done
@@ -728,7 +793,7 @@ class _StepsList extends StatelessWidget {
             width: iconSize,
             child: Column(
               children: [
-                _icon(app, done, isActive, iconSize, i),
+                _icon(done, isActive, iconSize, i),
                 if (!last)
                   Container(
                     margin: EdgeInsets.only(top: 3 * scale),
@@ -776,17 +841,14 @@ class _StepsList extends StatelessWidget {
     );
   }
 
-  Widget _icon(_LegacyLoaderPalette app, bool done, bool active, double size, int i) {
-    final accent = app.stremioTv.loaderAccent;
-    final ink = app.onGlass;
+  Widget _icon(bool done, bool active, double size, int i) {
     if (done) {
       return Container(
         width: size,
         height: size,
         alignment: Alignment.center,
         decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
-        child: Icon(Icons.check_rounded,
-            size: size * 0.62, color: app.stremioTv.inkOnFill),
+        child: Icon(Icons.check_rounded, size: size * 0.62, color: inkOnFill),
       );
     }
     if (active) {
@@ -835,15 +897,20 @@ class _StepsList extends StatelessWidget {
 class _NoteLine extends StatelessWidget {
   final ValueNotifier<_PlState> state;
   final double scale;
-  const _NoteLine({required this.state, required this.scale});
+
+  /// Threaded down from [_PlContent] — see [_StepsList].
+  final Color accent2;
+  final Color ink;
+
+  const _NoteLine({
+    required this.state,
+    required this.scale,
+    required this.accent2,
+    required this.ink,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Legacy values, pinned: this widget must not read the app theme (see
-    // the token fields above). Threading these to the constructor params
-    // is follow-up work — until then the overlay is fixed-palette, which
-    // is what it was before the conversion.
-    const app = _LegacyLoaderPalette();
     return ValueListenableBuilder<_PlState>(
       valueListenable: state,
       builder: (context, st, _) {
@@ -857,7 +924,7 @@ class _NoteLine extends StatelessWidget {
               Icon(
                 Icons.filter_alt_rounded,
                 size: 13 * scale,
-                color: app.stremioTv.loaderAccent2.withValues(alpha: 0.85),
+                color: accent2.withValues(alpha: 0.85),
               ),
               SizedBox(width: 6 * scale),
               Flexible(
@@ -866,7 +933,7 @@ class _NoteLine extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: app.onGlass.withValues(alpha: 0.62),
+                    color: ink.withValues(alpha: 0.62),
                     fontSize: 11.5 * scale,
                     height: 1.35,
                   ),
@@ -886,7 +953,18 @@ class _CancelButton extends StatefulWidget {
   final VoidCallback onCancel;
   final bool isTv;
   final double scale;
-  const _CancelButton({required this.onCancel, required this.isTv, required this.scale});
+
+  /// Threaded down from [_PlContent] — see [_StepsList].
+  final Color accent;
+  final Color ink;
+
+  const _CancelButton({
+    required this.onCancel,
+    required this.isTv,
+    required this.scale,
+    required this.accent,
+    required this.ink,
+  });
 
   @override
   State<_CancelButton> createState() => _CancelButtonState();
@@ -912,13 +990,8 @@ class _CancelButtonState extends State<_CancelButton> {
 
   @override
   Widget build(BuildContext context) {
-    // Legacy values, pinned: this widget must not read the app theme (see
-    // the token fields above). Threading these to the constructor params
-    // is follow-up work — until then the overlay is fixed-palette, which
-    // is what it was before the conversion.
-    const app = _LegacyLoaderPalette();
-    final accent = app.stremioTv.loaderAccent;
-    final ink = app.onGlass;
+    final accent = widget.accent;
+    final ink = widget.ink;
     final tvFocused = widget.isTv && _focused;
     final s = widget.scale;
     return Focus(
@@ -955,6 +1028,11 @@ class _CancelButtonState extends State<_CancelButton> {
           child: Text(
             'Cancel',
             style: TextStyle(
+              // Ink on the focused pill, whose fill is [ink] — always a light
+              // colour, since `onGlass` is scored against black on every
+              // theme. No token holds this exact near-black, and `inkOn(ink)`
+              // would resolve to the page ground (a different value), so it
+              // stays pinned rather than shifting today's pixel.
               color: tvFocused
                   ? const Color(0xFF17131F)
                   : ink.withValues(alpha: 0.82),

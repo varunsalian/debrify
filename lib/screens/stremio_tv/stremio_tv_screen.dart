@@ -883,6 +883,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     // it also covers the random-episode resolve; the subtitle is omitted since
     // the episode isn't known yet for series.
     if (!mounted) return;
+    final app = AppThemeScope.of(context);
     final pInfo = _tvProviderInfo();
     final overlay = PipelineLoadingOverlay.show(
       context,
@@ -892,6 +893,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       providerCode: pInfo.code,
       providerColor: pInfo.color,
       hasCacheCheck: pInfo.cacheCheck,
+      // The loader is a dark cinematic plate on every theme (black Material,
+      // black-at-alpha scrims), so its ink is `onGlass`, never page ink.
+      // `inkOnFill` is already contrast-scored against the accent it sits on.
+      loaderGround: app.stremioTv.loaderGround,
+      loaderAccent: app.stremioTv.loaderAccent,
+      loaderAccent2: app.stremioTv.loaderAccent2,
+      railFar: app.stremioTv.loaderRailFar,
+      ink: app.onGlass,
+      inkOnFill: app.stremioTv.inkOnFill,
       onCancel: () {
         // The overlay dismisses itself; just abort the in-flight play. Every
         // await below bails on the _playGeneration mismatch.
