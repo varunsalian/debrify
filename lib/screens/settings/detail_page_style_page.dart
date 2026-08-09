@@ -34,6 +34,7 @@ const Set<String> kDetailPageStylesShipped = {
   'mosaic',
   'halo',
   'premiere',
+  'showcase',
 };
 
 /// The stored value narrowed to what this build can render. Never persists —
@@ -44,6 +45,12 @@ String effectiveDetailPageStyle(String raw) =>
         : StorageService.kDetailPageStyleDefault;
 
 const List<DetailPageStyleChoice> kDetailPageStyleChoices = [
+  DetailPageStyleChoice(
+    'showcase',
+    'Showcase',
+    'Full-bleed art that dissolves into a colour field; episodes, cast and '
+        'sources as bands',
+  ),
   DetailPageStyleChoice(
     'classic',
     'Classic',

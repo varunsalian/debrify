@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/imdb_enrichment_service.dart';
 import '../../services/imdb_parents_guide_service.dart';
+import '../../services/series_source_service.dart';
 import 'detail_style.dart';
 
 /// Screen-owned focus anchors, handed to whichever body is drawing.
@@ -61,7 +62,22 @@ class DetailBodySpec {
   /// which erases the entire point of a full-bleed layout.
   final bool ownScrim;
 
-  const DetailBodySpec({this.inkGround = false, this.ownScrim = false});
+  /// Whether the shell paints ANY wash over the artwork.
+  ///
+  /// [ownScrim] only *swaps* Classic's 0.60→0.88 tint for a lighter
+  /// 0.10→0.24 one — it does not remove it, and it does not touch the accent
+  /// radial that follows. A layout whose scrim is a specific angled gradient
+  /// (Showcase's 100° left fade) compounds with both and cannot match its
+  /// spec, so it needs the shell to paint neither.
+  ///
+  /// Default `true`, so every existing layout is untouched.
+  final bool shellTint;
+
+  const DetailBodySpec({
+    this.inkGround = false,
+    this.ownScrim = false,
+    this.shellTint = true,
+  });
 }
 
 /// Everything a layout renders, owned and kept fresh by `MergedDetailScreen`.
@@ -87,6 +103,14 @@ class DetailModel {
   /// Bound-source count for the pill; 0 renders "Bind source".
   final int sourceCount;
 
+  /// The bound sources themselves, for a layout that shows them as a band
+  /// rather than a count.
+  ///
+  /// A SharedPreferences read plus a JSON decode — no network — which is what
+  /// lets Showcase's Sources band paint on open. Empty for every layout that
+  /// does not ask for it, and for hosts that supply no loader.
+  final List<SeriesSource> boundSources;
+
   // ── Trailer ──────────────────────────────────────────────────────────────
   final bool hasTrailer;
   final bool trailerBusy;
@@ -111,6 +135,25 @@ class DetailModel {
   final VoidCallback? onAppMenu;
   final VoidCallback? onTraktMenu;
   final VoidCallback? onSimklMenu;
+
+  /// Both trackers behind one affordance.
+  ///
+  /// Showcase's action row has no room for two branded pills, and tracker
+  /// state belongs in the meta line as a readout rather than in a row of
+  /// verbs. Null when neither service is configured.
+  final VoidCallback? onTrackers;
+
+  /// The SECOND tracker, when both are connected.
+  ///
+  /// One combined sheet does not exist — the two services have separate
+  /// screen-owned sheets and the More menu is app actions, not a chooser — so
+  /// rather than hiding one behind the other, both get a mark in the meta line
+  /// and both get a button. Null whenever fewer than two are connected.
+  final VoidCallback? onTrackersSecondary;
+
+  /// Open the title-level source manager. There is no per-source host API, so
+  /// a card in the Sources band and the "Find sources" tile both land here.
+  final VoidCallback? onManageSources;
   final void Function(StremioMeta)? onRecommendationTap;
 
   /// Filmstrip pushes the focused episode's still here; the shell paints it as
@@ -129,6 +172,7 @@ class DetailModel {
     required this.recommendations,
     required this.primaryLabel,
     required this.sourceCount,
+    this.boundSources = const [],
     required this.hasTrailer,
     required this.trailerBusy,
     required this.trailerPlaying,
@@ -148,6 +192,9 @@ class DetailModel {
     required this.onAppMenu,
     required this.onTraktMenu,
     required this.onSimklMenu,
+    this.onTrackers,
+    this.onTrackersSecondary,
+    this.onManageSources,
     required this.onRecommendationTap,
     required this.onAmbientStill,
     required this.focus,

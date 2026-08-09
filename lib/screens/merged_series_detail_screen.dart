@@ -9,6 +9,7 @@ import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/playlist_view_mode.dart';
 import '../services/analytics_service.dart';
+import '../services/series_source_service.dart';
 import '../services/app_route_observer.dart';
 import '../services/debrify_image_cache.dart';
 import '../services/imdb_enrichment_service.dart';
@@ -21,6 +22,7 @@ import '../widgets/detail/detail_layout_console.dart';
 import '../widgets/detail/detail_layout_dossier.dart';
 import '../widgets/detail/detail_layout_marquee.dart';
 import '../widgets/detail/detail_layout_premium.dart';
+import '../widgets/detail/detail_layout_showcase.dart';
 import '../widgets/detail/detail_layout_stage.dart';
 import '../widgets/detail/detail_style.dart';
 import '../widgets/detail/detail_model.dart';
@@ -381,6 +383,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _loadBoundSources();
       _loadEnrichedMeta();
       _loadImdbEnrichment();
       _loadParentsGuide();
@@ -430,6 +433,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // top of this screen (like Resume), so the list is still alive when the
     // player returns and must reflect the session that just ended.
     _episodesPanelKey.currentState?.refreshWatchProgress();
+    // Sources can be bound from inside the player's own source picker and from
+    // the app-action menu, so returning here is the only place that catches
+    // both. Cheap — a prefs read, not a network call.
+    unawaited(_loadBoundSources());
   }
 
   /// Resolve the user's Trakt relationship to this title so the menu shows
@@ -874,23 +881,28 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                         // near-black, and a full-bleed layout is ABOUT the
                         // artwork. Those layouts keep a much lighter floor so
                         // a blown-out image still can't wash out the chrome.
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: _bodySpec.ownScrim
-                                  ? [
-                                      _bg.withValues(alpha: 0.10),
-                                      _bg.withValues(alpha: 0.24),
-                                    ]
-                                  : [
-                                      _bg.withValues(alpha: 0.60),
-                                      _bg.withValues(alpha: 0.88),
-                                    ],
+                        // `shellTint: false` paints NOTHING here — not a
+                        // lighter wash, none at all. A layout whose scrim is a
+                        // specific angle cannot reach its spec while the shell
+                        // is also laying a diagonal over the same artwork.
+                        if (_bodySpec.shellTint)
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: _bodySpec.ownScrim
+                                    ? [
+                                        _bg.withValues(alpha: 0.10),
+                                        _bg.withValues(alpha: 0.24),
+                                      ]
+                                    : [
+                                        _bg.withValues(alpha: 0.60),
+                                        _bg.withValues(alpha: 0.88),
+                                      ],
+                              ),
                             ),
                           ),
-                        ),
                         // Flat editorial ground (Broadsheet). Painted here so
                         // it covers the artwork without ever becoming an
                         // ancestor of the trailer backdrop, and so it fades
@@ -905,6 +917,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                         // color. Animates in when the accent resolves (no pop).
                         // A radial gradient fill is a single cheap paint — no
                         // blur, no layer — so it's safe on the weak TV GPU.
+                        if (_bodySpec.shellTint)
                         Positioned.fill(
                           child: IgnorePointer(
                             child: TweenAnimationBuilder<Color?>(
@@ -985,6 +998,24 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// load, refresh and tracker round-trip reaches them unchanged.
   ///
   /// Layouts are stateless with respect to data — they own only focus, scroll
+  /// The bound sources behind Showcase's Sources band.
+  ///
+  /// A SharedPreferences read plus a JSON decode — no network — which is what
+  /// lets the band paint on open. Reloaded after the source manager closes and
+  /// on playback return, or it goes stale the moment anyone binds anything.
+  List<SeriesSource> _boundSources = const [];
+
+  /// Called from every path that can change a binding — the source manager,
+  /// the app-action menu, and playback return. A band that only refreshes on
+  /// one of the three is stale the first time someone uses another.
+  Future<void> _loadBoundSources() async {
+    final imdb = _item.imdbId;
+    if (imdb == null || imdb.isEmpty) return;
+    final list = await SeriesSourceService.getSources(imdb);
+    if (!mounted) return;
+    setState(() => _boundSources = list);
+  }
+
   /// and tab state.
   DetailModel _buildDetailModel() {
     return DetailModel(
@@ -1000,6 +1031,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       recommendations: _recommendations ?? const [],
       primaryLabel: _primaryLabel,
       sourceCount: widget.boundSourceCount?.call(_item) ?? 0,
+      boundSources: _boundSources,
       hasTrailer: _trailerYtId != null,
       trailerBusy: _trailerResolving || _trailerLoading,
       trailerPlaying: _trailerAmbientPlaying,
@@ -1028,6 +1060,48 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       onSimklMenu: widget.onSimklAction != null
           ? _showSimklQuickActionsMenu
           : null,
+      // Both trackers behind one affordance, for a layout whose action row has
+      // no room for two branded pills. Whichever single service is configured
+      // opens directly; with both, the app menu is the chooser that already
+      // lists them.
+      // Null when neither service is configured, or the layout mounts a `+`
+      // that focuses and does nothing. There is no combined sheet to open —
+      // `_showAppActionsMenu` is the APP-action list, not a tracker chooser —
+      // so with both configured this opens Trakt's, and Simkl stays reachable
+      // through the More button beside it.
+      // Gated on whether a tracker is actually CONNECTED, not on whether the
+      // host passed a callback — the home screen always passes the Trakt one,
+      // so a callback test mounts a `+` that focuses and does nothing for
+      // anyone who has not connected Trakt.
+      //
+      // With both connected this opens Trakt's sheet and Simkl stays reachable
+      // from the More button beside it; there is no combined sheet to open,
+      // and `_showAppActionsMenu` is the APP-action list, not a chooser.
+      onTrackers: (_traktOnlyMenuOptions.isNotEmpty &&
+              widget.onTraktAction != null)
+          ? _showQuickActionsMenu
+          : (_menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null
+              ? _showSimklQuickActionsMenu
+              : null),
+      // Only when Trakt already took the first slot; otherwise Simkl IS the
+      // first slot above and this would mount the same sheet twice.
+      onTrackersSecondary: (_traktOnlyMenuOptions.isNotEmpty &&
+              widget.onTraktAction != null &&
+              _menuOptionsSimkl.isNotEmpty &&
+              widget.onSimklAction != null)
+          ? _showSimklQuickActionsMenu
+          : null,
+      // There is no per-source host API, so a card in the Sources band and the
+      // "Find sources" tile both land on the title-level manager — and the
+      // band reloads afterwards, since binding is exactly what changes it.
+      onManageSources: widget.onSelectSource == null
+          ? null
+          : () async {
+              await widget.onSelectSource!(_item);
+              if (!mounted) return;
+              setState(() {});
+              await _loadBoundSources();
+            },
       onRecommendationTap: widget.onRecommendationTap,
       onAmbientStill: (url) {
         if (!mounted || _focusedStillUrl == url) return;
@@ -1049,6 +1123,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // Marquee and Stage are showcase layouts — the artwork is the point, and
     // each already paints the gradient its own identity block sits on.
     'marquee' || 'stage' || 'vista' || 'halo' => const DetailBodySpec(ownScrim: true),
+    // Showcase paints a SPECIFIC angled scrim (100° from the left) and its own
+    // ambient field. `ownScrim` alone only swaps the shell's diagonal for a
+    // lighter one; compounded with Showcase's own gradient neither reaches the
+    // spec. `shellTint: false` is the only mode that leaves the artwork alone.
+    'showcase' => const DetailBodySpec(ownScrim: true, shellTint: false),
     // A light theme cannot sit on the artwork at all: its own ground has to
     // cover it, or black-on-paper text lands on a photograph.
     _ => DetailBodySpec(inkGround: _themedBody && _theme.lightGround),
@@ -1136,6 +1215,13 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         return themed(
           DetailPremium(
             kind: PremiumDetailKind.premiere,
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'showcase':
+        return themed(
+          DetailShowcase(
             model: _buildDetailModel(),
             episodesHost: _episodesHost,
           ),

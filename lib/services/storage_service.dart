@@ -765,6 +765,7 @@ class StorageService {
     'promenade',
     'deck',
     'tonight',
+    'spotlight',
   };
 
   /// TV Home layout. Phone/desktop and the Search tab never read it.
@@ -811,6 +812,7 @@ class StorageService {
     'mosaic',
     'halo',
     'premiere',
+    'showcase',
   };
 
   /// The layout a fresh install — and anyone who has never opened the picker —
@@ -898,6 +900,8 @@ class StorageService {
     'hearth',
     'console',
     'reel',
+  
+    'spotlight',
   };
 
   /// Synchronous mirror, warmed in main() before runApp — the details page
