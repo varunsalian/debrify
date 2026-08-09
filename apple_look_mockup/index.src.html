@@ -1,0 +1,925 @@
+<title>Spotlight &amp; Showcase — Debrify TV in the Apple TV idiom</title>
+<style>
+  :root{
+    --ink:#0B0912;
+    --panel:#131020;
+    --hair:rgba(167,139,250,.16);
+    --hair2:rgba(255,255,255,.07);
+    --tx:#EAE7F3;
+    --dim:#9A93B0;
+    --dimmer:#6E6785;
+    --acc:#A78BFA;
+    --gold:#F5C518;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --ink:#E9E7EF; --panel:#FBFAFD; --hair:rgba(88,60,190,.20); --hair2:rgba(20,17,30,.10);
+           --tx:#17141F; --dim:#59526B; --dimmer:#8B849C; --acc:#5B3BD4; }
+  }
+  :root[data-theme="dark"]{ --ink:#0B0912; --panel:#131020; --hair:rgba(167,139,250,.16); --hair2:rgba(255,255,255,.07);
+           --tx:#EAE7F3; --dim:#9A93B0; --dimmer:#6E6785; --acc:#A78BFA; }
+  :root[data-theme="light"]{ --ink:#E9E7EF; --panel:#FBFAFD; --hair:rgba(88,60,190,.20); --hair2:rgba(20,17,30,.10);
+           --tx:#17141F; --dim:#59526B; --dimmer:#8B849C; --acc:#5B3BD4; }
+
+  body{ margin:0; background:var(--ink); color:var(--tx); font-family:var(--sans);
+        -webkit-font-smoothing:antialiased; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 28px 140px; }
+
+  /* ── masthead ─────────────────────────────────────────────── */
+  .top{ position:sticky; top:0; z-index:60; background:color-mix(in srgb, var(--ink) 88%, transparent);
+        border-bottom:1px solid var(--hair2); backdrop-filter:blur(14px); }
+  .topin{ max-width:1180px; margin:0 auto; padding:11px 28px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .brandmark{ font:600 12px/1 var(--mono); letter-spacing:.16em; color:var(--acc); text-transform:uppercase; }
+  .jump{ display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; }
+  .jump a,.jump button{ font:600 11.5px/1 var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--dim);
+           text-decoration:none; padding:6px 9px; border-radius:6px; border:1px solid transparent; background:none; cursor:pointer; }
+  .jump a:hover,.jump a:focus-visible,.jump button:hover{ color:var(--tx); border-color:var(--hair); outline:none; }
+  .jump button.on{ color:var(--acc); border-color:var(--hair); }
+
+  h1{ font:700 30px/1.15 var(--sans); margin:44px 0 10px; letter-spacing:-.02em; }
+  .lede{ color:var(--dim); font-size:15px; line-height:1.62; max-width:74ch; margin:0 0 8px; }
+  .lede b{ color:var(--tx); font-weight:600; }
+  h2{ font:700 21px/1.2 var(--sans); margin:60px 0 6px; letter-spacing:-.01em; }
+  h2 .num{ font:600 12px/1 var(--mono); color:var(--acc); letter-spacing:.14em; display:block; margin-bottom:9px; }
+  .sub{ color:var(--dim); font-size:14px; line-height:1.6; max-width:70ch; margin:0 0 18px; }
+  .keys{ font:600 11px/1 var(--mono); color:var(--dimmer); letter-spacing:.08em; margin:0 0 14px; }
+  .keys kbd{ border:1px solid var(--hair); border-radius:4px; padding:3px 6px; color:var(--dim); }
+
+  /* ── the TV frame ─────────────────────────────────────────── */
+  .stage{ position:relative; width:100%; aspect-ratio:16/9; border-radius:10px; overflow:hidden;
+          border:1px solid var(--hair2); background:#000; cursor:pointer; }
+  .stage:focus{ outline:2px solid var(--acc); outline-offset:3px; }
+  .stage .scaler{ position:absolute; inset:0; width:1920px; height:1080px; transform-origin:0 0; }
+  .stagenote{ font:500 12px/1.5 var(--mono); color:var(--dimmer); margin:9px 0 0; letter-spacing:.04em; }
+
+  /* ── spec tables ──────────────────────────────────────────── */
+  table{ border-collapse:collapse; width:100%; margin:16px 0 0; font-size:13px; }
+  th,td{ text-align:left; padding:7px 10px; border-bottom:1px solid var(--hair2); vertical-align:top; }
+  th{ font:600 10.5px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--dimmer); }
+  td:first-child{ color:var(--tx); font-weight:500; width:31%; }
+  td code{ font:500 12px/1.5 var(--mono); color:var(--acc); }
+  .note{ border-left:2px solid var(--acc); padding:2px 0 2px 14px; margin:20px 0; color:var(--dim);
+         font-size:13.5px; line-height:1.65; }
+  .note b{ color:var(--tx); font-weight:600; }
+
+  /* ══ TV-SCALE STYLES — everything below is drawn at 1920×1080 ══ */
+  /* MEASURED off the screenshots, not chosen: every scrolled Home frame has a
+     flat rgb(28,28,28) gutter — a neutral grey, not black — drifting about
+     three levels warmer down the page. The detail page differs: there the
+     ground IS the ambient field, which is why the two grounds are separate. */
+  .tv{ position:absolute; inset:0; overflow:hidden; color:#fff;
+       background:linear-gradient(to bottom, #1B1C1C 0%, #1F1D1C 100%);
+       font-family:-apple-system,"SF Pro Display","SF Pro Text",system-ui,sans-serif; }
+  .tv.inkground{ background:#0A0A0B; }
+  .tv *{ box-sizing:border-box; }
+
+  /* the sidebar mark we already ship (tv_sidebar_style = 'pill') */
+  .pillmark{ position:absolute; left:48px; top:36px; z-index:40; display:flex; align-items:center; gap:6px;
+             opacity:.9; transition:opacity .3s; }
+  .pillmark .chev{ font-size:36px; line-height:1; color:rgba(255,255,255,.34); font-weight:300; margin-top:-4px; }
+  .pillmark .disc{ width:60px; height:60px; border-radius:50%; background:rgba(255,255,255,.07);
+                   border:1px solid rgba(255,255,255,.08); display:flex; align-items:center; justify-content:center;
+                   font-size:30px; color:rgba(255,255,255,.72); }
+  .pillmark .lbl{ font-size:27px; font-weight:600; letter-spacing:.1px; color:rgba(255,255,255,.92);
+                  margin-left:10px; white-space:nowrap; overflow:hidden; max-width:0; transition:max-width .3s ease; }
+  .pillmark.open .lbl{ max-width:260px; }
+
+  /* ── identity stack (shared by hero and detail) ───────────── */
+  .idstack{ position:absolute; left:84px; z-index:20; width:820px; }
+  .idstack.right{ left:auto; right:84px; text-align:right; }
+  .chip{ display:inline-block; background:rgba(0,0,0,.55); backdrop-filter:blur(12px); border-radius:8px;
+         padding:7px 15px; font-size:19px; font-weight:600; letter-spacing:.2px; margin-bottom:18px; }
+  .logoart{ display:block; max-width:470px; max-height:120px; object-fit:contain; object-position:left bottom;
+            margin-bottom:20px; filter:drop-shadow(0 3px 16px rgba(0,0,0,.55)); }
+  .idstack.right .logoart{ object-position:right bottom; margin-left:auto; }
+  .texttitle{ font-size:78px; font-weight:800; letter-spacing:-1.6px; line-height:1; margin-bottom:20px;
+              text-shadow:0 3px 20px rgba(0,0,0,.6); }
+  .metaline{ display:flex; align-items:center; gap:10px; font-size:21px; color:rgba(255,255,255,.86);
+             margin-bottom:16px; }
+  .idstack.right .metaline{ justify-content:flex-end; }
+  .srcdot{ width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,.16);
+           display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; }
+  .rated{ border:1px solid rgba(255,255,255,.45); border-radius:5px; padding:1px 6px; font-size:15px;
+          line-height:1.35; }
+  .tagline{ font-size:21px; line-height:1.42; color:rgba(255,255,255,.74); margin-bottom:14px; }
+  .techline{ display:flex; align-items:center; gap:9px; font-size:19px; color:rgba(255,255,255,.7);
+             margin-bottom:22px; }
+  .techbadge{ border:1px solid rgba(255,255,255,.38); border-radius:4px; padding:1px 6px; font-size:14px;
+              font-weight:600; letter-spacing:.3px; color:rgba(255,255,255,.8); }
+
+  /* buttons: white pill primary, circular ghost secondaries */
+  .btnrow{ display:flex; align-items:center; gap:14px; }
+  .idstack.right .btnrow{ justify-content:flex-end; }
+  .pillbtn{ height:60px; border-radius:30px; background:rgba(255,255,255,.22); color:#fff;
+            font-size:21px; font-weight:600; display:flex; align-items:center; padding:0 34px; gap:11px;
+            white-space:nowrap; transition:transform .18s, background .18s, box-shadow .18s; }
+  .circbtn{ width:52px; height:52px; border-radius:50%; background:rgba(255,255,255,.18);
+            display:flex; align-items:center; justify-content:center; font-size:24px;
+            transition:transform .18s, background .18s, box-shadow .18s; }
+  .pillbtn.f,.circbtn.f{ background:#fff; color:#000; transform:scale(1.04);
+            box-shadow:0 14px 34px rgba(0,0,0,.5); }
+  .subcap{ font-size:17px; color:rgba(255,255,255,.62); margin-top:14px; }
+
+  /* ── HOME: hero ───────────────────────────────────────────── */
+  .heroart{ position:absolute; inset:0; width:1920px; height:1080px; object-fit:cover; }
+  .heroart.fade{ transition:opacity .5s ease; }
+  .scrimL{ position:absolute; inset:0;
+    background:linear-gradient(100deg, rgba(0,0,0,.88) 0%, rgba(0,0,0,.66) 26%, rgba(0,0,0,.18) 52%, transparent 68%); }
+  .scrimR{ position:absolute; inset:0;
+    background:linear-gradient(260deg, rgba(0,0,0,.88) 0%, rgba(0,0,0,.66) 26%, rgba(0,0,0,.18) 52%, transparent 68%); }
+  /* lands on the SHELF ground, not on black — a scrim that fades to a colour
+     the page never paints leaves a visible seam where the hero ends */
+  .scrimB{ position:absolute; left:0; right:0; bottom:0; height:520px;
+    background:linear-gradient(to top, #1B1C1C 4%, rgba(27,28,28,.92) 22%, rgba(27,28,28,.45) 56%, transparent 100%); }
+  .inkground .scrimB{
+    background:linear-gradient(to top, #0A0A0B 4%, rgba(10,10,11,.92) 22%, rgba(10,10,11,.45) 56%, transparent 100%); }
+  .dots{ position:absolute; left:0; right:0; bottom:182px; display:flex; justify-content:center; gap:9px; z-index:22; }
+  .dots i{ width:8px; height:8px; border-radius:4px; background:rgba(255,255,255,.34); transition:all .25s; }
+  .dots i.on{ width:22px; background:rgba(255,255,255,.95); }
+
+  /* ── rows ─────────────────────────────────────────────────── */
+  .rowwrap{ position:absolute; left:0; right:0; top:0; z-index:24; transition:transform .38s cubic-bezier(.22,.7,.3,1); }
+  .row{ margin-bottom:44px; }
+  .rowtitle{ font-size:26px; font-weight:600; color:rgba(255,255,255,.84); margin:0 0 20px 84px;
+             letter-spacing:.1px; }
+  .strip{ display:flex; gap:40px; padding-left:84px; }
+  /* NO transition on the transform. Every focus move is integrated by the
+     spring engine below — a CSS ease cannot overshoot and settle, and that
+     settle is most of what "it feels like Apple" actually means. */
+  .card{ position:relative; flex:0 0 auto; border-radius:14px; overflow:hidden; background:#17171A;
+         will-change:transform; }
+  /* The specular highlight: a blurry white disc, ~1.7× the card, parked above
+     the top edge so only its lower arc catches the surface. It slides with the
+     tilt, which is what sells the card as a physical panel under a light. */
+  .glare{ position:absolute; left:-35%; top:-35%; width:170%; height:170%; pointer-events:none;
+          background:radial-gradient(circle at 50% 50%, rgba(255,255,255,.62) 0%,
+                     rgba(255,255,255,.28) 26%, rgba(255,255,255,0) 58%);
+          opacity:0; mix-blend-mode:screen; will-change:transform,opacity; }
+  .card img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .card .cap{ position:absolute; left:0; right:0; bottom:0; padding:52px 14px 14px; text-align:center;
+              background:linear-gradient(to top, rgba(0,0,0,.86), transparent); font-size:21px;
+              color:rgba(255,255,255,.78); }
+  .card.poster{ width:260px; height:390px; }
+  .card.wide{ width:520px; height:293px; }
+  .card.wide .cap{ text-align:left; padding:70px 20px 18px; }
+  /* Borderless. The focused card is identified by the LIFT — it rises, grows
+     and casts — not by a ring drawn around it. A ring is what you reach for
+     when the lift isn't carrying the signal on its own. */
+  .card.f{ z-index:3; }
+  .card.wide .wlogo{ position:absolute; left:20px; bottom:64px; max-width:220px; max-height:56px;
+                     object-fit:contain; object-position:left bottom; }
+
+  /* ── DETAIL ───────────────────────────────────────────────── */
+  .ambient{ position:absolute; inset:-140px; opacity:0; transition:opacity .55s ease; }
+  /* The field is a BED for white text, not a picture. Saturation past ~1.4 and
+     a veil under ~.55 and the artwork starts competing with the episode titles
+     sitting on it — which is the whole failure mode of "just blur the poster". */
+  .ambient img{ width:100%; height:100%; object-fit:cover; filter:blur(90px) saturate(1.35); transform:scale(1.15); }
+  .ambient::after{ content:""; position:absolute; inset:0; background:rgba(10,10,11,.58); }
+  .stickylogo{ position:absolute; left:0; right:0; top:44px; display:flex; justify-content:center; z-index:30;
+               opacity:0; transform:translateY(-12px); transition:opacity .4s ease, transform .4s ease; }
+  .stickylogo img{ max-height:74px; max-width:420px; object-fit:contain; }
+  .dpage{ position:absolute; left:0; right:0; top:0; z-index:20;
+          transition:transform .45s cubic-bezier(.22,.7,.3,1); }
+  .seasonrow{ display:flex; gap:14px; padding-left:84px; margin-bottom:34px; }
+  /* relative + clipped so the glare has a host to sit in; the glare is
+     position:absolute, so it is NOT a flex item and cannot disturb the row */
+  .seasonpill{ position:relative; overflow:hidden; height:50px; border-radius:25px; padding:0 30px;
+               display:flex; align-items:center; will-change:transform;
+               font-size:25px; font-weight:600; color:rgba(255,255,255,.55); }
+  .seasonpill.on{ background:rgba(255,255,255,.18); color:#fff; }
+  .seasonpill.f{ background:#fff; color:#000; }
+  .epstrip{ display:flex; gap:46px; padding-left:84px; align-items:flex-start; }
+  .ep{ position:relative; flex:0 0 auto; width:456px; padding:10px 12px 14px; border-radius:16px;
+       transition:background .2s; }
+  .ep .still{ position:relative; width:432px; height:243px; border-radius:12px; overflow:hidden; background:#17171A;
+              will-change:transform; }
+  .ep .still img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .ep .dur{ position:absolute; left:12px; bottom:12px; background:rgba(0,0,0,.62); backdrop-filter:blur(8px);
+            border-radius:7px; padding:4px 10px; font-size:19px; display:flex; align-items:center; gap:7px; }
+  .ep .no{ font-size:19px; letter-spacing:.8px; color:rgba(255,255,255,.55); margin:16px 0 4px; }
+  .ep .ttl{ font-size:25px; font-weight:600; margin-bottom:7px; }
+  .ep .ov{ font-size:21px; line-height:1.36; color:rgba(255,255,255,.6); height:58px; overflow:hidden;
+           margin-bottom:9px; }
+  .ep .dt{ font-size:19px; color:rgba(255,255,255,.5); }
+  .ep.f{ background:rgba(255,255,255,.11); }
+  .castrow{ display:flex; gap:52px; padding-left:84px; }
+  .cast{ width:250px; text-align:center; }
+  .cast .circ{ position:relative; width:250px; height:250px; border-radius:50%; overflow:hidden;
+               background:#4A4A55; will-change:transform; }
+  .cast .circ img{ width:100%; height:100%; object-fit:cover; }
+  .cast .circ .glare{ border-radius:50%; }
+  .cast .nm{ font-size:25px; margin-top:18px; }
+  .cast .ch{ font-size:23px; color:rgba(255,255,255,.55); margin-top:4px; }
+  .starring{ position:absolute; right:84px; width:420px; font-size:21px; line-height:1.42;
+             color:rgba(255,255,255,.9); z-index:20; }
+  .starring b{ color:rgba(255,255,255,.55); font-weight:400; }
+
+  /* ── trackers: STATE, not buttons ─────────────────────────────
+     Trakt and Simkl leave the action row entirely and join the meta line
+     beside the rating, where Apple puts its service glyph. Filled = tracked,
+     hollow = not. What a tracker says is "what this title is to you", which
+     is a property of the title, not something you came to the page to do. */
+  .trk{ display:flex; align-items:center; gap:6px; font-size:19px; }
+  .trkmark{ width:30px; height:30px; border-radius:50%; display:flex; align-items:center;
+            justify-content:center; font-size:14px; font-weight:800; letter-spacing:-.3px; }
+  .trkmark.on{ color:#fff; }
+  .trkmark.off{ background:none; border:1.5px solid rgba(255,255,255,.34); color:rgba(255,255,255,.5); }
+
+  /* ── sources band = Apple's "How to Watch" ────────────────────
+     The closest one-to-one mapping in the whole exercise: a labelled section
+     saying where this can actually be played. Painted from BOUND sources, so
+     it costs no network on open. */
+  .srcstrip{ display:flex; gap:26px; padding-left:84px; align-items:stretch; }
+  .srccard{ position:relative; flex:0 0 auto; width:560px; height:132px; border-radius:14px;
+            background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.09);
+            padding:18px 20px; overflow:hidden; will-change:transform; display:flex; gap:18px; }
+  .srccard .q{ width:92px; height:56px; border-radius:9px; background:rgba(255,255,255,.13);
+               display:flex; align-items:center; justify-content:center; font-size:23px;
+               font-weight:700; letter-spacing:.4px; flex:0 0 auto; }
+  /* 330, not 390: the BOUND chip owns the top-right corner, and a release name
+     is always long enough to run under it given the chance */
+  .srccard .rel{ font-size:21px; font-weight:600; margin-bottom:8px; white-space:nowrap;
+                 overflow:hidden; text-overflow:ellipsis; max-width:330px; }
+  .srccard .sm{ font-size:19px; color:rgba(255,255,255,.58); }
+  .srccard .bound{ position:absolute; right:18px; top:18px; font-size:16px; font-weight:600;
+                   background:rgba(255,255,255,.9); color:#111; border-radius:6px; padding:3px 9px; }
+  .srccard.add{ align-items:center; justify-content:center; width:300px;
+                background:none; border:1px dashed rgba(255,255,255,.22); font-size:21px;
+                color:rgba(255,255,255,.66); }
+</style>
+
+<div class="top"><div class="topin">
+  <span class="brandmark">Debrify · TV design</span>
+  <span style="font-size:12px;color:var(--dimmer)">Spotlight (Home) &amp; Showcase (Series)</span>
+  <nav class="jump">
+    <a href="#home">Home</a>
+    <a href="#detail">Series</a>
+    <a href="#spec">Spec</a>
+    <button id="fxtog" class="on">Focus: Apple</button>
+    <button id="zoomtog">Zoom 1:1</button>
+  </nav>
+</div></div>
+
+<div class="wrap">
+
+<h1>Spotlight &amp; Showcase</h1>
+<p class="lede">Two new TV layouts drawn at <b>true panel scale — 1920×1080</b>, which is 2× the app's
+logical pixels. Every number in the spec tables is the <b>1920-scale</b> value; halve it for the Flutter
+constant. Artwork, titles, synopses, episode stills and cast photos are <b>real</b>, pulled live from
+Cinemeta and IMDb — the same two endpoints the app already uses.</p>
+<p class="lede">Click a screen and drive it with the <b>arrow keys</b>. The focus model is as much the
+design as the paint is.</p>
+<p class="lede"><b>The focus effect is the point of this build.</b> Apple's is five things at once —
+a 1.1 lift, a shadow that slides opposite the tilt, up to 10° of rotation on a 700px perspective, a
+4pt shift, and a blurry white specular disc parked above the card's top edge. What no CSS easing can
+reproduce is the <b>timing</b>: damping 0.9 means every move <i>overshoots and settles</i>. Each value
+here is integrated by a real spring per frame, not tweened. Hit
+<b>Focus: Apple / flat</b> in the header to A/B it against what the app does today.</p>
+<p class="lede">On tvOS the tilt tracks the remote's trackpad continuously. A <b>d-pad has no
+pointer</b>, so the honest analogue is to lean the card away from the direction focus travelled and
+let the spring carry it back through neutral — the 3D read comes out of the key press itself.
+<b>Hover a focused card with the mouse</b> to feel the trackpad version for comparison.</p>
+
+<div class="note"><b>No credentials were read.</b> Cinemeta and IMDb's GraphQL are both public and
+unauthenticated — the app stores no key for either. Simkl/Trakt would only add <i>your</i> watch state,
+which a design mock has no use for, so the token store was left alone.</div>
+
+<h2 id="home"><span class="num">Layout I</span>Spotlight — Home</h2>
+<p class="sub">A full-bleed hero that is <b>a focusable row</b>: LEFT/RIGHT pages it, dots show position,
+and it parks where you left it when you go back down. The first shelf overlaps the hero's lower edge,
+and descending scrolls hero and shelves together onto a flat ground — <b>measured</b> at
+<code>rgb(28,28,28)</code> from the screenshots, a neutral grey rather than black. The scrolled page
+shows no artwork at all; there is no dimmed backdrop under the shelves.</p>
+<p class="keys"><kbd>↑</kbd><kbd>↓</kbd> hero ⇄ shelves &nbsp;·&nbsp; <kbd>←</kbd><kbd>→</kbd> page the hero / walk a shelf</p>
+<div class="stage" id="s-home" tabindex="0"><div class="scaler"><div class="tv" id="tv-home"></div></div></div>
+<p class="stagenote">1920×1080 · identity stack at x=84 · hero art full-bleed under a 100° left scrim</p>
+
+<h2 id="detail"><span class="num">Layout II</span>Showcase — Series</h2>
+<p class="sub">The backdrop holds the identity, then <b>dissolves into an ambient colour field</b> lifted
+off the same artwork as you descend, while the logo re-forms as a centred header. That dissolve is the
+single biggest reason Apple's page reads richer than ours — and we already own the engine
+(<code>TvAmbientArtStage</code> + <code>dominant_color.dart</code>).</p>
+<p class="sub"><b>Our own affordances are placed by what they are, not squeezed into Apple's row.</b>
+<code>DetailActionRow</code> currently puts up to seven things in a <code>Wrap</code> — Play, Trailer,
+Sources, a source-count pill, More, and the Trakt and Simkl pills — against Apple's one pill and two
+circles. Shrinking seven to fit is how you get something that looks like the idiom and behaves like a
+toolbar. So: <b>Trakt and Simkl leave the row</b> and become marks in the meta line beside the rating,
+filled when tracked — tracker state describes what a title <i>is to you</i>, it is not an errand.
+And <b>Sources becomes a band</b>, which is the closest one-to-one mapping in the whole exercise:
+Apple ends its page with <i>How to Watch</i>, and that is literally our source list. Because
+<code>sourceCount</code> is <code>boundSourceCount</code> — bound sources, already local — that band
+paints with <b>no network on open</b>, and Bind stops being a mystery button in the identity row and
+becomes an action on the card it applies to. The row settles at four, the same four on every title.</p>
+<p class="keys"><kbd>↑</kbd><kbd>↓</kbd> identity → episodes → cast &nbsp;·&nbsp; <kbd>←</kbd><kbd>→</kbd> walk the band</p>
+<div class="stage" id="s-detail" tabindex="0"><div class="scaler"><div class="tv" id="tv-detail"></div></div></div>
+<p class="stagenote">1920×1080 · ambient = the backdrop at blur(90px) saturate(1.35) under a 58% ink veil</p>
+
+<h2 id="spec">The numbers</h2>
+<p class="sub">1920-scale. Halve for the Flutter value.</p>
+
+<table>
+  <tr><th>Identity stack</th><th>Value</th></tr>
+  <tr><td>Left margin</td><td><code>84</code> — Apple's 4.4%; our TV pages use 96, worth aligning</td></tr>
+  <tr><td>Chip</td><td><code>h 34 · r 8 · pad 7/15 · 19px/600</code> on <code>rgba(0,0,0,.55)</code> + blur 12</td></tr>
+  <tr><td>Logo art</td><td>max <code>470×120</code>, contain, anchored <b>left-bottom</b></td></tr>
+  <tr><td>Meta line</td><td><code>21px</code> <code>rgba(255,255,255,.86)</code>, source disc 28, rating box r5</td></tr>
+  <tr><td>Synopsis</td><td><code>21px/1.42</code> <code>rgba(255,255,255,.74)</code>, max 3 lines</td></tr>
+  <tr><td>Primary button</td><td><code>h 60 · r 30 · pad 0/34 · 21px/600</code>; rest <code>white .22</code>, focus <b>solid white on black</b></td></tr>
+  <tr><td>Secondary</td><td><code>52</code> circle, <code>white .18</code>; same focus flip</td></tr>
+  <tr><td>Focus motion</td><td><code>scale 1.04</code> + <code>0 14px 34px rgba(0,0,0,.5)</code>, 180ms</td></tr>
+</table>
+
+<table>
+  <tr><th>Cards</th><th>Value</th></tr>
+  <tr><td>Poster</td><td><code>260×390</code> · r14 · gap 40</td></tr>
+  <tr><td>Landscape</td><td><code>520×293</code> (16:9) · r14 · gap 40</td></tr>
+  <tr><td>Episode still</td><td><code>432×243</code> · r12 · cell 456 · gap 46</td></tr>
+  <tr><td>Cast circle</td><td><code>250</code> · gap 52 · name 25px · character 23px <code>.55</code></td></tr>
+  <tr><td>Card focus</td><td><b>borderless</b> — <code>scale 1.1</code> poster · <code>1.055</code> episode still · <code>1.08</code> cast circle</td></tr>
+  <tr><td>Rise</td><td><code>-140px × (scale − 1)</code> — 14px at full lift, derived from the scale spring so it shares the overshoot</td></tr>
+  <tr><td>Focus tilt</td><td>±<code>10°</code> both axes on <code>perspective 1400</code> (Apple's <code>m34 = -1/700</code> at 2×)</td></tr>
+  <tr><td>Focus shift</td><td><code>0.8px per degree</code> — Apple's 4pt at full tilt</td></tr>
+  <tr><td>Focus shadow</td><td><code>0 32px 50px rgba(0,0,0,.45)</code>, sliding <b>opposite</b> the tilt at 2.2px/deg</td></tr>
+  <tr><td>Glare</td><td>radial white disc <code>170%</code> of the card, parked <code>-26%</code> above, tracking the tilt at <code>4.2%/deg</code>, <code>screen</code> blend, α <code>0.5</code></td></tr>
+  <tr><td>Spring</td><td><code>k 210</code>, <b>ζ 0.82</b> — Apple's damping 0.9. Integrated per frame; a CSS ease cannot overshoot</td></tr>
+  <tr><td>Lean impulse</td><td><code>190°/s</code> of rotational velocity away from travel, on the d-pad path</td></tr>
+  <tr><td>Pan</td><td>strips and page bands are springs too (<code>k 190</code>, ζ 0.85), not eased transitions</td></tr>
+  <tr><td>Caption</td><td><b>inside</b> on a poster (gradient bed), <b>below</b> on a 16:9 episode cell</td></tr>
+  <tr><td>Episode focus</td><td>a <code>white .11</code> r16 plate behind the <i>whole</i> cell — still and text together</td></tr>
+  <tr><td>Row title</td><td><code>26px/600</code> <code>rgba(255,255,255,.84)</code>, 20 above the strip</td></tr>
+</table>
+
+<table>
+  <tr><th>Grounds</th><th>Value</th></tr>
+  <tr><td>Ink</td><td><code>#0A0A0B</code> — near-black, very slightly warm</td></tr>
+  <tr><td>Hero left scrim</td><td><code>100°</code>, <code>.88 → .66 @26% → .18 @52% → 0 @68%</code></td></tr>
+  <tr><td>Hero bottom scrim</td><td>520 tall, ink at 4% → transparent at 100%</td></tr>
+  <tr><td>Ambient field</td><td>same backdrop, <code>blur(90) saturate(1.35) scale(1.15)</code>, ink veil <code>.58</code> — it is a bed for white text, not a picture</td></tr>
+  <tr><td>Dissolve</td><td>550ms ease, driven by scroll — not a cut</td></tr>
+  <tr><td>Sticky logo</td><td>top 44, max-h 74, fades in with a 12px rise over 400ms</td></tr>
+</table>
+
+<div class="note"><b>The art-supply problem, made visible.</b> Each hero below carries a measured
+<i>left-third luminance</i>. Apple's editorial stills keep a clean dark field on the left; metahub
+backdrops are frame grabs and often don't. Above roughly <code>0.32</code> the identity stack should
+flip to the right edge — the mock does this automatically, and you can watch it happen as you page.
+Metahub also ships some <b>black</b> wordmarks, which vanish on ink; the fetch measures logo luminance
+and drops anything under <code>0.30</code> to the text-title fallback.</div>
+
+</div>
+
+<script>
+const IMG = __IMG_MAP__;
+const D = __DATA__;
+const src = f => f ? (IMG[f.replace(/\.(jpg|png)$/,'')] || '') : '';
+const esc = s => (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+/* ═══ FX — the tvOS focus effect ════════════════════════════════
+   Five parts, per Apple's own sample and PGSSoft's replication of the
+   private effect:
+
+     lift      scale 1.1
+     shadow    offset 16 / radius 25 / black 30%, sliding opposite the tilt
+     tilt      up to 10° about both axes, m34 = -1/700 → perspective 700
+     shift     up to 4pt with the tilt
+     glare     a blurry white disc ~1.7× the card, parked above the top edge
+
+   The part a CSS transition cannot do is the timing: damping 0.9 means it
+   OVERSHOOTS and settles. That settle is the difference between "it moved"
+   and "it's a physical object". So every value here is integrated by a real
+   spring, not tweened.
+
+   The tilt tracks a pointer on tvOS — you nudge the remote's trackpad and the
+   card follows. A D-PAD has no pointer, so a literal copy is impossible on the
+   input side. The honest analogue, and what this does: lean the card AWAY from
+   the direction focus travelled, then let the spring carry it back through
+   neutral. You get the 3D read out of the key press itself. Move the mouse
+   over a focused card to feel the trackpad version for comparison.        */
+const FX = (() => {
+  const K = 210, Z = 0.82;               // ζ<1 on purpose — 1.0 never overshoots
+  const Dp = 2 * Z * Math.sqrt(K);
+  const live = new Set();
+  let raf = 0, last = 0;
+  // FLAT is what the app does today: one scale, one eased curve, no tilt, no
+  // glare, no overshoot. Kept switchable because the gap between the two is
+  // the entire argument, and an argument you can toggle beats one you assert.
+  let flat = false;
+
+  const mk = () => ({ s:1, vs:0, ts:1, rx:0, vrx:0, trx:0, ry:0, vry:0, try_:0,
+                      g:0, vg:0, tg:0, on:false });
+
+  function spring(x, v, t, dt){
+    v += (-K * (x - t) - Dp * v) * dt;
+    return [x + v * dt, v];
+  }
+
+  function frame(now){
+    const dt = Math.min((now - last) / 1000, 1/30) || 1/60;
+    last = now;
+    for(const el of live){
+      const f = el._fx;
+      [f.s,  f.vs ] = spring(f.s,  f.vs,  f.ts,  dt);
+      [f.rx, f.vrx] = spring(f.rx, f.vrx, f.trx, dt);
+      [f.ry, f.vry] = spring(f.ry, f.vry, f.try_, dt);
+      [f.g,  f.vg ] = spring(f.g,  f.vg,  f.tg,  dt);
+      apply(el, f);
+      const rest = Math.abs(f.s-f.ts) < .0005 && Math.abs(f.vs) < .002 &&
+                   Math.abs(f.rx) + Math.abs(f.ry) < .02 &&
+                   Math.abs(f.g-f.tg) < .004;
+      if(rest && !f.on){ live.delete(el); apply(el, Object.assign(f, mk())); }
+    }
+    raf = live.size ? requestAnimationFrame(frame) : 0;
+  }
+
+  function apply(el, f){
+    if(flat){
+      el.style.transform = `translateY(${(-(f.s-1)*140).toFixed(2)}px) scale(${f.s.toFixed(4)})`;
+      el.style.boxShadow = f.s > 1.005 ? '0 26px 62px rgba(0,0,0,.7)' : '';
+      el.style.filter = '';
+      if(el._glare) el._glare.style.opacity = 0;
+      return;
+    }
+    // The rise. Derived from the scale spring rather than given one of its own,
+    // so it inherits the same overshoot — the card lifts, tops out slightly
+    // past its mark and settles back, as one movement instead of two.
+    const rise = -(f.s - 1) * 140;
+    // perspective 700 at 1× → 1400 at the 1920 scale everything here is drawn in
+    el.style.transform =
+      `perspective(1400px) translate3d(${(-f.ry*0.8).toFixed(2)}px,${(f.rx*0.8 + rise).toFixed(2)}px,0)`
+      + ` rotateX(${f.rx.toFixed(3)}deg) rotateY(${f.ry.toFixed(3)}deg) scale(${f.s.toFixed(4)})`;
+    // the shadow slides the OPPOSITE way to the tilt — the light stays put
+    const d = (f.s - 1) / 0.1;
+    el.style.boxShadow = d > .01
+      ? `${(-f.ry*2.2).toFixed(1)}px ${(32 + f.rx*2.2).toFixed(1)}px 50px rgba(0,0,0,${(0.45*d).toFixed(3)})`
+      : '';
+    el.style.filter = d > .01 ? `brightness(${(1 + 0.05*d).toFixed(3)})` : '';
+    const gl = el._glare;
+    if(gl){
+      gl.style.opacity = f.g.toFixed(3);
+      // parked above the top edge; the tilt walks it down across the face
+      gl.style.transform =
+        `translate(${(-f.ry*4.2).toFixed(2)}%, ${(-26 + f.rx*4.2).toFixed(2)}%)`;
+    }
+  }
+
+  function ensure(el){
+    if(!el._fx){
+      el._fx = mk();
+      const g = document.createElement('div');
+      g.className = 'glare';
+      el.appendChild(g);
+      el._glare = g;
+    }
+    live.add(el);
+    if(!raf){ last = performance.now(); raf = requestAnimationFrame(frame); }
+  }
+
+  return {
+    /** Focus lands on [el], arriving along [dir] (-1 left/up, +1 right/down).
+        1.1 is Apple's poster figure and it is wrong for everything else: a
+        432-wide episode still at 1.1 grows 43px and eats its neighbour, and a
+        pill grows more than its own gap. Scale by what the thing IS. */
+    focus(el, dir){
+      ensure(el);
+      const f = el._fx;
+      if(f.on) return;
+      f.on = true;
+      const cl = el.classList;
+      f.ts = cl.contains('still') ? 1.055
+           : cl.contains('circ') ? 1.08
+           : cl.contains('seasonpill') ? 1.06
+           : 1.1;
+      f.tg = 0.5; f.trx = 0; f.try_ = 0;
+      // The lean: kick the rotation's VELOCITY rather than its target, so the
+      // card swings past neutral and comes back. Setting a target and easing
+      // to it is the thing that reads as mechanical.
+      if(flat){ f.tg = 0; return; }
+      f.vry = -(dir||0) * 190;
+      f.vs += (f.ts - 1) * 5.5;   // the kick scales with the lift, not with 1.1
+      f.vg += 2.2;
+    },
+    blur(el){
+      if(!el || !el._fx) return;
+      ensure(el);
+      const f = el._fx;
+      f.on = false;
+      f.ts = 1; f.tg = 0; f.trx = 0; f.try_ = 0;
+    },
+    setFlat(v){ flat = v; },
+    isFlat(){ return flat; },
+
+    /** Trackpad emulation: pointer at [px],[py] ∈ [-1,1] over a focused card. */
+    aim(el, px, py){
+      if(flat || !el || !el._fx || !el._fx.on) return;
+      ensure(el);
+      el._fx.trx = -py * 10;    // Apple's sample: 10° max about each axis
+      el._fx.try_ =  px * 10;
+    },
+  };
+})();
+
+/** Wire pointer tilt on a stage: hovering a focused card drives the trackpad
+    path, so the two input models can be compared side by side. */
+function aimOnHover(stage){
+  stage.addEventListener('mousemove', e => {
+    const el = stage.querySelector('.card.f, .ep.f .still, .cast.f .circ, .fxon');
+    if(!el) return;
+    const r = el.getBoundingClientRect();
+    const px = ((e.clientX - r.left) / r.width  - .5) * 2;
+    const py = ((e.clientY - r.top ) / r.height - .5) * 2;
+    if(Math.abs(px) <= 1.6 && Math.abs(py) <= 1.6) FX.aim(el, px, py);
+  });
+  stage.addEventListener('mouseleave', () => {
+    const el = stage.querySelector('.card.f, .ep.f .still, .cast.f .circ, .fxon');
+    if(el) FX.aim(el, 0, 0);
+  });
+}
+
+/** Spring-driven pan for a strip or a page band. */
+function panner(el){
+  let x = 0, v = 0, t = 0, raf = 0, last = 0;
+  const K = 190, Dp = 2 * 0.85 * Math.sqrt(190);
+  function step(now){
+    const dt = Math.min((now - last)/1000, 1/30) || 1/60; last = now;
+    v += (-K * (x - t) - Dp * v) * dt; x += v * dt;
+    el.style.transform = `translate${el._axis || 'X'}(${x.toFixed(2)}px)`;
+    raf = (Math.abs(x - t) > .3 || Math.abs(v) > .6) ? requestAnimationFrame(step) : 0;
+    if(!raf){ x = t; el.style.transform = `translate${el._axis || 'X'}(${x.toFixed(2)}px)`; }
+  }
+  return to => { t = to; if(!raf){ last = performance.now(); raf = requestAnimationFrame(step); } };
+}
+
+/* ── layout I: Spotlight ─────────────────────────────────────── */
+function buildHome(root){
+  const H = D.hero;
+  // The hero is the FIRST ITEM OF THE SCROLL, not a fixed backdrop the shelves
+  // ride over. Measured off the real screenshots: every scrolled frame has a
+  // flat rgb(28,28,28) gutter, so once you are past the hero its art is gone
+  // entirely — there is no dimmed-artwork ground under the shelves. Hero and
+  // shelves therefore live in ONE translated container over the ink.
+  root.innerHTML = `
+    <div class="pillmark" id="pm"><span class="chev">&#8249;</span>
+      <span class="disc">&#9750;</span><span class="lbl">Home</span></div>
+    <div id="scroll" style="position:absolute;left:0;right:0;top:0">
+      <div id="herobox" style="position:relative;height:1080px;overflow:hidden">
+        <div id="hawrap" style="position:absolute;inset:0">
+          <img class="heroart fade" id="haA"><img class="heroart fade" id="haB" style="opacity:0"></div>
+        <div class="scrimL" id="sl"></div><div class="scrimR" id="sr" style="opacity:0"></div>
+        <div class="scrimB"></div>
+        <div class="idstack" id="id" style="bottom:270px"></div>
+        <div class="dots" id="dots"></div>
+      </div>
+      <div class="rowwrap" id="rows" style="position:relative;margin-top:-175px"></div>
+    </div>`;
+
+  const rows = [
+    {label:'Continue Watching', kind:'wide',   items:H},
+    {label:D.rows[0].label,     kind:'poster', items:D.rows[0].items},
+    {label:D.rows[1].label,     kind:'poster', items:D.rows[1].items}];
+
+  root.querySelector('#rows').innerHTML = rows.map((r,ri)=>`
+    <div class="row"><div class="rowtitle">${esc(r.label)}</div>
+    <div class="strip">${r.items.map((it,ci)=> r.kind==='wide'
+      ? `<div class="card wide" data-r="${ri}" data-c="${ci}">
+           <img src="${src(it.bg)}"><img class="wlogo" src="${src(it.logo)}">
+           <div class="cap">${esc(it.genres?it.genres.slice(0,2).join(' · '):'')}</div></div>`
+      : `<div class="card poster" data-r="${ri}" data-c="${ci}">
+           <img src="${src(it.poster)}">
+           <div class="cap">${esc(it.genre||it.year||'')}</div></div>`).join('')}
+    </div></div>`).join('');
+
+  root.querySelector('#dots').innerHTML = H.map(()=>'<i></i>').join('');
+
+  // band 0 is the hero itself; 1.. are the shelves
+  const st = {band:0, page:0, col:rows.map(()=>0), layer:0, dir:0};
+
+  let cur = null;
+  const setFocus = (el, dir) => {
+    if(cur === el) return;
+    if(cur) FX.blur(cur);
+    cur = el;
+    if(el) FX.focus(el, dir);
+  };
+  const scrollEl = root.querySelector('#scroll');
+  scrollEl._axis = 'Y';
+  const liftTo = panner(scrollEl);
+  const pans = [...root.querySelectorAll('.strip')].map(panner);
+
+  // Where each shelf has to land when it is the focused band. MEASURED, not
+  // hardcoded — a row's height depends on its card kind, and a table of magic
+  // numbers goes stale the moment a row changes shape.
+  // A .row's offsetParent is #rows (it is position:relative), NOT #scroll — so
+  // its offsetTop is relative to the shelf block and has to be added to where
+  // that block starts. Without the outer term the lift comes out negative and
+  // the page scrolls the wrong way.
+  const REST = 300;
+  const rowEls = [...root.querySelectorAll('.row')];
+  const rowsTop = root.querySelector('#rows').offsetTop;
+  const lifts = [0, ...rowEls.map(el => rowsTop + el.offsetTop - REST)];
+
+  function paintHero(){
+    const h = H[st.page];
+    const flip = h.leftThird > 0.32;      // busy art on the left → move the text
+    // Two layers, crossfaded: paging the hero is a DISSOLVE. Swapping one
+    // img's src pops, and a pop is the difference between a carousel and a
+    // slideshow.
+    if(st.shown !== st.page){
+      const show = root.querySelector(st.layer ? '#haB' : '#haA');
+      const hide = root.querySelector(st.layer ? '#haA' : '#haB');
+      show.src = src(h.bg);
+      show.style.opacity = 1; hide.style.opacity = 0;
+      st.layer ^= 1; st.shown = st.page;
+    }
+    root.querySelector('#sl').style.opacity = flip ? 0 : 1;
+    root.querySelector('#sr').style.opacity = flip ? 1 : 0;
+    const id = root.querySelector('#id');
+    id.className = 'idstack' + (flip ? ' right' : '');
+    id.style.left = flip ? 'auto' : '84px';
+    id.style.right = flip ? '84px' : 'auto';
+    const dark = h.logoLuma < 0.30;
+    const meta = [h.kind === 'series' ? 'Series' : 'Film', ...(h.genres||[]).slice(0,2)].join(' · ');
+    id.innerHTML = `
+      <div class="chip">${h.kind==='series' ? 'New Season' : 'New Release'}</div>
+      ${dark ? `<div class="texttitle">${esc(h.name)}</div>`
+             : `<img class="logoart" src="${src(h.logo)}" alt="${esc(h.name)}">`}
+      <div class="metaline"><span class="srcdot">D</span><span>${esc(meta)}</span>
+        ${h.imdb?`<span class="rated">&#9733; ${esc(h.imdb)}</span>`:''}</div>
+      <div class="tagline">${esc((h.desc||'').slice(0,132))}${(h.desc||'').length>132?'…':''}</div>
+      <div class="btnrow">
+        <div class="pillbtn ${st.band===0?'f':''}">&#9654; Play</div>
+        <div class="circbtn">&#43;</div><div class="circbtn">&#9432;</div></div>
+      <div class="subcap">${esc(h.year)}${h.runtime?' · '+esc(h.runtime):''} · ${H.length} in this shelf</div>`;
+    [...root.querySelectorAll('#dots i')].forEach((d,i)=>d.classList.toggle('on', i===st.page));
+  }
+
+  function paint(){
+    paintHero();
+    // One translate carries hero and shelves together. The identity needs no
+    // fade now — it leaves the frame with the art it belongs to.
+    liftTo(-lifts[st.band]);
+    // Gone once you are past the top band — Apple's scrolled frames have no
+    // mark at all, and ours already auto-hides after a second. Leaving it up
+    // parks a glyph on someone's artwork for the whole page.
+    const pm = root.querySelector('#pm');
+    pm.classList.toggle('open', st.band === 0);
+    pm.style.opacity = st.band === 0 ? .9 : 0;
+    let want = null;
+    root.querySelectorAll('.card').forEach(c=>{
+      const r = +c.dataset.r, ci = +c.dataset.c;
+      const on = st.band-1 === r && st.col[r] === ci;
+      c.classList.toggle('f', on);
+      if(on) want = c;
+    });
+    setFocus(want, st.dir);
+    // keep the focused card on screen
+    pans.forEach((to,i)=> to(-Math.max(0, st.col[i]-2) * (rows[i].kind==='wide'?560:300)));
+  }
+
+  paint();
+  return e=>{
+    const k = e.key;
+    if(k === 'ArrowDown'){ st.band = Math.min(rows.length, st.band+1); st.dir = 1; }
+    else if(k === 'ArrowUp'){ st.band = Math.max(0, st.band-1); st.dir = -1; }
+    else if(k === 'ArrowLeft'){
+      st.dir = -1;
+      if(st.band === 0) st.page = (st.page - 1 + H.length) % H.length;
+      else st.col[st.band-1] = Math.max(0, st.col[st.band-1]-1);
+    } else if(k === 'ArrowRight'){
+      st.dir = 1;
+      if(st.band === 0) st.page = (st.page + 1) % H.length;
+      else st.col[st.band-1] = Math.min(rows[st.band-1].items.length-1, st.col[st.band-1]+1);
+    } else return false;
+    paint(); return true;
+  };
+}
+
+/* ── layout II: Showcase ─────────────────────────────────────── */
+function buildDetail(root){
+  const d = D.detail;
+  root.innerHTML = `
+    <img class="heroart fade" id="bd" src="${src(d.bg)}">
+    <div class="scrimL" id="dsl"></div><div class="scrimB"></div>
+    <div class="ambient" id="amb"><img src="${src(d.bg)}"></div>
+    <div class="pillmark" id="pm"><span class="chev">&#8249;</span>
+      <span class="disc">&#9635;</span><span class="lbl">Series</span></div>
+    <div class="stickylogo" id="sticky"><img src="${src(d.logo)}"></div>
+    <div class="dpage" id="pg"></div>`;
+  // the detail ground is the ambient field over ink, not Home's grey shelf ground
+  root.classList.add('inkground');
+
+  const meta = ['Series', ...(d.genres||[]).slice(0,2)].join(' · ');
+  const idHTML = `<div id="idband" style="transition:opacity .35s ease">
+    <div class="idstack" style="top:446px">
+      <div class="chip">New Season</div>
+      <img class="logoart" src="${src(d.logo)}" alt="${esc(d.name)}">
+      <div class="metaline"><span class="srcdot">D</span><span>${esc(meta)}</span>
+        ${d.imdb?`<span class="rated">&#9733; ${esc(d.imdb)}</span>`:''}
+        <span style="width:8px"></span>
+        <span class="trk"><span class="trkmark on" style="background:#ED1C24">T</span>
+          <span style="color:rgba(255,255,255,.72)">Watching</span></span>
+        <span class="trk"><span class="trkmark off">S</span></span>
+      </div>
+      <div class="tagline">${esc((d.desc||'').slice(0,190))}…</div>
+      <div class="techline"><span>${esc(d.year)}</span><span>·</span>
+        <span>${d.seasons.length} seasons</span><span>·</span>
+        <span>${esc(d.runtime||'50 min')}</span></div>
+      <div class="btnrow">
+        <div class="pillbtn f">&#9654; Resume S1 E4</div>
+        <div class="circbtn">&#43;</div>
+        <div class="circbtn">&#9654;&#124;</div>
+        <div class="circbtn">&#8943;</div></div>
+      <div class="subcap">3 bound sources · Sources below</div>
+    </div>
+    <div class="starring" style="top:880px"><b>Starring</b>
+      ${esc((d.cast||[]).slice(0,3).map(c=>c.name).join(', '))}</div></div>`;
+
+  const epHTML = `
+    <div class="seasonrow" id="seasons">${d.seasons.slice(0,4).map((s,i)=>
+      `<div class="seasonpill ${i===0?'on':''}" data-s="${i}">Season ${s}</div>`).join('')}</div>
+    <div class="epstrip">${d.episodes.map((e,i)=>`
+      <div class="ep" data-c="${i}">
+        <div class="still">${e.thumb?`<img src="${src(e.thumb)}">`:''}
+          <div class="dur">&#9654; ${esc((d.runtime||'55 min').replace(' min','m'))}</div></div>
+        <div class="no">EPISODE ${e.n}</div>
+        <div class="ttl">${esc(e.name)}</div>
+        <div class="ov">${esc(e.overview)}</div>
+        <div class="dt">${esc(e.released)}</div>
+      </div>`).join('')}</div>`;
+
+  const castHTML = `
+    <div class="rowtitle" style="margin-top:52px">Cast &amp; Crew</div>
+    <div class="castrow">${(d.cast||[]).map((c,i)=>`
+      <div class="cast" data-c="${i}"><div class="circ">${c.photo?`<img src="${src(c.photo)}">`:''}</div>
+        <div class="nm">${esc(c.name)}</div><div class="ch">${esc(c.character||'')}</div></div>`).join('')}</div>`;
+
+  // Representative, not fetched: there is no live source data without a search,
+  // and the point here is the SHAPE of the band. In the app these rows are the
+  // user's bound sources, already local — which is what lets this paint with
+  // no network on open.
+  const SRC = [
+    {q:'4K',    rel:'Silo.S01.2160p.ATVP.WEB-DL.DDP5.1.Atmos.DV.HEVC-FLUX', sm:'42.1 GB · 24 seeds · Real-Debrid', bound:true},
+    {q:'1080p', rel:'Silo.S01.1080p.ATVP.WEB-DL.DDP5.1.H.264-NTb',          sm:'18.4 GB · 61 seeds · Real-Debrid'},
+    {q:'1080p', rel:'Silo.S01.COMPLETE.1080p.WEBRip.x265-RARBG',            sm:'9.2 GB · 12 seeds · AllDebrid'},
+  ];
+  const srcHTML = `
+    <div class="rowtitle" style="margin-top:56px">Sources</div>
+    <div class="srcstrip">${SRC.map((s,i)=>`
+      <div class="srccard" data-c="${i}">
+        <div class="q">${esc(s.q)}</div>
+        <div><div class="rel">${esc(s.rel)}</div><div class="sm">${esc(s.sm)}</div></div>
+        ${s.bound?'<div class="bound">BOUND</div>':''}
+      </div>`).join('')}
+      <div class="srccard add" data-c="${SRC.length}">&#43;&nbsp; Find sources</div>
+    </div>`;
+
+  const moreHTML = `
+    <div class="rowtitle" style="margin-top:56px">More Like This</div>
+    <div class="strip">${(d.more||[]).map((m,i)=>`
+      <div class="card poster" data-c="${i}"><img src="${src(m.poster)}">
+        <div class="cap">${esc(m.genre||'')}</div></div>`).join('')}</div>`;
+
+  // The episode band starts ABOVE the fold on purpose: a sliver of the first
+  // stills has to show under the identity, or nothing on screen says the page
+  // continues. Apple leans on the same tell.
+  root.querySelector('#pg').innerHTML = idHTML +
+    `<div style="position:absolute;top:1010px;left:0;right:0">${epHTML}</div>` +
+    `<div style="position:absolute;top:1580px;left:0;right:0">${castHTML}</div>` +
+    `<div style="position:absolute;top:2060px;left:0;right:0">${srcHTML}</div>` +
+    `<div style="position:absolute;top:2400px;left:0;right:0">${moreHTML}</div>`;
+
+  // bands: 0 identity · 1 seasons · 2 episodes · 3 cast · 4 sources · 5 more
+  const st = {band:0, col:[0,0,0,0,0,0], dir:0};
+
+  let cur = null;
+  const setFocus = (el, dir) => {
+    if(cur === el) return;
+    if(cur) FX.blur(cur);
+    cur = el;
+    if(el) FX.focus(el, dir);
+  };
+
+  // Measured against the page's own top, so a change to any band's height
+  // re-flows the rest instead of quietly sliding everything off-centre.
+  const pg = root.querySelector('#pg');
+  const top0 = pg.getBoundingClientRect().top;
+  const at = (sel, rest) => {
+    const el = root.querySelector(sel);
+    return el ? el.getBoundingClientRect().top - top0 - rest : 0;
+  };
+  const OFFSET = [0, at('#seasons', 220), at('.epstrip', 250),
+                  at('.castrow', 300), at('.srcstrip', 330), at('.dpage .strip', 300)];
+  pg._axis = 'Y';
+  const pgTo = panner(pg);
+  const epPan   = panner(root.querySelector('.epstrip'));
+  const castPan = panner(root.querySelector('.castrow'));
+  const srcPan  = panner(root.querySelector('.srcstrip'));
+  const morePan = panner(root.querySelector('.dpage .strip'));
+
+  function paint(){
+    pgTo(-OFFSET[st.band]);
+    const deep = st.band > 0;
+    root.querySelector('#bd').style.opacity = deep ? 0 : 1;
+    root.querySelector('#dsl').style.opacity = deep ? 0 : 1;
+    root.querySelector('#amb').style.opacity = deep ? 1 : 0;
+    // The identity band belongs to the top state. Scrolled, its tail (the
+    // sub-caption, the Starring line) would otherwise hang under the sticky
+    // logo saying the same thing twice.
+    root.querySelector('#idband').style.opacity = deep ? 0 : 1;
+    const sticky = root.querySelector('#sticky');
+    sticky.style.opacity = deep ? 1 : 0;
+    sticky.style.transform = deep ? 'translateY(0)' : 'translateY(-12px)';
+    // Gone once you are past the top band — Apple's scrolled frames have no
+    // mark at all, and ours already auto-hides after a second. Leaving it up
+    // parks a glyph on someone's artwork for the whole page.
+    const pm = root.querySelector('#pm');
+    pm.classList.toggle('open', st.band === 0);
+    pm.style.opacity = st.band === 0 ? .9 : 0;
+
+    let want = null;
+    // The plate and ring are classes; the LIFT is the spring. They are applied
+    // to different elements on purpose — the plate wraps the whole episode
+    // cell, the lift belongs to the still alone.
+    root.querySelectorAll('.seasonpill').forEach((p,i)=>{
+      const on = st.band === 1 && st.col[1] === i;
+      p.classList.toggle('f', on); if(on) want = p;
+    });
+    root.querySelectorAll('.ep').forEach((p,i)=>{
+      const on = st.band === 2 && st.col[2] === i;
+      p.classList.toggle('f', on); if(on) want = p.querySelector('.still');
+    });
+    root.querySelectorAll('.cast').forEach((p,i)=>{
+      const on = st.band === 3 && st.col[3] === i;
+      p.classList.toggle('f', on); if(on) want = p.querySelector('.circ');
+    });
+    root.querySelectorAll('.srccard').forEach((p,i)=>{
+      const on = st.band === 4 && st.col[4] === i;
+      p.classList.toggle('f', on); if(on) want = p;
+    });
+    root.querySelectorAll('.dpage .card').forEach((p,i)=>{
+      const on = st.band === 5 && st.col[5] === i;
+      p.classList.toggle('f', on); if(on) want = p;
+    });
+    setFocus(want, st.dir);
+
+    epPan  (-Math.max(0, st.col[2]-2) * 502);
+    castPan(-Math.max(0, st.col[3]-2) * 302);
+    srcPan (-Math.max(0, st.col[4]-1) * 586);
+    morePan(-Math.max(0, st.col[5]-2) * 300);
+  }
+
+  const LEN = [1, Math.min(4,d.seasons.length), d.episodes.length,
+               (d.cast||[]).length, SRC.length + 1, (d.more||[]).length];
+  paint();
+  return e=>{
+    const k = e.key;
+    if(k === 'ArrowDown'){ st.band = Math.min(5, st.band+1); st.dir = 1; }
+    else if(k === 'ArrowUp'){ st.band = Math.max(0, st.band-1); st.dir = -1; }
+    else if(k === 'ArrowLeft'){ st.col[st.band] = Math.max(0, st.col[st.band]-1); st.dir = -1; }
+    else if(k === 'ArrowRight'){
+      st.col[st.band] = Math.min(LEN[st.band]-1, st.col[st.band]+1); st.dir = 1; }
+    else return false;
+    paint(); return true;
+  };
+}
+
+/* ── wiring ──────────────────────────────────────────────────── */
+const handlers = {
+  's-home':   buildHome(document.getElementById('tv-home')),
+  's-detail': buildDetail(document.getElementById('tv-detail')),
+};
+for(const id in handlers){
+  const stage = document.getElementById(id);
+  stage.addEventListener('keydown', e=>{ if(handlers[id](e)) e.preventDefault(); });
+  stage.addEventListener('click', ()=>stage.focus());
+  aimOnHover(stage);
+}
+
+/* scale 1920×1080 into whatever width the page gives us */
+function rescale(){
+  document.querySelectorAll('.stage').forEach(s=>{
+    const k = s.clientWidth / 1920;
+    s.querySelector('.scaler').style.transform = `scale(${k})`;
+  });
+}
+addEventListener('resize', rescale); rescale();
+
+document.getElementById('fxtog').addEventListener('click', function(){
+  const apple = FX.isFlat();          // toggling INTO Apple when currently flat
+  FX.setFlat(!apple);
+  this.classList.toggle('on', apple);
+  this.textContent = apple ? 'Focus: Apple' : 'Focus: flat (today)';
+});
+
+document.getElementById('zoomtog').addEventListener('click', function(){
+  const on = document.body.classList.toggle('zoom1');
+  this.classList.toggle('on', on);
+  document.querySelectorAll('.stage').forEach(s=>{
+    s.style.width = on ? '1920px' : '';
+    s.style.maxWidth = on ? 'none' : '';
+  });
+  document.querySelector('.wrap').style.maxWidth = on ? '1990px' : '';
+  rescale();
+});
+</script>
