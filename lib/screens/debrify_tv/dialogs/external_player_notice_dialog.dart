@@ -62,7 +62,7 @@ class _ExternalPlayerNoticeDialogState
         child: AlertDialog(
           backgroundColor: tv.noticeBg,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: app.shape.br(20),
             // Not `hairline`: this is composed at 0.1 exactly, and the
             // hairline is 31/255. Ink at alpha, so it follows the ink.
             side: BorderSide(color: app.core.tx.withValues(alpha: 0.1)),
@@ -214,7 +214,7 @@ class _DontShowAgainRowState extends State<_DontShowAgainRow> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: background,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(
               color: _isFocused ? tv.focusRing : tv.hairline,
               width: _isFocused ? 2 : 1,
@@ -297,7 +297,7 @@ class _DialogButtonState extends State<_DialogButton> {
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
           decoration: BoxDecoration(
             color: background,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(
               color: _isFocused
                   ? app.debrifyTv.focusRing

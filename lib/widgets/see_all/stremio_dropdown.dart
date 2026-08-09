@@ -58,7 +58,7 @@ class StremioDropdownSectionHeader extends StatelessWidget {
           height: 14,
           decoration: BoxDecoration(
             color: app.fade(app.seeAll.accent2, 0.75),
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: app.shape.br(2),
           ),
         ),
         const SizedBox(width: 9),
@@ -226,7 +226,7 @@ class _StremioDropdownState<T extends Object>
       color: app.seeAll.panel2,
       elevation: 12,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: app.shape.br(14),
         side: BorderSide(color: app.seeAll.line),
       ),
       constraints: const BoxConstraints(minWidth: 190, maxWidth: 320),
@@ -370,7 +370,7 @@ class _StremioDropdownState<T extends Object>
                       padding: const EdgeInsets.fromLTRB(14, 9, 11, 9),
                       decoration: BoxDecoration(
                         color: app.seeAll.panel,
-                        borderRadius: BorderRadius.circular(11),
+                        borderRadius: app.shape.br(11),
                         // Constant width: Container feeds the border's thickness into
                         // its layout padding, so a 1→2px focus ring RESIZES the pill
                         // and reflows the whole filter row (reads as the screen shaking
@@ -458,7 +458,7 @@ class _StremioDropdownState<T extends Object>
         color: _focused
             ? app.fade(app.seeAll.accent, 0.30)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: app.shape.brPill,
         // Constant thickness — only the color changes on focus, so the row
         // never reflows on DPAD moves (same rule as the boxed pill).
         border: Border.all(
@@ -611,7 +611,7 @@ class _LazyPickerDialogState<T extends Object>
     return Dialog(
       backgroundColor: app.seeAll.panel,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         side: BorderSide(color: app.seeAll.line),
       ),
       child: ConstrainedBox(
@@ -664,10 +664,10 @@ class _LazyPickerDialogState<T extends Object>
                       color: app.fade(app.core.tx, 0.35),
                       fontSize: 13.5,
                     ),
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.search_rounded,
                       size: 18,
-                      color: Colors.white38,
+                      color: app.core.tx.withValues(alpha: 0x62 / 0xFF),
                     ),
                     filled: true,
                     fillColor: app.seeAll.panel2,
@@ -676,15 +676,15 @@ class _LazyPickerDialogState<T extends Object>
                       vertical: 9,
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: app.shape.br(10),
                       borderSide: BorderSide(color: app.seeAll.line),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: app.shape.br(10),
                       borderSide: BorderSide(color: app.seeAll.line),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: app.shape.br(10),
                       borderSide: BorderSide(color: app.seeAll.accent),
                     ),
                   ),
@@ -894,7 +894,7 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
                   : _hovered
                   ? app.fade(app.core.tx, 0.05)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: app.shape.br(10),
             ),
             child: Row(
               children: [

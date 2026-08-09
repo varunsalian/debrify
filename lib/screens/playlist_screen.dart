@@ -264,7 +264,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: app.home.sheetBg,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: app.shape.br(18),
           side: BorderSide(color: app.fade(app.core.tx, 0.08)),
         ),
         title: const Text(
@@ -365,7 +365,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: app.home.sheetBg,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: app.shape.br(18),
           side: BorderSide(color: app.fade(app.core.tx, 0.08)),
         ),
         title: const Text(
@@ -647,15 +647,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                           // pins, so it stays a veil off the page ink.
                           fillColor: app.fade(app.core.tx, 0.07),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: app.shape.br(14),
                             borderSide: BorderSide.none,
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: app.shape.br(14),
                             borderSide: BorderSide.none,
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: app.shape.br(14),
                             borderSide: BorderSide(
                               // A line, so it derives off the ink and not off
                               // playlist.controlFill (same value under legacy,
@@ -737,7 +737,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     ? app.playlist.controlFill
                     // No token carries this near-black; left literal.
                     : const Color(0xFF141414),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: app.shape.br(20),
                 border: isFocused
                     ? Border.all(
                         color: app.fade(app.core.tx, 0.6),

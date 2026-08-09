@@ -530,7 +530,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                     : Theme.of(context).dividerColor.withOpacity(0.3),
                 width: hasFocus ? 3 : 1,
               ),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: app.shape.br(8),
               boxShadow: hasFocus
                   ? [
                       BoxShadow(
@@ -601,7 +601,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: app.shape.br(10),
                           boxShadow: [
                             BoxShadow(
                               color: categoryColor.withOpacity(0.2),
@@ -858,7 +858,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                               : Theme.of(context).dividerColor.withOpacity(0.3),
                           width: hasFocus ? 3 : 1,
                         ),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: app.shape.br(8),
                         boxShadow: hasFocus
                             ? [
                                 BoxShadow(
@@ -899,7 +899,7 @@ class CommunityChannelsDialogState extends State<CommunityChannelsDialog> {
                                         context,
                                       ).primaryColor.withOpacity(0.2)
                                     : Colors.grey.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: app.shape.br(12),
                               ),
                               child: Text(
                                 '$selectedCount / $totalCount',

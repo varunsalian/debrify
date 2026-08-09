@@ -242,7 +242,7 @@ class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
     return Dialog(
       backgroundColor: app.sheetSurface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: app.shape.br(20)),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: width < 520 ? width : 460,
@@ -263,7 +263,7 @@ class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
       children: [
         if (logo != null && logo.isNotEmpty) ...[
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: app.shape.brImg(8),
             child: Image.network(
               logo,
               width: 34,
@@ -428,15 +428,15 @@ class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
               filled: true,
               fillColor: app.iptv.fieldFill,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: app.shape.br(12),
                 borderSide: BorderSide(color: app.iptv.fieldBorder),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: app.shape.br(12),
                 borderSide: BorderSide(color: app.iptv.fieldBorder),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: app.shape.br(12),
                 borderSide: const BorderSide(color: _accent, width: 2),
               ),
             ),
@@ -536,7 +536,7 @@ class _ListRowState extends State<_ListRow> {
             color: _focused
                 ? widget.accent.withValues(alpha: 0.18)
                 : app.iptv.surfaceTint,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(
               color: _focused
                   ? widget.accent
@@ -646,7 +646,7 @@ class _DialogButtonState extends State<_DialogButton> {
             color: widget.filled
                 ? widget.accent.withValues(alpha: _focused ? 1 : 0.85)
                 : app.core.tx.withValues(alpha: _focused ? 0.16 : 0.06),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             border: Border.all(
               color: _focused
                   ? app.core.tx.withValues(alpha: 0.9)

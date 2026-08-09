@@ -349,7 +349,7 @@ class _CloudScreenState extends State<CloudScreen> {
               // The parent Focus owns keyboard/DPAD focus; keep InkWell out of
               // focus traversal so it doesn't create a competing focus node.
               canRequestFocus: false,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: app.shape.br(18),
               hoverColor: app.fade(app.core.tx, 0.03),
               onTap: () => _openProvider(p.key),
               child: AnimatedContainer(
@@ -371,7 +371,7 @@ class _CloudScreenState extends State<CloudScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: app.shape.br(18),
                   border: Border.all(
                     color: focused
                         ? app.cloud.accent
@@ -403,7 +403,7 @@ class _CloudScreenState extends State<CloudScreen> {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: app.shape.br(14),
                         border: Border.all(
                             color: p.color.withValues(alpha: 0.35)),
                       ),

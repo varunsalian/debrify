@@ -195,7 +195,7 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
             child: IgnorePointer(
               ignoring: !_isExpanded,
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: app.shape.br(20),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
                   child: Container(
@@ -203,7 +203,7 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                     constraints: BoxConstraints(maxHeight: maxMenuHeight),
                     decoration: BoxDecoration(
                       color: app.fade(app.core.tx, 0.08),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: app.shape.br(20),
                       border: Border.all(
                         color: app.fade(app.core.tx, 0.12),
                         width: 1,
@@ -250,7 +250,7 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                   scale: _scaleAnimation.value,
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(22),
+                      borderRadius: app.shape.br(22),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.4),
@@ -261,7 +261,7 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: app.shape.br(20),
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                         child: AnimatedContainer(
@@ -272,7 +272,7 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                             color: _isExpanded
                                 ? app.fade(app.core.tx, 0.12)
                                 : app.fade(app.core.tx, 0.1),
-                            borderRadius: BorderRadius.circular(22),
+                            borderRadius: app.shape.br(22),
                             border: Border.all(
                               color: app.fade(app.core.tx, _isExpanded ? 0.25 : 0.15),
                               width: 1,
@@ -372,7 +372,7 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: app.shape.br(20),
       child: Stack(
         children: [
           SingleChildScrollView(
@@ -572,7 +572,7 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                   ],
                 )
               : null,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: app.shape.br(12),
           border: widget.isSelected
               ? Border.all(
                   color: widget.gradient[0].withValues(alpha: 0.4),
@@ -598,7 +598,7 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                           widget.gradient[1].withValues(alpha: 0.1),
                         ],
                 ),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: app.shape.br(10),
                 boxShadow: widget.isSelected
                     ? [
                         BoxShadow(
@@ -643,7 +643,7 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: Colors.amber.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: app.shape.br(4),
                         border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 0.5),
                       ),
                       child: Text(
@@ -753,7 +753,7 @@ class _Dot extends StatelessWidget {
       height: 5,
       decoration: BoxDecoration(
         color: app.fade(app.core.tx, opacity),
-        borderRadius: BorderRadius.circular(1.5),
+        borderRadius: app.shape.br(1.5),
       ),
     );
   }
@@ -790,7 +790,7 @@ class _RemoteControlMenuItemState extends State<_RemoteControlMenuItem> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: _isPressed ? _accentColor.withValues(alpha: 0.08) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: app.shape.br(8),
           border: Border(
             left: BorderSide(
               color: _accentColor.withValues(alpha: _isPressed ? 1.0 : 0.6),

@@ -98,7 +98,7 @@ class _IptvListNameDialogState extends State<_IptvListNameDialog> {
     final width = MediaQuery.of(context).size.width;
     return Dialog(
       backgroundColor: app.sheetSurface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: app.shape.br(20)),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: width < 480 ? width : 420),
         child: Padding(
@@ -161,15 +161,15 @@ class _IptvListNameDialogState extends State<_IptvListNameDialog> {
                     filled: true,
                     fillColor: app.iptv.fieldFill,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: app.shape.br(12),
                       borderSide: BorderSide(color: app.iptv.fieldBorder),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: app.shape.br(12),
                       borderSide: BorderSide(color: app.iptv.fieldBorder),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: app.shape.br(12),
                       borderSide: const BorderSide(color: _accent, width: 2),
                     ),
                   ),
@@ -251,7 +251,7 @@ class _NameDialogButtonState extends State<_NameDialogButton> {
             color: widget.filled
                 ? _accent.withValues(alpha: _focused ? 1 : 0.85)
                 : app.core.tx.withValues(alpha: _focused ? 0.16 : 0.06),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             border: Border.all(
               color: _focused
                   ? app.core.tx.withValues(alpha: 0.9)

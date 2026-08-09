@@ -226,7 +226,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: app.shape.br(16),
                 boxShadow: isActive
                     ? [
                         BoxShadow(
@@ -244,7 +244,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                       ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: app.shape.brImg(16),
                 child: Stack(
                   children: [
                     // Poster background
@@ -299,7 +299,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: app.shape.br(6),
                           ),
                           child: Text(
                             _prettifyProvider(provider),
@@ -324,7 +324,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: app.shape.br(6),
                           ),
                           child: Icon(
                             Icons.star_rounded,
@@ -432,7 +432,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                         duration: const Duration(milliseconds: 200),
                         curve: Curves.easeOutCubic,
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: app.shape.br(16),
                           border: Border.all(
                             color: isActive
                                 ? app.fade(app.core.tx, 0.25)
@@ -647,7 +647,7 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
                         child: Container(
                           margin: const EdgeInsets.all(12),
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: app.shape.br(20),
                             // TV: solid panel instead of glass — the blur
                             // re-rasterises during the sheet's slide/fade-in,
                             // a full-screen saveLayer per frame on weak GPUs.
@@ -660,7 +660,7 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
                                       // role: a veil over a real blur, so it
                                       // steps off the ink, not off sheetPanel.
                                       : app.fade(app.core.tx, 0.08),
-                                  borderRadius: BorderRadius.circular(20),
+                                  borderRadius: app.shape.br(20),
                                   border: Border.all(
                                     // A line, so it does not borrow
                                     // playlist.controlFill's 0.15.
@@ -714,7 +714,7 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
             width: 56,
             height: 84,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: app.shape.br(8),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.3),
@@ -724,7 +724,7 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: app.shape.brImg(8),
               child: widget.posterUrl != null && widget.posterUrl!.isNotEmpty
                   ? CachedNetworkImage(
                       imageUrl: widget.posterUrl!,
@@ -748,7 +748,7 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: app.playlist.controlFill,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: app.shape.br(4),
                     ),
                     child: Text(
                       widget.provider!,
@@ -912,7 +912,7 @@ class _GlassButtonState extends State<_GlassButton> {
             color: isHighlighted
                 ? app.playlist.controlFill
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(
               color: _isFocused
                   ? app.playlist.focusRing

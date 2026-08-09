@@ -201,7 +201,7 @@ class _DetailThemePageState extends State<DetailThemePage> {
       padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
       decoration: BoxDecoration(
         color: app.fade(app.core.tx, 0.05),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: app.shape.br(10),
         border: Border.all(color: app.fade(app.core.tx, 0.10)),
       ),
       child: Row(

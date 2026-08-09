@@ -230,7 +230,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
               color: isSelected ? accent : app.playlist.hairline,
               width: isSelected ? 2 : 1,
             ),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: app.shape.br(8),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,10 +249,10 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                   // (posterPlaceholder is #1A1A2E), so pointing legacy at the
                   // token would move a colour that ships today.
                   color: app.playlist.posterTileBg,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: app.shape.brImg(4),
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: app.shape.brImg(4),
                   child: imageUrl != null
                       ? CachedNetworkImage(
                           imageUrl: imageUrl,
@@ -297,7 +297,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: accent.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: app.shape.br(4),
                             ),
                             child: Text(
                               premiered.substring(0, 4),
@@ -315,7 +315,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                               color: status == 'Ended'
                                   ? Colors.red.withOpacity(0.2)
                                   : Colors.green.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: app.shape.br(4),
                             ),
                             child: Text(
                               status,
@@ -407,7 +407,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
         vertical: isCompact ? 24 : 40,
       ),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
       ),
       child: Container(
         width: isCompact ? double.infinity : screenWidth * 0.8,
@@ -466,11 +466,11 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                 // A veil, not playlist.fieldFill (that role is opaque slate).
                 fillColor: app.fade(app.core.tx, 0.1),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   borderSide: BorderSide.none,
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   borderSide: BorderSide(color: accent, width: 2),
                 ),
                 prefixIcon: Icon(Icons.search, color: ink54),
@@ -583,7 +583,7 @@ class _TVMazeSearchDialogState extends State<TVMazeSearchDialog> {
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: app.shape.br(8),
                           ),
                         ),
                         child: const Text('Cancel'),

@@ -489,7 +489,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                         height: 5,
                         decoration: BoxDecoration(
                           color: app.home.controlBg,
-                          borderRadius: BorderRadius.circular(999),
+                          borderRadius: app.shape.brPill,
                         ),
                       ),
                     ),
@@ -503,7 +503,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: app.shape.br(16),
                       ),
                       child: Row(
                         children: [
@@ -579,7 +579,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               side: BorderSide(color: app.downloads.line),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              shape: RoundedRectangleBorder(borderRadius: app.shape.br(14)),
                             ),
                             child: const Text('Cancel'),
                           ),
@@ -596,7 +596,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               backgroundColor: app.downloads.accent,
                               foregroundColor: app.downloads.onAccent,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              shape: RoundedRectangleBorder(borderRadius: app.shape.br(14)),
                               elevation: 2,
                             ),
                           ),
@@ -645,7 +645,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
               margin: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: app.shape.br(12),
               ),
               child: TabBar(
             controller: _tabController,
@@ -657,7 +657,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
             overlayColor: MaterialStateProperty.all(Colors.transparent),
             indicator: BoxDecoration(
               color: Theme.of(context).colorScheme.primary,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: app.shape.br(10),
             ),
             labelColor: Theme.of(context).colorScheme.onPrimaryContainer,
             unselectedLabelColor:
@@ -679,7 +679,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: app.shape.br(12),
                       border: Border.all(
                         color: Theme.of(context)
                             .colorScheme
@@ -689,10 +689,27 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Shimmer(width: double.infinity, height: 16),
-                        SizedBox(height: 8),
-                        Shimmer(width: 160, height: 14),
+                      // The skeleton's own tokens. Omitting them left
+                      // `Shimmer` on its shipped slate literals — correct for
+                      // the frozen player, which also renders this widget, but
+                      // a stranded blue-grey plate on every other theme and an
+                      // invisible one on a light ground. `app` is captured
+                      // from the enclosing build, not read inside the
+                      // itemBuilder.
+                      children: [
+                        Shimmer(
+                          width: double.infinity,
+                          height: 16,
+                          base: app.downloads.shimmerBase,
+                          highlight: app.downloads.shimmerHighlight,
+                        ),
+                        const SizedBox(height: 8),
+                        Shimmer(
+                          width: 160,
+                          height: 14,
+                          base: app.downloads.shimmerBase,
+                          highlight: app.downloads.shimmerHighlight,
+                        ),
                       ],
                     ),
                   ),
@@ -776,7 +793,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: app.cloud.dialogSurface,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: app.shape.br(20),
                   border: Border.all(
                     color: _addButtonFocused
                         ? app.downloads.addAccent
@@ -826,7 +843,7 @@ class _DownloadsScreenState extends State<DownloadsScreen>
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: app.cloud.dialogSurface,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: app.shape.brPill,
         border: Border.all(color: app.downloads.line),
       ),
       child: Row(
@@ -887,11 +904,11 @@ class _StyledField extends StatelessWidget {
         filled: true,
         fillColor: app.downloads.fieldFill,
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: app.shape.br(14),
           borderSide: BorderSide(color: app.downloads.line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: app.shape.br(14),
           borderSide: BorderSide(color: app.downloads.accent),
         ),
         contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
@@ -914,7 +931,7 @@ class _PreviewCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: app.downloads.previewCard,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         border: Border.all(color: app.downloads.line),
       ),
       child: Column(
@@ -1982,7 +1999,7 @@ class _TorrentGroupCard extends StatelessWidget {
     }
 
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      shape: RoundedRectangleBorder(borderRadius: app.shape.br(18)),
       margin: EdgeInsets.zero,
       elevation: 0,
       color: theme.colorScheme.surface,
@@ -1997,7 +2014,7 @@ class _TorrentGroupCard extends StatelessWidget {
                 Container(
                   decoration: BoxDecoration(
                     color: stateColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: app.shape.br(14),
                   ),
                   padding: const EdgeInsets.all(12),
                   child: Icon(group.state.icon, color: stateColor, size: 24),
@@ -2073,7 +2090,7 @@ class _TorrentGroupCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             ClipRRect(
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: app.shape.brPill,
               child: LinearProgressIndicator(
                 value: group.progress.isNaN ? 0 : group.progress.clamp(0.0, 1.0),
                 minHeight: 8,
@@ -2275,7 +2292,7 @@ class _DownloadTile extends StatelessWidget {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: app.downloads.accent.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: app.shape.br(10),
                   ),
                   child: Icon(
                     record.status == TaskStatus.complete && (moveProgress == null || moveProgress == 1.0)
@@ -2316,14 +2333,14 @@ class _DownloadTile extends StatelessWidget {
             LinearProgressIndicator(
               value: shownProgress,
               minHeight: 8,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: app.shape.br(8),
             ),
             if (record.status == TaskStatus.complete && !moveFailed && moveProgress != null && moveProgress! < 1.0) ...[
               const SizedBox(height: 8),
               LinearProgressIndicator(
                 value: moveProgress!.clamp(0.0, 1.0),
                 minHeight: 6,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: app.shape.br(8),
               ),
               const SizedBox(height: 4),
               Text('Moving ${(moveProgress! * 100).toStringAsFixed(0)}%',
@@ -2468,7 +2485,7 @@ class _StatChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: app.home.controlBg,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: app.shape.brPill,
         border: Border.all(color: app.downloads.chipBorder),
       ),
       child: Row(

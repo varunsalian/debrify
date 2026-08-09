@@ -367,7 +367,7 @@ class _PlaylistDropdownState extends State<_PlaylistDropdown> {
           // a 1→2px focus ring resizes the chip and reflows the whole bar.
           decoration: BoxDecoration(
             color: app.seeAll.panel,
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: app.shape.br(11),
             border: Border.all(
               width: 2,
               color: _isFocused ? app.seeAll.accent : app.seeAll.line,
@@ -534,7 +534,7 @@ class _CategoryDropdownState extends State<_CategoryDropdown> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: app.seeAll.panel,
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: app.shape.br(11),
             border: Border.all(
               width: 2,
               color: _isFocused ? app.seeAll.accent : app.seeAll.line,
@@ -646,7 +646,7 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: selected ? app.seeAll.accent : Colors.transparent,
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: app.shape.br(7),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -719,7 +719,7 @@ class _ContentTypeToggleState extends State<_ContentTypeToggle> {
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           decoration: BoxDecoration(
             color: app.seeAll.panel,
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: app.shape.br(11),
             border: Border.all(
               width: 2,
               color: _isFocused ? app.seeAll.accent : app.seeAll.line,

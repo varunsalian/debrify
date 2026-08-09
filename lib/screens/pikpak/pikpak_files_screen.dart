@@ -1359,7 +1359,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                 color: isError
                     ? const Color(0xFFEF4444)
                     : const Color(0xFF22C55E),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: app.shape.br(8),
               ),
               child: Icon(
                 isError ? Icons.error : Icons.check_circle,
@@ -1378,7 +1378,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         ),
         backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
         margin: const EdgeInsets.all(16),
         duration: duration ?? const Duration(seconds: 3),
       ),
@@ -1840,7 +1840,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                 filled: true,
                 fillColor: app.fade(app.core.tx, 0.06),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1883,7 +1883,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                     return Container(
                       decoration: BoxDecoration(
                         color: app.fade(app.core.tx, 0.06),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: app.shape.br(8),
                         border: isFocused
                             ? Border.all(color: app.core.tx, width: 2)
                             : null,
@@ -2338,7 +2338,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: theme.colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         border: Border.all(
           color: theme.colorScheme.primary.withValues(alpha: 0.3),
         ),

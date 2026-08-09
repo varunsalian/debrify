@@ -479,7 +479,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
                         child: IgnorePointer(
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(2),
+                              borderRadius: app.shape.br(2),
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
@@ -867,7 +867,7 @@ class _TvNavItemWidget extends StatelessWidget {
                 child: Container(
                   margin: const EdgeInsets.only(right: 6),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: app.shape.br(14),
                     color: isFocused
                         ? app.fade(app.core.tx, t)
                         : app.fade(app.core.tx, 0.10 * t),
@@ -945,7 +945,7 @@ class _TvNavItemWidget extends StatelessWidget {
                   width: 38,
                   height: 32,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: app.shape.br(12),
                     color: app.fade(app.core.tx, k),
                   ),
                 ),
@@ -979,7 +979,7 @@ class _TvNavItemWidget extends StatelessWidget {
                 child: Container(
                   margin: const EdgeInsets.only(right: 6, top: 4, bottom: 4),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: app.shape.br(16),
                     color: isSelected ? app.fade(app.core.tx, t) : null,
                     border: isFocused
                         ? Border.all(
@@ -1126,7 +1126,7 @@ class _TvNavItemWidget extends StatelessWidget {
                     if (isFocused) {
                       return Container(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(21),
+                          borderRadius: app.shape.br(21),
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
@@ -1146,7 +1146,7 @@ class _TvNavItemWidget extends StatelessWidget {
                         padding: const EdgeInsets.all(1.4),
                         child: Container(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: app.shape.br(20),
                             gradient: LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
@@ -1165,7 +1165,7 @@ class _TvNavItemWidget extends StatelessWidget {
                     }
                     return Container(
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(21),
+                        borderRadius: app.shape.br(21),
                         gradient: LinearGradient(
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
@@ -1220,7 +1220,7 @@ class _TvNavItemWidget extends StatelessWidget {
                                 ),
                                 decoration: BoxDecoration(
                                   color: accent.withValues(alpha: 0.18),
-                                  borderRadius: BorderRadius.circular(5),
+                                  borderRadius: app.shape.br(5),
                                 ),
                                 child: Text(
                                   item.tag!,

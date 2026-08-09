@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
+import '../../theme/app_motion.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 
@@ -33,25 +34,29 @@ class CloudSegmentedTabs<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
+    // Hoisted with the theme read, above every builder callback below.
+    final motion = AppMotion.of(context);
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: app.fade(app.core.tx, 0.045),
-        borderRadius: BorderRadius.circular(13),
+        borderRadius: app.shape.br(13),
         border: Border.all(color: app.fade(app.core.tx, 0.08)),
       ),
       child: Row(
         children: [
           for (var i = 0; i < segments.length; i++) ...[
             if (i > 0) const SizedBox(width: 4),
-            Expanded(child: _segment(segments[i], app)),
+            Expanded(child: _segment(segments[i], app, motion)),
           ],
         ],
       ),
     );
   }
 
-  Widget _segment(CloudSegment<T> segment, AppTheme app) {
+  // `motion` is threaded in rather than read here: this method's body is a
+// Builder callback, and the house rule keeps inherited reads out of those.
+Widget _segment(CloudSegment<T> segment, AppTheme app, AppMotion motion) {
     final isSelected = segment.value == selected;
     return Focus(
       onKeyEvent: (node, event) {
@@ -67,11 +72,14 @@ class CloudSegmentedTabs<T> extends StatelessWidget {
           return GestureDetector(
             onTap: () => onSelected(segment.value),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
+              // The site keeps its own 150ms; the theme only scales it, and
+              // reduced motion collapses it. Legacy's scale is 1.0, so this
+              // is the same 150ms it has always been.
+              duration: motion.scaled(const Duration(milliseconds: 150)),
               padding: const EdgeInsets.symmetric(vertical: 9),
               decoration: BoxDecoration(
                 color: isSelected ? app.cloud.accent : Colors.transparent,
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: app.shape.br(9),
                 border: Border.all(
                   color: focused
                       ? app.fade(

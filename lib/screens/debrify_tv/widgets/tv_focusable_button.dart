@@ -60,7 +60,7 @@ class _TvFocusableButtonState extends State<TvFocusableButton> {
         child: Container(
           width: widget.width,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: app.shape.br(16),
             // TV: the white border is the focus cue; skip the blurred glow.
             boxShadow: _isFocused && !PlatformUtil.isTelevision
                 ? [
@@ -103,7 +103,7 @@ class _TvFocusableButtonState extends State<TvFocusableButton> {
                   : app.inkOn(widget.backgroundColor),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: app.shape.br(16),
               ),
             ),
           ),

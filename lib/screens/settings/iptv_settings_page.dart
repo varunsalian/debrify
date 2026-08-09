@@ -2538,7 +2538,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
     return Container(
       decoration: BoxDecoration(
         color: t.panel,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         border: Border.all(color: t.line),
       ),
       padding: const EdgeInsets.all(4),
@@ -2594,7 +2594,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                           color: isSelected
                               ? t.accent.withValues(alpha: 0.22)
                               : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: app.shape.br(8),
                           border: _urlTabFocused
                               ? Border.all(color: t.accent, width: 2)
                               : null,
@@ -2694,7 +2694,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                           color: isSelected
                               ? t.accent.withValues(alpha: 0.22)
                               : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: app.shape.br(8),
                           border: _fileTabFocused
                               ? Border.all(color: t.accent, width: 2)
                               : null,
@@ -2789,7 +2789,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                             color: isSelected
                                 ? t.accent.withValues(alpha: 0.22)
                                 : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: app.shape.br(8),
                             border: _xcTabFocused
                                 ? Border.all(color: t.accent, width: 2)
                                 : null,
@@ -3756,7 +3756,7 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: t.success.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: app.shape.br(8),
               border: Border.all(color: t.success.withValues(alpha: 0.22)),
             ),
             child: Row(

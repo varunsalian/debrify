@@ -679,7 +679,7 @@ class _StremioTvLocalCatalogEditorDialogState
     final height = compact ? 74.0 : 86.0;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: app.shape.brImg(10),
       child: Container(
         width: width,
         height: height,
@@ -729,7 +729,7 @@ class _StremioTvLocalCatalogEditorDialogState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         color: app.stremioTv.surfaceFill,
         border: Border.all(color: app.core.tx.withValues(alpha: 0.08)),
       ),
@@ -1674,7 +1674,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
               decoration: InputDecoration(
                 hintText: 'Catalog name (required for Trakt lists)',
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: app.shape.br(12),
                 ),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
@@ -1699,7 +1699,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
             decoration: InputDecoration(
               hintText: 'https://example.com/catalog.json',
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: app.shape.br(12),
               ),
               errorText: _error,
               isDense: true,
@@ -1912,7 +1912,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
               decoration: InputDecoration(
                 hintText: 'Catalog name (required for Trakt lists)',
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: app.shape.br(12),
                 ),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
@@ -1931,7 +1931,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
               hintText:
                   '{"name": "My Catalog", "items": [...]}\nor paste Trakt list JSON',
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: app.shape.br(12),
               ),
               errorText: _error,
               contentPadding: const EdgeInsets.all(12),

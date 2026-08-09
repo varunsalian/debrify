@@ -489,7 +489,7 @@ class _TakeoverInfo extends StatelessWidget {
                       child: Container(
                         width: 5,
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: app.shape.br(4),
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
@@ -584,7 +584,7 @@ class _TrailerLoadingPill extends StatelessWidget {
             decoration: BoxDecoration(
               // Glassy page ink — fade 0.8 pins the legacy 0xCC alpha.
               color: app.fade(app.seeAll.bg, 0.8),
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: app.shape.brPill,
               border: Border.all(color: app.seeAll.accentBorder),
               boxShadow: [
                 BoxShadow(

@@ -297,7 +297,7 @@ class _IptvChannelRowState extends State<IptvChannelRow>
                         ? const Color(0xFF17132E)
                         : app.iptv.rowFocusFill)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: app.shape.br(12),
               border: Border.all(
                 color: _active ? activeAccent : Colors.transparent,
                 width: 2,
@@ -1121,7 +1121,7 @@ class _RowEpgState extends State<_RowEpg> {
           const SizedBox(height: 5),
           // Same bar the rail card draws, at row scale.
           ClipRRect(
-            borderRadius: BorderRadius.circular(1.5),
+            borderRadius: app.shape.br(1.5),
             child: SizedBox(
               height: 3,
               child: Row(

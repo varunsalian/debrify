@@ -548,7 +548,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   end: Alignment.bottomCenter,
                   colors: [const Color(0xFF0F172A), app.cloud.dialogSurface],
                 ),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: app.shape.br(24),
                 border: Border.all(
                   color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                   width: 1,
@@ -576,7 +576,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                                   await option.onTap();
                                 }
                               : null,
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: app.shape.br(16),
                           splashColor: option.enabled
                               ? const Color(0xFF6366F1).withValues(alpha: 0.2)
                               : Colors.transparent,
@@ -592,7 +592,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                               ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF111C32),
-                                borderRadius: BorderRadius.circular(16),
+                                borderRadius: app.shape.br(16),
                                 border: Border.all(
                                   color: const Color(
                                     0xFF475569,
@@ -934,7 +934,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: const Color(0xFF7C3AED),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: app.shape.br(8),
               ),
               child: const Icon(
                 Icons.check,
@@ -953,7 +953,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
         ),
         backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 3),
       ),
@@ -1409,7 +1409,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   end: Alignment.bottomCenter,
                   colors: [const Color(0xFF0F172A), app.cloud.dialogSurface],
                 ),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: app.shape.br(24),
                 border: Border.all(
                   color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                   width: 1,
@@ -1975,7 +1975,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           return AlertDialog(
             backgroundColor: app.cloud.dialogSurface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: app.shape.br(16),
             ),
             title: Text(
               'Deleting ${isTorrents ? 'Torrents' : 'Web Downloads'}',
@@ -2611,7 +2611,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                       app.cloud.dialogSurface.withValues(alpha: 0.98),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(28),
+                  borderRadius: app.shape.br(28),
                   border: Border.all(
                     color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                   ),
@@ -2636,7 +2636,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: app.cloud.dialogSurface.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: app.shape.br(16),
                           border: Border.all(
                             color: const Color(
                               0xFF475569,
@@ -2751,7 +2751,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                                         vertical: 14,
                                       ),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
+                                        borderRadius: app.shape.br(16),
                                       ),
                                     ),
                                   ),
@@ -2812,7 +2812,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                                     vertical: 14,
                                   ),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: app.shape.br(16),
                                   ),
                                 ),
                                 child: const Text(
@@ -3115,7 +3115,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                   end: Alignment.bottomCenter,
                   colors: [const Color(0xFF0F172A), app.cloud.dialogSurface],
                 ),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: app.shape.br(24),
                 border: Border.all(
                   color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                   width: 1,
@@ -3479,7 +3479,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                     const Color(0xFF111827).withValues(alpha: 0.6),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: app.shape.br(18),
                 border: Border.all(
                   color: const Color(0xFF475569).withValues(alpha: 0.3),
                 ),
@@ -3487,7 +3487,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: app.shape.br(18),
                   onTap: () => onSeasonChange(seasonNumber),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -3524,7 +3524,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                                     ? 0.4
                                     : 0,
                               ),
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: app.shape.br(6),
                               border: Border.all(
                                 color: const Color(0xFF10B981),
                                 width: 2,
@@ -3559,7 +3559,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                             gradient: const LinearGradient(
                               colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                             ),
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: app.shape.br(16),
                           ),
                           child: const Icon(
                             Icons.folder_rounded,
@@ -5739,7 +5739,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 filled: true,
                 fillColor: app.fade(app.core.tx, 0.06),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -5782,7 +5782,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                     return Container(
                       decoration: BoxDecoration(
                         color: app.fade(app.core.tx, 0.06),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: app.shape.br(8),
                         border: isFocused
                             ? Border.all(color: app.core.tx, width: 2)
                             : null,
@@ -6441,7 +6441,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: theme.colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         border: Border.all(
           color: theme.colorScheme.primary.withValues(alpha: 0.3),
         ),
@@ -6506,15 +6506,15 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
                 fillColor: app.fade(app.core.tx, 0.06),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: app.shape.br(12),
                   borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: app.shape.br(12),
                   borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: app.shape.br(12),
                   borderSide: BorderSide(color: app.cloud.accent),
                 ),
               ),
@@ -6646,7 +6646,7 @@ class _TorboxDownloadsScreenState extends State<TorboxDownloadsScreen> {
           padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
           decoration: BoxDecoration(
             color: app.fade(app.core.tx, 0.05),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(color: app.fade(app.core.tx, 0.08)),
           ),
           child: Row(

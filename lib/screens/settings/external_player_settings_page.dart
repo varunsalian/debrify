@@ -1253,7 +1253,7 @@ class _ExternalPlayerSettingsPageState
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: t.accent.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: app.shape.br(10),
         ),
         child: Icon(
           player.icon,
@@ -1315,7 +1315,7 @@ class _ExternalPlayerSettingsPageState
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: t.accent.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: app.shape.br(10),
         ),
         child: Icon(player.icon, color: t.accent),
       ),
@@ -1371,7 +1371,7 @@ class _ExternalPlayerSettingsPageState
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: t.accent.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: app.shape.br(10),
         ),
         child: Icon(player.icon, color: t.accent),
       ),
@@ -1427,7 +1427,7 @@ class _ExternalPlayerSettingsPageState
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: t.accent.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: app.shape.br(10),
         ),
         child: Icon(player.icon, color: t.accent),
       ),

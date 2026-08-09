@@ -382,7 +382,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       builder: (_) => Dialog(
         backgroundColor: app.seeAll.panel,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: app.shape.br(16),
           side: BorderSide(color: app.seeAll.line),
         ),
         child: Padding(
@@ -547,11 +547,11 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
             hintText: 'https://…/manifest.json',
             hintStyle: TextStyle(color: app.fade(app.core.tx, 0.35)),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: app.shape.br(11),
               borderSide: BorderSide(color: app.seeAll.line),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: app.shape.br(11),
               borderSide: BorderSide(color: app.seeAll.accent, width: 2),
             ),
           ),
@@ -903,7 +903,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
       color: app.seeAll.panel2,
       elevation: 12,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: app.shape.br(14),
         side: BorderSide(color: app.seeAll.line),
       ),
       items: [
@@ -1232,7 +1232,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     return Container(
       decoration: BoxDecoration(
         color: app.seeAll.panel,
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: app.shape.br(11),
         border: Border.all(color: app.seeAll.line),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1620,7 +1620,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
             Icon(icon, size: 44, color: Colors.white.withValues(alpha: 0.25)),
             const SizedBox(height: 14),
             Text(title,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
@@ -1856,7 +1856,7 @@ class _AddonTitleLine extends StatelessWidget {
     final nameText = Text(name,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
+        style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.2));
@@ -2198,7 +2198,7 @@ class _MarketButtonState extends State<_MarketButton> {
             padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
             decoration: BoxDecoration(
               color: fill,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: app.shape.br(24),
               border: Border.all(width: 2, color: borderColor),
             ),
             child: Text(widget.label,
@@ -2259,7 +2259,7 @@ class _EngineRow extends StatelessWidget {
                   Text(title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.2)),
@@ -2318,7 +2318,7 @@ class _EngineActionPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
       decoration: BoxDecoration(
         color: fill,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: app.shape.br(24),
         border: Border.all(width: 2, color: border),
       ),
       child: Text(label,
@@ -2403,7 +2403,7 @@ class _AddonOptionsSheet extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 14),
               decoration: BoxDecoration(
                 color: app.fade(app.core.tx, 0.2),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: app.shape.br(2),
               ),
             ),
             Padding(
@@ -2487,7 +2487,7 @@ class _OptionTileState extends State<_OptionTile> {
             color: _focused
                 ? app.fade(app.seeAll.accent, 0.14)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: app.shape.br(11),
             border: Border.all(
               color: _focused ? app.seeAll.accent : Colors.transparent,
               width: _focused ? 1.5 : 1,
@@ -2581,7 +2581,7 @@ class _HubActionButtonState extends State<_HubActionButton> {
                 horizontal: widget.label == null ? 10 : 16, vertical: 9),
             decoration: BoxDecoration(
               color: fill,
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: app.shape.br(11),
               border: Border.all(width: 2, color: borderColor),
             ),
             child: Row(
@@ -2625,7 +2625,7 @@ class _HubDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: app.seeAll.panel,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: app.shape.br(18),
         side: BorderSide(color: app.seeAll.line),
       ),
       child: Padding(
@@ -2712,7 +2712,7 @@ class _HubDialogButtonState extends State<_HubDialogButton> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
             color: fill,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             // Constant width — see _HubActionButton (focus resize = shake).
             border: Border.all(
                 width: 2,

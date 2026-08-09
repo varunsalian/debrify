@@ -401,7 +401,7 @@ class _FilterSettingsPageState extends State<FilterSettingsPage> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: t.panel,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         border: Border.all(color: t.line),
       ),
       child: Column(

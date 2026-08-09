@@ -120,7 +120,7 @@ class _CwCardMenuState extends State<_CwCardMenu> {
       // theme's near-black text on a near-black sheet.
       backgroundColor: app.sheetSurface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: app.shape.br(20)),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: maxWidth,
@@ -170,7 +170,7 @@ class _CwCardMenuState extends State<_CwCardMenu> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: app.shape.brImg(8),
           child: SizedBox(
             width: 44,
             height: 66,
@@ -305,7 +305,7 @@ class _MenuRowState extends State<_MenuRow> {
               color: _active
                   ? widget.accent.withValues(alpha: 0.16)
                   : app.fade(app.core.tx, 0.04),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: app.shape.br(14),
               border: Border.all(
                 color: _active
                     ? widget.accent

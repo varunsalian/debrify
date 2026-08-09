@@ -1246,7 +1246,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
               horizontal: isCompact ? 8 : 16, vertical: 8),
           decoration: BoxDecoration(
             color: app.fade(app.core.tx, 0.05),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(color: app.fade(app.core.tx, 0.08)),
           ),
           child: Row(
@@ -1468,15 +1468,15 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       fillColor: app.fade(app.core.tx, 0.06),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         borderSide: BorderSide(color: app.cloud.accent),
       ),
     );
@@ -1549,7 +1549,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                     return Container(
                       decoration: BoxDecoration(
                         color: app.fade(app.core.tx, 0.06),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: app.shape.br(8),
                         border: isFocused
                             ? Border.all(color: app.core.tx, width: 2)
                             : null,

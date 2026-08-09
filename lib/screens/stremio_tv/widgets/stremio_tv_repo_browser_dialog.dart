@@ -556,7 +556,7 @@ class _StremioTvRepoBrowserDialogState
         ),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: app.shape.br(20),
         ),
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -605,7 +605,7 @@ class _StremioTvRepoBrowserDialogState
                       decoration: InputDecoration(
                         hintText: 'https://github.com/user/repo',
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: app.shape.br(12),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 10),

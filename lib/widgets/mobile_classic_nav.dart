@@ -139,7 +139,7 @@ class MobileClassicNav extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 10),
                 decoration: BoxDecoration(
                   color: app.fade(app.core.tx, 0.18),
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: app.shape.br(2),
                 ),
               ),
               Row(
@@ -264,7 +264,7 @@ class MobileClassicNav extends StatelessWidget {
                       margin: const EdgeInsets.only(bottom: 10),
                       decoration: BoxDecoration(
                         color: app.fade(app.core.tx, 0.18),
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: app.shape.br(2),
                       ),
                     ),
                   ),
@@ -312,7 +312,7 @@ class MobileClassicNav extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: app.shape.br(14),
                       border: Border.all(
                         color: const Color(0xFFF5C042).withValues(alpha: 0.3),
                         width: 1.4,
@@ -356,7 +356,7 @@ class MobileClassicNav extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: app.shape.br(14),
                       border: Border.all(
                         color: app.fade(app.core.tx, 0.12),
                       ),
@@ -429,7 +429,7 @@ class _NavSlot extends StatelessWidget {
                 height: 28,
                 margin: const EdgeInsets.only(bottom: 14),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: app.shape.br(14),
                   gradient: LinearGradient(
                     colors: [
                       const Color(0xFF6366F1).withValues(alpha: 0.32),
@@ -497,13 +497,13 @@ class _SheetCell extends StatelessWidget {
     final app = AppThemeScope.of(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: app.shape.br(12),
       child: Container(
         decoration: BoxDecoration(
           color: active
               ? const Color(0xFF8B5CF6).withValues(alpha: 0.16)
               : app.fade(app.core.tx, 0.045),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: app.shape.br(12),
           border: Border.all(
             color: active
                 ? const Color(0xFF8B5CF6).withValues(alpha: 0.5)
@@ -549,13 +549,13 @@ class _RemoteRow extends StatelessWidget {
     final app = AppThemeScope.of(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: app.shape.br(12),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: app.fade(app.core.tx, 0.045),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: app.shape.br(12),
           border: Border.all(color: app.fade(app.core.tx, 0.06)),
         ),
         child: Row(
@@ -608,7 +608,7 @@ class _EditChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: app.fade(app.core.tx, fixed ? 0.03 : 0.06),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: app.shape.br(10),
         border: Border.all(
           color: app.fade(app.core.tx, 0.1),
           style: fixed ? BorderStyle.none : BorderStyle.solid,
@@ -639,7 +639,7 @@ class _EditChip extends StatelessWidget {
       opacity: dimmedWhenFull ? 0.45 : 1,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: app.shape.br(10),
         child: chip,
       ),
     );

@@ -143,10 +143,23 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                       ? [tv.cardFocusBg, tv.cardBg]
                       : [tv.cardBg, tv.dialogBg],
                 ),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: app.shape.br(16),
                 border: Border.all(
                   color: _isFocused ? tv.focusRing : tv.hairline,
-                  width: _isFocused ? 3 : 1,
+                  // The cursor's WEIGHT is part of a theme's identity —
+                  // Broadcast asks for 4, Vault and Cinemascope for 1 — and
+                  // `focusWidthFor` holds the 2.5px floor that keeps a ring
+                  // visible at three metres whatever it asked for.
+                  //
+                  // Legacy keeps its shipped 3px: that literal is what the
+                  // card has always drawn, and Signal's own focusWidth is
+                  // 2.5, so reading the token unconditionally would thin
+                  // today's ring.
+                  width: _isFocused
+                      ? (app.isLegacy
+                          ? 3
+                          : app.shape.focusWidthFor(PlatformUtil.isTelevision))
+                      : 1,
                 ),
                 // TV: the 3px white border is the focus cue; blurred shadows
                 // are the expensive part of the repaint, so skip them there.
@@ -191,7 +204,7 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                       // Black glass floating over the card's artwork — it stays
                       // black on every theme, so its ink is `onGlass`.
                       color: Colors.black.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: app.shape.br(6),
                       border: Border.all(
                         color: app.onGlass.withAlpha(77),
                         width: 1,

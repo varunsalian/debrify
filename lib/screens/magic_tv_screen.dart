@@ -1934,7 +1934,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               return Dialog(
                 backgroundColor: tv.dialogBg,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: app.shape.br(24),
                 ),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(
@@ -1953,7 +1953,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
                                 color: tv.accent.withAlpha(51),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: app.shape.br(12),
                               ),
                               child: Icon(
                                 Icons.tv_rounded,
@@ -4073,7 +4073,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: app.shape.br(12),
                               boxShadow: [
                                 BoxShadow(
                                   color: tv.accent.withAlpha(77),
@@ -4122,7 +4122,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
-                          borderRadius: BorderRadius.circular(30),
+                          borderRadius: app.shape.br(30),
                           boxShadow: [
                             BoxShadow(
                               color: tv.accent.withAlpha(102),
@@ -4161,7 +4161,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: Colors.blue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: app.shape.br(6),
                           border: Border.all(
                             color: Colors.blue.withOpacity(0.2),
                           ),
@@ -4213,7 +4213,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             foregroundColor: tv.textDim,
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: app.shape.br(6),
                             ),
                           ),
                           child: const Text(
@@ -7808,7 +7808,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   color: disabled
                       ? Colors.grey.withValues(alpha: 0.3)
                       : (focused ? activeColor : (inactiveColor ?? tv.controlBg)),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: app.shape.br(20),
                   border: focused && !disabled
                       ? Border.all(
                           color: tv.focusRing.withValues(alpha: 0.6),
@@ -7927,7 +7927,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   width: 40,
                   decoration: BoxDecoration(
                     color: focused ? tv.fillStrong : tv.controlBg,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: app.shape.br(20),
                     border: focused
                         ? Border.all(
                             color: tv.focusRing.withValues(alpha: 0.6),
@@ -8081,7 +8081,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                             return Container(
                               decoration: focused
                                   ? BoxDecoration(
-                                      borderRadius: BorderRadius.circular(20),
+                                      borderRadius: app.shape.br(20),
                                       border: Border.all(
                                         color: ink.withValues(alpha: 0.3),
                                         width: 1.5,
@@ -8103,15 +8103,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       )
                     : null,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: app.shape.br(14),
                   borderSide: BorderSide.none,
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: app.shape.br(14),
                   borderSide: BorderSide.none,
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: app.shape.br(14),
                   borderSide: BorderSide(
                     // The search field's focused border is `fillStrong` by
                     // design — see the token's own doc.
@@ -8342,7 +8342,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: tv.accent,
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: app.shape.br(6),
                     ),
                     child: Text(
                       'CH ${channel.channelNumber > 0 ? channel.channelNumber : _channels.indexOf(channel) + 1}',
@@ -8439,7 +8439,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: tv.accent,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: app.shape.br(8),
                   ),
                   child: Text(
                     'CH ${channel.channelNumber > 0 ? channel.channelNumber : _channels.indexOf(channel) + 1}',
@@ -8481,7 +8481,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 height: 28,
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: app.shape.br(6),
                 ),
                 child: PopupMenuButton<String>(
                   icon: Icon(
@@ -8495,7 +8495,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                 // LEFT LITERAL: 0xFF1F1F1F, the popup-menu ground, has no role.
                 color: const Color(0xFF1F1F1F),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: app.shape.br(12),
                 ),
                 onSelected: (value) {
                   if (value == 'favorite') {
@@ -9001,7 +9001,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       foregroundColor: app.inkOn(tv.accent),
                       padding: buttonPadding,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: app.shape.br(14),
                       ),
                     ),
                   ),
@@ -9024,7 +9024,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       foregroundColor: app.inkOn(const Color(0xFF2563EB)),
                       padding: buttonPadding,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: app.shape.br(14),
                       ),
                     ),
                   ),
@@ -9042,7 +9042,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       foregroundColor: app.core.tx,
                       minimumSize: iconSize,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: app.shape.br(14),
                       ),
                     ),
                     tooltip: 'Add Channel',
@@ -9058,7 +9058,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       foregroundColor: Colors.redAccent,
                       minimumSize: iconSize,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: app.shape.br(14),
                       ),
                     ),
                     tooltip: 'Delete all channels',
@@ -9072,7 +9072,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       foregroundColor: tv.textDim,
                       minimumSize: iconSize,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: app.shape.br(14),
                       ),
                     ),
                     tooltip: 'Global settings',
@@ -9178,7 +9178,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             return AlertDialog(
               backgroundColor: tv.dialogBg,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: app.shape.br(20),
               ),
               title: const Text('Quick Play'),
               content: SizedBox(
@@ -9332,7 +9332,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: app.core.tx.withAlpha(10),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: app.shape.br(16),
           border: Border.all(color: tv.hairline, width: 1),
         ),
         child: Column(
@@ -9405,7 +9405,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         // LEFT LITERAL: 0xFF101010 is this list card's ground and no role
         // holds it (`dialogBg` is 0xFF0F0F0F, one step off).
         color: const Color(0xFF101010),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         border: Border.all(color: tv.hairline, width: 1),
         boxShadow: [
           BoxShadow(
@@ -9462,7 +9462,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         foregroundColor: app.inkOn(tv.accent),
                         padding: const EdgeInsets.all(12),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: app.shape.br(12),
                         ),
                       ),
                       child: const Icon(Icons.play_arrow_rounded),
@@ -9521,7 +9521,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     );
     Widget interactive = InkWell(
       key: gestureKey,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: app.shape.br(16),
       onTap: _isBusy ? null : () => _watchChannel(channel),
       child: cardContent,
     );
@@ -9529,7 +9529,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     if (_isAndroidTv) {
       interactive = FocusHighlightWrapper(
         enabled: true,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: app.shape.br(20),
         debugLabel: 'debrify-tv-channel-card-${channel.id}',
         child: interactive,
       );
@@ -9545,7 +9545,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: app.core.tx.withAlpha(20),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         border: Border.all(color: tv.hairline, width: 1),
       ),
       child: Text(
@@ -9562,7 +9562,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: app.core.tx.withAlpha(15),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         border: Border.all(color: tv.hairline, width: 1),
       ),
       child: Row(

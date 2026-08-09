@@ -52,7 +52,7 @@ class MdblistListCard extends StatelessWidget {
               app.fade(app.core.tx, 0.04),
             ],
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: app.shape.br(12),
           border: Border.all(
             color: focused ? accent : app.fade(app.core.tx, 0.10),
             width: focused ? 2 : 1,

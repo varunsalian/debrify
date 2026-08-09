@@ -535,7 +535,7 @@ class _StageButtonState extends State<_StageButton> {
               horizontal: widget.label == null ? 10 : 13,
             ),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: app.shape.br(10),
               gradient: widget.primary
                   ? const LinearGradient(
                       colors: [Color(0xFF4F74FF), Color(0xFF8A5CFF)],
@@ -750,7 +750,7 @@ class _StageScheduleRowState extends State<_StageScheduleRow> {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: t == null
           ? BoxDecoration(
-              borderRadius: BorderRadius.circular(7),
+              borderRadius: app.shape.br(7),
               color: _focused
                   // Not iptv.rowFocusFill (#141824) — the stage's schedule
                   // row paints a different literal, so no token carries it.

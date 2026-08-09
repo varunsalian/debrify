@@ -119,7 +119,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
           curve: Curves.easeInOut,
           margin: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             // LEFT LITERAL: the focused slate 0xFF1E293B is not a Debrify TV
             // role — the only sanctioned cross-profile reads for this surface
             // are `core.tx`, `home.sheetBg` and `inkOn`, and 0xFF1E293B lives
@@ -156,7 +156,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                   ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             child: Stack(
               children: [
                 // Left accent strip on focus
@@ -183,7 +183,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: widget.isAndroidTv ? null : onSelect,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: app.shape.br(12),
                     splashColor: accentColor.withOpacity(0.1),
                     highlightColor: accentColor.withOpacity(0.05),
                     child: Padding(
@@ -272,7 +272,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
           // The shared slate this dialog has always used — the one
           // cross-profile ground Debrify TV is sanctioned to read.
           color: app.home.sheetBg,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: app.shape.br(16),
           border: Border.all(
             color: app.core.tx.withAlpha(20),
             width: 1,
@@ -415,7 +415,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: app.shape.br(10),
                       color: _focusedIndex == 3
                           ? app.core.tx.withAlpha(20)
                           : Colors.transparent,
@@ -435,7 +435,7 @@ class ImportChannelsDialogState extends State<ImportChannelsDialog> {
                         onTap: widget.isAndroidTv
                             ? null
                             : () => Navigator.of(context).pop(),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: app.shape.br(10),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 20,

@@ -59,14 +59,14 @@ class SeeAllHeader extends StatelessWidget {
             child: Builder(builder: (context) {
               final focused = Focus.of(context).hasFocus;
               return InkWell(
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: app.shape.br(11),
                 onTap: () => Navigator.of(context).maybePop(),
                 child: Container(
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
                     color: app.seeAll.panel,
-                    borderRadius: BorderRadius.circular(11),
+                    borderRadius: app.shape.br(11),
                     border: Border.all(
                       color: focused ? app.seeAll.accent : app.seeAll.line,
                       width: focused ? 2 : 1,

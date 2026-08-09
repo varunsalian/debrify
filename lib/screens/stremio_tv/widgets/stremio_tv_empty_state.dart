@@ -78,7 +78,7 @@ class StremioTvEmptyState extends StatelessWidget {
                         color: focused
                             ? app.core.tx.withValues(alpha: 0.14)
                             : app.core.tx.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: app.shape.br(14),
                         border: Border.all(
                           color: focused
                               ? app.core.tx.withValues(alpha: 0.5)

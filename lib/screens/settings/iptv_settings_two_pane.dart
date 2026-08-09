@@ -1536,7 +1536,7 @@ class _RailEntryState extends State<_RailEntry> {
               color: _focused
                   ? t.panel2
                   : (widget.selected ? t.panel : null),
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: app.shape.br(11),
               border: Border.all(
                 color: _focused ? t.accent : Colors.transparent,
                 width: 2,
@@ -1549,7 +1549,7 @@ class _RailEntryState extends State<_RailEntry> {
                   height: 34,
                   decoration: BoxDecoration(
                     color: _focused ? t.accent : t.panel2,
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: app.shape.br(9),
                   ),
                   child: widget.busy
                       ? const Padding(

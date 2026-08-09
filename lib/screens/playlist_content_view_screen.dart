@@ -1290,7 +1290,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 filled: true,
                 fillColor: app.playlist.fieldFill,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(
@@ -1339,7 +1339,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                     return Container(
                       decoration: BoxDecoration(
                         color: app.playlist.fieldFill,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: app.shape.br(8),
                         border: isFocused
                             ? Border.all(color: app.core.tx, width: 2)
                             : null,
@@ -1477,7 +1477,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         color: isFinished
                             ? Colors.green
                             : app.playlist.progressPlayed,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: app.shape.br(4),
                       ),
                       child: Text(
                         isFinished ? 'DONE' : '${(progress * 100).toInt()}%',
@@ -1726,7 +1726,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                           color: isFinished
                               ? app.playlist.statusWatched
                               : app.playlist.progressPlayed,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: app.shape.br(4),
                         ),
                         child: Text(
                           isFinished ? 'DONE' : '${(progress * 100).round()}%',
@@ -2523,12 +2523,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             color: Colors.transparent,
             child: InkWell(
               onTap: _showFixMetadataDialog,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: app.shape.br(8),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
                   color: app.playlist.warning.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   border: Border.all(
                     color: app.playlist.warning.withValues(alpha: 0.5),
                     width: 1,
@@ -2760,7 +2760,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                     : app.playlist.rowFill,
                 clipBehavior: Clip.antiAlias,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: app.shape.br(12),
                   side: BorderSide(
                     color: isFocused
                         ? app.playlist.focusRing
@@ -2803,7 +2803,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                     decoration: BoxDecoration(
                       // Black glass stays black on every theme.
                       color: Colors.black.withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: app.shape.br(6),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -2856,7 +2856,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         children: [
           // Left: Compact thumbnail
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: app.shape.brImg(8),
             child: SizedBox(
               width: 120,
               height: 68,
@@ -3015,7 +3015,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         children: [
           // Left: Compact thumbnail
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: app.shape.brImg(8),
             child: SizedBox(
               width: 155,
               height: 88,
@@ -3205,7 +3205,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: const Color(0xFF34D399).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: app.shape.br(4),
             ),
             child: Text(
               seString,

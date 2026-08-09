@@ -458,7 +458,7 @@ class _CategoryTileState extends State<_CategoryTile> {
           color: _focused
               ? t.accent.withValues(alpha: 0.16)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: app.shape.br(10),
         ),
         child: ListTile(
           leading: Icon(
@@ -538,7 +538,7 @@ class _CatalogTabChipState extends State<_CatalogTabChip> {
             color: active
                 ? t.accent.withValues(alpha: 0.22)
                 : t.panel2,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             border: Border.all(
               color: _focused
                   ? t.accent

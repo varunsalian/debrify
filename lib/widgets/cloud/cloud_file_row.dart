@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_motion.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 
@@ -240,7 +241,7 @@ class _CloudFileRowState extends State<CloudFileRow> {
       color: app.cloud.menuSurface,
       elevation: 8,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         side: BorderSide(color: app.fade(app.core.tx, 0.08)),
       ),
       items: [
@@ -370,6 +371,8 @@ class _CloudFileRowState extends State<CloudFileRow> {
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
+    // Hoisted with the theme read, above every builder callback below.
+    final motion = AppMotion.of(context);
     final compact = MediaQuery.sizeOf(context).width < 600;
     final rowFocused = _rowNode.hasPrimaryFocus;
     final parked = !rowFocused && _stripNodes.any((n) => n.hasPrimaryFocus);
@@ -401,7 +404,7 @@ class _CloudFileRowState extends State<CloudFileRow> {
       decoration: BoxDecoration(
         color: app.fade(
             chipColor, widget.kind == CloudRowKind.file ? 0.06 : 0.13),
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: app.shape.br(9),
       ),
       child: Icon(
         chipIcon,
@@ -538,14 +541,14 @@ class _CloudFileRowState extends State<CloudFileRow> {
                 ? null
                 : (details) => _openMenu(globalPosition: details.globalPosition),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
+              duration: motion.scaled(const Duration(milliseconds: 150)),
               margin: const EdgeInsets.only(bottom: 4),
               padding: compact
                   ? const EdgeInsets.fromLTRB(12, 10, 8, 8)
                   : const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               decoration: BoxDecoration(
                 color: bgColor,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: app.shape.br(10),
                 border: Border.all(color: borderColor, width: 1.5),
               ),
               child: content,
@@ -631,7 +634,7 @@ class _CloudFileRowState extends State<CloudFileRow> {
                 color: focused
                     ? app.fade(app.core.tx, 0.08)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: app.shape.br(8),
                 border: Border.all(
                   color: focused ? app.cloud.accent : Colors.transparent,
                   width: 2,
@@ -662,7 +665,7 @@ class _CloudFileRowState extends State<CloudFileRow> {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
       decoration: BoxDecoration(
         color: fg.withValues(alpha: bgAlpha),
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: app.shape.br(5),
       ),
       child: Text(
         badge.text,

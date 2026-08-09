@@ -201,7 +201,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     return Container(
       decoration: BoxDecoration(
         color: t.panel,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         border: Border.all(color: t.line),
       ),
       child: Column(
@@ -272,7 +272,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     return Container(
       decoration: BoxDecoration(
         color: t.panel,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         border: Border.all(color: t.line),
       ),
       child: Column(
@@ -332,7 +332,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     return Container(
       decoration: BoxDecoration(
         color: t.panel,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         border: Border.all(color: t.line),
       ),
       child: Column(
@@ -477,7 +477,7 @@ class _FocusableCheckboxTileState extends State<_FocusableCheckboxTile> {
     return Container(
       decoration: BoxDecoration(
         color: _focused ? t.panel2 : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         border: Border.all(
           color: _focused ? t.accent : Colors.transparent,
           width: 1,
@@ -486,7 +486,7 @@ class _FocusableCheckboxTileState extends State<_FocusableCheckboxTile> {
       child: InkWell(
         onTap: () => widget.onChanged(!widget.value),
         onFocusChange: (f) => setState(() => _focused = f),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(

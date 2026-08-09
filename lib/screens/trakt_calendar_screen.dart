@@ -492,13 +492,13 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: app.shape.br(20),
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [Color(0xFF211017), Color(0xFF110A0F), Color(0xFF07090F)],
         ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        border: Border.all(color: app.core.tx.withValues(alpha: 0.07)),
         boxShadow: [
           BoxShadow(
             color: app.fade(app.calendar.accent, 0.12),
@@ -514,7 +514,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: app.shape.brPill,
               color: app.fade(app.calendar.accent, 0.14),
             ),
             child: Text(
@@ -540,7 +540,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
           Text(
             'Browse only the days that have episodes airing.',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.68),
+              color: app.core.tx.withValues(alpha: 0.68),
               fontSize: 11,
               height: 1.3,
             ),
@@ -597,7 +597,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: app.shape.brPill,
               color: app.fade(app.calendar.accent, 0.14),
               border: Border.all(
                 color: app.fade(app.calendar.accent, 0.22),
@@ -644,13 +644,13 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
         isWide ? 18 : (isCompact ? 14 : 16),
       ),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: app.shape.br(28),
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [Color(0xFF211017), Color(0xFF110A0F), Color(0xFF07090F)],
         ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        border: Border.all(color: app.core.tx.withValues(alpha: 0.07)),
         boxShadow: [
           BoxShadow(
             color: app.fade(app.calendar.accent, 0.12),
@@ -665,7 +665,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: app.shape.brPill,
               color: app.fade(app.calendar.accent, 0.14),
             ),
             child: Text(
@@ -692,7 +692,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
             Text(
               'Pick a year and month, then browse only the days that actually have episodes airing. No grid, no jitter, just the schedule.',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.72),
+                color: app.core.tx.withValues(alpha: 0.72),
                 fontSize: 14,
                 height: 1.35,
               ),
@@ -702,7 +702,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
             Text(
               'Only days with actual episodes are shown.',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.68),
+                color: app.core.tx.withValues(alpha: 0.68),
                 fontSize: 12,
               ),
             ),
@@ -813,7 +813,7 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
                   vertical: isCompact ? 8 : 10,
                 ),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: app.shape.brPill,
                   color: app.fade(app.calendar.accent, 0.14),
                   border: Border.all(
                     color: app.fade(app.calendar.accent, 0.22),
@@ -927,16 +927,16 @@ class _SelectorField<T> extends StatelessWidget {
       dropdownColor: const Color(0xFF12182B),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
+        labelStyle: TextStyle(color: app.core.tx.withValues(alpha: 0.72)),
         filled: true,
         fillColor: const Color(0xFF1A1720),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+          borderRadius: app.shape.br(18),
+          borderSide: BorderSide(color: app.core.tx.withValues(alpha: 0.07)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          borderRadius: app.shape.br(18),
+          borderSide: BorderSide(color: app.core.tx.withValues(alpha: 0.08)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(18)),
@@ -958,7 +958,7 @@ class _SelectorField<T> extends StatelessWidget {
         color: Theme.of(context).colorScheme.onSurface,
         fontWeight: FontWeight.w700,
       ),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: app.shape.br(18),
     );
   }
 }
@@ -1489,7 +1489,7 @@ class _EpisodeRow extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: app.shape.br(10),
           color: rowGround,
           border: Border.all(color: rowLine),
         ),
@@ -1528,7 +1528,7 @@ class _EpisodeRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: app.shape.brPill,
                 color: accent.withValues(alpha: 0.14),
                 border: Border.all(color: accent.withValues(alpha: 0.22)),
               ),
@@ -1545,7 +1545,7 @@ class _EpisodeRow extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(roomy ? 12 : 10),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         color: rowGround,
         border: Border.all(color: rowLine),
       ),
@@ -1584,7 +1584,7 @@ class _EpisodeRow extends StatelessWidget {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(999),
+                        borderRadius: app.shape.brPill,
                         color: accent.withValues(alpha: 0.14),
                         border: Border.all(
                           color: accent.withValues(alpha: 0.22),
@@ -1691,7 +1691,7 @@ class _DayHeaderStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: app.shape.brImg(22),
       child: Stack(
         children: [
           Positioned.fill(
@@ -1778,8 +1778,8 @@ class _DayHeaderStrip extends StatelessWidget {
             width: double.infinity,
             padding: EdgeInsets.all(compact ? 10 : 12),
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
-              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: app.core.tx.withValues(alpha: 0.04)),
+              borderRadius: app.shape.br(22),
             ),
             child: child,
           ),

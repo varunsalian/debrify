@@ -636,7 +636,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 12),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(11),
+                      borderRadius: app.shape.br(11),
                     ),
                   ),
                 ),

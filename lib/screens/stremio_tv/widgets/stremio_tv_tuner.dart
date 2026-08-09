@@ -588,7 +588,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                 height: 4,
                 decoration: BoxDecoration(
                   color: app.core.tx.withAlpha(0x3D),
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: app.shape.br(2),
                 ),
               ),
               Padding(
@@ -597,7 +597,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                   Container(width: 4, height: 26,
                     decoration: BoxDecoration(
                         color: ident,
-                        borderRadius: BorderRadius.circular(2)),
+                        borderRadius: app.shape.br(2)),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -669,7 +669,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                   height: 4,
                   decoration: BoxDecoration(
                     color: app.core.tx.withAlpha(0x3D),
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: app.shape.br(2),
                   ),
                 ),
                 Padding(
@@ -728,7 +728,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                     const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 decoration: BoxDecoration(
                   color: ident,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: app.shape.br(6),
                 ),
                 child: Text(
                   'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
@@ -742,7 +742,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
               ),
               const SizedBox(width: 12),
               ClipRRect(
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: app.shape.brImg(6),
                 child: SizedBox(
                   width: 40,
                   height: 60,
@@ -791,7 +791,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                     if (np != null) ...[
                       const SizedBox(height: 6),
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: app.shape.br(2),
                         child: LinearProgressIndicator(
                           value: widget.displayProgress(channel, np.progress)
                               .clamp(0.0, 1.0),
@@ -1466,7 +1466,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.50),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: app.shape.br(24),
         border: Border.all(
           color: app.onGlass.withValues(alpha: 0.15),
           width: 0.5,
@@ -1503,7 +1503,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
                 color: widget.ident,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: app.shape.br(10),
               ),
               child: Text(
                 'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
@@ -1520,7 +1520,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: app.core.tx.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: app.shape.br(8),
                 border: Border.all(
                   color: app.core.tx.withValues(alpha: 0.08),
                   width: 0.5,
@@ -1627,7 +1627,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
         const SizedBox(width: 16),
         Expanded(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: app.shape.br(4),
             child: SizedBox(
               height: 5,
               child: Stack(
@@ -1635,7 +1635,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
                   Container(
                     decoration: BoxDecoration(
                       color: app.stremioTv.progressTrack,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: app.shape.br(4),
                     ),
                   ),
                   FractionallySizedBox(
@@ -1643,7 +1643,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
                     child: Container(
                       decoration: BoxDecoration(
                         color: app.stremioTv.progressFill,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: app.shape.br(4),
                       ),
                     ),
                   ),
@@ -1675,7 +1675,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: app.stremioTv.surfaceFill,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         border: Border.all(
           color: app.stremioTv.hairline,
           width: 0.5,
@@ -1867,7 +1867,7 @@ class _StageDescription extends StatelessWidget {
               height: 4,
               decoration: BoxDecoration(
                 color: app.core.tx.withAlpha(0x3D),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: app.shape.br(2),
               ),
             ),
             Padding(
@@ -1878,7 +1878,7 @@ class _StageDescription extends StatelessWidget {
                   height: 26,
                   decoration: BoxDecoration(
                     color: ident,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: app.shape.br(2),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2138,7 +2138,7 @@ class _DialCardState extends State<_DialCard> {
             width: 138,
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: app.shape.brImg(16),
               // Gold focus rim + bloom, matching the Home board's poster tiles
               // (was the per-channel identity colour). Consistent focus colour
               // is what makes the two screens feel like one.
@@ -2243,7 +2243,7 @@ class _DialCardState extends State<_DialCard> {
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: ident,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: app.shape.br(8),
                       ),
                       child: Text(
                         channelNumberLabel,
@@ -2332,7 +2332,7 @@ class _DialCardState extends State<_DialCard> {
                           ),
                           const SizedBox(height: 8),
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(3),
+                            borderRadius: app.shape.br(3),
                             child: SizedBox(
                               height: 4,
                               child: Stack(
@@ -2351,7 +2351,7 @@ class _DialCardState extends State<_DialCard> {
                                         color: app.onGlass
                                             .withValues(alpha: 0.9),
                                         borderRadius:
-                                            BorderRadius.circular(3),
+                                            app.shape.br(3),
                                       ),
                                     ),
                                   ),
@@ -2449,7 +2449,7 @@ class _DialHintChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.62),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: app.shape.br(6),
         border: Border.all(
           color: app.onGlass.withValues(alpha: 0.16),
           width: 0.5,

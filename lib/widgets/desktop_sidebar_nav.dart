@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_motion.dart';
 import '../theme/app_theme_scope.dart';
 import 'window_drag_area.dart';
 
@@ -80,7 +81,7 @@ class DesktopSidebarNav extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 22),
               child: Center(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(9),
+                  borderRadius: app.shape.br(9),
                   child: Image.asset('assets/app_icon.png',
                       width: 32, height: 32),
                 ),
@@ -138,6 +139,8 @@ class _SidebarItemState extends State<_SidebarItem> {
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
+    // Hoisted with the theme read, above every builder callback below.
+    final motion = AppMotion.of(context);
     final cs = Theme.of(context).colorScheme;
     final selected = widget.selected;
     final Color fg = selected
@@ -163,12 +166,12 @@ class _SidebarItemState extends State<_SidebarItem> {
           onTap: widget.onTap,
           behavior: HitTestBehavior.opaque,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 130),
+            duration: motion.scaled(const Duration(milliseconds: 130)),
             curve: Curves.easeOut,
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
               color: bg,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: app.shape.br(16),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,

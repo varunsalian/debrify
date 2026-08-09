@@ -449,7 +449,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
           padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
             color: t.panel2,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(color: t.line),
           ),
           child: Column(
@@ -464,7 +464,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
               // traverse instead of moving a text cursor.
               _FocusRing(
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: _userCode!));
                     _showSnackBar('Code copied to clipboard', isError: false);
@@ -502,7 +502,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         // Verification URL (focusable link)
         _FocusRing(
           child: InkWell(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: app.shape.br(8),
             onTap: () {
               final url = _verificationUrl ?? 'https://trakt.tv/activate';
               launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);

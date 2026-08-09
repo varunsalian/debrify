@@ -226,7 +226,7 @@ String _getDedupeKey(Map<String, dynamic> item) {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: iconColor.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: app.shape.br(10),
                 boxShadow: [
                   BoxShadow(
                     color: iconColor.withValues(alpha: 0.2),
@@ -272,7 +272,7 @@ String _getDedupeKey(Map<String, dynamic> item) {
                   app.fade(app.core.tx, 0.06),
                 ],
               ),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: app.shape.br(12),
               border: Border.all(
                 color: app.playlist.hairline,
                 width: 1,

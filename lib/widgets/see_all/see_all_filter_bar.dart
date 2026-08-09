@@ -128,8 +128,8 @@ class _SeeAllFilterBarState extends State<SeeAllFilterBar> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.tune_rounded,
-                            size: 18, color: Colors.white70),
+                        Icon(Icons.tune_rounded,
+                            size: 18, color: app.core.tx.withValues(alpha: 0xB3 / 0xFF)),
                         const SizedBox(width: 8),
                         const Text(
                           'Filters',
@@ -141,8 +141,8 @@ class _SeeAllFilterBarState extends State<SeeAllFilterBar> {
                         const Spacer(),
                         IconButton(
                           onPressed: () => Navigator.of(innerContext).pop(),
-                          icon: const Icon(Icons.close_rounded,
-                              color: Colors.white54),
+                          icon: Icon(Icons.close_rounded,
+                              color: app.core.tx.withValues(alpha: 0x8A / 0xFF)),
                         ),
                       ],
                     ),
@@ -287,7 +287,7 @@ class _FiltersButtonState extends State<_FiltersButton> {
           padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
           decoration: BoxDecoration(
             color: app.seeAll.panel,
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: app.shape.br(11),
             border: Border.all(
               color: _hovered ? app.seeAll.accentBorder : app.seeAll.line,
             ),
@@ -295,7 +295,7 @@ class _FiltersButtonState extends State<_FiltersButton> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.tune_rounded, size: 16, color: Colors.white70),
+              Icon(Icons.tune_rounded, size: 16, color: app.core.tx.withValues(alpha: 0xB3 / 0xFF)),
               const SizedBox(width: 8),
               const Text(
                 'Filters',
@@ -311,7 +311,7 @@ class _FiltersButtonState extends State<_FiltersButton> {
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
                   decoration: BoxDecoration(
                     color: app.seeAll.accent,
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: app.shape.br(9),
                   ),
                   child: Text(
                     '${widget.count}',

@@ -949,7 +949,7 @@ class _TypeBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: app.shape.br(6),
         border: Border.all(color: app.fade(app.core.tx, 0.32)),
       ),
       child: Text(
@@ -1034,7 +1034,7 @@ class _GenreChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: app.fade(app.seeAll.accent, 0.14),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: app.shape.brPill,
         border: Border.all(color: app.seeAll.accentBorder, width: 1),
       ),
       child: Text(

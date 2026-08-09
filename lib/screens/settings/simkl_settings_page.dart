@@ -439,7 +439,7 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
           padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
             color: t.panel2,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(color: t.line),
           ),
           child: Column(
@@ -454,7 +454,7 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
               // traverse instead of moving a text cursor.
               _SimklFocusRing(
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: _userCode!));
                     _showSnackBar('Code copied to clipboard', isError: false);
@@ -492,7 +492,7 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
         // Verification URL (focusable link)
         _SimklFocusRing(
           child: InkWell(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: app.shape.br(8),
             onTap: () {
               final url = _verificationUrl ?? 'https://simkl.com/pin';
               launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);

@@ -1330,7 +1330,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 color: isError
                     ? const Color(0xFFEF4444)
                     : const Color(0xFF22C55E),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: app.shape.br(8),
               ),
               child: Icon(
                 isError ? Icons.error : Icons.check_circle,
@@ -1349,7 +1349,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         ),
         backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
         margin: const EdgeInsets.all(16),
         duration: duration ?? const Duration(seconds: 3),
       ),
@@ -1745,7 +1745,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 filled: true,
                 fillColor: app.fade(app.core.tx, 0.06),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   borderSide: BorderSide.none,
                 ),
                 contentPadding:
@@ -1783,7 +1783,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                     return Container(
                       decoration: BoxDecoration(
                         color: app.fade(app.core.tx, 0.06),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: app.shape.br(8),
                         border: isFocused
                             ? Border.all(color: app.core.tx, width: 2)
                             : null,
@@ -2038,7 +2038,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
         decoration: BoxDecoration(
           color: app.fade(app.core.tx, 0.05),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: app.shape.br(12),
           border: Border.all(color: app.fade(app.core.tx, 0.07)),
         ),
         child: Column(
@@ -2068,7 +2068,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             const SizedBox(height: 8),
             if (transfer.isRunning) ...[
               ClipRRect(
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: app.shape.br(4),
                 child: LinearProgressIndicator(
                   value: transfer.progress > 0 ? transfer.progress : null,
                   minHeight: 5,

@@ -262,7 +262,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         child: AnimatedContainer(
           duration: fx,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: app.shape.br(14),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: _active ? 0.7 : 0.35),
@@ -289,7 +289,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: app.shape.brImg(14),
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -299,7 +299,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                     child: IgnorePointer(
                       child: Container(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: app.shape.br(14),
                           border: Border.all(
                             color: app.home.focus,
                             width: 2.5,
@@ -438,7 +438,7 @@ class _GlassChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: app.shape.br(6),
         border: Border.all(
           // On the glass, not the page — see AppTheme.onGlass.
           color: app.fade(app.onGlass, 0.18),
@@ -493,7 +493,7 @@ class _RatingChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: app.shape.br(6),
         border: Border.all(
           // On the glass, not the page — see AppTheme.onGlass.
           color: app.fade(app.onGlass, 0.18),

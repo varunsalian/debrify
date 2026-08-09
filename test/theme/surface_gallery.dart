@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import 'package:debrify/screens/settings/widgets/settings_widgets.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/screens/stremio_tv/widgets/stremio_tv_empty_state.dart';
 import 'package:debrify/widgets/cloud/cloud_segmented_tabs.dart';
 import 'package:debrify/widgets/desktop_sidebar_nav.dart';
+import 'package:debrify/widgets/iptv/iptv_empty_state.dart';
+import 'package:debrify/widgets/youtube/youtube_empty_state.dart';
 
 /// REAL widgets from each themed family, composed with fixture data.
 ///
@@ -198,6 +201,181 @@ class SurfaceGallery extends StatelessWidget {
               label: 'on-glass',
               background: const Color(0xFF000000),
               child: Text('S02E04', style: TextStyle(color: app.onGlass)),
+            ),
+            // ── Expanded coverage ────────────────────────────────────────
+            //
+            // Everything below is a REAL shipped widget composed from plain
+            // props, added so the contrast audit can see the families that
+            // carry the most hardcoded ink — and so the shape sweep has a
+            // pixel baseline for them. The limit is unchanged and stated in
+            // the class doc: a screen that needs a service, a database or a
+            // platform channel cannot be reached from a widget test, and a
+            // mock of one would prove nothing.
+            _Band(
+              label: 'settings · banners',
+              background: app.settings.bg,
+              child: const Column(
+                children: [
+                  SettingsInfoBanner(text: 'Signed in as varun@example.com'),
+                  SizedBox(height: 8),
+                  SettingsInfoBanner(
+                    text: 'This provider has no cached results',
+                    tone: SettingsBannerTone.warning,
+                  ),
+                  SizedBox(height: 8),
+                  SettingsInfoBanner(
+                    text: 'Your API key expired',
+                    tone: SettingsBannerTone.danger,
+                  ),
+                  SizedBox(height: 8),
+                  SettingsInfoBanner(
+                    text: 'Playlist imported',
+                    tone: SettingsBannerTone.success,
+                  ),
+                ],
+              ),
+            ),
+            _Band(
+              label: 'settings · toggle',
+              background: app.settings.bg,
+              child: SettingsToggleTile(
+                icon: Icons.hd_rounded,
+                title: 'Prefer 4K sources',
+                subtitle: 'Falls back to 1080p when nothing 4K is cached',
+                value: true,
+                onChanged: (_) {},
+              ),
+            ),
+            _Band(
+              label: 'settings · header',
+              background: app.settings.bg,
+              child: const SettingsPageHeader(
+                icon: Icons.palette_rounded,
+                title: 'Appearance',
+                subtitle: 'Themes, layouts and the launch animation',
+              ),
+            ),
+            // The downloads skeleton, as its two STOPS rather than as a live
+            // `Shimmer`.
+            //
+            // `Shimmer` drives a `..repeat()` controller, so a real one here
+            // makes `pumpAndSettle` time out and takes the whole audit with
+            // it. What the audit needs is the composite — the skeleton's
+            // resting fill and its travelling highlight over the card they sit
+            // on — and that is exactly what these two boxes are. The widget's
+            // own geometry is covered by the shape sweep, not by contrast.
+            _Band(
+              label: 'downloads · skeleton stops',
+              background: app.downloads.previewCard,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: 16,
+                    child: ColoredBox(color: app.downloads.shimmerBase),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 14,
+                    child: ColoredBox(color: app.downloads.shimmerHighlight),
+                  ),
+                ],
+              ),
+            ),
+            // Empty states — heavy users of inherited ink, and the screens
+            // they belong to are otherwise unreachable from a widget test.
+            _Band(
+              label: 'iptv · empty',
+              background: app.iptv.stageBg,
+              child: const SizedBox(
+                height: 430,
+                child: IptvEmptyState(hasPlaylists: true),
+              ),
+            ),
+            _Band(
+              label: 'youtube · empty',
+              background: app.core.ground,
+              child: const SizedBox(height: 430, child: YoutubeEmptyState()),
+            ),
+            _Band(
+              label: 'stremio tv · empty',
+              background: app.core.ground,
+              child: const SizedBox(height: 430, child: StremioTvEmptyState()),
+            ),
+            // The surfaces the shape sweep touches most, as their real tokens.
+            _Band(
+              label: 'playlist · card',
+              background: app.playlist.card,
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 62,
+                    decoration: BoxDecoration(
+                      color: app.playlist.posterPlaceholder,
+                      borderRadius: app.shape.brImg(8),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('The Bear',
+                            style: TextStyle(color: app.core.tx, fontSize: 14)),
+                        Text('S03 · 10 episodes',
+                            style: TextStyle(color: app.playlist.ink3,
+                                fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: app.playlist.statusWatched,
+                      borderRadius: app.shape.br(4),
+                    ),
+                    child: Text(
+                      'DONE',
+                      style: TextStyle(
+                        color: app.inkOn(app.playlist.statusWatched),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _Band(
+              label: 'iptv · row + logo plate',
+              background: app.iptv.railBg,
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: app.iptv.logoPlate,
+                      borderRadius: app.shape.br(4),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('BBC One HD',
+                        style: TextStyle(color: app.iptv.inkMid, fontSize: 13)),
+                  ),
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: app.iptv.liveDot,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
+              ),
             ),
             SizedBox(
               height: 220,

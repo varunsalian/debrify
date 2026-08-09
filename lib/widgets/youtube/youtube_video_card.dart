@@ -156,7 +156,7 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
                   child: AnimatedContainer(
                     duration: fx,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: app.shape.br(14),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black
@@ -173,7 +173,7 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: app.shape.brImg(14),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
@@ -199,7 +199,7 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: Colors.black.withValues(alpha: 0.82),
-                                  borderRadius: BorderRadius.circular(5),
+                                  borderRadius: app.shape.br(5),
                                 ),
                                 child: Text(
                                   _formatDuration(video.durationSeconds!),
@@ -220,7 +220,7 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
                               child: IgnorePointer(
                                 child: DecoratedBox(
                                   decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(14),
+                                    borderRadius: app.shape.br(14),
                                     border: Border.all(
                                       color: app.youtube.focus,
                                       width: 2.5,

@@ -65,7 +65,7 @@ Widget _stepDropdown(
       context,
     ).textTheme.bodyMedium?.copyWith(color: app.core.tx),
     dropdownColor: t.panel2,
-    borderRadius: BorderRadius.circular(14),
+    borderRadius: app.shape.br(14),
     icon: Icon(Icons.arrow_drop_down, color: t.dim),
   );
 }
@@ -346,7 +346,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
           color: currentValue
               ? t.accent.withValues(alpha: 0.1)
               : t.panel2,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: app.shape.br(8),
           border: Border.all(
             color: focused
                 ? t.accent
@@ -363,7 +363,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                 color: currentValue
                     ? t.accent.withValues(alpha: 0.2)
                     : app.fade(app.core.tx, 0.08),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: app.shape.br(6),
               ),
               child: Icon(
                 _getIconForSetting(settingId),
@@ -451,7 +451,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: t.panel2,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: app.shape.br(8),
         border: Border.all(color: t.line),
       ),
       child: Column(
@@ -463,7 +463,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: app.fade(app.core.tx, 0.08),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: app.shape.br(6),
                 ),
                 child: Icon(
                   _getIconForSetting(settingId),
@@ -536,7 +536,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: t.panel2,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: app.shape.br(8),
         border: Border.all(color: t.line),
       ),
       child: Column(
@@ -548,7 +548,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: app.fade(app.core.tx, 0.08),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: app.shape.br(6),
                 ),
                 child: Icon(
                   _getIconForSetting(settingId),
@@ -980,7 +980,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: t.panel2,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: app.shape.br(8),
         border: Border.all(color: t.line),
       ),
       child: Column(
@@ -992,7 +992,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: app.fade(app.core.tx, 0.08),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: app.shape.br(6),
                 ),
                 child: Icon(icon, size: 18, color: t.dim),
               ),
@@ -1049,7 +1049,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
           color: value
               ? t.accent.withValues(alpha: 0.1)
               : t.panel2,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: app.shape.br(8),
           border: Border.all(
             color: focused
                 ? t.accent
@@ -1066,7 +1066,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                 color: value
                     ? t.accent.withValues(alpha: 0.2)
                     : app.fade(app.core.tx, 0.08),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: app.shape.br(6),
               ),
               child: Icon(
                 icon,
@@ -1117,7 +1117,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
       color: t.panel,
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         side: BorderSide(color: t.line),
       ),
       child: Padding(
@@ -1134,7 +1134,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                     color: isEnabled
                         ? t.accent.withValues(alpha: 0.1)
                         : app.fade(app.core.tx, 0.06),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: app.shape.br(10),
                   ),
                   child: Icon(
                     _getIconForEngine(iconName),
@@ -1170,7 +1170,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                   builder: (context, focused) => Container(
                     padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: app.shape.br(20),
                       border: Border.all(
                         color: focused ? t.accent : Colors.transparent,
                       ),

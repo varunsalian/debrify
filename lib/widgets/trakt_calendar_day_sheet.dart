@@ -118,14 +118,14 @@ class _EpisodeRow extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: app.shape.br(8),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Row(
           children: [
             if (entry.posterUrl != null)
               ClipRRect(
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: app.shape.brImg(4),
                 child: Image.network(
                   entry.posterUrl!,
                   width: 40,
@@ -176,7 +176,7 @@ class _EpisodeRow extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF59E0B),
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: app.shape.br(3),
                       ),
                       child: Text(
                         badge,

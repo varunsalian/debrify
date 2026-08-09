@@ -304,7 +304,7 @@ class _RailItemState extends State<_RailItem> {
             margin: const EdgeInsets.symmetric(vertical: 1),
             padding: const EdgeInsets.symmetric(horizontal: 9),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(9),
+              borderRadius: app.shape.br(9),
               color: widget.selected
                   ? app.iptv.railSelectionFill
                   : _focused

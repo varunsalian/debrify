@@ -2766,15 +2766,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                           )
                                         : null,
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
+                                      borderRadius: app.shape.br(14),
                                       borderSide: BorderSide.none,
                                     ),
                                     enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
+                                      borderRadius: app.shape.br(14),
                                       borderSide: BorderSide.none,
                                     ),
                                     focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
+                                      borderRadius: app.shape.br(14),
                                       borderSide: BorderSide(
                                         color: app.core.tx.withValues(
                                           alpha: 0.15,
@@ -3259,7 +3259,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         color: active
             ? app.home.chromeAccent
             : app.stremioTv.surfaceFill,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         border: Border.all(
           color: focused
               ? app.stremioTv.focusRing
@@ -3284,7 +3284,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
             margin: const EdgeInsets.symmetric(horizontal: 32),
             decoration: BoxDecoration(
               color: app.core.tx.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: app.shape.br(20),
             ),
             child: Stack(
               children: [
@@ -3299,7 +3299,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                         height: 28,
                         decoration: BoxDecoration(
                           color: app.core.tx.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: app.shape.br(10),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -3308,7 +3308,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                         height: 36,
                         decoration: BoxDecoration(
                           color: app.stremioTv.surfaceFill,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: app.shape.br(8),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -3317,7 +3317,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                         height: 16,
                         decoration: BoxDecoration(
                           color: app.core.tx.withValues(alpha: 0.03),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: app.shape.br(6),
                         ),
                       ),
                     ],
@@ -3342,7 +3342,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                 decoration: BoxDecoration(
                   color: app.stremioTv.surfaceFill,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: app.shape.br(16),
                   border: Border.all(
                     color: app.core.tx.withValues(alpha: 0.04),
                     width: 0.5,
@@ -3536,7 +3536,7 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
             height: 4,
             decoration: BoxDecoration(
               color: app.core.tx.withAlpha(0x3D),
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: app.shape.br(2),
             ),
           ),
           // Header
@@ -3697,7 +3697,7 @@ class _SourcePickerTabState extends State<_SourcePickerTab> {
             color: widget.isActive
                 ? app.home.chromeAccent
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: app.shape.br(20),
             border: Border.all(
               color: _focused
                   ? app.stremioTv.focusRing
@@ -3804,7 +3804,7 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
             color: _focused
                 ? app.home.chromeAccent.withValues(alpha: 0.15)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             border: Border.all(
               // Chrome focus ring (width 2), matching the reskinned toggles /
               // header buttons so every DPAD-focusable control reads the same.
@@ -3819,7 +3819,7 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: qColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: app.shape.br(6),
                   border: Border.all(color: qColor.withValues(alpha: 0.4)),
                 ),
                 child: Text(

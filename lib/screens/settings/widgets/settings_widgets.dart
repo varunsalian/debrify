@@ -195,6 +195,12 @@ abstract final class SettingsRows {
   );
   // Subtitle is dynamic (the chosen theme) — passed per call site.
   // Subtitle is dynamic (the chosen theme) — passed per call site.
+  // Subtitle is dynamic (the active Look, or "Custom") — passed per call site.
+  static const looks = SettingsRowContent(
+    icon: Icons.auto_awesome_rounded,
+    title: 'Looks',
+    subtitle: '',
+  );
   static const appTheme = SettingsRowContent(
     icon: Icons.format_paint_rounded,
     title: 'App Theme',
@@ -364,7 +370,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
       color: t.panel,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         side: BorderSide(color: t.line),
       ),
     ),
@@ -381,23 +387,23 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
       prefixIconColor: t.dim,
       suffixIconColor: t.dim,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         borderSide: BorderSide(color: t.line),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         borderSide: BorderSide(color: t.line),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         borderSide: BorderSide(color: t.accent, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         borderSide: BorderSide(color: t.danger, width: 1.5),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         borderSide: BorderSide(color: t.danger, width: 1.5),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
@@ -410,7 +416,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
         disabledForegroundColor: t.dim2,
         elevation: 0,
         textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
       ),
     ),
@@ -419,7 +425,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
         backgroundColor: t.accent,
         foregroundColor: onAccent,
         textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
       ),
     ),
@@ -428,7 +434,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
         foregroundColor: app.core.tx,
         side: BorderSide(color: const Color(0xFFB4A0FF).withValues(alpha: 0.3)),
         textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
       ),
     ),
@@ -436,7 +442,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
       style: TextButton.styleFrom(
         foregroundColor: t.accent2,
         textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: app.shape.br(10)),
       ),
     ),
     // Disabled states must stay visually distinct (grayed) or users can't
@@ -479,7 +485,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
             : t.accent;
       }),
       side: BorderSide(color: t.dim2, width: 1.5),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+      shape: RoundedRectangleBorder(borderRadius: app.shape.br(5)),
     ),
     radioTheme: RadioThemeData(
       fillColor: WidgetStateProperty.resolveWith((states) {
@@ -511,7 +517,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
       backgroundColor: t.panel2,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: app.shape.br(20),
         side: BorderSide(color: t.line),
       ),
     ),
@@ -519,7 +525,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
       color: t.panel2,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: app.shape.br(14),
         side: BorderSide(color: t.line),
       ),
     ),
@@ -535,7 +541,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
       selectedColor: t.accent.withValues(alpha: 0.25),
       labelStyle: TextStyle(color: text, fontSize: 12.5),
       side: BorderSide(color: t.line),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      shape: RoundedRectangleBorder(borderRadius: app.shape.br(10)),
     ),
     dropdownMenuTheme: base.dropdownMenuTheme.copyWith(
       menuStyle: MenuStyle(
@@ -543,7 +549,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: app.shape.br(14),
             side: BorderSide(color: t.line),
           ),
         ),
@@ -726,7 +732,7 @@ class SettingsInfoBanner extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: c.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         border: Border.all(color: c.withValues(alpha: 0.22)),
       ),
       child: Row(
@@ -1280,7 +1286,7 @@ class _ConnectionCardState extends State<ConnectionCard> {
         child: Container(
           decoration: BoxDecoration(
             color: lit ? t.panel2 : t.panel,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: app.shape.br(14),
             border: Border.all(
               color: _focused ? t.accent : t.line,
               width: 1,
@@ -1297,10 +1303,10 @@ class _ConnectionCardState extends State<ConnectionCard> {
           ),
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: app.shape.br(14),
             child: InkWell(
               focusNode: widget.focusNode,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: app.shape.br(14),
               onTap: () async {
                 await info.onTap();
               },
@@ -1317,7 +1323,7 @@ class _ConnectionCardState extends State<ConnectionCard> {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: app.fade(app.core.tx, 0.055),
-                        borderRadius: BorderRadius.circular(11),
+                        borderRadius: app.shape.br(11),
                         border: Border.all(color: t.line),
                       ),
                       child: Text(
@@ -1977,7 +1983,7 @@ class SettingsInfoTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: app.fade(app.core.tx, 0.05),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: app.shape.br(8),
               border: Border.all(color: t.line),
             ),
             child: Text(

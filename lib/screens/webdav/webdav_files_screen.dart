@@ -656,7 +656,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: app.fade(app.core.tx, 0.05),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         border: Border.all(color: app.fade(app.core.tx, 0.08)),
       ),
       child: Row(
@@ -751,15 +751,15 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
           ),
           filled: true,
           fillColor: app.fade(app.core.tx, 0.06),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          border: OutlineInputBorder(borderRadius: app.shape.br(10)),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             borderSide: BorderSide(
               color: app.fade(app.core.tx, 0.10),
             ),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             borderSide: BorderSide(
               color: app.cloud.accent,
               width: 1.6,
@@ -802,19 +802,19 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
                 filled: true,
                 fillColor: app.fade(app.core.tx, 0.06),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: app.shape.br(10),
                   borderSide: BorderSide(
                     color: app.fade(app.core.tx, 0.12),
                   ),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: app.shape.br(10),
                   borderSide: BorderSide(
                     color: app.fade(app.core.tx, 0.10),
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: app.shape.br(10),
                   borderSide: BorderSide(
                     color: app.cloud.accent,
                     width: 1.6,
@@ -897,7 +897,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: focused ? app.cloud.focusSurface : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: app.shape.br(12),
                   border: focused
                       ? Border.all(color: app.cloud.accent, width: 1.4)
                       : null,

@@ -945,7 +945,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           return AlertDialog(
             backgroundColor: app.cloud.dialogSurface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: app.shape.br(16),
             ),
             title: const Text(
               'Deleting All Torrents',
@@ -1143,7 +1143,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           return AlertDialog(
             backgroundColor: app.cloud.dialogSurface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: app.shape.br(16),
             ),
             title: const Text(
               'Deleting All Downloads',
@@ -1486,7 +1486,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           return AlertDialog(
             backgroundColor: app.cloud.dialogSurface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: app.shape.br(16),
             ),
             title: Text(
               'Deleting ${isTorrents ? 'Torrents' : 'Downloads'}',
@@ -1617,9 +1617,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: const Color(0xFF10B981),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: app.shape.br(8),
               ),
-              child: const Icon(Icons.check, color: Colors.white, size: 16),
+              // Ink PINNED with its surface. The fill above is a `const Color`
+              // that does not follow the palette, so page ink on it is exactly
+              // the both-directions mistake — near-black on a semantic green
+              // under a paper theme, or Phosphor's amber on amber.
+              child: Icon(Icons.check, color: Colors.white, size: 16),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1632,7 +1636,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         ),
         backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 2),
       ),
@@ -1724,9 +1728,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: const Color(0xFFEF4444),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: app.shape.br(8),
               ),
-              child: const Icon(Icons.error, color: Colors.white, size: 16),
+              // Ink PINNED with its surface. The fill above is a `const Color`
+              // that does not follow the palette, so page ink on it is exactly
+              // the both-directions mistake — near-black on a semantic green
+              // under a paper theme, or Phosphor's amber on amber.
+              child: Icon(Icons.error, color: Colors.white, size: 16),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1739,7 +1747,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         ),
         backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 3),
       ),
@@ -2380,7 +2388,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 filled: true,
                 fillColor: app.fade(app.core.tx, 0.06),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -2423,8 +2431,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     return Container(
                       decoration: BoxDecoration(
                         color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: app.shape.br(8),
                         border: isFocused
+                            // Pinned with the slate fill above, which does
+                            // not follow the palette: a paper theme's
+                            // near-black ring on dark slate is a ring you
+                            // cannot see.
                             ? Border.all(color: Colors.white, width: 2)
                             : null,
                       ),
@@ -2860,7 +2872,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: theme.colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         border: Border.all(
           color: theme.colorScheme.primary.withValues(alpha: 0.3),
         ),
@@ -2926,7 +2938,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
           decoration: BoxDecoration(
             color: app.fade(app.core.tx, 0.05),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(color: app.fade(app.core.tx, 0.08)),
           ),
           child: Row(
@@ -3029,7 +3041,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
           decoration: BoxDecoration(
             color: app.fade(app.core.tx, 0.05),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(color: app.fade(app.core.tx, 0.08)),
           ),
           child: Row(
@@ -3245,15 +3257,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   fillColor: app.fade(app.core.tx, 0.06),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: app.shape.br(12),
                     borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: app.shape.br(12),
                     borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: app.shape.br(12),
                     borderSide: BorderSide(color: app.cloud.accent),
                   ),
                 ),
@@ -4443,7 +4455,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         final app = AppThemeScope.of(context);
         return AlertDialog(
           backgroundColor: app.cloud.dialogSurface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(borderRadius: app.shape.br(16)),
           title: const Text(
             'Add Link',
             style: TextStyle(fontWeight: FontWeight.bold),
@@ -4473,15 +4485,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     hintText: 'https://example.com/file.zip',
                     hintStyle: TextStyle(color: Colors.grey[600]),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: app.shape.br(8),
                       borderSide: const BorderSide(color: Color(0xFF475569)),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: app.shape.br(8),
                       borderSide: const BorderSide(color: Color(0xFF475569)),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: app.shape.br(8),
                       borderSide: BorderSide(color: app.cloud.accent),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
@@ -5056,7 +5068,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                                     : null,
                               ),
                               child: isSelected
-                                  ? const Icon(
+                                  ? Icon(
                                       Icons.check,
                                       color: Colors.white,
                                       size: 16,
@@ -5106,14 +5118,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                                                 ),
                                           ),
                                         )
-                                      : const Icon(
+                                      : Icon(
                                           Icons.play_arrow_rounded,
                                           color: Colors.white,
                                           size: 18,
                                         ),
                                   label: Text(
                                     isUnrestricting ? 'Loading...' : 'Play',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 13,
@@ -5147,14 +5159,14 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                                             ),
                                       ),
                                     )
-                                  : const Icon(
+                                  : Icon(
                                       Icons.copy_rounded,
                                       size: 16,
                                       color: Colors.white,
                                     ),
                               label: Text(
                                 isUnrestricting ? 'Working…' : 'Copy',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   fontSize: 13,
                                 ),
@@ -5379,7 +5391,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: app.shape.br(8),
                       border: Border.all(
                         color: const Color(0xFF6366F1).withValues(alpha: 0.3),
                         width: 1,
@@ -5425,9 +5437,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF10B981),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: app.shape.br(12),
                     ),
                     child: Text(
+                      // Ink pinned with the green fill above: the surface does
+                      // not follow the palette, so its ink must not either.
                       '${selectedFiles.length} selected',
                       style: const TextStyle(
                         color: Colors.white,
@@ -5515,7 +5529,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
             color: app.cloud.dialogSurface.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(
               color: const Color(0xFF475569).withValues(alpha: 0.3),
               width: 1,
@@ -5562,8 +5576,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                               : Colors.grey[600]!,
                           width: 2,
                         ),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: app.shape.br(6),
                       ),
+                      // Both glyphs pinned with the green fill/border above.
                       child: allSelected
                           ? const Icon(
                               Icons.check,

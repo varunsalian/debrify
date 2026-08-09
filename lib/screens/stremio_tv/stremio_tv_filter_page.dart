@@ -673,7 +673,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
         color: app.core.tx.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(99),
+        borderRadius: app.shape.brPill,
       ),
       child: Text.rich(
         TextSpan(
@@ -774,7 +774,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(99),
+                borderRadius: app.shape.brPill,
                 border: Border.all(
                   color: focused
                       ? app.home.focus
@@ -912,7 +912,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                     color: selected
                         ? app.home.chromeAccent.withValues(alpha: 0.10)
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: app.shape.br(12),
                     border: Border.all(
                       color: focused
                           ? app.home.focus
@@ -985,7 +985,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.62),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: app.shape.br(6),
         border: Border.all(
           color: app.onGlass.withValues(alpha: 0.16),
           width: 0.5,
@@ -1023,7 +1023,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: app.home.chromeAccent.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: app.shape.br(9),
         border: Border.all(
           color: app.home.chromeAccent.withValues(alpha: 0.45),
         ),
@@ -1087,7 +1087,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                   ),
                   decoration: BoxDecoration(
                     color: app.core.tx.withValues(alpha: 0.025),
-                    borderRadius: BorderRadius.circular(13),
+                    borderRadius: app.shape.br(13),
                     border: Border.all(
                       color: focused
                           ? app.home.focus
@@ -1272,7 +1272,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(99),
+                borderRadius: app.shape.brPill,
                 border: Border.all(
                   color: focused
                       ? app.home.focus
@@ -1322,7 +1322,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                 color: on
                     ? app.home.chromeAccent.withValues(alpha: 0.28)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: app.shape.br(10),
                 border: Border.all(
                   color: focused
                       ? app.home.focus
@@ -1403,7 +1403,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
       padding: const EdgeInsets.all(2.5),
       decoration: BoxDecoration(
         color: track,
-        borderRadius: BorderRadius.circular(99),
+        borderRadius: app.shape.brPill,
       ),
       child: AnimatedAlign(
         duration: const Duration(milliseconds: 120),
@@ -1428,7 +1428,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: app.home.chromeAccent.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: app.shape.br(5),
       ),
       child: Text(
         type.toUpperCase(),
@@ -1477,7 +1477,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                   const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(
                 color: app.core.tx.withValues(alpha: 0.07),
-                borderRadius: BorderRadius.circular(5),
+                borderRadius: app.shape.br(5),
               ),
               child: Text(
                 key,

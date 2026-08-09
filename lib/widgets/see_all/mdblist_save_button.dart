@@ -111,7 +111,7 @@ class _MdblistSaveButtonState extends State<MdblistSaveButton> {
       padding: const EdgeInsets.fromLTRB(14, 9, 14, 9),
       decoration: BoxDecoration(
         color: app.seeAll.panel,
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: app.shape.br(11),
         border: Border.all(
           width: 2,
           color: _focused
@@ -146,7 +146,7 @@ class _MdblistSaveButtonState extends State<MdblistSaveButton> {
         color: _focused
             ? app.fade(app.seeAll.accent, 0.30)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: app.shape.brPill,
         border: Border.all(
           width: 1.2,
           color: _focused

@@ -226,7 +226,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: t.panel,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         border: Border.all(color: t.line),
       ),
       child: Column(
@@ -361,7 +361,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: t.danger.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: app.shape.br(16),
         border: Border.all(color: t.danger.withValues(alpha: 0.3)),
       ),
       child: Row(
@@ -443,7 +443,7 @@ class _ProviderOption extends StatelessWidget {
           color: selected
               ? t.accent.withValues(alpha: 0.15)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: app.shape.br(12),
           border: Border.all(
             color: isFocused
                 ? t.accent
@@ -460,7 +460,7 @@ class _ProviderOption extends StatelessWidget {
             // The outer Focus node owns DPAD focus/activation; a focusable
             // InkWell here would make each option two traversal stops.
             canRequestFocus: false,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -469,7 +469,7 @@ class _ProviderOption extends StatelessWidget {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: app.fade(app.core.tx, 0.055),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: app.shape.br(10),
                       border: Border.all(color: t.line),
                     ),
                     child: Icon(
