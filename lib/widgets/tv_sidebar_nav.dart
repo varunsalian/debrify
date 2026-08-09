@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -37,9 +39,13 @@ class TvSidebarNav extends StatefulWidget {
   /// Visual style: 'ghost' (no chrome, white coin — the default) | 'classic'
   /// (the original liquid glass) | 'island' (floating glass capsule) |
   /// 'marquee' (ghost at rest, big-type overlay when open) | 'badge'
-  /// (labelled icons, white squircle active). ONLY the chrome changes —
-  /// focus model, LEFT-only entry, key handling and expand mechanics are
-  /// identical in every style.
+  /// (labelled icons, white squircle active) | 'pill' (no rail at rest — a
+  /// single capsule naming the current tab, and the menu arrives as a drawer
+  /// over full-bleed content).
+  ///
+  /// Focus model, LEFT-only entry, key handling and expand mechanics are
+  /// identical in every style. The first five change chrome ONLY; 'pill' also
+  /// changes layout, which is why [contentInsetFor] exists.
   final String navStyle;
 
   const TvSidebarNav({
@@ -52,18 +58,39 @@ class TvSidebarNav extends StatefulWidget {
     this.navStyle = 'ghost',
   });
 
-  /// The width the collapsed rail occupies. The content should be inset by this
-  /// so nothing hides behind the rail while it's collapsed. Shared by every
-  /// style so switching styles never re-flows the content.
+  /// The width the collapsed rail occupies. The content is inset by this so
+  /// nothing hides behind the rail while it's collapsed.
   static const double collapsedWidth = 64.0;
   static const double expandedWidth = 232.0;
+
+  /// How far the CONTENT must be inset for [style].
+  ///
+  /// Every style used to share [collapsedWidth] precisely so switching one
+  /// never re-flowed the content. 'pill' is the exception and the reason this
+  /// is a function: it draws no rail at rest, so reserving a 64px gutter for a
+  /// rail that is not there would waste the space the style exists to reclaim.
+  ///
+  /// Read this rather than the constant — a host that hardcodes 64 silently
+  /// leaves a dead margin down the left of every screen under 'pill'.
+  static double contentInsetFor(String style) =>
+      style == 'pill' ? 0.0 : collapsedWidth;
+
+  /// Handle for the 'pill' capsule.
+  ///
+  /// Needed because the shell keeps building its item list even at zero width,
+  /// so the collapsed drawer's labels are in the tree alongside the capsule's
+  /// — a bare `find.text('Home')` matches both and proves nothing.
+  static const Key pillKey = ValueKey('tv-sidebar-pill');
 
   @override
   State<TvSidebarNav> createState() => TvSidebarNavState();
 }
 
+// Ticker*s*, plural: the expand tween and the 'pill' capsule's hold-fade run
+// independently, so `SingleTickerProviderStateMixin` throws the moment the
+// second controller is built.
 class TvSidebarNavState extends State<TvSidebarNav>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final List<FocusNode> _focusNodes = [];
   int _focusedIndex = 0;
   bool _hasSidebarFocus = false;
@@ -78,6 +105,36 @@ class TvSidebarNavState extends State<TvSidebarNav>
   late AppMotion _motion;
 
   static const int _pageTransitionDelay = 400;
+
+  /// How long the 'pill' capsule stays up after you arrive somewhere.
+  ///
+  /// The label answers "which tab am I on", and that is a question you have
+  /// when you ARRIVE, not continuously — so it says its piece and leaves.
+  /// Permanent would mean permanent collision: every page in this app owns its
+  /// own top-left (YouTube's search field starts in the corner), and no amount
+  /// of shrinking makes a fixed overlay stop landing on them.
+  ///
+  /// A second. Short on purpose: it is a confirmation, not a heading, and the
+  /// LABEL sits on someone's content the whole time it is up.
+  static const Duration _pillHold = Duration(milliseconds: 1000);
+
+  /// How close to the left edge focus must be for the mark to brighten.
+  ///
+  /// Roughly one poster plus its gutter — the leftmost column, which is
+  /// exactly where LEFT stops moving within the content and starts opening
+  /// the menu. Content is full-bleed under this style, so this is measured
+  /// from the screen edge.
+  static const double _pillEdgeZone = 200;
+
+  /// Reveals the LABEL — not the mark. The chevron and icon are permanent;
+  /// only the name breathes in and out.
+  AnimationController? _pillLabel;
+
+  /// The left-edge brighten. Separate controller so the mark can light up
+  /// while the label is collapsed, which is the common case.
+  AnimationController? _pillGlow;
+  final ValueNotifier<bool> _pillNearEdge = ValueNotifier<bool>(false);
+  Timer? _pillTimer;
 
   @override
   void initState() {
@@ -95,6 +152,79 @@ class TvSidebarNavState extends State<TvSidebarNav>
       // close's ease-IN counterpart. Left as shipped.
       reverseCurve: Curves.easeInCubic,
     );
+    // Closing the drawer is an arrival too — you have just chosen where to be,
+    // so the label re-states it rather than leaving you to guess.
+    _expandController.addStatusListener(_onExpandStatus);
+    if (_ensurePillFade()) {
+      _armPillHide();
+      FocusManager.instance.addListener(_onFocusMovedForEdge);
+    }
+  }
+
+  /// Brighten the mark when focus reaches the leftmost column.
+  ///
+  /// The "you can use me right now" signal: LEFT is only the menu gesture once
+  /// focus has run out of content to move through, and this is the same
+  /// moment. Runs on focus CHANGE, which is user-paced — one render-object
+  /// lookup per keypress, not per frame.
+  void _onFocusMovedForEdge() {
+    if (_pillGlow == null) return;
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    final ro = ctx?.findRenderObject();
+    if (ro is! RenderBox || !ro.attached || !ro.hasSize) return;
+    final near = ro.localToGlobal(Offset.zero).dx < _pillEdgeZone;
+    if (_pillNearEdge.value == near) return;
+    _pillNearEdge.value = near;
+    near ? _pillGlow!.forward() : _pillGlow!.reverse();
+  }
+
+  /// Build the capsule's fade controller if this style needs one.
+  ///
+  /// Lazy and idempotent: the other five styles never carry a ticker they
+  /// cannot use, and switching INTO 'pill' at runtime builds it then. Returns
+  /// whether a controller exists afterwards, so callers can decide what to do
+  /// without re-testing the style.
+  ///
+  /// One constructor, one place — duplicating it across initState and
+  /// didUpdateWidget is how the two quietly end up with different durations.
+  bool _ensurePillFade() {
+    if (widget.navStyle != 'pill') return false;
+    _pillLabel ??= AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+      reverseDuration: const Duration(milliseconds: 340),
+      value: 1,
+    );
+    _pillGlow ??= AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+      reverseDuration: const Duration(milliseconds: 320),
+    );
+    return true;
+  }
+
+  void _onExpandStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed) _showPill();
+  }
+
+  /// Bring the capsule back and start its countdown. Cheap no-op under every
+  /// other style, which never builds the controller.
+  void _showPill() {
+    final label = _pillLabel;
+    if (label == null) return;
+    label.forward();
+    _armPillHide();
+  }
+
+  void _armPillHide() {
+    _pillTimer?.cancel();
+    _pillTimer = Timer(_pillHold, () {
+      if (!mounted) return;
+      // Never fade out from under an OPEN drawer: closing it re-shows the
+      // label, and a timer that fired mid-open would cut that short.
+      if (_expandController.value > 0) return;
+      _pillLabel?.reverse();
+    });
   }
 
   @override
@@ -217,21 +347,51 @@ class TvSidebarNavState extends State<TvSidebarNav>
     if (oldWidget.items.length != widget.items.length) {
       _initFocusNodes();
     }
-    // Selecting a new tab collapses the rail — re-centre it on the new current
-    // item (its index arrives here, one frame after the tap fires).
-    if (oldWidget.currentIndex != widget.currentIndex && !_hasSidebarFocus) {
-      _scrollToCurrent();
+    if (oldWidget.currentIndex != widget.currentIndex) {
+      // Selecting a new tab collapses the rail — re-centre it on the new
+      // current item (its index arrives here, one frame after the tap fires).
+      if (!_hasSidebarFocus) _scrollToCurrent();
+      // Arriving somewhere new is exactly when the 'pill' label earns its
+      // place. No-op under every other style.
+      _showPill();
     }
-    // A live style change swaps the shell branch, which recreates the scroll
-    // view at offset 0 — on a short panel that scrolls the SELECTED item
-    // (Settings, where the picker lives) clean off-screen. Re-centre it.
     if (oldWidget.navStyle != widget.navStyle) {
+      // A live style change swaps the shell branch, which recreates the scroll
+      // view at offset 0 — on a short panel that scrolls the SELECTED item
+      // (Settings, where the picker lives) clean off-screen. Re-centre it.
       _scrollToCurrent();
+      if (_ensurePillFade()) {
+        // Switched INTO the style — announce where we are, same as a fresh
+        // arrival. Remove-then-add so a second switch cannot double-register.
+        FocusManager.instance.removeListener(_onFocusMovedForEdge);
+        FocusManager.instance.addListener(_onFocusMovedForEdge);
+        _showPill();
+      } else {
+        // Switched AWAY. The controllers are kept — `_ensurePillFade` uses
+        // `??=`, so disposing them here would hand a switch back a dead one —
+        // but everything that DRIVES them has to stop: nothing renders the
+        // capsule now, so a running tween is a ticker per frame for a widget
+        // that is not on screen, and the focus listener is a render-object
+        // lookup per keypress for an answer nobody reads.
+        _pillTimer?.cancel();
+        _pillTimer = null;
+        FocusManager.instance.removeListener(_onFocusMovedForEdge);
+        _pillLabel?.stop();
+        _pillGlow?.stop();
+        _pillNearEdge.value = false;
+        _pillGlow?.value = 0;
+      }
     }
   }
 
   @override
   void dispose() {
+    _pillTimer?.cancel();
+    FocusManager.instance.removeListener(_onFocusMovedForEdge);
+    _pillLabel?.dispose();
+    _pillGlow?.dispose();
+    _pillNearEdge.dispose();
+    _expandController.removeStatusListener(_onExpandStatus);
     for (final node in _focusNodes) {
       node.dispose();
     }
@@ -303,6 +463,12 @@ class TvSidebarNavState extends State<TvSidebarNav>
     }
   }
 
+  /// The shell's width at rest. Zero under 'pill' — the capsule is drawn as a
+  /// separate overlay, so the shell itself must occupy nothing until it opens
+  /// or it would reintroduce the gutter the style just removed.
+  double get _collapsedW =>
+      _style == 'pill' ? 0.0 : TvSidebarNav.collapsedWidth;
+
   @override
   Widget build(BuildContext context) {
     // Read ONCE here and captured by the builders below: the shell's builders
@@ -311,12 +477,11 @@ class TvSidebarNavState extends State<TvSidebarNav>
     final app = AppThemeScope.of(context);
     // Only the width-bearing shell rebuilds each animation frame; the item list
     // is passed as `child` so it isn't rebuilt during the expand tween.
-    return AnimatedBuilder(
+    final shell = AnimatedBuilder(
       animation: _expand,
       builder: (context, child) {
         final t = _expand.value;
-        final width = TvSidebarNav.collapsedWidth +
-            (_expandedW - TvSidebarNav.collapsedWidth) * t;
+        final width = _collapsedW + (_expandedW - _collapsedW) * t;
         // Non-classic styles skip the liquid-glass pane entirely: their shell
         // is either a plain scrim gradient (ghost/badge: quiet; marquee:
         // heavy, for the big type) or fully transparent (island — the capsule
@@ -588,6 +753,154 @@ class TvSidebarNavState extends State<TvSidebarNav>
           ),
         ),
       ),
+    );
+
+    // Every other style IS the rail; 'pill' is a capsule that names where you
+    // are and gets out of the way. The shell above still renders the drawer
+    // when it opens — this only adds what stands in for the rail at rest.
+    if (_style != 'pill') return shell;
+    final pad = MediaQuery.paddingOf(context);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        shell,
+        // Hard into the corner: the safe-area inset and NOTHING else. The
+        // capsule is transient, so a comfortable margin only buys it more
+        // content to sit on; flush to the edge is where it overlaps least.
+        //
+        // The `pad` term stays because it is not decoration — the rail's items
+        // sit inside a `SafeArea` further down, and this capsule is a sibling
+        // of the shell, so without it a TV reporting overscan would clip the
+        // capsule against the bezel entirely.
+        //
+        // Only `left`/`top` are set, which is deliberate: `RenderStack` leaves
+        // a child constrained that way UNBOUNDED, so the capsule sizes to its
+        // content and paints outside the zero-width shell (hence
+        // `Clip.none`). Adding `right` or `width` would tighten it to a stack
+        // that is 0px wide at rest and collapse the pill to nothing.
+        //
+        // `IgnorePointer` because the capsule is a LABEL — LEFT is the only
+        // way in, and giving it its own focus would be a second entry point
+        // the policy forbids.
+        Positioned(
+          left: pad.left,
+          top: pad.top,
+          child: IgnorePointer(
+            child: KeyedSubtree(
+              key: TvSidebarNav.pillKey,
+              child: _buildPill(app),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The 'pill' style's whole resting state: `‹` plus the current tab's icon,
+  /// permanently — widening to name the tab for a second when you arrive.
+  ///
+  /// The split is the point. The chevron answers "is there a menu?", the icon
+  /// answers "where am I?", and both are cheap enough to stay. Only the NAME
+  /// is expensive — 150px of it, straight through whatever the page put in its
+  /// corner — so only the name is transient.
+  ///
+  /// Alpha is BAKED into every colour rather than wrapped in an Opacity — a
+  /// saveLayer per frame is the one thing a TV cursor cannot afford.
+  ///
+  Widget _buildPill(AppTheme app) {
+    final label = _pillLabel;
+    final glow = _pillGlow;
+    return AnimatedBuilder(
+      // Three drivers, merged so the mark can never be caught half-lit by one
+      // while another moves: the drawer's expand, the label's reveal, and the
+      // left-edge brighten.
+      animation: Listenable.merge([
+        _expand,
+        if (label != null) label,
+        if (glow != null) glow,
+      ]),
+      builder: (context, _) {
+        // Gone by the halfway point of the open: past that the drawer covers
+        // this spot, and two names for one tab read as a duplication bug.
+        final a = (1.0 - _expand.value * 2).clamp(0.0, 1.0);
+        if (a <= 0.01) return const SizedBox.shrink();
+
+        final item = widget.items.isEmpty
+            ? null
+            : widget.items[widget.currentIndex.clamp(
+                0,
+                widget.items.length - 1,
+              )];
+        if (item == null) return const SizedBox.shrink();
+
+        final reveal = label?.value ?? 1.0;
+        final lit = glow?.value ?? 0.0;
+        final ink = app.core.tx;
+
+        // Transparent by design — no plate, no scrim. The mark is a glyph pair
+        // sitting ON the page rather than a bar laid over it, which is what
+        // lets it stay permanent without owning the corner. Only the icon gets
+        // a container, and only enough of one to read as a control.
+        double at(double rest, double near) =>
+            (rest + (near - rest) * lit) * a;
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The affordance. Dim at rest, brighter the moment focus reaches
+            // the column where LEFT would actually open the menu.
+            Icon(
+              Icons.chevron_left_rounded,
+              size: 18,
+              color: ink.withValues(alpha: at(0.34, 0.72)),
+            ),
+            const SizedBox(width: 3),
+            Container(
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: ink.withValues(alpha: at(0.07, 0.13)),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: ink.withValues(alpha: at(0.08, 0.16)),
+                ),
+              ),
+              child: Icon(
+                item.icon,
+                size: 16,
+                color: ink.withValues(alpha: at(0.72, 0.98)),
+              ),
+            ),
+            // The NAME breathes; the mark above does not. Built only while it
+            // is actually revealing — a clipped-to-zero Text still lays out,
+            // and it would still be found by anything looking for the label.
+            if (reveal > 0.01)
+              ClipRect(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: reveal,
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8, right: 4),
+                    child: Text(
+                      item.label,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.1,
+                        // Rides the reveal so it fades as it narrows, instead
+                        // of a full-strength word being sliced in half.
+                        color: ink.withValues(alpha: 0.92 * reveal * a),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 

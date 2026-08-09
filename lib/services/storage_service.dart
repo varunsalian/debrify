@@ -1269,12 +1269,17 @@ class StorageService {
     'island',
     'marquee',
     'badge',
+    'pill',
   };
 
   /// TV sidebar chrome: 'ghost' (chromeless, the default), 'classic' (the
-  /// original liquid glass), 'island', 'marquee' or 'badge'. Visuals only —
-  /// the LEFT-only focus model is shared by every style. Phone/desktop never
-  /// read it.
+  /// original liquid glass), 'island', 'marquee', 'badge' or 'pill'.
+  ///
+  /// The LEFT-only focus model is shared by every style. Chrome-only for the
+  /// first five; **'pill' is the one that also changes LAYOUT** — it shows no
+  /// rail at rest, so content runs full-bleed and gains 64px. Read the inset
+  /// through `TvSidebarNav.contentInsetFor` rather than assuming the constant.
+  /// Phone/desktop never read any of it.
   /// Synchronous mirror of `tvSidebarStyle`, kept so a Look can read
   /// the current value without an await. Additive: every existing caller
   /// still goes through the async getter, which now also refreshes this.

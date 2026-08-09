@@ -42,6 +42,11 @@ const List<TvSidebarStyleChoice> kTvSidebarStyleChoices = [
     'Badge',
     'Labelled icons; the active tab wears a white badge',
   ),
+  TvSidebarStyleChoice(
+    'pill',
+    'Pill',
+    'No rail at all — just the current tab, and content fills the screen',
+  ),
 ];
 
 /// Row caption for the current choice (rail subtitle in TV settings).

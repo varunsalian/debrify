@@ -2822,7 +2822,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         // scaffolds simply cover it.
                         const Positioned.fill(child: TvAmbientArtStage()),
                         Positioned.fill(
-                          left: TvSidebarNav.collapsedWidth,
+                          // Through the helper, not the constant: 'pill' draws
+                          // no rail at rest, and a hardcoded 64 would leave a
+                          // dead margin down the left of every screen under
+                          // the one style whose point is to reclaim it.
+                          left: TvSidebarNav.contentInsetFor(_tvSidebarStyle),
                           child: SafeArea(
                             left: false,
                             // The sidebar's nodes are skipTraversal, so DPAD can
@@ -2939,7 +2943,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           left: 0,
                           top: 0,
                           bottom: 0,
-                          width: TvSidebarNav.collapsedWidth,
+                          // Matches the rail it veils — zero-width under
+                          // 'pill', where there is no rail to darken.
+                          width: TvSidebarNav.contentInsetFor(_tvSidebarStyle),
                           child: IgnorePointer(
                             child: ValueListenableBuilder<bool>(
                               valueListenable: MainPageBridge.tvStageLightsOff,
