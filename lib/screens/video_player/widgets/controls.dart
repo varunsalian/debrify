@@ -1,13 +1,14 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import '../models/gesture_state.dart';
+import '../services/playback_ui_clock.dart';
 import 'netflix_control_button.dart';
 
 class Controls extends StatelessWidget {
   final String title;
   final String? subtitle;
   final Map<String, dynamic> enhancedMetadata;
-  final Duration duration;
-  final Duration position;
+  final ValueListenable<PlaybackUiClockValue> clock;
   final bool isPlaying;
   final bool isReady;
   final VoidCallback onPlayPause;
@@ -76,8 +77,7 @@ class Controls extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.enhancedMetadata,
-    required this.duration,
-    required this.position,
+    required this.clock,
     required this.isPlaying,
     required this.isReady,
     required this.onPlayPause,
@@ -193,14 +193,6 @@ class Controls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = duration.inMilliseconds <= 0
-        ? const Duration(seconds: 1)
-        : duration;
-    final progress = (position.inMilliseconds / total.inMilliseconds).clamp(
-      0.0,
-      1.0,
-    );
-
     return Stack(
       children: [
         // Non-interactive gradient overlay
@@ -314,63 +306,73 @@ class Controls extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           // Progress bar with time indicators
-                          Row(
-                            children: [
-                              if (!hideSeekbar) ...[
-                                Text(
-                                  _format(position),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: SliderTheme(
-                                    data: SliderTheme.of(context).copyWith(
-                                      trackHeight: 4,
-                                      activeTrackColor: const Color(0xFFE50914),
-                                      inactiveTrackColor: Colors.white
-                                          .withOpacity(0.3),
-                                      thumbShape: const RoundSliderThumbShape(
-                                        enabledThumbRadius: 6,
-                                        elevation: 2,
+                          if (!hideSeekbar)
+                            ValueListenableBuilder<PlaybackUiClockValue>(
+                              valueListenable: clock,
+                              builder: (context, value, _) {
+                                final total = value.duration.inMilliseconds <= 0
+                                    ? const Duration(seconds: 1)
+                                    : value.duration;
+                                final progress =
+                                    (value.position.inMilliseconds /
+                                            total.inMilliseconds)
+                                        .clamp(0.0, 1.0);
+                                return Row(
+                                  children: [
+                                    Text(
+                                      _format(value.position),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
                                       ),
-                                      thumbColor: const Color(0xFFE50914),
-                                      overlayShape:
-                                          const RoundSliderOverlayShape(
-                                            overlayRadius: 12,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: SliderTheme(
+                                        data: SliderTheme.of(context).copyWith(
+                                          trackHeight: 4,
+                                          activeTrackColor: const Color(
+                                            0xFFE50914,
                                           ),
+                                          inactiveTrackColor: Colors.white
+                                              .withOpacity(0.3),
+                                          thumbShape:
+                                              const RoundSliderThumbShape(
+                                                enabledThumbRadius: 6,
+                                                elevation: 2,
+                                              ),
+                                          thumbColor: const Color(0xFFE50914),
+                                          overlayShape:
+                                              const RoundSliderOverlayShape(
+                                                overlayRadius: 12,
+                                              ),
+                                        ),
+                                        child: Slider(
+                                          min: 0,
+                                          max: 1,
+                                          value: progress,
+                                          onChangeStart: (_) =>
+                                              onSeekBarChangedStart(),
+                                          onChanged: onSeekBarChanged,
+                                          onChangeEnd: (_) =>
+                                              onSeekBarChangeEnd(),
+                                        ),
+                                      ),
                                     ),
-                                    child: Slider(
-                                      min: 0,
-                                      max: 1,
-                                      value:
-                                          (position.inMilliseconds /
-                                                  (total.inMilliseconds == 0
-                                                      ? 1
-                                                      : total.inMilliseconds))
-                                              .clamp(0.0, 1.0),
-                                      onChangeStart: (_) =>
-                                          onSeekBarChangedStart(),
-                                      onChanged: (v) => onSeekBarChanged(v),
-                                      onChangeEnd: (_) => onSeekBarChangeEnd(),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      _format(value.duration),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  _format(duration),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
+                                  ],
+                                );
+                              },
+                            ),
 
                           // Separates the seek row from the buttons. Dropped
                           // only when there is no seek row AND a panel above

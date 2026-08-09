@@ -14,6 +14,7 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -34,6 +35,8 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.media.audiofx.LoudnessEnhancer;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -54,9 +57,11 @@ import androidx.media3.common.text.Cue;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.DecoderReuseEvaluation;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.RenderersFactory;
+import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.trackselection.AdaptiveTrackSelection;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.exoplayer.upstream.DefaultBandwidthMeter;
@@ -105,6 +110,7 @@ import io.flutter.plugin.common.MethodChannel;
  */
 public class TorboxTvPlayerActivity extends AppCompatActivity {
 
+    private static final String DECODER_LOG_TAG = "DEBRIFY_PLAYER_DECODER";
     private static final String PROVIDER_TORBOX = "torbox";
     private static final String PROVIDER_REAL_DEBRID = "real_debrid";
     private static final String PROVIDER_PIKPAK = "pikpak";
@@ -125,9 +131,71 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private static final int PIKPAK_BASE_DELAY_MS = 2000; // 2 seconds base delay
     private static final int PIKPAK_MAX_DELAY_MS = 18000; // 18 seconds max delay
 
+    private static String androidDecoderStatus(String decoderName) {
+        String normalized = decoderName.toLowerCase(Locale.US);
+        if (normalized.contains(".google.")
+                || normalized.contains(".android.")
+                || normalized.startsWith("c2.android")
+                || normalized.startsWith("c2.google")
+                || normalized.contains("ffmpeg")) {
+            return "software";
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                for (MediaCodecInfo codecInfo
+                        : new MediaCodecList(MediaCodecList.ALL_CODECS).getCodecInfos()) {
+                    if (!codecInfo.getName().equalsIgnoreCase(decoderName)) continue;
+                    if (codecInfo.isSoftwareOnly()) return "software";
+                    if (codecInfo.isHardwareAccelerated()) return "hardware";
+                    return "unknown";
+                }
+            } catch (RuntimeException ignored) {
+                // Decoder name remains in the release diagnostic for manual
+                // inspection when a vendor codec registry cannot be queried.
+            }
+        }
+        return "unknown";
+    }
+
     private String provider;
     private PlayerView playerView;
     private ExoPlayer player;
+    private final AnalyticsListener decoderAnalyticsListener = new AnalyticsListener() {
+        private Format inputFormat;
+
+        @Override
+        public void onVideoInputFormatChanged(
+                AnalyticsListener.EventTime eventTime,
+                Format format,
+                @Nullable DecoderReuseEvaluation decoderReuseEvaluation) {
+            inputFormat = format;
+        }
+
+        @Override
+        public void onVideoDecoderInitialized(
+                AnalyticsListener.EventTime eventTime,
+                String decoderName,
+                long initializedTimestampMs,
+                long initializationDurationMs) {
+            Format format = player != null && player.getVideoFormat() != null
+                    ? player.getVideoFormat()
+                    : inputFormat;
+            long generation = eventTime.mediaPeriodId != null
+                    ? eventTime.mediaPeriodId.windowSequenceNumber
+                    : -1L;
+            Log.i(
+                    DECODER_LOG_TAG,
+                    "generation=" + generation + " phase=stable"
+                            + " status=" + androidDecoderStatus(decoderName)
+                            + " platform=android_tv backend=media3"
+                            + " codec=" + (format != null && format.sampleMimeType != null
+                                    ? format.sampleMimeType : "unknown")
+                            + " decoder=" + decoderName
+                            + " output=surface_view"
+                            + " resolution=" + (format != null ? format.width : 0)
+                            + "x" + (format != null ? format.height : 0));
+        }
+    };
     private DefaultTrackSelector trackSelector;
     private RenderersFactory renderersFactory;
     private OffsetRenderersFactory offsetRenderersFactory;
@@ -745,6 +813,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                 .setBandwidthMeter(bandwidthMeter)
                 .build();
         player.addListener(playbackListener);
+        player.addAnalyticsListener(decoderAnalyticsListener);
         playerView.setPlayer(player);
         
         // Hide PlayerView's internal SubtitleView to use our custom one

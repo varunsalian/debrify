@@ -7,6 +7,7 @@ import 'iptv_media_store.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/webdav_item.dart';
+import '../models/android_video_renderer_mode.dart';
 import '../utils/json_isolate.dart';
 import '../utils/platform_util.dart';
 
@@ -184,6 +185,8 @@ class StorageService {
   static const String _playerSystemAudioEffectsKey =
       'player_system_audio_effects';
   static const String _playerStartPortraitKey = 'player_start_portrait';
+  static const String _androidVideoRendererModeKey =
+      'android_video_renderer_mode';
   static const String _subtitleAutoSyncKey = 'subtitle_auto_sync_enabled';
   static const String _playerDefaultSubtitleLanguageKey =
       'player_default_subtitle_language';
@@ -883,15 +886,17 @@ class StorageService {
   static Future<String> getAppTheme() async {
     final prefs = await SharedPreferences.getInstance();
     final value = prefs.getString(_appThemeKey);
-    appThemeCached =
-        (value == 'legacy' || kDetailThemes.contains(value)) ? value! : 'legacy';
+    appThemeCached = (value == 'legacy' || kDetailThemes.contains(value))
+        ? value!
+        : 'legacy';
     return appThemeCached;
   }
 
   static Future<void> setAppTheme(String value) async {
     final prefs = await SharedPreferences.getInstance();
-    final normalized =
-        (value == 'legacy' || kDetailThemes.contains(value)) ? value : 'legacy';
+    final normalized = (value == 'legacy' || kDetailThemes.contains(value))
+        ? value
+        : 'legacy';
     await prefs.setString(_appThemeKey, normalized);
     appThemeCached = normalized;
   }
@@ -997,7 +1002,9 @@ class StorageService {
 
   static Future<String> getDiscoverLayout() async {
     final prefs = await SharedPreferences.getInstance();
-    return discoverLayoutCached = prefs.getString(_discoverLayoutKey) == 'grid' ? 'grid' : 'stage';
+    return discoverLayoutCached = prefs.getString(_discoverLayoutKey) == 'grid'
+        ? 'grid'
+        : 'stage';
   }
 
   /// Normalizes toward 'stage' on the same terms [getDiscoverLayout] does —
@@ -1053,15 +1060,17 @@ class StorageService {
   static Future<String> getLaunchAnimation() async {
     final prefs = await SharedPreferences.getInstance();
     final value = prefs.getString(_launchAnimationKey);
-    launchAnimationCached =
-        _launchAnimationValues.contains(value) ? value! : 'horizon';
+    launchAnimationCached = _launchAnimationValues.contains(value)
+        ? value!
+        : 'horizon';
     return launchAnimationCached;
   }
 
   static Future<void> setLaunchAnimation(String value) async {
     final prefs = await SharedPreferences.getInstance();
-    final normalized =
-        _launchAnimationValues.contains(value) ? value : 'horizon';
+    final normalized = _launchAnimationValues.contains(value)
+        ? value
+        : 'horizon';
     await prefs.setString(_launchAnimationKey, normalized);
     launchAnimationCached = normalized;
   }
@@ -1085,15 +1094,15 @@ class StorageService {
   static Future<String> getLaunchIdentPalette() async {
     final prefs = await SharedPreferences.getInstance();
     final value = prefs.getString(_launchIdentPaletteKey);
-    launchIdentPaletteCached =
-        _launchIdentPalettes.contains(value) ? value! : 'ident';
+    launchIdentPaletteCached = _launchIdentPalettes.contains(value)
+        ? value!
+        : 'ident';
     return launchIdentPaletteCached;
   }
 
   static Future<void> setLaunchIdentPalette(String value) async {
     final prefs = await SharedPreferences.getInstance();
-    final normalized =
-        _launchIdentPalettes.contains(value) ? value : 'ident';
+    final normalized = _launchIdentPalettes.contains(value) ? value : 'ident';
     // Mirror BEFORE the await: the picker rebuilds on the next frame and the
     // splash reads the mirror synchronously.
     launchIdentPaletteCached = normalized;
@@ -1148,7 +1157,8 @@ class StorageService {
   static Future<String> getTvSidebarStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_tvSidebarStyleKey);
-    return tvSidebarStyleCached = (raw != null && _tvSidebarStyles.contains(raw)) ? raw : 'ghost';
+    return tvSidebarStyleCached =
+        (raw != null && _tvSidebarStyles.contains(raw)) ? raw : 'ghost';
   }
 
   static Future<void> setTvSidebarStyle(String style) async {
@@ -5913,6 +5923,22 @@ class StorageService {
   static Future<void> setPlayerSystemAudioEffects(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
+  }
+
+  /// Renderer used by the Flutter media-kit player on Android phones/tablets.
+  /// Android TV ignores this and keeps its native Media3 SurfaceView backend.
+  static Future<AndroidVideoRendererMode> getAndroidVideoRendererMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return AndroidVideoRendererMode.fromStorage(
+      prefs.getString(_androidVideoRendererModeKey),
+    );
+  }
+
+  static Future<void> setAndroidVideoRendererMode(
+    AndroidVideoRendererMode mode,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_androidVideoRendererModeKey, mode.storageKey);
   }
 
   /// Whether the Debrify Player should request community timestamps and show

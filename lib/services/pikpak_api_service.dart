@@ -60,7 +60,8 @@ class PikPakApiService {
 
   /// Generate a random device ID (32 character hex string like rclone does)
   String _generateDeviceId() {
-    final random = DateTime.now().millisecondsSinceEpoch.toString() +
+    final random =
+        DateTime.now().millisecondsSinceEpoch.toString() +
         DateTime.now().microsecondsSinceEpoch.toString() +
         (DateTime.now().hashCode * 31).toString();
     final bytes = utf8.encode(random);
@@ -179,9 +180,7 @@ class PikPakApiService {
         meta['user_id'] = userId;
       }
 
-      print(
-        'PikPak: Captcha meta fields - captcha_sign: ${captchaSign.substring(0, 10)}..., timestamp: $timestamp',
-      );
+      print('PikPak: Captcha request metadata prepared');
 
       final response = await http.post(
         Uri.parse(
@@ -210,17 +209,12 @@ class PikPakApiService {
         return token;
       } else {
         print('PikPak: Failed to get captcha token: ${response.statusCode}');
-        print('PikPak: Response body: ${response.body}');
-
         // Try to parse error details
         try {
           final errorData = jsonDecode(response.body);
           final errorCode = errorData['error_code'];
-          final errorDesc =
-              errorData['error_description'] ??
-              errorData['error'] ??
-              'Unknown error';
-          print('PikPak: Error code: $errorCode, Description: $errorDesc');
+          final errorType = errorData['error'] ?? 'unknown';
+          print('PikPak: Error code: $errorCode, type: $errorType');
         } catch (e) {
           // Ignore parsing errors
         }
@@ -228,25 +222,29 @@ class PikPakApiService {
         throw Exception('Failed to get captcha token: ${response.statusCode}');
       }
     } catch (e) {
-      print('PikPak: Captcha token error: $e');
+      print('PikPak: Captcha token error (${e.runtimeType})');
       rethrow;
     }
   }
 
   /// Login with email and password
   /// [notifyListeners] - If false, won't update authStateNotifier (used for internal re-auth)
-  Future<bool> login(String email, String password, {bool notifyListeners = true}) async {
+  Future<bool> login(
+    String email,
+    String password, {
+    bool notifyListeners = true,
+  }) async {
     try {
-      print('PikPak: Logging in as $email...');
+      print('PikPak: Starting login');
 
       // 1. Generate or load device ID
       String? deviceId = await StorageService.getPikPakDeviceId();
       if (deviceId == null) {
         deviceId = _generateDeviceId();
         await StorageService.setPikPakDeviceId(deviceId);
-        print('PikPak: Generated new device ID: $deviceId');
+        print('PikPak: Generated a new device ID');
       } else {
-        print('PikPak: Using existing device ID: $deviceId');
+        print('PikPak: Using the stored device ID');
       }
 
       // 2. Get captcha token BEFORE login
@@ -299,15 +297,20 @@ class PikPakApiService {
         if (notifyListeners) authStateNotifier.value = true;
         return true;
       } else {
-        final errorData = jsonDecode(response.body);
-        print(
-          'PikPak: Login failed: ${errorData['error_description'] ?? errorData['error'] ?? response.body}',
-        );
+        try {
+          final errorData = jsonDecode(response.body);
+          print(
+            'PikPak: Login failed: code=${errorData['error_code']} '
+            'type=${errorData['error'] ?? 'unknown'}',
+          );
+        } catch (_) {
+          print('PikPak: Login failed: status=${response.statusCode}');
+        }
         if (notifyListeners) authStateNotifier.value = false;
         return false;
       }
     } catch (e) {
-      print('PikPak: Login error: $e');
+      print('PikPak: Login error (${e.runtimeType})');
       if (notifyListeners) authStateNotifier.value = false;
       return false;
     }
@@ -353,7 +356,7 @@ class PikPakApiService {
       print('PikPak: Standard refresh failed, attempting re-authentication...');
       return await _tryReAuthenticate();
     } catch (e) {
-      print('PikPak: Token refresh error: $e');
+      print('PikPak: Token refresh error (${e.runtimeType})');
       return false;
     }
   }
@@ -418,7 +421,7 @@ class PikPakApiService {
         return false;
       }
     } catch (e) {
-      print('PikPak: Error during JSON refresh: $e');
+      print('PikPak: Error during JSON refresh (${e.runtimeType})');
       return false;
     }
   }
@@ -473,7 +476,7 @@ class PikPakApiService {
         return false;
       }
     } catch (e) {
-      print('PikPak: Error during form-urlencoded refresh: $e');
+      print('PikPak: Error during form-urlencoded refresh (${e.runtimeType})');
       return false;
     }
   }
@@ -502,22 +505,19 @@ class PikPakApiService {
       print('PikPak: Token refreshed successfully');
       return true;
     } catch (e) {
-      print('PikPak: Error parsing refresh response: $e');
+      print('PikPak: Error parsing refresh response (${e.runtimeType})');
       return false;
     }
   }
 
   /// Log refresh error details
   void _logRefreshError(String responseBody) {
-    print('PikPak: Refresh failed: $responseBody');
     try {
       final errorData = jsonDecode(responseBody);
       final errorCode = errorData['error_code'];
       final errorType = errorData['error'] ?? '';
       final errorDesc = errorData['error_description'] ?? '';
-      print(
-        'PikPak: Error code: $errorCode, type: $errorType, desc: $errorDesc',
-      );
+      print('PikPak: Refresh failed: code=$errorCode, type=$errorType');
 
       // If invalid_grant, the refresh token itself is expired
       if (errorType == 'invalid_grant' ||
@@ -552,7 +552,9 @@ class PikPakApiService {
       if (_lastReAuthAttempt != null) {
         final elapsed = DateTime.now().difference(_lastReAuthAttempt!);
         if (elapsed < _reAuthCooldown) {
-          print('PikPak: Re-auth cooldown active (${_reAuthCooldown.inSeconds - elapsed.inSeconds}s remaining), skipping');
+          print(
+            'PikPak: Re-auth cooldown active (${_reAuthCooldown.inSeconds - elapsed.inSeconds}s remaining), skipping',
+          );
           return false;
         }
       }
@@ -585,7 +587,7 @@ class PikPakApiService {
         return false;
       }
     } catch (e) {
-      print('PikPak: Re-authentication error: $e');
+      print('PikPak: Re-authentication error (${e.runtimeType})');
       return false;
     }
   }
@@ -960,9 +962,7 @@ class PikPakApiService {
       if (errorMsg.contains('target folder no longer exists') ||
           errorMsg.contains('parent folder not found') ||
           errorMsg.contains('folder does not exist')) {
-        print(
-          'PikPak: Parent folder appears to be deleted, not falling back',
-        );
+        print('PikPak: Parent folder appears to be deleted, not falling back');
         throw Exception('RESTRICTED_FOLDER_DELETED: $e');
       }
 
@@ -1737,7 +1737,9 @@ class PikPakApiService {
             final fileWithPath = Map<String, dynamic>.from(file);
 
             // Build full path from root of scan
-            final fullPath = currentPath.isEmpty ? fileName : '$currentPath/$fileName';
+            final fullPath = currentPath.isEmpty
+                ? fileName
+                : '$currentPath/$fileName';
 
             // Add path metadata fields
             fileWithPath['_fullPath'] = fullPath;
