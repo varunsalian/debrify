@@ -199,8 +199,44 @@ abstract final class PremiumLooks {
     sectionGap: 1.1,
   );
 
+
+  /// **Spotlight** — the tvOS idiom.
+  ///
+  /// The only look whose focus expression is [FocusExpression.parallax], and
+  /// the reason that value exists: cards lift, tilt on a 700px perspective and
+  /// catch a specular highlight, spring-driven so a fast traversal keeps its
+  /// momentum. Everything else here exists to stay out of that mechanic's way.
+  ///
+  /// `reactiveRoom: 0` because the detail page's own ambient field IS the
+  /// ground — the shell's accent wash on top of it is a second, differently
+  /// coloured light in the same room.
+  static const spotlight = ThemeSpec(
+    id: 'spotlight',
+    label: 'Spotlight',
+    subtitle: 'Full-bleed art, borderless focus, ambient detail',
+    // MEASURED off the reference, not chosen: rgb(28,28,28) at every gutter of
+    // a scrolled frame — a neutral grey, not black.
+    ground: Color(0xFF1B1C1C),
+    sunken: Color(0xFF151616),
+    raised: Color(0xFF242525),
+    ink: Color(0xFFFFFFFF),
+    // White, not a hue. The reference has no accent colour anywhere: state is
+    // carried by the lift and by a solid-white primary button.
+    accent: Color(0xFFFFFFFF),
+    accentButton: true,
+    separation: SeparationModel.fill,
+    scrim: ScrimStyle.bottomGradient,
+    frame: ArtFrame.bleed,
+    focusExpression: FocusExpression.parallax,
+    motion: MotionCharacter.settle,
+    entrance: EntranceStyle.fadeUp,
+    idle: IdlePolicy.dimChrome,
+    radius: 7,
+    reactiveRoom: 0,
+  );
+
   /// In picker order.
-  static const List<ThemeSpec> all = [glass, field, hearth, console, reel];
+  static const List<ThemeSpec> all = [glass, field, hearth, console, reel, spotlight];
 
   static ThemeSpec? byId(String id) {
     for (final s in all) {

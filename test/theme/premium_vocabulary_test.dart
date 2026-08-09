@@ -257,8 +257,10 @@ void main() {
     });
 
     test('ids and labels are unique', () {
-      expect(PremiumLooks.all.map((s) => s.id).toSet().length, 5);
-      expect(PremiumLooks.all.map((s) => s.label).toSet().length, 5);
+      expect(PremiumLooks.all.map((s) => s.id).toSet().length,
+          PremiumLooks.all.length);
+      expect(PremiumLooks.all.map((s) => s.label).toSet().length,
+          PremiumLooks.all.length);
     });
 
     test('every look builds, and none is legacy', () {
@@ -541,7 +543,7 @@ void main() {
 
     test('the pickers show them first, and show all twenty-five', () {
       final ids = DetailThemes.catalogue.map((t) => t.id).toList();
-      expect(ids.take(5), PremiumLooks.all.map((s) => s.id));
+      expect(ids.take(PremiumLooks.all.length), PremiumLooks.all.map((s) => s.id));
       expect(ids.length, DetailThemes.all.length + PremiumLooks.all.length);
       expect(ids.toSet().length, ids.length, reason: 'id collision');
     });
@@ -635,6 +637,9 @@ void main() {
           ArtGrade.none, FocusExpression.invert, MotionCharacter.snap),
       'reel': (SeparationModel.fill, ScrimStyle.plate, ArtFrame.matted,
           ArtGrade.sepia, FocusExpression.lift, MotionCharacter.settle),
+      'spotlight': (SeparationModel.fill, ScrimStyle.bottomGradient,
+          ArtFrame.bleed, ArtGrade.none, FocusExpression.parallax,
+          MotionCharacter.settle),
     };
 
     // Everything the enums do NOT cover, pinned as the numbers a consumer
@@ -648,6 +653,17 @@ void main() {
       'hearth': (0xFF141110, 0xFFF6EFE6, 0xFFE8A13C, 0xFFE8A13C, 12.0, 8.0, 12.0),
       'console': (0xFF080B09, 0xFFD8E0D8, 0xFF8CE0A8, 0xFF8CE0A8, 0.0, 0.0, 0.0),
       'reel': (0xFF0A0908, 0xFFEDE4D8, 0xFFD9A441, 0xFFD9A441, 4.0, 3.0, 4.0),
+      // White accent AND white button fill: the reference carries no accent
+      // colour at all — state is the lift and a solid-white primary.
+      'spotlight': (
+        0xFF1B1C1C,
+        0xFFFFFFFF,
+        0xFFFFFFFF,
+        0xFFFFFFFF,
+        7.0,
+        5.0,
+        7.0
+      ),
     };
 
     for (final s in PremiumLooks.all) {

@@ -204,6 +204,16 @@ class AppLook {
       if (key == null) return false;
       if (key.read() != entry.value) return false;
     }
+    // The `detail_theme` MIRROR is not one of the named keys — the controller
+    // writes it as part of `app_theme` — so without this a Look reports itself
+    // active while the details page renders a palette the user changed by
+    // hand. Detection only; `apply` still never writes the mirror itself.
+    final theme = values['app_theme'];
+    if (theme != null &&
+        theme != AppThemes.legacyId &&
+        StorageService.detailThemeCached != theme) {
+      return false;
+    }
     return true;
   }
 }
@@ -232,6 +242,19 @@ abstract final class AppLooks {
         'detail_page_style': 'classic',
         'launch_animation': 'horizon',
         'launch_ident_palette': 'ident',
+        'text_brightness': 'bright',
+      },
+    ),
+    AppLook(
+      id: 'spotlight',
+      label: 'Spotlight',
+      blurb: 'The tvOS idiom — full-bleed art, borderless focus that lifts '
+          'and tilts, and a details page that dissolves into colour.',
+      values: {
+        'app_theme': 'spotlight',
+        'detail_page_style': 'showcase',
+        'tv_home_style': 'spotlight',
+        'tv_sidebar_style': 'pill',
         'text_brightness': 'bright',
       },
     ),

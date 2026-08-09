@@ -104,7 +104,13 @@ class AppThemeController extends ChangeNotifier {
         (id == AppThemes.legacyId || StorageService.kDetailThemes.contains(id))
         ? id
         : AppThemes.legacyId;
-    if (normalized == _id) return;
+    // NOT `normalized == _id` alone. `select` also writes the `detail_theme`
+    // mirror, so this sequence left a Look half-applied: apply it, change
+    // Details Theme by hand, apply it again — the app theme already matches,
+    // this returns, and the mirror is never repaired. Compare BOTH.
+    final mirrorOk = normalized == AppThemes.legacyId ||
+        StorageService.detailThemeCached == normalized;
+    if (normalized == _id && mirrorOk) return;
     _id = normalized;
     if (normalized != AppThemes.legacyId) {
       // The synchronous mirror BEFORE publishing: an open details route

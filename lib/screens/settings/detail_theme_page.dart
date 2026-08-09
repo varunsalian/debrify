@@ -37,6 +37,7 @@ import 'widgets/settings_widgets.dart';
 ///
 /// Re-enable both once the remaining literals read from the token layer.
 const Set<String> kDetailThemesShipped = {
+  'spotlight',
   'signal',
   'noir',
   // 'broadsheet', // light ground — unreadable text, see note above
