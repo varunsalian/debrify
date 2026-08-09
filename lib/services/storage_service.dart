@@ -982,7 +982,17 @@ class StorageService {
   // Read once at player launch. Televisions never consult these — they build
   // `TvControls`, not `Controls`.
   static const String _playerDockStyleKey = 'player_dock_style';
-  static const Set<String> _playerDockStyles = {'classic', 'two_tier'};
+  static const Set<String> _playerDockStyles = {
+    'classic',
+    'auto',
+    'compact',
+    'tiers',
+    'cinema',
+    // The value shipped before the arrangements became selectable. Still
+    // accepted on read so existing installs keep the dock they chose; it
+    // means the same thing 'auto' does.
+    'two_tier',
+  };
 
   static Future<String> getPlayerDockStyle() async {
     final prefs = await SharedPreferences.getInstance();

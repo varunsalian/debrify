@@ -17,9 +17,24 @@ class PlayerDockChoice {
 const List<PlayerDockChoice> kPlayerDockStyleChoices = [
   PlayerDockChoice('classic', 'Classic', "Today's controls"),
   PlayerDockChoice(
-    'two_tier',
-    'Two-Tier Dock',
-    'Larger controls, transport on its own row, tools below',
+    'auto',
+    'Adaptive',
+    'Picks the best layout for the window — recommended',
+  ),
+  PlayerDockChoice(
+    'compact',
+    'Compact',
+    'One row: transport, three tools and a More sheet',
+  ),
+  PlayerDockChoice(
+    'tiers',
+    'Two-Tier',
+    'Centred transport above the bar, tools wrapping below',
+  ),
+  PlayerDockChoice(
+    'cinema',
+    'Cinema Bar',
+    'Full-width bar — transport, volume and time, tools right',
   ),
 ];
 
@@ -44,9 +59,12 @@ const List<PlayerDockChoice> kPlayerDockSizeChoices = [
 /// Row caption for the Appearance list — the chosen style, plus the palette
 /// when one is actually in effect.
 String playerDockLabel(String style, String palette, [String size = 'auto']) {
+  // Installs from before the arrangements were selectable still store the old
+  // value; it means what 'auto' means.
+  final normalized = style == 'two_tier' ? 'auto' : style;
   final styleLabel = kPlayerDockStyleChoices
       .firstWhere(
-        (c) => c.value == style,
+        (c) => c.value == normalized,
         orElse: () => kPlayerDockStyleChoices.first,
       )
       .label;
@@ -157,6 +175,9 @@ class _PlayerDockPageState extends State<PlayerDockPage> {
 
   bool get _styled => _style != 'classic';
 
+  bool _isSelected(String value) =>
+      _style == value || (value == 'auto' && _style == 'two_tier');
+
   @override
   Widget build(BuildContext context) {
     final t = AppThemeScope.of(context).settings;
@@ -195,7 +216,9 @@ class _PlayerDockPageState extends State<PlayerDockPage> {
                       for (final choice in kPlayerDockStyleChoices)
                         _optionRow(
                           choice,
-                          selected: _style,
+                          selected: _isSelected(choice.value)
+                              ? choice.value
+                              : _style,
                           onSelect: _selectStyle,
                         ),
                     ],

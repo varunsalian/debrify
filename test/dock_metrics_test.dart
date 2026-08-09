@@ -243,7 +243,29 @@ void main() {
 
     test('classic is the default and is not styled', () {
       expect(PlayerDockStyle.fromPref(null).isStyled, isFalse);
-      expect(PlayerDockStyle.twoTier.isStyled, isTrue);
+      for (final s in PlayerDockStyle.values.where(
+        (s) => s != PlayerDockStyle.classic,
+      )) {
+        expect(s.isStyled, isTrue, reason: s.name);
+      }
+    });
+
+    test('the pre-selectable `two_tier` value still resolves to Adaptive', () {
+      // Installs that chose the styled dock before the arrangements became
+      // selectable must keep it, not silently drop back to Classic.
+      expect(PlayerDockStyle.fromPref('two_tier'), PlayerDockStyle.auto);
+      expect(PlayerDockStyle.fromPref('two_tier').isStyled, isTrue);
+    });
+
+    test('only Adaptive defers to the viewport', () {
+      expect(PlayerDockStyle.auto.forcedArrangement, isNull);
+      expect(PlayerDockStyle.classic.forcedArrangement, isNull);
+      expect(
+        PlayerDockStyle.compact.forcedArrangement,
+        DockArrangement.narrow,
+      );
+      expect(PlayerDockStyle.tiers.forcedArrangement, DockArrangement.regular);
+      expect(PlayerDockStyle.cinema.forcedArrangement, DockArrangement.wide);
     });
   });
 

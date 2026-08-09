@@ -434,3 +434,84 @@ class _DockExtentReporterState extends State<DockExtentReporter> {
     return KeyedSubtree(key: _key, child: widget.child);
   }
 }
+
+/// A slider track painted with the palette's accent **gradient**, running
+/// `deep → hot` so the played edge is the brightest point on the bar.
+///
+/// Material's `SliderThemeData` only takes flat `Color`s, so the shipped dock
+/// drew a solid pink bar while the design called for a gradient with a bloom
+/// at the leading edge. This is what closes that gap.
+class GradientSliderTrackShape extends SliderTrackShape
+    with BaseSliderTrackShape {
+  final Color deep;
+  final Color hot;
+  final Color inactive;
+  final Color glow;
+
+  const GradientSliderTrackShape({
+    required this.deep,
+    required this.hot,
+    required this.inactive,
+    required this.glow,
+  });
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required TextDirection textDirection,
+    required Offset thumbCenter,
+    Offset? secondaryOffset,
+    bool isDiscrete = false,
+    bool isEnabled = false,
+    double additionalActiveTrackHeight = 0,
+  }) {
+    final rect = getPreferredRect(
+      parentBox: parentBox,
+      offset: offset,
+      sliderTheme: sliderTheme,
+      isEnabled: isEnabled,
+      isDiscrete: isDiscrete,
+    );
+    if (rect.isEmpty) return;
+    final radius = Radius.circular(rect.height / 2);
+    final canvas = context.canvas;
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, radius),
+      Paint()..color = inactive,
+    );
+
+    // In RTL the thumb travels right-to-left, so the played portion runs from
+    // the RIGHT edge to the thumb. Taking left->thumb unconditionally showed a
+    // full bar at position 0 and an empty one at the end.
+    final ltr = textDirection == TextDirection.ltr;
+    final thumbX = thumbCenter.dx.clamp(rect.left, rect.right);
+    final played = ltr
+        ? Rect.fromLTRB(rect.left, rect.top, thumbX, rect.bottom)
+        : Rect.fromLTRB(thumbX, rect.top, rect.right, rect.bottom);
+    if (played.width <= 0) return;
+
+    // The bloom sits under the fill so the leading edge reads as lit.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(played, radius),
+      Paint()
+        ..color = glow
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(played, radius),
+      Paint()
+        ..shader =
+            LinearGradient(
+              // The hot end always sits at the leading (played) edge.
+              begin: ltr ? Alignment.centerLeft : Alignment.centerRight,
+              end: ltr ? Alignment.centerRight : Alignment.centerLeft,
+              colors: [deep, hot],
+            ).createShader(played),
+    );
+  }
+}

@@ -94,6 +94,14 @@ class Controls extends StatelessWidget {
   final void Function(double, int)? onDockExtent;
 
   /// The host's geometry generation, forwarded to both reporters.
+  /// Wide dock only: the level its volume control shows and drives.
+  final double volume;
+  final ValueChanged<double>? onVolumeChanged;
+
+  /// Windows/Linux only — elsewhere the OS owns fullscreen.
+  final bool showFullscreen;
+  final VoidCallback? onFullscreen;
+
   final int geometryGeneration;
 
   /// Separate from [geometryGeneration]: the panel's structure can change
@@ -159,6 +167,10 @@ class Controls extends StatelessWidget {
     this.showRotate = true,
     this.onDockExtent,
     this.onInfoPanelExtent,
+    this.volume = 1.0,
+    this.onVolumeChanged,
+    this.showFullscreen = false,
+    this.onFullscreen,
     this.geometryGeneration = 0,
     this.infoPanelGeneration = 0,
   }) : super(key: key);
@@ -191,17 +203,30 @@ class Controls extends StatelessWidget {
   /// The `two_tier` dock, or null when the viewport cannot seat one row.
   Widget? _buildStyled(BuildContext context) {
     final media = MediaQuery.of(context);
-    final arrangement = DockArrangement.forViewport(media.size);
-    final metrics = DockMetrics.compute(
+    final natural = DockArrangement.forViewport(media.size);
+
+    DockMetrics? metricsFor(DockArrangement a) => DockMetrics.compute(
       DockLayoutInput(
         viewport: media.size,
         safeArea: media.padding,
-        arrangement: arrangement,
+        arrangement: a,
         infoPanelH: infoPanel == null ? 0 : infoPanelHeight,
         textScale: media.textScaler.scale(1),
         size: dockSize,
       ),
     );
+
+    // A forced arrangement is a preference, not a promise: `cinema` on a
+    // short window genuinely cannot seat two rows, so it degrades to the
+    // viewport's own choice rather than overflowing. Only if that fails too
+    // do we hand back to classic.
+    final forced = dockStyle.forcedArrangement;
+    var arrangement = forced ?? natural;
+    var metrics = metricsFor(arrangement);
+    if (metrics == null && forced != null && forced != natural) {
+      arrangement = natural;
+      metrics = metricsFor(arrangement);
+    }
     if (metrics == null) return null;
 
     final dock = StyledDock(
@@ -257,6 +282,10 @@ class Controls extends StatelessWidget {
       // StyledDock would measure its full-screen Stack.
       onDockExtent: onDockExtent,
       onInfoPanelExtent: onInfoPanelExtent,
+      volume: volume,
+      onVolumeChanged: onVolumeChanged,
+      showFullscreen: showFullscreen,
+      onFullscreen: onFullscreen,
       geometryGeneration: geometryGeneration,
       infoPanelGeneration: infoPanelGeneration,
     );

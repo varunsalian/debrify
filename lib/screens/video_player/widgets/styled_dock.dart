@@ -113,6 +113,16 @@ class StyledDock extends StatelessWidget {
   final void Function(double, int)? onDockExtent;
 
   /// The host's geometry generation, handed to both reporters.
+  /// 0..1. The wide dock anchors its play button with a volume control, the
+  /// way the design does; without it the transport floats alone.
+  final double volume;
+  final ValueChanged<double>? onVolumeChanged;
+
+  /// Only Windows/Linux drive fullscreen through windowManager; elsewhere the
+  /// OS owns it, so the control would be a lie.
+  final bool showFullscreen;
+  final VoidCallback? onFullscreen;
+
   final int geometryGeneration;
 
   /// Separate from [geometryGeneration]: the panel's structure can change
@@ -175,6 +185,10 @@ class StyledDock extends StatelessWidget {
     this.sleepTimerLabel,
     this.onDockExtent,
     this.onInfoPanelExtent,
+    this.volume = 1.0,
+    this.onVolumeChanged,
+    this.showFullscreen = false,
+    this.onFullscreen,
     this.geometryGeneration = 0,
     this.infoPanelGeneration = 0,
   });
@@ -270,7 +284,15 @@ class StyledDock extends StatelessWidget {
     final tools = _tools();
     return Stack(
       children: [
-        Positioned(top: 0, left: 0, right: 0, child: _topBar(context)),
+        // The wide dock carries identity in its centre zone, so a top bar
+        // title there would render the same string twice — which is exactly
+        // the duplication this redesign set out to remove.
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: _topBar(context, showTitle: !_centreIdentityVisible),
+        ),
         Positioned(
           bottom: 0,
           left: 0,
@@ -287,7 +309,15 @@ class StyledDock extends StatelessWidget {
     );
   }
 
-  Widget _topBar(BuildContext context) {
+  /// True only when the wide centre zone is actually on screen to carry the
+  /// title. `hideOptions` removes the whole controls row, so without this the
+  /// identity vanished from both places at once.
+  bool get _centreIdentityVisible =>
+      arrangement == DockArrangement.wide &&
+      !hideOptions &&
+      (title.isNotEmpty || (subtitle?.isNotEmpty ?? false));
+
+  Widget _topBar(BuildContext context, {bool showTitle = true}) {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: metrics.padX * 1.8,
@@ -317,7 +347,7 @@ class StyledDock extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (title.isNotEmpty)
+                  if (showTitle && title.isNotEmpty)
                     Text(
                       title,
                       maxLines: 1,
@@ -328,7 +358,7 @@ class StyledDock extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                  if (subtitle != null && subtitle!.isNotEmpty)
+                  if (showTitle && subtitle != null && subtitle!.isNotEmpty)
                     Text(
                       subtitle!,
                       maxLines: 1,
@@ -384,18 +414,31 @@ class StyledDock extends StatelessWidget {
                       child: infoPanel!,
                     ),
             if (!hideOptions)
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  metrics.padX * 1.8,
-                  metrics.padY,
-                  metrics.padX * 1.8,
-                  metrics.padY * 1.5,
-                ),
-                child: switch (arrangement) {
-                  DockArrangement.narrow => _narrow(context, tools),
-                  DockArrangement.regular => _twoTier(context, tools),
-                  DockArrangement.wide => _wide(context, tools),
-                },
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // The wide bar is genuinely edge-to-edge, so it is mounted
+                  // OUTSIDE the dock's horizontal padding rather than trying
+                  // to cancel it (negative padding is not a thing).
+                  if (arrangement == DockArrangement.wide && !hideSeekbar)
+                    Padding(
+                      padding: EdgeInsets.only(top: metrics.padY),
+                      child: _scrubber(context, bleed: true),
+                    ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      metrics.padX * 1.8,
+                      arrangement == DockArrangement.wide ? 0 : metrics.padY,
+                      metrics.padX * 1.8,
+                      metrics.padY * 1.5,
+                    ),
+                    child: switch (arrangement) {
+                      DockArrangement.narrow => _narrow(context, tools),
+                      DockArrangement.regular => _twoTier(context, tools),
+                      DockArrangement.wide => _wide(context, tools),
+                    },
+                  ),
+                ],
               )
             else if (!hideSeekbar)
               Padding(
@@ -573,32 +616,18 @@ class StyledDock extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (!hideSeekbar) _scrubber(context),
-        SizedBox(height: metrics.gap),
         Row(
           children: [
             ..._transport(),
+            if (onVolumeChanged != null) ...[
+              SizedBox(width: metrics.gap),
+              _volume(context),
+            ],
             SizedBox(width: metrics.gap),
-            if (title.isNotEmpty)
-              Expanded(
-                child: Center(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: palette.inkDim,
-                      fontSize: metrics.label,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              )
-            else
-              const Spacer(),
-            // Icon-only, but still scrollable: a session with every tool
-            // available can exceed even a wide row, and the budget models
-            // only the transport here.
+            _timeReadout(),
+            SizedBox(width: metrics.gap * 1.5),
+            Expanded(child: _nowPlaying()),
+            SizedBox(width: metrics.gap * 1.5),
             Flexible(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -620,12 +649,111 @@ class StyledDock extends StatelessWidget {
                       ),
                       SizedBox(width: metrics.gap * 0.75),
                     ],
+                    if (showFullscreen && onFullscreen != null)
+                      DockChip(
+                        icon: Icons.fullscreen_rounded,
+                        label: 'Fullscreen',
+                        showLabel: false,
+                        onPressed: onFullscreen!,
+                        metrics: metrics,
+                        palette: palette,
+                      ),
                   ],
                 ),
               ),
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  /// Speaker plus a short level bar — what anchors the play button so the
+  /// left of the row reads as an instrument instead of a void.
+  Widget _volume(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          volume <= 0.01
+              ? Icons.volume_off_rounded
+              : volume < 0.5
+              ? Icons.volume_down_rounded
+              : Icons.volume_up_rounded,
+          size: metrics.icon,
+          color: palette.ink,
+        ),
+        SizedBox(
+          width: metrics.target * 1.6,
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: metrics.trackHeight * 0.75,
+              activeTrackColor: palette.ink,
+              inactiveTrackColor: palette.inactiveTrack,
+              thumbColor: palette.ink,
+              thumbShape: RoundSliderThumbShape(
+                enabledThumbRadius: metrics.knob * 0.35,
+              ),
+              overlayShape: RoundSliderOverlayShape(
+                overlayRadius: metrics.knob * 0.7,
+              ),
+            ),
+            child: Slider(
+              min: 0,
+              max: 1,
+              value: volume.clamp(0.0, 1.0),
+              onChanged: onVolumeChanged,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _timeReadout() {
+    return ValueListenableBuilder<PlaybackUiClockValue>(
+      valueListenable: clock,
+      builder: (context, value, _) => Text(
+        '${_fmt(value.position)}  /  ${_fmt(value.duration)}',
+        maxLines: 1,
+        style: TextStyle(
+          color: palette.inkDim,
+          fontSize: metrics.label,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+  }
+
+  /// Centre zone. Carries the subtitle too — the design puts the stream's
+  /// identity here, which is why the wide dock does not repeat the title in a
+  /// top bar the way the narrow arrangements do.
+  Widget _nowPlaying() {
+    final hasSubtitle = subtitle?.isNotEmpty ?? false;
+    if (title.isEmpty && !hasSubtitle) return const SizedBox.shrink();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (title.isNotEmpty)
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: palette.ink,
+              fontSize: metrics.label * 1.05,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        if (hasSubtitle)
+          Text(
+            subtitle!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: palette.inkDim, fontSize: metrics.label),
+          ),
       ],
     );
   }
@@ -663,27 +791,59 @@ class StyledDock extends StatelessWidget {
     ];
   }
 
-  Widget _scrubber(BuildContext context) {
+  Widget _scrubber(BuildContext context, {bool bleed = false}) {
     return ValueListenableBuilder<PlaybackUiClockValue>(
       valueListenable: clock,
-      builder: (context, value, _) => _scrubberRow(context, value),
+      builder: (context, value, _) => _scrubberRow(context, value, bleed),
     );
   }
 
-  Widget _scrubberRow(BuildContext context, PlaybackUiClockValue value) {
+  Widget _scrubberRow(
+    BuildContext context,
+    PlaybackUiClockValue value,
+    bool bleed,
+  ) {
     final total = value.duration.inMilliseconds <= 0
         ? 1
         : value.duration.inMilliseconds;
     final progress = (value.position.inMilliseconds / total).clamp(0.0, 1.0);
+
+    final bar = SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        trackHeight: metrics.trackHeight,
+        // deep -> hot with a bloom at the played edge. Material's flat
+        // activeTrackColor cannot express this.
+        trackShape: GradientSliderTrackShape(
+          deep: palette.deep,
+          hot: palette.hot,
+          inactive: palette.inactiveTrack,
+          glow: palette.glow,
+        ),
+        thumbColor: palette.ink,
+        thumbShape: RoundSliderThumbShape(enabledThumbRadius: metrics.knob / 2),
+        overlayShape: RoundSliderOverlayShape(
+          overlayRadius: metrics.knob * 0.8,
+        ),
+        overlayColor: palette.activeFill,
+      ),
+      child: Slider(
+        min: 0,
+        max: 1,
+        value: progress,
+        onChangeStart: (_) => onSeekBarChangedStart(),
+        onChanged: onSeekBarChanged,
+        onChangeEnd: (_) => onSeekBarChangeEnd(),
+      ),
+    );
+
+    // Wide runs the bar edge to edge and moves the readouts into the left
+    // zone; the narrower arrangements keep them flanking it.
+    if (bleed) return SizedBox(height: metrics.target, child: bar);
+
     return SizedBox(
-      // Explicitly constrained: an unconstrained Material Slider claims ~48lp
-      // on its own, and the vertical budget in DockMetrics assumes this bound.
       height: DockLayoutInput.scrubberH,
       child: Row(
         children: [
-          // Flexible + ellipsis: at large k with a 1.3 text scale these two
-          // readouts plus the Slider's own minimum track width can exceed the
-          // row. The time is the thing that may shrink; the scrub bar is not.
           Flexible(
             child: Text(
               _fmt(value.position),
@@ -697,32 +857,7 @@ class StyledDock extends StatelessWidget {
             ),
           ),
           SizedBox(width: metrics.gap),
-          Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: metrics.trackHeight,
-                // deep -> hot, so the played edge is the brightest point.
-                activeTrackColor: palette.hot,
-                inactiveTrackColor: palette.inactiveTrack,
-                thumbColor: palette.ink,
-                thumbShape: RoundSliderThumbShape(
-                  enabledThumbRadius: metrics.knob / 2,
-                ),
-                overlayShape: RoundSliderOverlayShape(
-                  overlayRadius: metrics.knob * 0.8,
-                ),
-                overlayColor: palette.activeFill,
-              ),
-              child: Slider(
-                min: 0,
-                max: 1,
-                value: progress,
-                onChangeStart: (_) => onSeekBarChangedStart(),
-                onChanged: onSeekBarChanged,
-                onChangeEnd: (_) => onSeekBarChangeEnd(),
-              ),
-            ),
-          ),
+          Expanded(flex: 8, child: bar),
           SizedBox(width: metrics.gap),
           Flexible(
             child: Text(

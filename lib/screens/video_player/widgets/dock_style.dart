@@ -29,19 +29,50 @@ import 'package:flutter/widgets.dart';
 /// only by that branch and is not modified.
 enum PlayerDockStyle {
   classic,
-  twoTier;
+
+  /// The styled dock, picking its arrangement from the viewport. What
+  /// `two_tier` always meant; kept as the sensible default.
+  auto,
+
+  /// Force one row plus an overflow sheet, whatever the window size.
+  compact,
+
+  /// Force the two-tier stack: centred transport over the scrubber, tools
+  /// wrapping below.
+  tiers,
+
+  /// Force the zoned bar: transport + volume + time / title / icon-only
+  /// tools. Needs real width; falls back when it cannot fit.
+  cinema;
 
   static PlayerDockStyle fromPref(String? raw) => switch (raw) {
-    'two_tier' => PlayerDockStyle.twoTier,
+    // `two_tier` is the value shipped before the arrangements became
+    // selectable, and it meant exactly what `auto` means now.
+    'auto' || 'two_tier' => PlayerDockStyle.auto,
+    'compact' => PlayerDockStyle.compact,
+    'tiers' => PlayerDockStyle.tiers,
+    'cinema' => PlayerDockStyle.cinema,
     _ => PlayerDockStyle.classic,
   };
 
   String get prefValue => switch (this) {
     PlayerDockStyle.classic => 'classic',
-    PlayerDockStyle.twoTier => 'two_tier',
+    PlayerDockStyle.auto => 'auto',
+    PlayerDockStyle.compact => 'compact',
+    PlayerDockStyle.tiers => 'tiers',
+    PlayerDockStyle.cinema => 'cinema',
   };
 
   bool get isStyled => this != PlayerDockStyle.classic;
+
+  /// The arrangement this style demands, or null when it defers to the
+  /// viewport.
+  DockArrangement? get forcedArrangement => switch (this) {
+    PlayerDockStyle.classic || PlayerDockStyle.auto => null,
+    PlayerDockStyle.compact => DockArrangement.narrow,
+    PlayerDockStyle.tiers => DockArrangement.regular,
+    PlayerDockStyle.cinema => DockArrangement.wide,
+  };
 }
 
 /// The dock accent. Inert under [PlayerDockStyle.classic] — the setting is
