@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../theme/premium_looks.dart';
 import 'detail_theme.dart';
 
 /// The twenty shipped looks.
@@ -855,7 +856,26 @@ abstract final class DetailThemes {
     cinemascope,
   ];
 
+  /// The five premium looks, as detail cores.
+  ///
+  /// Separate from [all] rather than appended to it: [all] is `const` and
+  /// pinned at twenty by `detail_theme_test.dart`, and these are DERIVED —
+  /// `ThemeSpec.toCore()` runs colour math, so they cannot be const and must
+  /// not be recomputed per lookup. `static final` gives one lazy build each
+  /// for the process.
+  ///
+  /// The cull merges the two lists by deleting the first one.
+  static final List<DetailTheme> premium = [
+    for (final s in PremiumLooks.all) s.toCore(),
+  ];
+
+  /// Every look this build can resolve, premium first — picker order.
+  static List<DetailTheme> get catalogue => [...premium, ...all];
+
   static DetailTheme byId(String id) {
+    for (final t in premium) {
+      if (t.id == id) return t;
+    }
     for (final t in all) {
       if (t.id == id) return t;
     }

@@ -8,8 +8,10 @@ import 'app_focus.dart';
 import 'app_light.dart';
 import 'app_motion.dart';
 import 'app_shape.dart';
+import 'app_sound.dart';
 import 'app_surface.dart';
 import 'app_type.dart';
+import 'premium_looks.dart';
 
 /// App-wide theme: the details-page token core plus the per-surface role
 /// tokens the chrome needs.
@@ -89,6 +91,11 @@ class AppTheme {
   /// How much room things take — four bounded metrics, not a spacing scale.
   final DensityTokens density;
 
+  /// What moving the cursor sounds and feels like. Delivered by
+  /// `UiFeedback`, which decides WHETHER a focus change was human-caused
+  /// before it consults any of this.
+  final SoundTokens sound;
+
   /// Light chrome ⇔ the ground reads light. One stated threshold, everywhere:
   /// `ground.computeLuminance() > 0.5`. Broadsheet (≈0.86) and Concrete
   /// (≈0.57) land light; every other shipped theme lands dark.
@@ -121,6 +128,7 @@ class AppTheme {
     required this.idle,
     required this.wait,
     required this.density,
+    required this.sound,
     required this.brightness,
     required this.sheetSurface,
   });
@@ -205,6 +213,7 @@ class AppTheme {
     IdleTokens? idle,
     WaitTokens? wait,
     DensityTokens? density,
+    SoundTokens? sound,
   }) {
     final ground = core.ground;
     final light = ground.computeLuminance() > 0.5;
@@ -259,44 +268,28 @@ class AppTheme {
       shape: ShapeTokens.fromDetail(core),
       type: TypeTokens.fromDetail(core),
       motion: motion ?? MotionTokens.fromDetail(core),
-      // Neutral derivations. Each keeps a pre-spec theme exactly as it is
-      // today: filled surfaces, the hero's own gradient, framed ungraded
-      // artwork, the ring at the width the core already declares, no idle
-      // policy, the shipped shimmer, and density of 1.
-      surface: surface ??
-          SurfaceTokens(
-            base: SeparationModel.fill,
-            // Sensible glass values for a theme that never asks for glass —
-            // present so a later opt-in does not need a new derivation.
-            glassSigma: 24,
-            glassOpacity: 0.52,
-            glassOpacityTv: 0.94,
-            sheen: 0,
-            restShadow: const <BoxShadow>[],
-            raisedShadow: core.shadow,
-            floatingShadow: core.shadow,
-          ),
+      // Neutral derivations, and NEUTRAL means the legacy profile — not
+      // "something plausible from the core".
+      //
+      // The tempting version inherits: shadows from `core.shadow`, the room
+      // strength from `core.washOpacity`, the ring width from
+      // `core.focusWidth`. Every one of those is a DETAIL-PAGE value being
+      // promoted app-wide by a default nobody chose, and the moment the
+      // consumer sweeps land it would start rendering on the twenty old
+      // themes — silently, and differently from what they ship today. That is
+      // exactly the trap `ShapeTokens` documents for elevation: replace-vs-
+      // compose is a design pass, not a default.
+      //
+      // So a theme that predates `ThemeSpec` gets the legacy profile
+      // verbatim, and only a spec can turn any of this on.
+      surface: surface ?? SurfaceTokens.legacy,
       light: light_ ?? LightTokens.legacy,
-      art: art ??
-          ArtTokens(
-            frame: ArtFrame.contained,
-            grade: ArtGrade.none,
-            // The core already declares how strongly its per-title wash reads;
-            // reactiveRoom IS that idea at shell scale, so it inherits rather
-            // than inventing a second number.
-            reactiveRoom: core.washOpacity,
-          ),
-      focus: focus ??
-          FocusTokens(
-            expression: FocusExpression.ring,
-            width: core.focusWidth,
-            offset: core.focusOffset,
-            scale: 1,
-            lift: 0,
-          ),
+      art: art ?? ArtTokens.legacy,
+      focus: focus ?? FocusTokens.legacy,
       idle: idle ?? IdleTokens.legacy,
       wait: wait ?? WaitTokens.legacy,
       density: density ?? DensityTokens.legacy,
+      sound: sound ?? SoundTokens.legacy,
       sheetSurface: mix(ground, tx, 0.08),
       home: HomeTokens(
         bg: ground,
@@ -1897,6 +1890,7 @@ abstract final class AppThemes {
     idle: IdleTokens.legacy,
     wait: WaitTokens.legacy,
     density: DensityTokens.legacy,
+    sound: SoundTokens.legacy,
     // cw_card_menu, the two detail quick-action sheets, the episode sheet
     sheetSurface: const Color(0xFF141019),
     home: HomeTokens(
@@ -2171,9 +2165,23 @@ abstract final class AppThemes {
   /// a random theme — a downgraded build must render the app it shipped.
   static AppTheme byId(String id) {
     if (id == legacyId) return legacy;
+    final look = _premium[id];
+    if (look != null) return look;
     for (final core in DetailThemes.all) {
       if (core.id == id) return AppTheme.fromDetail(core);
     }
     return legacy;
   }
+
+  /// The five premium looks, built once.
+  ///
+  /// Resolved BEFORE [DetailThemes.all] and built through `ThemeSpec.build()`
+  /// rather than `fromDetail(core)`, because the core is only half of a look:
+  /// the separation model, the scrim, the focus expression, the grade and the
+  /// motion character live in the phase-four groups that only `build()`
+  /// supplies. Going through the core alone would render the right colours
+  /// with none of the character.
+  static final Map<String, AppTheme> _premium = {
+    for (final s in PremiumLooks.all) s.id: s.build(),
+  };
 }

@@ -102,7 +102,12 @@ class MotionTokens {
       slow: Duration(milliseconds: 140),
       standard: Curves.linear,
       emphasized: Curves.linear,
-      scale: 0.85,
+      // 1.0, NOT 0.85: the durations above already ARE the tempo. `AppMotion`
+      // multiplies by `scale` on the way out, so a character that also scaled
+      // would apply its own tempo twice — snap's advertised 90ms base would
+      // arrive as 76.5ms. `scale` exists for a look that wants the standard
+      // durations at a different pace, which is not what a character does.
+      scale: 1,
       character: MotionCharacter.snap,
     ),
     MotionCharacter.glide => const MotionTokens(
@@ -111,7 +116,7 @@ class MotionTokens {
       slow: Duration(milliseconds: 520),
       standard: Curves.easeOutQuart,
       emphasized: Curves.easeOutQuint,
-      scale: 1.15,
+      scale: 1,
       character: MotionCharacter.glide,
     ),
     MotionCharacter.settle => const MotionTokens(
@@ -120,7 +125,7 @@ class MotionTokens {
       slow: Duration(milliseconds: 420),
       standard: Curves.easeOutCubic,
       emphasized: Curves.easeOutBack,
-      scale: 1.15,
+      scale: 1,
       character: MotionCharacter.settle,
     ),
   };
@@ -128,6 +133,21 @@ class MotionTokens {
   /// Entrance choreography is a full-screen animation on the one platform
   /// that cannot afford one.
   EntranceStyle entranceFor(bool isTv) => isTv ? EntranceStyle.none : entrance;
+
+  /// Lives here rather than as a private extension elsewhere: a reconstruction
+  /// helper that sits away from the constructor silently resets any field
+  /// added later, and still compiles.
+  MotionTokens copyWith({EntranceStyle? entrance, double? scale}) =>
+      MotionTokens(
+        fast: fast,
+        base: base,
+        slow: slow,
+        standard: standard,
+        emphasized: emphasized,
+        scale: scale ?? this.scale,
+        character: character,
+        entrance: entrance ?? this.entrance,
+      );
 
   static const MotionTokens legacy = MotionTokens(
     fast: Duration(milliseconds: 120),

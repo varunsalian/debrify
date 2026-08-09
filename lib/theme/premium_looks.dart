@@ -6,6 +6,7 @@ import 'app_art.dart';
 import 'app_focus.dart';
 import 'app_light.dart';
 import 'app_motion.dart';
+import 'app_sound.dart';
 import 'app_surface.dart';
 import 'theme_spec.dart';
 
@@ -80,6 +81,10 @@ abstract final class PremiumLooks {
     pillRadius: 3,
     // The one look that lets the room take the film's colour.
     reactiveRoom: 0.72,
+    // The one look that lets a poster's colour become the accent. The room
+    // tints far here, and a fixed hue fighting a tinted room is exactly the
+    // "every colour lit at once" failure the cull was for.
+    artworkAccent: true,
     vignette: 0.55,
     bloom: 26,
     rowHeight: 1.1,
@@ -92,6 +97,10 @@ abstract final class PremiumLooks {
   /// at eleven at night.
   static const hearth = ThemeSpec(
     id: 'hearth',
+    accentButton: true,
+    // Weight without chatter: nothing on traversal, a confirmation on
+    // activation. A warm room is not a machine room.
+    feedback: FeedbackCharacter.confirming,
     label: 'Warm Room',
     subtitle: 'Matte, warm and unhurried',
     ground: Color(0xFF141110),
@@ -122,6 +131,12 @@ abstract final class PremiumLooks {
   /// Nothing here costs anything on TV: no blur, no shadow, no grading.
   static const console = ThemeSpec(
     id: 'console',
+    accentButton: true,
+    // The only look that ticks. Console is the one whose whole idea is that
+    // the app is an INSTRUMENT — hard corners, invert focus, linear curves —
+    // and a mechanism that moves silently is the one detail that would give
+    // it away.
+    feedback: FeedbackCharacter.mechanical,
     label: 'Console',
     subtitle: 'Hairlines and monospace; focus inverts',
     ground: Color(0xFF080B09),
@@ -150,11 +165,15 @@ abstract final class PremiumLooks {
   /// **Midnight Cinema** — grain, letterbox and a warm grade. The app as a
   /// screening room.
   ///
-  /// Grain is the one thing this look cannot have on TV; the existing
-  /// `grainFor` rule forces it to 0 there, so the TV variant keeps the bars,
-  /// the grade and the warmth without the speckle.
+  /// On TV this look loses BOTH its speckle and its grade: `grainFor` forces
+  /// grain to 0 and `gradeFor` forces the sepia to none, for the same reason
+  /// in both cases — a per-frame raster cost on a weak GPU. What survives is
+  /// what costs nothing: the letterbox mat, the warm ground and ink, the
+  /// amber accent and the settle tempo. That is still a screening room; it is
+  /// just one with a clean print.
   static const reel = ThemeSpec(
     id: 'reel',
+    accentButton: true,
     label: 'Midnight Cinema',
     subtitle: 'Grain, letterbox and a warm grade',
     ground: Color(0xFF0A0908),

@@ -111,6 +111,23 @@ class SurfaceTokens {
     floatingShadow: <BoxShadow>[],
   );
 
+  /// True when this look has no surface opinion at all.
+  ///
+  /// Which is to say: Debrify Classic, and every theme that predates
+  /// `ThemeSpec` — all twenty of them inherit `legacy` verbatim from
+  /// `fromDetail`. `GlassSurface` uses it to answer a question the model alone
+  /// cannot: *did the SITE ship a blur?* A look that stated `fill` chose not
+  /// to blur; a look that stated nothing is not choosing anything, and the
+  /// site's own behaviour is what must survive.
+  bool get isNeutral =>
+      base == SeparationModel.fill &&
+      overrides.isEmpty &&
+      glassSigma == 0 &&
+      sheen == 0 &&
+      restShadow.isEmpty &&
+      raisedShadow.isEmpty &&
+      floatingShadow.isEmpty;
+
   /// What [family] may legally take.
   ///
   /// The caps are not style guidance — they are geometry facts, established by

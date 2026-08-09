@@ -81,10 +81,14 @@ class FocusTokens {
   /// two cursors, and the whole point of those expressions is that motion,
   /// not decoration, tells you where you are.
   bool get drawsRing => switch (expression) {
-    FocusExpression.ring || FocusExpression.invert => true,
+    FocusExpression.ring => true,
+    // Invert and flood REPLACE the surface; a ring around an already-inverted
+    // cell is a second cursor drawn on top of the first. `ThemeSpec` derives
+    // width 1 for them for the same reason, and the two must agree.
+    FocusExpression.invert ||
+    FocusExpression.flood ||
     FocusExpression.scale ||
     FocusExpression.lift ||
-    FocusExpression.flood ||
     FocusExpression.underline => false,
   };
 

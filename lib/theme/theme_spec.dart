@@ -6,6 +6,7 @@ import 'app_art.dart';
 import 'app_focus.dart';
 import 'app_light.dart';
 import 'app_motion.dart';
+import 'app_sound.dart';
 import 'app_surface.dart';
 import 'app_theme.dart';
 
@@ -69,6 +70,22 @@ class ThemeSpec {
   /// The cursor. Defaults to [accent].
   final Color? focusColor;
 
+  /// Whether the primary button is filled with the accent or with ink.
+  ///
+  /// An explicit decision because the mockups disagree: Obsidian Glass and
+  /// Deep Field use a near-white button, while Warm Room, Console and
+  /// Midnight Cinema fill theirs with the accent. Deriving it from the ground
+  /// would have silently contradicted three of the five approved concepts.
+  final bool accentButton;
+
+  /// Whether this look lets a poster's own colour replace its accent.
+  ///
+  /// Separate from [reactiveRoom] on purpose. `reactiveRoom` is a MAGNITUDE —
+  /// how far the shell tints — while this is a binary permission to substitute
+  /// a semantic colour throughout the detail UI. Inferring one from the other
+  /// meant a small numeric nudge flipped a large behaviour.
+  final bool artworkAccent;
+
   // ── 3–12. the character dimensions ────────────────────────────────────
   final SeparationModel separation;
   final Map<SurfaceFamily, SeparationModel> separationOverrides;
@@ -80,6 +97,9 @@ class ThemeSpec {
   final EntranceStyle entrance;
   final IdlePolicy idle;
   final SkeletonStyle skeleton;
+
+  /// Sound and haptics, as one decision — see [FeedbackCharacter].
+  final FeedbackCharacter feedback;
 
   /// Corner character, as the details-page radius the shape scale derives
   /// from. 0 squares everything.
@@ -122,6 +142,8 @@ class ThemeSpec {
     this.state,
     this.callout,
     this.focusColor,
+    this.accentButton = false,
+    this.artworkAccent = false,
     required this.separation,
     this.separationOverrides = const {},
     required this.scrim,
@@ -132,6 +154,7 @@ class ThemeSpec {
     this.entrance = EntranceStyle.none,
     this.idle = IdlePolicy.none,
     this.skeleton = SkeletonStyle.shimmer,
+    this.feedback = FeedbackCharacter.none,
     required this.radius,
     this.pillRadius = 999,
     this.displayFont = DetailFontRole.sans,
@@ -164,10 +187,25 @@ class ThemeSpec {
       ground: ground,
       pane: raised,
       railBg: sunken,
-      // The translucent panel and hairline are the ink at fixed alphas, so
-      // they read correctly on any ground including a future light one.
-      panel: ink.withValues(alpha: 0.07),
-      hair: ink.withValues(alpha: 0.11),
+      // The body paints its ground opaquely over the shell tint on a light
+      // theme. Without this a light spec would be classified light by
+      // `AppTheme` and still render as a dark-ground detail page, because the
+      // detail layouts read THIS flag rather than the luminance.
+      lightGround: isLight,
+      // Panel and hairline follow the SEPARATION model, not a fixed alpha.
+      // A `space` look that still paints 7%-ink pills has not stopped having
+      // boxes — it has boxes the token layer cannot see. The detail widgets
+      // paint `panel` and `ghostFill` directly, so this is where those looks
+      // actually lose their fills.
+      panel: switch (separation) {
+        SeparationModel.space => const Color(0x00000000),
+        SeparationModel.rule => ink.withValues(alpha: 0.03),
+        SeparationModel.glass => ink.withValues(alpha: 0.10),
+        SeparationModel.fill => ink.withValues(alpha: 0.07),
+      },
+      hair: ink.withValues(
+        alpha: separation == SeparationModel.rule ? 0.17 : 0.11,
+      ),
       tx: ink,
       tx2: ink.withValues(alpha: 0.64),
       tx3: ink.withValues(alpha: 0.40),
@@ -180,14 +218,18 @@ class ThemeSpec {
       // Ratings are IMDb yellow everywhere; that is data, not identity.
       rating: const Color(0xFFF5C518),
       focus: focusColor ?? acc,
-      // A fixed-palette look must not be contaminated by poster colours; only
-      // a look that explicitly wants a reactive room invites them.
-      useArtworkAccent: reactiveRoom >= 0.5,
+      // An explicit permission, never inferred from the room's magnitude.
+      useArtworkAccent: artworkAccent,
       washOpacity: reactiveRoom,
       radius: radius,
-      radiusSm: radius * 0.6,
+      // Rounded to whole pixels, and artwork tracks the main radius rather
+      // than sitting at a fraction of it. That is how the existing hard-edged
+      // themes relate their radii — Broadsheet 2/2/2, Velvet 3/2/3, Sepia
+      // 4/3/4 — and a 1.8px small radius on a 3px look is a number nobody
+      // chose.
+      radiusSm: (radius * 0.7).roundToDouble(),
       radiusBtn: pillRadius,
-      radiusImg: radius * 0.8,
+      radiusImg: radius,
       radiusCast: pillRadius,
       displayFont: displayFont,
       bodyFont: bodyFont,
@@ -203,10 +245,20 @@ class ThemeSpec {
       shadow: _shadowFor(),
       grain: grain,
       grid: false,
-      btnFill: isLight ? ink : mix(ground, ink, 0.94),
-      btnText: isLight ? ground : mix(ink, ground, 0.94),
-      ghostFill: ink.withValues(alpha: 0.10),
-      ghostBorder: ink.withValues(alpha: 0.16),
+      // Ink on the fill is SCORED either way, so an accent button cannot end
+      // up with an unreadable label whatever hue the look picked.
+      btnFill: accentButton ? acc : (isLight ? ink : mix(ground, ink, 0.94)),
+      btnText: accentButton
+          ? _inkOn(acc, ink, ground)
+          : (isLight ? ground : mix(ink, ground, 0.94)),
+      ghostFill: switch (separation) {
+        SeparationModel.space => const Color(0x00000000),
+        SeparationModel.rule => const Color(0x00000000),
+        _ => ink.withValues(alpha: 0.10),
+      },
+      ghostBorder: ink.withValues(
+        alpha: separation == SeparationModel.space ? 0.0 : 0.16,
+      ),
       ghostText: ink,
     );
   }
@@ -227,8 +279,17 @@ class ThemeSpec {
   };
 
   /// The complete theme.
-  AppTheme build() => AppTheme.fromDetail(
-    toCore(),
+  AppTheme build() => buildWith(toCore());
+
+  /// The complete theme, over a core someone else has already adjusted.
+  ///
+  /// The controller resolves text colours against the user's text-brightness
+  /// preset BEFORE deriving the subprofiles — the whole token surface follows
+  /// that preset, not just Material's `onSurface`. So it needs to hand in its
+  /// own core rather than let [build] make a fresh one, or a premium look
+  /// would be the only theme in the app that ignores the setting.
+  AppTheme buildWith(DetailTheme core) => AppTheme.fromDetail(
+    core,
     surface: SurfaceTokens(
       base: separation,
       overrides: separationOverrides,
@@ -263,7 +324,7 @@ class ThemeSpec {
       },
       lift: focusExpression == FocusExpression.lift ? 8 : 0,
     ),
-    motion: MotionTokens.of(motion).copyEntrance(entrance),
+    motion: MotionTokens.of(motion).copyWith(entrance: entrance),
     idle: IdleTokens(
       policy: idle,
       after: const Duration(seconds: 30),
@@ -279,6 +340,7 @@ class ThemeSpec {
       pageGutter: pageGutter,
       sectionGap: sectionGap,
     ),
+    sound: soundTokensFor(feedback),
   );
 }
 
@@ -296,17 +358,4 @@ Color _inkOn(Color fill, Color ink, Color ground) {
 
   if (against(ink) >= 4.0) return ink;
   return against(ground) > against(ink) ? ground : ink;
-}
-
-extension on MotionTokens {
-  MotionTokens copyEntrance(EntranceStyle e) => MotionTokens(
-    fast: fast,
-    base: base,
-    slow: slow,
-    standard: standard,
-    emphasized: emphasized,
-    scale: scale,
-    character: character,
-    entrance: e,
-  );
 }

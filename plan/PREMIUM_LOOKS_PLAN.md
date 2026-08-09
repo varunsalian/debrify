@@ -414,3 +414,128 @@ No layout changes beyond D8's two bounded seams · no light themes (D1) · no
 player theming (D7) · no iOS/tvOS audio in v1 (§2a) · everything on the §3
 cut list · no general spacing scale · no `dart format` sweep · no device QA
 by the implementer — Fridays and the W5/W6 weekend are the user's.
+
+---
+
+## 13 · What has actually landed **[W2–W5, uncommitted]**
+
+Written from the tree, not from the schedule. Nothing here is committed.
+
+### The five looks are live, not staged
+
+The W2 review's first P1 was that they could not be selected at all. Fixed at
+the level that matters: **`AppThemeController._recomputeSilently` — the method
+the running app reads — now resolves a premium id through
+`ThemeSpec.buildWith(core)`.** `AppThemes.byId` doing it was not enough;
+that method is not on the live path. The core still goes through
+`AppThemeAdapter.resolveCoreText` first, so a premium look follows the
+text-brightness preset like every other theme.
+
+Registered in `kDetailThemes`, `kDetailThemesShipped`, `DetailThemes.premium`
+and `DetailThemes.catalogue` (premium first, which is picker order). The 20
+old cores are untouched and `DetailThemes.all` is still `const` and still 20 —
+the cull removes them, this does not.
+
+### Consumers, by dimension
+
+| Dimension | Delivered through | Sites |
+| --- | --- | --- |
+| separation | `GlassSurface` | 10 `BackdropFilter` sites; four bespoke `_maybeBlur` helpers deleted |
+| light | `DetailScrim` | the 5 `detailIdentityScrim`/`detailStageScrim` call sites |
+| artwork | `ThemedArtwork` | 8 sites across 6 files |
+| focus | `FocusExpressionBox` | 5 TV focus widgets |
+| motion | `AppMotion` | 14 sites across 3 shell files |
+| entrance | `HomeSectionReveal` | the section reveal |
+| wait | `ThemedSkeleton` | new |
+| sound + haptics | `UiFeedback` | root key handler + focus listener, installed in `main()` |
+| idle | `IdleDim` + `IdleChrome` | the TV rail reads the compositor |
+| density | — | **carried, not adopted** — see below |
+
+Codex reviewed the tree afterwards and found four P0s. Three were real and are
+fixed (blur and pane opacity lost under Classic at ten sheets; a suppressed
+transparent border still insetting content by a phantom pixel; `ThemedSkeleton`
+calling `repeat()` before its controller had a duration, which threw on the
+first frame of any animated wait style). The fourth — `TorrentResultRow`
+losing its inset because `DecoratedBox` does not apply `BoxDecoration.padding`
+— was a real bug in my own fix and is now a `Container` again, with the reason
+written above it.
+
+### Deliberate gaps
+
+- **Density has no consumer.** It is the plan's stretch item and first on the
+  cut list, and the §12 sweep found no chokepoint a mechanical adoption could
+  take safely — the four metrics live in a dozen widgets' literals. Adopting
+  it at one skeleton would have made it decorative, which is the failure the
+  W2 review already caught twice.
+- **The cull has not run.** §8 is written and the acceptance sets are staged,
+  but deleting the 19 is gated on W6 device signoff (§9), and the five looks
+  have not been seen on a real panel yet. Deleting the fallback in the same
+  change that introduces its replacement is the one ordering the plan
+  explicitly forbids.
+- **`AppScrim` found no adoptable site.** Every hand-rolled gradient outside
+  the detail layouts turned out to be a shell wash, a placeholder fill or
+  player chrome over the trailer's punched video hole — not text-over-artwork.
+  The scrim grammar reaches the screen through `DetailScrim` instead. The
+  widget stays for the sites a future layout will have.
+- **Three spike verdicts still need hardware**: Mi Box audio latency, the
+  30-poster grading fling benchmark, and the tvOS release-build no-op check.
+  `ThemedArtwork.gradeInLists` is the kill switch for the second.
+
+### One structural fix worth naming
+
+`TorrentResultRow` drew a border whose WIDTH changed with state (1 / 1.5 / 2),
+and `Container` insets its child by the border it draws — so the decoration
+was in the layout path, and a `space` look dropping it would have reflowed the
+row. The border is now split: a transparent border of the same width holds the
+inset, and the visible ring is a `Positioned.fill` sibling. Same pixels, same
+focus wobble, and `shelfRow` can now legally take `space`.
+
+### Known legacy deviations, named rather than discovered
+
+The byte-identity rule allows exactly one exception (reduced motion). These
+are the places this wave came close, and what was done about each.
+
+1. **Blur under Classic — fixed, and it was nearly a P0.** `SurfaceTokens
+   .legacy` is `fill`, so a naive "blur only under a glass look" rule would
+   have deleted a real `BackdropFilter` from ten phone sheets the moment they
+   adopted `GlassSurface`. `SurfaceTokens.isNeutral` now distinguishes *stated
+   fill* from *no opinion*: a look that says `fill` has chosen not to blur; a
+   look that says nothing has not, and the site's shipped `sigma` survives.
+   `adoption_legacy_test.dart` pins it for Classic and for all twenty cores.
+2. **The blurred tint — fixed.** Every converted site shipped its fill as a
+   ternary (opaque on TV where the blur was skipped, translucent elsewhere).
+   Collapsing it to one colour would have made the phone sheets opaque. The
+   widget now takes both as `tint` and `blurTint`.
+3. **The four Torbox dialogs were REVERTED, not accepted.** Their old
+   `_maybeBlur` wrapped the whole `Dialog` rect *unclipped*, so the blur was
+   visible in the 16 px margin around the panel; `GlassSurface` always clips,
+   and the two cannot both be true. I first wrote this down as an accepted
+   deviation. That was wrong — the invariant permits exactly one exception and
+   this is not it — so the file is back to what it shipped, byte for byte.
+   `GlassSurface`'s doc now names the shape it cannot express: a filter that
+   wraps a margin-bearing or full-screen widget rather than the panel itself.
+   The nav barrier is the same shape and stays raw for the same reason.
+4. **`TorrentResultRow`'s ring animates as its own layer.** Split from the
+   container so the decoration leaves the layout path; both halves tween on
+   the same 200 ms curve, so the border still moves as one thing.
+6. **The idle timer suspends on the trailer's chrome dim, not on an aggregate
+   frame signal.** There is no aggregate — `MainPageBridge.tvChromeDim` is
+   what the shell itself already uses to hide the rail, so the compositor
+   reads the same thing. A trailer that plays without dimming chrome could
+   still let the timer arm; that needs a real trailer-active aggregate, which
+   is its own change.
+7. **`EntranceStyle.stagger` currently renders as `fadeUp`.** One live caller,
+   and it is a single card, so there is no sequence to stagger. A missing
+   consumer rather than a broken token: it upgrades for free when the home
+   board's sections adopt `HomeSectionReveal` and pass their positions.
+8. **`invert` and `flood` degrade to a ring unless the call site supplies
+   `inverted`.** By design — the widget paints behind its child, so over an
+   opaque card neither would be visible at all, and only the caller knows
+   which of its children are ink. Today `TvFocusableButton` opts in; the other
+   four fall back to a cursor that always works.
+5. **The five focus widgets keep their shipped ring under Classic and hand
+   the cursor to the theme otherwise.** Forced, not chosen: `FocusTokens
+   .legacy` is width 2.5 and every one of those sites ships 1.5, 2 or 3, and
+   `FocusExpressionBox` exposes no width override. Gating the whole wrap on
+   `isLegacy` is the only way to say "keep the shipped width" from a call
+   site.

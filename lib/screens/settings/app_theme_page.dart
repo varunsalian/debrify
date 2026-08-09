@@ -37,7 +37,7 @@ class _AppThemePageState extends State<AppThemePage> {
   );
 
   static List<DetailTheme> get _choices => [
-    for (final t in DetailThemes.all)
+    for (final t in DetailThemes.catalogue)
       if (kDetailThemesShipped.contains(t.id)) t,
   ];
 

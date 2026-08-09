@@ -4,6 +4,7 @@ import '../services/storage_service.dart';
 import '../services/text_brightness.dart';
 import '../widgets/detail/theme/detail_themes.dart';
 import 'app_theme.dart';
+import 'premium_looks.dart';
 import 'app_theme_adapter.dart';
 
 /// Owns the live app theme: the selected id, the preset-resolved [AppTheme]
@@ -152,7 +153,14 @@ class AppThemeController extends ChangeNotifier {
       DetailThemes.byId(_id),
       preset,
     );
-    _theme = AppTheme.fromDetail(core);
+    // A premium look is a SPEC, and `fromDetail(core)` alone would deliver
+    // only its colours — the separation model, the scrim grammar, the focus
+    // expression, the grade, the motion character and the feedback all live
+    // in the phase-four groups that only `ThemeSpec` supplies. Resolving them
+    // here rather than in `AppThemes.byId` is what actually puts them on
+    // screen: this is the method the live app reads.
+    final spec = PremiumLooks.byId(_id);
+    _theme = spec == null ? AppTheme.fromDetail(core) : spec.buildWith(core);
     _themeData = AppThemeAdapter.themed(_theme, preset);
   }
 }

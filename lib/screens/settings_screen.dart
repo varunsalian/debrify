@@ -51,6 +51,7 @@ import '../widgets/launch/launch_ident.dart';
 import 'settings/detail_page_style_page.dart';
 import 'settings/app_theme_page.dart';
 import 'settings/looks_page.dart';
+import 'settings/theme_lab_page.dart';
 import 'settings/detail_theme_page.dart';
 import '../theme/app_theme_controller.dart';
 import 'settings/parents_guide_style_page.dart';
@@ -793,6 +794,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appThemeLabel: appThemeLabel(AppThemeController.instance.id),
       looksLabel: AppLooks.active()?.label ?? 'Custom',
       onOpenLooks: _openLooksPage,
+      onOpenThemeLab: _openThemeLab,
       onOpenAppTheme: _openAppThemePage,
       detailThemeLabel: detailThemeLabel(_detailTheme),
       onOpenDetailTheme: _openDetailThemePage,
@@ -878,6 +880,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenDetailPageStyle: _openDetailPageStylePage,
       appThemeLabel: appThemeLabel(AppThemeController.instance.id),
       onOpenLooks: _openLooksPage,
+      onOpenThemeLab: _openThemeLab,
       onOpenAppTheme: _openAppThemePage,
       detailThemeLabel: detailThemeLabel(_detailTheme),
       onOpenDetailTheme: _openDetailThemePage,
@@ -4042,8 +4045,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  /// App-wide theme picker. Also refreshes the Details Theme subtitle: picking
-  /// a real app theme write-through-mirrors it into `detail_theme`.
+  /// Appearance → Theme Lab. The setState on return covers the feedback
+  /// toggles the lab hosts — their values are read from the synchronous
+  /// mirrors, so one rebuild is the whole refresh.
+  Future<void> _openThemeLab() async {
+    await pushSettingsPage(context, const ThemeLabPage());
+    if (!mounted) return;
+    setState(() {});
+  }
+
   /// Appearance → Looks. Re-reads nothing on return: the row's subtitle is
   /// COMPUTED from the live prefs (`AppLooks.active()`), so one setState is
   /// the whole refresh — there is no stored "current Look" that could drift.
@@ -4320,6 +4330,7 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenDetailPageStyle;
   final String appThemeLabel;
   final Future<void> Function() onOpenLooks;
+  final Future<void> Function() onOpenThemeLab;
   final Future<void> Function() onOpenAppTheme;
   final String detailThemeLabel;
   final Future<void> Function() onOpenDetailTheme;
@@ -4377,6 +4388,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenDetailPageStyle,
     required this.appThemeLabel,
     required this.onOpenLooks,
+    required this.onOpenThemeLab,
     required this.onOpenAppTheme,
     required this.detailThemeLabel,
     required this.onOpenDetailTheme,
@@ -4439,6 +4451,13 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.looks,
                       subtitle: AppLooks.active()?.label ?? 'Custom',
                       onTap: onOpenLooks,
+                    ),
+                    // Sits beside Looks because it answers the question Looks
+                    // raises — "what does that one actually look like?" — and
+                    // it is the loop a theme author lives in.
+                    SettingsTile.spec(
+                      SettingsRows.themeLab,
+                      onTap: onOpenThemeLab,
                     ),
                     // App-wide next, then the feature looks.
                     SettingsTile.spec(

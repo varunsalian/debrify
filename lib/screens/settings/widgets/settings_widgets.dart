@@ -5,7 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../services/main_page_bridge.dart';
 import '../../../services/storage_service.dart';
+import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
+import '../../../theme/app_surface.dart';
 import '../../../theme/app_theme_scope.dart';
 import '../../../widgets/shimmer.dart';
 
@@ -206,6 +208,11 @@ abstract final class SettingsRows {
   );
   // Subtitle is dynamic (the chosen theme) — passed per call site.
   // Subtitle is dynamic (the chosen theme) — passed per call site.
+  static const themeLab = SettingsRowContent(
+    icon: Icons.science_rounded,
+    title: 'Theme Lab',
+    subtitle: 'Preview the looks on real widgets',
+  );
   // Subtitle is dynamic (the active Look, or "Custom") — passed per call site.
   static const looks = SettingsRowContent(
     icon: Icons.auto_awesome_rounded,
@@ -1225,6 +1232,17 @@ class _ConnectionCardState extends State<ConnectionCard> {
   bool _focused = false;
   bool _hovered = false;
 
+  /// The theme's tempo, resolved in the one hook that may depend on inherited
+  /// widgets and still re-runs when they change. The reveal below fires from a
+  /// key handler, which is no place for a scope lookup.
+  late AppMotion _motion;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _motion = AppMotion.of(context);
+  }
+
   // Helper to focus and scroll into view
   void _focusAndScroll(FocusNode target) {
     target.requestFocus();
@@ -1232,7 +1250,7 @@ class _ConnectionCardState extends State<ConnectionCard> {
       if (target.context != null) {
         tvRevealMinimal(
           target.context!,
-          duration: const Duration(milliseconds: 200),
+          duration: _motion.scaled(const Duration(milliseconds: 200)),
         );
       }
     });
@@ -1434,14 +1452,26 @@ class SettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
+    // The `settingsGroup` family, and the reason it is capped to fill-or-rule:
+    // this is ONE filled container whose rows have zero inter-row gap and an
+    // in-place `Border.all`. Dropping both would shift every row by a pixel
+    // and dissolve the grouping into an undifferentiated stack — so `space`
+    // and `glass` are not on offer, and a look that asks for either is
+    // clamped to `rule` by `modelFor` before it reaches here.
+    final rule = app.surface.modelFor(SurfaceFamily.settingsGroup) ==
+        SeparationModel.rule;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (title.isNotEmpty) SettingsSectionLabel(title, color: accentColor),
         Container(
           decoration: BoxDecoration(
-            color: t.panel,
+            // A rule look keeps the border — that IS its separation — and
+            // loses only the fill. The border width is unchanged either way,
+            // which is what keeps the row geometry identical.
+            color: rule ? Colors.transparent : t.panel,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: t.line, width: 1),
           ),

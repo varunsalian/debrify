@@ -76,14 +76,20 @@ class WaitTokens {
     period: Duration(milliseconds: 1200),
   );
 
-  /// On TV, anything that animates forever is a repaint forever. The house
-  /// playbook already says "nothing animates unless it must" there, and the
-  /// IPTV skeletons are deliberately static — so an animated skeleton
-  /// degrades to the static block rather than being allowed to loop.
-  SkeletonStyle styleFor(bool isTv) =>
-      isTv && skeleton != SkeletonStyle.scanlines
-          ? SkeletonStyle.static_
-          : skeleton;
+  /// On TV, anything that animates forever is a repaint forever — the house
+  /// playbook says "nothing animates unless it must" there.
+  ///
+  /// **Shimmer is exempt, and that is not an oversight.** It is what the app
+  /// ships today: `Shimmer` runs a 1200ms repeating controller on TV right
+  /// now. Degrading it here would make the legacy profile stop being a no-op,
+  /// and the one permitted legacy exception is reduced motion, not a TV
+  /// optimisation. A look that chooses shimmer knowingly accepts the cost the
+  /// app already pays; the newer styles do not get to add to it.
+  SkeletonStyle styleFor(bool isTv) => switch (skeleton) {
+    SkeletonStyle.shimmer || SkeletonStyle.scanlines => skeleton,
+    SkeletonStyle.pulse => isTv ? SkeletonStyle.static_ : skeleton,
+    SkeletonStyle.static_ => SkeletonStyle.static_,
+  };
 }
 
 /// How much room things take.

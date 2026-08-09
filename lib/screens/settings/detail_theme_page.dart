@@ -56,6 +56,13 @@ const Set<String> kDetailThemesShipped = {
   'verdant',
   'frost',
   'cinemascope',
+  // The premium set. Listed last here but shown FIRST by the pickers, which
+  // read `DetailThemes.catalogue`; this set only says what may be drawn.
+  'glass',
+  'field',
+  'hearth',
+  'console',
+  'reel',
 };
 
 /// The stored value narrowed to what this build can render. Never persists.
@@ -91,7 +98,7 @@ class _DetailThemePageState extends State<DetailThemePage> {
   );
 
   static List<DetailTheme> get _choices => [
-    for (final t in DetailThemes.all)
+    for (final t in DetailThemes.catalogue)
       if (kDetailThemesShipped.contains(t.id)) t,
   ];
 

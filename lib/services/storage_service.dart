@@ -188,6 +188,8 @@ class StorageService {
   static const String _playerStartPortraitKey = 'player_start_portrait';
   static const String _androidVideoRendererModeKey =
       'android_video_renderer_mode';
+  static const String _uiSoundsKey = 'ui_sounds';
+  static const String _uiHapticsKey = 'ui_haptics';
   static const String _subtitleAutoSyncKey = 'subtitle_auto_sync_enabled';
   static const String _playerDefaultSubtitleLanguageKey =
       'player_default_subtitle_language';
@@ -867,6 +869,15 @@ class StorageService {
     'verdant',
     'frost',
     'cinemascope',
+    // The five premium looks. Accepted here from the build that introduces
+    // them, for the same downgrade reason as everything above: a value a newer
+    // build wrote must survive being read by an older one, which normalizes it
+    // to 'signal' rather than losing the key.
+    'glass',
+    'field',
+    'hearth',
+    'console',
+    'reel',
   };
 
   /// Synchronous mirror, warmed in main() before runApp — the details page
@@ -6092,6 +6103,47 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_playerStartPortraitKey, enabled);
     playerStartPortraitCached = enabled;
+  }
+
+  /// Whether interface sound and haptics are allowed at all.
+  ///
+  /// A VETO, not a switch: the theme decides whether there is anything to play
+  /// and these decide whether the user wants to hear or feel it. Both default
+  /// ON, because a theme that asks for silence — which is every look except
+  /// Console and Warm Room — already produces none, so the default cannot
+  /// surprise anybody who has not chosen a look that ticks.
+  ///
+  /// Synchronous mirrors because `UiFeedback` is consulted from a focus
+  /// listener and a key handler, neither of which can await. Warmed in main()
+  /// before runApp.
+  static bool uiSoundsCached = true;
+  static bool uiHapticsCached = true;
+
+  static Future<bool> getUiSounds() async {
+    final prefs = await SharedPreferences.getInstance();
+    uiSoundsCached = prefs.getBool(_uiSoundsKey) ?? true;
+    return uiSoundsCached;
+  }
+
+  static Future<void> setUiSounds(bool enabled) async {
+    // The mirror moves FIRST. `UiFeedback` reads it from a focus listener that
+    // cannot await, so publishing after the platform write leaves a window in
+    // which a user who has just switched sound off still hears the next tick.
+    uiSoundsCached = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_uiSoundsKey, enabled);
+  }
+
+  static Future<bool> getUiHaptics() async {
+    final prefs = await SharedPreferences.getInstance();
+    uiHapticsCached = prefs.getBool(_uiHapticsKey) ?? true;
+    return uiHapticsCached;
+  }
+
+  static Future<void> setUiHaptics(bool enabled) async {
+    uiHapticsCached = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_uiHapticsKey, enabled);
   }
 
   /// Whether the native TV player silently aligns addon subtitles to the

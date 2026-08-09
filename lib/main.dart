@@ -45,6 +45,8 @@ import 'widgets/animated_background.dart';
 import 'services/main_page_bridge.dart';
 import 'theme/app_surfaces.dart';
 import 'theme/app_theme_controller.dart';
+import 'theme/idle_dim.dart';
+import 'theme/ui_feedback.dart';
 import 'theme/app_texture.dart';
 import 'theme/app_theme_scope.dart';
 import 'theme/legacy_theme_boundary.dart';
@@ -189,6 +191,36 @@ Future<void> main() async {
   // active-surface or theme change (the _initOrientation call below remains
   // the pre-warm default and matches the legacy style anyway).
   SystemBarsOwner.init();
+  // The traversal-feedback dispatcher. Installed AFTER the theme controller
+  // because it reads the live theme's sound tokens, and it is a no-op under
+  // every theme that asks for silence — which is all of them except Console.
+  // Warm the two feedback vetoes before installing the dispatcher: it is
+  // consulted from a focus listener that cannot await, so an unwarmed read
+  // would use the default for the first few seconds of a session.
+  try {
+    await StorageService.getUiSounds();
+    await StorageService.getUiHaptics();
+  } catch (e) {
+    debugPrint('main: feedback prefs warm failed, using defaults: $e');
+  }
+  UiFeedback.instance.install();
+  // The idle compositor. Also a no-op under every look with no idle policy,
+  // and TV-only in v1 — a phone in a pocket already has a screen timeout.
+  IdleDim.instance.install();
+  // Bridge the trailer's chrome dim into the compositor's trailer input. The
+  // notifier stays where it is — the screens that publish it are the ones that
+  // know a trailer is playing — and the compositor only needs to SEE it. It
+  // also suspends the idle timer while a trailer runs: idle must never arm
+  // during playback, and it restarts from zero when the trailer ends.
+  MainPageBridge.tvChromeDim.addListener(() {
+    final v = MainPageBridge.tvChromeDim.value;
+    IdleDim.instance.trailerDim.value = v;
+    if (v > 0) {
+      IdleDim.instance.suspend(MainPageBridge.tvChromeDim);
+    } else {
+      IdleDim.instance.resume(MainPageBridge.tvChromeDim);
+    }
+  });
   // Warms the launch-ident choice: AppInitializer builds the splash in its
   // initState, so an async-only read would flash the default ident's world
   // for a frame. A cosmetic pref must never block startup.
@@ -503,6 +535,17 @@ class _DebrifyAppState extends State<DebrifyApp> {
           // for legacy and for the seventeen themes that declare neither, so
           // the common path costs one build and no layer.
           child: AppTexture(child: child!),
+        );
+        // Pointer input counts as presence too — an Apple TV remote's
+        // trackpad and an attached mouse both arrive here rather than through
+        // the key handler. `Listener` at the root sees moves and downs
+        // regardless of what any descendant does with them, and behavior
+        // deferToChild keeps it from claiming a single hit.
+        content = Listener(
+          behavior: HitTestBehavior.deferToChild,
+          onPointerDown: (_) => IdleDim.instance.noteInput(),
+          onPointerHover: (_) => IdleDim.instance.noteInput(),
+          child: content,
         );
         if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
           content = Focus(
@@ -2828,8 +2871,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           // which kills the trailer, so it's already fading
                           // back in as it expands — the user never actually
                           // sees an empty menu.
+                          // Reads the COMPOSITOR, not the trailer notifier
+                          // directly. Two things want the rail out of the way
+                          // — a trailer taking the screen, and the room going
+                          // idle — and `IdleDim.effective` is their max,
+                          // computed once so the two can never fight. Under
+                          // legacy the idle half is always 0, so this is
+                          // `tvChromeDim` and nothing else.
                           child: ValueListenableBuilder<double>(
-                            valueListenable: MainPageBridge.tvChromeDim,
+                            valueListenable: IdleDim.instance.effective,
                             builder: (context, target, child) =>
                                 TweenAnimationBuilder<double>(
                                   tween: Tween<double>(end: target),
