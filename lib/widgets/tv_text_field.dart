@@ -47,6 +47,10 @@ class TvTextField extends StatefulWidget {
     this.autofillHints,
     this.validator,
     this.shellRing = true,
+    this.accent = const Color(0xFF7B5CFF),
+    this.keyboardGround = const Color(0xF01A1630),
+    this.keyboardInk = Colors.white,
+    this.keyboardInkOnAccent = Colors.white,
     this.onChanged,
     this.onSubmitted,
     this.onUpArrow,
@@ -95,6 +99,31 @@ class TvTextField extends StatefulWidget {
   /// Set false when the call site draws its own focus ring around the field
   /// (otherwise the shell's fallback accent ring would double it up).
   final bool shellRing;
+
+  // ─────────────────────────────────────────────────────── caller-supplied ink
+  //
+  // This field is rendered by themed surfaces, by surfaces still scheduled for
+  // conversion, and by the video player — which stays legacy permanently — so
+  // it can neither read the app theme nor keep a fixed palette. Each token
+  // below is OPTIONAL and defaults to the exact literal it replaces, so a call
+  // site that passes nothing renders byte-identically to what shipped and each
+  // surface can opt in on its own schedule.
+
+  /// The shell's focus ring, and every filled accent on the keyboard panel
+  /// this field owns (highlighted keycap, latched shift, mic disc + halo,
+  /// notice bar).
+  final Color? accent;
+
+  /// The keyboard panel's ground.
+  final Color? keyboardGround;
+
+  /// All keyboard-panel foreground; today's alphas ride on top of it.
+  final Color? keyboardInk;
+
+  /// Keyboard foreground ON a filled [accent] — separate from [keyboardInk]
+  /// because half the shipped themes have light accents, where white ink on
+  /// the highlighted keycap would be invisible.
+  final Color? keyboardInkOnAccent;
 
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
@@ -402,7 +431,17 @@ class TvTextFieldState extends State<TvTextField> {
         right: 0,
         bottom: 16,
         child: capturedThemes.wrap(SafeArea(
-          child: Center(child: TvKeyboardPanel(controller: _kb!)),
+          child: Center(
+            child: TvKeyboardPanel(
+              controller: _kb!,
+              // The panel's own defaults are these same literals, so a token
+              // left null lands on exactly what shipped either way.
+              accent: widget.accent,
+              ground: widget.keyboardGround,
+              ink: widget.keyboardInk,
+              inkOnAccent: widget.keyboardInkOnAccent,
+            ),
+          ),
         )),
       ),
     );
@@ -1078,7 +1117,10 @@ class TvTextFieldState extends State<TvTextField> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: shellFocused && !_editing && !_useSystemIme
-              ? Border.all(color: const Color(0xFF7B5CFF), width: 2)
+              ? Border.all(
+                  color: widget.accent ?? const Color(0xFF7B5CFF),
+                  width: 2,
+                )
               : null,
         ),
         child: field,

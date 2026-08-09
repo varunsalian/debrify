@@ -22,6 +22,30 @@ class BrowseSearchHeader extends StatefulWidget {
   /// DPAD-down exit from the field (drops into the results/filters).
   final VoidCallback? onDownArrow;
 
+  /// The ink every alpha in this header is struck from: hint text (0.3), the
+  /// search glyph (0.35), the clear glyph (0.5), and — unless overridden below
+  /// — the focus ring (0.15) and the field fill (0.07).
+  ///
+  /// Set ONLY by a caller that has landed on the app palette. The default is
+  /// the [Colors.white] every literal here used before this widget took
+  /// parameters, so a caller that passes nothing renders byte-identically:
+  /// that is what lets YouTube and IPTV — both of which reach this header
+  /// through `BrowseScreen` — convert on their own schedules, and what keeps
+  /// the permanently-legacy player unmoved. The relative alphas are the
+  /// widget's own visual hierarchy, not the caller's, so one token carries the
+  /// whole set and a light palette gets the same hierarchy in black.
+  final Color ink;
+
+  /// Field fill. Null derives [ink] at the shipped 0.07, which is the right
+  /// answer for a monochrome palette; pass a colour only when the theme's
+  /// field surface is not a tint of its own ink.
+  final Color? fillColor;
+
+  /// Focus ring. Null derives [ink] at the shipped 0.15 — pass the theme's
+  /// accent to make focus read as focus rather than as a slightly brighter
+  /// edge.
+  final Color? focusedBorderColor;
+
   const BrowseSearchHeader({
     super.key,
     required this.controller,
@@ -31,6 +55,9 @@ class BrowseSearchHeader extends StatefulWidget {
     this.onChanged,
     this.onSubmitted,
     this.onDownArrow,
+    this.ink = Colors.white,
+    this.fillColor,
+    this.focusedBorderColor,
   });
 
   @override
@@ -67,6 +94,7 @@ class _BrowseSearchHeaderState extends State<BrowseSearchHeader> {
   @override
   Widget build(BuildContext context) {
     final hasText = widget.controller.text.isNotEmpty;
+    final ink = widget.ink;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
       child: TvTextField(
@@ -78,16 +106,16 @@ class _BrowseSearchHeaderState extends State<BrowseSearchHeader> {
         textInputAction: TextInputAction.search,
         decoration: InputDecoration(
           hintText: widget.hintText,
-          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+          hintStyle: TextStyle(color: ink.withValues(alpha: 0.3)),
           prefixIcon: Icon(
             Icons.search_rounded,
-            color: Colors.white.withValues(alpha: 0.35),
+            color: ink.withValues(alpha: 0.35),
           ),
           suffixIcon: hasText
               ? IconButton(
                   icon: Icon(
                     Icons.close_rounded,
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: ink.withValues(alpha: 0.5),
                   ),
                   onPressed: widget.onClear,
                 )
@@ -103,12 +131,12 @@ class _BrowseSearchHeaderState extends State<BrowseSearchHeader> {
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(
-              color: Colors.white.withValues(alpha: 0.15),
+              color: widget.focusedBorderColor ?? ink.withValues(alpha: 0.15),
               width: 1,
             ),
           ),
           filled: true,
-          fillColor: Colors.white.withValues(alpha: 0.07),
+          fillColor: widget.fillColor ?? ink.withValues(alpha: 0.07),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 14,
