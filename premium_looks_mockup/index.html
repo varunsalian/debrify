@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Premium Looks — five concepts</title>
+<link rel='preconnect' href='https://fonts.googleapis.com'><link href='https://fonts.googleapis.com/css2?family=Inter+Tight:wght@200..800&family=JetBrains+Mono:wght@400..700&display=swap' rel='stylesheet'>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#060607;color:#EDEDED;font:14px/1.55 'Inter Tight',sans-serif;
+     padding:56px 5vw 110px}
+h1{font-size:34px;font-weight:600;letter-spacing:-.6px}
+h1 em{font-style:normal;font-weight:200;color:rgba(237,237,237,.5)}
+.sub{color:rgba(237,237,237,.62);margin:14px 0 10px;max-width:900px;font-size:14px}
+.why{color:rgba(237,237,237,.4);font-size:12.5px;max-width:900px;line-height:1.75;
+     margin-bottom:46px}
+.why b{color:rgba(237,237,237,.68)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+      gap:20px;max-width:1500px}
+a.card{display:block;text-decoration:none;color:#EDEDED;border-radius:14px;
+  overflow:hidden;border:1px solid rgba(255,255,255,.1);transition:border-color .18s}
+a.card:hover{border-color:rgba(255,255,255,.32)}
+.thumb{aspect-ratio:16/9;position:relative;overflow:hidden}
+.meta{padding:15px 17px 17px}
+.k{font:600 9.5px 'JetBrains Mono',monospace;letter-spacing:2.2px;
+   color:rgba(237,237,237,.34);text-transform:uppercase}
+.meta h2{font-size:19px;font-weight:600;margin:5px 0 6px;letter-spacing:-.3px}
+.meta p{color:rgba(237,237,237,.6);font-size:12.5px;line-height:1.5}
+.meta .sp{color:rgba(237,237,237,.34);font-size:11px;margin-top:9px;
+  font-family:'JetBrains Mono',monospace}
+table{border-collapse:collapse;margin:52px 0 0;font-size:12.5px;max-width:1500px;width:100%}
+th,td{text-align:left;padding:9px 14px 9px 0;border-bottom:1px solid rgba(255,255,255,.09);
+      vertical-align:top}
+th{color:rgba(237,237,237,.4);font-weight:600;font-size:10px;letter-spacing:1.6px;
+   text-transform:uppercase}
+td b{font-weight:600}
+
+.t-l1_obsidian_glass{background:linear-gradient(150deg,#12202F,#080C12);}
+.t-l1_obsidian_glass .r{position:absolute;left:0;top:0;bottom:0;width:17%;background:rgba(255,255,255,.09);border-right:1px solid rgba(255,255,255,.16)}
+.t-l1_obsidian_glass .h{position:absolute;left:23%;top:16%;width:40%;height:34%;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);border-radius:9px}
+.t-l1_obsidian_glass .b{position:absolute;left:23%;top:24%;width:16%;height:5%;background:#7FD4FF;border-radius:2px}
+.t-l1_obsidian_glass .c{position:absolute;bottom:11%;height:30%;width:9%;background:rgba(255,255,255,.16);border-radius:6px}
+.t-l1_obsidian_glass .c1{left:23%}.t-l1_obsidian_glass .c2{left:33.5%}.t-l1_obsidian_glass .c3{left:44%}
+.t-l1_obsidian_glass .c4{left:54.5%}.t-l1_obsidian_glass .c5{left:65%}
+.t-l1_obsidian_glass .c2{outline:2px solid #7FD4FF;outline-offset:2px}
+
+.t-l2_deep_field{background:radial-gradient(90% 70% at 60% 26%,rgba(255,150,100,.3),transparent 58%),linear-gradient(180deg,#101A26,#000 72%);}
+.t-l2_deep_field .r{position:absolute;left:0;top:0;bottom:0;width:17%;background:none}
+.t-l2_deep_field .h{position:absolute;left:23%;top:16%;width:40%;height:34%;background:none}
+.t-l2_deep_field .b{position:absolute;left:23%;top:24%;width:16%;height:5%;background:#E8503A;border-radius:2px}
+.t-l2_deep_field .c{position:absolute;bottom:11%;height:30%;width:9%;background:rgba(255,255,255,.2);border-radius:2px}
+.t-l2_deep_field .c1{left:23%}.t-l2_deep_field .c2{left:33.5%}.t-l2_deep_field .c3{left:44%}
+.t-l2_deep_field .c4{left:54.5%}.t-l2_deep_field .c5{left:65%}
+.t-l2_deep_field .c2{outline:2px solid #E8503A;outline-offset:2px}
+
+.t-l3_warm_room{background:linear-gradient(160deg,#241D16,#141110);}
+.t-l3_warm_room .r{position:absolute;left:0;top:0;bottom:0;width:17%;background:#1D1917}
+.t-l3_warm_room .h{position:absolute;left:23%;top:16%;width:40%;height:34%;background:#252019;border-radius:8px}
+.t-l3_warm_room .b{position:absolute;left:23%;top:24%;width:16%;height:5%;background:#E8A13C;border-radius:2px}
+.t-l3_warm_room .c{position:absolute;bottom:11%;height:30%;width:9%;background:#2C2620;border-radius:6px}
+.t-l3_warm_room .c1{left:23%}.t-l3_warm_room .c2{left:33.5%}.t-l3_warm_room .c3{left:44%}
+.t-l3_warm_room .c4{left:54.5%}.t-l3_warm_room .c5{left:65%}
+.t-l3_warm_room .c2{outline:2px solid #E8A13C;outline-offset:2px}
+
+.t-l4_console{background:#080B09;}
+.t-l4_console .r{position:absolute;left:0;top:0;bottom:0;width:17%;background:none;border-right:1px solid rgba(216,224,216,.2)}
+.t-l4_console .h{position:absolute;left:23%;top:16%;width:40%;height:34%;background:none;border-left:2px solid #8CE0A8}
+.t-l4_console .b{position:absolute;left:23%;top:24%;width:16%;height:5%;background:#8CE0A8;border-radius:2px}
+.t-l4_console .c{position:absolute;bottom:11%;height:30%;width:9%;background:none;border:1px solid rgba(216,224,216,.24)}
+.t-l4_console .c1{left:23%}.t-l4_console .c2{left:33.5%}.t-l4_console .c3{left:44%}
+.t-l4_console .c4{left:54.5%}.t-l4_console .c5{left:65%}
+.t-l4_console .c2{outline:2px solid #8CE0A8;outline-offset:2px}
+
+.t-l5_midnight_cinema{background:linear-gradient(170deg,#1A140E,#0A0908);}
+.t-l5_midnight_cinema .r{position:absolute;left:0;top:0;bottom:0;width:17%;background:#12100E;border-right:1px solid rgba(237,228,216,.12)}
+.t-l5_midnight_cinema .h{position:absolute;left:23%;top:16%;width:40%;height:34%;background:rgba(10,9,8,.6);border-left:2px solid #D9A441}
+.t-l5_midnight_cinema .b{position:absolute;left:23%;top:24%;width:16%;height:5%;background:#D9A441;border-radius:2px}
+.t-l5_midnight_cinema .c{position:absolute;bottom:11%;height:30%;width:9%;background:#1A1512;border-radius:2px;border:3px solid #12100E}
+.t-l5_midnight_cinema .c1{left:23%}.t-l5_midnight_cinema .c2{left:33.5%}.t-l5_midnight_cinema .c3{left:44%}
+.t-l5_midnight_cinema .c4{left:54.5%}.t-l5_midnight_cinema .c5{left:65%}
+.t-l5_midnight_cinema .c2{outline:2px solid #D9A441;outline-offset:2px}
+</style></head><body>
+<h1>Premium Looks <em>— five designed looks, one DOM</em></h1>
+<p class="sub">Every concept below renders the <b>identical markup</b> — same
+rail, same hero, same three shelves, same focused card, same skeleton row.
+Only the stylesheet changes.</p>
+<p class="why">That constraint is the experiment. The twenty themes we ship
+today came from a mockup that put twenty <b>palettes</b> on one layout, and
+palettes are exactly what we got. This round varies the things a palette
+cannot reach — <b>separation</b> (how things are told apart), <b>scrim</b>
+(how text sits on artwork), <b>artwork treatment</b> (framing and grading),
+<b>focus</b> (what the cursor does), <b>motion</b> and <b>density</b>. If
+these five read as five different apps with the DOM held fixed, the
+vocabulary in <b>plan/PREMIUM_LOOKS_PLAN.md §3</b> is the right one. If they
+read as one app in five tints, we learned it in week one.</p>
+<div class="grid">
+  <a class="card" href="l1_obsidian_glass.html">
+    <div class="thumb t-l1_obsidian_glass"><div class="r"></div><div class="h"></div>
+      <div class="b"></div><div class="c c1"></div><div class="c c2"></div>
+      <div class="c c3"></div><div class="c c4"></div><div class="c c5"></div></div>
+    <div class="meta"><div class="k">look 1 · glass</div>
+      <h2>Obsidian Glass</h2><p>Everything is a floating pane of tinted glass over the artwork.</p>
+      <div class="sp">glass · ring · glide</div></div>
+  </a>
+  <a class="card" href="l2_deep_field.html">
+    <div class="thumb t-l2_deep_field"><div class="r"></div><div class="h"></div>
+      <div class="b"></div><div class="c c1"></div><div class="c c2"></div>
+      <div class="c c3"></div><div class="c c4"></div><div class="c c5"></div></div>
+    <div class="meta"><div class="k">look 2 · field</div>
+      <h2>Deep Field</h2><p>No boxes anywhere. Artwork bleeds, and space alone does the separating.</p>
+      <div class="sp">space · scale 1.06 · settle</div></div>
+  </a>
+  <a class="card" href="l3_warm_room.html">
+    <div class="thumb t-l3_warm_room"><div class="r"></div><div class="h"></div>
+      <div class="b"></div><div class="c c1"></div><div class="c c2"></div>
+      <div class="c c3"></div><div class="c c4"></div><div class="c c5"></div></div>
+    <div class="meta"><div class="k">look 3 · hearth</div>
+      <h2>Warm Room</h2><p>Matte, warm and unhurried — the one you leave on at eleven at night.</p>
+      <div class="sp">fill · lift · glide, tempo 1.15</div></div>
+  </a>
+  <a class="card" href="l4_console.html">
+    <div class="thumb t-l4_console"><div class="r"></div><div class="h"></div>
+      <div class="b"></div><div class="c c1"></div><div class="c c2"></div>
+      <div class="c c3"></div><div class="c c4"></div><div class="c c5"></div></div>
+    <div class="meta"><div class="k">look 4 · console</div>
+      <h2>Console</h2><p>Hairlines, monospace and hard edges. Focus inverts instead of glowing.</p>
+      <div class="sp">rule · invert · snap</div></div>
+  </a>
+  <a class="card" href="l5_midnight_cinema.html">
+    <div class="thumb t-l5_midnight_cinema"><div class="r"></div><div class="h"></div>
+      <div class="b"></div><div class="c c1"></div><div class="c c2"></div>
+      <div class="c c3"></div><div class="c c4"></div><div class="c c5"></div></div>
+    <div class="meta"><div class="k">look 5 · reel</div>
+      <h2>Midnight Cinema</h2><p>Grain, letterbox bars and a warm grade — the app as a screening room.</p>
+      <div class="sp">fill · lift · settle, tempo 1.15</div></div>
+  </a></div>
+<table><thead><tr><th>look</th><th>separation</th><th>scrim</th>
+<th>artwork</th><th>focus</th><th>motion</th><th>density &amp; extras</th></tr></thead>
+<tbody><tr><td><b>Obsidian Glass</b><br><span style='opacity:.45'>glass</span></td><td>glass · sheet+dialog+card glass, settings rule</td><td>blurBand — text sits on a frosted strip, not a gradient</td><td>contained · radius 14 · no grading</td><td>ring + soft bloom, 2.5px cold</td><td>glide — long decelerations</td><td>standard · sound: soft tick</td></tr><tr><td><b>Deep Field</b><br><span style='opacity:.45'>field</span></td><td>space · card/shelf/hero bare; settings fall back to rule</td><td>bottomGradient + vignette</td><td>bleed · hero is the page background · reactiveRoom high</td><td>scale 1.06 + bloom, no ring</td><td>settle — spring, slight overshoot</td><td>airy · theater idle</td></tr><tr><td><b>Warm Room</b><br><span style='opacity:.45'>hearth</span></td><td>fill · matte + 1px sheen, no hairline borders</td><td>plate — a solid warm slab under the text</td><td>faded · masked into the ground · warm grade</td><td>lift — raises with a soft shadow, amber ring</td><td>glide, tempo 1.15 — everything settles slowly</td><td>generous · dimChrome idle · felt-thud sounds</td></tr><tr><td><b>Console</b><br><span style='opacity:.45'>console</span></td><td>rule · hairlines only; settings capped to rule</td><td>plate — a hard-edged black slab</td><td>contained · square · no grading (data, not mood)</td><td>invert — the card flips to ink-on-accent</td><td>snap — no easing, minimum durations</td><td>dense · scanline skeletons · terminal clicks</td></tr><tr><td><b>Midnight Cinema</b><br><span style='opacity:.45'>reel</span></td><td>fill · deep matte, hairline rules</td><td>plate under a letterboxed frame</td><td>matted · warm grade on every image</td><td>lift + bloom, warm</td><td>settle, tempo 1.15 — nothing is in a hurry</td><td>cinematic · grain texture · theater idle</td></tr></tbody></table>
+</body></html>

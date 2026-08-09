@@ -9,6 +9,39 @@ import 'app_theme_scope.dart';
 /// there is no single place to turn motion down on a weak box — a live problem
 /// on Amlogic/Xiaomi hardware. The defaults below are the durations already
 /// most common in the tree, so adopting a token at a site is usually a no-op.
+/// How motion FEELS, as opposed to how long it lasts.
+///
+/// The tempo scalar shipped in phase three is the weak version of this: a
+/// theme that is 15% slower is not a different theme. Character changes the
+/// curve and the duration together, which is what makes `snap` feel like a
+/// terminal and `settle` feel like something with mass.
+enum MotionCharacter {
+  /// The shipped feel: ease-out cubic at the shipped durations.
+  standard,
+
+  /// No easing worth the name, minimum durations. Instruments do not glide.
+  snap,
+
+  /// Long decelerations. Everything arrives late and softly.
+  glide,
+
+  /// Slight overshoot, as though the thing has weight.
+  settle,
+}
+
+/// How a page's content arrives.
+enum EntranceStyle {
+  /// It is simply there. Today's app on TV, and the legacy pin.
+  none,
+
+  /// One cross-fade for the whole page.
+  fadeUp,
+
+  /// Rows arrive in sequence — the reveal the catalog detail already has, and
+  /// already skips on TV.
+  stagger,
+}
+
 @immutable
 class MotionTokens {
   /// A state change the eye should barely register — a chip filling, a ring
@@ -38,6 +71,13 @@ class MotionTokens {
   /// as long to open a sheet does not read as characterful, it reads as lag.
   final double scale;
 
+  /// The feel. Sets curve and duration together — see [MotionCharacter].
+  final MotionCharacter character;
+
+  /// How page content arrives. Skipped on TV by [entranceFor], which is what
+  /// the catalog detail's reveal controller already does by hand.
+  final EntranceStyle entrance;
+
   const MotionTokens({
     required this.fast,
     required this.base,
@@ -45,7 +85,49 @@ class MotionTokens {
     required this.standard,
     required this.emphasized,
     required this.scale,
+    this.character = MotionCharacter.standard,
+    this.entrance = EntranceStyle.none,
   });
+
+  /// [character] resolved into the pair of curves and the tempo it implies.
+  ///
+  /// Derived rather than stored so a character can never disagree with the
+  /// curves beside it — the failure mode where a theme says `snap` and then
+  /// eases for 360ms because someone set the fields independently.
+  factory MotionTokens.of(MotionCharacter c) => switch (c) {
+    MotionCharacter.standard => legacy,
+    MotionCharacter.snap => const MotionTokens(
+      fast: Duration(milliseconds: 60),
+      base: Duration(milliseconds: 90),
+      slow: Duration(milliseconds: 140),
+      standard: Curves.linear,
+      emphasized: Curves.linear,
+      scale: 0.85,
+      character: MotionCharacter.snap,
+    ),
+    MotionCharacter.glide => const MotionTokens(
+      fast: Duration(milliseconds: 160),
+      base: Duration(milliseconds: 300),
+      slow: Duration(milliseconds: 520),
+      standard: Curves.easeOutQuart,
+      emphasized: Curves.easeOutQuint,
+      scale: 1.15,
+      character: MotionCharacter.glide,
+    ),
+    MotionCharacter.settle => const MotionTokens(
+      fast: Duration(milliseconds: 140),
+      base: Duration(milliseconds: 260),
+      slow: Duration(milliseconds: 420),
+      standard: Curves.easeOutCubic,
+      emphasized: Curves.easeOutBack,
+      scale: 1.15,
+      character: MotionCharacter.settle,
+    ),
+  };
+
+  /// Entrance choreography is a full-screen animation on the one platform
+  /// that cannot afford one.
+  EntranceStyle entranceFor(bool isTv) => isTv ? EntranceStyle.none : entrance;
 
   static const MotionTokens legacy = MotionTokens(
     fast: Duration(milliseconds: 120),

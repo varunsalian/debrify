@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/detail/theme/detail_themes.dart';
+import 'app_ambience.dart';
+import 'app_art.dart';
+import 'app_focus.dart';
+import 'app_light.dart';
 import 'app_motion.dart';
 import 'app_shape.dart';
+import 'app_surface.dart';
 import 'app_type.dart';
 
 /// App-wide theme: the details-page token core plus the per-surface role
@@ -62,6 +67,28 @@ class AppTheme {
   /// reduced motion needs a context.
   final MotionTokens motion;
 
+  /// Separation, material and elevation — the biggest lever, because it
+  /// changes the silhouette rather than the colour.
+  final SurfaceTokens surface;
+
+  /// Scrim grammar and the lighting rig.
+  final LightTokens light;
+
+  /// Artwork framing, grading, and how far the room follows the title.
+  final ArtTokens art;
+
+  /// What the cursor does.
+  final FocusTokens focus;
+
+  /// What the app does when you stop touching it. TV only in v1.
+  final IdleTokens idle;
+
+  /// What waiting looks like.
+  final WaitTokens wait;
+
+  /// How much room things take — four bounded metrics, not a spacing scale.
+  final DensityTokens density;
+
   /// Light chrome ⇔ the ground reads light. One stated threshold, everywhere:
   /// `ground.computeLuminance() > 0.5`. Broadsheet (≈0.86) and Concrete
   /// (≈0.57) land light; every other shipped theme lands dark.
@@ -87,6 +114,13 @@ class AppTheme {
     required this.shape,
     required this.type,
     required this.motion,
+    required this.surface,
+    required this.light,
+    required this.art,
+    required this.focus,
+    required this.idle,
+    required this.wait,
+    required this.density,
     required this.brightness,
     required this.sheetSurface,
   });
@@ -155,7 +189,23 @@ class AppTheme {
       c.withValues(alpha: (c.a * factor).clamp(0.0, 1.0));
 
   /// Derive a real app theme from a detail core.
-  factory AppTheme.fromDetail(DetailTheme core) {
+  ///
+  /// The phase-four groups are optional and default to a NEUTRAL derivation
+  /// from the core — so a theme that predates `ThemeSpec` renders exactly what
+  /// it renders today and gains nothing it did not ask for. `ThemeSpec` is the
+  /// only caller that passes them, which is what keeps derivation authority in
+  /// one place (plan §4).
+  factory AppTheme.fromDetail(
+    DetailTheme core, {
+    SurfaceTokens? surface,
+    LightTokens? light_,
+    ArtTokens? art,
+    FocusTokens? focus,
+    MotionTokens? motion,
+    IdleTokens? idle,
+    WaitTokens? wait,
+    DensityTokens? density,
+  }) {
     final ground = core.ground;
     final light = ground.computeLuminance() > 0.5;
     final tx = core.tx;
@@ -208,7 +258,45 @@ class AppTheme {
       // beyond the memoized derivation the controller already does.
       shape: ShapeTokens.fromDetail(core),
       type: TypeTokens.fromDetail(core),
-      motion: MotionTokens.fromDetail(core),
+      motion: motion ?? MotionTokens.fromDetail(core),
+      // Neutral derivations. Each keeps a pre-spec theme exactly as it is
+      // today: filled surfaces, the hero's own gradient, framed ungraded
+      // artwork, the ring at the width the core already declares, no idle
+      // policy, the shipped shimmer, and density of 1.
+      surface: surface ??
+          SurfaceTokens(
+            base: SeparationModel.fill,
+            // Sensible glass values for a theme that never asks for glass —
+            // present so a later opt-in does not need a new derivation.
+            glassSigma: 24,
+            glassOpacity: 0.52,
+            glassOpacityTv: 0.94,
+            sheen: 0,
+            restShadow: const <BoxShadow>[],
+            raisedShadow: core.shadow,
+            floatingShadow: core.shadow,
+          ),
+      light: light_ ?? LightTokens.legacy,
+      art: art ??
+          ArtTokens(
+            frame: ArtFrame.contained,
+            grade: ArtGrade.none,
+            // The core already declares how strongly its per-title wash reads;
+            // reactiveRoom IS that idea at shell scale, so it inherits rather
+            // than inventing a second number.
+            reactiveRoom: core.washOpacity,
+          ),
+      focus: focus ??
+          FocusTokens(
+            expression: FocusExpression.ring,
+            width: core.focusWidth,
+            offset: core.focusOffset,
+            scale: 1,
+            lift: 0,
+          ),
+      idle: idle ?? IdleTokens.legacy,
+      wait: wait ?? WaitTokens.legacy,
+      density: density ?? DensityTokens.legacy,
       sheetSurface: mix(ground, tx, 0.08),
       home: HomeTokens(
         bg: ground,
@@ -1798,6 +1886,17 @@ abstract final class AppThemes {
     shape: ShapeTokens.legacy,
     type: TypeTokens.legacy,
     motion: MotionTokens.legacy,
+    // Phase four's vocabulary, every value a no-op: fill separation with no
+    // blur or sheen, the bottom gradient the hero already draws, framed and
+    // ungraded artwork, an in-bounds ring at Signal's width, no idle policy,
+    // the shipped shimmer, and density multipliers of exactly 1.
+    surface: SurfaceTokens.legacy,
+    light: LightTokens.legacy,
+    art: ArtTokens.legacy,
+    focus: FocusTokens.legacy,
+    idle: IdleTokens.legacy,
+    wait: WaitTokens.legacy,
+    density: DensityTokens.legacy,
     // cw_card_menu, the two detail quick-action sheets, the episode sheet
     sheetSurface: const Color(0xFF141019),
     home: HomeTokens(

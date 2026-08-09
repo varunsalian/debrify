@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5 · Midnight Cinema — Premium Looks</title>
+<link rel='preconnect' href='https://fonts.googleapis.com'><link href='https://fonts.googleapis.com/css2?family=Inter+Tight:wght@200..800&family=JetBrains+Mono:wght@400..700&display=swap' rel='stylesheet'>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:14px/1.5 var(--sans);padding:38px 4vw 90px}
+svg{width:100%;height:100%}
+.tv{width:min(1560px,96vw);aspect-ratio:16/9;position:relative;overflow:hidden;
+    box-shadow:0 40px 120px rgba(0,0,0,.75)}
+.rail{position:absolute;left:0;top:0;bottom:0;width:var(--railw);
+      display:flex;flex-direction:column;align-items:stretch;
+      gap:var(--navgap);padding:var(--railpad);z-index:5}
+.mark{width:34px;height:34px;display:grid;place-items:center;font-weight:800;
+      font-size:15px;margin-bottom:16px;flex:none}
+.nav{display:flex;align-items:center;gap:11px;padding:var(--navpad);
+     font-size:13px;white-space:nowrap;overflow:hidden}
+.nav i{width:19px;height:19px;flex:none;display:block}
+.nav.bot{margin-top:auto}
+.hero{position:absolute;left:var(--railw);right:0;top:0;height:var(--herow);
+      overflow:hidden;z-index:1}
+.hero .backdrop{position:absolute;inset:0}
+.scrim{position:absolute;inset:0}
+.herobody{position:absolute;left:var(--gut);bottom:var(--herob);right:38%;z-index:3}
+.eyebrow{font-size:10.5px;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px}
+.title{font-size:var(--titlesz);line-height:1.02;margin-bottom:12px}
+.meta{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:11px;flex-wrap:wrap}
+.badge{padding:2px 7px;font-size:9.5px;letter-spacing:1.1px;font-weight:700}
+.blurb{font-size:12.5px;line-height:1.6;max-width:520px;margin-bottom:16px}
+.btns{display:flex;gap:10px;align-items:center}
+button{font:inherit;font-size:12.5px;font-weight:600;padding:9px 20px;
+       display:flex;align-items:center;gap:8px;cursor:pointer;border:0}
+button i{width:14px;height:14px;display:block}
+button.ic{padding:9px 11px}
+.prog{height:3px;width:300px;margin-top:16px;overflow:hidden}
+.prog span{display:block;height:100%}
+.shelves{position:absolute;left:var(--railw);right:0;top:var(--herow);bottom:0;
+         z-index:4;overflow:hidden;padding-top:var(--shelftop)}
+.shelf{padding:0 var(--gut) var(--shelftop)}
+.shelf h2{font-size:13px;margin-bottom:var(--capgap);font-weight:600}
+.shelf h2 em{font-style:italic;font-weight:400}
+.rowcards{display:flex;gap:var(--cardgap)}
+.card{width:var(--cardw);flex:none;position:relative}
+.card .art{aspect-ratio:2/3;position:relative;overflow:hidden}
+.cap{padding-top:8px}
+.cap b{display:block;font-size:11.5px;font-weight:600;white-space:nowrap;
+       overflow:hidden;text-overflow:ellipsis}
+.cap i{display:block;font-size:10px;font-style:normal;margin-top:2px}
+.card .bar{height:2.5px;margin-top:6px;overflow:hidden}
+.card .bar span{display:block;height:100%}
+.card .ring{position:absolute;left:0;right:0;top:0;aspect-ratio:2/3;
+            pointer-events:none}
+.card.sk .art{}
+.card.sk .cap b{height:9px;width:72%}
+.card.sk .cap i{height:8px;width:44%;margin-top:5px}
+.grain,.bars{position:absolute;inset:0;pointer-events:none;z-index:6}
+/* close-ups: the states a 16:9 frame cannot show at a readable size */
+.strip{display:flex;gap:26px;align-items:flex-start;margin-top:26px;flex-wrap:wrap}
+.cell{display:flex;flex-direction:column;gap:9px}
+.cell .card{position:relative}
+.cell.wide{flex:1;min-width:330px}
+.lb{font-size:9.5px;letter-spacing:2px;text-transform:uppercase;opacity:.5}
+.ctl{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding-top:2px}
+/* page chrome around the mock */
+h3.pt{font:600 26px/1.2 var(--sans);letter-spacing:-.3px;margin-bottom:8px}
+p.pd{font-size:13.5px;max-width:900px;margin-bottom:26px;line-height:1.6}
+.legend{margin-top:26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));
+        gap:14px;max-width:1560px}
+.legend div{font-size:12px;line-height:1.55;padding:13px 15px}
+.legend b{display:block;font-size:10px;letter-spacing:1.6px;text-transform:uppercase;
+          margin-bottom:5px}
+a.back{font-size:12px;display:inline-block;margin-bottom:22px}
+
+.p1{background:linear-gradient(160deg,#2A4A6B,#0E1E30 62%),radial-gradient(70% 45% at 50% 22%,rgba(255,190,120,.5),transparent)}
+.p2{background:linear-gradient(150deg,#6B2F3A,#1B0F16 65%),radial-gradient(60% 40% at 62% 26%,rgba(255,150,110,.55),transparent)}
+.p3{background:linear-gradient(200deg,#1F4A42,#08181B 68%),radial-gradient(65% 42% at 38% 30%,rgba(140,225,200,.4),transparent)}
+.p4{background:linear-gradient(140deg,#4A3A66,#150F22 64%),radial-gradient(60% 40% at 55% 24%,rgba(190,160,255,.42),transparent)}
+.p5{background:linear-gradient(175deg,#6A4A22,#1E1408 66%),radial-gradient(62% 42% at 45% 28%,rgba(255,205,130,.45),transparent)}
+.p6{background:linear-gradient(190deg,#243F5E,#0A1420 62%),radial-gradient(58% 40% at 60% 30%,rgba(150,200,255,.38),transparent)}
+.backdrop{background:
+  radial-gradient(85% 65% at 66% 24%,rgba(255,178,110,.34),transparent 58%),
+  radial-gradient(48% 46% at 26% 32%,rgba(110,170,255,.22),transparent 62%),
+  linear-gradient(178deg,#12202F 0%,#152538 40%,#0A1119 100%)}
+
+:root{--sans:'Inter Tight',-apple-system,sans-serif;--railw:184px;--herow:54%;
+ --gut:46px;--herob:56px;--titlesz:46px;--cardw:134px;--cardgap:17px;
+ --navgap:4px;--navpad:10px 13px;--railpad:34px 15px;--shelftop:22px;--capgap:13px;
+ --ink:#EDE4D8;--dim:rgba(237,228,216,.6);--dim2:rgba(237,228,216,.34);
+ --acc:#D9A441;--pane:#12100E;--hair:rgba(237,228,216,.11)}
+body{background:#070605;color:var(--ink)}
+.tv{border-radius:6px;background:#0A0908}
+/* the projection: bars top and bottom, grain over the whole frame */
+.bars{background:linear-gradient(180deg,#000 0 5.6%,transparent 5.6% 94.4%,#000 94.4% 100%)}
+.grain{opacity:.5;mix-blend-mode:overlay;
+ background-image:radial-gradient(rgba(255,255,255,.5) .5px,transparent .5px),
+                  radial-gradient(rgba(255,255,255,.35) .5px,transparent .5px);
+ background-size:3px 3px,5px 5px;background-position:0 0,2px 2px}
+.rail{background:var(--pane);border-right:1px solid var(--hair);padding-top:52px}
+.mark{background:none;border:1px solid var(--acc);color:var(--acc);border-radius:50%}
+.nav{color:var(--dim);border-radius:8px;letter-spacing:.3px}
+.nav.on{background:rgba(217,164,65,.13);color:var(--ink)}
+.hero .backdrop{filter:sepia(.42) saturate(1.12) contrast(1.06) brightness(.86)}
+.scrim{background:
+ linear-gradient(0deg,rgba(10,9,8,.96) 0%,rgba(10,9,8,.7) 30%,rgba(10,9,8,.15) 60%,transparent 80%),
+ radial-gradient(115% 88% at 50% 40%,transparent 40%,rgba(0,0,0,.6) 100%)}
+.herobody{right:42%;background:rgba(10,9,8,.62);padding:22px 24px;
+ border-left:2px solid var(--acc)}
+.eyebrow{color:var(--acc);letter-spacing:2.8px}
+.title{font-weight:300;letter-spacing:-1.4px}
+.title em{font-style:italic;font-weight:300;color:var(--acc)}
+.badge{background:none;border:1px solid var(--hair);color:var(--dim);border-radius:2px}
+.dot{color:var(--dim2)}
+.blurb{color:var(--dim);max-width:480px}
+button.pri{background:var(--acc);color:#140E03;border-radius:3px;letter-spacing:.6px}
+button.sec{background:none;border:1px solid var(--hair);color:var(--ink);border-radius:3px}
+.prog{background:rgba(237,228,216,.14)}
+.prog span{background:var(--acc)}
+.shelf h2{color:var(--dim);letter-spacing:.4px}
+.shelf h2 em{font-style:italic;color:var(--ink)}
+.card .art{border-radius:3px;padding:0;background-clip:content-box;
+ border:5px solid var(--pane);
+ filter:sepia(.4) saturate(1.14) contrast(1.05) brightness(.88)}
+.cap b{color:var(--ink)}.cap i{color:var(--dim2)}
+.card .bar{background:rgba(237,228,216,.14)}
+.card .bar span{background:var(--acc)}
+.card.focus{transform:translateY(-8px)}
+.card.focus .art{filter:sepia(.24) saturate(1.2) brightness(1.02);border-color:#1B1713}
+.card.focus .ring{border:2px solid var(--acc);border-radius:5px;margin:-4px;
+ box-shadow:0 20px 50px rgba(0,0,0,.7),0 0 44px rgba(217,164,65,.26)}
+.card.sk .art{background:#15120F;filter:none;border-color:var(--pane)}
+.card.sk .cap b,.card.sk .cap i{background:#15120F;border-radius:2px}
+.legend div{background:var(--pane);border:1px solid var(--hair);border-radius:4px;color:var(--dim)}
+.legend b{color:var(--acc)}
+a.back{color:var(--dim)}
+h3.pt{color:var(--ink)}p.pd{color:var(--dim)}
+</style></head>
+<body>
+<a class="back" href="index.html">← all five</a>
+<h3 class="pt">5 · Midnight Cinema <span style="opacity:.45">·
+  a projected print</span></h3>
+<p class="pd">Grain, letterbox bars and a warm grade — the app as a screening room. <br><br>Separation by fill, but the page is a PROJECTION: bars top and bottom, grain over everything, and every poster warm-graded so the whole board looks like one print rather than a wall of thumbnails.</p>
+
+<div class="tv">
+  <div class="grain"></div>
+  <div class="bars"></div>
+
+  <nav class="rail">
+    <div class="mark">D</div>
+    <a class="nav on"><i data-g="home"></i><span>Home</span></a>
+    <a class="nav"><i data-g="search"></i><span>Search</span></a>
+    <a class="nav"><i data-g="compass"></i><span>Discover</span></a>
+    <a class="nav"><i data-g="live"></i><span>Live TV</span></a>
+    <a class="nav"><i data-g="cloud"></i><span>Cloud</span></a>
+    <a class="nav bot"><i data-g="gear"></i><span>Settings</span></a>
+  </nav>
+
+  <section class="hero">
+    <div class="art backdrop"></div>
+    <div class="scrim"></div>
+    <div class="herobody">
+      <div class="eyebrow">Continue watching · S2 E4</div>
+      <h1 class="title">The Long <em>Night</em></h1>
+      <div class="meta">
+        <span class="badge">4K</span><span class="badge">HDR</span>
+        <span class="badge">ATMOS</span>
+        <span class="dot">2019</span><span class="dot">TV-MA</span>
+        <span class="dot">48 min left</span>
+      </div>
+      <p class="blurb">The siege begins at dusk. Everything the watch has
+        prepared for arrives at once, and the walls are only as good as the
+        people standing on them.</p>
+      <div class="btns">
+        <button class="pri"><i data-g="play"></i>Resume</button>
+        <button class="sec">Episodes</button>
+        <button class="sec ic"><i data-g="plus"></i></button>
+      </div>
+      <div class="prog"><span style="width:62%"></span></div>
+    </div>
+  </section>
+
+  <div class="shelves">
+  <section class="shelf">
+    <h2>Continue watching</h2>
+    <div class="rowcards">
+      <div class="card"><div class="art p1"></div><div class="cap"><b>Ridgeline</b><i>S1 E7</i></div><div class="bar"><span style="width:78%"></span></div></div>
+      <div class="card focus"><div class="art p2"></div><div class="cap"><b>Harbour Lights</b><i>S3 E2</i></div><div class="bar"><span style="width:41%"></span></div><div class="ring"></div></div>
+      <div class="card"><div class="art p3"></div><div class="cap"><b>Slow Water</b><i>S1 E1</i></div><div class="bar"><span style="width:12%"></span></div></div>
+      <div class="card"><div class="art p4"></div><div class="cap"><b>The Cartographer</b><i>S2 E9</i></div><div class="bar"><span style="width:90%"></span></div></div>
+      <div class="card"><div class="art p5"></div><div class="cap"><b>Nightjar</b><i>S1 E3</i></div><div class="bar"><span style="width:33%"></span></div></div>
+      <div class="card"><div class="art p6"></div><div class="cap"><b>Ember Lake</b><i>S4 E1</i></div><div class="bar"><span style="width:55%"></span></div></div>
+    </div>
+  </section>
+
+  <section class="shelf">
+    <h2>Trending</h2>
+    <div class="rowcards">
+      <div class="card sk"><div class="art"></div><div class="cap"><b></b><i></i></div></div>
+      <div class="card sk"><div class="art"></div><div class="cap"><b></b><i></i></div></div>
+      <div class="card sk"><div class="art"></div><div class="cap"><b></b><i></i></div></div>
+      <div class="card sk"><div class="art"></div><div class="cap"><b></b><i></i></div></div>
+      <div class="card sk"><div class="art"></div><div class="cap"><b></b><i></i></div></div>
+      <div class="card sk"><div class="art"></div><div class="cap"><b></b><i></i></div></div>
+    </div>
+  </section>
+  </div>
+</div>
+
+<div class="strip">
+  <div class="cell"><div class="lb">rest</div>
+    <div class="card"><div class="art p3"></div><div class="cap"><b>Slow Water</b><i>S1 E1</i></div><div class="bar"><span style="width:12%"></span></div></div></div>
+  <div class="cell"><div class="lb">focused</div>
+    <div class="card focus"><div class="art p2"></div><div class="cap"><b>Harbour Lights</b><i>S3 E2</i></div><div class="bar"><span style="width:41%"></span></div><div class="ring"></div></div></div>
+  <div class="cell"><div class="lb">loading</div>
+    <div class="card sk"><div class="art"></div><div class="cap"><b></b><i></i></div></div></div>
+  <div class="cell wide"><div class="lb">controls</div>
+    <div class="ctl">
+      <button class="pri"><i data-g="play"></i>Resume</button>
+      <button class="sec">Episodes</button>
+      <span class="badge">4K</span><span class="badge">HDR</span>
+      <span class="dot">2019</span>
+    </div></div>
+</div>
+
+<div class="legend"><div><b>separation</b>fill · deep matte, hairline rules</div><div><b>scrim</b>plate under a letterboxed frame</div><div><b>artwork</b>matted · warm grade on every image</div><div><b>focus</b>lift + bloom, warm</div><div><b>motion</b>settle, tempo 1.15 — nothing is in a hurry</div><div><b>density</b>cinematic · grain texture · theater idle</div>
+<div><b>on tv</b>Grain is the one thing this look cannot have on TV — the existing grainFor rule forces it to 0 there, so the TV variant carries the bars, the grade and the warmth without the speckle.</div></div>
+
+<script>
+const G={
+ home:'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+ search:'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
+ compass:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM15.5 8.5l-2 5-5 2 2-5z',
+ live:'M3 6h18v11H3zM8 21h8M12 17v4',
+ cloud:'M7 18h9a4 4 0 0 0 .4-8A6 6 0 0 0 5 11a3.5 3.5 0 0 0 2 7z',
+ gear:'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1L14.5 3h-4l-.4 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4L6 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.1-.3.1-.7.1-1z',
+ play:'M7 4l13 8-13 8z',
+ plus:'M12 5v14M5 12h14'};
+document.querySelectorAll('[data-g]').forEach(function(e){
+  var d=G[e.dataset.g]; if(!d) return;
+  e.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '+
+    'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'+
+    '<path d="'+d+'"/></svg>';
+});
+</script>
+
+</body></html>
