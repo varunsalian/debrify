@@ -1,3 +1,4 @@
+import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
@@ -58,6 +59,9 @@ class _TextBrightnessPageState extends State<TextBrightnessPage> {
   Future<void> _select(TextBrightness choice) async {
     if (choice == _choice) return;
     setState(() => _choice = choice);
+    // Tell an in-flight Look apply that a human just chose this key, so it
+    // does not stamp over the choice. See theme/app_looks.dart.
+    LookApplier.noteExternalWrite('text_brightness');
     await TextBrightnessController.select(choice);
   }
 

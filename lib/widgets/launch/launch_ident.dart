@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../theme/app_theme.dart';
+
 import 'anamorphic_ident.dart';
 import 'aperture_ident.dart';
 import 'blueprint_ident.dart';
@@ -41,6 +43,27 @@ import 'swiss_ident.dart';
 abstract class LaunchIdent {
   const LaunchIdent();
 
+  /// The ident's own colours, and the door through which a theme replaces
+  /// them. See [IdentPalette].
+  IdentPalette get palette => IdentPalette(
+        base: baseColor,
+        backdrop: backdrop,
+        accent: sweepColors.first,
+        ink: sweepColors.last,
+        sweep: sweepColors,
+      );
+
+  /// This ident's world rebuilt in [p]'s colours.
+  ///
+  /// Overridden by idents whose [backdrop] is more than a flat fill: the
+  /// GEOMETRY of the decoration is the ident's (Horizon's radial nebula
+  /// around the collapse point, Blueprint's graph paper), and only its
+  /// COLOURS come from the palette. A flat backdrop needs no override.
+  ///
+  /// This matters because every backdrop must be fully opaque — so an ident
+  /// that only swapped [baseColor] would change nothing a viewer can see.
+  Decoration themedBackdrop(IdentPalette p) => BoxDecoration(color: p.base);
+
   /// Stored pref value.
   String get id;
 
@@ -68,10 +91,101 @@ abstract class LaunchIdent {
   /// Loading-sweep gradient while holding for the Home board.
   List<Color> get sweepColors;
 
+  /// [palette] is null for "the ident's own colours" — the default, and what
+  /// every existing caller passes. A painter that supports theming reads
+  /// `palette?.accent` / `palette?.ink` where it would otherwise use its
+  /// signature literal; structural blacks, whites-as-light and alpha veils
+  /// stay literal, because they are the art direction rather than the palette.
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   });
+}
+
+/// The colours an ident paints its world in.
+///
+/// The design rule, stated once: **the room takes the theme's colour; the mark
+/// keeps its own art.** Repainting seventeen bespoke painters per theme is
+/// neither cheap nor right — an ident IS an art direction, and a themed
+/// Horizon should still be a starfield collapsing into a ring, just a ring in
+/// the theme's colour.
+@immutable
+class IdentPalette {
+  /// The opaque base behind everything, and the splash Scaffold colour.
+  final Color base;
+
+  /// The full-screen static decoration. See [LaunchIdent.themedBackdrop].
+  final Decoration backdrop;
+
+  /// The ident's signature colour — the ring, the neon, the sweep's leading
+  /// stop.
+  final Color accent;
+
+  /// What the wordmark and any light-coloured structure are drawn in.
+  final Color ink;
+
+  /// The loading sweep's gradient, shown while the splash holds for Home.
+  final List<Color> sweep;
+
+  const IdentPalette({
+    required this.base,
+    required this.backdrop,
+    required this.accent,
+    required this.ink,
+    required this.sweep,
+  });
+
+  /// [ident] wearing [theme]'s colours — or its own, where taking the theme's
+  /// would make it unreadable.
+  ///
+  /// Three deliberate choices:
+  ///
+  ///  * **The base is the theme's DEEPEST ground** (`core.railBg`), not its
+  ///    page ground. An ident is a cinema, not a page; every one of the
+  ///    seventeen picks something at or below its own darkest surface.
+  ///  * **The contrast guard.** If the theme's base leaves less than 3:1
+  ///    against the ident's own mark, the ident keeps ITS base. Three seconds
+  ///    of first impression: an unreadable ident is worse than an off-palette
+  ///    one, and the two paper themes would otherwise wash out marks drawn in
+  ///    white.
+  ///  * **The backdrop comes from the ident**, via
+  ///    [LaunchIdent.themedBackdrop], so its geometry survives and only its
+  ///    colours move.
+  factory IdentPalette.fromTheme(LaunchIdent ident, AppTheme theme) {
+    final own = ident.palette;
+    final base = theme.core.railBg.withValues(alpha: 1);
+    final accent = theme.core.accent;
+    final ink = theme.core.tx;
+
+    // Scored against the ident's OWN mark colour, which is what will be drawn
+    // on this base whether or not the painter reads the palette.
+    if (_contrast(base, own.ink) < 3.0 || _contrast(base, accent) < 1.6) {
+      return own;
+    }
+    final themed = IdentPalette(
+      base: base,
+      backdrop: const BoxDecoration(), // replaced below
+      accent: accent,
+      ink: ink,
+      sweep: [accent, ink],
+    );
+    return IdentPalette(
+      base: base,
+      backdrop: ident.themedBackdrop(themed),
+      accent: accent,
+      ink: ink,
+      sweep: [accent, ink],
+    );
+  }
+
+  static double _contrast(Color a, Color b) {
+    final la = a.withValues(alpha: 1).computeLuminance();
+    final lb = b.withValues(alpha: 1).computeLuminance();
+    final hi = la > lb ? la : lb;
+    final lo = la > lb ? lb : la;
+    return (hi + 0.05) / (lo + 0.05);
+  }
 }
 
 /// Registry, in picker order. Ids are stable — they are the stored pref —

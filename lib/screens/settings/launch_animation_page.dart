@@ -1,3 +1,4 @@
+import '../../theme/app_looks.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -25,6 +26,7 @@ class LaunchAnimationPage extends StatefulWidget {
 class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
   // Sync-cached (warmed in main), so no loading state.
   LaunchIdent _choice = launchIdentFor(StorageService.launchAnimationCached);
+  String _palette = StorageService.launchIdentPaletteCached;
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).
@@ -59,7 +61,20 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
   Future<void> _select(LaunchIdent choice) async {
     if (choice.id == _choice.id) return;
     setState(() => _choice = choice);
+    // Tell an in-flight Look apply that a human just chose this key, so it
+    // does not stamp over the choice. See theme/app_looks.dart.
+    LookApplier.noteExternalWrite('launch_animation');
     await StorageService.setLaunchAnimation(choice.id);
+  }
+
+  Future<void> _selectPalette(String value) async {
+    if (value == _palette) return;
+    setState(() => _palette = value);
+    // Every non-Classic Look writes this key, so without the announcement an
+    // in-flight apply would stamp over a choice made here. Same reason every
+    // other Appearance picker announces itself.
+    LookApplier.noteExternalWrite('launch_ident_palette');
+    await StorageService.setLaunchIdentPalette(value);
   }
 
   @override
@@ -98,8 +113,10 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
             children: [
               _header(),
               const SizedBox(height: 18),
-              _LaunchPreview(ident: _choice),
+              _LaunchPreview(ident: _choice, palette: _palette),
               const SizedBox(height: 18),
+              _paletteCard(),
+              const SizedBox(height: 14),
               _optionsCard(),
               const SizedBox(height: 14),
               _footnote(),
@@ -126,6 +143,8 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
                 children: [
                   _header(),
                   const SizedBox(height: 18),
+                  _paletteCard(),
+                  const SizedBox(height: 14),
                   _optionsCard(),
                   const SizedBox(height: 14),
                   _footnote(),
@@ -138,7 +157,9 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
           // the DPAD inside the list instead of stranding it on a picture.
           Expanded(
             flex: 6,
-            child: Center(child: _LaunchPreview(ident: _choice)),
+            child: Center(
+              child: _LaunchPreview(ident: _choice, palette: _palette),
+            ),
           ),
         ],
       ),
@@ -150,6 +171,34 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
         title: 'Launch Animation',
         subtitle: 'The ident Debrify plays while it starts',
       );
+
+  /// Whether the ident wears its own colours or the app theme's.
+  ///
+  /// Placed ABOVE the ident list rather than inside it: it is a different
+  /// question from "which ident", and burying it as an eighteenth radio row
+  /// would read as another ident.
+  Widget _paletteCard() {
+    final app = AppThemeScope.of(context);
+    final themed = _palette == 'theme';
+    return SettingsSection(
+      title: 'Colour',
+      children: [
+        SettingsToggleTile(
+          icon: Icons.palette_outlined,
+          title: 'Match the app theme',
+          subtitle: app.isLegacy
+              // Honest about doing nothing: legacy IS the ident's own world.
+              ? 'Pick an App Theme first — Debrify Classic leaves every ident '
+                  'in its own colours'
+              : 'The ident\'s room takes ${app.label}\'s colours. Its '
+                  'motion, mark and composition are unchanged, and an ident '
+                  'that would become unreadable keeps its own.',
+          value: themed,
+          onChanged: (v) => _selectPalette(v ? 'theme' : 'ident'),
+        ),
+      ],
+    );
+  }
 
   Widget _optionsCard() => Focus(
         focusNode: _firstCardMarker,
@@ -195,7 +244,13 @@ class _LaunchAnimationPageState extends State<LaunchAnimationPage> {
 /// Loops the selected ident's real painter: play → hold 1.4 s → replay.
 class _LaunchPreview extends StatefulWidget {
   final LaunchIdent ident;
-  const _LaunchPreview({required this.ident});
+
+  /// 'ident' or 'theme' — the same pref the splash reads. Passed as the raw
+  /// string so the preview re-derives the palette from the LIVE theme, which
+  /// is what makes toggling the switch show its effect immediately.
+  final String palette;
+
+  const _LaunchPreview({required this.ident, required this.palette});
 
   @override
   State<_LaunchPreview> createState() => _LaunchPreviewState();
@@ -216,8 +271,24 @@ class _LaunchPreviewState extends State<_LaunchPreview>
   @override
   void didUpdateWidget(covariant _LaunchPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.ident.id != widget.ident.id) _start();
+    if (oldWidget.ident.id != widget.ident.id ||
+        oldWidget.palette != widget.palette) {
+      _start();
+    }
   }
+
+  /// The palette this preview is painting — the ident's own, or the live app
+  /// theme's. Recomputed on every restart so the switch shows its effect at
+  /// once rather than on the next launch.
+  IdentPalette get _resolved => widget.palette == 'theme'
+      ? IdentPalette.fromTheme(widget.ident, AppThemeScope.of(context))
+      : widget.ident.palette;
+
+  /// Null unless themed — see the note in `app_initializer.dart`. An ident's
+  /// own palette carries its SWEEP colours, which are not what its painter
+  /// draws the mark with.
+  IdentPalette? get _painterPalette =>
+      widget.palette == 'theme' ? _resolved : null;
 
   void _start() {
     _holdTimer?.cancel();
@@ -230,6 +301,7 @@ class _LaunchPreviewState extends State<_LaunchPreview>
     _painter = widget.ident.createPainter(
       c,
       isTelevision: () => PlatformUtil.isAndroidTvCached,
+      palette: _painterPalette,
     );
     c.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
@@ -258,7 +330,7 @@ class _LaunchPreviewState extends State<_LaunchPreview>
         child: DecoratedBox(
           // The ident's static backdrop, exactly as the splash composes it —
           // the painter draws only the moving elements over it.
-          decoration: widget.ident.backdrop,
+          decoration: _resolved.backdrop,
           child: RepaintBoundary(
             child: CustomPaint(
               painter: _painter,

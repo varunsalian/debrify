@@ -36,6 +36,7 @@ class SwissIdent extends LaunchIdent {
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
       _SwissPainter(animation, isTelevision: isTelevision);
 }

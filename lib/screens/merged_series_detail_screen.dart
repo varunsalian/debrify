@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../utils/dominant_color.dart';
 import '../utils/platform_util.dart';
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
@@ -26,6 +25,7 @@ import '../widgets/detail/detail_layout_stage.dart';
 import '../widgets/detail/detail_style.dart';
 import '../widgets/detail/detail_model.dart';
 import '../theme/app_theme_scope.dart';
+import '../theme/artwork_accent.dart';
 import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/detail/theme/detail_themes.dart';
 import '../widgets/hero_trailer_backdrop.dart';
@@ -511,11 +511,19 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// brand-saturated than backdrops). One tiny 32px decode; silent on failure,
   /// leaving the gold fallback. Extracted from the initial artwork only — a
   /// later enrichment swap isn't worth a second pass.
+  ///
+  /// Through [DominantColorCache] rather than the extractor directly, so
+  /// reopening a title costs nothing and two screens asking at once share one
+  /// decode. The cache also remembers a NULL answer, which is the common case
+  /// for black-and-white artwork and used to be re-decoded on every visit.
   Future<void> _loadAccent() async {
     final url = widget.item.poster ?? widget.item.background;
     if (url == null || url.isEmpty) return;
     try {
-      final c = await extractDominantColor(CachedNetworkImageProvider(url));
+      final c = await DominantColorCache.of(
+        url,
+        CachedNetworkImageProvider(url),
+      );
       if (c != null && mounted) setState(() => _accent = c);
     } catch (_) {}
   }
@@ -1390,7 +1398,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             const SizedBox(height: 8),
             Text(
               summary,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white70,
                 fontSize: 13,
                 height: 1.5,
@@ -1644,7 +1652,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   Widget _metaText(String s) => Text(
     s,
-    style: const TextStyle(
+    style: TextStyle(
       color: Colors.white70,
       fontSize: 14,
       fontWeight: FontWeight.w600,
@@ -2059,7 +2067,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             padding: const EdgeInsets.fromLTRB(10, 4, 16, 4),
             child: TextButton.icon(
               onPressed: _openDetailsSheet,
-              icon: const Icon(Icons.info_outline_rounded, size: 18),
+              icon: Icon(Icons.info_outline_rounded, size: 18),
               label: const Text('Cast, ratings & more'),
               style: TextButton.styleFrom(foregroundColor: Colors.white70),
             ),
@@ -2120,7 +2128,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         ..add(
           Text(
             summary,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white70,
               fontSize: 13.5,
               height: 1.55,
@@ -2323,7 +2331,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   Widget _sectionLabel(String s) => Text(
     s.toUpperCase(),
-    style: const TextStyle(
+    style: TextStyle(
       color: Colors.white38,
       fontSize: 11,
       fontWeight: FontWeight.w700,
@@ -2606,7 +2614,7 @@ class _CastTileState extends State<_CastTile> {
                         )
                       : Container(
                           color: widget.fallback,
-                          child: const Icon(
+                          child: Icon(
                             Icons.person,
                             color: Colors.white38,
                           ),
@@ -2902,7 +2910,7 @@ class _GhostButtonState extends State<_GhostButton> {
                 const SizedBox(width: 7),
                 Text(
                   widget.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -3349,7 +3357,7 @@ class _QuickActionsMenu extends StatelessWidget {
                   children: [
                     Text(
                       o.label,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -3419,7 +3427,7 @@ class _TrackerSheetHeader extends StatelessWidget {
                   children: [
                     Text(
                       brand,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16.5,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.3,
@@ -3523,7 +3531,7 @@ class _SheetSwitchRow extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -3562,7 +3570,7 @@ class _SheetSwitchRow extends StatelessWidget {
                     margin: const EdgeInsets.symmetric(horizontal: 3),
                     width: 18,
                     height: 18,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
                     ),

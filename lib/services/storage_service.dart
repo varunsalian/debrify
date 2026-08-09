@@ -743,18 +743,24 @@ class StorageService {
   };
 
   /// TV Home layout. Phone/desktop and the Search tab never read it.
+  /// Synchronous mirror of `tvHomeStyle`, kept so a Look can read
+  /// the current value without an await. Additive: every existing caller
+  /// still goes through the async getter, which now also refreshes this.
+  static String tvHomeStyleCached = 'canvas';
+
   static Future<String> getTvHomeStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_tvHomeStyleKey);
-    return kTvHomeStyles.contains(raw) ? raw! : 'canvas';
+    return tvHomeStyleCached = kTvHomeStyles.contains(raw) ? raw! : 'canvas';
   }
 
   static Future<void> setTvHomeStyle(String style) async {
+    final normalized = kTvHomeStyles.contains(style) ? style : 'canvas';
+    // Mirror BEFORE the await, so anything reading synchronously on the next
+    // frame sees the choice. Existing async readers are unaffected.
+    tvHomeStyleCached = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _tvHomeStyleKey,
-      kTvHomeStyles.contains(style) ? style : 'canvas',
-    );
+    await prefs.setString(_tvHomeStyleKey, normalized);
   }
 
   static const String _detailPageStyleKey = 'detail_page_style';
@@ -923,18 +929,22 @@ class StorageService {
   /// unset coerces to 'command' on BOTH read and write, so an old build
   /// downgrading past a newer value can never pin a look the reader treats
   /// as the exception.
+  /// Synchronous mirror of `iptvStyle`, kept so a Look can read
+  /// the current value without an await. Additive: every existing caller
+  /// still goes through the async getter, which now also refreshes this.
+  static String iptvStyleCached = 'command';
+
   static Future<String> getIptvStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_iptvStyleKey);
-    return _iptvStyles.contains(raw) ? raw! : 'command';
+    return iptvStyleCached = _iptvStyles.contains(raw) ? raw! : 'command';
   }
 
   static Future<void> setIptvStyle(String style) async {
+    final normalized = _iptvStyles.contains(style) ? style : 'command';
+    iptvStyleCached = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _iptvStyleKey,
-      _iptvStyles.contains(style) ? style : 'command',
-    );
+    await prefs.setString(_iptvStyleKey, normalized);
   }
 
   static const String _iptvPlayerGuideStyleKey = 'iptv_player_guide_style';
@@ -980,20 +990,24 @@ class StorageService {
   /// Everything else that holds a pre-load placeholder for this pref must
   /// agree, or the UI paints one layout and then swaps: SearchScreen's
   /// `_discLayoutCached`, DiscoverLayoutPage, SettingsScreen.
+  /// Synchronous mirror of `discoverLayout`, kept so a Look can read
+  /// the current value without an await. Additive: every existing caller
+  /// still goes through the async getter, which now also refreshes this.
+  static String discoverLayoutCached = 'stage';
+
   static Future<String> getDiscoverLayout() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_discoverLayoutKey) == 'grid' ? 'grid' : 'stage';
+    return discoverLayoutCached = prefs.getString(_discoverLayoutKey) == 'grid' ? 'grid' : 'stage';
   }
 
   /// Normalizes toward 'stage' on the same terms [getDiscoverLayout] does —
   /// an unrecognized value has to mean the default on BOTH sides, or writing
   /// one would silently pin the layout the reader treats as the exception.
   static Future<void> setDiscoverLayout(String layout) async {
+    final normalized = layout == 'grid' ? 'grid' : 'stage';
+    discoverLayoutCached = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _discoverLayoutKey,
-      layout == 'grid' ? 'grid' : 'stage',
-    );
+    await prefs.setString(_discoverLayoutKey, normalized);
   }
 
   static const String _launchAnimationKey = 'launch_animation';
@@ -1052,6 +1066,40 @@ class StorageService {
     launchAnimationCached = normalized;
   }
 
+  static const String _launchIdentPaletteKey = 'launch_ident_palette';
+  static const Set<String> _launchIdentPalettes = {'ident', 'theme'};
+
+  /// Whether the launch ident wears its OWN colours or the app theme's
+  /// (Appearance → Launch Animation).
+  ///
+  /// Defaults to `'ident'`, so nobody's splash changes until they ask. The
+  /// ident's art direction — its geometry, its motion, its mark — is the same
+  /// either way; only the room's colours move, and only where they stay
+  /// legible (see `IdentPalette.fromTheme`).
+  ///
+  /// Mirrored synchronously for the same reason [launchAnimationCached] is:
+  /// AppInitializer builds the splash in `initState`, before any async read
+  /// could land.
+  static String launchIdentPaletteCached = 'ident';
+
+  static Future<String> getLaunchIdentPalette() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_launchIdentPaletteKey);
+    launchIdentPaletteCached =
+        _launchIdentPalettes.contains(value) ? value! : 'ident';
+    return launchIdentPaletteCached;
+  }
+
+  static Future<void> setLaunchIdentPalette(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized =
+        _launchIdentPalettes.contains(value) ? value : 'ident';
+    // Mirror BEFORE the await: the picker rebuilds on the next frame and the
+    // splash reads the mirror synchronously.
+    launchIdentPaletteCached = normalized;
+    await prefs.setString(_launchIdentPaletteKey, normalized);
+  }
+
   static const String _textBrightnessKey = 'text_brightness';
   static const Set<String> _textBrightnessValues = {'bright', 'soft', 'dim'};
 
@@ -1092,18 +1140,22 @@ class StorageService {
   /// original liquid glass), 'island', 'marquee' or 'badge'. Visuals only —
   /// the LEFT-only focus model is shared by every style. Phone/desktop never
   /// read it.
+  /// Synchronous mirror of `tvSidebarStyle`, kept so a Look can read
+  /// the current value without an await. Additive: every existing caller
+  /// still goes through the async getter, which now also refreshes this.
+  static String tvSidebarStyleCached = 'ghost';
+
   static Future<String> getTvSidebarStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_tvSidebarStyleKey);
-    return (raw != null && _tvSidebarStyles.contains(raw)) ? raw : 'ghost';
+    return tvSidebarStyleCached = (raw != null && _tvSidebarStyles.contains(raw)) ? raw : 'ghost';
   }
 
   static Future<void> setTvSidebarStyle(String style) async {
+    final normalized = _tvSidebarStyles.contains(style) ? style : 'ghost';
+    tvSidebarStyleCached = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _tvSidebarStyleKey,
-      _tvSidebarStyles.contains(style) ? style : 'ghost',
-    );
+    await prefs.setString(_tvSidebarStyleKey, normalized);
   }
 
   /// The classic bar's user-chosen middle slots, as REAL tab indices (Home

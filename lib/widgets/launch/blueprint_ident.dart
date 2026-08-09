@@ -38,6 +38,16 @@ class BlueprintIdent extends LaunchIdent {
   @override
   Decoration get backdrop =>
       _GraphPaperDecoration(PlatformUtil.isAndroidTvCached);
+
+  /// The graph paper IS this ident — a flat fill would leave nothing of it.
+  /// So the geometry (line spacing, the major/minor split, the registration to
+  /// the mark's crossing) is kept and only the two colours move.
+  @override
+  Decoration themedBackdrop(IdentPalette p) => _GraphPaperDecoration(
+        PlatformUtil.isAndroidTvCached,
+        base: p.base,
+        line: p.accent,
+      );
   @override
   List<Color> get sweepColors =>
       const [Color(0xFF5EE1FF), Color(0xFFDFF6FF)];
@@ -46,6 +56,7 @@ class BlueprintIdent extends LaunchIdent {
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
       _BlueprintPainter(animation, isTelevision: isTelevision);
 }
@@ -56,28 +67,43 @@ class BlueprintIdent extends LaunchIdent {
 class _GraphPaperDecoration extends Decoration {
   final bool lightweight;
 
-  const _GraphPaperDecoration(this.lightweight);
+  /// The paper and its rule. Default to Blueprint's own; a themed palette
+  /// substitutes them without touching the geometry.
+  final Color base;
+  final Color line;
+
+  const _GraphPaperDecoration(
+    this.lightweight, {
+    this.base = const Color(0xFF080B11),
+    this.line = const Color(0xFF5EE1FF),
+  });
 
   @override
   BoxPainter createBoxPainter([VoidCallback? onChanged]) =>
-      _GraphPaperBoxPainter(lightweight);
+      _GraphPaperBoxPainter(lightweight, base, line);
 
   // Equality is what lets a late TV probe swap the grid density: DecoratedBox
-  // keeps its BoxPainter until the decoration compares unequal.
+  // keeps its BoxPainter until the decoration compares unequal. The colours
+  // join it for the same reason — a theme change must rebuild the painter.
   @override
   bool operator ==(Object other) =>
-      other is _GraphPaperDecoration && other.lightweight == lightweight;
+      other is _GraphPaperDecoration &&
+      other.lightweight == lightweight &&
+      other.base == base &&
+      other.line == line;
 
   @override
-  int get hashCode => lightweight.hashCode;
+  int get hashCode => Object.hash(lightweight, base, line);
 }
 
 class _GraphPaperBoxPainter extends BoxPainter {
   final bool lightweight;
+  final Color base;
+  final Color line;
   Size? _size;
   Path? _grid, _major;
 
-  _GraphPaperBoxPainter(this.lightweight);
+  _GraphPaperBoxPainter(this.lightweight, this.base, this.line);
 
   void _build(Size size) {
     if (_grid != null && _size == size) return;
@@ -118,15 +144,16 @@ class _GraphPaperBoxPainter extends BoxPainter {
     canvas.save();
     canvas.translate(offset.dx, offset.dy);
     // Opaque base first — this decoration IS the splash's floor.
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = const Color(0xFF080B11),
-    );
+    canvas.drawRect(Offset.zero & size, Paint()..color = base);
     final hair = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    canvas.drawPath(_grid!, hair..color = const Color(0x0E5EE1FF));
-    canvas.drawPath(_major!, hair..color = const Color(0x215EE1FF));
+    // The mock's two rule weights, as alphas OF the line colour — composed
+    // `0xNN / 0xFF` so Blueprint's own #0E/#21 are reproduced exactly.
+    canvas.drawPath(
+        _grid!, hair..color = line.withValues(alpha: 0x0E / 0xFF));
+    canvas.drawPath(
+        _major!, hair..color = line.withValues(alpha: 0x21 / 0xFF));
     canvas.restore();
   }
 }

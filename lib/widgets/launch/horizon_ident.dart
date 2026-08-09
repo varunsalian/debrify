@@ -45,12 +45,28 @@ class HorizonIdent extends LaunchIdent {
   List<Color> get sweepColors =>
       const [Color(0xFF818CF8), Color(0xFFE9EDFF)];
 
+  /// The nebula keeps its radial geometry — same centre, same radius, same
+  /// stop positions — and only its two colours move. A flat fill here would
+  /// throw away the collapse point the whole reveal is composed around.
+  @override
+  Decoration themedBackdrop(IdentPalette p) => RadialGradient(
+        center: const Alignment(0, -0.16),
+        radius: 0.9,
+        colors: [
+          // The bright inner stop is the base lifted TOWARD the accent, the
+          // same relationship #080718 has to #000005.
+          Color.lerp(p.base, p.accent, 0.14)!,
+          p.base,
+        ],
+      ).let((g) => BoxDecoration(gradient: g));
+
   @override
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
-      _HorizonPainter(animation, isTelevision: isTelevision);
+      _HorizonPainter(animation, isTelevision: isTelevision, palette: palette);
 }
 
 class _Star {
@@ -61,6 +77,24 @@ class _Star {
 class _HorizonPainter extends CustomPainter {
   final Animation<double> animation;
   final bool Function() isTelevision;
+
+  /// Null keeps Horizon's own accretion colours — the default path.
+  final IdentPalette? palette;
+
+  /// The burning ring and the condensing wordmark. A themed palette moves the
+  /// hue; the collapse geometry, the star count and the timeline do not move.
+  static const _ownRingInner = Color(0xFF4F74FF);
+  static const _ownRingOuter = Color(0xFF8A5CFF);
+  static const _ownMarkInk = Color(0xFFD9DEFF);
+
+  Color get _ringInner => palette?.accent ?? _ownRingInner;
+  Color get _ringOuter =>
+      palette == null ? _ownRingOuter : Color.lerp(palette!.accent, palette!.ink, 0.35)!;
+  Color get _markInk => palette?.ink ?? _ownMarkInk;
+
+  /// The ignition glow — Horizon's own indigo, or the theme's accent.
+  static const _ownGlow = Color(0xFF818CF8);
+  Color get _glow => palette?.accent ?? _ownGlow;
 
   Size? _size;
   bool? _lw;
@@ -76,7 +110,8 @@ class _HorizonPainter extends CustomPainter {
   static const double _collapse = 0.58;
   static const List<int> _order = [3, 2, 4, 1, 5, 0, 6];
 
-  _HorizonPainter(this.animation, {required this.isTelevision})
+  _HorizonPainter(this.animation,
+      {required this.isTelevision, this.palette})
       : super(repaint: animation);
 
   void _layout(Size size, bool lightweight) {
@@ -103,15 +138,18 @@ class _HorizonPainter extends CustomPainter {
     _mark = identPlayPath(_g);
     _inner = identPlayPath(_g * 0.52);
     _markRect = Rect.fromCenter(center: Offset.zero, width: _g, height: _g);
-    _markShader = const LinearGradient(
-      colors: [Color(0xFF4F74FF), Color(0xFF8A5CFF)],
+    // No longer `const`: the two stops now come from the palette when one is
+    // supplied. Still built once per (size, TV-flag) in `_build`, so this is
+    // not a per-frame allocation.
+    _markShader = LinearGradient(
+      colors: [_ringInner, _ringOuter],
     ).createShader(_markRect);
     _word = IdentWordLayout.fit(
       styleFor: (fz) => TextStyle(
         fontSize: fz,
         fontWeight: FontWeight.w200,
         height: 1.0,
-        color: const Color(0xFFD9DEFF),
+        color: _markInk,
       ),
       fontSize: h * 0.085,
       trackingFactor: 0.85,
@@ -119,7 +157,7 @@ class _HorizonPainter extends CustomPainter {
     );
     _startX = w / 2 - _word!.width / 2;
     _baseY = h * 0.76;
-    _letters = IdentAlphaSets(_word!, 'star', const Color(0xFFD9DEFF));
+    _letters = IdentAlphaSets(_word!, 'star', _markInk);
   }
 
   @override
@@ -245,7 +283,10 @@ class _HorizonPainter extends CustomPainter {
       identGlowPath(
         canvas,
         _mark,
-        Color.fromRGBO(129, 140, 248, 0.55 * ma),
+        // The glow around the ignited mark. Alpha is animated, so the colour
+        // is composed rather than named — `_glow` is the ident's own #818CF8
+        // unless a palette replaced it.
+        _glow.withValues(alpha: 0.55 * ma),
         _g * 0.12,
         lightweight: lightweight,
       );
@@ -258,8 +299,11 @@ class _HorizonPainter extends CustomPainter {
           ..shader = ma >= 1
               ? _markShader
               : LinearGradient(colors: [
-                  Color.fromRGBO(79, 116, 255, ma),
-                  Color.fromRGBO(138, 92, 255, ma),
+                  // The same two ring stops as `_markShader`, alpha-baked for
+                  // the ignition ramp (shader/Paint.color fades are
+                  // backend-dependent and banned here).
+                  _ringInner.withValues(alpha: ma),
+                  _ringOuter.withValues(alpha: ma),
                 ]).createShader(_markRect),
       );
       canvas.drawPath(
@@ -286,4 +330,10 @@ class _HorizonPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _HorizonPainter old) =>
       old.animation != animation;
+}
+
+
+/// Tiny helper so the gradient above reads as one expression.
+extension _Let<T> on T {
+  R let<R>(R Function(T) f) => f(this);
 }

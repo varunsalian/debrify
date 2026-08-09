@@ -45,6 +45,7 @@ class MarqueeIdent extends LaunchIdent {
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
       _MarqueePainter(animation, isTelevision: isTelevision);
 }

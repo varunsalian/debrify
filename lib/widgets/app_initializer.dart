@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
+import '../theme/app_theme_controller.dart';
 import '../theme/app_surfaces.dart';
 import '../theme/legacy_theme_boundary.dart';
 import 'launch/launch_ident.dart';
@@ -49,6 +50,8 @@ class _AppInitializerState extends State<AppInitializer>
   // The chosen launch ident — its painter, backdrop and sweep accent.
   // Resolved synchronously from the cache warmed in main().
   late LaunchIdent _ident;
+  late IdentPalette _palette;
+  IdentPalette? _painterPalette;
   late CustomPainter _revealPainter;
   late LoadingSweepPainter _loadingPainter;
   Timer? _homeReadyTimeout;
@@ -65,6 +68,27 @@ class _AppInitializerState extends State<AppInitializer>
     AppSurfaceState.instance.publishBootstrap(true);
 
     _ident = launchIdentFor(StorageService.launchAnimationCached);
+    // The ident's colours: its own by default, the app theme's when the user
+    // opted in.
+    //
+    // Read from `AppThemeController.instance` and NOT from an ambient scope.
+    // The splash renders under the bootstrap freeze — `publishBootstrap(true)`
+    // three lines up — so `AppThemeScope.of` here would resolve to LEGACY and
+    // the feature would silently do nothing. The controller is a singleton
+    // already warmed in `main()` before `runApp`, so it is both correct and
+    // synchronous, which is what `initState` needs.
+    final themed = StorageService.launchIdentPaletteCached == 'theme';
+    _palette = themed
+        ? IdentPalette.fromTheme(_ident, AppThemeController.instance.theme)
+        : _ident.palette;
+    // NULL unless the user opted in. `_ident.palette` exposes `sweepColors`
+    // as its accent/ink, which are the LOADING SWEEP's colours — not the
+    // ring, the tube or the wordmark. Handing that to a painter would repaint
+    // the default splash in the sweep's blue, which is a change to what
+    // Debrify Classic has always shown. "No palette" must mean "your own
+    // literals", and this is what makes that true at runtime as well as in
+    // the tests.
+    _painterPalette = themed ? _palette : null;
 
     // The reveal is progress-driven; the splash holds only as long as the
     // ident's animation (plus real init work) — no fixed delays.
@@ -89,9 +113,10 @@ class _AppInitializerState extends State<AppInitializer>
     _revealPainter = _ident.createPainter(
       _revealController,
       isTelevision: () => _isAndroidTv,
+      palette: _painterPalette,
     );
     _loadingPainter =
-        LoadingSweepPainter(_idleController, colors: _ident.sweepColors);
+        LoadingSweepPainter(_idleController, colors: _palette.sweep);
 
     _exitAnimation = Tween<double>(
       begin: 1.0,
@@ -336,7 +361,7 @@ class _AppInitializerState extends State<AppInitializer>
   Widget build(BuildContext context) {
     if (!_onboardingComplete) {
       return Scaffold(
-        backgroundColor: _ident.baseColor,
+        backgroundColor: _palette.base,
         body: _buildSplashBody(),
       );
     }
@@ -369,7 +394,7 @@ class _AppInitializerState extends State<AppInitializer>
       // it rasters once while only the animated elements repaint. Opaque on
       // purpose: as an overlay this must fully cover the shell until the exit
       // fade runs.
-      decoration: _ident.backdrop,
+      decoration: _palette.backdrop,
       child: Stack(
         fit: StackFit.expand,
         children: [

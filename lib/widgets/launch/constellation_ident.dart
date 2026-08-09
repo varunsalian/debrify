@@ -49,6 +49,7 @@ class ConstellationIdent extends LaunchIdent {
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
       _ConstellationPainter(animation, isTelevision: isTelevision);
 }

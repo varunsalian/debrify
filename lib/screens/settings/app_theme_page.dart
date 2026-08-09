@@ -1,3 +1,4 @@
+import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
@@ -64,6 +65,9 @@ class _AppThemePageState extends State<AppThemePage> {
 
   Future<void> _select(String id) async {
     if (id == AppThemeController.instance.id) return;
+    // Tell an in-flight Look apply that a human just chose this key, so it
+    // does not stamp over the choice. See theme/app_looks.dart.
+    LookApplier.noteExternalWrite('app_theme');
     await AppThemeController.instance.select(id);
     // The root rebuild re-themes this page through the scope; the setState is
     // only for the radio glyphs, which key off the controller's id.
@@ -132,7 +136,7 @@ class _AppThemePageState extends State<AppThemePage> {
                     child: Container(
                       decoration: BoxDecoration(
                         color: t.panel,
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: app.shape.br(14),
                         border: Border.all(color: t.line),
                       ),
                       child: Column(
@@ -201,7 +205,7 @@ class _AppThemePageState extends State<AppThemePage> {
       type: MaterialType.transparency,
       child: InkWell(
         onTap: () => _select(id),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: app.shape.br(14),
         focusColor: t.accent.withValues(alpha: 0.18),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),

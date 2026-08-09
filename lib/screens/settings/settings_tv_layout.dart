@@ -86,6 +86,8 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenPlayerGuideStyle;
   final String detailPageStyleLabel;
   final Future<void> Function() onOpenDetailPageStyle;
+  final String looksLabel;
+  final Future<void> Function() onOpenLooks;
   final String appThemeLabel;
   final Future<void> Function() onOpenAppTheme;
   final String detailThemeLabel;
@@ -149,6 +151,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenPlayerGuideStyle,
     required this.detailPageStyleLabel,
     required this.onOpenDetailPageStyle,
+    required this.looksLabel,
+    required this.onOpenLooks,
     required this.appThemeLabel,
     required this.onOpenAppTheme,
     required this.detailThemeLabel,
@@ -226,13 +230,17 @@ const List<_Category> _kCategories = [
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
   /// written out here rather than driven by a provider list (Appearance has
-  /// exactly 12; About up to 6 with the conditional donation row;
+  /// exactly 14 since Looks joined it; About up to 6 with the conditional
+  /// donation row;
   /// Data & Backup up to 5). Connections and Trackers are sized from their
   /// own lists; see the pool computation in [initState].
   ///
   /// MUST cover the largest category: the pane indexes [_paneNodes] directly,
   /// so a row added past the pool throws on build.
-  static const int _kMaxCategoryRows = 13;
+  /// Appearance is the longest fixed category: fourteen rows since Looks
+  /// joined it at index 0. The pool must cover the longest one, or the
+  /// last row of that category has no node and cannot be reached.
+  static const int _kMaxCategoryRows = 14;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -608,42 +616,53 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           SettingsSection(
             title: '',
             children: [
-              // App-wide first, then the TV-specific pickers.
+              // Looks leads, for the same reason it leads the phone list —
+              // it is the entry point the rows below are alternatives to.
+              // Every index after it shifted by one; _paneKey wires Up/Down
+              // as index ± 1, so the numbering IS the order and has to stay
+              // contiguous.
+              SettingsTile.spec(
+                SettingsRows.looks,
+                subtitle: widget.looksLabel,
+                onTap: widget.onOpenLooks,
+                focusNode: _paneNodes[0],
+              ),
+              // App-wide next, then the TV-specific pickers.
               SettingsTile.spec(
                 SettingsRows.textBrightness,
                 subtitle: widget.textBrightnessLabel,
                 onTap: widget.onOpenTextBrightness,
-                focusNode: _paneNodes[0],
+                focusNode: _paneNodes[1],
               ),
               SettingsTile.spec(
                 SettingsRows.launchAnimation,
                 subtitle: widget.launchAnimationLabel,
                 onTap: widget.onOpenLaunchAnimation,
-                focusNode: _paneNodes[1],
+                focusNode: _paneNodes[2],
               ),
               SettingsTile.spec(
                 SettingsRows.tvHomeStyle,
                 subtitle: widget.tvHomeStyleLabel,
                 onTap: widget.onOpenTvHomeStyle,
-                focusNode: _paneNodes[2],
+                focusNode: _paneNodes[3],
               ),
               SettingsTile.spec(
                 SettingsRows.discoverLayout,
                 subtitle: widget.discoverLayoutLabel,
                 onTap: widget.onOpenDiscoverLayout,
-                focusNode: _paneNodes[3],
+                focusNode: _paneNodes[4],
               ),
               SettingsTile.spec(
                 SettingsRows.tvSidebarStyle,
                 subtitle: widget.tvSidebarStyleLabel,
                 onTap: widget.onOpenTvSidebarStyle,
-                focusNode: _paneNodes[4],
+                focusNode: _paneNodes[5],
               ),
               SettingsTile.spec(
                 SettingsRows.tvScreenSize,
                 subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
                 onTap: widget.onOpenTvScreenSize,
-                focusNode: _paneNodes[5],
+                focusNode: _paneNodes[6],
               ),
               // Next to Screen Size on purpose: both govern how the picture
               // is drawn on this panel rather than what it looks like.
@@ -651,25 +670,25 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.tvRenderQuality,
                 subtitle: widget.tvRenderQualityLabel,
                 onTap: widget.onOpenTvRenderQuality,
-                focusNode: _paneNodes[6],
+                focusNode: _paneNodes[7],
               ),
               SettingsTile.spec(
                 SettingsRows.iptvAppearance,
                 subtitle: widget.iptvStyleLabel,
                 onTap: widget.onOpenIptvStyle,
-                focusNode: _paneNodes[7],
+                focusNode: _paneNodes[8],
               ),
               SettingsTile.spec(
                 SettingsRows.playerGuideStyle,
                 subtitle: widget.playerGuideStyleLabel,
                 onTap: widget.onOpenPlayerGuideStyle,
-                focusNode: _paneNodes[8],
+                focusNode: _paneNodes[9],
               ),
               SettingsTile.spec(
                 SettingsRows.detailPageStyle,
                 subtitle: widget.detailPageStyleLabel,
                 onTap: widget.onOpenDetailPageStyle,
-                focusNode: _paneNodes[9],
+                focusNode: _paneNodes[10],
               ),
               // Node indices MUST stay contiguous in visual order: _paneKey
               // hand-wires Up/Down as node index ± 1, so a row numbered out
@@ -679,19 +698,19 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.appTheme,
                 subtitle: widget.appThemeLabel,
                 onTap: widget.onOpenAppTheme,
-                focusNode: _paneNodes[10],
+                focusNode: _paneNodes[11],
               ),
               SettingsTile.spec(
                 SettingsRows.detailTheme,
                 subtitle: widget.detailThemeLabel,
                 onTap: widget.onOpenDetailTheme,
-                focusNode: _paneNodes[11],
+                focusNode: _paneNodes[12],
               ),
               SettingsTile.spec(
                 SettingsRows.parentsGuideStyle,
                 subtitle: widget.parentsGuideStyleLabel,
                 onTap: widget.onOpenParentsGuideStyle,
-                focusNode: _paneNodes[12],
+                focusNode: _paneNodes[13],
               ),
             ],
           ),
@@ -965,10 +984,10 @@ class _RailItemState extends State<_RailItem> {
         onKeyEvent: (node, event) => widget.onKey(node, event, widget.index),
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: app.shape.br(12),
           child: InkWell(
             focusNode: widget.focusNode,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             onTap: widget.onActivate,
             onFocusChange: (f) {
               setState(() => _focused = f);
@@ -1007,7 +1026,7 @@ class _RailItemState extends State<_RailItem> {
                               ? t.panel2
                               : t.accent.withValues(alpha: 0.12))
                         : (focused ? t.panel2 : Colors.transparent),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: app.shape.br(12),
                     border: Border.all(
                       color: focused ? t.accent : Colors.transparent,
                       width: 1.5,
@@ -1096,10 +1115,10 @@ class _RailSearchItemState extends State<_RailSearchItem> {
         onKeyEvent: widget.onKey,
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: app.shape.br(12),
           child: InkWell(
             focusNode: widget.focusNode,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             onTap: widget.onActivate,
             onFocusChange: (f) {
               setState(() => _focused = f);
@@ -1114,7 +1133,7 @@ class _RailSearchItemState extends State<_RailSearchItem> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: focused ? t.panel2 : t.panel,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: app.shape.br(12),
                 border: Border.all(
                   color: focused ? t.accent : t.line,
                   width: focused ? 1.5 : 1,

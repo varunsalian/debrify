@@ -1,3 +1,4 @@
+import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
@@ -121,6 +122,9 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
   Future<void> _select(String value) async {
     if (value == _style) return;
     setState(() => _style = value);
+    // Tell an in-flight Look apply that a human just chose this key, so it
+    // does not stamp over the choice. See theme/app_looks.dart.
+    LookApplier.noteExternalWrite('tv_home_style');
     await StorageService.setTvHomeStyle(value);
     // Live-apply: the Home board re-reads the pref and rebuilds.
     MainPageBridge.tvHomeStyleChanged?.call();

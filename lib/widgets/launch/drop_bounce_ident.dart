@@ -47,6 +47,7 @@ class DropBounceIdent extends LaunchIdent {
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
       DropBouncePainter(animation, isTelevision: isTelevision);
 }

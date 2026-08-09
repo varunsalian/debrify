@@ -1,3 +1,4 @@
+import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
@@ -99,6 +100,9 @@ class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
   Future<void> _select(String value) async {
     if (value == _layout) return;
     setState(() => _layout = value);
+    // Tell an in-flight Look apply that a human just chose this key, so it
+    // does not stamp over the choice. See theme/app_looks.dart.
+    LookApplier.noteExternalWrite('discover_layout');
     await StorageService.setDiscoverLayout(value);
     // Live-apply: the Discover tab re-reads the pref and rebuilds.
     MainPageBridge.discoverLayoutChanged?.call();

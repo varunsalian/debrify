@@ -46,6 +46,7 @@ class RackFocusIdent extends LaunchIdent {
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
       _RackFocusPainter(animation, isTelevision: isTelevision);
 }

@@ -39,6 +39,7 @@ class SilkIdent extends LaunchIdent {
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
       _SilkPainter(animation, isTelevision: isTelevision);
 }

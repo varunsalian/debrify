@@ -50,6 +50,7 @@ import 'settings/launch_animation_page.dart';
 import '../widgets/launch/launch_ident.dart';
 import 'settings/detail_page_style_page.dart';
 import 'settings/app_theme_page.dart';
+import 'settings/looks_page.dart';
 import 'settings/detail_theme_page.dart';
 import '../theme/app_theme_controller.dart';
 import 'settings/parents_guide_style_page.dart';
@@ -79,6 +80,7 @@ import 'settings/mdblist_settings_page.dart';
 import 'settings/webdav_settings_page.dart';
 import 'settings/stremio_tv_settings_page.dart';
 import '../widgets/remote/remote_role_picker_screen.dart';
+import '../theme/app_looks.dart';
 import '../theme/app_theme_scope.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -763,6 +765,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
       onOpenDetailPageStyle: _openDetailPageStylePage,
       appThemeLabel: appThemeLabel(AppThemeController.instance.id),
+      looksLabel: AppLooks.active()?.label ?? 'Custom',
+      onOpenLooks: _openLooksPage,
       onOpenAppTheme: _openAppThemePage,
       detailThemeLabel: detailThemeLabel(_detailTheme),
       onOpenDetailTheme: _openDetailThemePage,
@@ -841,6 +845,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
       onOpenDetailPageStyle: _openDetailPageStylePage,
       appThemeLabel: appThemeLabel(AppThemeController.instance.id),
+      onOpenLooks: _openLooksPage,
       onOpenAppTheme: _openAppThemePage,
       detailThemeLabel: detailThemeLabel(_detailTheme),
       onOpenDetailTheme: _openDetailThemePage,
@@ -3642,7 +3647,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       height: 4,
                       decoration: BoxDecoration(
                         color: app.fade(app.core.tx, 0.2),
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: app.shape.br(2),
                       ),
                     ),
                   ),
@@ -3858,6 +3863,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// App-wide theme picker. Also refreshes the Details Theme subtitle: picking
   /// a real app theme write-through-mirrors it into `detail_theme`.
+  /// Appearance → Looks. Re-reads nothing on return: the row's subtitle is
+  /// COMPUTED from the live prefs (`AppLooks.active()`), so one setState is
+  /// the whole refresh — there is no stored "current Look" that could drift.
+  Future<void> _openLooksPage() async {
+    await pushSettingsPage(context, const LooksPage());
+    if (!mounted) return;
+    setState(() {});
+  }
+
   Future<void> _openAppThemePage() async {
     await pushSettingsPage(context, const AppThemePage());
     if (!mounted) return;
@@ -4122,6 +4136,7 @@ class _SettingsLayout extends StatelessWidget {
   final String detailPageStyleLabel;
   final Future<void> Function() onOpenDetailPageStyle;
   final String appThemeLabel;
+  final Future<void> Function() onOpenLooks;
   final Future<void> Function() onOpenAppTheme;
   final String detailThemeLabel;
   final Future<void> Function() onOpenDetailTheme;
@@ -4176,6 +4191,7 @@ class _SettingsLayout extends StatelessWidget {
     required this.detailPageStyleLabel,
     required this.onOpenDetailPageStyle,
     required this.appThemeLabel,
+    required this.onOpenLooks,
     required this.onOpenAppTheme,
     required this.detailThemeLabel,
     required this.onOpenDetailTheme,
@@ -4230,7 +4246,16 @@ class _SettingsLayout extends StatelessWidget {
                 SettingsSection(
                   title: 'Appearance',
                   children: [
-                    // App-wide first, then the feature looks.
+                    // Looks FIRST: it is the entry point every picker below is
+                    // an alternative to. Nobody assembles a coherent look out
+                    // of fourteen dropdowns, so the one-pick answer goes at
+                    // the top and the dropdowns stay for people who want them.
+                    SettingsTile.spec(
+                      SettingsRows.looks,
+                      subtitle: AppLooks.active()?.label ?? 'Custom',
+                      onTap: onOpenLooks,
+                    ),
+                    // App-wide next, then the feature looks.
                     SettingsTile.spec(
                       SettingsRows.textBrightness,
                       subtitle: textBrightnessLabel,

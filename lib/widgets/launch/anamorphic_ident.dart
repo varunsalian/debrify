@@ -40,6 +40,7 @@ class AnamorphicIdent extends LaunchIdent {
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
       _AnamorphicPainter(animation, isTelevision: isTelevision);
 }

@@ -44,6 +44,7 @@ import 'widgets/animated_background.dart';
 import 'services/main_page_bridge.dart';
 import 'theme/app_surfaces.dart';
 import 'theme/app_theme_controller.dart';
+import 'theme/app_texture.dart';
 import 'theme/app_theme_scope.dart';
 import 'theme/legacy_theme_boundary.dart';
 import 'theme/system_bars.dart';
@@ -193,6 +194,7 @@ Future<void> main() async {
   // for a frame. A cosmetic pref must never block startup.
   try {
     await StorageService.getLaunchAnimation();
+    await StorageService.getLaunchIdentPalette();
   } catch (_) {}
   // Warms the details-page layout choice: MergedDetailScreen picks its body in
   // the first build, so an async-only read would paint Classic for a frame and
@@ -488,7 +490,13 @@ class _DebrifyAppState extends State<DebrifyApp> {
         // change for free — it inherits from here, not from a capture.
         Widget content = AppThemeScope(
           theme: AppThemeController.instance.theme,
-          child: child!,
+          // The theme's whole-page texture — film grain, Blueprint's rule.
+          // INSIDE the scope so it can read the tokens, and self-gating on
+          // AppSurfaceState so it never paints over the frozen player or the
+          // launch ident (see app_texture.dart). It short-circuits to `child`
+          // for legacy and for the seventeen themes that declare neither, so
+          // the common path costs one build and no layer.
+          child: AppTexture(child: child!),
         );
         if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
           content = Focus(

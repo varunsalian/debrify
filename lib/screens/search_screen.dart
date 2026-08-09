@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/advanced_search_selection.dart';
 import '../theme/app_theme_scope.dart';
+import '../theme/artwork_accent.dart';
 import '../utils/platform_util.dart';
 import '../models/debrify_tv/channel.dart';
 import '../models/iptv_playlist.dart';
@@ -46,7 +47,6 @@ import '../services/simkl/simkl_service.dart';
 import '../services/video_player_launcher.dart';
 import '../utils/concurrency.dart';
 import '../utils/dialog_tap_guard.dart';
-import '../utils/dominant_color.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
@@ -8019,7 +8019,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   height: _kCanvasTabUnderline,
                   width: 26,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: app.shape.br(2),
                     color: i == active ? app.core.tx : Colors.transparent,
                   ),
                 ),
@@ -8467,7 +8467,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _publishHeroTintToShell(_tintCache[item.id]);
         return;
       }
-      final color = await extractDominantColor(
+      // Via the shared cache: the Home hero re-extracts on every focus rest,
+      // and the same posters come back constantly as the user arrows around.
+      final color = await DominantColorCache.of(
+        poster,
         CachedNetworkImageProvider(poster),
       );
       if (!mounted || req != _tintReq) return; // focus moved on — stale
@@ -9524,7 +9527,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFF1E3A8A).withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: app.shape.br(8),
         border: Border.all(
           color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
         ),
@@ -10240,7 +10243,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             return Dialog(
               backgroundColor: const Color(0xFF1E293B),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: app.shape.br(16),
               ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(
@@ -10368,7 +10371,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFF6366F1),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: app.shape.br(10),
                                 ),
                               ),
                             ),
@@ -10401,7 +10404,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                     width: 1,
                                   ),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: app.shape.br(10),
                                   ),
                                 ),
                               ),
@@ -10435,7 +10438,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                     width: 1,
                                   ),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: app.shape.br(10),
                                   ),
                                 ),
                               ),
@@ -10649,7 +10652,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: app.fade(app.core.tx, 0.05),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: app.shape.br(8),
         border: Border.all(color: app.fade(app.core.tx, 0.08)),
       ),
       child: Row(
@@ -10661,7 +10664,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: const Color(0xFF60A5FA).withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: app.shape.br(6),
               ),
               child: Text(
                 '${index + 1}',
@@ -10695,7 +10698,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   ),
                   decoration: BoxDecoration(
                     color: serviceColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(3),
+                    borderRadius: app.shape.br(3),
                   ),
                   child: Text(
                     serviceLabel,
@@ -10721,10 +10724,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
           if (showDragHandle)
-            const Icon(
+            Icon(
               Icons.drag_handle_rounded,
               size: 18,
-              color: Colors.white24,
+              color: app.core.tx.withValues(alpha: 0x3D / 0xFF),
             ),
         ],
       ),
@@ -11720,7 +11723,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   Widget _buildSearchField(bool tv) {
     final app = AppThemeScope.of(context);
     final scheme = Theme.of(context).colorScheme;
-    final radius = BorderRadius.circular(26);
+    final radius = app.shape.br(26);
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
@@ -12156,7 +12159,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             color: Colors.transparent,
             child: InkWell(
               onTap: _openCatalogSources,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: app.shape.brPill,
               canRequestFocus: false,
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -12165,7 +12168,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 ),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: app.shape.brPill,
                   border: Border.all(
                     color: focused
                         ? app.fade(app.core.tx, 0.9)
@@ -12469,7 +12472,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             color: Colors.transparent,
             child: InkWell(
               onTap: _openKeywordSources,
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: app.shape.brPill,
               canRequestFocus: false,
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -12478,7 +12481,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 ),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: app.shape.brPill,
                   // 1.5px always so focus never shifts layout: white ring when
                   // focused, else the faint idle border.
                   border: Border.all(
@@ -12569,7 +12572,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
         decoration: BoxDecoration(
           color: on ? accent : app.fade(app.core.tx, 0.05),
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: app.shape.brPill,
           // Always 2px so focus never shifts layout.
           border: Border.all(
             color: focused
@@ -12598,7 +12601,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               color: Colors.transparent,
               child: InkWell(
                 onTap: onTap,
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: app.shape.brPill,
                 child: body(false),
               ),
             )
@@ -12612,7 +12615,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     color: Colors.transparent,
                     child: InkWell(
                       onTap: onTap,
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: app.shape.brPill,
                       canRequestFocus: false,
                       child: body(focused),
                     ),
@@ -12796,10 +12799,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: focused ? Colors.white : accent,
-                borderRadius: BorderRadius.circular(999),
+                color: focused ? app.core.tx : accent,
+                borderRadius: app.shape.brPill,
                 border: Border.all(
-                  color: focused ? Colors.white : Colors.transparent,
+                  color: focused ? app.core.tx : Colors.transparent,
                   width: 1.5,
                 ),
                 boxShadow: [
@@ -12881,7 +12884,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           color: active
               ? scheme.primary.withValues(alpha: 0.16)
               : scheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: app.shape.brPill,
           // Always 2px so focus never shifts layout: white ring when
           // focused, else the active/idle border.
           border: Border.all(
@@ -12921,7 +12924,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               color: Colors.transparent,
               child: InkWell(
                 onTap: onTap,
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: app.shape.brPill,
                 child: body(false),
               ),
             )
@@ -12936,7 +12939,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                     color: Colors.transparent,
                     child: InkWell(
                       onTap: onTap,
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: app.shape.brPill,
                       canRequestFocus: false,
                       child: body(focused),
                     ),
@@ -13149,7 +13152,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: app.shape.br(8),
         ),
         child: child,
       ),
@@ -13165,7 +13168,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: app.shape.br(16),
           border: Border.all(
             color: app.fade(app.home.chromeAccent, 0.45),
           ),
@@ -13180,7 +13183,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         child: Row(
           children: [
             chip(
-              const Icon(Icons.close_rounded, color: Colors.white70, size: 18),
+              Icon(Icons.close_rounded, color: app.core.tx.withValues(alpha: 0xB3 / 0xFF), size: 18),
               _exitKwSelection,
               app.fade(app.core.tx, 0.1),
             ),
@@ -13190,7 +13193,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 '$count selected',
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: count > 0 ? app.home.chromeAccent : Colors.white54,
+                  color: count > 0 ? app.home.chromeAccent : app.core.tx.withValues(alpha: 0x8A / 0xFF),
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -13200,8 +13203,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             chip(
               Text(
                 allSelected ? 'None' : 'All',
-                style: const TextStyle(
-                  color: Colors.white70,
+                style: TextStyle(
+                  color: app.core.tx.withValues(alpha: 0xB3 / 0xFF),
                   fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),
@@ -14452,7 +14455,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                               child: Container(
                                 width: 5,
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: app.shape.br(4),
                                   gradient: LinearGradient(
                                     begin: Alignment.topCenter,
                                     end: Alignment.bottomCenter,
@@ -17006,7 +17009,7 @@ class _HeroLiveChip extends StatelessWidget {
       decoration: BoxDecoration(
         // Glassy page ink — 0.8 of the opaque bg pins the legacy 0xCC alpha.
         color: app.fade(app.home.bg, 0.8),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: app.shape.brPill,
         border: Border.all(color: app.fade(app.core.tx, 0.16)),
       ),
       child: Row(
@@ -17219,7 +17222,7 @@ class _HeroTrailerLoadingPillState extends State<_HeroTrailerLoadingPill>
               decoration: BoxDecoration(
                 // Glassy page ink — fade 0.8 pins the legacy 0xCC alpha.
                 color: app.fade(app.home.bg, 0.8),
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: app.shape.brPill,
                 border: Border.all(
                   color: app.fade(app.core.tx, 0.16),
                 ),
@@ -17344,7 +17347,7 @@ class _HeroAmbientChipState extends State<_HeroAmbientChip>
               decoration: BoxDecoration(
                 // Glassy page ink — fade 0.8 pins the legacy 0xCC alpha.
                 color: app.fade(app.home.bg, 0.8),
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: app.shape.brPill,
                 border: Border.all(
                   color: app.fade(app.core.tx, 0.16),
                 ),
@@ -17498,7 +17501,7 @@ class _CategoryTag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(
         color: app.fade(app.home.chromeAccent, 0.16),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: app.shape.br(8),
         border: Border.all(
           color: app.fade(app.home.chromeAccent, 0.35),
         ),
@@ -18125,7 +18128,7 @@ class _TonightCardCaption extends StatelessWidget {
     name,
     maxLines: 1,
     overflow: TextOverflow.ellipsis,
-    style: const TextStyle(
+    style: TextStyle(
       color: Colors.white,
       fontSize: 22,
       fontWeight: FontWeight.w900,
@@ -18175,7 +18178,7 @@ class _TonightCardCaption extends StatelessWidget {
                   border: Border.all(
                     color: app.fade(app.core.tx, 0.30),
                   ),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: app.shape.br(20),
                 ),
                 child: Text(
                   'HOLD  $hold',
@@ -18192,8 +18195,8 @@ class _TonightCardCaption extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.92),
-                borderRadius: BorderRadius.circular(20),
+                color: app.core.tx.withValues(alpha: 0.92),
+                borderRadius: app.shape.br(20),
               ),
               child: Text(
                 'OK  $action',
@@ -18210,11 +18213,11 @@ class _TonightCardCaption extends StatelessWidget {
         if (progress != null && progress > 0) ...[
           const SizedBox(height: 12),
           ClipRRect(
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: app.shape.br(3),
             child: SizedBox(
               height: 5,
               child: ColoredBox(
-                color: Colors.white.withValues(alpha: 0.22),
+                color: app.core.tx.withValues(alpha: 0.22),
                 child: FractionallySizedBox(
                   alignment: Alignment.centerLeft,
                   widthFactor: progress.clamp(0.0, 1.0),
@@ -18405,7 +18408,7 @@ class _TonightQueueRowState extends State<_TonightQueueRow>
           height: h,
           decoration: BoxDecoration(
             color: app.fade(app.core.tx, _focused ? 0.10 : 0.045),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             border: Border.all(
               color: _focused
                   ? app.core.tx
@@ -18414,7 +18417,7 @@ class _TonightQueueRowState extends State<_TonightQueueRow>
             ),
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(9),
+            borderRadius: app.shape.br(9),
             child: Row(
               children: [
                 SizedBox(
@@ -18459,7 +18462,7 @@ class _TonightQueueRowState extends State<_TonightQueueRow>
                                   CircularProgressIndicator(
                                     value: _holdController.value,
                                     strokeWidth: 2.5,
-                                    color: Colors.white,
+                                    color: app.core.tx,
                                     backgroundColor: Colors.white24,
                                   ),
                             ),
@@ -18505,14 +18508,14 @@ class _TonightQueueRowState extends State<_TonightQueueRow>
                         if (widget.progress != null) ...[
                           const SizedBox(height: 9),
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(2),
+                            borderRadius: app.shape.br(2),
                             child: SizedBox(
                               height: 4,
                               child: ColoredBox(
                                 // 0.18 vanished against the row's own panel,
                                 // so the fill read as a dash floating in
                                 // space rather than a bar with a track.
-                                color: Colors.white.withValues(alpha: 0.28),
+                                color: app.core.tx.withValues(alpha: 0.28),
                                 child: FractionallySizedBox(
                                   alignment: Alignment.centerLeft,
                                   widthFactor: widget.progress!.clamp(
@@ -19367,7 +19370,7 @@ class _StremioCardState extends State<_StremioCard>
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: 0.66),
-                borderRadius: BorderRadius.circular(5),
+                borderRadius: app.shape.br(5),
               ),
               child: Text(
                 widget.episodeLabel!,
@@ -19619,7 +19622,7 @@ class _SeeAllLinkState extends State<_SeeAllLink> {
             color: _hover
                 ? app.fade(app.core.tx, 0.08)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -19913,7 +19916,7 @@ class _ArtPosterState extends State<_ArtPoster> {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: app.shape.br(6),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -20130,7 +20133,7 @@ class _ModeToggle extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: app.shape.br(14),
         border: Border.all(color: app.fade(app.core.tx, 0.08)),
       ),
       child: Row(
@@ -20164,7 +20167,7 @@ class _ModeToggle extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: on ? app.home.chromeAccent : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: app.shape.br(10),
         // A white ring shows the remote's DPAD position. Drawn whenever the
         // segment is focused — including the selected one, since focus lands
         // there first (its accent fill alone wouldn't signal focus moved).
@@ -20209,7 +20212,7 @@ class _ModeToggle extends StatelessWidget {
     if (node == null) {
       return InkWell(
         onTap: () => onChanged(value),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: app.shape.br(10),
         child: content(false),
       );
     }
@@ -20224,7 +20227,7 @@ class _ModeToggle extends StatelessWidget {
           final focused = Focus.of(context).hasFocus;
           return InkWell(
             onTap: () => onChanged(value),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             canRequestFocus: false,
             child: content(focused),
           );
@@ -21276,10 +21279,10 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: focused ? Colors.white : accent,
-                borderRadius: BorderRadius.circular(999),
+                color: focused ? app.core.tx : accent,
+                borderRadius: app.shape.brPill,
                 border: Border.all(
-                  color: focused ? Colors.white : Colors.transparent,
+                  color: focused ? app.core.tx : Colors.transparent,
                   width: 1.5,
                 ),
                 boxShadow: [
@@ -21415,9 +21418,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       padding: const EdgeInsets.only(right: 6),
       child: Material(
         color: on ? accent : app.fade(app.core.tx, 0.05),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: app.shape.brPill,
         child: InkWell(
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: app.shape.brPill,
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
@@ -21547,7 +21550,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               const SizedBox(width: 6),
               if (_sortBy != 'relevance')
                 InkWell(
-                  borderRadius: BorderRadius.circular(9),
+                  borderRadius: app.shape.br(9),
                   onTap: () {
                     _sortAsc = !_sortAsc;
                     _rebuildVisible();
@@ -21585,7 +21588,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                     final focused = _filterFocus.hasFocus;
                     final tint = (!_filters.isEmpty || focused) ? accent : dim;
                     return InkWell(
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: app.shape.br(9),
                       // The outer Focus is the sole focus target; don't let the
                       // InkWell add a competing node that breaks D-pad traversal.
                       canRequestFocus: false,
@@ -21632,7 +21635,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       decoration: BoxDecoration(
         color: app.fade(app.core.tx, 0.05),
         border: Border.all(color: border),
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: app.shape.br(9),
       ),
       child: child,
     );
@@ -21661,7 +21664,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
               decoration: BoxDecoration(
                 color: app.fade(app.core.tx, 0.06),
                 border: Border.all(color: app.fade(app.core.tx, 0.08)),
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: app.shape.brPill,
               ),
               child: Text(
                 l,
@@ -22132,7 +22135,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                       s.torrentName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12.5,
                       ),
                     ),
@@ -22191,7 +22194,7 @@ class _SrcMiniToggle extends StatelessWidget {
         color: value
             ? app.home.chromeAccent
             : app.fade(app.core.tx, 0.16),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: app.shape.brPill,
       ),
       child: AnimatedAlign(
         duration: const Duration(milliseconds: 150),
@@ -22265,7 +22268,7 @@ class _SrcToggleRowState extends State<_SrcToggleRow> {
             color: _focused
                 ? app.fade(app.core.tx, 0.08)
                 : app.fade(app.core.tx, 0.03),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: app.shape.br(14),
             border: Border.all(
               color: _focused
                   ? app.fade(app.core.tx, 0.9)
@@ -22283,7 +22286,7 @@ class _SrcToggleRowState extends State<_SrcToggleRow> {
                   color: on
                       ? app.fade(app.home.chromeAccent, 0.18)
                       : app.fade(app.core.tx, 0.05),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: app.shape.br(10),
                 ),
                 child: Icon(
                   on ? Icons.check_circle_rounded : Icons.block_rounded,
@@ -22379,7 +22382,7 @@ class _SrcActionChipState extends State<_SrcActionChip> {
             color: widget.filled
                 ? app.fade(app.home.chromeAccent, _focused ? 1.0 : 0.9)
                 : app.fade(app.core.tx, _focused ? 0.14 : 0.06),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: app.shape.brPill,
             border: Border.all(
               color: _focused
                   ? app.fade(app.core.tx, 0.9)
@@ -22446,7 +22449,7 @@ class _SrcDialogShell extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             color: app.home.dialogBg,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: app.shape.br(22),
             border: Border.all(color: app.fade(app.core.tx, 0.08)),
             boxShadow: [
               BoxShadow(
@@ -22478,11 +22481,11 @@ class _SrcDialogShell extends StatelessWidget {
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
-                          borderRadius: BorderRadius.circular(13),
+                          borderRadius: app.shape.br(13),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.dns_rounded,
-                          color: Colors.white,
+                          color: app.core.tx,
                           size: 22,
                         ),
                       ),
