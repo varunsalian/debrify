@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
+import '../../theme/premium_looks.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/detail/theme/detail_theme.dart';
 import '../../widgets/detail/theme/detail_themes.dart';
@@ -102,6 +103,19 @@ class _DetailThemePageState extends State<DetailThemePage> {
       if (kDetailThemesShipped.contains(t.id)) t,
   ];
 
+  /// The two classes of theme, told apart.
+  ///
+  /// They make different promises and the picker used to hide that: a spec
+  /// look restyles the app's STRUCTURE — separation, focus, motion, scrim —
+  /// while a core theme is a palette and the vocabulary it inherits is neutral
+  /// by construction. One list of look-alike rows made "pick a theme" mean two
+  /// different things depending on which half you landed on.
+  static List<DetailTheme> get _complete =>
+      [for (final t in _choices) if (PremiumLooks.byId(t.id) != null) t];
+
+  static List<DetailTheme> get _palettes =>
+      [for (final t in _choices) if (PremiumLooks.byId(t.id) == null) t];
+
   @override
   void initState() {
     super.initState();
@@ -177,9 +191,34 @@ class _DetailThemePageState extends State<DetailThemePage> {
                   focusNode: _firstCardMarker,
                   canRequestFocus: false,
                   skipTraversal: true,
-                  child: SettingsSection(
-                    title: '',
-                    children: [for (final t in _choices) _optionRow(t)],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SettingsSection(
+                        title: 'Complete looks',
+                        children: [for (final t in _complete) _optionRow(t)],
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(2, 6, 2, 14),
+                        child: Text(
+                          'Change structure, focus and motion — not just '
+                          'colour.',
+                          style: TextStyle(fontSize: 12, color: st.dim),
+                        ),
+                      ),
+                      SettingsSection(
+                        title: 'Palettes',
+                        children: [for (final t in _palettes) _optionRow(t)],
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(2, 6, 2, 0),
+                        child: Text(
+                          'Recolour the app; layout and motion stay as they '
+                          'are.',
+                          style: TextStyle(fontSize: 12, color: st.dim),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 14),

@@ -72,9 +72,19 @@ void main() {
   group('detail page style pref', () {
     setUp(() => SharedPreferences.setMockInitialValues({}));
 
-    test('unset reads classic', () async {
-      expect(await StorageService.getDetailPageStyle(), 'classic');
-      expect(StorageService.detailPageStyleCached, 'classic');
+    test('unset reads the default, which is a THEMED layout', () async {
+      // Not merely "reads the default": the point of the default moving off
+      // Classic is that Classic is the one layout that ignores the app theme,
+      // which made picking an App Theme look like it did nothing.
+      expect(
+        await StorageService.getDetailPageStyle(),
+        StorageService.kDetailPageStyleDefault,
+      );
+      expect(
+        StorageService.detailPageStyleCached,
+        StorageService.kDetailPageStyleDefault,
+      );
+      expect(StorageService.kDetailPageStyleDefault, isNot('classic'));
     });
 
     test('a known value round-trips and updates the sync cache', () async {
@@ -85,14 +95,29 @@ void main() {
 
     test('an unknown value is coerced on WRITE', () async {
       await StorageService.setDetailPageStyle('nonsense');
-      expect(await StorageService.getDetailPageStyle(), 'classic');
+      expect(
+        await StorageService.getDetailPageStyle(),
+        StorageService.kDetailPageStyleDefault,
+      );
     });
 
     test('an unknown stored value is coerced on READ', () async {
       SharedPreferences.setMockInitialValues({
         'detail_page_style': 'nonsense',
       });
-      expect(await StorageService.getDetailPageStyle(), 'classic');
+      expect(
+        await StorageService.getDetailPageStyle(),
+        StorageService.kDetailPageStyleDefault,
+      );
+    });
+
+    test('the default is a layout this build can actually draw', () {
+      // A default outside the shipped set would send every fresh install
+      // through effectiveDetailPageStyle's fallback on the first frame.
+      expect(
+        kDetailPageStylesShipped,
+        contains(StorageService.kDetailPageStyleDefault),
+      );
     });
 
     test('storage accepts every style, including ones not yet drawable', () {
@@ -130,17 +155,21 @@ void main() {
       for (final s in unshipped) {
         expect(
           effectiveDetailPageStyle(s),
-          'classic',
-          reason: '$s is not shipped, so dispatch and the label must say Classic',
+          StorageService.kDetailPageStyleDefault,
+          reason: '$s is not shipped, so dispatch and the label must say '
+              'the default',
         );
       }
     });
 
     test('the row label follows the effective style, never the raw one', () {
       expect(detailPageStyleLabel('classic'), 'Classic');
+      final defaultLabel = detailPageStyleLabel(
+        StorageService.kDetailPageStyleDefault,
+      );
       for (final s in StorageService.kDetailPageStyles
           .difference(kDetailPageStylesShipped)) {
-        expect(detailPageStyleLabel(s), 'Classic');
+        expect(detailPageStyleLabel(s), defaultLabel);
       }
     });
 

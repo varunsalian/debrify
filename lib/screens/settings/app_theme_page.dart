@@ -5,10 +5,12 @@ import '../../services/analytics_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_controller.dart';
 import '../../theme/app_theme_scope.dart';
+import '../../theme/premium_looks.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/detail/theme/detail_theme.dart';
 import '../../widgets/detail/theme/detail_themes.dart';
 import 'detail_theme_page.dart' show kDetailThemesShipped;
+import 'widgets/settings_widgets.dart' show SettingsSectionLabel;
 
 /// Row caption for the Appearance list.
 String appThemeLabel(String id) =>
@@ -40,6 +42,15 @@ class _AppThemePageState extends State<AppThemePage> {
     for (final t in DetailThemes.catalogue)
       if (kDetailThemesShipped.contains(t.id)) t,
   ];
+
+  /// The two classes of theme, told apart — see the note in
+  /// `detail_theme_page.dart`. A spec look restyles the app's STRUCTURE; a
+  /// core theme is a palette whose vocabulary is neutral by construction.
+  static List<DetailTheme> get _complete =>
+      [for (final t in _choices) if (PremiumLooks.byId(t.id) != null) t];
+
+  static List<DetailTheme> get _palettes =>
+      [for (final t in _choices) if (PremiumLooks.byId(t.id) == null) t];
 
   @override
   void initState() {
@@ -133,14 +144,12 @@ class _AppThemePageState extends State<AppThemePage> {
                     focusNode: _firstCardMarker,
                     canRequestFocus: false,
                     skipTraversal: true,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: t.panel,
-                        borderRadius: app.shape.br(14),
-                        border: Border.all(color: t.line),
-                      ),
-                      child: Column(
-                        children: [
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Classic leads and sits on its own: it is not a look
+                        // OR a palette, it is the absence of both.
+                        _group(app, [
                           _optionRow(
                             app: app,
                             id: AppThemes.legacyId,
@@ -151,21 +160,22 @@ class _AppThemePageState extends State<AppThemePage> {
                             selected: selected == AppThemes.legacyId,
                             swatches: null,
                           ),
-                          for (final choice in _choices)
-                            _optionRow(
-                              app: app,
-                              id: choice.id,
-                              label: choice.label,
-                              subtitle: choice.subtitle,
-                              selected: selected == choice.id,
-                              swatches: [
-                                choice.ground,
-                                choice.accent,
-                                choice.state,
-                              ],
-                            ),
-                        ],
-                      ),
+                        ]),
+                        _heading(app, 'Complete looks',
+                            'Change structure, focus and motion — not just '
+                                'colour.'),
+                        _group(app, [
+                          for (final choice in _complete)
+                            _row(app, choice, selected),
+                        ]),
+                        _heading(app, 'Palettes',
+                            'Recolour the app; layout and motion stay as they '
+                                'are.'),
+                        _group(app, [
+                          for (final choice in _palettes)
+                            _row(app, choice, selected),
+                        ]),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -191,6 +201,48 @@ class _AppThemePageState extends State<AppThemePage> {
       ),
     );
   }
+
+  /// One bordered panel around a run of rows — the shape the single list had.
+  Widget _group(AppTheme app, List<Widget> rows) {
+    final t = app.settings;
+    return Container(
+      decoration: BoxDecoration(
+        color: t.panel,
+        borderRadius: app.shape.br(14),
+        border: Border.all(color: t.line),
+      ),
+      child: Column(children: rows),
+    );
+  }
+
+  Widget _heading(AppTheme app, String title, String blurb) {
+    final t = app.settings;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 18, 2, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SettingsSectionLabel(title),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Text(
+              blurb,
+              style: TextStyle(fontSize: 12, height: 1.4, color: t.dim),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(AppTheme app, DetailTheme choice, String selected) => _optionRow(
+    app: app,
+    id: choice.id,
+    label: choice.label,
+    subtitle: choice.subtitle,
+    selected: selected == choice.id,
+    swatches: [choice.ground, choice.accent, choice.state],
+  );
 
   Widget _optionRow({
     required AppTheme app,

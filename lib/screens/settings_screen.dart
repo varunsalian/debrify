@@ -203,7 +203,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _playerDockStyle = 'classic';
   String _playerDockPalette = 'ultraviolet';
   String _playerDockSize = 'auto';
-  String _detailPageStyle = 'classic';
+  // The placeholder the Appearance row shows for the one frame before the
+  // async load lands; a literal here would flash the wrong label.
+  String _detailPageStyle = StorageService.kDetailPageStyleDefault;
   String _detailTheme = 'signal';
   String _parentsGuideStyle = 'compass';
   String _phoneNavStyle = 'classic';

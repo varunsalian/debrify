@@ -813,26 +813,46 @@ class StorageService {
     'premiere',
   };
 
-  /// Synchronous mirror, warmed in main() before runApp: `MergedDetailScreen`
-  /// picks its body in the first build, so an async-only read would paint
-  /// Classic for a frame and then re-lay-out the whole page.
+  /// The layout a fresh install — and anyone who has never opened the picker —
+  /// gets.
   ///
-  /// Normalizes toward 'classic' on BOTH sides — an unrecognized value has to
-  /// mean the default for the reader and the writer alike.
-  static String detailPageStyleCached = 'classic';
+  /// **Console rather than Classic, and that is a deliberate change to what
+  /// the app looks like out of the box.** Classic is the one layout that is
+  /// deliberately unthemed: it paints its own literals and ignores the app
+  /// theme entirely. With Classic as the default, picking an App Theme
+  /// appeared to do nothing on the page most people judge the app by — the
+  /// setting looked broken when it was working. A themed layout as the default
+  /// is what makes it honest.
+  ///
+  /// This is the FALLBACK, so it moves everyone with no stored value — not
+  /// just new installs, but every user who never opened the picker. That
+  /// breadth is the point rather than a side effect; Classic is still one row
+  /// away for anyone who wants it back.
+  static const String kDetailPageStyleDefault = 'console';
+
+  /// Synchronous mirror, warmed in main() before runApp: `MergedDetailScreen`
+  /// picks its body in the first build, so an async-only read would paint the
+  /// default for a frame and then re-lay-out the whole page.
+  ///
+  /// Normalizes toward [kDetailPageStyleDefault] on BOTH sides — an
+  /// unrecognized value has to mean the default for the reader and the writer
+  /// alike.
+  static String detailPageStyleCached = kDetailPageStyleDefault;
 
   static Future<String> getDetailPageStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final value = prefs.getString(_detailPageStyleKey);
     detailPageStyleCached = kDetailPageStyles.contains(value)
         ? value!
-        : 'classic';
+        : kDetailPageStyleDefault;
     return detailPageStyleCached;
   }
 
   static Future<void> setDetailPageStyle(String value) async {
     final prefs = await SharedPreferences.getInstance();
-    final normalized = kDetailPageStyles.contains(value) ? value : 'classic';
+    final normalized = kDetailPageStyles.contains(value)
+        ? value
+        : kDetailPageStyleDefault;
     await prefs.setString(_detailPageStyleKey, normalized);
     detailPageStyleCached = normalized;
   }

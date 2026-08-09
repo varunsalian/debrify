@@ -1140,8 +1140,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             episodesHost: _episodesHost,
           ),
         );
-      // Alternate layouts land here as they ship; anything not yet drawable
-      // was already narrowed to 'classic' by effectiveDetailPageStyle.
+      // Only 'classic' reaches here: every shipped alternate has a case above,
+      // and anything not yet drawable was already narrowed to the DEFAULT by
+      // effectiveDetailPageStyle — which is no longer Classic, so this arm is
+      // now the explicit choice rather than the fallback.
       default:
         return _buildClassicBody(backdropUrl);
     }

@@ -39,13 +39,18 @@ const Set<String> kDetailPageStylesShipped = {
 /// The stored value narrowed to what this build can render. Never persists —
 /// the raw choice is left alone so upgrading restores it.
 String effectiveDetailPageStyle(String raw) =>
-    kDetailPageStylesShipped.contains(raw) ? raw : 'classic';
+    kDetailPageStylesShipped.contains(raw)
+        ? raw
+        : StorageService.kDetailPageStyleDefault;
 
 const List<DetailPageStyleChoice> kDetailPageStyleChoices = [
   DetailPageStyleChoice(
     'classic',
     'Classic',
-    "Today's look — info beside a full-height episode list",
+    // No longer the default, and it is the one layout that ignores the app
+    // theme — so the row says both rather than leaving someone to discover it.
+    'The original — info beside a full-height episode list. Keeps its own '
+        'look and ignores your App Theme.',
   ),
   DetailPageStyleChoice(
     'marquee',
@@ -128,7 +133,7 @@ class DetailPageStylePage extends StatefulWidget {
 
 class _DetailPageStylePageState extends State<DetailPageStylePage> {
   bool _loading = true;
-  String _style = 'classic';
+  String _style = StorageService.kDetailPageStyleDefault;
 
   /// Non-focusable marker around the options card; used on TV to hand entry
   /// focus to its first focusable descendant (the first option row).
