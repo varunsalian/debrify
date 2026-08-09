@@ -1,4 +1,4 @@
-# Player Dock Style, Palette & Density — Dart player (rev 11, post-Codex round 9)
+# Player Dock Style, Palette & Density — Dart player (rev 12 — AS BUILT)
 
 > **Re-based on `b525f2dc`** ("Improve player battery efficiency and renderer
 > fallback"), working tree clean, in sync with `origin/tvos_port`. All line
@@ -7,32 +7,35 @@
 > `clock` (`ValueListenable<PlaybackUiClockValue>`) and its seek row rebuilds
 > inside a `ValueListenableBuilder` (`controls.dart:11,80,309-320`).**
 
-## 0. Round-8 outcome
+## 0. Status — shipped, and where the build diverged
 
-Codex round 4: three plan-level blockers, **all inside §5 and the vertical
-budget**. Every other section audited clean — measurement boundary, visibility
-condition, long-press identification, Next Channel priority, §7.4 fixtures and
-the tvOS reasoning were all confirmed fixed, and the contextual selector's
-three-control cardinality re-verified.
+Built and pushed as `43142f25` (the dock) and `3b4ea443` (selectable
+arrangements + the wide rebuild), on top of `b525f2dc`. `flutter analyze lib
+test` is clean; 24 dock tests pass; the suite is at 2250 with 9 pre-existing
+`series_parser` failures untouched by this work.
 
-| rev 4 defect | rev 5 fix | § |
+Rev 1–11 were reviewed against the plan. Implementation then contradicted the
+plan in ten places, every one deliberate. **Where this section and the sections
+below disagree, this section is what the code does.**
+
+| Plan said | Code does | Why |
 |---|---|---|
-| **One scalar cannot publish `160/28`, `72` and `80` at once.** "All consumers read the notifier, classic included" was impossible; §2 also said classic does not participate, contradicting §5.4 | **classic keeps its literals**; the notifier is styled-only; each consumer derives its own offset. The `if (styled)` branch at six sites is accepted — avoiding it is what created the impossibility | 5.4 |
-| `Controls` cannot publish the legacy skip ternary — it receives neither `controlsVisible` nor `isTelevision` | it no longer needs to; classic never publishes | 5.4 |
-| Skip inset subtraction breaks classic parity (today `bottom` is exactly `160/28` **and then** the child `SafeArea` adds padding) | subtraction applies to the **styled** path only | 5.2 |
-| Seed `max(160, h×0.5)` is not an upper bound, and under-protection recurs on rotate/resize | seed and re-seed to **full viewport height** — maximally conservative, corrected on first measurement | 5.3 |
-| Symmetric epsilon can leave the band shorter than the dock | **asymmetric**: increases publish immediately, only decreases < 1lp are suppressed | 5.3 |
-| Budget omits top bar + top inset; they share the same `spaceBetween` column | both included | 3.4 |
-| Budget circular — `gaps`/`scrubberH` scale with `k` but are used before `k` | evaluated at `k = 1.55` (worst case), so the test is conservative and non-circular | 3.4 |
-| `fitK` clamped to ≥ 1 and *then* asked whether it is < 1 | computed unclamped; the < 1 case is the classic fallback | 3.4 |
-| `DockMetrics.compute(Size, PlayerDockSize)` cannot produce the resolved `k` — no arrangement, safe area or `infoPanelH` input | takes a `DockLayoutInput` carrying all four | 4 |
-| §3.6 said pinned sizes ignore the viewport, contradicting §3.4's degradation rule | §3.6 corrected: pins are **upper bounds** | 3.6 |
-| §7.5 still asserted the deleted 45% cap | replaced with the budget assertions | 7.5 |
-| "Six host behaviours" / "all six consumers" / six in §0 | **six** everywhere | 5.1, 8 |
+| One styled dock (`two_tier`), arrangement chosen by viewport | **Five styles**: Classic · Adaptive · Compact · Two-Tier · Cinema. A forced arrangement degrades to the viewport's pick, then to Classic | Three of the four mock concepts were the same widget at different widths — correct for layout, wrong for the user, who got no say on a wide window |
+| Pref values `classic`, `two_tier` | `classic`, `auto`, `compact`, `tiers`, `cinema`; **`two_tier` still accepted on read** and resolves to `auto` | Installs that chose the styled dock must keep it |
+| `dockExtent` seeds to the full viewport height to over-protect | **Seeds to 0**, so `_dockBand` yields each consumer's legacy constant | Over-protecting the whole screen killed every gesture until first measurement, and stranded the fallback case where no reporter is ever mounted |
+| All six consumers read one notifier, classic included | **Classic keeps its literals**; the notifier is styled-only, with a branch at each of the six sites | One scalar cannot simultaneously be `160/28`, `72` and `80`. The uniform path did not exist |
+| `aurum` is the only palette with dark primary ink | **`aurum` and `ice`** | `ice`'s hot end `0xFF7BF1FF` is light enough to need it. Caught by the Phase A test, not by review |
+| PiP lives in the tools row | **Top bar**, as legacy does | The tools row disappears under `hideOptions`, which lost PiP entirely |
+| `DockMetrics.compute` checks a vertical budget | Checks **vertical and horizontal** | Nothing verified transport + More fit side by side; `large` on a 320lp viewport overflowed by 14px |
+| `wide` reuses the two-tier tree | Its own zoned row: transport · **volume** · `pos / dur` \| title + subtitle \| icon-only tools · **fullscreen** | The shipped version was the design's skeleton with half its content missing |
+| Scrub fill runs `deep → hot` | A custom `GradientSliderTrackShape` | Material's `SliderThemeData` takes a flat `Color`; the plan asserted something the framework cannot do |
+| Aspect labels from a four-value switch | `AspectModeUtils.aspectModeToString` | The real `AspectMode` has ten values |
 
-`infoPanel` height correction accepted: at width 599 it is ~80lp bare and
-~100lp with full now/next EPG (`iptv_zap_banner.dart:84-97,124-165,278-323`),
-not the ~72 rev 4 assumed. §3.4's worked example uses 100.
+Two additions with no plan entry at all: a **volume** control (new `_dockVolume`
+state mirrored to `_player.setVolume`, starting at 1.0 rather than reading the
+player's real level) and a **fullscreen** button gated to Windows/Linux, where
+`windowManager` actually drives it. The mock showed fullscreen everywhere; the
+mock was wrong.
 
 ## 1. Goal & scope
 
@@ -66,7 +69,7 @@ export (appearance prefs are not in the payload — `backup_restore_service.dart
 
 | Pref | Key | Values | Default |
 |---|---|---|---|
-| Style | `player_dock_style` | `classic`, `two_tier` | `classic` |
+| Style | `player_dock_style` | `classic`, `auto`, `compact`, `tiers`, `cinema` (+ legacy `two_tier` → `auto`) | `classic` |
 | Palette | `player_dock_palette` | `ultraviolet`, `crimson`, `aurum`, `ice` | `ultraviolet` |
 | Size | `player_dock_size` | `auto`, `small`, `medium`, `large` | `auto` |
 
@@ -101,6 +104,14 @@ values are preserved so switching to Two-Tier restores prior choices.
    every platform where the action is meaningful". Classic keeps it
    unconditional.
 
+**Also changed, discovered during implementation:**
+7. `wide` carries a **volume** control and a **fullscreen** button
+   (Windows/Linux only). Neither existed in `Controls` before; both are new
+   parameters with classic-safe defaults.
+8. The top bar drops its title in `wide` — but only when the centre zone will
+   actually render it, since `hideOptions` removes the controls row and would
+   otherwise lose the identity from both places at once.
+
 **Not in v1:** ±10s buttons — they need a callback `Controls` does not have
 (only `onSeekBarChanged(double)`), and double-tap already seeks. See §9.
 
@@ -108,8 +119,11 @@ values are preserved so switching to Two-Tier restores prior choices.
 
 ### 3.1 One style, three arrangements
 
-`two_tier` selects its arrangement from **width and height** at build time.
-The pref never changes; rotating or resizing re-picks.
+**Adaptive** selects its arrangement from **width and height** at build time;
+the other three styles force one. A forced arrangement is a preference, not a
+promise — `cinema` on a short window cannot seat two rows, so it degrades to
+the viewport's own pick, and only if that fails too does the dock render
+`classic`. The pref never changes; rotating or resizing re-picks.
 
 | Arrangement | Selected when | Shape |
 |---|---|---|
@@ -371,7 +385,15 @@ tokens), `DockPalettes.of`, and:
 }
 ```
 
-`dock_widgets.dart` — `DockChip`, `DockTransportButton`, `DockOverflowSheet`.
+`dock_widgets.dart` — `DockChip`, `DockTransportButton`, `DockOverflowSheet`,
+`DockExtentReporter`, and **`GradientSliderTrackShape`**: Material's
+`SliderThemeData` accepts a flat `Color`, so painting the `deep → hot` fill
+with its bloom needs a custom track shape, which also derives its bounds and
+gradient direction from `textDirection` (taking left-to-thumb showed a full
+bar at position 0 under RTL).
+
+`styled_dock.dart` — the `two_tier` widget itself, with the three arrangements
+and the availability-priority selector.
 Built fresh: `TracksSheet` is a monolithic static `show` (`tracks_sheet.dart:44`,
 modal at `:136`) with no reusable chrome widget.
 
@@ -608,82 +630,66 @@ merely golden-tested.
      `Controls` construction point (the non-TV branch of the
      `PlatformUtil.isTelevision` ternary at `:9804`).
 
-## 7. Verification
+## 7. Verification — what exists, what does not
 
-1. `dock_metrics_test.dart` — `DockMetrics.compute` across viewports; asserts
-   `target >= 44` for every size × viewport pair **for which `compute`
-   returns non-null** (rev 6's unqualified claim contradicted the nullable
-   fallback); both clamp ends; `auto`
-   and `medium` now differ.
-2. `dock_storage_test.dart` — round-trip, default-on-unset, unknown-value
-   coercion **on read and on write**, for all three prefs. (Phase B gate;
-   missing from rev 2.)
-3. `dock_classic_pin_test.dart` — **goldens** across seekbar on/off, options
-   on/off, `infoPanel` present, PiP visible, metadata present, portrait and
-   landscape. Note the classic primary is `0xFFE50914.withOpacity(0.9)`; only
-   the border is opaque.
-4. `dock_callback_parity_test.dart` — every control reachable under both
-   styles fires the same callback with the same arguments. Requires stable
-   `Key`s, `showRotate` injected as a param, and route settling for
-   overflow-sheet actions. **Two fixture families, because rev 3's fixtures
-   each omitted a callback by construction:**
-   - *Capability fixtures* — one per conditional callback, plus an
-     **all-enabled** fixture, so `onRecord`, `onNextChannel`, `onPrevious`,
-     `onNext`, `onPip`, `onRandom`, `onShowGuide`, `onShowIptvChannels`,
-     `onShowStremioSources` and `onShowPlaylist` are each actually exercised.
-   - *Realistic fixtures* — live-with-Channels-no-Guide, playlist-VOD-no-
-     Sources, single-file VOD — asserting §3.3 selects exactly three, in the
-     right order.
-   Plus explicit `onSeekBarChangedStart` / `onSeekBarChanged(double)` /
-   `onSeekBarChangeEnd` coverage. **Post-re-base these fixtures must drive a
-   `ValueNotifier<PlaybackUiClockValue>` rather than passing `position` and
-   `duration`** — those parameters no longer exist.
-5. `dock_layout_test.dart` — widget tests over viewport **pairs**, not scalar
-   widths: `320×320`, `360×640`, `599×360` (worst case, `large`, full-EPG
-   panel), **`599×479` and `600×480`** (either side of the arrangement
-   boundary), `800×480`, `1280×800`, `2560×1440` — each × `TextScaler`
-   1.0/1.15/1.3 × `auto|large`, and each with zero and with 48lp top / 34lp
-   bottom insets. Asserts the collapse ladder fires in order, the §3.4 budget
-   holds, **that the rendered styled seek row measures ≤ 56lp at text scale
-   1.0 and 1.3** (rev 10 sent this to §7.7, which only measures the info
-   panel — the scrubber bound had no owner), and — per §3.4's computed boundary — that **either the styled dock
-   fits with no overflow, or `compute` returns null and `classic` renders**.
-   Rev 7's unconditional "no overflow" could not hold at every listed size.
-6. `dock_footprint_test.dart` — **at settled layout** (see §5.3), pumping
-   through the 150ms animation: **both** positioned consumers — skip button
-   and PikPak retry overlay — never overlap the dock at max height, including
-   the controls-hidden and `hideOptions: true + infoPanel` cases (rev 6 tested
-   only the skip button despite §5.4 naming both); all four gesture bands match the published extent; and under
-   `classic` the exact `160/28` ternary and all four `72`s are unchanged.
-7. `dock_info_panel_bound_test.dart` — measures the real rendered height of
-   `_buildIptvInfoPanel` across **all four `PlayerGuideStyle` values × text
-   scale 1.0/1.3 × widths 320/599/**639/640**/**959/960**/1440, using the
-   **maximum structural fixture** (now + times + next + group + channel number
-   + recording)**, asserting every result stays
-   under `kInfoPanelBound` (200lp). Rev 7's 120 was a guess derived from one style at one width, and Edition at
-   width ≥ 960 already exceeds it. 200 is a **credible conservative bound
-   verified across the enumerated domain** — not a proof for all widths, which
-   sampling cannot give.
-8. **No** app-theme import test — `kStillFrozenPaths` already covers
-   `lib/screens/video_player/` (`source_guard_test.dart:35-38`).
-9. **Manual matrix:** `1 classic + (4 palettes × 4 sizes × 3 arrangements) =
-   49` visual states before conditional controls. Spot-check all 4 palettes at
-   `regular` (`aurum` dark-ink mandatory), each arrangement once, live IPTV
-   with `infoPanel`, a Stremio session with sources, and
-   `hideOptions`/`hideSeekbar` flows.
+**Written and passing (24 tests):**
 
-## 8. Phases + gates
+- `test/dock_metrics_test.dart` — the 44lp floor across 9 viewports × 4 sizes ×
+  2 inset sets × 3 panel heights; arrangement boundaries either side of both
+  gates; the worked `599×360` case; null-instead-of-overflow at `320×240`;
+  labels never pre-multiplied; every style's `forcedArrangement`; the legacy
+  `two_tier` value resolving to Adaptive; all four palettes, including that
+  **two** carry dark primary ink.
+- `test/dock_layout_test.dart` — renders the densest possible dock at every
+  approved viewport × inset × text scale × size and asserts no overflow; the
+  same with a full-EPG panel; each arrangement's distinguishing shape; PiP
+  surviving `hideOptions`.
 
-| # | Phase | Gate |
+This pair earned its keep immediately: it found three overflows the arithmetic
+had approved (no width check at all, the scrubber's time labels against the
+`Slider`'s minimum track, and `DockChip`'s own label in constrained rows).
+
+**Not written — the outstanding debt:**
+
+1. **Storage coercion.** The enum parsing is tested; `StorageService`'s
+   whitelist and its coerce-on-read-and-write are not.
+2. **Classic goldens.** Nothing pins today's dock. The legacy subtree is
+   unreachable from `classic` by construction, but nothing would catch an
+   accidental edit to it.
+3. **Callback parity.** No test proves every control fires the same callback
+   with the same arguments as before. Needs capability fixtures (one per
+   conditional callback plus an all-enabled case), realistic fixtures for the
+   §3.3 selector, and explicit seek start/change/end coverage.
+4. **Six-consumer footprint.** No test proves the skip button and PikPak
+   overlay clear a taller dock at settled layout, nor that `classic` keeps its
+   exact `160/28` ternary and four `72`s.
+5. **Info-panel bound.** `kInfoPanelBound = 200` is a reading of
+   `iptv_zap_banner.dart`, not a measurement. Needs the render across all four
+   guide styles × text scale 1.0/1.3 × widths 320/599/639/640/959/960/1440
+   with the maximum structural fixture.
+
+**Not covered by any test, by nature:** whether the dock *looks* right. The
+layout tests prove it does not overflow; they cannot tell you the volume
+control sits well or the bar reaches the edges. The single defect that most
+embarrassed this plan — `wide` shipping as the design's skeleton with half its
+content missing — was found by putting a screenshot beside the mock, after
+eleven rounds of review had passed the code. Render and look before calling a
+visual change done.
+
+## 8. Phases — all shipped
+
+| # | Phase | State |
 |---|---|---|
-| A | `dock_style.dart` — tokens + metrics, no UI | §7.1 |
-| B | Prefs, page, settings wiring | §7.2; classic still default |
-| C | **Footprint contract alone, under classic** — all six consumers gain the styled/classic branch and select today's constants | §7.6, zero visual change |
-| D | `two_tier` `regular` | §7.3 goldens, §7.4 parity |
-| E | `narrow` + overflow sheet, then `wide` | §7.5 |
+| A | `dock_style.dart` tokens + metrics | done, §7.1 green |
+| B | Prefs, picker page, settings wiring | done; Classic still the default |
+| C | Footprint contract | done, with the classic-keeps-literals contract of §5.4 |
+| D | `regular` | done |
+| E | `narrow` + overflow sheet, `wide` | done; `wide` rebuilt in `3b4ea443` |
 
-Phase C ships the risky plumbing with no visual change, so a regression there
-is isolated from the redesign. Codex review at the end of A, C and E.
+Codex reviewed the plan nine times and the build twice. The build reviews found
+two criticals the plan reviews could not have: a reporter measuring the whole
+screen instead of the dock, and a fallback that left the host in styled
+geometry with no reporter to correct it.
 
 ## 9. Deferred
 
@@ -716,3 +722,11 @@ actually changed.
 
 The architecture was unaffected. Only the parity baseline and line references
 moved.
+
+**Second pass, `3b4ea443`.** `StyledDock` gained `volume`,
+`onVolumeChanged`, `showFullscreen`, `onFullscreen`; `_scrubber` gained a
+`bleed` variant mounted *outside* the dock's horizontal padding (negative
+padding asserts in Flutter, so the edge-to-edge bar cannot be produced by
+cancelling the padding — it has to sit outside it); and `PlayerDockStyle`
+went from two values to five. §7's outstanding tests are written against this
+surface, not the rev-11 one.

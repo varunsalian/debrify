@@ -625,6 +625,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// panel's own reporter on the next frame.
   double _infoPanelHeight = DockLayoutInput.kInfoPanelBound;
 
+  /// 0..1, mirrored for the dock's volume control. mpv takes 0..100.
+  double _dockVolume = 1.0;
+
   /// The panel's STRUCTURAL signature — which rows exist, not what they say.
   /// Every row is bounded to one line, so content cannot change the height;
   /// only presence can. Recomputed each build, and a change resets the cached
@@ -10473,6 +10476,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                         (_infoPanelHeight - h) >= 1.0) {
                                       setState(() => _infoPanelHeight = h);
                                     }
+                                  },
+                                  volume: _dockVolume,
+                                  onVolumeChanged: (v) {
+                                    setState(() => _dockVolume = v);
+                                    _player.setVolume(
+                                      (v * 100).clamp(0.0, 100.0),
+                                    );
+                                  },
+                                  // windowManager drives fullscreen only on
+                                  // Windows/Linux; macOS and mobile leave it
+                                  // to the OS, so the button would be a lie.
+                                  showFullscreen:
+                                      Platform.isWindows || Platform.isLinux,
+                                  onFullscreen: () async {
+                                    final isFull = await windowManager
+                                        .isFullScreen();
+                                    if (!mounted) return;
+                                    await windowManager.setFullScreen(!isFull);
                                   },
                                   dockStyle: _dockStyle,
                                   dockPalette: _dockPalette,

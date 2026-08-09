@@ -1,6 +1,7 @@
 import 'package:debrify/screens/video_player/models/gesture_state.dart';
 import 'package:debrify/screens/video_player/services/playback_ui_clock.dart';
 import 'package:debrify/screens/video_player/widgets/dock_style.dart';
+import 'package:debrify/screens/video_player/widgets/dock_widgets.dart';
 import 'package:debrify/screens/video_player/widgets/styled_dock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -190,7 +191,10 @@ void main() {
   });
 
   testWidgets('each arrangement renders its own shape', (tester) async {
-    // narrow keeps a single More affordance; wide drops chip labels entirely.
+    // With every capability enabled, narrow and regular both need a More
+    // affordance — narrow because it shows three tools, regular because the
+    // tools tier is capped at two lines. Wide is icon-only and scrolls, so it
+    // never needs one.
     for (final entry in {
       const Size(599, 360): DockArrangement.narrow,
       const Size(800, 700): DockArrangement.regular,
@@ -221,10 +225,80 @@ void main() {
       final hasMore = find.text('More').evaluate().isNotEmpty;
       expect(
         hasMore,
-        entry.value == DockArrangement.narrow,
-        reason: 'More belongs to narrow only — ${entry.key}',
+        entry.value != DockArrangement.wide,
+        reason:
+            'More is the overflow escape for narrow and regular, and wide '
+            'has none because it scrolls icon-only — ${entry.key}',
       );
     }
+  });
+
+  testWidgets('tool chips hug their content instead of filling the row', (
+    tester,
+  ) async {
+    // A Container with an `alignment` expands to fill bounded constraints, so
+    // every chip in the two-tier Wrap became a full-width row: six lines of
+    // tools, and a dock that ate the screen. It never overflowed, so the
+    // no-overflow tests passed it happily.
+    const size = Size(900, 700);
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    expect(DockArrangement.forViewport(size), DockArrangement.regular);
+
+    await tester.pumpWidget(
+      host(
+        size: size,
+        safeArea: EdgeInsets.zero,
+        textScale: 1.0,
+        dockSize: PlayerDockSize.auto,
+        withPanel: false,
+      ),
+    );
+    await tester.pump();
+
+    final chips = find.byType(DockChip);
+    expect(chips, findsWidgets);
+    for (final element in chips.evaluate()) {
+      final width = (element.renderObject! as RenderBox).size.width;
+      expect(
+        width,
+        lessThan(size.width / 2),
+        reason:
+            'a chip ${width.toStringAsFixed(1)}lp wide in a ${size.width}lp '
+            'dock means it is filling the row, not hugging its label',
+      );
+    }
+  });
+
+  testWidgets('the two-tier dock does not eat the screen', (tester) async {
+    const size = Size(900, 700);
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      host(
+        size: size,
+        safeArea: EdgeInsets.zero,
+        textScale: 1.0,
+        dockSize: PlayerDockSize.auto,
+        withPanel: false,
+      ),
+    );
+    await tester.pump();
+
+    // The tools tier is budgeted as at most one extra row; a dock taller than
+    // half the viewport means it wrapped far more than that.
+    final dock = tester.getSize(find.byType(StyledDock));
+    expect(dock.height, lessThanOrEqualTo(size.height));
+    final toolsRow = tester.getSize(find.byType(Wrap).first);
+    expect(
+      toolsRow.height,
+      lessThan(size.height * 0.35),
+      reason: 'tools tier ${toolsRow.height}lp tall — it is stacking',
+    );
   });
 
   testWidgets('PiP stays reachable when options are hidden', (tester) async {
