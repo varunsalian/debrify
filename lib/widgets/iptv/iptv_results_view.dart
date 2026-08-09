@@ -4809,7 +4809,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       padding: const EdgeInsets.fromLTRB(12, 8, 2, 8),
       decoration: BoxDecoration(
         color: app.iptv.surfaceTint,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: app.shape.br(10),
         border: Border.all(color: app.iptv.hairline),
       ),
       child: Row(
@@ -4892,7 +4892,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
           decoration: BoxDecoration(
             color: app.iptv.chipSurface,
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: app.shape.br(22),
             border: Border.all(color: app.core.tx.withValues(alpha: 0.10)),
             boxShadow: const [
               BoxShadow(
@@ -5169,7 +5169,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             builder: (context, ch, _) {
               return RepaintBoundary(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: app.shape.br(10),
                   child: ColoredBox(
                     color:
                         IptvStyleTokens.of(_iptvStyle)?.panel ??
@@ -5326,7 +5326,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               height: 34,
               decoration: t == null
                   ? BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: app.shape.br(8),
                       border: Border.all(
                         color: app.iptv.hairline,
                       ),
@@ -5337,7 +5337,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                     )
                   : BoxDecoration(
                       shape: isConsole ? BoxShape.rectangle : BoxShape.circle,
-                      borderRadius: isConsole ? BorderRadius.circular(6) : null,
+                      borderRadius: isConsole ? app.shape.br(6) : null,
                       border: Border.all(color: t.hairline2),
                       color: t.fg.withValues(alpha: 0.03),
                     ),
@@ -5779,7 +5779,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                           ),
                           minimumSize: const Size.fromHeight(46),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(13),
+                            borderRadius: app.shape.br(13),
                           ),
                         ),
                         icon: Icon(
@@ -5837,7 +5837,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   Widget _buildTvFocusStage(IptvChannel? ch, int epoch) {
     final app = AppThemeScope.of(context);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: app.shape.br(8),
       child: ColoredBox(
         color: app.iptv.stageBg,
         child: Column(
@@ -6678,8 +6678,12 @@ class _IptvStageChipState extends State<_IptvStageChip>
         // VIDEO, so it must stay black glass and legible over an arbitrary
         // picture rather than follow the page (see the token's doc).
         color: const Color(0xB00B0918),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: app.core.tx.withValues(alpha: 0.10)),
+        borderRadius: app.shape.brPill,
+        // `onGlass`, not `core.tx`: the fill above is black on EVERY theme by
+        // design, so its ink must be what reads on black — a paper theme's
+        // near-black page ink would draw an invisible edge here. Same reason
+        // the label below uses it.
+        border: Border.all(color: app.onGlass.withValues(alpha: 0.10)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -6704,7 +6708,7 @@ class _IptvStageChipState extends State<_IptvStageChip>
           Text(
             label,
             style: TextStyle(
-              color: app.core.tx,
+              color: app.onGlass,
               fontSize: 9.5,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.0,
@@ -6793,7 +6797,7 @@ class _IptvFocusStageInfo extends StatelessWidget {
                       width: logoSize,
                       height: logoSize,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: app.shape.brImg(8),
                         border: Border.all(
                           color: app.iptv.hairline,
                         ),
@@ -6930,7 +6934,7 @@ class _IptvRailInfo extends StatelessWidget {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: app.shape.br(11),
                 border: Border.all(color: app.core.tx.withValues(alpha: 0.06)),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
@@ -7062,7 +7066,7 @@ class _KeyCap extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: app.shape.br(5),
         border: Border.all(color: app.core.tx.withValues(alpha: 0.22)),
       ),
       child: Text(

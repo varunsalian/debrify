@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:debrify/theme/app_surfaces.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Files inside a still-frozen surface that have been converted to the token
@@ -18,6 +19,23 @@ import 'package:flutter_test/flutter_test.dart';
 /// empty between surfaces, and a stale entry means a migration was abandoned
 /// half-done.
 const Set<String> kThemingPrepared = {};
+
+/// The surfaces that are still shadowed by a `LegacyThemeBoundary` at their
+/// root, as PATHS — what the push guard below needs.
+///
+/// Phase two flipped Playlist, Downloads, Debrify TV, Stremio TV, IPTV and
+/// YouTube. What remains frozen is PLAYBACK, permanently: it has its own
+/// stable theme, its Kotlin TV layer is out of reach of any Dart palette, and
+/// a fixed dark surface is the right answer over arbitrary video.
+///
+/// Coupled to `AppSurfaces.tabs` by
+/// `'the frozen path list agrees with the tab classification'` — the two are
+/// different spellings of one fact, and a tab flipped to themed while this
+/// list still names its screen is exactly the drift that test exists to catch.
+const List<String> kStillFrozenPaths = [
+  'lib/screens/video_player_screen.dart',
+  'lib/screens/video_player/',
+];
 
 /// Source-level tripwires for the containment rules a type system can't see.
 ///
@@ -98,13 +116,7 @@ void main() {
     // Fifteen kThemingPrepared entries were previously invisible to this guard
     // because their paths were absent here — the allow-list looked like it was
     // doing work while the guard could not see the files at all.
-    const frozen = [
-      // Phase two flipped Playlist, Downloads, Debrify TV, Stremio TV, IPTV
-      // and YouTube. What remains frozen is PLAYBACK, permanently — it has its
-      // own stable theme and does not follow the app palette.
-      'lib/screens/video_player_screen.dart',
-      'lib/screens/video_player/',
-    ];
+    const frozen = kStillFrozenPaths;
     final offenders = <String>[];
     for (final file in _libDartFiles()) {
       final rel = _rel(file);
@@ -172,13 +184,11 @@ void main() {
       'lib/screens/playlist_screen.dart', // player push
       'lib/screens/downloads_screen.dart', // player push
     };
-    const stillFrozen = [
-      // Phase two flipped Playlist, Downloads, Debrify TV, Stremio TV, IPTV
-      // and YouTube. What remains frozen is PLAYBACK, permanently — it has its
-      // own stable theme and does not follow the app palette.
-      'lib/screens/video_player_screen.dart',
-      'lib/screens/video_player/',
-    ];
+    // Coupled to the classification by the sibling test below — this list may
+    // only ever name playback, and `AppSurfaces` may only ever freeze the
+    // inert slot. Left uncoupled it was a hand-maintained list that a tab flip
+    // could silently outdate.
+    const stillFrozen = kStillFrozenPaths;
     final offenders = <String>[];
     for (final file in _libDartFiles()) {
       final rel = _rel(file);
@@ -196,6 +206,49 @@ void main() {
         reason: 'a themed surface still pushes a frozen child route — remove '
             'the freeze, or allow-list it if the destination is playback or '
             'another frozen surface\'s screen: $offenders');
+  });
+
+  test('the frozen path list agrees with the tab classification', () {
+    // [kStillFrozenPaths] and `AppSurfaces.tabs` are two spellings of one
+    // fact: which surfaces do not follow the app palette. They were only
+    // related by hand, so flipping a tab to themed could leave its screen
+    // named in the path list and the push guard above would stay green while
+    // silently exempting a themed surface.
+    //
+    // Both directions are asserted:
+    //
+    //  * the path list may name ONLY playback — anything else means a surface
+    //    was frozen without a classification entry;
+    //  * `AppSurfaces` may freeze ONLY index 0, the inert deprecated-Home slot
+    //    that is unreachable rather than deferred. Playback is deliberately
+    //    absent from that map: it is excluded at its ENTRY POINTS
+    //    (`FrozenLegacyPageRoute` / `pushExcluded`), not by tab.
+    //
+    // A future surface that is genuinely frozen again has to update both, and
+    // this test is where it says so.
+    // Pinned exactly, not by prefix. `everyElement(startsWith(…))` is
+    // vacuously true on an empty list — and an empty list would silently make
+    // the "frozen surfaces never read the app theme" scan above cover NOTHING,
+    // so a new `AppThemeScope` read inside the player would pass. The prefix
+    // form was also broader than the two paths it meant.
+    expect(
+      kStillFrozenPaths,
+      const ['lib/screens/video_player_screen.dart', 'lib/screens/video_player/'],
+      reason: 'only playback may sit outside the app palette by path. Changing '
+          'this list changes what the frozen-surface scans can see, so it '
+          'needs a matching AppSurfaces.tabs entry and a note here',
+    );
+    final frozenTabs = AppSurfaces.tabs.entries
+        .where((e) => e.value == SurfaceKind.frozen)
+        .map((e) => e.key)
+        .toList();
+    expect(
+      frozenTabs,
+      [0],
+      reason: 'AppSurfaces froze a tab other than the inert slot — either the '
+          'freeze is wrong, or kStillFrozenPaths needs its screen and the '
+          'push guard needs a matching allow-list entry',
+    );
   });
 
   // NOTE: the "frozen surface's child screen is never pushed unwrapped" test

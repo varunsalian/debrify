@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
 import '../../services/iptv_epg_service.dart';
 import 'styles/iptv_style.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 
@@ -176,9 +177,39 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
     });
   }
 
+  /// This card's ink at a given emphasis.
+  ///
+  /// The `command` look has no style tokens and reads the app palette, exactly
+  /// as it did before — passing `null` tokens returns the same
+  /// `core.tx`-at-alpha literal every site used. Edition and Console DO own a
+  /// foreground ramp (`fg` / `fgMid` / `fgDim` / `fgFaint`, the mocks'
+  /// 100/80/55/35 steps), and the agreed rule is that palette follows the app
+  /// theme while a style's own ramp and layout stay the style's. Reading
+  /// `core.tx` unconditionally broke that half of it — this is the same
+  /// `t == null ? … : t.fgN` shape `_EpgScheduleListState` already uses, just
+  /// expressed once instead of eleven times.
+  ///
+  /// The alpha is the SELECTOR, not the value: each site keeps the alpha it
+  /// always passed, and the bands map it onto the ramp step of the same
+  /// MEANING. Deliberately semantic bands, not nearest-value ones — Console's
+  /// ramp is 100/70/45/28, so a nearest-value rule would put the 0.58 body
+  /// text on `fgMid` (a title tone) and the 0.40 metadata on `fgDim` (a body
+  /// tone), flattening the hierarchy the alphas were chosen to express.
+  /// primary ≥ 0.90 · secondary ≥ 0.65 · body ≥ 0.42 · metadata below.
+  Color _ink(AppTheme app, double alpha) {
+    final t = widget.tokens;
+    if (t == null) return app.core.tx.withValues(alpha: alpha);
+    if (alpha >= 0.90) return t.fg;
+    if (alpha >= 0.65) return t.fgMid;
+    if (alpha >= 0.42) return t.fgDim;
+    return t.fgFaint;
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const _EpgSkeleton();
+    // The skeleton is a styled-card surface too — `surfaceTint` where the
+    // style declares one, the app-ink veil otherwise.
+    if (_loading) return _EpgSkeleton(tint: widget.tokens?.selectedTint);
     final app = AppThemeScope.of(context);
     final data = _data;
     if (data == null || data.isEmpty) return const SizedBox.shrink();
@@ -192,7 +223,14 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
         if (next == null) return const SizedBox.shrink();
         return Row(
           children: [
-            _EpgTag('NEXT', dim: true, accent: widget.tokens?.accent),
+            _EpgTag(
+              'NEXT',
+              dim: true,
+              accent: widget.tokens?.accent,
+              // The dim tone is part of the style's ramp too — passing only
+              // the accent left REPLAY/NEXT on app ink under a styled panel.
+              dimColor: widget.tokens?.fgFaint,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -200,7 +238,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: app.core.tx.withValues(alpha: 0.78),
+                  color: _ink(app, 0.78),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -210,7 +248,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
             Text(
               _clock(context, next.start),
               style: TextStyle(
-                color: app.core.tx.withValues(alpha: 0.48),
+                color: _ink(app, 0.48),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 fontFeatures: const [FontFeature.tabularFigures()],
@@ -230,7 +268,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
               Text(
                 '${_clock(context, now.start)} – ${_clock(context, now.stop)}',
                 style: TextStyle(
-                  color: app.core.tx.withValues(alpha: 0.52),
+                  color: _ink(app, 0.52),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -244,7 +282,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
             maxLines: widget.dense ? 1 : 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: app.core.tx,
+              color: _ink(app, 1),
               fontSize: widget.dense ? 14 : 16,
               fontWeight: FontWeight.w700,
               height: 1.2,
@@ -256,7 +294,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
               _OverflowMarqueeText(
                 text: now.description,
                 style: TextStyle(
-                  color: app.core.tx.withValues(alpha: 0.58),
+                  color: _ink(app, 0.58),
                   fontSize: 10.5,
                   height: 1.2,
                 ),
@@ -267,7 +305,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: app.core.tx.withValues(alpha: 0.58),
+                  color: _ink(app, 0.58),
                   fontSize: 11.5,
                   height: 1.35,
                 ),
@@ -277,6 +315,9 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
           _EpgProgressBar(
             progress: now.progressAt(at),
             accent: widget.tokens?.accent,
+            // `_EpgScheduleList` already passes this; the rail card did not,
+            // so a styled panel drew the style's fill on an app-ink track.
+            track: widget.tokens?.hairline2,
           ),
         ],
       );
@@ -297,7 +338,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: app.core.tx.withValues(alpha: 0.5),
+                    color: _ink(app, 0.5),
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     fontFeatures: const [FontFeature.tabularFigures()],
@@ -312,7 +353,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: app.core.tx,
+              color: _ink(app, 1),
               fontSize: 15,
               fontWeight: FontWeight.w700,
               height: 1.2,
@@ -322,12 +363,15 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
           _EpgProgressBar(
             progress: now.progressAt(at),
             accent: widget.tokens?.accent,
+            // `_EpgScheduleList` already passes this; the rail card did not,
+            // so a styled panel drew the style's fill on an app-ink track.
+            track: widget.tokens?.hairline2,
           ),
           const SizedBox(height: 4),
           Text(
             _remainingLabel(now, at),
             style: TextStyle(
-              color: app.core.tx.withValues(alpha: 0.4),
+              color: _ink(app, 0.4),
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
             ),
@@ -340,7 +384,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: app.iptv.inkDim,
+                  color: _ink(app, 0.55),
                   fontSize: 12,
                   height: 1.35,
                 ),
@@ -352,12 +396,19 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
           if (now != null) const SizedBox(height: 10),
           Row(
             children: [
-              _EpgTag('NEXT', dim: true, accent: widget.tokens?.accent),
+              _EpgTag(
+              'NEXT',
+              dim: true,
+              accent: widget.tokens?.accent,
+              // The dim tone is part of the style's ramp too — passing only
+              // the accent left REPLAY/NEXT on app ink under a styled panel.
+              dimColor: widget.tokens?.fgFaint,
+            ),
               const SizedBox(width: 8),
               Text(
                 _clock(context, next.start),
                 style: TextStyle(
-                  color: app.core.tx.withValues(alpha: 0.45),
+                  color: _ink(app, 0.45),
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -370,7 +421,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: app.core.tx.withValues(alpha: 0.72),
+                    color: _ink(app, 0.72),
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -506,15 +557,20 @@ class _OverflowMarqueeTextState extends State<_OverflowMarqueeText> {
 /// Static two-bar placeholder — no shimmer on purpose (TV perf playbook:
 /// nothing animates unless it must).
 class _EpgSkeleton extends StatelessWidget {
-  const _EpgSkeleton();
+  /// The styled looks' own surface tint. Null keeps the app-ink veil, which is
+  /// what `command` and every unstyled caller have always drawn.
+  final Color? tint;
+
+  const _EpgSkeleton({this.tint});
 
   @override
   Widget build(BuildContext context) {
+    final veil = tint ?? AppThemeScope.of(context).core.tx.withValues(alpha: 0.07);
     Widget bar(double w) => Container(
       width: w,
       height: 10,
       decoration: BoxDecoration(
-        color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.07),
+        color: veil,
         borderRadius: BorderRadius.circular(5),
       ),
     );
@@ -598,7 +654,7 @@ class _EpgTag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: app.shape.br(4),
         border: Border.all(color: color.withValues(alpha: 0.55), width: 1),
       ),
       child: Text(
@@ -627,7 +683,7 @@ class _EpgProgressBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(2),
+      borderRadius: app.shape.br(2),
       child: SizedBox(
         height: 3.5,
         child: Row(
@@ -804,7 +860,7 @@ Future<void> showIptvScheduleSheet(
                 height: 4,
                 decoration: BoxDecoration(
                   color: app.core.tx.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: app.shape.br(2),
                 ),
               ),
             ),
@@ -1149,7 +1205,7 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                         ? app.iptv.surfaceTint
                         : t.selectedTint)
                   : Colors.transparent),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: app.shape.br(10),
         border: Border.all(
           color: _focused
               ? (t == null ? app.home.focus : t.accent)
