@@ -90,6 +90,9 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenDetailPageStyle;
   final String looksLabel;
   final Future<void> Function() onOpenLooks;
+
+  /// Withheld like [detailThemeLabel]: Theme Lab is a preview TOOL, not a
+  /// setting — it changes nothing. Page and wiring stay.
   final Future<void> Function() onOpenThemeLab;
   final String appThemeLabel;
   final Future<void> Function() onOpenAppTheme;
@@ -243,9 +246,10 @@ const List<_Category> _kCategories = [
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
   /// written out here rather than driven by a provider list (Appearance has
-  /// exactly 15 — Looks and Theme Lab from the theme work and Hero Artwork
-  /// Quality from the player-dock merge, less Details Theme which App Theme
-  /// now covers; About has up to 6 with the conditional donation row;
+  /// exactly 14 — Looks from the theme work and Hero Artwork Quality from the
+  /// player-dock merge, less Details Theme (App Theme covers it) and Theme Lab
+  /// (a tool, not a setting); About has up to 6 with the conditional donation
+  /// row;
   /// Data & Backup up to 5). Connections and Trackers are sized from their
   /// own lists; see the pool computation in [initState].
   ///
@@ -253,7 +257,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// so a row added past the pool throws on build.
   /// Appearance is the longest fixed category. The pool must cover it, or the
   /// last row of that category has no node and cannot be reached.
-  static const int _kMaxCategoryRows = 15;
+  static const int _kMaxCategoryRows = 14;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -671,13 +675,6 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenLaunchAnimation,
                 focusNode: _paneNodes[3],
               ),
-              // Last because it CHANGES nothing — it is the loop for judging
-              // what the rows above did.
-              SettingsTile.spec(
-                SettingsRows.themeLab,
-                onTap: widget.onOpenThemeLab,
-                focusNode: _paneNodes[4],
-              ),
             ],
           ),
           const SizedBox(height: 18),
@@ -689,43 +686,43 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.tvHomeStyle,
                 subtitle: widget.tvHomeStyleLabel,
                 onTap: widget.onOpenTvHomeStyle,
-                focusNode: _paneNodes[5],
+                focusNode: _paneNodes[4],
               ),
               SettingsTile.spec(
                 SettingsRows.discoverLayout,
                 subtitle: widget.discoverLayoutLabel,
                 onTap: widget.onOpenDiscoverLayout,
-                focusNode: _paneNodes[6],
+                focusNode: _paneNodes[5],
               ),
               SettingsTile.spec(
                 SettingsRows.detailPageStyle,
                 subtitle: widget.detailPageStyleLabel,
                 onTap: widget.onOpenDetailPageStyle,
-                focusNode: _paneNodes[7],
+                focusNode: _paneNodes[6],
               ),
               SettingsTile.spec(
                 SettingsRows.tvSidebarStyle,
                 subtitle: widget.tvSidebarStyleLabel,
                 onTap: widget.onOpenTvSidebarStyle,
-                focusNode: _paneNodes[8],
+                focusNode: _paneNodes[7],
               ),
               SettingsTile.spec(
                 SettingsRows.iptvAppearance,
                 subtitle: widget.iptvStyleLabel,
                 onTap: widget.onOpenIptvStyle,
-                focusNode: _paneNodes[9],
+                focusNode: _paneNodes[8],
               ),
               SettingsTile.spec(
                 SettingsRows.playerGuideStyle,
                 subtitle: widget.playerGuideStyleLabel,
                 onTap: widget.onOpenPlayerGuideStyle,
-                focusNode: _paneNodes[10],
+                focusNode: _paneNodes[9],
               ),
               SettingsTile.spec(
                 SettingsRows.parentsGuideStyle,
                 subtitle: widget.parentsGuideStyleLabel,
                 onTap: widget.onOpenParentsGuideStyle,
-                focusNode: _paneNodes[11],
+                focusNode: _paneNodes[10],
               ),
             ],
           ),
@@ -739,19 +736,19 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.tvScreenSize,
                 subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
                 onTap: widget.onOpenTvScreenSize,
-                focusNode: _paneNodes[12],
+                focusNode: _paneNodes[11],
               ),
               SettingsTile.spec(
                 SettingsRows.tvRenderQuality,
                 subtitle: widget.tvRenderQualityLabel,
                 onTap: widget.onOpenTvRenderQuality,
-                focusNode: _paneNodes[13],
+                focusNode: _paneNodes[12],
               ),
               SettingsTile.spec(
                 SettingsRows.tvHeroArtworkQuality,
                 subtitle: widget.tvHeroArtworkQualityLabel,
                 onTap: widget.onOpenTvHeroArtworkQuality,
-                focusNode: _paneNodes[14],
+                focusNode: _paneNodes[13],
               ),
             ],
           ),

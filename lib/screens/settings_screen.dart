@@ -4298,6 +4298,11 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenDetailPageStyle;
   final String appThemeLabel;
   final Future<void> Function() onOpenLooks;
+
+  /// Withheld like [detailThemeLabel]: Theme Lab is a preview TOOL, not a
+  /// setting — it changes nothing, and a row that changes nothing is noise in
+  /// a list of rows that do. Page and wiring stay so restoring it is a few
+  /// lines.
   final Future<void> Function() onOpenThemeLab;
   final Future<void> Function() onOpenAppTheme;
 
@@ -4447,12 +4452,6 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.launchAnimation,
                       subtitle: launchAnimationLabel,
                       onTap: onOpenLaunchAnimation,
-                    ),
-                    // Last in the group because it CHANGES nothing — it is the
-                    // loop for judging what the rows above did.
-                    SettingsTile.spec(
-                      SettingsRows.themeLab,
-                      onTap: onOpenThemeLab,
                     ),
                   ],
                 ),
