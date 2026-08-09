@@ -2,6 +2,7 @@ import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
+import '../../services/storage_service.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_controller.dart';
 import '../../theme/app_theme_scope.dart';
@@ -9,6 +10,7 @@ import '../../theme/premium_looks.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/detail/theme/detail_theme.dart';
 import '../../widgets/detail/theme/detail_themes.dart';
+import 'detail_page_style_page.dart' show effectiveDetailPageStyle;
 import 'detail_theme_page.dart' show kDetailThemesShipped;
 import 'widgets/settings_widgets.dart' show SettingsSectionLabel;
 
@@ -139,6 +141,17 @@ class _AppThemePageState extends State<AppThemePage> {
                       ),
                     ),
                   ),
+                  // Picking a theme while Classic is the details layout looks
+                  // like it did nothing on the page most people judge the app
+                  // by. Said HERE rather than only on the Details Page picker,
+                  // because this is the screen where the expectation is set.
+                  if (effectiveDetailPageStyle(
+                        StorageService.detailPageStyleCached,
+                      ) ==
+                      'classic') ...[
+                    const SizedBox(height: 18),
+                    _classicNotice(app),
+                  ],
                   const SizedBox(height: 20),
                   Focus(
                     focusNode: _firstCardMarker,
@@ -198,6 +211,38 @@ class _AppThemePageState extends State<AppThemePage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Why a theme appears to do nothing on detail pages.
+  ///
+  /// Classic is the one details layout that is deliberately unthemed — it
+  /// paints its own literals — so a theme picked here reaches every screen
+  /// except the one the user is most likely to check first.
+  Widget _classicNotice(AppTheme app) {
+    final t = app.settings;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+      decoration: BoxDecoration(
+        color: app.fade(app.core.tx, 0.05),
+        borderRadius: app.shape.br(10),
+        border: Border.all(color: app.fade(app.core.tx, 0.10)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded, size: 17, color: t.dim),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Your Details Page is set to Classic, which keeps its own look — '
+              'so themes will not apply to movie and series pages. Pick any '
+              'other layout under Appearance → Details Page.',
+              style: TextStyle(fontSize: 12.5, height: 1.45, color: t.dim),
+            ),
+          ),
+        ],
       ),
     );
   }

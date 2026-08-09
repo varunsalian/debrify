@@ -53,6 +53,7 @@ import 'settings/app_theme_page.dart';
 import 'settings/looks_page.dart';
 import 'settings/theme_lab_page.dart';
 import 'settings/detail_theme_page.dart';
+import '../widgets/detail/theme/detail_themes.dart';
 import '../theme/app_theme_controller.dart';
 import 'settings/parents_guide_style_page.dart';
 import 'settings/player_dock_page.dart';
@@ -1356,7 +1357,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Appearance',
         _openAppThemePage,
         subtitle: appThemeLabel(AppThemeController.instance.id),
-        keywords: const [
+        keywords: [
           'app',
           'theme',
           'app theme',
@@ -1371,48 +1372,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'light',
           'legacy',
           'classic',
-          'broadsheet',
           'experimental',
-        ],
-      ),
-      // Ungated: the theme applies wherever an alternate layout draws.
-      nav(
-        SettingsRows.detailTheme,
-        'Appearance',
-        _openDetailThemePage,
-        subtitle: detailThemeLabel(_detailTheme),
-        keywords: const [
-          'details',
-          'detail',
-          'theme',
-          'colour',
-          'color',
-          'palette',
-          'look',
-          'style',
-          'skin',
-          'dark',
-          'light',
-          'noir',
-          'broadsheet',
-          'phosphor',
-          'aurora',
-          'concrete',
-          'velvet',
-          'blueprint',
-          'broadcast',
-          'sepia',
-          'obsidian',
-          'halo',
-          'prestige',
-          'deep field',
-          'graphite',
-          'vault',
-          'spectrum',
-          'verdant',
-          'frost',
-          'cinemascope',
-          'gold',
+          // Every theme by NAME, derived rather than typed out. The names used
+          // to live on the Details Theme entry; withholding that row would
+          // otherwise have made searching "velvet" or "deep field" find
+          // nothing, and a hardcoded copy had already gone stale — it listed
+          // the twenty old cores and none of the five new looks.
+          for (final t in DetailThemes.catalogue) t.label.toLowerCase(),
         ],
       ),
       nav(
@@ -4334,6 +4300,13 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenLooks;
   final Future<void> Function() onOpenThemeLab;
   final Future<void> Function() onOpenAppTheme;
+
+  /// Still plumbed, deliberately: the Details Theme ROW is withheld from the
+  /// Appearance list because App Theme write-through-mirrors into
+  /// `detail_theme`, so two rows set the same thing and one silently
+  /// overwrote the other. The page and its wiring stay so restoring the row is
+  /// a few lines rather than an archaeology exercise — the same
+  /// withheld-not-deleted pattern `kDetailThemesShipped` uses.
   final String detailThemeLabel;
   final Future<void> Function() onOpenDetailTheme;
   final String parentsGuideStyleLabel;
@@ -4502,11 +4475,6 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.appTheme,
                       subtitle: appThemeLabel,
                       onTap: onOpenAppTheme,
-                    ),
-                    SettingsTile.spec(
-                      SettingsRows.detailTheme,
-                      subtitle: detailThemeLabel,
-                      onTap: onOpenDetailTheme,
                     ),
                     SettingsTile.spec(
                       SettingsRows.parentsGuideStyle,

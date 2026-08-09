@@ -93,6 +93,13 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenThemeLab;
   final String appThemeLabel;
   final Future<void> Function() onOpenAppTheme;
+
+  /// Still plumbed, deliberately: the Details Theme ROW is withheld from the
+  /// Appearance list because App Theme write-through-mirrors into
+  /// `detail_theme`, so two rows set the same thing and one silently
+  /// overwrote the other. The page and its wiring stay so restoring the row is
+  /// a few lines rather than an archaeology exercise — the same
+  /// withheld-not-deleted pattern `kDetailThemesShipped` uses.
   final String detailThemeLabel;
   final Future<void> Function() onOpenDetailTheme;
   final String parentsGuideStyleLabel;
@@ -236,9 +243,9 @@ const List<_Category> _kCategories = [
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
   /// written out here rather than driven by a provider list (Appearance has
-  /// exactly 16 — Looks and Theme Lab from the theme work, Hero Artwork
-  /// Quality from the player-dock merge; About has up to 6 with the
-  /// conditional donation row;
+  /// exactly 15 — Looks and Theme Lab from the theme work and Hero Artwork
+  /// Quality from the player-dock merge, less Details Theme which App Theme
+  /// now covers; About has up to 6 with the conditional donation row;
   /// Data & Backup up to 5). Connections and Trackers are sized from their
   /// own lists; see the pool computation in [initState].
   ///
@@ -246,7 +253,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// so a row added past the pool throws on build.
   /// Appearance is the longest fixed category. The pool must cover it, or the
   /// last row of that category has no node and cannot be reached.
-  static const int _kMaxCategoryRows = 16;
+  static const int _kMaxCategoryRows = 15;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -718,16 +725,10 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 focusNode: _paneNodes[13],
               ),
               SettingsTile.spec(
-                SettingsRows.detailTheme,
-                subtitle: widget.detailThemeLabel,
-                onTap: widget.onOpenDetailTheme,
-                focusNode: _paneNodes[14],
-              ),
-              SettingsTile.spec(
                 SettingsRows.parentsGuideStyle,
                 subtitle: widget.parentsGuideStyleLabel,
                 onTap: widget.onOpenParentsGuideStyle,
-                focusNode: _paneNodes[15],
+                focusNode: _paneNodes[14],
               ),
             ],
           ),
