@@ -4416,25 +4416,28 @@ class _SettingsLayout extends StatelessWidget {
                 // pickers live in the TV layout's Appearance category — this
                 // layout never renders on Android TV.
                 SettingsSection(
-                  title: 'Appearance',
+                  title: 'Presets',
+                  blurb: 'One pick that sets the theme, layouts and launch '
+                      'animation together.',
                   children: [
-                    // Looks FIRST: it is the entry point every picker below is
-                    // an alternative to. Nobody assembles a coherent look out
-                    // of fourteen dropdowns, so the one-pick answer goes at
-                    // the top and the dropdowns stay for people who want them.
                     SettingsTile.spec(
                       SettingsRows.looks,
                       subtitle: AppLooks.active()?.label ?? 'Custom',
                       onTap: onOpenLooks,
                     ),
-                    // Sits beside Looks because it answers the question Looks
-                    // raises — "what does that one actually look like?" — and
-                    // it is the loop a theme author lives in.
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Theme',
+                  blurb: 'Colour, focus and motion. Applies everywhere in the '
+                      'app.',
+                  children: [
                     SettingsTile.spec(
-                      SettingsRows.themeLab,
-                      onTap: onOpenThemeLab,
+                      SettingsRows.appTheme,
+                      subtitle: appThemeLabel,
+                      onTap: onOpenAppTheme,
                     ),
-                    // App-wide next, then the feature looks.
                     SettingsTile.spec(
                       SettingsRows.textBrightness,
                       subtitle: textBrightnessLabel,
@@ -4444,6 +4447,24 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.launchAnimation,
                       subtitle: launchAnimationLabel,
                       onTap: onOpenLaunchAnimation,
+                    ),
+                    // Last in the group because it CHANGES nothing — it is the
+                    // loop for judging what the rows above did.
+                    SettingsTile.spec(
+                      SettingsRows.themeLab,
+                      onTap: onOpenThemeLab,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Screen layouts',
+                  blurb: 'Where things sit. Each screen is chosen separately.',
+                  children: [
+                    SettingsTile.spec(
+                      SettingsRows.detailPageStyle,
+                      subtitle: detailPageStyleLabel,
+                      onTap: onOpenDetailPageStyle,
                     ),
                     if (showIptvAppearance)
                       SettingsTile.spec(
@@ -4466,16 +4487,6 @@ class _SettingsLayout extends StatelessWidget {
                         subtitle: playerDockLabel,
                         onTap: onOpenPlayerDock,
                       ),
-                    SettingsTile.spec(
-                      SettingsRows.detailPageStyle,
-                      subtitle: detailPageStyleLabel,
-                      onTap: onOpenDetailPageStyle,
-                    ),
-                    SettingsTile.spec(
-                      SettingsRows.appTheme,
-                      subtitle: appThemeLabel,
-                      onTap: onOpenAppTheme,
-                    ),
                     SettingsTile.spec(
                       SettingsRows.parentsGuideStyle,
                       subtitle: parentsGuideStyleLabel,

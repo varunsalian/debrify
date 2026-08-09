@@ -206,8 +206,6 @@ abstract final class SettingsRows {
     title: 'Details Page',
     subtitle: '',
   );
-  // Subtitle is dynamic (the chosen theme) — passed per call site.
-  // Subtitle is dynamic (the chosen theme) — passed per call site.
   static const themeLab = SettingsRowContent(
     icon: Icons.science_rounded,
     title: 'Theme Lab',
@@ -221,7 +219,10 @@ abstract final class SettingsRows {
   );
   static const appTheme = SettingsRowContent(
     icon: Icons.format_paint_rounded,
-    title: 'App Theme',
+    // Just 'Theme': the section header above it already says THEME, and
+    // 'App Theme' only ever needed the qualifier to tell itself apart from
+    // the Details Theme row that no longer exists.
+    title: 'Theme',
     subtitle: '',
   );
   static const detailTheme = SettingsRowContent(
@@ -1443,11 +1444,20 @@ class SettingsSection extends StatelessWidget {
   final List<Widget> children;
   final Color? accentColor;
 
+  /// One line under the header saying what the rows below have in common.
+  ///
+  /// Optional because most sections are self-evident from their title. It
+  /// earns its place where a group's rows LOOK like their neighbours but
+  /// answer a different question — Appearance's performance rows next to its
+  /// style rows being the case that prompted it.
+  final String? blurb;
+
   const SettingsSection({
     super.key,
     required this.title,
     required this.children,
     this.accentColor,
+    this.blurb,
   });
 
   @override
@@ -1466,6 +1476,14 @@ class SettingsSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (title.isNotEmpty) SettingsSectionLabel(title, color: accentColor),
+        if (blurb != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 10, right: 8),
+            child: Text(
+              blurb!,
+              style: TextStyle(fontSize: 12, height: 1.4, color: t.dim),
+            ),
+          ),
         Container(
           decoration: BoxDecoration(
             // A rule look keeps the border — that IS its separation — and

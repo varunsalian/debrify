@@ -624,28 +624,41 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 3: // Appearance — every look/layout pref, one place.
+      case 3: // Appearance — grouped by the QUESTION each row answers.
+        // Four groups, not one list of fifteen. The rows used to interleave
+        // four different kinds of decision — a global theme, a per-screen
+        // layout, a per-device performance cap and a preset that sets several
+        // of the others — which is what made the category read as noise.
+        //
+        // `_paneNodes` is indexed POSITIONALLY and `_paneKey` wires Up/Down as
+        // index ± 1, so the numbering has to stay contiguous across the group
+        // boundaries: 0..14 top to bottom, headers excluded. Section headers
+        // are plain text and take no focus, so DPAD steps over them.
         return [
           SettingsSection(
-            title: '',
+            title: 'Presets',
+            blurb: 'One pick that sets the theme, layouts and launch '
+                'animation together.',
             children: [
-              // Looks leads, for the same reason it leads the phone list —
-              // it is the entry point the rows below are alternatives to.
-              // Every index after it shifted by one; _paneKey wires Up/Down
-              // as index ± 1, so the numbering IS the order and has to stay
-              // contiguous.
               SettingsTile.spec(
                 SettingsRows.looks,
                 subtitle: widget.looksLabel,
                 onTap: widget.onOpenLooks,
                 focusNode: _paneNodes[0],
               ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          SettingsSection(
+            title: 'Theme',
+            blurb: 'Colour, focus and motion. Applies everywhere in the app.',
+            children: [
               SettingsTile.spec(
-                SettingsRows.themeLab,
-                onTap: widget.onOpenThemeLab,
+                SettingsRows.appTheme,
+                subtitle: widget.appThemeLabel,
+                onTap: widget.onOpenAppTheme,
                 focusNode: _paneNodes[1],
               ),
-              // App-wide next, then the TV-specific pickers.
               SettingsTile.spec(
                 SettingsRows.textBrightness,
                 subtitle: widget.textBrightnessLabel,
@@ -658,76 +671,86 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenLaunchAnimation,
                 focusNode: _paneNodes[3],
               ),
+              // Last because it CHANGES nothing — it is the loop for judging
+              // what the rows above did.
+              SettingsTile.spec(
+                SettingsRows.themeLab,
+                onTap: widget.onOpenThemeLab,
+                focusNode: _paneNodes[4],
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          SettingsSection(
+            title: 'Screen layouts',
+            blurb: 'Where things sit. Each screen is chosen separately.',
+            children: [
               SettingsTile.spec(
                 SettingsRows.tvHomeStyle,
                 subtitle: widget.tvHomeStyleLabel,
                 onTap: widget.onOpenTvHomeStyle,
-                focusNode: _paneNodes[4],
+                focusNode: _paneNodes[5],
               ),
               SettingsTile.spec(
                 SettingsRows.discoverLayout,
                 subtitle: widget.discoverLayoutLabel,
                 onTap: widget.onOpenDiscoverLayout,
-                focusNode: _paneNodes[5],
-              ),
-              SettingsTile.spec(
-                SettingsRows.tvSidebarStyle,
-                subtitle: widget.tvSidebarStyleLabel,
-                onTap: widget.onOpenTvSidebarStyle,
                 focusNode: _paneNodes[6],
-              ),
-              SettingsTile.spec(
-                SettingsRows.tvScreenSize,
-                subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
-                onTap: widget.onOpenTvScreenSize,
-                focusNode: _paneNodes[7],
-              ),
-              // Next to Screen Size on purpose: both govern how the picture
-              // is drawn on this panel rather than what it looks like.
-              SettingsTile.spec(
-                SettingsRows.tvRenderQuality,
-                subtitle: widget.tvRenderQualityLabel,
-                onTap: widget.onOpenTvRenderQuality,
-                focusNode: _paneNodes[8],
-              ),
-              SettingsTile.spec(
-                SettingsRows.tvHeroArtworkQuality,
-                subtitle: widget.tvHeroArtworkQualityLabel,
-                onTap: widget.onOpenTvHeroArtworkQuality,
-                focusNode: _paneNodes[9],
-              ),
-              SettingsTile.spec(
-                SettingsRows.iptvAppearance,
-                subtitle: widget.iptvStyleLabel,
-                onTap: widget.onOpenIptvStyle,
-                focusNode: _paneNodes[10],
-              ),
-              SettingsTile.spec(
-                SettingsRows.playerGuideStyle,
-                subtitle: widget.playerGuideStyleLabel,
-                onTap: widget.onOpenPlayerGuideStyle,
-                focusNode: _paneNodes[11],
               ),
               SettingsTile.spec(
                 SettingsRows.detailPageStyle,
                 subtitle: widget.detailPageStyleLabel,
                 onTap: widget.onOpenDetailPageStyle,
-                focusNode: _paneNodes[12],
+                focusNode: _paneNodes[7],
               ),
-              // Node indices MUST stay contiguous in visual order: _paneKey
-              // hand-wires Up/Down as node index ± 1, so a row numbered out
-              // of sequence is skipped on the way down and trapped at the
-              // pool end once reached.
               SettingsTile.spec(
-                SettingsRows.appTheme,
-                subtitle: widget.appThemeLabel,
-                onTap: widget.onOpenAppTheme,
-                focusNode: _paneNodes[13],
+                SettingsRows.tvSidebarStyle,
+                subtitle: widget.tvSidebarStyleLabel,
+                onTap: widget.onOpenTvSidebarStyle,
+                focusNode: _paneNodes[8],
+              ),
+              SettingsTile.spec(
+                SettingsRows.iptvAppearance,
+                subtitle: widget.iptvStyleLabel,
+                onTap: widget.onOpenIptvStyle,
+                focusNode: _paneNodes[9],
+              ),
+              SettingsTile.spec(
+                SettingsRows.playerGuideStyle,
+                subtitle: widget.playerGuideStyleLabel,
+                onTap: widget.onOpenPlayerGuideStyle,
+                focusNode: _paneNodes[10],
               ),
               SettingsTile.spec(
                 SettingsRows.parentsGuideStyle,
                 subtitle: widget.parentsGuideStyleLabel,
                 onTap: widget.onOpenParentsGuideStyle,
+                focusNode: _paneNodes[11],
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          SettingsSection(
+            title: 'Display',
+            blurb: 'How this device draws. These affect performance, not '
+                'style.',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.tvScreenSize,
+                subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
+                onTap: widget.onOpenTvScreenSize,
+                focusNode: _paneNodes[12],
+              ),
+              SettingsTile.spec(
+                SettingsRows.tvRenderQuality,
+                subtitle: widget.tvRenderQualityLabel,
+                onTap: widget.onOpenTvRenderQuality,
+                focusNode: _paneNodes[13],
+              ),
+              SettingsTile.spec(
+                SettingsRows.tvHeroArtworkQuality,
+                subtitle: widget.tvHeroArtworkQualityLabel,
+                onTap: widget.onOpenTvHeroArtworkQuality,
                 focusNode: _paneNodes[14],
               ),
             ],
