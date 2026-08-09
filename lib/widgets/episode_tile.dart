@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/trakt/trakt_episode_model.dart';
+import '../theme/widgets/themed_artwork.dart';
 import '../utils/tv_keys.dart';
 import 'detail/theme/detail_theme.dart';
 import 'trakt/trakt_menu_helpers.dart';
@@ -211,7 +212,20 @@ class _EpisodeTileState extends State<EpisodeTile> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          AspectRatio(aspectRatio: 16 / 9, child: _still()),
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: ThemedArtwork(
+              role: ArtRole.still,
+              // Zero, because zero is what this layout gives the still today:
+              // the card's own clip above rounds the two TOP corners and the
+              // info block covers the bottom two, so the image itself has
+              // never carried a radius of its own here.
+              radius: 0,
+              inList: true,
+              builder: (context, blend) => _still(blend),
+              overlay: _stillChrome(),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
             child: _info(synopsisLines: 2),
@@ -227,11 +241,19 @@ class _EpisodeTileState extends State<EpisodeTile> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              width: 300,
-              child: AspectRatio(aspectRatio: 16 / 9, child: _still()),
+          SizedBox(
+            width: 300,
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              // The still's own clip, handed to [ThemedArtwork] so the frame
+              // is the theme's rather than this file's.
+              child: ThemedArtwork(
+                role: ArtRole.still,
+                radius: 12,
+                inList: true,
+                builder: (context, blend) => _still(blend),
+                overlay: _stillChrome(),
+              ),
             ),
           ),
           const SizedBox(width: 18),
@@ -248,27 +270,40 @@ class _EpisodeTileState extends State<EpisodeTile> {
 
   // ── Pieces ────────────────────────────────────────────────────────────────
 
-  Widget _still() {
+  /// The still and everything drawn over it. [blend] is the theme's grade,
+  /// which has to reach the image constructor itself — a filter layer per row
+  /// is the cost this widget's whole build is written to avoid.
+  /// The still ITSELF — nothing painted on it.
+  ///
+  /// Split from [_stillChrome] because `ThemedArtwork`'s frame is a treatment
+  /// of the image: handing it the whole stack made a `faded` look dissolve the
+  /// progress bar along the bottom edge, which is where progress bars live.
+  Widget _still((Color, BlendMode)? blend) {
     final e = widget.episode;
     final img = (e.thumbnailUrl != null && e.thumbnailUrl!.isNotEmpty)
         ? e.thumbnailUrl!
         : (widget.showImageUrl ?? '');
+    if (img.isEmpty) return _imgFallback(e);
+    return CachedNetworkImage(
+      imageUrl: img,
+      fit: BoxFit.cover,
+      color: blend?.$1,
+      colorBlendMode: blend?.$2,
+      placeholder: (_, __) => _imgFallback(e),
+      errorWidget: (_, __, ___) => _imgFallback(e),
+    );
+  }
+
+  /// Everything painted ON the still: the legibility vignette, the play glyph,
+  /// the watched tick and the progress bar.
+  Widget _stillChrome() {
+    final e = widget.episode;
     final progress = (widget.watchProgress ?? 0).clamp(0.0, 100.0);
     final watched = progress >= 100;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (img.isNotEmpty)
-          CachedNetworkImage(
-            imageUrl: img,
-            fit: BoxFit.cover,
-            placeholder: (_, __) => _imgFallback(e),
-            errorWidget: (_, __, ___) => _imgFallback(e),
-          )
-        else
-          _imgFallback(e),
-
         // Light vignette so the play glyph + badge read on any still.
         const DecoratedBox(
           decoration: BoxDecoration(

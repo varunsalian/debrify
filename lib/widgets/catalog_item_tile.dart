@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
 import '../theme/app_theme_scope.dart';
+import '../theme/widgets/themed_artwork.dart';
 import '../utils/tv_keys.dart';
 import 'home/card_focus_rise.dart';
 import 'home/home_theme.dart';
@@ -110,15 +111,23 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         ? Duration.zero
         : const Duration(milliseconds: 180);
 
-    // The poster and everything drawn over it, shared by both chromes. The
-    // selection ring is deliberately NOT here: the classic tree appends its
-    // own gold one, and [CardFocusRise] draws the board's above whatever it
-    // is handed.
-    final layers = <Widget>[
+    // The POSTER, and nothing else. Split from [chrome] because
+    // `ThemedArtwork`'s frame is a treatment of the image: handing it the
+    // whole stack made a `faded` look dissolve the progress bar and the
+    // badges along with the artwork, and a `matted` one shrink them into
+    // the mount.
+    //
+    // A function of the theme's grade rather than a plain list, because the
+    // blend has to reach the image constructor itself: compositing inside the
+    // image's own paint is what makes grading affordable in a grid at all,
+    // where a filter layer per poster would not be.
+    List<Widget> artwork((Color, BlendMode)? blend) => <Widget>[
       if (poster != null && poster.isNotEmpty)
         CachedNetworkImage(
           imageUrl: poster,
           fit: BoxFit.cover,
+          color: blend?.$1,
+          colorBlendMode: blend?.$2,
           // Decode posters at a capped width instead of full source
           // resolution (~780px → ~3.6MB each). Tiles never exceed ~320px
           // wide, so this roughly thirds the decoded bytes per poster —
@@ -145,7 +154,11 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         )
       else
         _placeholder(item.name),
+    ];
 
+    // Everything painted ON the poster: the focus wash, the badges, the
+    // inline title and the progress bar. Never framed, never graded.
+    List<Widget> chrome() => <Widget>[
       // Bottom gradient — only when focused — for the inline title. Board
       // chrome skips it: board cards carry no focus wash, and on a stage the
       // focused title is named at full size below the shelf anyway.
@@ -252,7 +265,21 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         // White ring, like the Canvas board's cells — the violet stays with
         // classic chrome.
         ringColor: Colors.white,
-        children: layers,
+        // One child, not the layers spread straight in: the artwork's framing
+        // and grade belong together, so the whole card face goes through
+        // [ThemedArtwork]. [CardFocusRise] still owns the outer clip at the
+        // same radius, so under a bleeding frame the board card keeps its
+        // corners — that clip is the board's card shape, not the art's.
+        children: [
+          ThemedArtwork(
+            role: ArtRole.poster,
+            radius: 10,
+            inList: true,
+            builder: (context, blend) =>
+                Stack(fit: StackFit.expand, children: artwork(blend)),
+            overlay: Stack(fit: StackFit.expand, children: chrome()),
+          ),
+        ],
       );
     } else {
       card = AnimatedScale(
@@ -288,22 +315,34 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
               ],
             ],
           ),
-          child: ClipRRect(
-            borderRadius: app.shape.brImg(14),
-            child: Stack(
+          // The framing is the artwork's, so [ThemedArtwork] owns it outright
+          // — everything drawn over the poster (the wash, the chips, the
+          // progress bar, the ring) lives inside that one clip rather than
+          // under a second one of our own.
+          child: ThemedArtwork(
+            role: ArtRole.poster,
+            radius: 14,
+            inList: true,
+            builder: (context, blend) => Stack(
+              fit: StackFit.expand,
+              children: artwork(blend),
+            ),
+            // Chrome and the focus ring together: badges, the inline title,
+            // the progress bar and the cursor are all things painted ON the
+            // poster, so none of them may be dissolved by a `faded` look or
+            // shrunk into a `matted` one.
+            overlay: Stack(
               fit: StackFit.expand,
               children: [
-                ...layers,
+                ...chrome(),
                 if (_active)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: app.shape.br(14),
-                          border: Border.all(
-                            color: app.home.focus,
-                            width: 2.5,
-                          ),
+                  IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: app.shape.br(14),
+                        border: Border.all(
+                          color: app.home.focus,
+                          width: 2.5,
                         ),
                       ),
                     ),

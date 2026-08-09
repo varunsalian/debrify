@@ -5,6 +5,7 @@ import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme_scope.dart';
+import '../../theme/widgets/focus_expression.dart';
 import '../../utils/tv_keys.dart';
 
 /// Which leading icon chip a [CloudFileRow] shows.
@@ -378,10 +379,18 @@ class _CloudFileRowState extends State<CloudFileRow> {
     final parked = !rowFocused && _stripNodes.any((n) => n.hasPrimaryFocus);
     final engaged = _hovered || rowFocused || parked;
 
+    // Legacy keeps the borders this row has always drawn — 1.5px on the row,
+    // 2px on a strip icon. `FocusTokens.legacy` is 2.5 and takes no width
+    // override, so routing legacy through the box would thicken both.
+    final ownCursor = app.isLegacy;
+
     Color borderColor;
     Color bgColor;
     if (rowFocused) {
-      borderColor = app.cloud.accent;
+      // The fill stays on both paths: it is the row answering the cursor, not
+      // the cursor itself, so an underline or a scale theme still lights the
+      // row it landed on.
+      borderColor = ownCursor ? app.cloud.accent : Colors.transparent;
       bgColor = app.fade(app.cloud.accent, 0.10);
     } else if (parked) {
       borderColor = app.fade(app.cloud.accent, 0.35);
@@ -540,9 +549,19 @@ class _CloudFileRowState extends State<CloudFileRow> {
             onLongPressStart: widget.selectionMode
                 ? null
                 : (details) => _openMenu(globalPosition: details.globalPosition),
-            child: AnimatedContainer(
+            // The row's gap moved out of the Container's `margin` and into a
+            // Padding above the cursor, because a margin is part of the box the
+            // cursor would wrap: left where it was, the theme's ring would draw
+            // 4px below the row it belongs to. Container implements `margin` as
+            // exactly this Padding, so nothing renders differently.
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: _cursor(
+              app: app,
+              focused: rowFocused,
+              radius: 10,
+              child: AnimatedContainer(
               duration: motion.scaled(const Duration(milliseconds: 150)),
-              margin: const EdgeInsets.only(bottom: 4),
               padding: compact
                   ? const EdgeInsets.fromLTRB(12, 10, 8, 8)
                   : const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -553,11 +572,35 @@ class _CloudFileRowState extends State<CloudFileRow> {
               ),
               child: content,
             ),
+            ),
+            ),
           ),
         ),
       ),
     );
   }
+
+  /// The cursor, off legacy.
+  ///
+  /// Legacy is returned untouched, ring and all; every other theme gets the
+  /// expression it asked for, which may be a scale or a flood rather than a
+  /// border. `on:` is the page ground rather than the row's own fill — that
+  /// fill is a 10% accent tint, so the ground is what a ring actually lands on
+  /// and what a light theme's cursor would vanish into.
+  Widget _cursor({
+    required AppTheme app,
+    required bool focused,
+    required double radius,
+    required Widget child,
+  }) =>
+      app.isLegacy
+          ? child
+          : FocusExpressionBox(
+              focused: focused,
+              radius: radius,
+              on: app.core.ground,
+              child: child,
+            );
 
   Widget _buildStrip({
     required bool engaged,
@@ -625,7 +668,13 @@ class _CloudFileRowState extends State<CloudFileRow> {
               horizontal: 4,
               vertical: (44 - size) / 2,
             ),
-            child: AnimatedContainer(
+            // The strip is the row's SECOND cursor — → parks focus here — so it
+            // follows the same rule as the row itself.
+            child: _cursor(
+              app: app,
+              focused: focused,
+              radius: 8,
+              child: AnimatedContainer(
               key: anchorKey,
               duration: const Duration(milliseconds: 150),
               width: size,
@@ -636,7 +685,9 @@ class _CloudFileRowState extends State<CloudFileRow> {
                     : Colors.transparent,
                 borderRadius: app.shape.br(8),
                 border: Border.all(
-                  color: focused ? app.cloud.accent : Colors.transparent,
+                  color: focused && app.isLegacy
+                      ? app.cloud.accent
+                      : Colors.transparent,
                   width: 2,
                 ),
               ),
@@ -647,6 +698,7 @@ class _CloudFileRowState extends State<CloudFileRow> {
                     ? app.core.tx
                     : app.fade(app.core.tx, engaged ? 0.9 : 0.45),
               ),
+            ),
             ),
           ),
         ),

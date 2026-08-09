@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_theme_scope.dart';
+import '../../theme/widgets/focus_expression.dart';
+
 /// Violet-300 focus ring — a light ring over dark art pops at 10ft, while the
 /// deep accent stays for chrome (tags, sidebar). Pairs with the calm 1.045
 /// scale below.
@@ -55,20 +58,35 @@ class CardFocusRise extends StatelessWidget {
     required this.children,
   });
 
+  /// The cursor, off legacy.
+  ///
+  /// Sits inside the AspectRatio so the theme's ring hugs the card rather than
+  /// whatever slot the shelf handed us, and takes no `on:` — a poster's
+  /// background is its artwork, which this widget never sees.
+  Widget _cursor(bool ownCursor, Widget child) => ownCursor
+      ? child
+      : FocusExpressionBox(focused: active, radius: 10, child: child);
+
   @override
   Widget build(BuildContext context) {
     final focusFx = isTelevision
         ? const Duration(milliseconds: 120)
         : const Duration(milliseconds: 160);
+    // Legacy keeps the whole rise — scale, lift shadow and ring — because that
+    // trio IS this widget's cursor, and it is tuned as one: the ring is 2.5 on
+    // TV but 1.5 elsewhere, and `FocusTokens.legacy` is 2.5 with no width
+    // override to hand a site. Every other theme gets one cursor, the one it
+    // asked for, instead of the theme's expression stacked on this one.
+    final ownCursor = AppThemeScope.of(context).isLegacy;
     return AnimatedScale(
       duration: focusFx,
       curve: Curves.easeOutCubic,
       // TV pop calmed from 1.09 to the Nuvio-class 1.045: with the lighter
       // ring the smaller lift reads premium, and neighbours shift less.
-      scale: active ? (isTelevision ? 1.045 : 1.05) : 1.0,
+      scale: active && ownCursor ? (isTelevision ? 1.045 : 1.05) : 1.0,
       child: AspectRatio(
         aspectRatio: aspectRatio,
-        child: AnimatedContainer(
+        child: _cursor(ownCursor, AnimatedContainer(
           duration: focusFx,
           curve: Curves.easeOutCubic,
           decoration: BoxDecoration(
@@ -81,9 +99,12 @@ class CardFocusRise extends StatelessWidget {
                 offset: Offset(0, 10),
               ),
               // Lift shadow — same geometry always, only its alpha animates
-              // (transparent at rest, so Skia skips the draw entirely).
+              // (transparent at rest, so Skia skips the draw entirely). Off
+              // legacy it stays transparent: the rise belongs to the theme's
+              // expression, and `lift` brings its own elevation ramp.
               BoxShadow(
-                color: Colors.black.withValues(alpha: active ? 0.6 : 0.0),
+                color: Colors.black
+                    .withValues(alpha: active && ownCursor ? 0.6 : 0.0),
                 blurRadius: 28,
                 offset: const Offset(0, 10),
               ),
@@ -109,32 +130,36 @@ class CardFocusRise extends StatelessWidget {
                     ),
                   ),
                 // Selection ring — accent on TV focus, subtle white on hover.
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: AnimatedOpacity(
-                      opacity: active ? 1.0 : 0.0,
-                      duration: focusFx,
-                      curve: Curves.easeOutCubic,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color:
-                                ringColor ??
-                                (isTelevision
-                                    ? kCardFocusRing
-                                    : Colors.white.withValues(alpha: 0.6)),
-                            width: isTelevision ? 2.5 : 1.5,
+                // Legacy only; elsewhere the theme's expression draws it (and
+                // the caller's [ringColor] has nothing to override, because a
+                // theme's cursor colour is the theme's to pick).
+                if (ownCursor)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedOpacity(
+                        opacity: active ? 1.0 : 0.0,
+                        duration: focusFx,
+                        curve: Curves.easeOutCubic,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color:
+                                  ringColor ??
+                                  (isTelevision
+                                      ? kCardFocusRing
+                                      : Colors.white.withValues(alpha: 0.6)),
+                              width: isTelevision ? 2.5 : 1.5,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
-        ),
+        )),
       ),
     );
   }

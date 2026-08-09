@@ -98,9 +98,7 @@ class _DetailPremiumState extends State<DetailPremium> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        DecoratedBox(
-          decoration: BoxDecoration(gradient: detailIdentityScrim(_t)),
-        ),
+        const DetailScrim(),
         Positioned(
           top: size.isPhone ? 68 : 78,
           right: gutter,
@@ -142,9 +140,7 @@ class _DetailPremiumState extends State<DetailPremium> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        DecoratedBox(
-          decoration: BoxDecoration(gradient: detailIdentityScrim(_t)),
-        ),
+        const DetailScrim(),
         Row(
           children: [
             Expanded(
@@ -260,9 +256,7 @@ class _DetailPremiumState extends State<DetailPremium> {
       fit: StackFit.expand,
       children: [
         _Poster(url: _m.backdrop, cacheWidth: 1000),
-        DecoratedBox(
-          decoration: BoxDecoration(gradient: detailIdentityScrim(_t)),
-        ),
+        const DetailScrim(),
         Padding(
           padding: const EdgeInsets.all(22),
           child: Column(

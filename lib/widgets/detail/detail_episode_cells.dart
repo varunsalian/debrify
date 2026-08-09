@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/debrify_image_cache.dart';
 import '../../services/trakt/trakt_episode_model.dart';
+import '../../theme/widgets/themed_artwork.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import '../home/home_theme.dart';
@@ -185,7 +186,14 @@ class DetailEpisodeThumb extends StatelessWidget {
   final String? fallbackImage;
   final double? progress; // 0..100
   final bool isNext;
-  final BorderRadius radius;
+
+  /// This site's own corner radius, before the theme's image scale.
+  ///
+  /// A scalar rather than a [BorderRadius] because [ThemedArtwork] owns the
+  /// framing now and applies that scale itself; every caller was passing a
+  /// uniform radius anyway.
+  final double radius;
+
   final bool showTick;
 
   const DetailEpisodeThumb({
@@ -194,7 +202,7 @@ class DetailEpisodeThumb extends StatelessWidget {
     required this.fallbackImage,
     required this.progress,
     required this.isNext,
-    this.radius = const BorderRadius.all(Radius.circular(7)),
+    this.radius = 7,
     this.showTick = true,
   });
 
@@ -205,15 +213,24 @@ class DetailEpisodeThumb extends StatelessWidget {
     final watched = p >= 100;
     final partial = p > 0 && p < 100;
     final url = episode.thumbnailUrl ?? fallbackImage;
-    return ClipRRect(
-      borderRadius: radius,
-      child: Stack(
+    // The frame is the artwork's, so it belongs to [ThemedArtwork] — and the
+    // veil, tick, badge and progress bar stay inside that one clip, exactly as
+    // they sat inside the one this replaces.
+    return ThemedArtwork(
+      role: ArtRole.still,
+      radius: radius,
+      // Every layout that hosts a thumb builds its cells lazily — Marquee's
+      // and Console's rails, the three vertical episode lists.
+      inList: true,
+      builder: (context, blend) => Stack(
         fit: StackFit.expand,
         children: [
           if (url != null && url.isNotEmpty)
             CachedNetworkImage(
               imageUrl: url,
               fit: BoxFit.cover,
+              color: blend?.$1,
+              colorBlendMode: blend?.$2,
               cacheManager: DebrifyImageCache.manager,
               // Rail/grid thumbs are ~200 logical px at most; never decode a
               // full-size poster fallback for one.
@@ -229,6 +246,15 @@ class DetailEpisodeThumb extends StatelessWidget {
             )
           else
             ColoredBox(color: t.placeholder),
+        ],
+      ),
+      // Everything above is the still; everything below is chrome ON it. The
+      // frame is a treatment of the IMAGE — a `faded` look must not dissolve
+      // the progress bar at the bottom of the cell, and a `matted` one must
+      // not shrink the UP NEXT flag into the mount.
+      overlay: Stack(
+        fit: StackFit.expand,
+        children: [
           if (watched) ColoredBox(color: Colors.black.withValues(alpha: 0.45)),
           if (watched && showTick)
             Center(
@@ -352,7 +378,11 @@ class DetailEpisodeCard extends StatelessWidget {
                   fallbackImage: fallbackImage,
                   progress: progress,
                   isNext: isNext,
-                  radius: t.brImg,
+                  // 8 is the base the detail themes scale their image radius
+                  // from, so this resolves to the `t.brImg` the ring above is
+                  // drawn at. Handing over `t.brImg` itself would scale an
+                  // already-scaled number twice.
+                  radius: 8,
                 ),
               ),
             ),

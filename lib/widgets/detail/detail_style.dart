@@ -1,9 +1,12 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_light.dart';
 import '../../theme/app_texture.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/platform_util.dart';
 import 'theme/detail_theme.dart';
 
@@ -75,6 +78,141 @@ LinearGradient detailStageScrim(DetailTheme t) => LinearGradient(
   ],
   stops: const [0.04, 0.48, 0.76, 1.0],
 );
+
+/// Which of the two legibility floors a site needs.
+enum DetailScrimKind {
+  /// The identity band — bottom-anchored, for a title sitting on artwork.
+  identity,
+
+  /// The split-layout variant, for a layout whose art fills the top half.
+  stage,
+}
+
+/// The legibility floor, expressed in the app theme's scrim GRAMMAR.
+///
+/// The five detail layouts all paint the same bottom-anchored gradient, which
+/// is why every theme's hero reads the same however the palette changes — a
+/// fade, a frosted band and a hard plate are three different products, and
+/// until now the app only had the fade.
+///
+/// **Under `ScrimStyle.bottomGradient`, which is the legacy pin and what every
+/// pre-`ThemeSpec` theme resolves to, this is exactly the `DecoratedBox` the
+/// five call sites shipped** — same gradient function, same stops, same
+/// `DetailTheme` ground. The other three grammars are reachable only from a
+/// spec.
+///
+/// The style comes from the APP theme and the colour from the DETAIL theme,
+/// which is deliberate: those are two settings, and a user who has pinned a
+/// details theme different from the app theme gets that theme's ink under the
+/// app's grammar rather than a surprise third combination.
+class DetailScrim extends StatelessWidget {
+  final DetailScrimKind kind;
+  const DetailScrim({super.key, this.kind = DetailScrimKind.identity});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = DetailThemeScope.of(context);
+    final light = AppThemeScope.of(context).light;
+    final ground = t.ground;
+    final vignette = light.vignetteFor(PlatformUtil.isTelevision);
+
+    // Corner darkening across the whole frame, where the look asks for one.
+    // Composed with the scrim rather than replacing it: they answer different
+    // questions — the scrim protects a specific band of text, the vignette
+    // pulls the eye off the edges of the image. A static gradient, so it costs
+    // the same on every platform.
+    if (vignette > 0) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          _scrim(t, light, ground),
+          IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  radius: 1.1,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: vignette),
+                  ],
+                  stops: const [0.45, 1.0],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return _scrim(t, light, ground);
+  }
+
+  Widget _scrim(DetailTheme t, LightTokens light, Color ground) {
+    switch (light.scrim) {
+      case ScrimStyle.bottomGradient:
+        return DecoratedBox(decoration: BoxDecoration(gradient: _gradient(t)));
+
+      case ScrimStyle.plate:
+        // A hard slab across the band the copy occupies. The one grammar that
+        // guarantees a contrast ratio whatever the image is — which is why it
+        // is the TV fallback for `blurBand` too.
+        return Align(
+          alignment: Alignment.bottomCenter,
+          child: FractionallySizedBox(
+            heightFactor: light.scrimExtent,
+            child: ColoredBox(
+              color: ground.withValues(alpha: light.scrimStrength),
+            ),
+          ),
+        );
+
+      case ScrimStyle.fullDim:
+        // No localised treatment at all: the whole image steps back so the
+        // copy can sit anywhere on it.
+        return ColoredBox(
+          color: ground.withValues(alpha: light.scrimStrength * 0.6),
+        );
+
+      case ScrimStyle.blurBand:
+        // The copy sits on BLURRED artwork rather than on a darkened copy of
+        // it. On TV there is no blur — `BackdropFilter` is a saveLayer per
+        // frame — so the band degrades to the plate, which is the same
+        // promise (guaranteed contrast) at a raster cost of zero.
+        if (PlatformUtil.isTelevision) {
+          return Align(
+            alignment: Alignment.bottomCenter,
+            child: FractionallySizedBox(
+              heightFactor: light.scrimExtent,
+              child: ColoredBox(
+                color: ground.withValues(alpha: light.scrimStrength),
+              ),
+            ),
+          );
+        }
+        return Align(
+          alignment: Alignment.bottomCenter,
+          child: FractionallySizedBox(
+            heightFactor: light.scrimExtent,
+            child: ClipRect(
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: ColoredBox(
+                  // Much lighter than the plate: the blur is doing the
+                  // legibility work, and a heavy tint on top of it just looks
+                  // like a plate that cost a saveLayer.
+                  color: ground.withValues(alpha: light.scrimStrength * 0.45),
+                ),
+              ),
+            ),
+          ),
+        );
+    }
+  }
+
+  LinearGradient _gradient(DetailTheme t) => switch (kind) {
+    DetailScrimKind.identity => detailIdentityScrim(t),
+    DetailScrimKind.stage => detailStageScrim(t),
+  };
+}
 
 /// Section label ("SUMMARY", "MORE LIKE THIS").
 ///

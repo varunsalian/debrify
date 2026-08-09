@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_theme_scope.dart';
+import '../../theme/widgets/themed_artwork.dart';
 import '../../utils/dialog_tap_guard.dart';
 import '../../utils/tv_keys.dart';
 
@@ -169,15 +170,20 @@ class _CwCardMenuState extends State<_CwCardMenu> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        ClipRRect(
-          borderRadius: app.shape.brImg(8),
-          child: SizedBox(
-            width: 44,
-            height: 66,
-            child: (poster != null && poster.isNotEmpty)
+        SizedBox(
+          width: 44,
+          height: 66,
+          // The poster's frame is the theme's, so [ThemedArtwork] owns the
+          // clip this site used to draw for itself.
+          child: ThemedArtwork(
+            role: ArtRole.poster,
+            radius: 8,
+            builder: (context, blend) => (poster != null && poster.isNotEmpty)
                 ? CachedNetworkImage(
                     imageUrl: poster,
                     fit: BoxFit.cover,
+                    color: blend?.$1,
+                    colorBlendMode: blend?.$2,
                     memCacheWidth: 132,
                     fadeInDuration: Duration.zero,
                     placeholder: (_, __) => const _PosterFallback(),

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_theme_scope.dart';
+import '../theme/widgets/focus_expression.dart';
 import '../utils/format_tag_detector.dart';
 import '../utils/tv_keys.dart';
 import 'format_badge.dart';
@@ -185,19 +187,31 @@ class _SourceRowState extends State<SourceRow> {
 
   @override
   Widget build(BuildContext context) {
+    // Legacy keeps the row's own cursor — the 1.5px accent border and the hard
+    // 3px halo around it. `FocusTokens.legacy` is 2.5 wide and takes no
+    // override, so the box would draw a heavier ring than this row has ever
+    // worn; off legacy the theme's expression takes the job outright.
+    //
+    // The focused FILL stays on both paths: it is the row responding to the
+    // cursor, not the cursor itself, so a theme that expresses focus as an
+    // underline still lights the row it is under.
+    final ownCursor = AppThemeScope.of(context).isLegacy;
     final content = Container(
       decoration: BoxDecoration(
         color: _isFocused ? _surfaceHi : _surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: _isFocused
+          // The width never changes, focused or not — a border insets its
+          // child, and a row that reflows on focus is the thing this widget
+          // has always avoided.
+          color: _isFocused && ownCursor
               ? _accent
               : widget.isSelected
                   ? _accent.withValues(alpha: 0.55)
                   : Colors.transparent,
           width: 1.5,
         ),
-        boxShadow: _isFocused
+        boxShadow: _isFocused && ownCursor
             ? [BoxShadow(color: _accent.withValues(alpha: 0.22), blurRadius: 0, spreadRadius: 3)]
             : null,
       ),
@@ -247,7 +261,16 @@ class _SourceRowState extends State<SourceRow> {
     final focusable = Focus(
       focusNode: widget.focusNode,
       onKeyEvent: _handleKeyEvent,
-      child: content,
+      child: ownCursor
+          ? content
+          : FocusExpressionBox(
+              focused: _isFocused,
+              radius: 14,
+              // The focused fill is what the ring lands on, and it is nearly
+              // black — a theme with a dark cursor needs the rescue here.
+              on: _surfaceHi,
+              child: content,
+            ),
     );
 
     return Padding(

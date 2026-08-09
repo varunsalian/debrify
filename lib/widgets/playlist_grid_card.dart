@@ -1,10 +1,11 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../theme/app_surface.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_theme_scope.dart';
-import '../utils/platform_util.dart';
+import '../theme/widgets/glass_surface.dart';
+import '../theme/widgets/themed_artwork.dart';
 import '../utils/tv_keys.dart';
 
 /// Portrait playlist card optimized for grid layouts on desktop/tablet/mobile.
@@ -16,16 +17,6 @@ import '../utils/tv_keys.dart';
 /// - Progress indicator for in-progress items
 /// - Hover effects on desktop
 /// - DPAD navigation support with proper focus handling
-/// TV: skip the glass blur (see the action-sheet panel below — it swaps to an
-/// opaque fill there, so no BackdropFilter saveLayer on weak TV GPUs).
-Widget _maybeBlur(Widget child) {
-  if (PlatformUtil.isTelevision) return child;
-  return BackdropFilter(
-    filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-    child: child,
-  );
-}
-
 class PlaylistGridCard extends StatefulWidget {
   final Map<String, dynamic> item;
   final Map<String, dynamic>? progressData;
@@ -243,13 +234,23 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                         ),
                       ],
               ),
-              child: ClipRRect(
-                borderRadius: app.shape.brImg(16),
-                child: Stack(
+              // The framing is the artwork's, so [ThemedArtwork] owns it
+              // outright — the wash, the badges, the title, the progress bar
+              // and the focus border all sit inside that one clip rather than
+              // under a second one of our own. The card's shadow stays on the
+              // container above, where it was.
+              child: ThemedArtwork(
+                role: ArtRole.poster,
+                radius: 16,
+                inList: true,
+                builder: (context, blend) =>
+                    _buildPoster(posterUrl, app, blend),
+                // Everything from the caption scrim down is chrome ON the
+                // poster, not poster: the frame treats the IMAGE, so a `faded`
+                // look must not dissolve the title and a `matted` one must not
+                // inset the badges into the mount.
+                overlay: Stack(
                   children: [
-                    // Poster background
-                    _buildPoster(posterUrl, app),
-
                     // Cinematic gradient overlay (4-stop, matching home screen)
                     Positioned.fill(
                       child: DecoratedBox(
@@ -452,7 +453,11 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
     );
   }
 
-  Widget _buildPoster(String? posterUrl, AppTheme app) {
+  Widget _buildPoster(
+    String? posterUrl,
+    AppTheme app,
+    (Color, BlendMode)? blend,
+  ) {
     // `Colors.white24` spelled off the page ink at its exact alpha (0x3D/255),
     // so it stays byte-identical under legacy and inverts on a light ground.
     final placeholderInk = app.core.tx.withValues(alpha: 0x3D / 255);
@@ -479,6 +484,11 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
               imageUrl: posterUrl,
               memCacheWidth: 600,
               fit: BoxFit.cover,
+              // Only the artwork takes the grade — the placeholder and the
+              // error tile below are chrome painted from tokens, and grading
+              // them would fight the palette they already resolved against.
+              color: blend?.$1,
+              colorBlendMode: blend?.$2,
               placeholder: (context, url) => Container(
                 decoration: BoxDecoration(gradient: loadingGradient),
                 child: Center(
@@ -646,39 +656,33 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
                         opacity: _fadeAnimation.value,
                         child: Container(
                           margin: const EdgeInsets.all(12),
-                          child: ClipRRect(
+                          child: GlassSurface(
+                            family: SurfaceFamily.sheet,
                             borderRadius: app.shape.br(20),
-                            // TV: solid panel instead of glass — the blur
-                            // re-rasterises during the sheet's slide/fade-in,
-                            // a full-screen saveLayer per frame on weak GPUs.
-                            child: _maybeBlur(
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: PlatformUtil.isTelevision
-                                      ? app.playlist.sheetPanel
-                                      // The phone/desktop paint of the same
-                                      // role: a veil over a real blur, so it
-                                      // steps off the ink, not off sheetPanel.
-                                      : app.fade(app.core.tx, 0.08),
-                                  borderRadius: app.shape.br(20),
-                                  border: Border.all(
-                                    // A line, so it does not borrow
-                                    // playlist.controlFill's 0.15.
-                                    color: app.fade(app.core.tx, 0.15),
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: FocusScope(
-                                  node: _focusScopeNode,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _buildHeader(),
-                                      _buildDivider(),
-                                      _buildActions(),
-                                    ],
-                                  ),
-                                ),
+                            sigma: 30,
+                            // The shipped hairline is half a pixel; the
+                            // widget's default 1 would double it.
+                            borderWidth: 0.5,
+                            // The panel's own ink, so a theme that resolves
+                            // `sheet` to `fill` — every theme shipped today —
+                            // paints the solid panel TV already got. The line
+                            // is passed for the same reason: it must not
+                            // borrow playlist.controlFill's 0.15.
+                            tint: app.playlist.sheetPanel,
+                            // The phone/desktop paint of the same role: a veil
+                            // over a real blur, so it steps off the ink rather
+                            // than off sheetPanel.
+                            blurTint: app.fade(app.core.tx, 0.08),
+                            border: app.fade(app.core.tx, 0.15),
+                            child: FocusScope(
+                              node: _focusScopeNode,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildHeader(),
+                                  _buildDivider(),
+                                  _buildActions(),
+                                ],
                               ),
                             ),
                           ),
@@ -723,13 +727,19 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
                 ),
               ],
             ),
-            child: ClipRRect(
-              borderRadius: app.shape.brImg(8),
-              child: widget.posterUrl != null && widget.posterUrl!.isNotEmpty
+            // One poster in a modal header, not a lazily-built cell, so this
+            // is outside the D5 kill switch's scope.
+            child: ThemedArtwork(
+              role: ArtRole.poster,
+              radius: 8,
+              builder: (context, blend) =>
+                  widget.posterUrl != null && widget.posterUrl!.isNotEmpty
                   ? CachedNetworkImage(
                       imageUrl: widget.posterUrl!,
                       memCacheWidth: 120,
                       fit: BoxFit.cover,
+                      color: blend?.$1,
+                      colorBlendMode: blend?.$2,
                       placeholder: (context, url) => _buildPosterPlaceholder(),
                       errorWidget: (context, url, error) => _buildPosterPlaceholder(),
                     )

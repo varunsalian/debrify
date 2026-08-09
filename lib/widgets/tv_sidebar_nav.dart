@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/main_page_bridge.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_theme_scope.dart';
 
@@ -68,7 +69,13 @@ class TvSidebarNavState extends State<TvSidebarNav>
   bool _hasSidebarFocus = false;
 
   late final AnimationController _expandController;
-  late final Animation<double> _expand;
+  late final CurvedAnimation _expand;
+
+  /// The theme's tempo, resolved once per dependency change and read from here
+  /// everywhere else in this State. The rail's shell and item list re-inflate
+  /// on every frame of the expand tween, so a scope lookup down there would be
+  /// a per-frame inherited walk — same reason [build] hoists the theme.
+  late AppMotion _motion;
 
   static const int _pageTransitionDelay = 400;
 
@@ -84,8 +91,24 @@ class TvSidebarNavState extends State<TvSidebarNav>
     _expand = CurvedAnimation(
       parent: _expandController,
       curve: Curves.easeOutCubic,
+      // Not a token — the tokens name one deceleration curve, and this is the
+      // close's ease-IN counterpart. Left as shipped.
       reverseCurve: Curves.easeInCubic,
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The one hook that may depend on inherited widgets AND re-runs when they
+    // change, so switching theme or turning "remove animations" on retargets
+    // the live expand controller. Legacy resolves both back to what initState
+    // built.
+    _motion = AppMotion.of(context);
+    _expandController.duration = _motion.scaled(
+      const Duration(milliseconds: 200),
+    );
+    _expand.curve = _motion.standard;
   }
 
   void _initFocusNodes() {
@@ -161,8 +184,8 @@ class TvSidebarNavState extends State<TvSidebarNav>
       Scrollable.ensureVisible(
         ctx,
         alignment: 0.5,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
+        duration: _motion.scaled(const Duration(milliseconds: 220)),
+        curve: _motion.standard,
       );
     });
   }
@@ -358,7 +381,9 @@ class TvSidebarNavState extends State<TvSidebarNav>
               // non-null — TweenAnimationBuilder asserts tween.end != null, and
               // tvHeroTint is null whenever no trailer plays.
               tween: ColorTween(end: heroTint ?? const Color(0x00000000)),
-              duration: const Duration(milliseconds: 650),
+              duration: _motion.scaled(const Duration(milliseconds: 650)),
+              // Left as shipped: plain easeOut is neither of the two token
+              // curves, so swapping it would change the legacy look.
               curve: Curves.easeOut,
               child: kid,
               builder: (context, eased, inner) {
@@ -596,6 +621,7 @@ class TvSidebarNavState extends State<TvSidebarNav>
             focusNode: _focusNodes[index],
             onTap: () => _selectMenuItem(index),
             onKeyEvent: (e) => _handleKeyEvent(index, e),
+            labelCurve: _motion.standard,
             style: _style,
           ),
         ),
@@ -672,6 +698,10 @@ class _TvNavItemWidget extends StatelessWidget {
   final VoidCallback onTap;
   final KeyEventResult Function(KeyEvent) onKeyEvent;
 
+  /// The theme's standard curve for the label cascade. Passed down for the same
+  /// reason [app] is — see [TvSidebarNavState._buildNavItems].
+  final Curve labelCurve;
+
   /// Visual style (see [TvSidebarNav.navStyle]) — visuals only; the Focus /
   /// key wrapper is shared by every style.
   final String style;
@@ -688,6 +718,7 @@ class _TvNavItemWidget extends StatelessWidget {
     required this.focusNode,
     required this.onTap,
     required this.onKeyEvent,
+    required this.labelCurve,
     this.style = 'classic',
   });
 
@@ -793,6 +824,7 @@ class _TvNavItemWidget extends StatelessWidget {
                 child: _StaggeredLabel(
                   expand: expand,
                   index: index,
+                  curve: labelCurve,
                   child: Text(
                     item.label,
                     maxLines: 1,
@@ -887,6 +919,7 @@ class _TvNavItemWidget extends StatelessWidget {
                     child: _StaggeredLabel(
                       expand: expand,
                       index: index,
+                      curve: labelCurve,
                       child: Text(
                         item.label,
                         maxLines: 1,
@@ -1012,6 +1045,7 @@ class _TvNavItemWidget extends StatelessWidget {
                 child: _StaggeredLabel(
                   expand: expand,
                   index: index,
+                  curve: labelCurve,
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -1192,6 +1226,7 @@ class _TvNavItemWidget extends StatelessWidget {
                       child: _StaggeredLabel(
                         expand: expand,
                         index: index,
+                        curve: labelCurve,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -1337,11 +1372,17 @@ class _IslandCapsule extends StatelessWidget {
 class _StaggeredLabel extends StatelessWidget {
   final Animation<double> expand;
   final int index;
+
+  /// The theme's standard curve, passed down rather than looked up — see
+  /// [TvSidebarNavState._buildNavItems].
+  final Curve curve;
+
   final Widget child;
 
   const _StaggeredLabel({
     required this.expand,
     required this.index,
+    required this.curve,
     required this.child,
   });
 
@@ -1351,11 +1392,7 @@ class _StaggeredLabel extends StatelessWidget {
       parent: expand,
       // Later rows start later; cap the offset so a long menu's tail doesn't
       // lag the 200ms expand.
-      curve: Interval(
-        (index * 0.055).clamp(0.0, 0.45),
-        1.0,
-        curve: Curves.easeOutCubic,
-      ),
+      curve: Interval((index * 0.055).clamp(0.0, 0.45), 1.0, curve: curve),
     );
     return FadeTransition(
       opacity: curved,

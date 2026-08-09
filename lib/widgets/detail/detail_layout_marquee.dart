@@ -91,9 +91,7 @@ class _DetailMarqueeState extends State<DetailMarquee> {
       children: [
         // Legibility floor: artwork can be anything, and stops picked against a
         // dark backdrop wash out completely over a bright one.
-        DecoratedBox(
-          decoration: BoxDecoration(gradient: detailIdentityScrim(_t)),
-        ),
+        const DetailScrim(),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.end,

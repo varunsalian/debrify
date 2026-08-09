@@ -176,7 +176,7 @@ class _DetailStageState extends State<DetailStage> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        DecoratedBox(decoration: BoxDecoration(gradient: detailStageScrim(_t))),
+        const DetailScrim(kind: DetailScrimKind.stage),
         Positioned(
           left: size.gutter,
           right: size.gutter,
