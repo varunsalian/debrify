@@ -605,4 +605,44 @@ test('iptv subprofile pins the Command Center palette', () {
     expect(legacy.iptv.favoriteAccent, legacy.iptv.recordAccent);
     expect(legacy.iptv.surfaceTint, legacy.calendar.line);
   });
+
+  test('roles added to replace call-site isLegacy branches', () {
+    // These six existed as `app.isLegacy ? <literal> : <token>` at the call
+    // site — correct, but a branch in a widget is the job the token layer is
+    // supposed to be doing. Modelling them removed five of eight such
+    // branches; the three that remain are contrast decisions, not gaps.
+    expect(legacy.playlist.posterFallbackDeep, const Color(0xFF06080F));
+    expect(legacy.playlist.posterTileBg, const Color(0xFF333333));
+    expect(legacy.playlist.noPosterBg, const Color(0xFF1E293B));
+    expect(legacy.playlist.noPosterDeep, const Color(0xFF0F172A));
+    expect(legacy.iptv.railBg, const Color(0xFF080B18));
+    expect(legacy.iptv.railFocusInk, const Color(0xFFE4DCFF));
+
+    // The two poster pairs are deliberately NOT collapsed: legacy paints the
+    // no-artwork card slate and the loading fallback near-black, so one token
+    // for both would move one of them.
+    expect(legacy.playlist.noPosterBg, isNot(legacy.playlist.posterFallbackDeep));
+  });
+
+  test('roles added to close the half-themed gaps', () {
+    expect(legacy.iptv.railSelectionFill,
+        const Color(0xFF8A5CFF).withValues(alpha: 0.16));
+    expect(legacy.stremioTv.loaderRailFar, const Color(0xFFC4B2FF));
+    expect(legacy.stremioTv.loaderInk, Colors.white);
+    expect(legacy.debrifyTv.dialogDeep, const Color(0xFF101014));
+    expect(legacy.debrifyTv.controlResting, const Color(0xFF141418));
+  });
+
+  test('the loader plate stays dark on every theme', () {
+    // The loader is a deliberate dark cinematic plate — black Material, black
+    // scrims — so its radial bright stop is tinted off BLACK, not off the
+    // page. Deriving it from the page ground gave Broadsheet a pale centre
+    // under white checklist ink. Anything above a mid grey means that
+    // regression is back.
+    for (final core in DetailThemes.all) {
+      final g = AppTheme.fromDetail(core).stremioTv.loaderGround;
+      expect(g.computeLuminance(), lessThan(0.25),
+          reason: '${core.id}: loader plate must stay dark');
+    }
+  });
 }

@@ -150,6 +150,11 @@ class AppTheme {
     // where it is drawn without the ground behind it.
     final line = Color.alphaBlend(core.hair, ground);
 
+    // Downloads' banner second stop. Hoisted because it is used BOTH as the
+    // gradient's stop and as a fill that onAccent is scored against — the two
+    // drifted once already, which silently voided the contrast guarantee.
+    final downloadsAccent2 = _hueShifted(core.accent, 19);
+
     // Status/category trios are semantic, not theme fields: green means good
     // on every theme. Only their weight changes — the dark-ground trio glares
     // on paper, so light grounds get deepened variants (WCAG-checked in the
@@ -286,7 +291,7 @@ class AppTheme {
         // banner run amber→green and Noir's white→red. Legacy's pair is
         // indigo→violet — a hue rotation at the same lightness — so derive
         // that RELATIONSHIP from whatever accent the theme has.
-        accent2: _hueShifted(core.accent, 19),
+        accent2: downloadsAccent2,
         addAccent: core.accent,
         // Ink on a filled accent, chosen by CONTRAST rather than by whether
         // the page is light. `light ? ground : core.tx` was wrong: it gives
@@ -297,7 +302,11 @@ class AppTheme {
         // score the worse one. Same threshold and tie-break as `inkOn`, which
         // cannot be called here because it is an instance method and the
         // instance does not exist yet.
-        onAccent: _inkOnWorstOf(core.accent, core.state, core.tx, ground),
+        // Scored against the two stops the banner ACTUALLY paints — accent
+        // and accent2. It previously scored core.state, which stopped being
+        // one of them when accent2 became a hue rotation, so the "survives
+        // both stops" guarantee was checking a colour that is not on screen.
+        onAccent: _inkOnWorstOf(core.accent, downloadsAccent2, core.tx, ground),
         shimmerBase: panel2,
         shimmerHighlight: mix(panel2, tx, 0.06),
       ),
@@ -319,6 +328,12 @@ class AppTheme {
         textFaint: tx.withValues(alpha: 0.35),
       ),
       playlist: PlaylistTokens(
+        // Poster fallbacks fall from the placeholder toward the page, so a
+        // theme gets a coherent card instead of a stranded slate rectangle.
+        posterFallbackDeep: ground,
+        posterTileBg: mix(ground, tx, 0.14),
+        noPosterBg: mix(ground, tx, 0.10),
+        noPosterDeep: ground,
         // Legacy's slate-and-white-veil ladder re-derived from the theme's own
         // ground and ink: each role keeps its RELATIONSHIP to the page, so a
         // light theme gets a darkening veil where legacy had a white one
@@ -391,7 +406,23 @@ class AppTheme {
         loaderAccent2: mix(core.accent, tx, 0.45),
         // The page pulled toward the action colour — what legacy's #201636 is
         // next to its #0D0B1A ground.
-        loaderGround: mix(ground, core.accent, 0.18),
+        // Tinted off BLACK, not off the page. The loader is a deliberate dark
+        // cinematic plate — its Material, scrims and vignettes are all black
+        // on every theme — so this is the radial's bright stop ON that plate.
+        // Deriving it from `ground` made Broadsheet paint a pale centre under
+        // white checklist ink: unreadable, and no longer "dark cinematic"
+        // either. The theme reaches it through the ACCENT it is tinted with.
+        loaderGround: mix(const Color(0xFF000000), core.accent, 0.18),
+        loaderRailFar: mix(core.accent, tx, 0.62),
+        // Scored against that plate rather than assumed white. It resolves to
+        // tx on every shipped theme; the scoring is what stops a future
+        // light-accent theme from reintroducing the bug above.
+        loaderInk: _inkOnWorstOf(
+          mix(const Color(0xFF000000), core.accent, 0.18),
+          const Color(0xFF000000),
+          tx,
+          ground,
+        ),
         // Scored against the one swatch it is painted on, the loader's step
         // dot. `inkOn` would be the natural call and cannot be used here: it is
         // an instance method and the instance does not exist yet.
@@ -404,6 +435,8 @@ class AppTheme {
         // Matches what the ThemeData adapter gives `dialogTheme`, so a Debrify
         // TV dialog and a Material one read as the same surface.
         dialogBg: core.pane.withValues(alpha: 1),
+        dialogDeep: ground,
+        controlResting: mix(ground, tx, 0.05),
         noticeBg: panel2,
         cardBg: mix(ground, tx, 0.08),
         // A visible step, not a nudge: this ground difference is the whole
@@ -427,6 +460,19 @@ class AppTheme {
         favorite: light ? const Color(0xFF8A6100) : const Color(0xFFFFD700),
       ),
       iptv: IptvTokens(
+        railBg: mix(ground, tx, 0.03),
+        railSelectionFill: core.accent.withValues(alpha: 0.16),
+        // Scored against what the row ACTUALLY composites to: the selection
+        // tint over the rail, not the bare rail.
+        railFocusInk: _inkOnWorstOf(
+          Color.alphaBlend(
+            core.accent.withValues(alpha: 0.16),
+            mix(ground, tx, 0.03),
+          ),
+          mix(ground, tx, 0.03),
+          tx,
+          ground,
+        ),
         // The cockpit recedes rather than lifts, and "deeper than the page" is
         // directional — so it takes the theme's OWN recessed ground, which is
         // deeper than `ground` in all twenty themes. The same reasoning (and
@@ -1127,7 +1173,30 @@ class PlaylistTokens {
   /// onto this token without moving a pixel.
   final Color warning;
 
+  /// The deep stop of a poster fallback — the loading/error gradient and the
+  /// no-poster tile both fall from [posterPlaceholder] to this.
+  ///
+  /// A role rather than a call-site `isLegacy` branch: the branch preserved
+  /// legacy correctly but left the fill unable to follow a theme, which is the
+  /// exact job the token layer exists to do.
+  final Color posterFallbackDeep;
+
+  /// Ground of a small poster tile that has no artwork (the TVMaze picker's
+  /// rows). Distinct from [posterPlaceholder]: legacy paints a neutral grey
+  /// here and a blue-violet there.
+  final Color posterTileBg;
+
+  /// The no-artwork card's own gradient. A separate pair from the loading
+  /// fallback above: legacy paints this one slate and that one near-black,
+  /// and collapsing them would move one of the two.
+  final Color noPosterBg;
+  final Color noPosterDeep;
+
   const PlaylistTokens({
+    required this.posterFallbackDeep,
+    required this.posterTileBg,
+    required this.noPosterBg,
+    required this.noPosterDeep,
     required this.card,
     required this.fieldFill,
     required this.sheetPanel,
@@ -1275,6 +1344,15 @@ class StremioTvTokens {
   /// from.
   final Color loaderGround;
 
+  /// The loader rail's far gradient stop, paired with [loaderAccent].
+  final Color loaderRailFar;
+
+  /// Ink on the loader. Scored against [loaderGround] rather than forced
+  /// white: the ground follows the theme, so a pale one left white checklist
+  /// text unreadable — "dark cinematic" stops being true the moment the
+  /// backdrop is not dark.
+  final Color loaderInk;
+
   /// Ink and glyphs sitting ON a filled swatch — the check inside the loader's
   /// completed-step dot.
   ///
@@ -1300,6 +1378,8 @@ class StremioTvTokens {
     required this.loaderAccent,
     required this.loaderAccent2,
     required this.loaderGround,
+    required this.loaderRailFar,
+    required this.loaderInk,
     required this.inkOnFill,
   });
 }
@@ -1349,6 +1429,13 @@ class DebrifyTvTokens {
   /// Kept apart from [dialogBg] rather than fused, because they are two looks
   /// in the shipped app and one token cannot pin two literals.
   final Color noticeBg;
+
+  /// The deep stop of a dialog's gradient, under [noticeBg].
+  final Color dialogDeep;
+
+  /// A resting (unfocused) control ground inside a dialog — the "don't show
+  /// again" row.
+  final Color controlResting;
 
   /// Resting ground of a channel card, a settings row and the dropdown.
   final Color cardBg;
@@ -1428,6 +1515,8 @@ class DebrifyTvTokens {
     required this.accent,
     required this.dialogBg,
     required this.noticeBg,
+    required this.dialogDeep,
+    required this.controlResting,
     required this.cardBg,
     required this.cardFocusBg,
     required this.controlBg,
@@ -1573,7 +1662,24 @@ class IptvTokens {
   /// succeeded. Deepened on paper so a 6px dot still reads.
   final Color liveDot;
 
+  /// Command Center's rail ground. The styled layouts paint their own from
+  /// `IptvStyleTokens`; this is the `tokens == null` path.
+  final Color railBg;
+
+  /// Ink on a FOCUSED Command Center rail row.
+  ///
+  /// Scored against the SELECTED row's composited fill, not the bare rail:
+  /// the text sits on [railSelectionFill] over [railBg], and scoring the rail
+  /// alone reports a contrast the user never sees.
+  final Color railFocusInk;
+
+  /// The selected Command Center rail row's tint, over [railBg].
+  final Color railSelectionFill;
+
   const IptvTokens({
+    required this.railBg,
+    required this.railFocusInk,
+    required this.railSelectionFill,
     required this.stageBg,
     required this.rowFocusFill,
     required this.modalBg,
@@ -1775,6 +1881,10 @@ abstract final class AppThemes {
       textFaint: Colors.white.withValues(alpha: 0.35), // empty-state glyph
     ),
     playlist: PlaylistTokens(
+      posterFallbackDeep: const Color(0xFF06080F), // loading/error deep stop
+      posterTileBg: const Color(0xFF333333), // TVMaze row, no artwork
+      noPosterBg: const Color(0xFF1E293B), // no-poster card, near stop
+      noPosterDeep: const Color(0xFF0F172A), // no-poster card, far stop
       card: const Color(0xFF1E293B), // file / search-result row Card
       fieldFill: const Color(0xFF1E293B), // search field + its clear button
       sheetPanel: const Color(0xF5181820), // action-sheet panel (TV paint)
@@ -1829,11 +1939,15 @@ abstract final class AppThemes {
       loaderAccent: const Color(0xFF8B6BFF), // PipelineLoadingOverlay.accent
       loaderAccent2: const Color(0xFFB9A6FF), // loader subtitle / note ink
       loaderGround: const Color(0xFF201636), // loader backdrop radial, bright stop
+      loaderRailFar: const Color(0xFFC4B2FF), // loader top rail, far stop
+      loaderInk: Colors.white, // loader ink on the dark backdrop
       inkOnFill: const Color(0xFF0A0712), // check glyph on the loader step dot
     ),
     debrifyTv: DebrifyTvTokens(
       accent: const Color(0xFFE50914), // CH badge / Play / Save fills
       dialogBg: const Color(0xFF0F0F0F), // magic_tv's five dialogs
+      dialogDeep: const Color(0xFF101014), // dialog gradient, deep stop
+      controlResting: const Color(0xFF141418), // "don't show again" row
       noticeBg: const Color(0xFF1B1B1F), // loading + creation + notice dialogs
       cardBg: const Color(0xFF1A1A1A), // resting card / settings row / dropdown
       cardFocusBg: const Color(0xFF2A2A2A), // the same row, focused
@@ -1854,6 +1968,10 @@ abstract final class AppThemes {
       favorite: const Color(0xFFFFD700), // favourite star and toggle
     ),
     iptv: IptvTokens(
+      railBg: const Color(0xFF080B18), // Command Center rail ground
+      railSelectionFill: // selected rail row tint
+          const Color(0xFF8A5CFF).withValues(alpha: 0.16),
+      railFocusInk: const Color(0xFFE4DCFF), // ink on a focused rail row
       stageBg: const Color(0xFF0B0914), // live-preview stage + info slab
       rowFocusFill: const Color(0xFF141824), // focused channel / EPG row
       modalBg: const Color(0xFF14141D), // IPTV dialogs + schedule sheet
