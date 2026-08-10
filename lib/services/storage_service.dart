@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:http/http.dart' as http;
@@ -621,16 +623,23 @@ class StorageService {
     await prefs.setBool('detail_trailer_autoplay_enabled', enabled);
   }
 
-  /// Ambient trailer in the TV hero surfaces — the Home board's spotlight and
-  /// the Discover rail. Android TV only in both senses: those surfaces aren't
-  /// rendered elsewhere, so this is hard-off off-TV rather than merely
-  /// defaulted off (the platform's ambient surface is the detail page instead
-  /// — [getDetailTrailerAutoplayEnabled] is its counterpart). Exactly one of
-  /// the pair is live on any given device, and Settings shows only that one.
+  /// Ambient trailer in the hero surfaces — the Home board's spotlight and
+  /// the Discover rail.
+  ///
+  /// **No longer hard-off off-TV.** That rule dated from when no other
+  /// platform rendered a hero; the Spotlight home layout now runs on phones,
+  /// tablets and desktop, so the hard-off becomes a platform DEFAULT:
+  /// on for televisions (unchanged) and desktop (wall power, wifi), off for
+  /// phones and tablets — autoplaying video on a battery over cellular is an
+  /// opt-in, not a surprise. The stored value, once written, wins everywhere.
   static Future<bool> getHomeHeroTrailerEnabled() async {
-    if (!await _isTelevision()) return false;
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('home_hero_trailer_enabled') ?? true;
+    final stored = prefs.getBool('home_hero_trailer_enabled');
+    if (stored != null) return stored;
+    if (await _isTelevision()) return true;
+    final desktop =
+        Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+    return desktop;
   }
 
   static Future<void> setHomeHeroTrailerEnabled(bool enabled) async {

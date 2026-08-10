@@ -362,26 +362,22 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// which side the identity sits on.
   final Map<String, double> _leftThird = {};
 
-  /// The hero's cadence: art, then a trailer, then on to the next title.
+  /// The hero's cadence: art, then a trailer. **Never an advance.**
   ///
-  ///     art (4s) ──▶ trailer (20s cap) ──▶ advance ──▶ art (next)
-  ///      ▲                                              │
-  ///      └────────── LEFT/RIGHT: cancel, restart ───────┘
+  ///     art (4s) ──▶ trailer (loops until a deliberate move)
+  ///      ▲                       │
+  ///      └── swipe / LEFT/RIGHT ─┘
+  ///
+  /// The reel used to page itself (art → trailer → advance → next art, and a
+  /// plain 4s advance with trailers off). Killed by user call, on every
+  /// device: a carousel that moves under you takes the choice away — the
+  /// reel now moves ONLY on a swipe, a dot tap, or a DPAD page. The one
+  /// timer's one remaining job is the trailer dwell.
   ///
   /// ONE timer with ONE owner. The shared `_scheduleHeroTrailer` is excluded
   /// for this style precisely so the two cannot interleave and start a trailer
   /// under the wrong title.
-  ///
-  /// Timer-capped rather than completion-driven: `HeroTrailerBackdrop` opens
-  /// trailers with `loop: !live` and exposes no completion, position or
-  /// duration callback, so the machine advances on its own clock and the video
-  /// simply loops until it does.
   static const Duration _artDwell = Duration(seconds: 4);
-
-  /// The touch reel's clock — slower than TV's art dwell, because there is no
-  /// trailer step here: each tick IS the advance. Six seconds is the mock's
-  /// number, taken from the Apple phone app.
-  static const Duration _touchDwell = Duration(seconds: 6);
 
   Timer? _cadence;
 
@@ -403,54 +399,21 @@ class SpotlightBoardState extends State<SpotlightBoard> {
 
   void _restartCadence() {
     _cadence?.cancel();
-    // Nulled, not just cancelled: didUpdateWidget's touch reconcile decides
-    // "is a timer armed" by null-ness, and a cancelled-but-non-null handle
-    // reads as armed — a 2→1 shrink through the removed-item branch would
-    // then freeze the reel forever, because the later 1→2 growth declines to
-    // re-arm.
+    // Nulled, not just cancelled: didUpdateWidget's reconcile decides "is a
+    // timer armed" by null-ness, and a cancelled-but-non-null handle reads
+    // as armed.
     _cadence = null;
     _rolling = false;
     if (!mounted) return;
-    // Touch: the reel runs on its own clock — nothing ever focuses the hero,
-    // so the focus gate below would freeze it forever. Route/lifecycle checks
-    // happen at FIRE time (_onTouchTick), so a covered or backgrounded board
-    // never pages under a detail page or a lock screen.
-    if (!widget.dpad) {
-      if (widget.hero.length < 2) return;
-      _cadence = Timer(_touchDwell, _onTouchTick);
-      return;
-    }
-    // Frozen while focus is elsewhere: a hero that keeps paging while you are
-    // three shelves down moves the page under you.
-    // Frozen when focus is off the hero. `_row == -1` alone is NOT that test:
-    // it only says the cursor was last in the hero band, and it stays -1 when
-    // focus goes to the sidebar, another tab, or a pushed detail route — so
-    // the timer kept paging and republishing ambient art for a board that was
-    // covered. The node's own `hasFocus` is the real question.
-    if (_row >= 0 || !widget.heroNode.hasFocus) return;
-    if (widget.hero.length < 2 && !widget.trailersEnabled) return;
+    // The cadence's only job is the trailer dwell now — with no trailer to
+    // arm there is nothing to time. The reel itself moves only on input.
+    if (!widget.trailersEnabled || widget.onDwell == null) return;
+    // TV: frozen while focus is off the hero. `_row == -1` alone is NOT that
+    // test: it stays -1 when focus goes to the sidebar, another tab, or a
+    // pushed detail route — the node's own `hasFocus` is the real question.
+    // Touch has no focus to gate on; visibility is checked at FIRE time.
+    if (widget.dpad && (_row >= 0 || !widget.heroNode.hasFocus)) return;
     _cadence = Timer(_artDwell, _onArtDone);
-  }
-
-  /// One tick of the touch reel. Skips (but stays armed) while a pushed route
-  /// covers the board or the app is backgrounded — advancing a hero nobody
-  /// can see just moves the page under the user on their way back.
-  void _onTouchTick() {
-    if (!mounted) return;
-    if (widget.hero.length < 2) {
-      _cadence = null;
-      return;
-    }
-    final route = ModalRoute.of(context);
-    final lifecycle = WidgetsBinding.instance.lifecycleState;
-    final visible = (route == null || route.isCurrent) &&
-        (lifecycle == null || lifecycle == AppLifecycleState.resumed);
-    if (visible && widget.hero.length > 1) {
-      final n = widget.hero.length;
-      setState(() => _heroId = widget.hero[(_heroIndex + 1) % n].id);
-      _probe();
-    }
-    _cadence = Timer(_touchDwell, _onTouchTick);
   }
 
   /// Dot tap / swipe target: show slide [i] and restart the clock.
@@ -463,27 +426,39 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   }
 
   void _onArtDone() {
+    // The one-shot is consumed the moment this runs — null it, or the
+    // reconcile in didUpdateWidget reads a dead handle as "armed" and a
+    // disable→re-enable of trailers strands the cadence forever.
+    _cadence = null;
     if (!mounted || _row >= 0) return;
+    // Touch: a covered or backgrounded board must not spin up an engine for
+    // a hero nobody can see. Re-arm and wait rather than dying — the route
+    // pop that reveals the board again gives no callback here.
+    if (!widget.dpad) {
+      final route = ModalRoute.of(context);
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      final visible = (route == null || route.isCurrent) &&
+          (lifecycle == null || lifecycle == AppLifecycleState.resumed);
+      if (!visible) {
+        _cadence = Timer(_artDwell, _onArtDone);
+        return;
+      }
+    }
     final item = _heroItem;
-    if (widget.trailersEnabled && item != null && widget.onDwell != null) {
-      // Once a trailer is rolling the reel STOPS. Cutting away from something
-      // the user is actually watching to show the next poster is the opposite
-      // of what the dwell is for — the carousel exists to offer titles, and a
-      // playing trailer means one has already been taken up.
-      //
-      // It resumes on the next deliberate move: LEFT/RIGHT pages, DOWN leaves.
-      setState(() => _rolling = true);
-      widget.onDwell!(item);
+    if (item == null) {
+      // An empty reel consumed the one-shot — re-arm, or a hero arriving
+      // later (CW mounts before the first catalog section) finds a dead
+      // clock and never dwells.
+      _cadence = Timer(_artDwell, _onArtDone);
       return;
     }
-    _advance();
-  }
-
-  void _advance() {
-    if (!mounted || _row >= 0) return;
-    _stopRolling();
-    if (widget.hero.length > 1) _page(1);
-    _restartCadence();
+    if (widget.trailersEnabled && widget.onDwell != null) {
+      // Once a trailer is rolling the reel stays put — the video loops until
+      // the next deliberate move (swipe, dot tap, LEFT/RIGHT, DOWN).
+      setState(() => _rolling = true);
+      widget.onDwell!(item);
+    }
+    // Never an advance — see the cadence comment.
   }
 
   int get _heroIndex {
@@ -494,6 +469,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
 
   StremioMeta? get _heroItem =>
       widget.hero.isEmpty ? null : widget.hero[_heroIndex];
+
+  /// The id of the slide currently SHOWING — the host's suppression snapshot
+  /// reads this at content-playback launch, because its own bookkeeping only
+  /// knows the last *dwelled* item and playback can start before any dwell.
+  String? get currentHeroId => _heroItem?.id;
 
   @override
   void initState() {
@@ -518,6 +498,13 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       old.heroNode.removeListener(_onHeroFocus);
       widget.heroNode.addListener(_onHeroFocus);
     }
+    // The trailer pref flipped: rebuild the cadence from scratch. Disable
+    // must also clear a stale `_rolling` (or nothing ever re-arms — the
+    // reconcile below skips while rolling), and enable must arm a clock that
+    // has nothing else to wake it.
+    if (old.trailersEnabled != widget.trailersEnabled) {
+      _restartCadence();
+    }
     if (_heroId != null && !widget.hero.any((m) => m.id == _heroId)) {
       // The title we were on is gone. Tear the trailer down FIRST: it was
       // resolved for that title, and leaving it rolling paints it over the new
@@ -525,19 +512,14 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       _stopRolling();
       _heroId = widget.hero.isNotEmpty ? widget.hero.first.id : null;
       _restartCadence();
-    } else if (!widget.dpad) {
-      // Touch reel reconcile. The board often first builds with a single
-      // hero item (the first section streams in) and grows later: the parked
-      // id never vanished, so the branch above doesn't run — but a reel that
-      // gained a second slide with no timer armed would never advance. The
-      // inverse holds too: a reel that shrank to one slide has a six-second
-      // timer rescheduling itself forever for nothing.
-      if (widget.hero.length > 1 && _cadence == null) {
-        _restartCadence();
-      } else if (widget.hero.length < 2 && _cadence != null) {
-        _cadence!.cancel();
-        _cadence = null;
-      }
+    } else if (_cadence == null && !_rolling) {
+      // Reconcile for BOTH inputs: the host often enables trailers (the
+      // pref read lands) or grows the reel AFTER first build, with the
+      // parked id intact — the branch above never runs then, and without
+      // this the dwell clock would simply never start. _restartCadence
+      // applies its own gates (focus on DPAD, pref, dwell callback), so an
+      // uncalled-for restart is a no-op, not a stolen cadence.
+      _restartCadence();
     }
     // A board reload can shrink or reorder the shelves under a parked cursor.
     // `_row` is positional, so without this the next arrow key indexes past

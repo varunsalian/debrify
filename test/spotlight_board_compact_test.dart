@@ -246,7 +246,10 @@ void main() {
       expect(find.text('Bravo'), findsWidgets);
     });
 
-    testWidgets('the reel advances itself every 6 seconds', (tester) async {
+    testWidgets('the touch reel does NOT advance itself — swipe is the only '
+        'pager', (tester) async {
+      // Auto-advance was removed by user call, on every device: the reel
+      // holds still until a swipe or a dot tap.
       surface(tester, const Size(390, 844));
       final a = _meta('tt1', 'Alpha');
       final b = _meta('tt2', 'Bravo');
@@ -254,13 +257,18 @@ void main() {
           .pumpWidget(host([a, b], [_section('Top', [a, b])], dpad: false));
       await tester.pump();
 
-      // Alpha's logo-fallback title shows first.
-      expect(find.text('Alpha'), findsWidgets);
-      await tester.pump(const Duration(seconds: 6));
+      expect(find.text('Series · Drama'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 20));
       await tester.pump();
-      expect(find.text('Bravo'), findsWidgets,
-          reason: 'touch has no DPAD to page with — the reel must move on '
-              'its own clock');
+      // Alpha's shelf caption AND hero identity are still the first slide's.
+      expect(find.text('Alpha'), findsWidgets,
+          reason: 'the reel must hold still until a deliberate move');
+
+      // The deliberate move still works.
+      await tester.fling(
+          find.byType(SpotlightBoard), const Offset(-260, 0), 900);
+      await tester.pumpAndSettle();
+      expect(find.text('Bravo'), findsWidgets);
     });
 
     testWidgets('on TV the unfocused hero does NOT auto-advance',
@@ -278,9 +286,52 @@ void main() {
       // rendered only on the wide hero, never on cards, so it is the
       // unambiguous witness.
       expect(find.text('About Alpha.'), findsOneWidget,
-          reason: 'the TV cadence is armed by hero FOCUS — an unfocused '
-              'board must hold still');
+          reason: 'the reel never advances on its own');
       expect(find.text('About Bravo.'), findsNothing);
+    });
+
+    testWidgets('the touch dwell asks for a trailer without paging the reel',
+        (tester) async {
+      // The cadence's one remaining job: after the art dwell, tell the host
+      // the hero has rested — and change nothing else.
+      surface(tester, const Size(390, 844));
+      final a = _meta('tt1', 'Alpha');
+      final b = _meta('tt2', 'Bravo');
+      final dwelled = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AppThemeScope(
+            theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+            child: Scaffold(
+              body: SpotlightBoard(
+                hero: [a, b],
+                sections: [_section('Top', [a, b])],
+                heroNode: hero,
+                heroAddon: _addon,
+                onHeroOpen: (_, __) {},
+                dpad: false,
+                trailersEnabled: true,
+                onDwell: (m) => dwelled.add(m.id),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      expect(dwelled, ['tt1'],
+          reason: 'the dwell fires for the resting slide');
+      expect(find.text('Alpha'), findsWidgets,
+          reason: 'and the reel has not moved');
+
+      // Swiping tears the roll down and re-arms for the next slide.
+      await tester.fling(
+          find.byType(SpotlightBoard), const Offset(-260, 0), 900);
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pump();
+      expect(dwelled, ['tt1', 'tt2']);
     });
 
     testWidgets('tapping a dot jumps the reel', (tester) async {

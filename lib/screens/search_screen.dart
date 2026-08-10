@@ -1117,6 +1117,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// NEW title takes the spotlight or the board reloads.
   bool _heroTrailerSuppressed = false;
 
+  /// The item the last hero-trailer schedule was for — what the suppression
+  /// lift above compares against.
+  String? _heroTrailerScheduledItemId;
+
   /// Settings → Home Page toggles, read once per screen life (on TV a tab
   /// switch rebuilds the screen, so Settings changes are picked up on return).
   bool _heroTrailerEnabled = false;
@@ -1130,6 +1134,20 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// (the hero itself isn't rendered there).
   bool get _heroTrailerActive =>
       widget.isTelevision && !widget.searchMode && !widget.discoverMode;
+
+  /// The hero trailer off-TV: the Spotlight home board's reel, rendered on
+  /// phones/tablets/desktop. Deliberately SEPARATE from [_heroTrailerActive]
+  /// — that getter is the whole TV shell lifecycle (glass scaffold, sidebar
+  /// relays, hardware-key takeover, ambient publish), none of which belongs
+  /// on a phone. This one means exactly "this instance may resolve and paint
+  /// a hero trailer"; the enabled pref (platform-defaulted: TV/desktop on,
+  /// phone/tablet off) gates it at schedule time.
+  bool get _heroTrailerOffTvEligible =>
+      !widget.isTelevision && !widget.searchMode && !widget.discoverMode;
+
+  /// May THIS instance resolve/render a hero trailer at all.
+  bool get _heroTrailerRenderable =>
+      _heroTrailerActive || _heroTrailerOffTvEligible;
 
   // Discover tab: the active source key ('cw' | 'trakt' | 'a:{addonId}') + its
   // DPAD focus node (the "Source" dropdown is the leading filter of whichever
@@ -1397,6 +1415,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Restored keyword results must come back with the sheet open — the
         // full-bleed shell would otherwise hide them behind a hero.
         if (restoredKeyword) _searchSheetOpen = true;
+        // Hero trailer prefs for the OFF-TV Spotlight reel. Only the pieces
+        // that mean "resolve and paint a video" — none of the TV shell
+        // machinery the _heroTrailerActive block registers.
+        MainPageBridge.addPlayerLaunchListener(_onContentPlayerLaunch);
+        unawaited(_reloadOffTvHeroTrailerPrefs());
       }
     }
     // Unified (non-TV) layout: drive the catalog Sources bar off search-field
@@ -1508,6 +1531,36 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       });
     }
     return true;
+  }
+
+  /// Off-TV hero trailer prefs — read at init and RE-read whenever Settings
+  /// fires the home-settings bridge, because off-TV Settings is a pushed
+  /// route over a surviving Home: without the re-read, flipping the toggle
+  /// would do nothing until the tab was recreated. setState because the
+  /// board's `trailersEnabled` is a constructor param — its dwell clock only
+  /// learns the pref through a rebuild.
+  ///
+  /// Sound/volume read the DETAIL surface keys off-TV: that is the pair the
+  /// settings page has always shown on these platforms, so a stored "sound
+  /// off" keeps meaning what it meant. Writes go to both surfaces now, so
+  /// the pairs converge on first change.
+  Future<void> _reloadOffTvHeroTrailerPrefs() async {
+    final values = await Future.wait([
+      StorageService.getHomeHeroTrailerEnabled(),
+      StorageService.getAmbientTrailerAudioEnabled(
+        AmbientTrailerSurface.detail,
+      ),
+      StorageService.getAmbientTrailerVolume(AmbientTrailerSurface.detail),
+    ]);
+    if (!mounted) return;
+    final enabled = values[0] as bool;
+    setState(() {
+      _heroTrailerEnabled = enabled;
+      _heroTrailerVolume = (values[1] as bool)
+          ? (values[2] as int).toDouble()
+          : 0;
+    });
+    if (!enabled) _clearHeroTrailer();
   }
 
   /// Off-TV Home's Back (via the bridge, tab key 'home'): close the Spotlight
@@ -1682,6 +1735,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // Same closure that registered — the bridge's mid-transition contract.
       MainPageBridge.unregisterTabBackHandler('home', _handleHomeBack);
       _searchFocusNode.removeListener(_onSearchFocusLatchSheet);
+      MainPageBridge.removePlayerLaunchListener(_onContentPlayerLaunch);
     }
     // Safe no-op in the variants that never registered it.
     FocusManager.instance.removeListener(_onGlobalFocusChange);
@@ -1857,6 +1911,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// settings.
   Future<void> _reloadForHomeSettings() async {
     if (!mounted) return;
+    // Off-TV the hero-trailer prefs ride this same signal — Settings is a
+    // pushed route here, so nothing else tells a surviving Home about them.
+    if (!widget.isTelevision) {
+      unawaited(_reloadOffTvHeroTrailerPrefs());
+    }
     await _loadHomeDefaultView();
     if (!mounted) return;
     final disabled = await StorageService.getHomeDisabledSections();
@@ -5466,10 +5525,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // this style — init, section loads, focus changes, `_applyHero`, route
       // return, sidebar return — so the board's clock is the single owner and
       // the two cannot start a trailer under different titles.
-      trailersEnabled: _heroTrailerEnabled && !_heroTrailerSuppressed,
+      // NOT && !_heroTrailerSuppressed: suppression is enforced inside
+      // _scheduleHeroTrailer. Folding it in here disarms the board's dwell
+      // clock entirely — and the dwell is the only event that can LIFT the
+      // suppression when the reel moves to a new title, so one post-playback
+      // rebuild would have frozen trailers until the tab was recreated.
+      trailersEnabled: _heroTrailerEnabled,
       onDwell: (item) => _scheduleHeroTrailer(item, fromSpotlight: true),
       onTrailerStop: _clearHeroTrailer,
-      trailer: _heroTrailerActive
+      trailer: _heroTrailerRenderable
           ? _HeroTrailerLayer(
               trailer: _heroTrailer,
               heroHeight: 540,
@@ -8550,9 +8614,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// lookups (Cinemeta /meta for the YouTube id, then the stream resolve) are
   /// cached in their services, so re-resting on a recent card starts fast.
   void _scheduleHeroTrailer(StremioMeta item, {bool fromSpotlight = false}) {
-    if (!_heroTrailerActive || !_heroTrailerEnabled || _heroTrailerSuppressed) {
+    // Off-TV nothing ever calls _applyHero (the TV paths that lift the
+    // after-playback suppression), so a NEW title arriving through the
+    // spotlight dwell lifts it here — fresh context, fresh trailer, the same
+    // rule _applyHero implements for TV.
+    if (_heroTrailerSuppressed &&
+        fromSpotlight &&
+        item.id != _heroTrailerScheduledItemId) {
+      _heroTrailerSuppressed = false;
+    }
+    if (!_heroTrailerRenderable ||
+        !_heroTrailerEnabled ||
+        _heroTrailerSuppressed) {
       return;
     }
+    _heroTrailerScheduledItemId = item.id;
     // Spotlight owns its own hero cadence, so the shared scheduler must not
     // also drive it — two systems interleaving on one hero is how a trailer
     // starts under the wrong title.
@@ -8797,8 +8873,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// a Flutter route, so RouteAware alone can't catch them all) and keep it
   /// off for this spotlight — it must not resume behind or after the feature.
   void _onContentPlayerLaunch() {
-    if (!_heroTrailerActive || !mounted) return;
+    if (!_heroTrailerRenderable || !mounted) return;
     _heroTrailerSuppressed = true;
+    // The suppression baseline is the hero SHOWING at launch, not the last
+    // dwell's item — playback can start before the first dwell (cold open →
+    // open a card immediately), or after paging A→B with B's dwell still
+    // pending. Without this snapshot the stored id is stale/null and the
+    // just-watched title's own dwell would read as "new" and lift the
+    // suppression it was meant to hold.
+    final showing = _spotlightKey.currentState?.currentHeroId;
+    if (showing != null) _heroTrailerScheduledItemId = showing;
     _clearHeroTrailer();
   }
 

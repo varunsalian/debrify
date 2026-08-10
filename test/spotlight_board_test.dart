@@ -169,40 +169,84 @@ void main() {
     expect(sawLeft, isTrue);
   });
 
-  testWidgets('the hero advances on its own, and freezes when focus leaves',
-      (tester) async {
+  testWidgets('the reel NEVER advances on its own — only a deliberate move '
+      'pages it', (tester) async {
+    // This pins the removal of auto-advance (user call, every device): the
+    // reel used to page itself after the art dwell when trailers were off,
+    // and a carousel that moves under you takes the choice away. The cadence
+    // timer's one remaining job is the trailer dwell.
     final a = _meta('tt1', 'Alpha');
     final b = _meta('tt2', 'Bravo');
     await tester.pumpWidget(host([a, b], [_section('Top', [a, b])]));
     await tester.pumpAndSettle();
-    expect(find.text('Alpha'), findsWidgets);
+    expect(find.text('About Alpha.'), findsOneWidget);
 
-    // It must NOT advance while the hero does not hold focus. `_row == -1`
-    // says only "the cursor was last in the hero band"; it stays -1 when focus
-    // goes to the sidebar, another tab or a pushed route, and a reel that
-    // keeps paging behind a covering screen republishes ambient art for a
-    // board nobody is looking at.
+    // Unfocused: parked.
     await tester.pump(const Duration(seconds: 8));
     await tester.pumpAndSettle();
-    expect(find.text('Alpha'), findsWidgets,
-        reason: 'unfocused: the reel must be frozen');
+    expect(find.text('About Alpha.'), findsOneWidget);
 
-    // Focused, it advances on its own with no key pressed.
+    // FOCUSED and idle: still parked — this is the behaviour that changed.
     hero.requestFocus();
     await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 12));
     await tester.pumpAndSettle();
-    expect(find.text('Bravo'), findsWidgets,
-        reason: 'focused: the reel must advance on its own');
+    expect(find.text('About Alpha.'), findsOneWidget,
+        reason: 'the reel must hold still until a deliberate move');
+    expect(find.text('About Bravo.'), findsNothing);
 
-    // DOWN out of the hero freezes it — a hero that keeps paging while you
-    // are three shelves down moves the page under you.
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    // A deliberate move still pages it.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
-    await tester.pump(const Duration(seconds: 10));
+    expect(find.text('About Bravo.'), findsOneWidget);
+  });
+
+  testWidgets('the TV dwell asks for a trailer without paging, and re-arms '
+      'after a deliberate move', (tester) async {
+    // The cadence's one remaining job on TV: focus rests on the hero, the
+    // art dwell elapses, the host is told — and the reel does NOT move.
+    final a = _meta('tt1', 'Alpha');
+    final b = _meta('tt2', 'Bravo');
+    final dwelled = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppThemeScope(
+          theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+          child: Scaffold(
+            body: SpotlightBoard(
+              hero: [a, b],
+              sections: [_section('Top', [a, b])],
+              heroNode: hero,
+              heroAddon: _addon,
+              onHeroOpen: (_, __) {},
+              trailersEnabled: true,
+              onDwell: (m) => dwelled.add(m.id),
+            ),
+          ),
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Bravo'), findsWidgets,
-        reason: 'frozen: the parked title must not have moved on');
+
+    // Unfocused: no dwell — the clock is armed by hero focus.
+    await tester.pump(const Duration(seconds: 5));
+    expect(dwelled, isEmpty);
+
+    hero.requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+    expect(dwelled, ['tt1'], reason: 'focused: one dwell after the art rest');
+    expect(find.text('About Alpha.'), findsOneWidget,
+        reason: 'and the reel has not paged');
+
+    // RIGHT pages, tears the roll down, and re-arms for the new slide.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(find.text('About Bravo.'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+    expect(dwelled, ['tt1', 'tt2']);
   });
 
   testWidgets('a shrinking board does not strand the cursor past the end',

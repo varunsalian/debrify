@@ -39,9 +39,9 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   /// TV home layout row (this page owns it now): open the picker, then
   /// re-read so the row caption matches what was chosen.
   Future<void> _openTvHomeStyle() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const TvHomeStylePage()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const TvHomeStylePage()));
     if (!mounted) return;
     final style = await StorageService.getTvHomeStyle();
     if (!mounted) return;
@@ -54,18 +54,19 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   /// an OR — a stale stored `true` for the wrong platform can't leak through.
   /// The cached TV read is safe here: build() is gated on [_loading], and
   /// clearing it awaits getters that themselves await the TV probe.
-  bool get _ambientTrailerEnabled => PlatformUtil.isTelevision
-      ? (_heroTrailerEnabled || _trailerAutoplayEnabled)
-      : _trailerAutoplayEnabled;
+  bool get _ambientTrailerEnabled =>
+      _heroTrailerEnabled || _trailerAutoplayEnabled;
 
-  /// The surface these controls READ from. On TV both surfaces exist now (Home
-  /// hero and the Showcase detail page), and one pair of controls governs both
-  /// — see [_setAmbientAudio]. Reading either gives the same answer because
-  /// writes go to both.
+  /// The surface these controls READ from. Every platform has both surfaces
+  /// now (the Spotlight home hero runs off-TV too) and one pair of controls
+  /// governs both — writes go to both keys ([_setAmbientAudio]). READS stay
+  /// per-platform for continuity: a phone's stored values live under the
+  /// detail keys (the only surface it had), a TV's under homeHero. The pairs
+  /// converge on the first write.
   static AmbientTrailerSurface get _ambientSurface =>
       PlatformUtil.isTelevision
-      ? AmbientTrailerSurface.homeHero
-      : AmbientTrailerSurface.detail;
+          ? AmbientTrailerSurface.homeHero
+          : AmbientTrailerSurface.detail;
 
   /// Writes the sound preference to every ambient surface this platform has.
   ///
@@ -78,12 +79,10 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       AmbientTrailerSurface.detail,
       value,
     );
-    if (PlatformUtil.isTelevision) {
-      await StorageService.setAmbientTrailerAudioEnabled(
-        AmbientTrailerSurface.homeHero,
-        value,
-      );
-    }
+    await StorageService.setAmbientTrailerAudioEnabled(
+      AmbientTrailerSurface.homeHero,
+      value,
+    );
   }
 
   Future<void> _setAmbientVolume(int value) async {
@@ -91,12 +90,10 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       AmbientTrailerSurface.detail,
       value,
     );
-    if (PlatformUtil.isTelevision) {
-      await StorageService.setAmbientTrailerVolume(
-        AmbientTrailerSurface.homeHero,
-        value,
-      );
-    }
+    await StorageService.setAmbientTrailerVolume(
+      AmbientTrailerSurface.homeHero,
+      value,
+    );
   }
 
   @override
@@ -131,9 +128,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       // enabled detail trailer played at its own default of on. Read the shown
       // surface, then write it through to the other.
       final ambientTrailerAudioEnabled =
-          await StorageService.getAmbientTrailerAudioEnabled(
-            _ambientSurface,
-          );
+          await StorageService.getAmbientTrailerAudioEnabled(_ambientSurface);
       final ambientTrailerVolume = await StorageService.getAmbientTrailerVolume(
         _ambientSurface,
       );
@@ -446,60 +441,66 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 SettingsSection(
                   title: '',
                   children: [
-                    if (PlatformUtil.isTelevision)
-                      SettingsToggleTile(
-                        icon: Icons.smart_display_rounded,
-                        title: 'Trailer on Home Spotlight',
-                        subtitle:
-                            'When you rest on a title, its trailer plays in '
-                            'the hero at the top of Home and in Discover.',
-                        subtitleMaxLines: 2,
-                        value: _heroTrailerEnabled,
-                        onChanged: (value) async {
-                          try {
-                            await StorageService.setHomeHeroTrailerEnabled(
-                              value,
-                            );
-                            if (!mounted) return;
-                            setState(() => _heroTrailerEnabled = value);
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Failed to save setting: $e'),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                      ),
+                    // Every platform now: the Spotlight home layout renders
+                    // its hero off-TV too. Desktop defaults on, phones and
+                    // tablets opt in here (battery, cellular).
                     SettingsToggleTile(
-                        icon: Icons.movie_filter_rounded,
-                        title: 'Trailer on Detail Page',
-                        subtitle:
-                            'Play a trailer behind the movie/series detail '
-                            'page. Falls back to the poster when off or '
-                            'unavailable.',
-                        subtitleMaxLines: 2,
-                        value: _trailerAutoplayEnabled,
-                        onChanged: (value) async {
-                          try {
-                            await StorageService.setDetailTrailerAutoplayEnabled(
-                              value,
+                      icon: Icons.smart_display_rounded,
+                      title: 'Trailer on Home Spotlight',
+                      subtitle: PlatformUtil.isTelevision
+                          ? 'When you rest on a title, its trailer plays in '
+                                'the hero at the top of Home and in Discover.'
+                          : 'The hero at the top of Home plays the current '
+                                'title\'s trailer (Spotlight layout).',
+                      subtitleMaxLines: 2,
+                      value: _heroTrailerEnabled,
+                      onChanged: (value) async {
+                        try {
+                          await StorageService.setHomeHeroTrailerEnabled(value);
+                          if (!mounted) return;
+                          setState(() => _heroTrailerEnabled = value);
+                          // Off-TV Home survives under this pushed route —
+                          // tell it, or the toggle does nothing until the
+                          // tab is recreated.
+                          MainPageBridge.notifyHomeSettingsChanged();
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to save setting: $e'),
+                              ),
                             );
-                            if (!mounted) return;
-                            setState(() => _trailerAutoplayEnabled = value);
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Failed to save setting: $e'),
-                                ),
-                              );
-                            }
                           }
-                        },
-                      ),
+                        }
+                      },
+                    ),
+                    SettingsToggleTile(
+                      icon: Icons.movie_filter_rounded,
+                      title: 'Trailer on Detail Page',
+                      subtitle:
+                          'Play a trailer behind the movie/series detail '
+                          'page. Falls back to the poster when off or '
+                          'unavailable.',
+                      subtitleMaxLines: 2,
+                      value: _trailerAutoplayEnabled,
+                      onChanged: (value) async {
+                        try {
+                          await StorageService.setDetailTrailerAutoplayEnabled(
+                            value,
+                          );
+                          if (!mounted) return;
+                          setState(() => _trailerAutoplayEnabled = value);
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to save setting: $e'),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
                     if (_ambientTrailerEnabled) ...[
                       SettingsToggleTile(
                         icon: Icons.volume_up_rounded,
@@ -516,6 +517,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                             await _setAmbientAudio(value);
                             if (!mounted) return;
                             setState(() => _ambientTrailerAudioEnabled = value);
+                            MainPageBridge.notifyHomeSettingsChanged();
                           } catch (e) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -549,6 +551,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                                 await _setAmbientVolume(value);
                                 if (!mounted) return;
                                 setState(() => _ambientTrailerVolume = value);
+                                MainPageBridge.notifyHomeSettingsChanged();
                               } catch (e) {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
