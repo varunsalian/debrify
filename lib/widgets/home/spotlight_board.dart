@@ -420,29 +420,70 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // the cache short-circuited the only code path that told anyone.
     if (_tints.containsKey(url)) {
       widget.onAmbient?.call(url, _tints[url]);
-      return;
+    } else {
+      final tint = await extractDominantColor(
+        CachedNetworkImageProvider(url,
+            cacheManager: DebrifyImageCache.manager),
+      );
+      if (!mounted || gen != _probeGen) return;
+      setState(() => _remember(url, tint));
+      widget.onAmbient?.call(url, tint);
     }
+    unawaited(_warmNext());
+  }
 
+  /// Luminance of the extracted colour stands in for "is the left third busy":
+  /// a bright dominant means a bright image, and a bright image is one whose
+  /// text side cannot be trusted. A true left-third measurement would be
+  /// better and is noted in the plan.
+  void _remember(String url, Color? tint) {
+    _leftThird[url] = tint == null ? 0.0 : tint.computeLuminance();
+    _tints[url] = tint;
+  }
+
+  /// Resolve the NEXT slide's art while this one is still showing.
+  ///
+  /// Without this, freezing the side below would mean every slide's FIRST
+  /// appearance used the default side, because the probe cannot possibly have
+  /// finished by the time the slide is drawn. The cadence gives us seconds of
+  /// lead time; one image is a cheap way to spend it.
+  Future<void> _warmNext() async {
+    if (widget.hero.length < 2) return;
+    final next = widget.hero[(_heroIndex + 1) % widget.hero.length];
+    final url = next.background ?? next.poster;
+    if (url == null || url.isEmpty || _tints.containsKey(url)) return;
     final tint = await extractDominantColor(
       CachedNetworkImageProvider(url, cacheManager: DebrifyImageCache.manager),
     );
-    if (!mounted || gen != _probeGen) return;
-    // Luminance of the extracted colour stands in for "is the left third
-    // busy": a bright dominant means a bright image, and a bright image is
-    // one whose text side cannot be trusted. A true left-third measurement
-    // would be better and is noted in the plan.
-    final l = tint == null ? 0.0 : tint.computeLuminance();
-    setState(() {
-      _leftThird[url] = l;
-      _tints[url] = tint;
-    });
-    widget.onAmbient?.call(url, tint);
+    if (!mounted) return;
+    setState(() => _remember(url, tint));
   }
 
+  /// Which item `_flipValue` was decided for.
+  String? _flipFor;
+  bool _flipValue = false;
+
+  /// The side the identity sits on, FROZEN for as long as an item is showing.
+  ///
+  /// This used to read `_leftThird` directly on every build. That map is
+  /// filled by an async probe, so a slide appeared with its logo on one side
+  /// and then, a second or two later, jumped to the other as the probe landed
+  /// — the one thing a title card must never do while someone is reading it.
+  ///
+  /// Memoised by item id rather than recomputed: a probe that resolves for the
+  /// slide currently on screen updates the map for NEXT time, and moves
+  /// nothing now. `_warmNext` is what keeps "next time" from being the common
+  /// case.
   bool get _flip {
-    final url = _heroItem?.background ?? _heroItem?.poster;
-    if (url == null) return false;
-    return (_leftThird[url] ?? 0) > SpotlightBoard.leftThirdBusy;
+    final item = _heroItem;
+    if (item == null) return false;
+    if (_flipFor != item.id) {
+      _flipFor = item.id;
+      final url = item.background ?? item.poster;
+      _flipValue = url != null &&
+          (_leftThird[url] ?? 0) > SpotlightBoard.leftThirdBusy;
+    }
+    return _flipValue;
   }
 
   // ── movement ───────────────────────────────────────────────────────────
@@ -928,17 +969,44 @@ class _LogoOrTitle extends StatelessWidget {
       ),
     );
     if (url == null || url!.isEmpty) return text;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 235, maxHeight: 60),
+    final corner =
+        align == TextAlign.right ? Alignment.bottomRight : Alignment.bottomLeft;
+    // A RESERVED slot, not a maximum.
+    //
+    // This was a `ConstrainedBox(maxWidth: 235, maxHeight: 60)`, which sizes
+    // itself to whatever is inside it. Before the art lands there is nothing
+    // inside it, so the slot collapsed and the identity below sat higher up;
+    // when the logo arrived a second or two later the block reflowed and
+    // everything settled into a different place. The column is anchored by its
+    // BOTTOM, so the whole identity moved, not just the logo.
+    //
+    // Holding the box at full size from the first frame means the art fades
+    // into a space already shaped for it and nothing else moves.
+    return SizedBox(
+      width: 235,
+      height: 60,
       child: CachedNetworkImage(
         imageUrl: url!,
         fit: BoxFit.contain,
-        alignment: align == TextAlign.right
-            ? Alignment.bottomRight
-            : Alignment.bottomLeft,
+        alignment: corner,
         cacheManager: DebrifyImageCache.manager,
         memCacheWidth: 520,
-        errorWidget: (_, __, ___) => text,
+        placeholder: (_, __) => const SizedBox.shrink(),
+        // The title has to earn its way into the same slot rather than
+        // resizing it — scaleDown only shrinks, so short titles keep their
+        // intended weight.
+        //
+        // The inner width is what makes that bearable: FittedBox offers its
+        // child unbounded width, so without it `maxLines: 2` never wraps and a
+        // long title is scaled down as one very long line.
+        errorWidget: (_, __, ___) => Align(
+          alignment: corner,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: corner,
+            child: SizedBox(width: 235, child: text),
+          ),
+        ),
       ),
     );
   }
