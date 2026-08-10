@@ -214,6 +214,22 @@ class _M {
   double get poster => w * (260 / 1920);
   double get posterH => poster * (390 / 260);
   double get gap => w * (40 / 1920);
+
+  /// What the focus effect paints OUTSIDE the resting card, which the row
+  /// reserves so the lift lands on ground instead of on the headings.
+  ///
+  /// The card grows about its centre, so half of the 10% goes upward, and
+  /// `ParallaxFocus` rises it a further 7. Reserving that much means nothing
+  /// OPAQUE ever reaches the title above.
+  ///
+  /// The shadow reaches 9 higher still (25 of blur less its 16 of downward
+  /// offset) and is deliberately NOT reserved: it is a soft blur whose far
+  /// edge is invisible, and paying for it would push every row apart by more
+  /// than the reference puts between them.
+  double get liftUp => posterH * 0.05 + 7;
+
+  /// Downward the rise works in our favour, so only the growth is reserved.
+  double get liftDown => posterH * 0.05;
   double get title => w * (26 / 1920);
   double get caption => w * (21 / 1920);
 }
@@ -571,7 +587,13 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             return KeyEventResult.ignored;
           }
         }
-        if (_row < 0 && widget.hero.length < 2) return KeyEventResult.ignored;
+        // The hero obeys the same rule as a shelf: at the FIRST item there is
+        // nothing to its left but the sidebar. It used to wrap round to the
+        // last slide instead, which made the reel a loop with no exit — the
+        // one gesture that opens the sidebar was the one gesture it ate.
+        if (_row < 0 && (widget.hero.length < 2 || _heroIndex == 0)) {
+          return KeyEventResult.ignored;
+        }
         _walk(-1);
         return KeyEventResult.handled;
     }
@@ -831,7 +853,9 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
-          padding: EdgeInsets.fromLTRB(m.gutter, 20, m.gutter, 10),
+          // The gap under the title is `liftUp`, supplied by the row below —
+          // reserved space that is empty at rest and consumed by the lift.
+          padding: EdgeInsets.fromLTRB(m.gutter, 20, m.gutter, 0),
           child: Text(
             section.title,
             style: TextStyle(
@@ -841,27 +865,37 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             ),
           ),
         ),
-        SizedBox(
-          // The card's own height plus headroom for the lift, its rise and its
-          // shadow — a viewport sized to the resting card slices the effect.
-          height: m.posterH * 1.10 + 24,
-          child: ListView.separated(
-            // A 195 poster at 1.10 is 214.5, plus a 7px rise and a 25px
-            // shadow. A clipping viewport slices off exactly the lift the
-            // whole look is built on.
-            clipBehavior: Clip.none,
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(horizontal: m.gutter),
-            itemCount: section.items.length,
-            separatorBuilder: (_, __) => SizedBox(width: m.gap),
-            itemBuilder: (context, c) => _Card(
-              card: section.items[c],
-              node: c < nodes.length ? nodes[c] : null,
-              // Every shape shares the ROW's height and takes the width its
-              // aspect implies, so a shelf that mixes posters and channel
-              // tiles sits on one baseline instead of stepping up and down.
-              height: m.posterH,
-              caption: m.caption,
+        Padding(
+          // The room the lift needs sits OUTSIDE the viewport, as padding.
+          //
+          // It used to be added to the viewport's own height instead, and that
+          // was the bug behind cards reading far too tall: a horizontal
+          // ListView constrains its children to the viewport height TIGHTLY,
+          // so every card was stretched to `posterH * 1.10 + 24` while its
+          // width was still computed from `posterH`. A 2:3 poster drew at
+          // 0.53:1. No amount of re-deriving the ratio could have fixed it.
+          padding: EdgeInsets.only(top: m.liftUp, bottom: m.liftDown),
+          child: SizedBox(
+            // The viewport IS the card now, so the tight cross-axis constraint
+            // hands each card exactly the height it asked for.
+            height: m.posterH,
+            child: ListView.separated(
+              // The lift paints into the padding above and below rather than
+              // being sliced off at the viewport edge.
+              clipBehavior: Clip.none,
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(horizontal: m.gutter),
+              itemCount: section.items.length,
+              separatorBuilder: (_, __) => SizedBox(width: m.gap),
+              itemBuilder: (context, c) => _Card(
+                card: section.items[c],
+                node: c < nodes.length ? nodes[c] : null,
+                // Every shape shares the ROW's height and takes the width its
+                // aspect implies, so a shelf that mixes posters and channel
+                // tiles sits on one baseline instead of stepping up and down.
+                height: m.posterH,
+                caption: m.caption,
+              ),
             ),
           ),
         ),

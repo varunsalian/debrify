@@ -1029,51 +1029,56 @@ class _SourceCardState extends State<_SourceCard> {
       onKeyEvent: (_, e) => _activate(e, widget.onTap),
       child: GestureDetector(
         onTap: widget.onTap,
-        child: ParallaxFocus(
-          focused: _f,
-          shape: ParallaxShape.sourceCard,
-          radius: BorderRadius.circular(7),
-          child: Container(
-            width: widget.add ? 150 : 280,
-            height: 66,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-            decoration: BoxDecoration(
-              color: widget.add ? null : _ink.withValues(alpha: 0.07),
-              border: Border.all(
-                color: _ink.withValues(alpha: widget.add ? 0.22 : 0.09),
+        // Same reason as `_Poster`: the Sources band is 96 tall to leave the
+        // lift room, and the tight cross-axis constraint would stretch this
+        // 66pt card to fill it.
+        child: Align(
+          child: ParallaxFocus(
+            focused: _f,
+            shape: ParallaxShape.sourceCard,
+            radius: BorderRadius.circular(7),
+            child: Container(
+              width: widget.add ? 150 : 280,
+              height: 66,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              decoration: BoxDecoration(
+                color: widget.add ? null : _ink.withValues(alpha: 0.07),
+                border: Border.all(
+                  color: _ink.withValues(alpha: widget.add ? 0.22 : 0.09),
+                ),
+                borderRadius: BorderRadius.circular(7),
               ),
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: widget.add
-                ? Center(
-                    child: Text('＋  Find sources',
-                        style: _t(10.5, a: 0.66)),
-                  )
-                : Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              s?.torrentName ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: _t(10.5, w: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              s?.debridService ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: _t(9.5, a: 0.58),
-                            ),
-                          ],
+              child: widget.add
+                  ? Center(
+                      child: Text('＋  Find sources',
+                          style: _t(10.5, a: 0.66)),
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                s?.torrentName ?? '',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: _t(10.5, w: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                s?.debridService ?? '',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: _t(9.5, a: 0.58),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+            ),
           ),
         ),
       ),
@@ -1153,26 +1158,32 @@ class _PosterState extends State<_Poster> {
       onKeyEvent: (_, e) => _activate(e, () => widget.onTap?.call(widget.item)),
       child: GestureDetector(
         onTap: () => widget.onTap?.call(widget.item),
-        child: ParallaxFocus(
-          focused: _f,
-          radius: BorderRadius.circular(7),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(7),
-            child: SizedBox(
-              width: widget.width,
-              height: widget.height,
-              child: (url != null && url.isNotEmpty)
-                  ? CachedNetworkImage(
-                      imageUrl: url,
-                      fit: BoxFit.cover,
-                      cacheManager: DebrifyImageCache.manager,
-                      memCacheWidth: 300,
-                      placeholder: (_, __) =>
-                          const ColoredBox(color: Color(0xFF17171A)),
-                      errorWidget: (_, __, ___) =>
-                          const ColoredBox(color: Color(0xFF17171A)),
-                    )
-                  : const ColoredBox(color: Color(0xFF17171A)),
+        // The band is taller than the card so the lift has somewhere to go,
+        // and a horizontal ListView constrains its children to that height
+        // TIGHTLY — without an Align the poster is stretched to the band while
+        // its width stays `m.poster`, drawing a 2:3 poster at about 0.53:1.
+        child: Align(
+          child: ParallaxFocus(
+            focused: _f,
+            radius: BorderRadius.circular(7),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(7),
+              child: SizedBox(
+                width: widget.width,
+                height: widget.height,
+                child: (url != null && url.isNotEmpty)
+                    ? CachedNetworkImage(
+                        imageUrl: url,
+                        fit: BoxFit.cover,
+                        cacheManager: DebrifyImageCache.manager,
+                        memCacheWidth: 300,
+                        placeholder: (_, __) =>
+                            const ColoredBox(color: Color(0xFF17171A)),
+                        errorWidget: (_, __, ___) =>
+                            const ColoredBox(color: Color(0xFF17171A)),
+                      )
+                    : const ColoredBox(color: Color(0xFF17171A)),
+              ),
             ),
           ),
         ),

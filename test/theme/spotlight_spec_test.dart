@@ -90,6 +90,12 @@ void main() {
       // 1920 only land on a panel whose logical width is exactly 960.
       expect(260 / 1920, closeTo(0.1354, 0.0005));
       expect(40 / 1920, closeTo(0.0208, 0.0005));
+      // This ratio was blamed twice for cards reading too tall and re-derived
+      // twice. It was never the problem: the row viewport was `posterH * 1.10
+      // + 24` and a horizontal ListView constrains children to the viewport
+      // TIGHTLY, so cards drew at that height with a width from `posterH`.
+      // `the card draws at the poster ratio` in spotlight_board_test.dart is
+      // the guard; leave these numbers alone.
     });
 
     test('the episode still is 432×243, cell 456, gap 46', () {

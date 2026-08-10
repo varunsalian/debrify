@@ -445,4 +445,89 @@ void main() {
     // One page is not a carousel; dots there are chrome that says nothing.
     expect(find.byType(AnimatedContainer), findsNothing);
   });
+
+  testWidgets('the card draws at the poster ratio, not the row viewport\'s',
+      (tester) async {
+    // The bug this pins: the row reserved the lift by making its own viewport
+    // `posterH * 1.10 + 24` tall. A horizontal ListView constrains children to
+    // the viewport height TIGHTLY, so every card was stretched to that while
+    // its width was still derived from `posterH` — a 2:3 poster drawn at
+    // 0.53:1, about 26% too tall. It was reported three times as "the cards
+    // are too big" and twice mis-diagnosed as the 260×390 ratio being wrong.
+    final a = _meta('tt1', 'Alpha');
+    final b = _meta('tt2', 'Bravo');
+    await tester.pumpWidget(host([a], [_section('Top', [a, b])]));
+    await tester.pumpAndSettle();
+
+    final board = tester.getSize(find.byType(SpotlightBoard)).width;
+    final posterH = board * (260 / 1920) * (390 / 260);
+
+    // The caption lives inside the card, so its enclosing ClipRRect IS the
+    // card box.
+    final box = tester
+        .getSize(find.ancestor(
+          of: find.text('Alpha'),
+          matching: find.byType(ClipRRect),
+        ).first);
+
+    expect(box.height, closeTo(posterH, 0.5),
+        reason: 'the card must be its own height, not the viewport\'s');
+    expect(box.width / box.height, closeTo(2 / 3, 0.005),
+        reason: 'a poster is 2:3 — anything else means it was stretched');
+  });
+
+  testWidgets('LEFT on the FIRST hero slide falls through to the sidebar',
+      (tester) async {
+    // The reel used to wrap modulo its length, so LEFT at slide 0 jumped to
+    // the last slide. Since LEFT is the only gesture that opens the sidebar,
+    // that made the hero a loop with no way out.
+    final a = _meta('tt1', 'Alpha');
+    final b = _meta('tt2', 'Bravo');
+    var sawLeft = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppThemeScope(
+          theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+          child: Focus(
+            onKeyEvent: (_, e) {
+              if (e is KeyDownEvent &&
+                  e.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                sawLeft = true;
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Scaffold(
+              body: SpotlightBoard(
+                hero: [a, b],
+                sections: [_section('Top', [a, b])],
+                heroNode: hero,
+                heroAddon: _addon,
+                onHeroOpen: (_, __) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    hero.requestFocus();
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(sawLeft, isTrue, reason: 'the shell must get the key');
+    expect(find.text('Alpha'), findsWidgets,
+        reason: 'and the reel must not have paged anywhere');
+
+    // RIGHT then LEFT still walks the reel — only the first slide falls out.
+    sawLeft = false;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(sawLeft, isFalse);
+    expect(find.text('Alpha'), findsWidgets);
+  });
 }
