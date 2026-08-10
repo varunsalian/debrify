@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:ui' as ui show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/main_page_bridge.dart';
+import '../utils/platform_util.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_theme_scope.dart';
@@ -308,7 +310,11 @@ class TvSidebarNavState extends State<TvSidebarNav>
       if (!mounted) return;
       final idx = widget.currentIndex.clamp(0, _focusNodes.length - 1);
       final ctx = _focusNodes[idx].context;
-      if (ctx == null) return;
+      // `mounted` too, not just null: a style switch re-parents the item
+      // subtree (pill wraps it in its panel), and this post-frame callback
+      // can run while the OLD elements are deactivated but not yet nulled —
+      // an ancestor walk from one of those asserts.
+      if (ctx == null || !ctx.mounted) return;
       final scrollable = Scrollable.maybeOf(ctx);
       if (scrollable == null || scrollable.position.maxScrollExtent <= 0) return;
       Scrollable.ensureVisible(
@@ -486,6 +492,56 @@ class TvSidebarNavState extends State<TvSidebarNav>
         // is either a plain scrim gradient (ghost/badge: quiet; marquee:
         // heavy, for the big type) or fully transparent (island — the capsule
         // around the item group is the chrome). Same width/expand mechanics.
+        if (_style == 'pill') {
+          // The Apple TV drawer, to the reference frame: a FLOATING frosted
+          // panel with rounded corners and a margin on every side — not a
+          // pane growing off the screen edge. Real BackdropFilter blur only
+          // on tvOS (an A15 renders it for free; the Android boxes this rail
+          // also serves raster at ~720p on GLES2-class GPUs where a per-frame
+          // blur is exactly the jank the no-BackdropFilter rule exists for —
+          // they get a higher-opacity fill that reads as the same glass over
+          // dim content).
+          // The item subtree must be MOUNTED at rest even though the shell
+          // is zero-wide — its FocusNodes are the door LEFT walks through,
+          // and returning a bare SizedBox here unmounted them: the sidebar
+          // could never open because there was nothing to focus.
+          if (t <= 0.01) return SizedBox(width: width, child: child);
+          final panel = Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: PlatformUtil.isTvOS
+                  ? Color.fromRGBO(38, 38, 42, 0.72 * t)
+                  : Color.fromRGBO(32, 32, 36, 0.92 * t),
+              borderRadius: app.shape.br(18),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.07 * t),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.45 * t),
+                  blurRadius: 34,
+                  offset: const Offset(6, 10),
+                ),
+              ],
+            ),
+            child: child,
+          );
+          return SizedBox(
+            width: width,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 14, 6, 14),
+              child: PlatformUtil.isTvOS
+                  ? ClipRRect(
+                      borderRadius: app.shape.br(18),
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                        child: panel,
+                      ),
+                    )
+                  : panel,
+            ),
+          );
+        }
         if (_style != 'classic') {
           final bool marquee = _style == 'marquee';
           final bool island = _style == 'island';
@@ -702,7 +758,12 @@ class TvSidebarNavState extends State<TvSidebarNav>
             children: [
               // Island hides the branding row — the floating capsule is the
               // whole chrome, and a lone logo above it read as clutter.
-              if (_style != 'island') ...[
+              // Pill replaces it with the reference's header: avatar, name,
+              // clock.
+              if (_style == 'pill') ...[
+                _buildPillHeader(app),
+                const SizedBox(height: 10),
+              ] else if (_style != 'island') ...[
                 _buildBranding(),
                 const SizedBox(height: 8),
               ],
@@ -916,7 +977,9 @@ class TvSidebarNavState extends State<TvSidebarNav>
       final item = widget.items[index];
       final startsSection = item.section != null &&
           (index == 0 || widget.items[index - 1].section != item.section);
-      if (startsSection) {
+      // The reference drawer has no category headers — one flat list. Pill
+      // follows it exactly; every other style keeps its sections.
+      if (startsSection && _style != 'pill') {
         widgets.add(_SectionHeader(item.section!, _expand, app));
       }
       widgets.add(
@@ -941,6 +1004,53 @@ class TvSidebarNavState extends State<TvSidebarNav>
       );
     }
     return widgets;
+  }
+
+  /// The reference drawer's header: avatar disc, name, clock — in place of
+  /// the branding row, pill style only.
+  Widget _buildPillHeader(AppTheme app) {
+    return FadeTransition(
+      opacity: _expand,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+        child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.16),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: const EdgeInsets.all(5),
+                child: Image.asset(
+                  'assets/app_icon.png',
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            const SizedBox(width: 9),
+            const Expanded(
+              child: Text(
+                'Debrify',
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.clip,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.1,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            _PillClock(),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildBranding() {
@@ -1041,6 +1151,10 @@ class _TvNavItemWidget extends StatelessWidget {
         return 50;
       case 'badge':
         return 52;
+      case 'pill':
+        // The reference's roomy pitch — the drawer is a short flat list and
+        // can afford it.
+        return 46;
       default:
         return 42;
     }
@@ -1061,6 +1175,9 @@ class _TvNavItemWidget extends StatelessWidget {
         break;
       case 'badge':
         body = _badgeBody();
+        break;
+      case 'pill':
+        body = _appleBody();
         break;
       default:
         body = _classicBody();
@@ -1160,6 +1277,64 @@ class _TvNavItemWidget extends StatelessWidget {
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  /// PILL: the Apple TV reference row, exactly. Focused — a full white
+  /// stadium with black icon and label (their focus idiom does not lift or
+  /// ring; it floods). Current-but-unfocused — a soft grey stadium. Idle —
+  /// bare icon and label on the glass. No accents, no gradients, no glow:
+  /// the reference's whole palette is white at three strengths.
+  Widget _appleBody() {
+    return AnimatedBuilder(
+      animation: expand,
+      builder: (context, _) {
+        final ink = isFocused
+            ? Colors.black
+            : Colors.white.withValues(alpha: isSelected ? 0.95 : 0.80);
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isFocused
+                  ? Colors.white
+                  : isSelected
+                      ? Colors.white.withValues(alpha: 0.14)
+                      : null,
+              borderRadius: app.shape.br(23),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: 14),
+                Icon(item.icon, size: 17, color: ink),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: ClipRect(
+                    child: _StaggeredLabel(
+                      expand: expand,
+                      index: index,
+                      curve: labelCurve,
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.clip,
+                        style: TextStyle(
+                          color: ink,
+                          fontSize: 14.5,
+                          fontWeight:
+                              isFocused ? FontWeight.w700 : FontWeight.w600,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
@@ -1773,4 +1948,53 @@ class TvNavItem {
   final String? section;
 
   const TvNavItem(this.icon, this.label, {this.tag, this.section});
+}
+
+/// The header clock — the reference shows local time, live. One timer per
+/// mounted drawer, aligned to the minute so it ticks exactly when the label
+/// would change.
+class _PillClock extends StatefulWidget {
+  @override
+  State<_PillClock> createState() => _PillClockState();
+}
+
+class _PillClockState extends State<_PillClock> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _arm();
+  }
+
+  void _arm() {
+    final now = DateTime.now();
+    _tick = Timer(
+      Duration(seconds: 60 - now.second, milliseconds: -now.millisecond),
+      () {
+        if (!mounted) return;
+        setState(() {});
+        _arm();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = TimeOfDay.now();
+    return Text(
+      MaterialLocalizations.of(context).formatTimeOfDay(now),
+      style: TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+        color: Colors.white.withValues(alpha: 0.85),
+      ),
+    );
+  }
 }
