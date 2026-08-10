@@ -310,6 +310,21 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// the title art the route Hero flies back into on pop.
   String? _focusedStillUrl;
 
+  /// The Showcase body has descended past its hero.
+  ///
+  /// Showcase wants the reference's two grounds: sharp key art while the
+  /// identity owns the screen, a blurred field once you walk down into the
+  /// bands. Both have to be painted HERE, because this backdrop is the only
+  /// layer outside the overscan `SafeArea` — art painted inside the body would
+  /// stop short of the screen edges and the two states would not line up.
+  bool _bodyDeep = false;
+
+  /// Whether this page should show sharp key art at rest at all. Showcase is
+  /// the tvOS idiom and the only layout designed around real artwork; every
+  /// other layout was drawn against the blurred wash and would lose its text
+  /// legibility over a sharp one.
+  bool get _wantsSharpStill => _style == 'showcase' && !_bodyDeep;
+
   /// The two focus anchors the shell owns, handed to whichever body draws.
   late final DetailFocusCoordinator _focusCoordinator = DetailFocusCoordinator(
     backNode: _backButtonFocusNode,
@@ -621,8 +636,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // platform), so off-TV it governs this backdrop. Read unconditionally so
     // all three land in the one setState below — [autoplay] is false on TV
     // anyway, and these are two prefs reads.
-    final soundOn = await StorageService.getAmbientTrailerAudioEnabled();
-    final volume = await StorageService.getAmbientTrailerVolume();
+    final soundOn = await StorageService.getAmbientTrailerAudioEnabled(
+      AmbientTrailerSurface.detail,
+    );
+    final volume = await StorageService.getAmbientTrailerVolume(
+      AmbientTrailerSurface.detail,
+    );
     if (!mounted) return;
     // The backdrop refuses to autoplay under OS reduced-motion — skip the whole
     // pipeline (no resolve, no spinner) rather than spin forever waiting for a
@@ -822,13 +841,28 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 // dark tint, zero per-frame filter cost), and drops the
                 // per-frame blur pass over the ambient trailer video.
                 imageBlurSigma: widget.isTelevision ? 0 : 42,
+                // Showcase at rest is the reference's full-bleed key art; the
+                // moment the body goes deep this reverts to the wash, which is
+                // the field the bands' white text was tuned against.
+                sharpStill: _wantsSharpStill,
                 videoBlurSigma: widget.isTelevision ? 0 : 8,
-                videoUrl: _trailerAutoplayEnabled
+                // Dropped the moment the body walks past its hero: the
+                // reference's trailer belongs to the key-art frame, and playing
+                // one under a blurred field is a decoder held for nothing. It
+                // also frees the process's single video output for whatever the
+                // user opens next.
+                videoUrl: _trailerAutoplayEnabled && !_bodyDeep
                     ? _trailerStreams?.playUrl
                     : null,
-                audioUrl: _trailerAutoplayEnabled
+                audioUrl: _trailerAutoplayEnabled && !_bodyDeep
                     ? _trailerStreams?.audioUrl
                     : null,
+                // The still is meant to be SEEN first — that is the shape of
+                // the reference, poster then motion. Off-TV keeps the shorter
+                // default it has always had.
+                startDelay: widget.isTelevision
+                    ? const Duration(milliseconds: 3200)
+                    : const Duration(milliseconds: 1400),
                 enabled: _trailerAutoplayEnabled,
                 ambientVolume: _trailerAmbientVolume,
                 foreground: _trailerForeground,
@@ -1106,6 +1140,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       onAmbientStill: (url) {
         if (!mounted || _focusedStillUrl == url) return;
         setState(() => _focusedStillUrl = url);
+      },
+      onDepth: (deep) {
+        if (!mounted || _bodyDeep == deep) return;
+        setState(() => _bodyDeep = deep);
       },
       focus: _focusCoordinator,
     );

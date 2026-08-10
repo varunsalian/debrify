@@ -43,6 +43,7 @@ import '../services/next_episode_service.dart';
 
 import '../widgets/series_browser.dart';
 import '../widgets/tv_text_field.dart';
+import '../widgets/video_output_lease.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
@@ -1995,6 +1996,79 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     AudioEffectSessionService.close(sessionId);
   }
 
+  /// This player's claim on the process's one video output.
+  ///
+  /// HELD for the controller's lifetime rather than taken as a momentary
+  /// barrier. A barrier that released before construction left a gap: a trailer
+  /// parked on the lease would be granted it and build its own output while
+  /// this player was still constructing — the two-output case, which is a
+  /// SIGABRT on tvOS.
+  VideoOutputLeaseHandle? _outputLease;
+
+  /// Take the slot before building a controller.
+  ///
+  /// The ambient trailer surfaces tear down when playback launches, but the
+  /// native release is asynchronous — "teardown was requested" is not "the
+  /// output is gone".
+  ///
+  /// **Bounded, deliberately.** Review pushed back on this twice: a timeout
+  /// that proceeds can, in principle, recreate the two-output case. The
+  /// judgement here is that an unbounded wait turns a stuck native disposal
+  /// into "video never plays again this session", which is a worse and far more
+  /// likely outcome than the crash it guards against — and by the time three
+  /// seconds have passed, something is already wrong. It logs, and it still
+  /// takes the slot when it finally frees, so the player never ends up
+  /// untracked.
+  Future<void> _claimVideoOutput() async {
+    if (_outputLease != null) return; // renderer fallback reuses the claim
+    if (!VideoOutputLease.isHeld) {
+      final handle = await VideoOutputLease.acquire(debugLabel: 'player');
+      if (_screenDisposed) {
+        handle.release();
+        return;
+      }
+      _outputLease = handle;
+      return;
+    }
+    final pending = VideoOutputLease.acquire(debugLabel: 'player');
+    VideoOutputLeaseHandle? handle;
+    try {
+      handle = await pending.timeout(const Duration(seconds: 3));
+    } on TimeoutException {
+      debugPrint(
+        'VideoOutputLease: player proceeding without the slot — a previous '
+        'video output has not released after 3s.',
+      );
+      // The wait was abandoned, not cancelled. Take the slot whenever it does
+      // arrive rather than handing it back: this player IS alive and holding a
+      // video output, so releasing would leave it untracked and let a trailer
+      // build a second one beside it.
+      unawaited(pending.then((late) {
+        if (_screenDisposed || _outputLease != null) {
+          late.release();
+        } else {
+          _outputLease = late;
+        }
+      }));
+    }
+    if (_screenDisposed) {
+      handle?.release();
+      return;
+    }
+    _outputLease = handle;
+  }
+
+  void _releaseVideoOutput() {
+    _outputLease?.release();
+    _outputLease = null;
+  }
+
+  /// Set once `dispose()` has run, so a claim still in flight at that moment
+  /// gives the slot straight back instead of being stranded by the `!mounted`
+  /// return at its call site — which would block every future trailer engine
+  /// for the rest of the session.
+  bool _screenDisposed = false;
+
   void _createPlayerInstance(AndroidVideoRendererMode rendererMode) {
     final instanceGeneration = ++_playerInstanceGeneration;
     _isReady = false;
@@ -2205,6 +2279,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _currentIndex = initialIndex;
     _dynamicTitle = widget.title;
+    await _claimVideoOutput();
+    if (!mounted) return;
     _createPlayerInstance(_androidVideoRendererMode);
     // libmpv exposes `stream-record`; the web backend does not. Gate the
     // record control on having a native player — and, on Android, on the
@@ -2721,6 +2797,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
       _duration = Duration.zero;
       _position = Duration.zero;
+      await _claimVideoOutput();
+      if (!mounted) return;
       _createPlayerInstance(AndroidVideoRendererMode.automatic);
       await _attachAudioEffectSession();
       if (!mounted) return;
@@ -8150,7 +8228,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _bufferingDebounceTimer?.cancel();
     _showBufferingIndicator.dispose();
     _releaseAudioEffectSession();
-    if (_playerCreated) _player.dispose();
+    _screenDisposed = true;
+    if (_playerCreated) {
+      // The slot frees only once the native output has actually gone, not when
+      // disposal is requested — the same rule the trailer engines follow.
+      _player.dispose().whenComplete(_releaseVideoOutput);
+    } else {
+      _releaseVideoOutput();
+    }
     _transitionStopTimer?.cancel();
     _rainbowController.dispose();
     // Restore system brightness when exiting the player

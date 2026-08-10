@@ -89,6 +89,35 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   /// dissolve and the sticky logo together, so they can never disagree.
   bool get _deep => _bandKey != 'identity';
 
+  /// The last depth published to the shell, so only genuine transitions are
+  /// sent and a rebuild cannot re-announce the same one.
+  bool _publishedDeep = false;
+
+  /// The single writer for [_bandKey].
+  ///
+  /// Every band change used to `setState` in place, from six call sites. The
+  /// shell now needs telling when the page crosses into or out of the hero, and
+  /// its handler calls `setState` — so an emit from a build or a focus callback
+  /// running during layout would be setState-during-build. Funnelling the
+  /// writes through here means the notification happens once, post-frame, and
+  /// only when the depth actually changed.
+  void _setBand(String key) {
+    if (_bandKey == key) return;
+    setState(() => _bandKey = key);
+    _publishDepth();
+  }
+
+  void _publishDepth() {
+    final deep = _deep;
+    if (deep == _publishedDeep) return;
+    _publishedDeep = deep;
+    final cb = widget.model.onDepth;
+    if (cb == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) cb(deep);
+    });
+  }
+
   @override
   void dispose() {
     _scroll.dispose();
@@ -139,7 +168,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     final band = bands[next];
     if (band.nodes.isEmpty) return;
     final col = (_col[band.key] ?? 0).clamp(0, band.nodes.length - 1);
-    setState(() => _bandKey = band.key);
+    _setBand(band.key);
     _go(band.nodes[col], Offset(0, delta.toDouble()));
     _reveal(band);
   }
@@ -163,7 +192,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
       // Column 0 and LEFT again: back to the primary action. Never geometric
       // traversal, which happily lands on a cast tile sitting below-left.
       _go(widget.model.focus.primaryEntry, const Offset(-1, 0));
-      setState(() => _bandKey = 'identity');
+      _setBand('identity');
       return;
     }
     if (next >= band.nodes.length) return;
@@ -171,10 +200,53 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     _go(band.nodes[next], Offset(delta.toDouble(), 0));
   }
 
+  /// How much of the next band the hero leaves showing.
+  ///
+  /// Computed from what actually comes next rather than fixed: a multi-season
+  /// show puts Seasons between the identity and Episodes, so a constant peek
+  /// would show a sliver of season chips and none of the episode art the
+  /// reference deliberately leaves visible. When Seasons is present the hero
+  /// gives up its whole row plus a slice of the episodes behind it.
+  /// The hero's height: the viewport less the peek.
+  ///
+  /// The viewport is measured by a `LayoutBuilder` wrapping the page, so it is
+  /// right on the FIRST frame. `MediaQuery` is the whole screen including the
+  /// overscan inset this list sits inside, and the scroll position has no
+  /// clients until after layout — either would size the opening frame wrong on
+  /// exactly the device this is for.
+  double _heroHeight(EpisodesPanelView? view, double viewport) =>
+      (viewport - _peekFor(view)).clamp(240.0, double.infinity);
+
+  double _peekFor(EpisodesPanelView? view) {
+    final m = ShowcaseMetrics.of(context);
+    // The TOP EDGE of an episode still and nothing more.
+    //
+    // This was `stillH * 0.34 + 46`, which showed most of a row — captions
+    // included, sliced through by the screen edge, which reads as a broken
+    // layout rather than as "the page continues". The reference leaves about
+    // 45pt of artwork showing and no text at all.
+    final episodePeek = m.stillH * 0.18;
+    final hasSeasons = view != null && view.seasons.length > 1;
+    return hasSeasons ? episodePeek + _seasonsBandHeight : episodePeek;
+  }
+
+  /// The seasons row's own height plus the space around it.
+  ///
+  /// Was 96, guessed. `ShowcaseSeasons` is a bare `SizedBox(height: 34)` — the
+  /// guess over-reserved by around 60, and every one of those pixels went to
+  /// showing more of the episode row than was ever intended.
+  static const double _seasonsBandHeight = 50;
+
   void _reveal(_Band band) {
     final ctx = band.anchor.currentContext;
     if (ctx == null) return;
-    final h = MediaQuery.sizeOf(context).height;
+    // The VIEWPORT, not the screen. `MediaQuery` height includes the overscan
+    // safe area this list is already inset by, so every band parked slightly
+    // low — invisible while the identity was a short block, obvious once it is
+    // a full screenful.
+    final h = _scroll.hasClients
+        ? _scroll.position.viewportDimension
+        : MediaQuery.sizeOf(context).height;
     // `rest` is where this band SITS when it owns the cursor, expressed as a
     // fraction of the viewport. Aligning everything to 0 parked each band
     // hard against the top edge under the sticky logo, with no sight of the
@@ -197,10 +269,14 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     // handler ever seeing it.
     for (final b in bands) {
       if (b.nodes.any((n) => n.hasFocus)) {
+        // Assigned directly, not through `_setBand`: this runs inside the key
+        // handler's re-sync and must not rebuild mid-event. The depth publish
+        // below covers it.
         _bandKey = b.key;
         break;
       }
     }
+    _publishDepth();
     final band = bands[_indexOf(bands)];
     switch (e.logicalKey) {
       case LogicalKeyboardKey.arrowDown:
@@ -327,12 +403,33 @@ class _DetailShowcaseState extends State<DetailShowcase> {
           landing.season,
           landing.number,
         );
-        if (node?.context != null) {
-          Scrollable.ensureVisible(node!.context!, alignment: 0.5);
-        }
+        final ctx = node?.context;
+        if (ctx == null) return;
+        // The RAIL only. This used to be a global `Scrollable.ensureVisible`,
+        // which walks every ancestor scrollable — so opening a series with a
+        // resume point scrolled the page's vertical list too, and with a
+        // full-height hero that means the page opens already scrolled past its
+        // own key art, while `_bandKey` still says `identity`.
+        final rail = Scrollable.maybeOf(ctx);
+        final box = ctx.findRenderObject();
+        if (rail == null || box is! RenderBox || !box.attached) return;
+        rail.position.ensureVisible(box, alignment: 0.5);
       });
     }
 
+    return LayoutBuilder(
+      builder: (context, constraints) =>
+          _pageBody(context, bands, view, m, constraints.maxHeight),
+    );
+  }
+
+  Widget _pageBody(
+    BuildContext context,
+    List<_Band> bands,
+    EpisodesPanelView? view,
+    DetailModel m,
+    double viewport,
+  ) {
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -345,13 +442,23 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         ListView(
           controller: _scroll,
           padding: EdgeInsets.zero,
+          // Build well past the fold.
+          //
+          // The identity is a full screenful now, so everything below it starts
+          // off-screen — and an unbuilt band has no anchor context, which is
+          // what `_reveal` needs to park it and what focus needs to land on.
+          // The peek guarantees the NEXT band is mounted; this widens the
+          // window so the one after it is ready before the cursor arrives,
+          // rather than being built during the glide.
+          cacheExtent: 1200,
           children: [
             ShowcaseIdentity(
               key: _identityKey,
               model: m,
               primaryNode: m.focus.primaryEntry,
               actionNodes: _grow(_actionNodes, _actionCount(m), 'showcase-act'),
-              onFocused: () => setState(() => _bandKey = 'identity'),
+              onFocused: () => _setBand('identity'),
+              height: _heroHeight(view, viewport),
             ),
             if (view != null && view.seasons.length > 1)
               ShowcaseSeasons(
@@ -449,7 +556,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                   ? () {
                       ParallaxTravel.note(const Offset(-1, 0));
                       widget.model.focus.focusEntry();
-                      setState(() => _bandKey = 'identity');
+                      _setBand('identity');
                     }
                   : null,
               ensureVisible: true,

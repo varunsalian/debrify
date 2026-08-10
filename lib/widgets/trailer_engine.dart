@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../utils/media_kit_init.dart';
+import 'video_output_lease.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -74,7 +75,24 @@ abstract class TrailerEngine {
 
 /// libmpv-backed engine (the original path). Used off-TV.
 class MediaKitTrailerEngine implements TrailerEngine {
-  MediaKitTrailerEngine() {
+  /// Takes the single video-output slot, then builds the engine.
+  ///
+  /// Asynchronous because `VideoController`'s constructor IS the output
+  /// creation, so the wait has to happen before construction rather than
+  /// inside it. See [VideoOutputLease] for why a second one aborts the process.
+  static Future<MediaKitTrailerEngine> create() async {
+    final lease = await VideoOutputLease.acquire(debugLabel: 'trailer');
+    try {
+      return MediaKitTrailerEngine._(lease);
+    } catch (_) {
+      // A throw here would strand the slot forever, and nothing else knows the
+      // handle exists yet.
+      lease.release();
+      rethrow;
+    }
+  }
+
+  MediaKitTrailerEngine._(this._lease) {
     // Idempotent; the main player also initializes it, but guard in case the
     // trailer is the first media_kit surface in this session.
     MediaKitInit.ensureInitialized();
@@ -82,10 +100,10 @@ class MediaKitTrailerEngine implements TrailerEngine {
     _controller = mkv.VideoController(_player);
   }
 
+  final VideoOutputLeaseHandle _lease;
   late final mk.Player _player;
   late final mkv.VideoController _controller;
   bool _disposed = false;
-  bool _released = false;
 
   @override
   bool get rendersUnderlay => false;
@@ -153,12 +171,18 @@ class MediaKitTrailerEngine implements TrailerEngine {
   @override
   void detach() => _disposed = true;
 
+  /// The single in-flight disposal. Dispose is called from several places —
+  /// the widget's `dispose`, a post-frame release, and the app-pause flush —
+  /// and a second call must JOIN the first, not run beside it. Releasing the
+  /// lease on the second call while the first `_player.dispose()` was still
+  /// running would let the next owner build its output too early, which is the
+  /// exact abort the lease exists to prevent.
+  Future<void>? _disposal;
+
   @override
-  Future<void> dispose() async {
+  Future<void> dispose() {
     _disposed = true;
-    if (_released) return;
-    _released = true;
-    await _player.dispose();
+    return _disposal ??= _player.dispose().whenComplete(_lease.release);
   }
 
   @override
@@ -201,6 +225,9 @@ class ExoTrailerEngine implements TrailerEngine {
 
   int? _textureId;
   bool _disposed = false;
+  /// Native release happens once. The Exo path takes no video-output lease —
+  /// it has its own decoder discipline and a different failure mode — so this
+  /// stays a plain guard rather than joining a shared disposal future.
   bool _released = false;
   bool _polling = false;
   Timer? _pollTimer;

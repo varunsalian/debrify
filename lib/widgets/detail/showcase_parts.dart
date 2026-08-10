@@ -91,15 +91,30 @@ KeyEventResult _activate(KeyEvent e, VoidCallback? onTap) {
   return KeyEventResult.handled;
 }
 
-/// Keeps a focused item inside a lazy horizontal rail on screen.
+/// Keeps a focused item inside a lazy horizontal rail on screen — **within
+/// that rail**, and nowhere else.
 ///
 /// Without it, walking a rail moves focus into cached off-screen children and
 /// then stalls at the first node that was never mounted.
+///
+/// `Scrollable.ensureVisible` walks every ancestor scrollable, so a cell in a
+/// horizontal rail also scrolled the page's vertical list. That fights
+/// `_reveal`, which is the only thing that knows where a band should park — and
+/// with a full-height identity it would drag the hero off screen the moment
+/// anything below it took focus. Scrolling the nearest scrollable only keeps
+/// horizontal travel horizontal.
 void _keepVisible(BuildContext context) {
   final box = context.findRenderObject();
   if (box is! RenderBox || !box.attached) return;
-  Scrollable.ensureVisible(
-    context,
+  final scrollable = Scrollable.maybeOf(context);
+  if (scrollable == null) return;
+  // HORIZONTAL only. The identity's action circles have no rail of their own,
+  // so the nearest scrollable is the page itself — and centring a button in the
+  // page scrolls the full-height hero away the instant one takes focus. Rails
+  // want this; the hero does not.
+  if (scrollable.position.axis != Axis.horizontal) return;
+  scrollable.position.ensureVisible(
+    box,
     alignment: 0.5,
     duration: const Duration(milliseconds: 220),
     curve: Curves.easeOutCubic,
@@ -238,12 +253,23 @@ class ShowcaseIdentity extends StatelessWidget {
   final List<FocusNode> actionNodes;
   final VoidCallback onFocused;
 
+  /// The hero's height: one viewport, less however much of the next band is
+  /// deliberately left showing.
+  ///
+  /// Computed by the layout, which is the only place that knows both the real
+  /// viewport and which band comes next. It cannot be derived here: a
+  /// `LayoutBuilder` inside a vertical list is handed an unbounded height, and
+  /// `MediaQuery` is the screen — including the overscan inset this body sits
+  /// inside — so both are the wrong number.
+  final double height;
+
   const ShowcaseIdentity({
     super.key,
     required this.model,
     required this.primaryNode,
     required this.actionNodes,
     required this.onFocused,
+    required this.height,
   });
 
   @override
@@ -282,11 +308,35 @@ class ShowcaseIdentity extends StatelessWidget {
       ));
     }
 
+    // A FIRST SCREENFUL, not a block in the flow.
+    //
+    // The reference opens on key art with the identity at its foot and the next
+    // row peeking in at the bottom edge — the tell that the page continues. As
+    // an ordinary 150-padded block the identity floated in the middle of the
+    // art with three rows already visible under it.
+    //
+    // Sized from the viewport the list actually has (`constraints.maxHeight`),
+    // not `MediaQuery`: the body is already inside the overscan `SafeArea`, so
+    // the screen height overstates it by the top AND bottom insets and the peek
+    // would be pushed off the bottom.
+    return SizedBox(
+      height: height,
+      child: _identityColumn(context, m, actions),
+    );
+  }
+
+  Widget _identityColumn(
+    BuildContext context,
+    DetailModel m,
+    List<Widget> actions,
+  ) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(kShowcaseGutter, 150, kShowcaseGutter, 26),
+      padding: const EdgeInsets.fromLTRB(kShowcaseGutter, 0, kShowcaseGutter, 26),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+        // Anchored to the FOOT of the screenful, as the reference is.
+        mainAxisAlignment: MainAxisAlignment.end,
+        mainAxisSize: MainAxisSize.max,
         children: [
           _Chip(label: m.isMovie ? 'Film' : 'Series'),
           const SizedBox(height: 9),
@@ -718,14 +768,15 @@ class ShowcaseEpisodeCell extends StatelessWidget {
     final url = episode.thumbnailUrl ?? fallbackImage;
 
     final m = ShowcaseMetrics.of(context);
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 160),
+    // The plate goes behind the CAPTION, not around the whole cell.
+    //
+    // A fill around everything sits behind the still too, where it is invisible
+    // under the artwork and only shows as a hairline margin — so the focused
+    // cell read as barely distinguishable. In the reference the still carries
+    // focus by lifting, and the caption below it gains a filled card. Splitting
+    // them lets each do its own job.
+    return SizedBox(
       width: cellWidth ?? m.epCell,
-      padding: const EdgeInsets.fromLTRB(6, 5, 6, 7),
-      decoration: BoxDecoration(
-        color: focused ? _ink.withValues(alpha: 0.11) : null,
-        borderRadius: BorderRadius.circular(8),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -795,27 +846,45 @@ class ShowcaseEpisodeCell extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          Text('EPISODE ${episode.number}',
-              style: _t(9.5, a: 0.55).copyWith(letterSpacing: 0.4)),
-          const SizedBox(height: 2),
-          Text(
-            episode.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: _t(12.5, w: FontWeight.w600),
-          ),
-          const SizedBox(height: 3),
-          SizedBox(
-            height: 29,
-            child: Text(
-              episode.overview ?? '',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: _t(10.5, a: 0.6).copyWith(height: 1.36),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            width: double.infinity,
+            // Padded on BOTH states, so gaining the plate does not shift the
+            // text sideways — only its ground appears.
+            padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
+            decoration: BoxDecoration(
+              color: focused ? _ink.withValues(alpha: 0.13) : null,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('EPISODE ${episode.number}',
+                    style: _t(9.5, a: 0.55).copyWith(letterSpacing: 0.4)),
+                const SizedBox(height: 2),
+                Text(
+                  episode.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _t(12.5, w: FontWeight.w600),
+                ),
+                const SizedBox(height: 3),
+                SizedBox(
+                  height: 29,
+                  child: Text(
+                    episode.overview ?? '',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: _t(10.5, a: 0.6).copyWith(height: 1.36),
+                  ),
+                ),
+                if ((episode.firstAired ?? '').isNotEmpty)
+                  Text(episode.firstAired!.split('T').first,
+                      style: _t(9.5, a: 0.5)),
+              ],
             ),
           ),
-          if ((episode.firstAired ?? '').isNotEmpty)
-            Text(episode.firstAired!.split('T').first, style: _t(9.5, a: 0.5)),
         ],
       ),
     );

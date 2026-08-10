@@ -186,8 +186,10 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     // both living surfaces; volume is 0 when the sound sub-toggle is off.
     Future.wait([
       StorageService.getHomeHeroTrailerEnabled(),
-      StorageService.getAmbientTrailerAudioEnabled(),
-      StorageService.getAmbientTrailerVolume(),
+      StorageService.getAmbientTrailerAudioEnabled(
+        AmbientTrailerSurface.homeHero,
+      ),
+      StorageService.getAmbientTrailerVolume(AmbientTrailerSurface.homeHero),
     ]).then((v) {
       if (!mounted || !(v[0] as bool)) return;
       _trailerEnabled = true;

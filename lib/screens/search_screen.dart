@@ -1309,8 +1309,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       HardwareKeyboard.instance.addHandler(_onTakeoverKey);
       Future.wait([
         StorageService.getHomeHeroTrailerEnabled(),
-        StorageService.getAmbientTrailerAudioEnabled(),
-        StorageService.getAmbientTrailerVolume(),
+        StorageService.getAmbientTrailerAudioEnabled(
+          AmbientTrailerSurface.homeHero,
+        ),
+        StorageService.getAmbientTrailerVolume(AmbientTrailerSurface.homeHero),
       ]).then((values) {
         if (!mounted || !(values[0] as bool)) return;
         _heroTrailerEnabled = true;

@@ -55,8 +55,49 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   /// The cached TV read is safe here: build() is gated on [_loading], and
   /// clearing it awaits getters that themselves await the TV probe.
   bool get _ambientTrailerEnabled => PlatformUtil.isTelevision
-      ? _heroTrailerEnabled
+      ? (_heroTrailerEnabled || _trailerAutoplayEnabled)
       : _trailerAutoplayEnabled;
+
+  /// The surface these controls READ from. On TV both surfaces exist now (Home
+  /// hero and the Showcase detail page), and one pair of controls governs both
+  /// — see [_setAmbientAudio]. Reading either gives the same answer because
+  /// writes go to both.
+  static AmbientTrailerSurface get _ambientSurface =>
+      PlatformUtil.isTelevision
+      ? AmbientTrailerSurface.homeHero
+      : AmbientTrailerSurface.detail;
+
+  /// Writes the sound preference to every ambient surface this platform has.
+  ///
+  /// The keys stay per-surface — a phone's stored value must never govern a TV
+  /// box's hero — but on a television one control deliberately governs both,
+  /// rather than the detail page silently inheriting the hero's preference,
+  /// which is what a platform-keyed lookup would have done.
+  Future<void> _setAmbientAudio(bool value) async {
+    await StorageService.setAmbientTrailerAudioEnabled(
+      AmbientTrailerSurface.detail,
+      value,
+    );
+    if (PlatformUtil.isTelevision) {
+      await StorageService.setAmbientTrailerAudioEnabled(
+        AmbientTrailerSurface.homeHero,
+        value,
+      );
+    }
+  }
+
+  Future<void> _setAmbientVolume(int value) async {
+    await StorageService.setAmbientTrailerVolume(
+      AmbientTrailerSurface.detail,
+      value,
+    );
+    if (PlatformUtil.isTelevision) {
+      await StorageService.setAmbientTrailerVolume(
+        AmbientTrailerSurface.homeHero,
+        value,
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -84,10 +125,22 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
           await StorageService.getDetailTrailerAutoplayEnabled();
       final heroTrailerEnabled =
           await StorageService.getHomeHeroTrailerEnabled();
+      // One pair of controls governs every ambient surface this platform has,
+      // so the two stored values must not be allowed to diverge — a TV that had
+      // sound off for its hero would otherwise show "off" while the newly
+      // enabled detail trailer played at its own default of on. Read the shown
+      // surface, then write it through to the other.
       final ambientTrailerAudioEnabled =
-          await StorageService.getAmbientTrailerAudioEnabled();
-      final ambientTrailerVolume =
-          await StorageService.getAmbientTrailerVolume();
+          await StorageService.getAmbientTrailerAudioEnabled(
+            _ambientSurface,
+          );
+      final ambientTrailerVolume = await StorageService.getAmbientTrailerVolume(
+        _ambientSurface,
+      );
+      if (PlatformUtil.isTelevision) {
+        await _setAmbientAudio(ambientTrailerAudioEnabled);
+        await _setAmbientVolume(ambientTrailerVolume);
+      }
       final tvTrailerUnderlayEnabled =
           await StorageService.getTvTrailerUnderlayEnabled();
       final tvHomeStyle = await StorageService.getTvHomeStyle();
@@ -371,11 +424,16 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Ambient trailers: exactly ONE living surface per platform —
-                // the Home hero spotlight on TV, the detail-page backdrop
-                // everywhere else — so only that platform's toggle is offered
-                // (the other is hard-off in StorageService, not merely hidden).
-                // The sound switch + volume below govern whichever one it is.
+                // Ambient trailers. A television now has BOTH surfaces — the
+                // Home hero spotlight and the Showcase detail page — so both
+                // toggles are offered there; off-TV there is no hero, so only
+                // the detail one appears. What used to make "one per platform"
+                // necessary was the process's single video output, and that is
+                // now enforced directly (VideoOutputLease) rather than by
+                // arranging for only one surface to exist.
+                //
+                // The sound switch + volume below govern every surface this
+                // platform has — one control, written to both keys.
                 SettingsSection(
                   title: '',
                   children: [
@@ -405,9 +463,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                             }
                           }
                         },
-                      )
-                    else
-                      SettingsToggleTile(
+                      ),
+                    SettingsToggleTile(
                         icon: Icons.movie_filter_rounded,
                         title: 'Trailer on Detail Page',
                         subtitle:
@@ -447,9 +504,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                         value: _ambientTrailerAudioEnabled,
                         onChanged: (value) async {
                           try {
-                            await StorageService.setAmbientTrailerAudioEnabled(
-                              value,
-                            );
+                            await _setAmbientAudio(value);
                             if (!mounted) return;
                             setState(() => _ambientTrailerAudioEnabled = value);
                           } catch (e) {
@@ -482,9 +537,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                             onChanged: (value) async {
                               if (value == null) return;
                               try {
-                                await StorageService.setAmbientTrailerVolume(
-                                  value,
-                                );
+                                await _setAmbientVolume(value);
                                 if (!mounted) return;
                                 setState(() => _ambientTrailerVolume = value);
                               } catch (e) {

@@ -160,6 +160,18 @@ class DetailModel {
   /// an ambient layer. Null clears it.
   final void Function(String?) onAmbientStill;
 
+  /// The body has left (true) or returned to (false) its identity/hero state.
+  ///
+  /// The shell owns the backdrop — it is the only layer outside the overscan
+  /// `SafeArea`, so it is the only one that can be full-bleed — but only the
+  /// body knows how deep the page has been walked. Showcase shows sharp key art
+  /// at rest and a blurred field once you descend, and this is how the shell is
+  /// told which.
+  ///
+  /// Delivered post-frame and only on genuine transitions: the shell's handler
+  /// calls `setState`, so emitting from a build would be setState-during-build.
+  final void Function(bool deep)? onDepth;
+
   final DetailFocusCoordinator focus;
 
   const DetailModel({
@@ -197,6 +209,7 @@ class DetailModel {
     this.onManageSources,
     required this.onRecommendationTap,
     required this.onAmbientStill,
+    this.onDepth,
     required this.focus,
   });
 

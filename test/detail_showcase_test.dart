@@ -64,6 +64,7 @@ DetailModel _model({
   bool withCast = true,
   List<SeriesSource> sources = const [],
   List<StremioMeta> recs = const [],
+  void Function(bool)? onDepth,
 }) {
   final item = StremioMeta(
     id: 'tt0903747',
@@ -115,6 +116,7 @@ DetailModel _model({
     onManageSources: () {},
     onRecommendationTap: (_) {},
     onAmbientStill: (_) {},
+    onDepth: onDepth,
     focus: DetailFocusCoordinator(
       backNode: FocusNode(debugLabel: 'test-back'),
       primaryEntry: FocusNode(debugLabel: 'test-primary'),
@@ -175,14 +177,19 @@ void main() {
     await tester.pumpWidget(_host(_model(), tall: true));
     await tester.pumpAndSettle();
 
-    expect(find.byType(ShowcaseSeasons), findsOneWidget);
-    expect(find.byType(ShowcaseCast), findsOneWidget);
-    expect(find.byType(ShowcaseSources), findsOneWidget);
-
-    // Every band is reachable by DOWN alone, in the order it is drawn.
-    for (var i = 0; i < 4; i++) {
+    // `skipOffstage: false` throughout: the identity is a full screenful now,
+    // so the bands below it are built but OFFSTAGE until scrolled to. These
+    // assertions are about the ladder's structure — which bands exist and in
+    // what order — not about what happens to be painted, and the default
+    // finder quietly conflates the two.
+    expect(find.byType(ShowcaseSeasons, skipOffstage: false), findsOneWidget);
+    // seasons → episodes → cast
+    for (var i = 0; i < 3; i++) {
       await _press(tester, LogicalKeyboardKey.arrowDown);
     }
+    expect(find.byType(ShowcaseCast, skipOffstage: false), findsOneWidget);
+    await _press(tester, LogicalKeyboardKey.arrowDown);
+    expect(find.byType(ShowcaseSources, skipOffstage: false), findsOneWidget);
     // Nothing threw and the page is intact — the ladder is contiguous.
     expect(find.byType(DetailShowcase), findsOneWidget);
   });
@@ -191,7 +198,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(_host(_model(), manySeasons: false));
     await tester.pumpAndSettle();
-    expect(find.byType(ShowcaseSeasons), findsNothing);
+    expect(find.byType(ShowcaseSeasons, skipOffstage: false), findsNothing);
     // DOWN once must reach the EPISODES, not an empty slot where Seasons was.
     await _press(tester, LogicalKeyboardKey.arrowDown);
     expect(find.byType(DetailShowcase), findsOneWidget);
@@ -202,9 +209,10 @@ void main() {
     _surface(tester, const Size(960, 2000));
     await tester.pumpWidget(_host(_model(isMovie: true), tall: true));
     await tester.pumpAndSettle();
-    expect(find.byType(ShowcaseSeasons), findsNothing);
-    expect(find.byType(ShowcaseSources), findsOneWidget);
+    expect(find.byType(ShowcaseSeasons, skipOffstage: false), findsNothing);
+    // Sources is the only band under the hero, so one DOWN reaches it.
     await _press(tester, LogicalKeyboardKey.arrowDown);
+    expect(find.byType(ShowcaseSources, skipOffstage: false), findsOneWidget);
     expect(find.byType(DetailShowcase), findsOneWidget);
   });
 
@@ -213,8 +221,12 @@ void main() {
     _surface(tester, const Size(960, 2000));
     await tester.pumpWidget(_host(_model(withCast: false), tall: true));
     await tester.pumpAndSettle();
-    expect(find.byType(ShowcaseCast), findsNothing);
-    expect(find.byType(ShowcaseSources), findsOneWidget);
+    expect(find.byType(ShowcaseCast, skipOffstage: false), findsNothing);
+    // seasons → episodes → sources, with Cast absent from the ladder entirely.
+    for (var i = 0; i < 3; i++) {
+      await _press(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(find.byType(ShowcaseSources, skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('the Sources band always exists, with the Find tile alone when '
@@ -222,9 +234,13 @@ void main() {
     _surface(tester, const Size(960, 2000));
     await tester.pumpWidget(_host(_model(), tall: true));
     await tester.pumpAndSettle();
+    // seasons → episodes → cast → sources.
+    for (var i = 0; i < 4; i++) {
+      await _press(tester, LogicalKeyboardKey.arrowDown);
+    }
     // An empty Sources band is not an empty state to hide — "Find sources" is
     // exactly what someone with no bound sources needs to see.
-    expect(find.text('＋  Find sources'), findsOneWidget);
+    expect(find.text('＋  Find sources', skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('trackers are READOUT in the meta line, never focusable',
@@ -246,5 +262,47 @@ void main() {
     await tester.pumpWidget(_host(_model()));
     await tester.pumpAndSettle();
     expect(find.text('A Show'), findsWidgets);
+  });
+
+  testWidgets('the hero fills the first screenful and leaves the next band '
+      'peeking', (tester) async {
+    _surface(tester, _tv);
+    await tester.pumpWidget(_host(_model()));
+    await tester.pumpAndSettle();
+
+    // The reference opens on key art with the identity at its foot and the
+    // next row peeking in — the tell that the page continues. As an ordinary
+    // block in the flow the identity floated mid-art with whole rows already
+    // under it, which is what read as "not the Apple layout".
+    final identity = tester.getSize(find.byType(ShowcaseIdentity)).height;
+    final viewport = tester.getSize(find.byType(DetailShowcase)).height;
+    final peek = viewport - identity;
+    expect(peek, greaterThan(50),
+        reason: 'nothing peeking reads as a dead end');
+    expect(peek, lessThan(viewport * 0.45),
+        reason: 'a whole band showing is the old layout, not a peek');
+  });
+
+  testWidgets('depth is announced to the shell, once per transition',
+      (tester) async {
+    final depths = <bool>[];
+    await tester.pumpWidget(_host(_model(onDepth: depths.add)));
+    await tester.pumpAndSettle();
+    expect(depths, isEmpty, reason: 'opening at the hero is not a transition');
+
+    await _press(tester, LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(depths, [true]);
+
+    // Walking further down is still deep — the shell must not be told again,
+    // and its handler calls setState.
+    await _press(tester, LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(depths, [true]);
+
+    await _press(tester, LogicalKeyboardKey.arrowUp);
+    await _press(tester, LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(depths.last, isFalse);
   });
 }

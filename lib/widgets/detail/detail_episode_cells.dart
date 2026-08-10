@@ -93,8 +93,16 @@ class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
         if (f && widget.ensureVisible) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted || !context.mounted) return;
-            Scrollable.ensureVisible(
-              context,
+            // The NEAREST scrollable only — the rail this cell lives in.
+            // `Scrollable.ensureVisible` scrolls every ancestor, so episode
+            // focus was also moving the page's vertical list behind the band
+            // ladder's back. `ensureVisibleAxis` was declared for exactly this
+            // and never honoured.
+            final rail = Scrollable.maybeOf(context);
+            final box = context.findRenderObject();
+            if (rail == null || box is! RenderBox || !box.attached) return;
+            rail.position.ensureVisible(
+              box,
               alignment: widget.ensureVisibleAlignment,
               alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
               // Snap on TV: a held key retargets an in-flight glide every
