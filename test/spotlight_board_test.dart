@@ -530,4 +530,41 @@ void main() {
     expect(sawLeft, isFalse);
     expect(find.text('Alpha'), findsWidgets);
   });
+
+  testWidgets('the hero is a FRACTION of the board, not a pixel count',
+      (tester) async {
+    // `_heroHeight` was 540 logical pixels flat. Logical size differs per
+    // device, so that one constant made the hero ~89% of the screen on an
+    // Android TV box and ~40% on an Apple TV — and on the latter the trailer
+    // played in a slot half its intended height, which is why `cover` threw
+    // away half the frame.
+    //
+    // Measured through the first shelf's title, which sits directly under the
+    // hero: its offset as a SHARE of the board is the hero's share, and that
+    // share must not move when the panel does.
+    final a = _meta('tt1', 'Alpha');
+    addTearDown(tester.view.reset);
+
+    Future<double> heroShare(Size size) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      await tester.pumpWidget(host([a], [_section('Shelf', [a])]));
+      await tester.pumpAndSettle();
+      final board = tester.getSize(find.byType(SpotlightBoard)).height;
+      final titleTop = tester.getTopLeft(find.text('Shelf')).dy;
+      return titleTop / board;
+    }
+
+    final short = await heroShare(const Size(1280, 720));
+    final tall = await heroShare(const Size(1280, 1440));
+    expect(tall, closeTo(short, 0.03),
+        reason: 'the hero must occupy the same share of every panel');
+    // And the artwork must reach the bottom of the screen, with the shelf over
+    // it — the first shelf title sits inside the hero's lower portion, not
+    // below its end. A share of 1.0 would mean the cards start off-screen; the
+    // overlap is what brings them up onto the art.
+    expect(short, greaterThan(0.6));
+    expect(short, lessThan(0.92),
+        reason: 'the first shelf must ride ON the artwork, not sit under it');
+  });
 }

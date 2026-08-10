@@ -235,7 +235,28 @@ class _M {
 }
 
 class SpotlightBoardState extends State<SpotlightBoard> {
-  static const double _heroHeight = 540;
+  /// The hero as a FRACTION of the board: the art reaches the bottom edge of
+  /// the screen, and the first shelf sits ON it.
+  ///
+  /// Two things were wrong before. It was `540` logical pixels flat, and
+  /// logical size differs per device — so one constant drew a hero at ~89% of
+  /// an Android TV box and ~40% of an Apple TV. Same code, same number, a
+  /// different design on each, and on tvOS a trailer playing in a slot half its
+  /// intended height, which is why `cover` was discarding half the frame.
+  ///
+  /// And the target itself was wrong: ending the artwork above the first shelf
+  /// leaves a band of flat grey under the cards at rest, which is exactly what
+  /// "the poster is not full screen" describes. The ground is what you land on
+  /// once you SCROLL — that is where the measured `rgb(28,28,28)` gutter came
+  /// from, and it was taken from scrolled frames and applied to the resting one
+  /// by mistake.
+  static const double _heroFraction = 1.0;
+
+  /// How far the first shelf rides up over the hero's lower edge, as a
+  /// fraction of the hero. Was 88 of 540, kept in proportion — with a
+  /// full-height hero this is what puts the cards OVER the artwork rather than
+  /// below it.
+  static const double _shelfOverlapFraction = 88 / 540;
 
   final ScrollController _scroll = ScrollController();
 
@@ -661,13 +682,18 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final m = _M(constraints.maxWidth);
-          return _board(m);
+          // The hero is measured against the board's real height, so it is the
+          // same share of the screen on every panel.
+          final viewport = constraints.maxHeight.isFinite
+              ? constraints.maxHeight
+              : MediaQuery.sizeOf(context).height;
+          return _board(m, viewport * _heroFraction);
         },
       ),
     );
   }
 
-  Widget _board(_M m) {
+  Widget _board(_M m, double heroH) {
     return DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -685,11 +711,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             // which the ListView clips only below the shelves that cover it
             // anyway.
             SizedBox(
-              height: _heroHeight - 88,
+              height: heroH * (1 - _shelfOverlapFraction),
               child: OverflowBox(
                 alignment: Alignment.topCenter,
-                maxHeight: _heroHeight,
-                child: SizedBox(height: _heroHeight, child: _hero(m)),
+                maxHeight: heroH,
+                child: SizedBox(height: heroH, child: _hero(m)),
               ),
             ),
             // The first shelf overlaps the hero's lower edge — the tell that
@@ -801,6 +827,12 @@ class SpotlightBoardState extends State<SpotlightBoard> {
               // be sealed — the bottom stop is the ground colour exactly, so
               // the hero still meets the shelf without a visible edge — but
               // the long soft tail costs half the frame for no legibility.
+              //
+              // Deliberately absolute, unlike the hero's own height: this is a
+              // blend DISTANCE, not a share of the layout, and a fade that
+              // scaled with the panel would smear further on a large one for no
+              // reason. The identity's `bottom` insets below are the same kind
+              // of number.
               height: rolling ? 150 : 260,
               child: DecoratedBox(
                 decoration: BoxDecoration(
