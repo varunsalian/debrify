@@ -653,27 +653,26 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
           const SizedBox(height: 18),
+          // The App Theme row is gone: a Look is the single top-level choice
+          // now, and Advanced under it edits the individual tokens. The rows
+          // below were RENUMBERED rather than left with a hole — the pane
+          // indexes `_paneNodes` directly and a test asserts the indices are
+          // contiguous from zero, because a gap is a row the remote skips.
           SettingsSection(
             title: 'Theme',
             blurb: 'Colour, focus and motion. Applies everywhere in the app.',
             children: [
               SettingsTile.spec(
-                SettingsRows.appTheme,
-                subtitle: widget.appThemeLabel,
-                onTap: widget.onOpenAppTheme,
-                focusNode: _paneNodes[1],
-              ),
-              SettingsTile.spec(
                 SettingsRows.textBrightness,
                 subtitle: widget.textBrightnessLabel,
                 onTap: widget.onOpenTextBrightness,
-                focusNode: _paneNodes[2],
+                focusNode: _paneNodes[1],
               ),
               SettingsTile.spec(
                 SettingsRows.launchAnimation,
                 subtitle: widget.launchAnimationLabel,
                 onTap: widget.onOpenLaunchAnimation,
-                focusNode: _paneNodes[3],
+                focusNode: _paneNodes[2],
               ),
             ],
           ),
@@ -686,43 +685,43 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.tvHomeStyle,
                 subtitle: widget.tvHomeStyleLabel,
                 onTap: widget.onOpenTvHomeStyle,
-                focusNode: _paneNodes[4],
+                focusNode: _paneNodes[3],
               ),
               SettingsTile.spec(
                 SettingsRows.discoverLayout,
                 subtitle: widget.discoverLayoutLabel,
                 onTap: widget.onOpenDiscoverLayout,
-                focusNode: _paneNodes[5],
+                focusNode: _paneNodes[4],
               ),
               SettingsTile.spec(
                 SettingsRows.detailPageStyle,
                 subtitle: widget.detailPageStyleLabel,
                 onTap: widget.onOpenDetailPageStyle,
-                focusNode: _paneNodes[6],
+                focusNode: _paneNodes[5],
               ),
               SettingsTile.spec(
                 SettingsRows.tvSidebarStyle,
                 subtitle: widget.tvSidebarStyleLabel,
                 onTap: widget.onOpenTvSidebarStyle,
-                focusNode: _paneNodes[7],
+                focusNode: _paneNodes[6],
               ),
               SettingsTile.spec(
                 SettingsRows.iptvAppearance,
                 subtitle: widget.iptvStyleLabel,
                 onTap: widget.onOpenIptvStyle,
-                focusNode: _paneNodes[8],
+                focusNode: _paneNodes[7],
               ),
               SettingsTile.spec(
                 SettingsRows.playerGuideStyle,
                 subtitle: widget.playerGuideStyleLabel,
                 onTap: widget.onOpenPlayerGuideStyle,
-                focusNode: _paneNodes[9],
+                focusNode: _paneNodes[8],
               ),
               SettingsTile.spec(
                 SettingsRows.parentsGuideStyle,
                 subtitle: widget.parentsGuideStyleLabel,
                 onTap: widget.onOpenParentsGuideStyle,
-                focusNode: _paneNodes[10],
+                focusNode: _paneNodes[9],
               ),
             ],
           ),
@@ -736,19 +735,19 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.tvScreenSize,
                 subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
                 onTap: widget.onOpenTvScreenSize,
-                focusNode: _paneNodes[11],
+                focusNode: _paneNodes[10],
               ),
               SettingsTile.spec(
                 SettingsRows.tvRenderQuality,
                 subtitle: widget.tvRenderQualityLabel,
                 onTap: widget.onOpenTvRenderQuality,
-                focusNode: _paneNodes[12],
+                focusNode: _paneNodes[11],
               ),
               SettingsTile.spec(
                 SettingsRows.tvHeroArtworkQuality,
                 subtitle: widget.tvHeroArtworkQualityLabel,
                 onTap: widget.onOpenTvHeroArtworkQuality,
-                focusNode: _paneNodes[13],
+                focusNode: _paneNodes[12],
               ),
             ],
           ),

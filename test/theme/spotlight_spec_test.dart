@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:debrify/theme/app_motion.dart';
+import 'package:debrify/theme/premium_looks.dart';
 import 'package:debrify/theme/widgets/parallax_focus.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 import 'package:flutter/material.dart';
@@ -44,14 +45,42 @@ void main() {
   });
 
   group('the grounds are the MEASURED ones', () {
-    test('Spotlight scrolls onto rgb(28,28,28), not black', () {
-      // Sampled from the reference screenshots at every gutter of a scrolled
-      // frame: a neutral grey drifting ~3 levels warmer down the page.
-      expect(SpotlightBoard.ground, const Color(0xFF1B1C1C));
-      expect(SpotlightBoard.groundLow, const Color(0xFF1F1D1C));
-      // Not black, and not the app's near-black ink either.
-      expect(SpotlightBoard.ground, isNot(const Color(0xFF000000)));
-      expect(SpotlightBoard.ground, isNot(const Color(0xFF0A0A0B)));
+    test('Spotlight scrolls onto its THEME\'s ground, which is the measured one',
+        () {
+      // These were hardcoded — `0xFF1B1C1C`/`0xFF1F1D1C`, sampled from the
+      // reference screenshots at every gutter of a scrolled frame — so that the
+      // Apple look was the Apple look whatever theme was selected.
+      //
+      // That became indefensible once tokens were editable: Home was the one
+      // surface that ignored the Background setting, and nothing on screen
+      // explained why. The measurement is not lost, it MOVED: the `spotlight`
+      // theme's own ground IS the measured value, so the reference is
+      // reproduced under the Look it was measured from and merely followed
+      // elsewhere.
+      final spec = PremiumLooks.byId('spotlight')!;
+      expect(spec.ground, const Color(0xFF1B1C1C));
+      // Not black, and not the app's near-black either.
+      expect(spec.ground, isNot(const Color(0xFF000000)));
+      expect(spec.ground, isNot(const Color(0xFF0A0A0B)));
+
+      final theme = spec.build();
+      expect(SpotlightBoard.groundOf(theme), theme.home.bg,
+          reason: 'the board must paint the theme\'s ground, not its own');
+      expect(SpotlightBoard.groundOf(theme), const Color(0xFF1B1C1C),
+          reason: 'and under Spotlight that IS the measured value');
+      // The reference drifts a few levels lighter down the page.
+      expect(
+        SpotlightBoard.groundLowOf(theme).computeLuminance(),
+        greaterThan(SpotlightBoard.groundOf(theme).computeLuminance()),
+      );
+    });
+
+    test('a different theme moves the ground with it', () {
+      // The whole point of the change: Background is one setting, and Home is
+      // not exempt from it.
+      final other = PremiumLooks.byId('console')!.build();
+      expect(SpotlightBoard.groundOf(other), other.home.bg);
+      expect(SpotlightBoard.groundOf(other), isNot(const Color(0xFF1B1C1C)));
     });
 
     test('the identity flips off a busy left third at 0.32', () {

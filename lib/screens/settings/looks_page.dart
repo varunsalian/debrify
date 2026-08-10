@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
 import '../../theme/app_looks.dart';
+import '../../theme/app_theme_controller.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/platform_util.dart';
+import 'theme_tokens_page.dart';
 import 'widgets/settings_widgets.dart';
 
 /// Appearance → **Looks**.
@@ -53,6 +55,14 @@ class _LooksPageState extends State<LooksPage> {
   Future<void> _apply(AppLook look) async {
     if (_applying) return;
     setState(() => _applying = true);
+    // Cleared BEFORE the apply, not after.
+    //
+    // A Look is a complete statement about how the app looks, so edits layered
+    // under one have to go — but `apply` is an asynchronous multi-key write,
+    // and a trailing clear would also delete an edit the user made WHILE it was
+    // running. Clearing first means later intent simply wins, which is the same
+    // rule `LookApplier`'s own generation protocol follows.
+    await AppThemeController.instance.clearOverrides();
     await LookApplier.apply(look);
     if (!mounted) return;
     // Nothing to store: `AppLooks.active()` recomputes from the prefs
@@ -63,7 +73,12 @@ class _LooksPageState extends State<LooksPage> {
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
-    final active = AppLooks.active();
+    final edits = AppThemeController.instance.overrides.count;
+    // A Look with tokens edited on top is NOT that Look, and `AppLooks.active`
+    // cannot know — it compares the keys a Look names, and overrides are not
+    // one of them. Showing a tick next to a Look the app no longer looks like
+    // is a lie the user has no way to detect.
+    final active = edits == 0 ? AppLooks.active() : null;
     return SettingsPageScaffold(
       title: 'Looks',
       body: SingleChildScrollView(
@@ -85,9 +100,13 @@ class _LooksPageState extends State<LooksPage> {
                     padding: const EdgeInsets.only(bottom: 12),
                     child: SettingsInfoBanner(
                       icon: Icons.tune_rounded,
-                      text: 'Custom — your settings don\'t match a Look. '
-                          'Picking one below replaces them; everything stays '
-                          'editable afterwards.',
+                      text: edits > 0
+                          ? 'Custom — $edits '
+                              '${edits == 1 ? "token" : "tokens"} edited under '
+                              'Advanced. Picking a Look below clears them.'
+                          : 'Custom — your settings don\'t match a Look. '
+                              'Picking one below replaces them; everything '
+                              'stays editable afterwards.',
                     ),
                   ),
                 Focus(
@@ -103,6 +122,9 @@ class _LooksPageState extends State<LooksPage> {
                               ? Icons.radio_button_checked_rounded
                               : Icons.radio_button_unchecked_rounded,
                           title: look.label,
+                          // A Look with edits on top is NOT the Look, and
+                          // saying it is would be a lie by omission — the key
+                          // set matches, so `isActive` alone cannot tell.
                           subtitle: look.blurb,
                           trailing: look.id == active?.id
                               ? Icon(Icons.check_rounded,
@@ -112,6 +134,27 @@ class _LooksPageState extends State<LooksPage> {
                         ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 14),
+                SettingsSection(
+                  title: '',
+                  children: [
+                    SettingsTile(
+                      icon: Icons.tune_rounded,
+                      title: 'Advanced',
+                      subtitle: edits == 0
+                          ? 'Edit individual tokens — colour, shape, motion'
+                          : '$edits ${edits == 1 ? "token" : "tokens"} '
+                              'changed over this Look',
+                      onTap: () async {
+                        await pushSettingsPage(
+                          context,
+                          const ThemeTokensPage(),
+                        );
+                        if (mounted) setState(() {});
+                      },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 14),
                 Text(

@@ -962,6 +962,7 @@ class StorageService {
   }
 
   static const String _appThemeKey = 'app_theme';
+  static const String _themeOverridesKey = 'theme_overrides';
 
   /// The app-wide theme (Appearance → App Theme). `'legacy'` is the sentinel
   /// meaning "render today's app exactly" and is the default; any other
@@ -992,6 +993,35 @@ class StorageService {
         : 'legacy';
     await prefs.setString(_appThemeKey, normalized);
     appThemeCached = normalized;
+  }
+
+  /// The user's per-token edits, as the raw JSON `ThemeOverrides` encodes.
+  ///
+  /// Kept as a string here rather than a parsed object so this layer stays free
+  /// of the theme package — and because the only consumer that matters resolves
+  /// it once, on the controller, and memoizes the result.
+  ///
+  /// Empty string means "no overrides", which is both the default and the fast
+  /// path every theme resolution checks first.
+  static String themeOverridesCached = '';
+
+  static Future<String> getThemeOverrides() async {
+    final prefs = await SharedPreferences.getInstance();
+    themeOverridesCached = prefs.getString(_themeOverridesKey) ?? '';
+    return themeOverridesCached;
+  }
+
+  static Future<void> setThemeOverrides(String raw) async {
+    final prefs = await SharedPreferences.getInstance();
+    // Publish the mirror BEFORE the await, like every other live-applied
+    // preference here: the controller has already recomputed and notified off
+    // this value, and a rebuild that raced the write must not read the old one.
+    themeOverridesCached = raw;
+    if (raw.isEmpty) {
+      await prefs.remove(_themeOverridesKey);
+    } else {
+      await prefs.setString(_themeOverridesKey, raw);
+    }
   }
 
   static const String _parentsGuideStyleKey = 'parents_guide_style';

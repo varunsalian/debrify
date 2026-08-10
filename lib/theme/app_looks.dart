@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../services/main_page_bridge.dart';
-import '../screens/settings/detail_theme_page.dart' show kDetailThemesShipped;
+import 'shipped_themes.dart' show kDetailThemesShipped;
 import '../services/storage_service.dart';
 import '../services/text_brightness.dart';
 import 'app_theme.dart';

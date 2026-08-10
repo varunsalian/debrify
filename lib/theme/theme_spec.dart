@@ -170,6 +170,72 @@ class ThemeSpec {
     this.sectionGap = 1,
   });
 
+  /// This spec with individual knobs replaced.
+  ///
+  /// Unlike `DetailTheme`, a spec is an AUTHORED data class rather than a
+  /// registry entry, and editing one is exactly what it is for — so a
+  /// `copyWith` here does not carry the risk that one on `DetailTheme` would.
+  ///
+  /// Colour, radius and fonts are deliberately absent: those reach the theme
+  /// through the core that `buildWith` is handed, and accepting them here too
+  /// would derive them twice from two different inputs.
+  ThemeSpec copyWith({
+    SeparationModel? separation,
+    ScrimStyle? scrim,
+    ArtFrame? frame,
+    ArtGrade? grade,
+    FocusExpression? focusExpression,
+    MotionCharacter? motion,
+    EntranceStyle? entrance,
+    IdlePolicy? idle,
+    SkeletonStyle? skeleton,
+    FeedbackCharacter? feedback,
+    double? grain,
+    double? sheen,
+    double? vignette,
+    double? bloom,
+    double? reactiveRoom,
+    bool? artworkAccent,
+  }) => ThemeSpec(
+    id: id,
+    label: label,
+    subtitle: subtitle,
+    ground: ground,
+    sunken: sunken,
+    raised: raised,
+    ink: ink,
+    accent: accent,
+    state: state,
+    callout: callout,
+    focusColor: focusColor,
+    accentButton: accentButton,
+    artworkAccent: artworkAccent ?? this.artworkAccent,
+    separation: separation ?? this.separation,
+    separationOverrides: separationOverrides,
+    scrim: scrim ?? this.scrim,
+    frame: frame ?? this.frame,
+    grade: grade ?? this.grade,
+    focusExpression: focusExpression ?? this.focusExpression,
+    motion: motion ?? this.motion,
+    entrance: entrance ?? this.entrance,
+    idle: idle ?? this.idle,
+    skeleton: skeleton ?? this.skeleton,
+    feedback: feedback ?? this.feedback,
+    radius: radius,
+    pillRadius: pillRadius,
+    displayFont: displayFont,
+    bodyFont: bodyFont,
+    grain: grain ?? this.grain,
+    reactiveRoom: reactiveRoom ?? this.reactiveRoom,
+    sheen: sheen ?? this.sheen,
+    vignette: vignette ?? this.vignette,
+    bloom: bloom ?? this.bloom,
+    rowHeight: rowHeight,
+    cardScale: cardScale,
+    pageGutter: pageGutter,
+    sectionGap: sectionGap,
+  );
+
   /// The complete `DetailTheme` this spec implies.
   ///
   /// Every field `DetailTheme` requires but a spec does not name is derived
@@ -347,6 +413,13 @@ class ThemeSpec {
 /// Ink for content on a filled swatch, scored rather than assumed — the same
 /// rule and threshold as `AppTheme.inkOn`, which cannot be called here because
 /// the instance does not exist yet.
+///
+/// Public because the override layer has to rederive `calloutText` when a user
+/// changes the callout colour, and it must use THIS rule rather than a second
+/// one that disagrees with it at the margins.
+Color inkOnFill(Color fill, Color ink, Color ground) =>
+    _inkOn(fill, ink, ground);
+
 Color _inkOn(Color fill, Color ink, Color ground) {
   double against(Color c) {
     final lf = fill.withValues(alpha: 1).computeLuminance();

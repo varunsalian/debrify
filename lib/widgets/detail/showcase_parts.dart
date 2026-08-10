@@ -7,6 +7,8 @@ import '../../services/debrify_image_cache.dart';
 import '../../services/imdb_enrichment_service.dart';
 import '../../services/series_source_service.dart';
 import '../../services/trakt/trakt_episode_model.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../episodes_panel.dart';
 import 'detail_model.dart';
@@ -65,6 +67,41 @@ class ShowcaseMetrics {
 const double kShowcaseGutter = 42;
 
 const _ink = Color(0xFFFFFFFF);
+
+/// The fill of a card slot whose art has not arrived, and of the ambient bed
+/// behind the bands.
+///
+/// These were `0xFF17171A` and `0xFF0A0A0B` written out at eight call sites —
+/// which meant the detail page was the surface that ignored the Background
+/// setting while everything around it followed. Derived now, from the same
+/// ground the rest of the app takes.
+///
+/// A placeholder is deliberately a STEP off the page rather than the page
+/// itself: an empty slot has to read as a slot. Pointing it at the ground would
+/// make loading cards dissolve into the background instead of holding their
+/// place.
+Color _slotFill(AppTheme app) =>
+    Color.lerp(app.home.bg, app.core.tx, 0.045)!;
+
+/// A contained mark — a channel logo — needs a lighter plate than a poster
+/// slot, or a dark logo lands on a dark card.
+Color _plateFill(AppTheme app) =>
+    Color.lerp(app.home.bg, app.core.tx, 0.10)!;
+
+/// The bed the ambient field is laid on, and the veil over it.
+///
+/// **Darkens regardless of the ground, and that is not an oversight.** The
+/// field is a bed for WHITE text — every band title, episode caption and
+/// synopsis on this page is `_ink`, a hardcoded white — so a veil that followed
+/// a pale ground would be a translucent white wash under white type.
+///
+/// Making it follow properly means the text following the ink first, which is
+/// the same outstanding work `kDetailThemesShipped` documents when it withholds
+/// `broadsheet` and `concrete`. Until that lands, the honest thing is a bed
+/// that keeps its own text readable rather than one that tracks a setting and
+/// breaks.
+Color _ambientBed(AppTheme app) =>
+    Color.lerp(app.home.bg, const Color(0xFF000000), 0.55)!;
 
 TextStyle _t(double size, {FontWeight w = FontWeight.w400, double a = 1}) =>
     TextStyle(
@@ -139,6 +176,7 @@ class ShowcaseAmbient extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (url == null || url!.isEmpty) return const SizedBox.shrink();
+    final bed = _ambientBed(AppThemeScope.of(context));
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 550),
       curve: Curves.easeOut,
@@ -154,14 +192,13 @@ class ShowcaseAmbient extends StatelessWidget {
               cacheManager: DebrifyImageCache.manager,
               memCacheWidth: 32,
               filterQuality: FilterQuality.low,
-              placeholder: (_, __) => const ColoredBox(color: Color(0xFF0A0A0B)),
-              errorWidget: (_, __, ___) =>
-                  const ColoredBox(color: Color(0xFF0A0A0B)),
+              placeholder: (_, __) => ColoredBox(color: bed),
+              errorWidget: (_, __, ___) => ColoredBox(color: bed),
             ),
           ),
           // The field is a BED for white text, not a picture. Under a .55 veil
           // the artwork starts competing with the episode titles sitting on it.
-          const ColoredBox(color: Color(0x940A0A0B)),
+          ColoredBox(color: bed.withValues(alpha: 0.58)),
         ],
       ),
     );
@@ -775,6 +812,7 @@ class ShowcaseEpisodeCell extends StatelessWidget {
     // cell read as barely distinguishable. In the reference the still carries
     // focus by lifting, and the caption below it gains a filled card. Splitting
     // them lets each do its own job.
+    final slot = _slotFill(AppThemeScope.of(context));
     return SizedBox(
       width: cellWidth ?? m.epCell,
       child: Column(
@@ -800,12 +838,12 @@ class ShowcaseEpisodeCell extends StatelessWidget {
                         cacheManager: DebrifyImageCache.manager,
                         memCacheWidth: 500,
                         placeholder: (_, __) =>
-                            const ColoredBox(color: Color(0xFF17171A)),
+                            ColoredBox(color: slot),
                         errorWidget: (_, __, ___) =>
-                            const ColoredBox(color: Color(0xFF17171A)),
+                            ColoredBox(color: slot),
                       )
                     else
-                      const ColoredBox(color: Color(0xFF17171A)),
+                      ColoredBox(color: slot),
                     if (watched)
                       ColoredBox(color: Colors.black.withValues(alpha: 0.45)),
                     if (isNext && !watched)
@@ -1218,6 +1256,7 @@ class _PosterState extends State<_Poster> {
   @override
   Widget build(BuildContext context) {
     final url = widget.item.poster;
+    final slot = _slotFill(AppThemeScope.of(context));
     return Focus(
       focusNode: widget.node,
       onFocusChange: (v) {
@@ -1247,11 +1286,11 @@ class _PosterState extends State<_Poster> {
                         cacheManager: DebrifyImageCache.manager,
                         memCacheWidth: 300,
                         placeholder: (_, __) =>
-                            const ColoredBox(color: Color(0xFF17171A)),
+                            ColoredBox(color: slot),
                         errorWidget: (_, __, ___) =>
-                            const ColoredBox(color: Color(0xFF17171A)),
+                            ColoredBox(color: slot),
                       )
-                    : const ColoredBox(color: Color(0xFF17171A)),
+                    : ColoredBox(color: slot),
               ),
             ),
           ),

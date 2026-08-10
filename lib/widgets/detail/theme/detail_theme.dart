@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../theme/app_surface.dart' show SeparationModel;
+import '../../../theme/theme_spec.dart' show inkOnFill;
 import 'detail_themes.dart';
 
 /// Which family a role uses. A theme names a ROLE, never a font, so it can
@@ -336,7 +338,28 @@ class DetailTheme {
   /// text-brightness resolver needs. Deliberately not a general `copyWith`:
   /// fifty-odd optional parameters invite drive-by theme edits that bypass the
   /// registry, and nothing else has a legitimate reason to derive a theme.
-  DetailTheme withText({Color? tx, Color? tx2, Color? tx3}) => DetailTheme(
+  /// This theme with its text tokens replaced — the ONLY mutation the app-level
+  /// text-brightness resolver needs.
+  ///
+  /// The legibility floor is re-applied HERE as well as in [withTokens],
+  /// because this runs LAST. The preset blends text toward the ground, so a
+  /// pair that cleared 3:1 when it was chosen can fall under it once Dim is
+  /// applied — and a floor that the final step can undo is not a floor.
+  DetailTheme withText({Color? tx, Color? tx2, Color? tx3}) {
+    final wanted = tx ?? this.tx;
+    final safe = _readable(wanted, [ground, pane]);
+    final dimmed = safe != wanted;
+    return _withTextRaw(
+      tx: safe,
+      // If the primary had to be pulled back, the tones derived from it are
+      // rebuilt rather than kept — they were computed from the value that
+      // failed.
+      tx2: dimmed ? safe.withValues(alpha: 0.64) : tx2,
+      tx3: dimmed ? safe.withValues(alpha: 0.40) : tx3,
+    );
+  }
+
+  DetailTheme _withTextRaw({Color? tx, Color? tx2, Color? tx3}) => DetailTheme(
     id: id,
     label: label,
     subtitle: subtitle,
@@ -394,6 +417,268 @@ class DetailTheme {
     grain: grain,
     grid: grid,
   );
+
+  /// The cursor colour: [wanted], else [authored], else a pole that reads.
+  static Color _focusFor(Color wanted, Color authored, Color ground) {
+    if (_contrast(wanted, ground) >= 2.0) return wanted;
+    if (_contrast(authored, ground) >= 2.0) return authored;
+    return _readable(wanted, [ground]);
+  }
+
+  /// [wanted] if it reads on every one of [surfaces]; otherwise whichever pole
+  /// does. The floor is 3:1 — below that, text on a surface is decoration.
+  static Color _readable(Color wanted, List<Color> surfaces) {
+    double worst(Color c) => surfaces
+        .map((s) => _contrast(c, s))
+        .reduce((a, b) => a < b ? a : b);
+    if (worst(wanted) >= 3.0) return wanted;
+    const white = Color(0xFFFFFFFF);
+    const black = Color(0xFF0E0E10);
+    return worst(white) > worst(black) ? white : black;
+  }
+
+  /// WCAG-style contrast ratio between two opaque colours.
+  static double _contrast(Color a, Color b) {
+    final la = a.withValues(alpha: 1).computeLuminance();
+    final lb = b.withValues(alpha: 1).computeLuminance();
+    final hi = la > lb ? la : lb;
+    final lo = la > lb ? lb : la;
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  /// Whether the primary button is FILLED with the accent, as opposed to the
+  /// neutral ink recipe.
+  ///
+  /// A `ThemeSpec` records this as `accentButton`, but a registry theme carries
+  /// only the resolved colours — so the authored fill is the one signal there
+  /// is. Compared on the opaque value because a fill is never drawn
+  /// translucent.
+  bool get _btnIsAccent =>
+      btnFill.withValues(alpha: 1) == accent.withValues(alpha: 1);
+
+  /// This theme with user-chosen palette, shape and type values, and every
+  /// field that DERIVES from them brought along.
+  ///
+  /// Narrow on purpose, exactly like [withText]: the registry stays the only
+  /// place a theme is authored, and this is the one other legitimate mutation —
+  /// a user editing tokens. It is emphatically not a general `copyWith`.
+  ///
+  /// The dependent fields are the whole reason this exists. Patching `ground`
+  /// alone leaves `lightGround` claiming the opposite, and the detail layouts
+  /// read that flag rather than the luminance — so a light ground would still
+  /// render a dark page. Patching `callout` alone leaves `calloutText` at a
+  /// contrast that was computed against the old swatch. Patching `state` leaves
+  /// `stateGradient` painting the colour you just replaced.
+  ///
+  /// Radius follows the same relationships `ThemeSpec.toCore` uses, or the
+  /// corners of one theme start disagreeing with each other.
+  DetailTheme withTokens({
+    Color? ground,
+    Color? pane,
+    Color? panel,
+    Color? tx,
+    Color? accent,
+    Color? state,
+    Color? callout,
+    Color? focus,
+    double? radius,
+    double? pillRadius,
+    DetailFontRole? displayFont,
+    DetailFontRole? bodyFont,
+    double? grain,
+    double? washOpacity,
+    bool? useArtworkAccent,
+    SeparationModel? separation,
+  }) {
+    final g = ground ?? this.ground;
+    // A FLOOR on legibility, and the one place this feature says no.
+    //
+    // Ground and ink are freely chosen, which means white-on-white is two taps
+    // away — and the app that results cannot be navigated back out of, because
+    // reaching the reset means reading the screens between here and it.
+    // `kDetailThemesShipped` withholds two whole themes over exactly this.
+    //
+    // So hue is free and contrast is not: if the pair scores below 3:1, the ink
+    // moves to whichever pole actually reads on that ground. It overrides an
+    // explicit ink choice, deliberately — an unusable app is not a preference.
+    // Surfaces have to share a POLARITY before ink can be judged against them.
+    //
+    // A white ground over Signal's near-black pane is unsatisfiable: black text
+    // reads on the page and vanishes on every sheet. So an unedited pane
+    // follows the ground it sits on — which is what a coherent theme does
+    // anyway, and what `ThemeSpec` expresses as ground/sunken/raised being one
+    // decision rather than three.
+    // POLARITY IS ONE DECISION, and the ground makes it.
+    //
+    // Pane, fill and rail were separately editable, and the combinations were
+    // unsatisfiable rather than merely ugly: a light page with a dark sheet has
+    // no single ink that reads on both, and every fix for one broke the other.
+    // Four free surfaces plus one ink is not a theme, it is four themes wearing
+    // the same text.
+    //
+    // So the ground is chosen and everything under it follows — which is what
+    // `ThemeSpec` already says by treating ground, sunken and raised as one
+    // authored family. Hue stays free; polarity does not fork.
+    final groundIsLight = g.computeLuminance() > 0.5;
+    final pole = groundIsLight ? Colors.black : Colors.white;
+    final resolvedPane =
+        ground == null ? this.pane : Color.lerp(g, pole, 0.06)!;
+    final resolvedRail =
+        ground == null ? railBg : Color.lerp(g, pole, 0.02)!;
+
+    // Against EVERY opaque surface the text sits on, not just the page: panes
+    // and panels are independently editable, so checking the ground alone still
+    // allows a white sheet carrying white text.
+    final wantedInk = tx ?? this.tx;
+    final ink = _readable(wantedInk, [g, resolvedPane]);
+    final cal = callout ?? this.callout;
+    final st = state ?? this.state;
+    final r = radius ?? this.radius;
+    final pill = pillRadius ?? radiusBtn;
+    final inkEdited = ink != this.tx;
+    final groundEdited = ground != null;
+    final isLight = groundEdited ? g.computeLuminance() > 0.5 : lightGround;
+    Color mix(Color a, Color b, double t) => Color.lerp(a, b, t)!;
+    // Every field below that is DERIVED from ink or ground has to move when
+    // they do. The registry authored them together; editing one input and
+    // keeping the rest is how you get a light theme wearing a dark theme's
+    // panels, or a button whose label is the same colour as its fill.
+    //
+    // `ThemeSpec.toCore` is the rule being mirrored here, deliberately: two
+    // derivations of the same field that disagree at the margins is worse than
+    // one that is written twice.
+    final derivedFromInk = inkEdited || groundEdited;
+    return DetailTheme(
+      id: id,
+      label: label,
+      subtitle: subtitle,
+      ground: g,
+      pane: resolvedPane,
+      railBg: resolvedRail,
+      // An explicit panel choice wins; otherwise it follows the ink it was
+      // originally derived from.
+      // Separation decides whether there are boxes at all, and the detail
+      // widgets paint these fields directly — so a `space` look that still has
+      // 7%-ink panels has not stopped having boxes, it has boxes the token
+      // layer cannot see. Same rules as `ThemeSpec.toCore`.
+      panel: panel ??
+          (separation != null
+              ? switch (separation) {
+                  SeparationModel.space => const Color(0x00000000),
+                  SeparationModel.rule => ink.withValues(alpha: 0.03),
+                  SeparationModel.glass => ink.withValues(alpha: 0.10),
+                  SeparationModel.fill => ink.withValues(alpha: 0.07),
+                }
+              : (inkEdited ? ink.withValues(alpha: 0.07) : this.panel)),
+      hair: separation != null
+          ? ink.withValues(
+              alpha: separation == SeparationModel.rule ? 0.17 : 0.11)
+          : (inkEdited ? ink.withValues(alpha: 0.11) : hair),
+      tx: ink,
+      // Derived from the ink at the alphas the registry itself uses, so an
+      // edited ink carries its own secondary and tertiary tones instead of
+      // leaving the old theme's showing through underneath it.
+      // Keyed on the ENFORCED ink, not the requested one. A ground-only edit
+      // that flips the primary text to the opposite pole must take the
+      // secondary and tertiary tones with it, or a snow ground ends up with
+      // black titles and translucent white metadata under them.
+      tx2: inkEdited ? ink.withValues(alpha: 0.64) : tx2,
+      tx3: inkEdited ? ink.withValues(alpha: 0.40) : tx3,
+      accent: accent ?? this.accent,
+      state: st,
+      callout: cal,
+      calloutText:
+          callout == null && tx == null && ground == null
+              ? calloutText
+              : inkOnFill(cal, ink, g),
+      award: award,
+      rating: rating,
+      // A cursor you cannot see is a television you cannot navigate. An
+      // unreadable choice falls back to the theme's own focus colour rather
+      // than to a pole — that one was authored to work here, and it is the same
+      // rule an unrecognised swatch already follows.
+      // A cursor you cannot see is a television you cannot navigate. The
+      // chosen colour is preferred, the theme's own is the first fallback, and
+      // a pole is the last — because on an edited ground the AUTHORED focus can
+      // fail too (Signal's gold is 1.67:1 on snow).
+      focus: _focusFor(focus ?? this.focus, this.focus, g),
+      // The button pair keeps its ROLE.
+      //
+      // A theme whose primary button is filled with the accent must follow the
+      // accent when that is edited, and must NOT be rewritten into the neutral
+      // ink recipe just because the ground moved. A neutral button is the
+      // reverse. Detecting the role from the authored fill is the only signal
+      // available — a spec records it as `accentButton`, but a registry theme
+      // does not carry the flag.
+      //
+      // Either way the label is SCORED against its own fill, so no edit can
+      // leave text the same colour as the surface under it.
+      btnFill: _btnIsAccent
+          ? (accent ?? this.accent)
+          : (derivedFromInk ? (isLight ? ink : mix(g, ink, 0.94)) : btnFill),
+      btnText: _btnIsAccent
+          ? ((accent != null || derivedFromInk)
+              ? inkOnFill(accent ?? this.accent, ink, g)
+              : btnText)
+          : (derivedFromInk ? (isLight ? g : mix(ink, g, 0.94)) : btnText),
+      // An authored gradient is a pair of colours chosen against the OLD fill;
+      // there is no honest way to re-author it from one replacement. Dropped
+      // when the fill it belonged to has moved.
+      btnGradient:
+          (_btnIsAccent && accent != null) || derivedFromInk ? null : btnGradient,
+      ghostFill: separation != null
+          ? switch (separation) {
+              SeparationModel.space || SeparationModel.rule =>
+                const Color(0x00000000),
+              _ => ink.withValues(alpha: 0.10),
+            }
+          : (derivedFromInk ? ink.withValues(alpha: 0.10) : ghostFill),
+      ghostBorder: separation != null
+          ? ink.withValues(
+              alpha: separation == SeparationModel.space ? 0.0 : 0.16)
+          : (derivedFromInk ? ink.withValues(alpha: 0.16) : ghostBorder),
+      ghostText: inkEdited ? ink : ghostText,
+      imageBg: imageBg,
+      paneWash: paneWash,
+      railWash: railWash,
+      idWash: idWash,
+      // The layouts read this flag, not the luminance. Left stale, a light
+      // ground renders a dark page.
+      lightGround:
+          ground == null ? lightGround : g.computeLuminance() > 0.5,
+      // Dropped rather than recoloured when the state colour changes: the
+      // gradient is an authored pair (Spectrum's progress bar), and there is no
+      // honest way to re-author it from one replacement colour. A flat bar in
+      // the new colour beats a gradient in the old one.
+      stateGradient: state == null ? stateGradient : null,
+      useArtworkAccent: useArtworkAccent ?? this.useArtworkAccent,
+      washOpacity: washOpacity ?? this.washOpacity,
+      radius: r,
+      radiusSm: radius == null ? radiusSm : (r * 0.7).roundToDouble(),
+      radiusBtn: pill,
+      radiusImg: radius == null ? radiusImg : r,
+      radiusCast: pillRadius == null ? radiusCast : pill,
+      displayFont: displayFont ?? this.displayFont,
+      bodyFont: bodyFont ?? this.bodyFont,
+      dataFont: dataFont,
+      displayWeight: displayWeight,
+      displayUpper: displayUpper,
+      displayTracking: displayTracking,
+      displaySize: displaySize,
+      slabSize: slabSize,
+      slabTracking: slabTracking,
+      slabWeight: slabWeight,
+      btnWeight: btnWeight,
+      btnBorder: btnBorder,
+      btnBorderWidth: btnBorderWidth,
+      focusWidth: focusWidth,
+      focusOffset: focusOffset,
+      shadow: shadow,
+      dividerGradient: dividerGradient,
+      grain: grain ?? this.grain,
+      grid: grid,
+    );
+  }
 
   TextStyle get slabStyle => TextStyle(
     fontFamily: dataFont.family,

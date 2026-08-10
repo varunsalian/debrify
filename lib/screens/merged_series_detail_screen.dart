@@ -43,7 +43,10 @@ import '../services/simkl/simkl_menu_helpers.dart';
 import '../widgets/tracker_brand_marks.dart';
 import 'episodes_screen.dart' show kCatalogDetailRouteName;
 import 'settings/detail_page_style_page.dart' show effectiveDetailPageStyle;
-import 'settings/detail_theme_page.dart' show effectiveDetailTheme;
+import '../theme/app_theme_controller.dart';
+import '../theme/theme_core_resolver.dart';
+import '../theme/theme_overrides.dart';
+import '../theme/shipped_themes.dart' show effectiveDetailTheme;
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
 /// episode drill-down fused into one Stremio-styled screen. Reached only from
@@ -301,8 +304,18 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   ///
   /// Classic is deliberately unthemed, so this is only consulted by the
   /// alternate bodies.
-  DetailTheme get _theme => DetailThemes.byId(
+  ///
+  /// Through [ThemeCoreResolver], not the registry directly: the user's token
+  /// overrides are applied there, and a page that fetched its own core would be
+  /// the one surface in the app still showing the unedited theme.
+  DetailTheme get _theme => ThemeCoreResolver.resolve(
     effectiveDetailTheme(StorageService.detailThemeCached),
+    // Classic is deliberately unthemed, and the controller's own fast path says
+    // so. Applying overrides here anyway would make this the one surface that
+    // disagreed with it.
+    AppThemeController.instance.isLegacy
+        ? ThemeOverrides.none
+        : AppThemeController.instance.overrides,
   );
 
   /// Filmstrip pushes the focused episode's still here. Painted by the shell as
@@ -814,6 +827,11 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Establishes the dependency that makes an ALREADY OPEN detail route
+    // re-theme when a token is edited. `_theme` reads the controller directly,
+    // which is a plain field read and notifies nobody — without this line the
+    // page you edited from would be the last one to change.
+    AppThemeScope.of(context);
     final backdropUrl = _item.background ?? _item.poster;
     return PopScope(
       // While the trailer is fullscreen, Back closes it instead of leaving the

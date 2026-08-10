@@ -1351,12 +1351,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'accent',
           ],
         ),
-      // App-wide theme (experimental) — the token layer's picker.
+      // Settings SEARCH still finds it, deliberately.
+      //
+      // The row is gone from the Appearance list because a Look is the single
+      // top-level choice now — but someone who knows the app has themes and
+      // types "theme" should land somewhere, and the honest destination is the
+      // Looks page rather than nothing at all.
       nav(
-        SettingsRows.appTheme,
+        SettingsRows.looks,
         'Appearance',
-        _openAppThemePage,
-        subtitle: appThemeLabel(AppThemeController.instance.id),
+        _openLooksPage,
+        subtitle: 'Looks and Advanced tokens',
         keywords: [
           'app',
           'theme',
@@ -4438,11 +4443,6 @@ class _SettingsLayout extends StatelessWidget {
                   blurb: 'Colour, focus and motion. Applies everywhere in the '
                       'app.',
                   children: [
-                    SettingsTile.spec(
-                      SettingsRows.appTheme,
-                      subtitle: appThemeLabel,
-                      onTap: onOpenAppTheme,
-                    ),
                     SettingsTile.spec(
                       SettingsRows.textBrightness,
                       subtitle: textBrightnessLabel,

@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/debrify_image_cache.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/dominant_color.dart';
 
@@ -174,11 +176,25 @@ class SpotlightBoard extends StatefulWidget {
     this.onAmbient,
   });
 
-  /// The scrolled ground. **Measured**, not chosen: `rgb(28,28,28)` at every
-  /// gutter of the reference screenshots, a neutral grey drifting ~3 levels
-  /// warmer down the page. Not black.
-  static const Color ground = Color(0xFF1B1C1C);
-  static const Color groundLow = Color(0xFF1F1D1C);
+  /// The scrolled ground, taken from the THEME.
+  ///
+  /// It was `0xFF1B1C1C`/`0xFF1F1D1C` — measured off the reference screenshots
+  /// at every gutter of a scrolled frame, and hardcoded so the Apple look was
+  /// the Apple look whatever theme was selected.
+  ///
+  /// That stopped being defensible once tokens became editable: this was the
+  /// one surface that ignored the Background setting, so changing it moved the
+  /// whole app EXCEPT Home, with nothing on screen to explain why. The
+  /// measurement is not lost — the `spotlight` theme's own ground is exactly
+  /// `0xFF1B1C1C`, so the reference is reproduced under the Look it was
+  /// measured from, and merely followed everywhere else.
+  static Color groundOf(AppTheme app) => app.home.bg;
+
+  /// The gradient's lower stop. The reference drifts a few levels lighter down
+  /// the page; derived rather than fixed so it drifts from whatever the ground
+  /// now is.
+  static Color groundLowOf(AppTheme app) =>
+      Color.lerp(app.home.bg, app.core.tx, 0.015)!;
 
   /// Above this, the backdrop's left third is too busy for text and the
   /// identity stack flips to the right edge. Without it, text lands on a face
@@ -694,12 +710,14 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   }
 
   Widget _board(_M m, double heroH) {
+    final app = AppThemeScope.of(context);
+    final ground = SpotlightBoard.groundOf(app);
     return DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [SpotlightBoard.ground, SpotlightBoard.groundLow],
+            colors: [ground, SpotlightBoard.groundLowOf(app)],
           ),
         ),
         child: ListView(
@@ -762,6 +780,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // Snapped, not tweened: animating a full-width gradient every frame is
     // exactly what the TV veil policy exists to avoid.
     final rolling = _rolling;
+    final app = AppThemeScope.of(context);
+    final ground = SpotlightBoard.groundOf(app);
+    // The legibility bed under the hero's white identity — always dark, see the
+    // gradient below.
+    final bed = Color.lerp(ground, const Color(0xFF000000), 0.75)!;
 
     return Stack(
       fit: StackFit.expand,
@@ -774,10 +797,8 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             cacheManager: DebrifyImageCache.manager,
             memCacheWidth: 1400,
             fadeInDuration: const Duration(milliseconds: 420),
-            placeholder: (_, __) =>
-                const ColoredBox(color: SpotlightBoard.ground),
-            errorWidget: (_, __, ___) =>
-                const ColoredBox(color: SpotlightBoard.ground),
+            placeholder: (_, __) => ColoredBox(color: ground),
+            errorWidget: (_, __, ___) => ColoredBox(color: ground),
           ),
         // Mounted whenever the HOST supplies one — never gated on this
         // board's own `_rolling`.
@@ -839,13 +860,22 @@ class SpotlightBoardState extends State<SpotlightBoard> {
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
                     end: Alignment.topCenter,
+                    // TWO jobs, and only one of them follows the ground.
+                    //
+                    // The bottom stop is the page ground exactly, so the hero
+                    // meets the shelf with no seam. Everything above it is a
+                    // legibility bed for the hero's identity and dots, which
+                    // are white because they sit on a photograph — so it stays
+                    // DARK. Tinting the whole ramp with the ground put a white
+                    // wash under white text the moment a pale background was
+                    // chosen.
                     colors: [
-                      SpotlightBoard.ground,
-                      Color(0xEB1B1C1C),
-                      Color(0x731B1C1C),
-                      Color(0x001B1C1C),
+                      ground,
+                      bed.withValues(alpha: 0.92),
+                      bed.withValues(alpha: 0.45),
+                      bed.withValues(alpha: 0),
                     ],
-                    stops: [0.04, 0.22, 0.56, 1],
+                    stops: const [0.04, 0.22, 0.56, 1],
                   ),
                 ),
               ),
@@ -960,7 +990,14 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             style: TextStyle(
               fontSize: m.title,
               fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.84),
+              // The one label on this board that sits on the PAGE rather than
+              // on artwork, so it is the one that has to follow the ink. The
+              // hero's text, the dots and the card captions all sit over a
+              // photograph and stay white whatever the ground is.
+              color: AppThemeScope.of(context)
+                  .core
+                  .tx
+                  .withValues(alpha: 0.84),
             ),
           ),
         ),
@@ -1095,6 +1132,7 @@ class _CardState extends State<_Card> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final c = widget.card;
     final w = widget.height * c.shape.aspect;
     final url = c.image;
@@ -1111,12 +1149,24 @@ class _CardState extends State<_Card> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // A contained mark needs a plate behind it: channel logos are
-              // frequently light-on-transparent and vanish on the ground.
+              // A contained mark needs a LIGHTER plate behind it: channel logos
+              // are frequently light-on-transparent and vanish on the ground.
+              //
+              // Both are steps off the page rather than literals, so an empty
+              // slot still reads as a slot once the Background is changed —
+              // pointing them at the ground itself would make loading cards
+              // dissolve into it.
               ColoredBox(
                 color: contained
-                    ? const Color(0xFF26272A)
-                    : const Color(0xFF17171A),
+                    // A plate for a CONTAINED mark is not a step off the page,
+                    // it is a dark backing: these logos are overwhelmingly
+                    // light-on-transparent, and on a pale ground a plate that
+                    // merely stepped 10% off it would let them vanish. So it
+                    // darkens regardless of polarity.
+                    ? Color.lerp(app.home.bg, const Color(0xFF000000), 0.82)!
+                    // An empty poster slot only has to read as a slot, which a
+                    // step toward the ink does in either direction.
+                    : Color.lerp(app.home.bg, app.core.tx, 0.045)!,
               ),
               if (url != null && url.isNotEmpty)
                 Padding(

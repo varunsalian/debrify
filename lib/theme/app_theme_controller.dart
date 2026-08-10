@@ -6,6 +6,9 @@ import '../widgets/detail/theme/detail_themes.dart';
 import 'app_theme.dart';
 import 'premium_looks.dart';
 import 'app_theme_adapter.dart';
+import 'theme_core_resolver.dart';
+import 'theme_override_applier.dart';
+import 'theme_overrides.dart';
 
 /// Owns the live app theme: the selected id, the preset-resolved [AppTheme]
 /// the scope provides, and the [ThemeData] the root `MaterialApp` renders.
@@ -84,6 +87,11 @@ class AppThemeController extends ChangeNotifier {
   static Future<void> warm() async {
     try {
       instance._id = await StorageService.getAppTheme();
+      // Decoded here rather than on every recompute: a malformed value costs
+      // one parse at startup and degrades to none, and the running app never
+      // touches storage to answer "what did the user change".
+      instance._overrides =
+          ThemeOverrides.decode(await StorageService.getThemeOverrides());
       instance._recomputeSilently();
     } catch (e) {
       debugPrint('AppThemeController: warm failed, staying legacy: $e');
@@ -143,8 +151,51 @@ class AppThemeController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The user's per-token edits. Read from the cached preference so a rebuild
+  /// never touches storage; refreshed by [warm] and by [setOverrides].
+  ThemeOverrides _overrides = ThemeOverrides.none;
+
+  ThemeOverrides get overrides => _overrides;
+
+  /// Apply an edited token set live, then persist it.
+  ///
+  /// Publish-first, exactly like [select]: the recompute and notify happen
+  /// synchronously so the app re-themes on the next frame, and a failed write
+  /// costs only stickiness across a restart.
+  ///
+  /// This is the ONLY invalidation path for overrides. [select] returns early
+  /// when the theme id has not changed, so routing an override change through
+  /// it would clear storage and leave the edited pixels on screen.
+  Future<void> setOverrides(ThemeOverrides value) async {
+    if (value.encode() == _overrides.encode()) return;
+    _overrides = value;
+    _recompute();
+    // No sequence token here, unlike [select] — and deliberately not one shared
+    // with it.
+    //
+    // `select` needs one because it writes TWO keys and a superseded call must
+    // not interleave them. This writes one key, after no awaits, and the mirror
+    // is published before the write; the preference channel is FIFO, so the
+    // last caller's value lands last. A token here would have been a guard that
+    // could never fire, which is worse than none because it implies protection.
+    //
+    // Sharing `select`'s token WAS actively harmful: an override change landing
+    // mid-select made select bail after writing `detail_theme` and never write
+    // `app_theme`, leaving the two disagreeing after a restart.
+    try {
+      await StorageService.setThemeOverrides(value.encode());
+    } catch (e) {
+      debugPrint('AppThemeController: override persist failed: $e');
+    }
+  }
+
+  Future<void> clearOverrides() => setOverrides(ThemeOverrides.none);
+
   void _recomputeSilently() {
     final preset = TextBrightnessController.current;
+    // Classic is deliberately NOT editable: it is a hand-built theme whose
+    // token groups are no-ops by construction, which is what makes it the
+    // honest "unthemed" option rather than a theme with nothing to edit.
     if (_id == AppThemes.legacyId) {
       _theme = AppThemes.legacy;
       // Via the per-preset cache, NOT a fresh build — under legacy the root
@@ -155,8 +206,16 @@ class AppThemeController extends ChangeNotifier {
     // Preset first, then derivation: subprofile tones (settings.dim etc.) are
     // computed FROM the resolved text colour, so the whole token surface
     // follows the preset, not just Material's onSurface.
+    final overrides = _overrides;
+    // Colour, shape, type and grain reach the CORE, and must be applied before
+    // the preset resolves — every derived surface tone is computed from them,
+    // and the preset still has to have the last word on text.
+    //
+    // Through the shared resolver rather than inline: the detail layouts fetch
+    // their core from the same place, and a core patched only here would leave
+    // every alternate detail page showing the unedited theme.
     final core = AppThemeAdapter.resolveCoreText(
-      DetailThemes.byId(_id),
+      ThemeCoreResolver.resolve(_id, overrides),
       preset,
     );
     // A premium look is a SPEC, and `fromDetail(core)` alone would deliver
@@ -166,7 +225,22 @@ class AppThemeController extends ChangeNotifier {
     // here rather than in `AppThemes.byId` is what actually puts them on
     // screen: this is the method the live app reads.
     final spec = PremiumLooks.byId(_id);
-    _theme = spec == null ? AppTheme.fromDetail(core) : spec.buildWith(core);
+    if (spec != null) {
+      _theme = overrides.isEmpty
+          ? spec.buildWith(core)
+          : ThemeOverrideApplier.applyToSpec(spec, overrides).buildWith(core);
+    } else if (overrides.isEmpty) {
+      _theme = AppTheme.fromDetail(core);
+    } else {
+      _theme = ThemeOverrideApplier.buildFromDetail(
+        core,
+        overrides,
+        authored: AppThemeAdapter.resolveCoreText(
+          DetailThemes.byId(_id),
+          preset,
+        ),
+      );
+    }
     _themeData = AppThemeAdapter.themed(_theme, preset);
   }
 }
