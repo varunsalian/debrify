@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/imdb_enrichment_service.dart';
+import 'package:debrify/services/imdb_parents_guide_service.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
 import 'package:debrify/theme/app_theme.dart';
@@ -66,6 +67,9 @@ DetailModel _model({
   void Function(bool)? onDepth,
   bool isMovie = false,
   VoidCallback? onBrowse,
+  ImdbEnrichment? extra,
+  ParentsGuideResult? guide,
+  void Function(StremioMeta)? onRecommendationTap,
 }) {
   final item = StremioMeta(
     id: 'tt0903747',
@@ -82,13 +86,14 @@ DetailModel _model({
     isMovie: isMovie,
     isTelevision: false,
     accent: const Color(0xFFABA124),
-    imdbExtra: const ImdbEnrichment(
-      cast: [
-        CastMember(name: 'A Person', character: 'Someone'),
-        CastMember(name: 'B Person', character: 'Someone Else'),
-      ],
-    ),
-    parentsGuide: null,
+    imdbExtra: extra ??
+        const ImdbEnrichment(
+          cast: [
+            CastMember(name: 'A Person', character: 'Someone'),
+            CastMember(name: 'B Person', character: 'Someone Else'),
+          ],
+        ),
+    parentsGuide: guide,
     recommendations: const [],
     primaryLabel: 'Resume',
     sourceCount: 0,
@@ -114,7 +119,7 @@ DetailModel _model({
     onSimklMenu: () {},
     onTrackers: () {},
     onManageSources: () {},
-    onRecommendationTap: (_) {},
+    onRecommendationTap: onRecommendationTap ?? (_) {},
     onAmbientStill: (_) {},
     onDepth: onDepth,
     focus: DetailFocusCoordinator(
@@ -395,5 +400,205 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('LESS'), findsOneWidget,
         reason: 'the synopsis expands in place and can be re-collapsed');
+  });
+
+  // ── IMDb enrichment: honors chips, Parents Guide, Universe, Did You Know ─
+
+  const honorsExtra = ImdbEnrichment(
+    top250Rank: 1,
+    meterRank: 21,
+    meterDelta: -1,
+  );
+
+  ParentsGuideResult pg() => const ParentsGuideResult(categories: [
+        ParentsGuideCategory(
+          id: 'violence',
+          label: 'Violence & Gore',
+          severity: 'Moderate',
+          severityVotes: 204,
+          totalVotes: 262,
+          items: [
+            ParentsGuideItem(text: 'Several fist fights.'),
+            ParentsGuideItem(text: 'A death near the end.', isSpoiler: true),
+          ],
+        ),
+        ParentsGuideCategory(
+          id: 'profanity',
+          label: 'Profanity',
+          severity: 'Severe',
+          severityVotes: 231,
+          totalVotes: 258,
+          items: [ParentsGuideItem(text: 'Frequent strong language.')],
+        ),
+      ]);
+
+  const uniExtra = ImdbEnrichment(universe: [
+    UniverseTitle(
+      imdbId: 'tt3032476',
+      name: 'Better Call Saul',
+      relation: 'Followed by',
+      year: 2015,
+      endYear: 2022,
+      isSeries: true,
+    ),
+    UniverseTitle(
+      imdbId: 'tt9243946',
+      name: 'El Camino',
+      relation: 'Followed by',
+      year: 2019,
+    ),
+  ]);
+
+  const dykExtra = ImdbEnrichment(
+    didYouKnow: [
+      DidYouKnowEntry(kind: 'Trivia', text: 'A fact about the production.'),
+      DidYouKnowEntry(kind: 'Quote', text: 'I am the one who knocks!'),
+    ],
+    triviaTotal: 15,
+    goofsTotal: 3,
+    quotesTotal: 2,
+  );
+
+  Future<void> reveal(WidgetTester tester, Finder target) async {
+    await tester.scrollUntilVisible(
+      target,
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('honors chips render on both tiers, and only when ranked',
+      (tester) async {
+    _surface(tester, _phone);
+    await tester.pumpWidget(
+        _host(_model(extra: honorsExtra), dpad: false, size: _phone));
+    await tester.pumpAndSettle();
+    expect(find.text('№1'), findsOneWidget);
+    expect(find.text('№21'), findsOneWidget);
+    expect(find.text(' ▾1'), findsOneWidget,
+        reason: 'a falling meter shows its drift');
+
+    _surface(tester, _tv);
+    await tester.pumpWidget(_host(_model(), dpad: true, size: _tv));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('TOP 250'), findsNothing,
+        reason: 'no rank → no chip, no reserved space');
+  });
+
+  testWidgets('the guide band renders cards whose plate follows the tap',
+      (tester) async {
+    _surface(tester, _tv);
+    await tester.pumpWidget(
+        _host(_model(guide: pg()), dpad: true, size: _tv));
+    await tester.pumpAndSettle();
+
+    final cards = find.text('Violence & Gore', skipOffstage: false);
+    expect(cards, findsNWidgets(2),
+        reason: 'the category card plus the plate header');
+    expect(find.text('Several fist fights.', skipOffstage: false),
+        findsOneWidget);
+    expect(find.text('A death near the end.', skipOffstage: false),
+        findsNothing,
+        reason: 'spoiler entries are withheld, not rendered');
+    expect(
+        find.text('1 spoiler entry hidden', skipOffstage: false),
+        findsOneWidget);
+
+    await reveal(
+        tester, find.text('Profanity', skipOffstage: false).first);
+    await tester.tap(find.text('Profanity').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Frequent strong language.', skipOffstage: false),
+        findsOneWidget,
+        reason: 'the plate follows the selected card');
+  });
+
+  testWidgets('the wide plate SHOW pill reveals spoilers', (tester) async {
+    _surface(tester, _tv);
+    await tester.pumpWidget(
+        _host(_model(guide: pg()), dpad: true, size: _tv));
+    await tester.pumpAndSettle();
+
+    await reveal(tester, find.text('SHOW', skipOffstage: false));
+    await tester.tap(find.text('SHOW'));
+    await tester.pumpAndSettle();
+    expect(find.text('A death near the end.', skipOffstage: false),
+        findsOneWidget);
+    expect(find.text('HIDE'), findsOneWidget);
+  });
+
+  testWidgets('compact guide is an accordion: closed rows, tap to open',
+      (tester) async {
+    _surface(tester, _phone);
+    await tester.pumpWidget(
+        _host(_model(guide: pg()), dpad: false, size: _phone));
+    await tester.pumpAndSettle();
+
+    await reveal(tester, find.text('Violence & Gore', skipOffstage: false));
+    expect(find.text('Several fist fights.'), findsNothing,
+        reason: 'rows start collapsed');
+    await tester.tap(find.text('Violence & Gore'));
+    await tester.pumpAndSettle();
+    expect(find.text('Several fist fights.'), findsOneWidget);
+    // Its spoiler stays withheld until this row's own SHOW.
+    expect(find.text('A death near the end.'), findsNothing);
+    await tester.tap(find.text('SHOW'));
+    await tester.pumpAndSettle();
+    expect(find.text('A death near the end.'), findsOneWidget);
+  });
+
+  testWidgets('a universe card opens through the recommendation door with a '
+      'synthesized meta', (tester) async {
+    final opened = <StremioMeta>[];
+    _surface(tester, _tv);
+    await tester.pumpWidget(_host(
+      _model(isMovie: true, extra: uniExtra, onRecommendationTap: opened.add),
+      dpad: true,
+      size: _tv,
+    ));
+    await tester.pumpAndSettle();
+
+    await reveal(tester, find.text('Better Call Saul', skipOffstage: false));
+    expect(find.text('FOLLOWED BY', skipOffstage: false), findsNWidgets(2));
+    expect(find.text('2015–2022', skipOffstage: false), findsOneWidget);
+
+    await tester.tap(find.text('Better Call Saul'));
+    expect(opened, hasLength(1));
+    expect(opened.single.imdbId, 'tt3032476');
+    expect(opened.single.type, 'series');
+
+    await tester.tap(find.text('El Camino'));
+    expect(opened, hasLength(2));
+    expect(opened.last.type, 'movie');
+  });
+
+  testWidgets('did you know renders mixed cards, the count line, and the +N '
+      'terminal card', (tester) async {
+    _surface(tester, _tv);
+    await tester.pumpWidget(_host(
+      _model(isMovie: true, extra: dykExtra),
+      dpad: true,
+      size: _tv,
+    ));
+    await tester.pumpAndSettle();
+
+    await reveal(tester, find.text('Did You Know', skipOffstage: false));
+    expect(find.text('15 trivia · 3 goofs · 2 quotes'), findsOneWidget);
+    expect(find.text('TRIVIA', skipOffstage: false), findsOneWidget);
+    expect(find.text('“I am the one who knocks!”', skipOffstage: false),
+        findsOneWidget, reason: 'quotes are set in quotation marks');
+    expect(find.text('+18', skipOffstage: false), findsOneWidget,
+        reason: '20 total, 2 mounted — the rest live on IMDb');
+  });
+
+  testWidgets('absent data mounts none of the new surfaces', (tester) async {
+    _surface(tester, _tv);
+    await tester.pumpWidget(_host(_model(), dpad: true, size: _tv));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Parents Guide', skipOffstage: false), findsNothing);
+    expect(find.text('Universe', skipOffstage: false), findsNothing);
+    expect(find.text('Did You Know', skipOffstage: false), findsNothing);
   });
 }

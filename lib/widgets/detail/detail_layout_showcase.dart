@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../models/stremio_addon.dart';
+import '../../services/imdb_enrichment_service.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../episodes_panel.dart';
 import 'detail_episode_cells.dart';
@@ -76,16 +78,22 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   final List<FocusNode> _actionNodes = [];
   final List<FocusNode> _seasonNodes = [];
   final List<FocusNode> _castNodes = [];
+  final List<FocusNode> _guideNodes = [];
   final List<FocusNode> _sourceNodes = [];
   final List<FocusNode> _recNodes = [];
+  final List<FocusNode> _uniNodes = [];
+  final List<FocusNode> _dykNodes = [];
   final List<FocusNode> _retryNodes = [];
 
   final GlobalKey _identityKey = GlobalKey();
   final GlobalKey _seasonsKey = GlobalKey();
   final GlobalKey _episodesKey = GlobalKey();
   final GlobalKey _castKey = GlobalKey();
+  final GlobalKey _guideKey = GlobalKey();
   final GlobalKey _sourcesKey = GlobalKey();
   final GlobalKey _recsKey = GlobalKey();
+  final GlobalKey _uniKey = GlobalKey();
+  final GlobalKey _dykKey = GlobalKey();
 
   /// The focused band by KEY, never by index. Cast arrives when IMDb
   /// enrichment lands and inserts itself above Sources — an index would then
@@ -175,8 +183,11 @@ class _DetailShowcaseState extends State<DetailShowcase> {
       ..._actionNodes,
       ..._seasonNodes,
       ..._castNodes,
+      ..._guideNodes,
       ..._sourceNodes,
       ..._recNodes,
+      ..._uniNodes,
+      ..._dykNodes,
       ..._retryNodes,
     ]) {
       n.dispose();
@@ -337,18 +348,31 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     }
     _publishDepth();
     final band = bands[_indexOf(bands)];
+    // The compact Parents Guide is the ladder's one VERTICAL band — accordion
+    // rows, not a rail — so its within-band axis is Up/Down, stepping to the
+    // neighbouring band only at its edges. (Compact never has a DPAD, but
+    // dpad:false pages still receive arrow keys from real keyboards.)
+    final verticalBand = (_m?.compact ?? false) && band.key == 'guide';
     switch (e.logicalKey) {
       case LogicalKeyboardKey.arrowDown:
-        _step(bands, 1);
+        if (verticalBand && _liveCol(band) < band.nodes.length - 1) {
+          _walk(band, 1);
+        } else {
+          _step(bands, 1);
+        }
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowUp:
-        _step(bands, -1);
+        if (verticalBand && _liveCol(band) > 0) {
+          _walk(band, -1);
+        } else {
+          _step(bands, -1);
+        }
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowRight:
-        _walk(band, 1);
+        if (!verticalBand) _walk(band, 1);
         return KeyEventResult.handled;
       case LogicalKeyboardKey.arrowLeft:
-        _walk(band, -1);
+        if (!verticalBand) _walk(band, -1);
         return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -361,6 +385,60 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     final host = widget.episodesHost;
     if (host == null || widget.model.isMovie) return _shell(context, null);
     return host((context, view) => _shell(context, view));
+  }
+
+  // ── IMDb-enriched bands: shared predicates ─────────────────────────────
+  //
+  // Band presence and node counts are read in BOTH _bands and _pageBody;
+  // deriving them once is what keeps topology and rendering incapable of
+  // disagreeing.
+
+  ImdbEnrichment? get _x => widget.model.imdbExtra;
+
+  bool get _hasGuide {
+    final g = widget.model.parentsGuide;
+    return g != null && !g.isEmpty;
+  }
+
+  List<UniverseTitle> get _universe => _x?.universe ?? const [];
+
+  /// The band mounts only when at least one READABLE entry survived the
+  /// spoiler filter — a rail holding nothing but a "+N on IMDb" card would be
+  /// a signpost to content the page can't show. Both _bands and _pageBody
+  /// gate on this same list, so topology and rendering agree.
+  List<DidYouKnowEntry> get _dyk => _x?.didYouKnow ?? const [];
+
+  /// Cards mounted, plus the terminal "+N" card when IMDb holds more.
+  int get _dykNodeCount =>
+      _dyk.length + ((_x?.didYouKnowTotal ?? 0) > _dyk.length ? 1 : 0);
+
+  String? get _dykCountLine {
+    final x = _x;
+    if (x == null) return null;
+    final bits = <String>[
+      if (x.triviaTotal > 0) '${x.triviaTotal} trivia',
+      if (x.goofsTotal > 0)
+        '${x.goofsTotal} goof${x.goofsTotal == 1 ? '' : 's'}',
+      if (x.quotesTotal > 0)
+        '${x.quotesTotal} quote${x.quotesTotal == 1 ? '' : 's'}',
+    ];
+    return bits.isEmpty ? null : bits.join(' · ');
+  }
+
+  /// A Universe card opens its title through the SAME door as a More Like
+  /// This card — the recommendation callback, fed a meta synthesized from
+  /// the connection (IMDb id, type, name, poster).
+  void _openUniverse(UniverseTitle u) {
+    final open = widget.model.onRecommendationTap;
+    if (open == null) return;
+    open(StremioMeta(
+      id: u.imdbId,
+      imdbId: u.imdbId,
+      type: u.isSeries ? 'series' : 'movie',
+      name: u.name,
+      poster: u.posterUrl,
+      year: u.year?.toString(),
+    ));
   }
 
   /// The bands as they exist for THIS build. Order here is the DPAD order.
@@ -420,6 +498,18 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         150,
       ));
     }
+    if (_hasGuide) {
+      bands.add(_Band(
+        'guide',
+        _grow(
+          _guideNodes,
+          m.parentsGuide!.categories.length,
+          'showcase-guide',
+        ),
+        _guideKey,
+        130,
+      ));
+    }
     bands.add(_Band(
       'sources',
       _grow(
@@ -438,6 +528,22 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         'recs',
         _grow(_recNodes, m.recommendations.length, 'showcase-rec'),
         _recsKey,
+        150,
+      ));
+    }
+    if (_universe.isNotEmpty) {
+      bands.add(_Band(
+        'universe',
+        _grow(_uniNodes, _universe.length, 'showcase-uni'),
+        _uniKey,
+        150,
+      ));
+    }
+    if (_dyk.isNotEmpty) {
+      bands.add(_Band(
+        'dyk',
+        _grow(_dykNodes, _dykNodeCount, 'showcase-dyk'),
+        _dykKey,
         150,
       ));
     }
@@ -591,6 +697,17 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                 cast: m.cast,
                 nodes: _grow(_castNodes, m.cast.length, 'showcase-cast'),
               ),
+            if (_hasGuide)
+              ShowcaseGuide(
+                key: _guideKey,
+                guide: m.parentsGuide!,
+                nodes: _grow(
+                  _guideNodes,
+                  m.parentsGuide!.categories.length,
+                  'showcase-guide',
+                ),
+                accent: m.accent,
+              ),
             ShowcaseSources(
               key: _sourcesKey,
               sources: m.boundSources,
@@ -610,6 +727,22 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                 items: m.recommendations,
                 nodes: _grow(_recNodes, m.recommendations.length, 'showcase-rec'),
                 onTap: m.onRecommendationTap,
+              ),
+            if (_universe.isNotEmpty)
+              ShowcaseUniverse(
+                key: _uniKey,
+                items: _universe,
+                nodes: _grow(_uniNodes, _universe.length, 'showcase-uni'),
+                onOpen:
+                    m.onRecommendationTap != null ? _openUniverse : null,
+              ),
+            if (_dyk.isNotEmpty)
+              ShowcaseDidYouKnow(
+                key: _dykKey,
+                entries: _dyk,
+                total: _x?.didYouKnowTotal ?? _dyk.length,
+                countLine: _dykCountLine,
+                nodes: _grow(_dykNodes, _dykNodeCount, 'showcase-dyk'),
               ),
             // Reference material, last and unfocusable — it is not a band in
             // the DPAD ladder, it is the page's footer.
