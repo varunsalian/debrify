@@ -721,6 +721,21 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     if (item == null) return const SizedBox.shrink();
     final url = item.background ?? item.poster;
     final flip = _flip;
+    // Both scrims below were tuned against a STILL, where they only have to
+    // keep white text off busy artwork. Left at that strength over a moving
+    // picture they are most of why the trailer reads dim: the identity scrim
+    // blacks out the left two thirds, and the ground fade covers 260 of the
+    // band's 540 across its full width.
+    //
+    // The page already has a name for this — theater, "veils thin to
+    // near-clear" — but that flag is read only inside the Canvas branch and
+    // never reaches this board, so Spotlight armed the timer and got none of
+    // the lift. Driven off the board's own cadence flag instead, which is the
+    // thing that actually knows a picture is rolling.
+    //
+    // Snapped, not tweened: animating a full-width gradient every frame is
+    // exactly what the TV veil policy exists to avoid.
+    final rolling = _rolling;
 
     return Stack(
       fit: StackFit.expand,
@@ -757,12 +772,19 @@ class SpotlightBoardState extends State<SpotlightBoard> {
               gradient: LinearGradient(
                 begin: flip ? const Alignment(1, -0.2) : const Alignment(-1, -0.2),
                 end: flip ? const Alignment(-1, 0.2) : const Alignment(1, 0.2),
-                colors: const [
-                  Color(0xE0000000),
-                  Color(0xA8000000),
-                  Color(0x2E000000),
-                  Color(0x00000000),
-                ],
+                colors: rolling
+                    ? const [
+                        Color(0x9E000000),
+                        Color(0x66000000),
+                        Color(0x1C000000),
+                        Color(0x00000000),
+                      ]
+                    : const [
+                        Color(0xE0000000),
+                        Color(0xA8000000),
+                        Color(0x2E000000),
+                        Color(0x00000000),
+                      ],
                 stops: const [0, 0.26, 0.52, 0.68],
               ),
             ),
@@ -771,11 +793,15 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         // Fades into the SHELF GROUND, not into black — a scrim landing on a
         // colour the page never paints leaves a visible seam where the hero
         // ends.
-        const IgnorePointer(
+        IgnorePointer(
           child: Align(
             alignment: Alignment.bottomCenter,
             child: SizedBox(
-              height: 260,
+              // Pulled in tight while the picture rolls. The seam still has to
+              // be sealed — the bottom stop is the ground colour exactly, so
+              // the hero still meets the shelf without a visible edge — but
+              // the long soft tail costs half the frame for no legibility.
+              height: rolling ? 150 : 260,
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
