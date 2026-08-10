@@ -424,6 +424,19 @@ class ShowcaseIdentity extends StatelessWidget {
         onTap: m.onTrailer,
       ));
     }
+    // The movie source BROWSE — the full searchable list, where a tap plays.
+    // Distinct from the Sources band below, whose cards and "Find sources"
+    // tile land on the title-level BINDING manager. Series don't mount it:
+    // their episode list is the picker. Every other layout kept this button
+    // (detail_identity.dart, Stage); Showcase shipped without it, which left
+    // a movie with no path to the source list at all.
+    if (m.isMovie && m.onBrowse != null && i < actionNodes.length) {
+      actions.add(_Circle(
+        node: next(),
+        icon: Icons.layers_rounded,
+        onTap: m.onBrowse!,
+      ));
+    }
     if (m.onAppMenu != null && i < actionNodes.length) {
       actions.add(_Circle(
         node: next(),
@@ -1558,11 +1571,18 @@ class ShowcaseSources extends StatelessWidget {
   final List<FocusNode> nodes;
   final VoidCallback? onOpen;
 
+  /// Movie only: the full browse/search source list (a tap there PLAYS).
+  /// When non-null the band gets a second entry card after "Find sources",
+  /// and the layout supplies one extra node — topology always matches
+  /// rendering.
+  final VoidCallback? onBrowseAll;
+
   const ShowcaseSources({
     super.key,
     required this.sources,
     required this.nodes,
     required this.onOpen,
+    this.onBrowseAll,
   });
 
   @override
@@ -1574,7 +1594,7 @@ class ShowcaseSources extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           padding: EdgeInsets.symmetric(
               horizontal: ShowcaseMetrics.of(context).gutter),
-          itemCount: sources.length + 1,
+          itemCount: sources.length + 1 + (onBrowseAll != null ? 1 : 0),
           separatorBuilder: (_, __) =>
               SizedBox(width: ShowcaseMetrics.of(context).srcGap),
           itemBuilder: (context, i) {
@@ -1583,6 +1603,14 @@ class ShowcaseSources extends StatelessWidget {
                 node: nodes[i],
                 onTap: onOpen,
                 add: true,
+              );
+            }
+            if (i == sources.length + 1) {
+              return _SourceCard(
+                node: nodes[i],
+                onTap: onBrowseAll,
+                add: true,
+                addLabel: '⌕  Browse all',
               );
             }
             return _SourceCard(
@@ -1599,6 +1627,9 @@ class _SourceCard extends StatefulWidget {
   final FocusNode node;
   final SeriesSource? source;
   final bool add;
+
+  /// The add-style card's label. Defaults to the binding manager's wording.
+  final String addLabel;
   final VoidCallback? onTap;
 
   const _SourceCard({
@@ -1606,6 +1637,7 @@ class _SourceCard extends StatefulWidget {
     required this.onTap,
     this.source,
     this.add = false,
+    this.addLabel = '＋  Find sources',
   });
 
   @override
@@ -1655,7 +1687,7 @@ class _SourceCardState extends State<_SourceCard> {
               ),
               child: widget.add
                   ? Center(
-                      child: Text('＋  Find sources',
+                      child: Text(widget.addLabel,
                           style: _t(10.5, a: 0.66)),
                     )
                   : Row(

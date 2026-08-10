@@ -62,11 +62,15 @@ EpisodesPanelView _view({
   );
 }
 
-DetailModel _model({void Function(bool)? onDepth}) {
+DetailModel _model({
+  void Function(bool)? onDepth,
+  bool isMovie = false,
+  VoidCallback? onBrowse,
+}) {
   final item = StremioMeta(
     id: 'tt0903747',
     imdbId: 'tt0903747',
-    type: 'series',
+    type: isMovie ? 'movie' : 'series',
     name: 'A Show',
     description: 'A synopsis long enough to be clamped on a phone, where two '
         'lines is all the identity affords before MORE.',
@@ -75,7 +79,7 @@ DetailModel _model({void Function(bool)? onDepth}) {
   );
   return DetailModel(
     item: item,
-    isMovie: false,
+    isMovie: isMovie,
     isTelevision: false,
     accent: const Color(0xFFABA124),
     imdbExtra: const ImdbEnrichment(
@@ -102,7 +106,7 @@ DetailModel _model({void Function(bool)? onDepth}) {
     simklRating: null,
     showPrimary: true,
     onPrimary: () {},
-    onBrowse: null,
+    onBrowse: onBrowse,
     onTrailer: () {},
     onSelectSource: () {},
     onAppMenu: () {},
@@ -143,16 +147,18 @@ Widget _host(
             body: DetailShowcase(
               model: m,
               dpad: dpad,
-              episodesHost: (builder) => Builder(
-                builder: (context) => builder(
-                  context,
-                  _view(
-                    manySeasons: manySeasons,
-                    options: options,
-                    selectSeason: selectSeason,
-                  ),
-                ),
-              ),
+              episodesHost: m.isMovie
+                  ? null
+                  : (builder) => Builder(
+                        builder: (context) => builder(
+                          context,
+                          _view(
+                            manySeasons: manySeasons,
+                            options: options,
+                            selectSeason: selectSeason,
+                          ),
+                        ),
+                      ),
             ),
           ),
         ),
@@ -335,6 +341,47 @@ void main() {
     expect(ambient.visible, isFalse,
         reason: 'the DPAD page answers depth with the band cursor, and the '
             'cursor never left the identity');
+  });
+
+  testWidgets('a movie mounts the source BROWSE — identity circle and band '
+      'card — and both fire onBrowse', (tester) async {
+    _surface(tester, _phone);
+    var browsed = 0;
+    await tester.pumpWidget(_host(
+      _model(isMovie: true, onBrowse: () => browsed++),
+      dpad: false,
+      size: _phone,
+    ));
+    await tester.pumpAndSettle();
+
+    // The identity's layers circle (Showcase shipped without ANY route to
+    // the movie source list — the band's cards go to the BINDING manager).
+    expect(find.byIcon(Icons.layers_rounded), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.layers_rounded));
+    expect(browsed, 1);
+
+    // And the band's labelled entry beside "Find sources".
+    await tester.drag(find.byType(DetailShowcase), const Offset(0, -900));
+    await tester.pumpAndSettle();
+    final browseCard = find.text('⌕  Browse all', skipOffstage: false);
+    expect(browseCard, findsOneWidget);
+    await tester.ensureVisible(browseCard);
+    await tester.pumpAndSettle();
+    await tester.tap(browseCard, warnIfMissed: false);
+    expect(browsed, 2);
+  });
+
+  testWidgets('a series mounts NO browse — the episode list is its picker',
+      (tester) async {
+    _surface(tester, _phone);
+    await tester.pumpWidget(_host(
+      _model(onBrowse: () {}),
+      dpad: false,
+      size: _phone,
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.layers_rounded), findsNothing);
+    expect(find.text('⌕  Browse all', skipOffstage: false), findsNothing);
   });
 
   testWidgets('the compact identity is centered with a MORE expander',

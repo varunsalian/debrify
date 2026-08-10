@@ -422,7 +422,14 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     }
     bands.add(_Band(
       'sources',
-      _grow(_sourceNodes, m.boundSources.length + 1, 'showcase-source'),
+      _grow(
+        _sourceNodes,
+        // Bound cards + "Find sources" + (movies) "Browse all". The count
+        // mirrors ShowcaseSources' itemCount exactly — a node the rendering
+        // doesn't mount is a place arrow keys can strand focus.
+        m.boundSources.length + 1 + (m.isMovie && m.onBrowse != null ? 1 : 0),
+        'showcase-source',
+      ),
       _sourcesKey,
       165,
     ));
@@ -589,10 +596,13 @@ class _DetailShowcaseState extends State<DetailShowcase> {
               sources: m.boundSources,
               nodes: _grow(
                 _sourceNodes,
-                m.boundSources.length + 1,
+                m.boundSources.length +
+                    1 +
+                    (m.isMovie && m.onBrowse != null ? 1 : 0),
                 'showcase-source',
               ),
               onOpen: m.onManageSources ?? m.onSelectSource,
+              onBrowseAll: m.isMovie ? m.onBrowse : null,
             ),
             if (m.recommendations.isNotEmpty)
               ShowcaseRecs(
@@ -616,6 +626,9 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     if (m.onTrackers != null) n++;
     if (m.onTrackersSecondary != null) n++;
     if (m.hasTrailer) n++;
+    // The movie source browse — mounted between trailer and the app menu by
+    // ShowcaseIdentity; the count here is what keeps its node real.
+    if (m.isMovie && m.onBrowse != null) n++;
     if (m.onAppMenu != null) n++;
     return n;
   }
