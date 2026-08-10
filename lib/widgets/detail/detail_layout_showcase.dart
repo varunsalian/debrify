@@ -36,10 +36,19 @@ class DetailShowcase extends StatefulWidget {
   )?
   episodesHost;
 
+  /// The INPUT axis: true on a television. False (phones, tablets, desktop)
+  /// unlocks the touch drivers — the scroll-driven dissolve, the kebab on
+  /// episode cells, and (under 600 wide) the compact presentation: centered
+  /// identity, integrated episode card, season pill + popup. Width never
+  /// implies input — a narrow TV keeps the wide presentation so the DPAD
+  /// ladder's widgets all exist.
+  final bool dpad;
+
   const DetailShowcase({
     super.key,
     required this.model,
     required this.episodesHost,
+    this.dpad = true,
   });
 
   @override
@@ -89,6 +98,38 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   /// dissolve and the sticky logo together, so they can never disagree.
   bool get _deep => _bandKey != 'identity';
 
+  /// The touch counterpart, driven by scroll offset with hysteresis (40% of
+  /// the viewport in, 30% out — a gap so the boundary can't flicker under a
+  /// finger resting exactly on it). SEPARATE state from [_bandKey]: on touch
+  /// nothing ever focuses, so the band cursor must not be faked to fire the
+  /// dissolve — it is the DPAD ladder's memory.
+  bool _scrollDeep = false;
+
+  /// The one depth every consumer reads — the three visual layers, the
+  /// published [DetailModel.onDepth], and nothing else. DPAD pages answer
+  /// with the band cursor; touch pages with the scroll.
+  bool get _effectiveDeep => widget.dpad ? _deep : _scrollDeep;
+
+  /// The viewport measured by [_page]'s LayoutBuilder — the hysteresis
+  /// thresholds are fractions of it.
+  double _viewportH = 0;
+
+  /// The page's metrics, computed once per layout pass in [_pageBody] and
+  /// read directly by [_peekFor]/[_episodes] (whose State context sits above
+  /// the inherited scope the bands read).
+  ShowcaseMetrics? _m;
+
+  void _onScrollDepth() {
+    if (widget.dpad || _viewportH <= 0 || !_scroll.hasClients) return;
+    final off = _scroll.offset;
+    final next = _scrollDeep
+        ? off > _viewportH * 0.30 // stays deep until it drops below 30%
+        : off > _viewportH * 0.40; // becomes deep past 40%
+    if (next == _scrollDeep) return;
+    setState(() => _scrollDeep = next);
+    _publishDepth();
+  }
+
   /// The last depth published to the shell, so only genuine transitions are
   /// sent and a rebuild cannot re-announce the same one.
   bool _publishedDeep = false;
@@ -108,7 +149,10 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   }
 
   void _publishDepth() {
-    final deep = _deep;
+    // The EFFECTIVE depth: the parent swaps its sharp/ambient backdrop and
+    // stops trailers off this signal, and it must agree with the three layers
+    // this page paints — whichever input is driving.
+    final deep = _effectiveDeep;
     if (deep == _publishedDeep) return;
     _publishedDeep = deep;
     final cb = widget.model.onDepth;
@@ -116,6 +160,12 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) cb(deep);
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.dpad) _scroll.addListener(_onScrollDepth);
   }
 
   @override
@@ -218,7 +268,10 @@ class _DetailShowcaseState extends State<DetailShowcase> {
       (viewport - _peekFor(view)).clamp(240.0, double.infinity);
 
   double _peekFor(EpisodesPanelView? view) {
-    final m = ShowcaseMetrics.of(context);
+    // The State's context sits ABOVE the metrics scope installed in [_page],
+    // so read the field it set — the `.of` fallback would recompute from
+    // MediaQuery and could disagree on tvOS. Null only before first layout.
+    final m = _m ?? ShowcaseMetrics.of(context);
     // The TOP EDGE of an episode still and nothing more.
     //
     // This was `stillH * 0.34 + 46`, which showed most of a row — captions
@@ -227,7 +280,9 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     // 45pt of artwork showing and no text at all.
     final episodePeek = m.stillH * 0.18;
     final hasSeasons = view != null && view.seasons.length > 1;
-    return hasSeasons ? episodePeek + _seasonsBandHeight : episodePeek;
+    return hasSeasons
+        ? episodePeek + (m.compact ? _seasonPillBandHeight : _seasonsBandHeight)
+        : episodePeek;
   }
 
   /// The seasons row's own height plus the space around it.
@@ -236,6 +291,10 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   /// guess over-reserved by around 60, and every one of those pixels went to
   /// showing more of the episode row than was ever intended.
   static const double _seasonsBandHeight = 50;
+
+  /// Compact renders the season control as a 34pt pill with more air around
+  /// it (a finger needs what a remote never did).
+  static const double _seasonPillBandHeight = 56;
 
   void _reveal(_Band band) {
     final ctx = band.anchor.currentContext;
@@ -314,9 +373,19 @@ class _DetailShowcaseState extends State<DetailShowcase> {
       ], _identityKey, 0),
     ];
     if (view != null && view.seasons.length > 1) {
+      // Compact renders ONE control — the season pill — so its band carries
+      // exactly one node. Listing a node per season here while the rendering
+      // mounts a single pill would let a desktop arrow key focus a detached
+      // node (dpad:false still receives arrow keys from real keyboards) and
+      // strand the cursor. Topology always matches rendering.
+      final compact = (_m?.compact ?? false);
       bands.add(_Band(
         'seasons',
-        _grow(_seasonNodes, view.seasons.length, 'showcase-season'),
+        _grow(
+          _seasonNodes,
+          compact ? 1 : view.seasons.length,
+          'showcase-season',
+        ),
         _seasonsKey,
         110,
       ));
@@ -373,18 +442,23 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   /// frame's episodes — so on the first frame the ladder had no episode band
   /// at all, and every season swap moved the DPAD map one frame late.
   Widget _shell(BuildContext context, EpisodesPanelView? view) {
-    final bands = _bands(view);
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
-      onKeyEvent: (_, e) => _onKey(bands, e),
-      child: _page(context, bands, view),
+      // Built PER KEY EVENT, not captured at build: the band list depends on
+      // the metrics tier (compact's seasons band carries one node, wide's one
+      // per season), and the tier is only known inside _page's LayoutBuilder.
+      // A list captured here would describe the PREVIOUS frame's tier — on
+      // the first compact frame that meant one node per season advertised
+      // while the pill mounts only the first, and arrow keys could focus a
+      // detached node.
+      onKeyEvent: (_, e) => _onKey(_bands(view), e),
+      child: _page(context, view),
     );
   }
 
   Widget _page(
     BuildContext context,
-    List<_Band> bands,
     EpisodesPanelView? view,
   ) {
     final m = widget.model;
@@ -418,8 +492,23 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     }
 
     return LayoutBuilder(
-      builder: (context, constraints) =>
-          _pageBody(context, bands, view, m, constraints.maxHeight),
+      builder: (context, constraints) {
+        // The page's metrics, once per layout pass: the tier needs the REAL
+        // width (tvOS insets the content for overscan, so MediaQuery lies),
+        // and compact additionally requires touch — a narrow TV must keep the
+        // wide presentation so every DPAD band's widgets exist.
+        final metrics = ShowcaseMetrics(
+          constraints.maxWidth,
+          compact: !widget.dpad && constraints.maxWidth < 600,
+        );
+        _m = metrics;
+        // Bands AFTER metrics — their topology follows the tier (see _shell).
+        final bands = _bands(view);
+        return ShowcaseMetricsScope(
+          metrics: metrics,
+          child: _pageBody(context, bands, view, m, constraints.maxHeight),
+        );
+      },
     );
   }
 
@@ -430,15 +519,23 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     DetailModel m,
     double viewport,
   ) {
+    _viewportH = viewport;
     return Stack(
       fit: StackFit.expand,
       children: [
         // The ambient field. A separate layer from the backdrop rather than a
         // filter over it, so the crossfade is between two static images and
-        // nothing is blurred per frame.
-        ShowcaseAmbient(url: m.backdrop, visible: _deep),
-        ShowcaseBackdropScrim(visible: !_deep),
-        ShowcaseStickyLogo(url: m.logo, name: m.name, visible: _deep),
+        // nothing is blurred per frame. All three read the EFFECTIVE depth —
+        // band-driven on DPAD, scroll-driven on touch — and can never
+        // disagree with what [_publishDepth] told the parent.
+        ShowcaseAmbient(url: m.backdrop, visible: _effectiveDeep),
+        ShowcaseBackdropScrim(
+          visible: !_effectiveDeep,
+          // Rolling trailer → bed pulled in tight, video clear. Off-TV only:
+          // the TV scrims are the shipped, panel-tuned ones.
+          thinned: !widget.dpad && m.trailerPlaying,
+        ),
+        ShowcaseStickyLogo(url: m.logo, name: m.name, visible: _effectiveDeep),
         ListView(
           controller: _scroll,
           padding: EdgeInsets.zero,
@@ -524,15 +621,16 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   }
 
   Widget _episodes(EpisodesPanelView view) {
-    final m = ShowcaseMetrics.of(context);
+    final m = _m ?? ShowcaseMetrics.of(context);
     return Padding(
       key: _episodesKey,
       padding: const EdgeInsets.only(top: 6),
       child: SizedBox(
         // The still, plus the caption block below it, plus headroom for the
         // lift. Derived from the still's own measured height so it tracks the
-        // viewport instead of assuming one.
-        height: m.stillH + 108,
+        // viewport instead of assuming one. Compact swaps the caption block
+        // for the integrated card's plate.
+        height: m.compact ? m.stillH + m.epPlate : m.stillH + 108,
         child: ListView.separated(
           // The lift, its 7px rise and its 25px shadow all paint outside the
           // cell; a clipping viewport slices exactly the effect off.
@@ -561,13 +659,27 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                   : null,
               ensureVisible: true,
               ensureVisibleAxis: Axis.horizontal,
-              builder: (context, focused) => ShowcaseEpisodeCell(
-                episode: ep,
-                focused: focused,
-                progress: view.progressOf(ep),
-                isNext: view.isNext(ep),
-                fallbackImage: view.showImageUrl,
-              ),
+              builder: (context, focused) => m.compact
+                  ? ShowcaseEpisodeCardCompact(
+                      episode: ep,
+                      focused: focused,
+                      progress: view.progressOf(ep),
+                      isNext: view.isNext(ep),
+                      fallbackImage: view.showImageUrl,
+                      onOptions: () => view.options(ep),
+                    )
+                  : ShowcaseEpisodeCell(
+                      episode: ep,
+                      focused: focused,
+                      progress: view.progressOf(ep),
+                      isNext: view.isNext(ep),
+                      fallbackImage: view.showImageUrl,
+                      // Touch/pointer without the compact card still needs a
+                      // visible way into the options that hold-OK provides on
+                      // TV — the kebab. TV passes null and renders untouched.
+                      onOptions:
+                          widget.dpad ? null : () => view.options(ep),
+                    ),
             );
           },
         ),

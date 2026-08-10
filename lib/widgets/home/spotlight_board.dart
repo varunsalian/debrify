@@ -161,6 +161,14 @@ class SpotlightBoard extends StatefulWidget {
   /// colour, exactly as the other stage layouts do.
   final void Function(String? art, Color? tint)? onAmbient;
 
+  /// The INPUT axis, distinct from size: true on a television, where the
+  /// remote drives everything and the cadence is armed by hero focus. False
+  /// on phones, tablets and desktop — the hero advances on its own clock,
+  /// pages on swipe and dot taps, and (under 600 wide) the whole board takes
+  /// the compact presentation. Width never implies input: a narrow TV must
+  /// stay a TV.
+  final bool dpad;
+
   const SpotlightBoard({
     super.key,
     required this.hero,
@@ -175,6 +183,7 @@ class SpotlightBoard extends StatefulWidget {
     this.trailer,
     this.trailersEnabled = true,
     this.onAmbient,
+    this.dpad = true,
   });
 
   /// The scrolled ground, taken from the THEME.
@@ -239,14 +248,52 @@ class SpotlightBoard extends StatefulWidget {
 /// non-pill sidebar styles, for the rail). Sizing off the screen makes every
 /// card proportionally too large for the region it is drawn in — a 260-wide
 /// card in a 1920 screen becomes a 260-wide card in a ~1800 visible band.
+/// The presentation tier — the SIZE axis, chosen from the board's own width
+/// but only ever leaving `wide` when the input is not a remote. A narrow TV
+/// (UI scale, odd panel) keeps the wide presentation with proportionally
+/// smaller cards, so the DPAD ladder never targets widgets that don't exist.
+enum _Tier { compact, mid, wide }
+
 class _M {
   final double w;
-  const _M(this.w);
+  final _Tier tier;
 
-  double get gutter => w * (84 / 1920);
-  double get poster => w * (260 / 1920);
+  _M(this.w, {bool dpad = true})
+      : tier = dpad
+            ? _Tier.wide
+            : w < 600
+                ? _Tier.compact
+                : w < 1100
+                    ? _Tier.mid
+                    : _Tier.wide;
+
+  bool get compact => tier == _Tier.compact;
+
+  /// Compact values are MEASURED off the Apple TV phone app on the reference
+  /// device (see spotlight_responsive_mockup/): gutter 4.8%, posters 24.3%
+  /// with 4.6% gaps (~2.9 per screen plus a peek), fixed type. Mid is the
+  /// tablet tier — the TV fractions with the posters bumped for fingers.
+  /// Wide is the TV mock's 1920-scale table, byte-for-byte what shipped.
+  double get gutter => compact ? w * 0.048 : w * (84 / 1920);
+  double get poster => switch (tier) {
+        _Tier.compact => w * 0.243,
+        _Tier.mid => w * 0.16,
+        _Tier.wide => w * (260 / 1920),
+      };
   double get posterH => poster * (390 / 260);
-  double get gap => w * (40 / 1920);
+  double get gap => switch (tier) {
+        _Tier.compact => w * 0.046,
+        _Tier.mid => w * 0.026,
+        _Tier.wide => w * (40 / 1920),
+      };
+
+  /// Card corner radius. 7 is the TV mock's number, moved here from the
+  /// card's hardcode; compact grows it the way every phone card idiom does.
+  double get radius => switch (tier) {
+        _Tier.compact => 10.0,
+        _Tier.mid => 8.0,
+        _Tier.wide => 7.0,
+      };
 
   /// What the focus effect paints OUTSIDE the resting card, which the row
   /// reserves so the lift lands on ground instead of on the headings.
@@ -259,12 +306,19 @@ class _M {
   /// offset) and is deliberately NOT reserved: it is a soft blur whose far
   /// edge is invisible, and paying for it would push every row apart by more
   /// than the reference puts between them.
-  double get liftUp => posterH * 0.05 + 7;
+  ///
+  /// Zero on compact: nothing there ever focuses or hovers, so the lift
+  /// never fires and the reservation would just be dead air between rows.
+  double get liftUp => compact ? 0 : posterH * 0.05 + 7;
 
   /// Downward the rise works in our favour, so only the growth is reserved.
-  double get liftDown => posterH * 0.05;
-  double get title => w * (26 / 1920);
-  double get caption => w * (21 / 1920);
+  double get liftDown => compact ? 0 : posterH * 0.05;
+  double get title => compact ? 19.0 : w * (26 / 1920);
+  double get caption => compact ? 12.0 : w * (21 / 1920);
+
+  /// The caption strip below the art — compact only; wide overlays it on the
+  /// card. One 12pt line plus its 6px gap.
+  double get captionBlock => compact ? 24.0 : 0;
 }
 
 class SpotlightBoardState extends State<SpotlightBoard> {
@@ -285,10 +339,15 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// by mistake.
   static const double _heroFraction = 1.0;
 
+  /// Compact keeps the hero to ~64% of the board — the Apple phone measure —
+  /// with the rows below it in flow rather than riding over the art.
+  static const double _heroFractionCompact = 0.64;
+
   /// How far the first shelf rides up over the hero's lower edge, as a
   /// fraction of the hero. Was 88 of 540, kept in proportion — with a
   /// full-height hero this is what puts the cards OVER the artwork rather than
-  /// below it.
+  /// below it. Compact has no overlap: the hero fades into the ground and the
+  /// first shelf starts ON the ground (the reference does exactly this).
   static const double _shelfOverlapFraction = 88 / 540;
 
   final ScrollController _scroll = ScrollController();
@@ -319,6 +378,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// simply loops until it does.
   static const Duration _artDwell = Duration(seconds: 4);
 
+  /// The touch reel's clock — slower than TV's art dwell, because there is no
+  /// trailer step here: each tick IS the advance. Six seconds is the mock's
+  /// number, taken from the Apple phone app.
+  static const Duration _touchDwell = Duration(seconds: 6);
+
   Timer? _cadence;
 
   /// Whether the cadence has asked the host for a trailer.
@@ -339,7 +403,23 @@ class SpotlightBoardState extends State<SpotlightBoard> {
 
   void _restartCadence() {
     _cadence?.cancel();
+    // Nulled, not just cancelled: didUpdateWidget's touch reconcile decides
+    // "is a timer armed" by null-ness, and a cancelled-but-non-null handle
+    // reads as armed — a 2→1 shrink through the removed-item branch would
+    // then freeze the reel forever, because the later 1→2 growth declines to
+    // re-arm.
+    _cadence = null;
     _rolling = false;
+    if (!mounted) return;
+    // Touch: the reel runs on its own clock — nothing ever focuses the hero,
+    // so the focus gate below would freeze it forever. Route/lifecycle checks
+    // happen at FIRE time (_onTouchTick), so a covered or backgrounded board
+    // never pages under a detail page or a lock screen.
+    if (!widget.dpad) {
+      if (widget.hero.length < 2) return;
+      _cadence = Timer(_touchDwell, _onTouchTick);
+      return;
+    }
     // Frozen while focus is elsewhere: a hero that keeps paging while you are
     // three shelves down moves the page under you.
     // Frozen when focus is off the hero. `_row == -1` alone is NOT that test:
@@ -349,8 +429,37 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // covered. The node's own `hasFocus` is the real question.
     if (_row >= 0 || !widget.heroNode.hasFocus) return;
     if (widget.hero.length < 2 && !widget.trailersEnabled) return;
-    if (!mounted) return;
     _cadence = Timer(_artDwell, _onArtDone);
+  }
+
+  /// One tick of the touch reel. Skips (but stays armed) while a pushed route
+  /// covers the board or the app is backgrounded — advancing a hero nobody
+  /// can see just moves the page under the user on their way back.
+  void _onTouchTick() {
+    if (!mounted) return;
+    if (widget.hero.length < 2) {
+      _cadence = null;
+      return;
+    }
+    final route = ModalRoute.of(context);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    final visible = (route == null || route.isCurrent) &&
+        (lifecycle == null || lifecycle == AppLifecycleState.resumed);
+    if (visible && widget.hero.length > 1) {
+      final n = widget.hero.length;
+      setState(() => _heroId = widget.hero[(_heroIndex + 1) % n].id);
+      _probe();
+    }
+    _cadence = Timer(_touchDwell, _onTouchTick);
+  }
+
+  /// Dot tap / swipe target: show slide [i] and restart the clock.
+  void _jumpTo(int i) {
+    if (i < 0 || i >= widget.hero.length) return;
+    _stopRolling();
+    setState(() => _heroId = widget.hero[i].id);
+    _probe();
+    _restartCadence();
   }
 
   void _onArtDone() {
@@ -416,6 +525,19 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       _stopRolling();
       _heroId = widget.hero.isNotEmpty ? widget.hero.first.id : null;
       _restartCadence();
+    } else if (!widget.dpad) {
+      // Touch reel reconcile. The board often first builds with a single
+      // hero item (the first section streams in) and grows later: the parked
+      // id never vanished, so the branch above doesn't run — but a reel that
+      // gained a second slide with no timer armed would never advance. The
+      // inverse holds too: a reel that shrank to one slide has a six-second
+      // timer rescheduling itself forever for nothing.
+      if (widget.hero.length > 1 && _cadence == null) {
+        _restartCadence();
+      } else if (widget.hero.length < 2 && _cadence != null) {
+        _cadence!.cancel();
+        _cadence = null;
+      }
     }
     // A board reload can shrink or reorder the shelves under a parked cursor.
     // `_row` is positional, so without this the next arrow key indexes past
@@ -714,13 +836,16 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       onKeyEvent: (_, e) => _onKey(e),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final m = _M(constraints.maxWidth);
+          final m = _M(constraints.maxWidth, dpad: widget.dpad);
           // The hero is measured against the board's real height, so it is the
           // same share of the screen on every panel.
           final viewport = constraints.maxHeight.isFinite
               ? constraints.maxHeight
               : MediaQuery.sizeOf(context).height;
-          return _board(m, viewport * _heroFraction);
+          return _board(
+            m,
+            viewport * (m.compact ? _heroFractionCompact : _heroFraction),
+          );
         },
       ),
     );
@@ -744,9 +869,10 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             // Laid out 88 short so the first shelf sits over the hero's lower
             // edge; the hero PAINTS its full height by overflowing downward,
             // which the ListView clips only below the shelves that cover it
-            // anyway.
+            // anyway. Compact has no overlap — the hero fades to ground and
+            // the rows follow in flow.
             SizedBox(
-              height: heroH * (1 - _shelfOverlapFraction),
+              height: heroH * (1 - (m.compact ? 0 : _shelfOverlapFraction)),
               child: OverflowBox(
                 alignment: Alignment.topCenter,
                 maxHeight: heroH,
@@ -778,8 +904,151 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   }
 
   Widget _hero(_M m) {
+    if (m.compact) return _heroCompact(m);
+    return _heroWide(m);
+  }
+
+  /// The phone hero — the Apple phone idiom, not the TV hero cropped.
+  ///
+  /// Centered identity stack over the art's lower third (logo → metadata →
+  /// CTA → dots), a vertical scrim whose bottom stop is the page ground
+  /// exactly (the seam rule), swipe paging, tappable dots. No description
+  /// line and no side-flip heuristic: there is no "side" when the stack is
+  /// centered.
+  Widget _heroCompact(_M m) {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
+    final url = item.background ?? item.poster;
+    final app = AppThemeScope.of(context);
+    final ground = SpotlightBoard.groundOf(app);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragEnd: (details) {
+        final v = details.primaryVelocity ?? 0;
+        if (v.abs() < 120) return;
+        _jumpTo((_heroIndex + (v < 0 ? 1 : -1) + widget.hero.length) %
+            widget.hero.length);
+      },
+      onTap: () {
+        final addon = widget.heroAddon;
+        if (addon != null) widget.onHeroOpen(item, addon);
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (url != null && url.isNotEmpty)
+            CachedNetworkImage(
+              imageUrl: url,
+              key: ValueKey(url),
+              fit: BoxFit.cover,
+              cacheManager: DebrifyImageCache.manager,
+              memCacheWidth: 900,
+              fadeInDuration: const Duration(milliseconds: 420),
+              placeholder: (_, __) => ColoredBox(color: ground),
+              errorWidget: (_, __, ___) => ColoredBox(color: ground),
+            ),
+          // One vertical scrim doing both jobs: a light cap up top so the
+          // status-bar clock stays readable over bright art, and a heavy bed
+          // below for the identity — ending ON the ground so the hero meets
+          // the rows without a seam.
+          IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0x6B000000),
+                    const Color(0x00000000),
+                    const Color(0x00000000),
+                    ground.withValues(alpha: 0.78),
+                    ground,
+                  ],
+                  stops: const [0, 0.24, 0.46, 0.8, 1],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 12,
+            child: _identityCompact(item, m),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _identityCompact(StremioMeta item, _M m) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Center(
+          child: _LogoOrTitle(
+            url: item.logo,
+            name: item.name,
+            align: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          [
+            item.type == 'series' ? 'Series' : 'Film',
+            ...(item.genres ?? const []).take(2),
+          ].join(' · '),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12.5,
+            color: Colors.white.withValues(alpha: 0.86),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // The CTA the mock promises. "Open" rather than "Play": it routes to
+        // the detail page (the same thing OK does on TV) — a button that says
+        // Play and then shows a detail page would be a lie.
+        _HeroOpenPill(
+          onTap: () {
+            final addon = widget.heroAddon;
+            if (addon != null) widget.onHeroOpen(item, addon);
+          },
+        ),
+        if (widget.hero.length > 1) ...[
+          const SizedBox(height: 13),
+          _dots(tappable: true),
+        ],
+        const SizedBox(height: 4),
+      ],
+    );
+  }
+
+  /// The TV hero, unchanged.
+  Widget _heroWide(_M m) {
+    final item = _heroItem;
+    if (item == null) return const SizedBox.shrink();
+    final wide = _heroWideStack(m, item);
+    if (widget.dpad) return wide;
+    // Desktop and tablet drive the same wide layout by pointer/touch: swipe
+    // pages the reel, a tap opens the showcased title — the exact gestures
+    // the compact hero has. TV returns the bare stack above, untouched.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragEnd: (details) {
+        final v = details.primaryVelocity ?? 0;
+        if (v.abs() < 120 || widget.hero.length < 2) return;
+        _jumpTo((_heroIndex + (v < 0 ? 1 : -1) + widget.hero.length) %
+            widget.hero.length);
+      },
+      onTap: () {
+        final addon = widget.heroAddon;
+        if (addon != null) widget.onHeroOpen(item, addon);
+      },
+      child: wide,
+    );
+  }
+
+  Widget _heroWideStack(_M m, StremioMeta item) {
     final url = item.background ?? item.poster;
     final flip = _flip;
     // Both scrims below were tuned against a STILL, where they only have to
@@ -911,7 +1180,10 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             left: 0,
             right: 0,
             bottom: 92,
-            child: _dots(),
+            // Tappable wherever there is no remote — desktop and tablet run
+            // this wide layout too. On TV the padding-free dots render
+            // byte-identically to HEAD.
+            child: _dots(tappable: !widget.dpad),
           ),
         // The hero's focusable surface. IgnorePointer-free and zero-sized in
         // paint terms: the hero shows focus through the page, not through a
@@ -973,19 +1245,30 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     );
   }
 
-  Widget _dots() => Row(
+  Widget _dots({bool tappable = false}) => Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           for (var i = 0; i < widget.hero.length; i++)
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOut,
-              margin: const EdgeInsets.symmetric(horizontal: 2.25),
-              width: i == _heroIndex ? 11 : 4,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: i == _heroIndex ? 0.95 : 0.34),
-                borderRadius: BorderRadius.circular(2),
+            GestureDetector(
+              // A 4px dot is not a tap target — the padding is.
+              onTap: tappable ? () => _jumpTo(i) : null,
+              behavior: tappable ? HitTestBehavior.opaque : null,
+              child: Padding(
+                padding: tappable
+                    ? const EdgeInsets.symmetric(horizontal: 2, vertical: 8)
+                    : EdgeInsets.zero,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOut,
+                  margin: const EdgeInsets.symmetric(horizontal: 2.25),
+                  width: i == _heroIndex ? 11 : 4,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white
+                        .withValues(alpha: i == _heroIndex ? 0.95 : 0.34),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
             ),
         ],
@@ -1030,8 +1313,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
           padding: EdgeInsets.only(top: m.liftUp, bottom: m.liftDown),
           child: SizedBox(
             // The viewport IS the card now, so the tight cross-axis constraint
-            // hands each card exactly the height it asked for.
-            height: m.posterH,
+            // hands each card exactly the height it asked for. On compact the
+            // caption strip below the art is part of the card, and the
+            // viewport grows by exactly that strip — the art box itself stays
+            // posterH, so the ratio guard still holds.
+            height: m.posterH + m.captionBlock,
             child: ListView.separated(
               // The lift paints into the padding above and below rather than
               // being sliced off at the viewport edge.
@@ -1048,6 +1334,10 @@ class SpotlightBoardState extends State<SpotlightBoard> {
                 // tiles sits on one baseline instead of stepping up and down.
                 height: m.posterH,
                 caption: m.caption,
+                radius: m.radius,
+                captionBelow: m.compact,
+                captionBlock: m.captionBlock,
+                hoverable: !widget.dpad,
               ),
             ),
           ),
@@ -1081,8 +1371,11 @@ class _LogoOrTitle extends StatelessWidget {
       ),
     );
     if (url == null || url!.isEmpty) return text;
-    final corner =
-        align == TextAlign.right ? Alignment.bottomRight : Alignment.bottomLeft;
+    final corner = align == TextAlign.right
+        ? Alignment.bottomRight
+        : align == TextAlign.center
+            ? Alignment.bottomCenter
+            : Alignment.bottomLeft;
     // A RESERVED slot, not a maximum.
     //
     // This was a `ConstrainedBox(maxWidth: 235, maxHeight: 60)`, which sizes
@@ -1124,6 +1417,42 @@ class _LogoOrTitle extends StatelessWidget {
   }
 }
 
+/// The compact hero's one button — white pill, black glyph, the phone idiom.
+class _HeroOpenPill extends StatelessWidget {
+  final VoidCallback onTap;
+  const _HeroOpenPill({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 42,
+        padding: const EdgeInsets.symmetric(horizontal: 26),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(21),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.play_arrow_rounded, size: 20, color: Colors.black),
+            SizedBox(width: 6),
+            Text(
+              'Open',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.black,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Card extends StatefulWidget {
   final SpotlightCard card;
   final FocusNode? node;
@@ -1132,12 +1461,29 @@ class _Card extends StatefulWidget {
   /// mixes posters and channel tiles keeps one baseline.
   final double height;
   final double caption;
+  final double radius;
+
+  /// Compact: the caption sits BELOW the art (small art can't afford an
+  /// overlay eating its bottom quarter — the measured Apple phone idiom).
+  /// Wide keeps the overlay-on-gradient the TV mock specifies.
+  final bool captionBelow;
+  final double captionBlock;
+
+  /// Pointer hover lifts the card — desktop only. OFF on TV: an Apple TV
+  /// trackpad delivers pointer events (see main.dart), and a hover lift
+  /// independent of DPAD focus would put two cursors on a board that had
+  /// exactly one at HEAD.
+  final bool hoverable;
 
   const _Card({
     required this.card,
     required this.node,
     required this.height,
     required this.caption,
+    this.radius = 7,
+    this.captionBelow = false,
+    this.captionBlock = 0,
+    this.hoverable = false,
   });
 
   @override
@@ -1147,6 +1493,11 @@ class _Card extends StatefulWidget {
 class _CardState extends State<_Card> {
   bool _f = false;
 
+  /// Pointer hover — desktop's focus. Kept SEPARATE from [_f] and OR-ed at
+  /// paint, so a pointer wandering off a card can never erase a real focus
+  /// visual that a keyboard put there.
+  bool _h = false;
+
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
@@ -1155,11 +1506,11 @@ class _CardState extends State<_Card> {
     final url = c.image;
     final contained = c.shape.fit == BoxFit.contain;
 
-    final card = ParallaxFocus(
-      focused: _f,
-      radius: BorderRadius.circular(7),
+    final art = ParallaxFocus(
+      focused: _f || _h,
+      radius: BorderRadius.circular(widget.radius),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(widget.radius),
         child: SizedBox(
           width: w,
           height: widget.height,
@@ -1208,58 +1559,106 @@ class _CardState extends State<_Card> {
                     valueColor: const AlwaysStoppedAnimation(Colors.white),
                   ),
                 ),
-              // The caption sits INSIDE over a gradient bed — below the card
-              // only on a 16:9 episode cell, which this is not.
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: DecoratedBox(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [Color(0xDB000000), Color(0x00000000)],
+              // The caption sits INSIDE over a gradient bed on wide — below
+              // the card on compact, where the art is too small to spare its
+              // bottom quarter.
+              if (!widget.captionBelow)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [Color(0xDB000000), Color(0x00000000)],
+                      ),
                     ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(7, 26, 7, 7),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          c.title,
-                          maxLines: 1,
-                          textAlign: TextAlign.center,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: widget.caption,
-                            color: Colors.white.withValues(alpha: 0.86),
-                          ),
-                        ),
-                        if ((c.subtitle ?? '').isNotEmpty)
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(7, 26, 7, 7),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Text(
-                            c.subtitle!,
+                            c.title,
                             maxLines: 1,
                             textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: widget.caption * 0.85,
-                              color: Colors.white.withValues(alpha: 0.58),
+                              fontSize: widget.caption,
+                              color: Colors.white.withValues(alpha: 0.86),
                             ),
                           ),
-                      ],
+                          if ((c.subtitle ?? '').isNotEmpty)
+                            Text(
+                              c.subtitle!,
+                              maxLines: 1,
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: widget.caption * 0.85,
+                                color: Colors.white.withValues(alpha: 0.58),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
             ],
           ),
         ),
       ),
     );
 
-    if (widget.node == null) return card;
+    // Compact: art + a one-line caption below, one Column — the caption is
+    // part of the card so the tap target covers both.
+    final card = widget.captionBelow
+        ? SizedBox(
+            width: w,
+            child: Column(
+              children: [
+                art,
+                SizedBox(
+                  height: widget.captionBlock,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      c.title,
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: widget.caption,
+                        color: app.core.tx.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        : art;
+
+    // The gesture layer is UNCONDITIONAL now. It used to hang off the focus
+    // wrapper, so a card whose row had run out of focus nodes silently lost
+    // its tap — invisible on TV (DPAD never reaches an un-noded card),
+    // real on touch. The hover layer is NOT unconditional — see [hoverable].
+    final tappable = GestureDetector(
+      onTap: c.onOpen,
+      onLongPress: c.onOptions,
+      child: card,
+    );
+    final interactive = widget.hoverable
+        ? MouseRegion(
+            onEnter: (_) => setState(() => _h = true),
+            onExit: (_) => setState(() => _h = false),
+            child: tappable,
+          )
+        : tappable;
+
+    if (widget.node == null) return interactive;
     return Focus(
       focusNode: widget.node,
       onFocusChange: (v) {
@@ -1284,11 +1683,7 @@ class _CardState extends State<_Card> {
         }
         return KeyEventResult.ignored;
       },
-      child: GestureDetector(
-        onTap: c.onOpen,
-        onLongPress: c.onOptions,
-        child: card,
-      ),
+      child: interactive,
     );
   }
 }

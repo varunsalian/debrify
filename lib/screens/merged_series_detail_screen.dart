@@ -825,6 +825,17 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   bool get _isMovie => _item.type == 'movie';
 
+  /// The reference plays its detail-page preview CRYSTAL CLEAR — no wash, no
+  /// glow, no blur. True while the Showcase ambient trailer is actually
+  /// rolling off-TV with the page at its hero; every shell-level veil over
+  /// the video gates on this. TV is untouched (its washes were tuned on the
+  /// panel and nobody has complained at ten feet).
+  bool get _trailerClearView =>
+      _style == 'showcase' &&
+      !widget.isTelevision &&
+      _trailerAmbientPlaying &&
+      !_bodyDeep;
+
   @override
   Widget build(BuildContext context) {
     // Establishes the dependency that makes an ALREADY OPEN detail route
@@ -863,7 +874,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 // moment the body goes deep this reverts to the wash, which is
                 // the field the bands' white text was tuned against.
                 sharpStill: _wantsSharpStill,
-                videoBlurSigma: widget.isTelevision ? 0 : 8,
+                // Sigma 8 was tuned for the classic layout, where the video
+                // is an AMBIENT backdrop behind opaque panes. Showcase is the
+                // reference's shape — the trailer IS the picture, playing in
+                // the key-art frame — and blurring it is why it read as dim
+                // mush next to the Apple app. Sharp for Showcase everywhere;
+                // the other layouts keep their ambient blur.
+                videoBlurSigma:
+                    widget.isTelevision || _style == 'showcase' ? 0 : 8,
                 // Dropped the moment the body walks past its hero: the
                 // reference's trailer belongs to the key-art frame, and playing
                 // one under a blurred field is a decoder held for nothing. It
@@ -937,7 +955,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                         // lighter wash, none at all. A layout whose scrim is a
                         // specific angle cannot reach its spec while the shell
                         // is also laying a diagonal over the same artwork.
-                        if (_bodySpec.shellTint)
+                        // Lifted entirely while the Showcase ambient trailer
+                        // rolls off-TV: the reference plays its preview
+                        // crystal clear in the key-art frame, and even this
+                        // light floor reads as a haze over motion. The
+                        // layout's own scrim (thinned the same way) keeps the
+                        // identity text legible. Snapped, not tweened — same
+                        // rule as the home hero's rolling scrims.
+                        if (_bodySpec.shellTint && !_trailerClearView)
                           DecoratedBox(
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
@@ -969,7 +994,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                         // color. Animates in when the accent resolves (no pop).
                         // A radial gradient fill is a single cheap paint — no
                         // blur, no layer — so it's safe on the weak TV GPU.
-                        if (_bodySpec.shellTint)
+                        if (_bodySpec.shellTint && !_trailerClearView)
                         Positioned.fill(
                           child: IgnorePointer(
                             child: TweenAnimationBuilder<Color?>(
@@ -1280,6 +1305,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           DetailShowcase(
             model: _buildDetailModel(),
             episodesHost: _episodesHost,
+            // The INPUT axis: unlocks the touch drivers (scroll dissolve,
+            // kebab, compact presentation under 600 wide) off-TV. Width is
+            // deliberately not the test — a narrow TV must stay a TV.
+            dpad: PlatformUtil.isTelevision,
           ),
         );
       // Only 'classic' reaches here: every shipped alternate has a case above,

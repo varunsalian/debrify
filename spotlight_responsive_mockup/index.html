@@ -1,0 +1,853 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spotlight everywhere — phone, tablet &amp; desktop</title>
+<style>
+  :root{
+    --ink:#0B0912;
+    --panel:#131020;
+    --hair:rgba(167,139,250,.16);
+    --hair2:rgba(255,255,255,.07);
+    --tx:#EAE7F3;
+    --dim:#9A93B0;
+    --dimmer:#6E6785;
+    --acc:#A78BFA;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  body{ margin:0; background:var(--ink); color:var(--tx); font-family:var(--sans);
+        -webkit-font-smoothing:antialiased; }
+  .wrap{ max-width:1220px; margin:0 auto; padding:0 28px 140px; }
+
+  .top{ position:sticky; top:0; z-index:60; background:color-mix(in srgb, var(--ink) 88%, transparent);
+        border-bottom:1px solid var(--hair2); backdrop-filter:blur(14px); }
+  .topin{ max-width:1220px; margin:0 auto; padding:11px 28px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .brandmark{ font:600 12px/1 var(--mono); letter-spacing:.16em; color:var(--acc); text-transform:uppercase; }
+  .jump{ display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; }
+  .jump a{ font:600 11.5px/1 var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--dim);
+           text-decoration:none; padding:6px 9px; border-radius:6px; border:1px solid transparent; }
+  .jump a:hover{ color:var(--tx); border-color:var(--hair); }
+
+  h1{ font:700 30px/1.15 var(--sans); margin:44px 0 10px; letter-spacing:-.02em; }
+  .lede{ color:var(--dim); font-size:15px; line-height:1.62; max-width:76ch; margin:0 0 8px; }
+  .lede b{ color:var(--tx); font-weight:600; }
+  h2{ font:700 21px/1.2 var(--sans); margin:64px 0 6px; letter-spacing:-.01em; }
+  h2 .num{ font:600 12px/1 var(--mono); color:var(--acc); letter-spacing:.14em; display:block; margin-bottom:9px; }
+  .sub{ color:var(--dim); font-size:14px; line-height:1.6; max-width:72ch; margin:0 0 18px; }
+  .keys{ font:600 11px/1 var(--mono); color:var(--dimmer); letter-spacing:.08em; margin:0 0 14px; }
+
+  table{ border-collapse:collapse; width:100%; margin:16px 0 0; font-size:13px; }
+  th,td{ text-align:left; padding:7px 10px; border-bottom:1px solid var(--hair2); vertical-align:top; }
+  th{ font:600 10.5px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--dimmer); }
+  td:first-child{ color:var(--tx); font-weight:500; width:26%; }
+  td code{ font:500 12px/1.5 var(--mono); color:var(--acc); }
+  .note{ border-left:2px solid var(--acc); padding:2px 0 2px 14px; margin:20px 0; color:var(--dim);
+         font-size:13.5px; line-height:1.65; }
+  .note b{ color:var(--tx); font-weight:600; }
+
+  /* ── device frames ────────────────────────────────────────── */
+  .devrow{ display:flex; gap:36px; align-items:flex-start; flex-wrap:wrap; }
+  .dev{ display:flex; flex-direction:column; gap:9px; }
+  .devlabel{ font:600 11px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--dimmer); }
+
+  .phone{ position:relative; width:390px; height:780px; border-radius:34px; overflow:hidden;
+          border:1px solid rgba(255,255,255,.13); background:#000;
+          box-shadow:0 24px 70px rgba(0,0,0,.5); }
+  .bigdev{ position:relative; width:100%; border-radius:14px; overflow:hidden;
+           border:1px solid rgba(255,255,255,.13); background:#000;
+           box-shadow:0 24px 70px rgba(0,0,0,.5); }
+  .bigdev .zoomer{ overflow-y:auto; overscroll-behavior:contain; scrollbar-width:none; }
+  .bigdev .zoomer::-webkit-scrollbar{ display:none; }
+
+  .scroller{ position:absolute; inset:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:none; }
+  .scroller::-webkit-scrollbar{ display:none; }
+
+  /* ══════════ THE APP SKIN — Spotlight: void ground, crimson accent ══════════ */
+  .app{ color:#fff; font-family:-apple-system,"SF Pro Display","SF Pro Text",system-ui,sans-serif; background:#000; }
+  .app *{ box-sizing:border-box; }
+  .app button{ font-family:inherit; border:none; cursor:pointer; }
+
+  /* ── phone HOME ───────────────────────────────────────────── */
+  .ph-hero{ position:relative; height:540px; }
+  .ph-hero .art{ position:absolute; inset:0; background-size:cover; background-position:center 20%;
+                 opacity:0; transition:opacity .65s ease; }
+  .ph-hero .art.on{ opacity:1; }
+  .ph-hero .scrim{ position:absolute; inset:0;
+      background:linear-gradient(to bottom, rgba(0,0,0,.42) 0%, rgba(0,0,0,0) 26%, rgba(0,0,0,0) 46%, rgba(0,0,0,.78) 76%, #000 100%); }
+  .ph-id{ position:absolute; left:20px; right:20px; bottom:14px; text-align:center; }
+  .ph-id .badge{ display:inline-block; background:rgba(255,255,255,.14); backdrop-filter:blur(10px);
+                 border-radius:999px; padding:5px 12px; font-size:11px; font-weight:600; margin-bottom:10px; }
+  .ph-id .hlogo{ display:block; margin:0 auto 8px; max-width:250px; max-height:66px; object-fit:contain;
+                 filter:drop-shadow(0 2px 12px rgba(0,0,0,.55)); }
+  .ph-id .ttitle{ font-size:34px; font-weight:800; letter-spacing:-.8px; margin:0 0 8px;
+                  text-shadow:0 2px 14px rgba(0,0,0,.6); }
+  .ph-id .meta{ font-size:12.5px; color:rgba(255,255,255,.85); margin-bottom:12px; }
+  .ph-cta{ display:flex; justify-content:center; align-items:center; gap:10px; margin-bottom:13px; }
+  .ph-cta .play{ height:42px; padding:0 26px; border-radius:21px; background:#fff; color:#000;
+                 font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .ph-cta .circ{ width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,.16);
+                 backdrop-filter:blur(10px); color:#fff; font-size:19px; display:flex; align-items:center; justify-content:center; }
+  .dots{ display:flex; justify-content:center; gap:4.5px; }
+  .dots i{ width:4px; height:4px; border-radius:2px; background:rgba(255,255,255,.34); transition:all .25s; cursor:pointer; }
+  .dots i.on{ width:11px; background:rgba(255,255,255,.95); }
+
+  .searchbtn{ position:absolute; top:14px; right:14px; z-index:30; width:40px; height:40px; border-radius:50%;
+              background:rgba(30,30,32,.55); backdrop-filter:blur(12px); color:#fff;
+              display:flex; align-items:center; justify-content:center; }
+  .searchbtn svg{ width:17px; height:17px; }
+
+  /* the search sheet — today's field + Catalog/Keyword, Spotlight-skinned */
+  .searchsheet{ position:absolute; left:0; right:0; top:0; z-index:40; padding:14px 16px 16px;
+                background:rgba(8,8,9,.86); backdrop-filter:blur(20px);
+                border-bottom:1px solid rgba(255,255,255,.09);
+                transform:translateY(-105%); transition:transform .32s cubic-bezier(.3,.9,.3,1); }
+  .searchsheet.open{ transform:translateY(0); }
+  .ssfield{ display:flex; align-items:center; gap:10px; height:44px; border-radius:12px;
+            background:rgba(255,255,255,.09); padding:0 14px; margin-bottom:11px; }
+  .ssfield svg{ width:16px; height:16px; opacity:.55; flex:none; }
+  .ssfield span{ font-size:14.5px; color:rgba(255,255,255,.45); }
+  .ssclose{ margin-left:auto; background:none; color:rgba(255,255,255,.6); font-size:17px; padding:4px; }
+  .seg{ display:flex; background:rgba(255,255,255,.09); border-radius:12px; padding:3px; }
+  .seg b{ flex:1; text-align:center; padding:9px 0; border-radius:9px; font-size:13.5px; font-weight:600;
+          color:rgba(255,255,255,.6); }
+  .seg b.on{ background:#fff; color:#000; }
+
+  .ph-rows{ padding:6px 0 78px; background:#000; }
+  .ph-row{ margin-top:20px; }
+  .ph-row .rh{ display:flex; align-items:baseline; gap:6px; padding:0 19px 10px; }
+  .ph-row .rh b{ font-size:19px; font-weight:700; letter-spacing:-.2px; }
+  .ph-row .rh .chev{ color:rgba(255,255,255,.4); font-size:15px; font-weight:700; }
+  .ph-row .rail{ display:flex; gap:18px; overflow-x:auto; padding:0 19px; scrollbar-width:none; }
+  .ph-row .rail::-webkit-scrollbar{ display:none; }
+  .ph-card{ flex:none; width:95px; }
+  .ph-card .artbox{ position:relative; width:95px; height:142px; border-radius:10px; overflow:hidden; background:#141416; }
+  .ph-card .artbox img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .ph-card .cap{ font-size:12px; color:rgba(255,255,255,.55); margin-top:6px; text-align:center;
+                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ph-card .epb{ position:absolute; left:5px; bottom:5px; background:rgba(0,0,0,.62); backdrop-filter:blur(8px);
+                 border-radius:5px; padding:2.5px 6px; font-size:10px; font-weight:600; }
+  .ph-card .prog{ position:absolute; left:0; right:0; bottom:0; height:3px; background:rgba(255,255,255,.22); }
+  .ph-card .prog i{ display:block; height:100%; background:#E23D4C; }
+
+  .bnav{ position:absolute; left:0; right:0; bottom:0; z-index:35; height:62px; display:flex;
+         background:rgba(8,8,9,.86); backdrop-filter:blur(20px); border-top:1px solid rgba(255,255,255,.08); }
+  .bnav a{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+           text-decoration:none; color:rgba(255,255,255,.5); font-size:9.5px; font-weight:600; }
+  .bnav a svg{ width:20px; height:20px; }
+  .bnav a.on{ color:#E23D4C; }
+
+  /* ── phone DETAIL ─────────────────────────────────────────── */
+  .backbtn{ position:absolute; top:14px; left:14px; z-index:30; width:40px; height:40px; border-radius:50%;
+            background:rgba(30,30,32,.55); backdrop-filter:blur(12px); color:#fff; font-size:17px;
+            display:flex; align-items:center; justify-content:center; }
+  .dt-hero{ position:relative; height:560px; }
+  .dt-hero .art{ position:absolute; inset:0; background-size:cover; background-position:center 12%; }
+  .dt-hero .scrim{ position:absolute; inset:0;
+      background:linear-gradient(to bottom, rgba(0,0,0,.34) 0%, rgba(0,0,0,0) 30%, rgba(14,13,10,.55) 66%, #12100C 100%); }
+  .dt-id{ position:absolute; left:18px; right:18px; bottom:0; text-align:center; }
+  .dt-id .hlogo{ display:block; margin:0 auto 9px; max-width:230px; max-height:64px; object-fit:contain;
+                 filter:drop-shadow(0 2px 12px rgba(0,0,0,.6)); }
+  .dt-id .meta{ display:flex; justify-content:center; align-items:center; gap:7px; font-size:12.5px;
+                color:rgba(255,255,255,.86); margin-bottom:10px; }
+  .star{ display:inline-flex; align-items:center; gap:4px; border:1px solid rgba(255,255,255,.28);
+         border-radius:999px; padding:2px 8px; font-size:11px; font-weight:600; }
+  .star em{ font-style:normal; color:#F5C518; }
+  .dt-id .syn{ font-size:12.5px; line-height:1.5; color:rgba(255,255,255,.78); margin:0 6px 9px; }
+  .dt-id .syn b{ color:#fff; font-weight:600; margin-left:4px; }
+  .caps{ display:flex; justify-content:center; gap:5px; margin-bottom:12px; }
+  .caps i{ font-style:normal; border:1px solid rgba(255,255,255,.3); border-radius:4px; padding:1.5px 5px;
+           font-size:9px; font-weight:700; color:rgba(255,255,255,.75); letter-spacing:.03em; }
+  .dt-cta{ display:flex; justify-content:center; align-items:center; gap:9px; padding-bottom:18px; }
+  .dt-cta .play{ height:42px; padding:0 20px; border-radius:21px; background:#fff; color:#000;
+                 font-size:14.5px; font-weight:600; display:flex; align-items:center; gap:8px; }
+  .dt-cta .circ{ width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,.14);
+                 backdrop-filter:blur(10px); color:#fff; font-size:17px; display:flex; align-items:center; justify-content:center; }
+
+  .dt-body{ position:relative; padding:18px 0 40px;
+            background:linear-gradient(to bottom, #12100C 0%, #0C0B09 34%, #000 78%); }
+  .dt-band{ margin-top:26px; }
+  .dt-band .rh{ font-size:19px; font-weight:700; letter-spacing:-.2px; padding:0 19px 11px; }
+  .dt-band .rail{ display:flex; gap:14px; overflow-x:auto; padding:0 19px; scrollbar-width:none; }
+  .dt-band .rail::-webkit-scrollbar{ display:none; }
+
+  .seasonwrap{ position:relative; padding:0 19px; }
+  .seasonpill{ display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 14px; border-radius:17px;
+               background:rgba(255,255,255,.12); color:#E9707B; font-size:14px; font-weight:600; }
+  .seasonpill .cv{ font-size:10px; transition:transform .2s; }
+  .seasonpill.open .cv{ transform:rotate(180deg); }
+  .seasonmenu{ position:absolute; left:19px; top:40px; z-index:45; width:200px; background:#1B1B1E;
+               border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:6px 0;
+               box-shadow:0 18px 50px rgba(0,0,0,.6); display:none; }
+  .seasonmenu.open{ display:block; }
+  .seasonmenu button{ display:block; width:100%; text-align:left; background:none; color:#fff;
+                      font-size:14.5px; padding:12px 18px; }
+  .seasonmenu button.on{ color:#E9707B; font-weight:600; }
+  .seasonmenu button:active{ background:rgba(255,255,255,.06); }
+
+  .epcard{ flex:none; width:242px; border-radius:12px; overflow:hidden; background:#141416; }
+  .epcard .still{ position:relative; width:242px; height:136px; background:#101012; }
+  .epcard .still img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .epcard .still .seen{ position:absolute; top:7px; right:7px; width:20px; height:20px; border-radius:50%;
+                        background:rgba(0,0,0,.55); backdrop-filter:blur(6px); color:#fff; font-size:11px;
+                        display:flex; align-items:center; justify-content:center; }
+  .epcard .still .prog{ position:absolute; left:0; right:0; bottom:0; height:3px; background:rgba(255,255,255,.22); }
+  .epcard .still .prog i{ display:block; height:100%; background:#E23D4C; }
+  .epcard .plate{ padding:10px 12px 12px; }
+  .epcard .eyebrow{ font-size:10px; font-weight:700; letter-spacing:.09em; color:rgba(255,255,255,.5);
+                    text-transform:uppercase; margin-bottom:3px; }
+  .epcard .et{ font-size:14.5px; font-weight:600; margin-bottom:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .epcard .eo{ font-size:11.5px; line-height:1.45; color:rgba(255,255,255,.55); height:50px; overflow:hidden;
+               display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; }
+  .epcard .efoot{ display:flex; align-items:center; margin-top:8px; font-size:11.5px; color:rgba(255,255,255,.7); }
+  .epcard .efoot .kebab{ margin-left:auto; background:none; color:rgba(255,255,255,.6); font-size:15px;
+                         padding:2px 6px; letter-spacing:.5px; }
+
+  .castcell{ flex:none; width:90px; text-align:center; }
+  .castcell img{ width:90px; height:90px; border-radius:50%; object-fit:cover; display:block; margin-bottom:7px; }
+  .castcell .cn{ font-size:11.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .castcell .cc{ font-size:10.5px; color:rgba(255,255,255,.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  .srccard{ flex:none; width:290px; border-radius:10px; background:#141416; padding:12px 14px; }
+  .srccard .sn{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; margin-bottom:4px; }
+  .srccard .sn i{ font-style:normal; font-size:9.5px; font-weight:700; border-radius:4px; padding:1.5px 6px;
+                  background:rgba(226,61,76,.18); color:#E9707B; }
+  .srccard .sm{ font-size:11px; color:rgba(255,255,255,.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* ══════════ BIG SCREENS (tablet / desktop) — the TV idiom + pointer ══════════ */
+  .big{ position:relative; background:#000; }
+  .big .bighero{ position:relative; }
+  .big .bighero .art{ position:absolute; inset:0; background-size:cover; background-position:center 18%;
+                      opacity:0; transition:opacity .65s ease; }
+  .big .bighero .art.on{ opacity:1; }
+  .big .bighero .scrim{ position:absolute; inset:0;
+      background:linear-gradient(to right, rgba(0,0,0,.88) 0%, rgba(0,0,0,.66) 26%, rgba(0,0,0,.18) 52%, rgba(0,0,0,0) 68%),
+                 linear-gradient(to top, #000 2%, rgba(10,10,11,.6) 13%, rgba(10,10,11,0) 34%); }
+  .big .idstack{ position:absolute; z-index:20; }
+  .big .idstack .hlogo{ display:block; max-height:100%; object-fit:contain; object-position:left bottom; margin-bottom:14px;
+                        filter:drop-shadow(0 3px 16px rgba(0,0,0,.55)); }
+  .big .idstack .meta{ color:rgba(255,255,255,.86); margin-bottom:10px; }
+  .big .idstack .syn{ line-height:1.45; color:rgba(255,255,255,.74); margin:0; }
+  .big .bigcta{ display:flex; align-items:center; margin-top:16px; }
+  .big .bigcta .play{ background:#fff; color:#000; font-weight:600; display:flex; align-items:center; border-radius:999px; }
+  .big .bigcta .glass{ background:rgba(255,255,255,.14); backdrop-filter:blur(10px); color:#fff; font-weight:600;
+                       display:flex; align-items:center; justify-content:center; border-radius:999px; }
+  .big .dots{ position:absolute; left:0; right:0; z-index:20; }
+
+  .big .rows{ position:relative; z-index:10; }
+  .big .row .rh{ font-weight:600; color:rgba(255,255,255,.84); display:flex; align-items:baseline; }
+  .big .row .rh .chev{ color:rgba(255,255,255,.35); font-weight:700; }
+  .big .rail{ display:flex; overflow-x:auto; scrollbar-width:none; }
+  .big .rail::-webkit-scrollbar{ display:none; }
+  .big .card{ flex:none; transition:transform .28s cubic-bezier(.3,1.4,.4,1), box-shadow .28s; }
+  .big .card .artbox{ position:relative; overflow:hidden; background:#141416; }
+  .big .card .artbox img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .big .card .cap{ color:rgba(255,255,255,.55); text-align:center;
+                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .big.hover .card:hover{ transform:translateY(-7px) scale(1.055); }
+  .big.hover .card:hover .artbox{ box-shadow:0 16px 40px rgba(0,0,0,.55); }
+  .big.hover .card:hover .cap{ color:rgba(255,255,255,.9); }
+  .big .card .epb{ position:absolute; background:rgba(0,0,0,.62); backdrop-filter:blur(8px);
+                   border-radius:6px; font-weight:600; }
+  .big .card .prog{ position:absolute; left:0; right:0; bottom:0; background:rgba(255,255,255,.22); }
+  .big .card .prog i{ display:block; height:100%; background:#E23D4C; }
+
+  .big .searchwrap{ position:absolute; top:0; left:0; right:0; z-index:40; }
+  .big .searchbtn2{ position:absolute; border-radius:50%; background:rgba(30,30,32,.55); backdrop-filter:blur(12px);
+                    color:#fff; display:flex; align-items:center; justify-content:center; }
+  .big .searchbar{ position:absolute; left:50%; transform:translate(-50%,-210%); transition:transform .32s cubic-bezier(.3,.9,.3,1);
+                   background:rgba(8,8,9,.85); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,.09);
+                   display:flex; align-items:center; }
+  .big .searchbar.open{ transform:translate(-50%,0); }
+  .big .searchbar .ssfield{ background:rgba(255,255,255,.09); margin-bottom:0; flex:1; }
+  .big .searchbar .seg{ flex:none; }
+  .big .searchbar .seg b{ flex:none; }
+
+  /* big detail */
+  .big .dt-bighero{ position:relative; }
+  .big .dt-bighero .art{ position:absolute; inset:0; background-size:cover; background-position:center 15%; }
+  .big .dt-bighero .scrim{ position:absolute; inset:0;
+      background:linear-gradient(to right, rgba(0,0,0,.82) 0%, rgba(0,0,0,.5) 30%, rgba(0,0,0,.08) 56%, rgba(0,0,0,0) 70%),
+                 linear-gradient(to top, #12100C 3%, rgba(14,13,10,.5) 16%, rgba(14,13,10,0) 38%); }
+  .big .dt-bands{ position:relative; z-index:10;
+                  background:linear-gradient(to bottom, #12100C 0%, #0C0B09 30%, #000 75%); }
+  .big .schips{ display:flex; }
+  .big .schip{ border-radius:999px; font-weight:600; color:rgba(255,255,255,.62); background:rgba(255,255,255,.08); }
+  .big .schip.on{ background:rgba(255,255,255,.92); color:#000; }
+  .big .bigep{ flex:none; }
+  .big .bigep .still{ position:relative; border-radius:9px; overflow:hidden; background:#101012; }
+  .big .bigep .still img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .big .bigep .ecap .eyebrow{ font-weight:700; letter-spacing:.09em; color:rgba(255,255,255,.5); text-transform:uppercase; }
+  .big .bigep .ecap .et{ font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .big .bigep .ecap .eo{ color:rgba(255,255,255,.55); overflow:hidden;
+                         display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .big .bigep .kebab{ position:absolute; top:8px; right:8px; z-index:5; border-radius:50%;
+                      background:rgba(0,0,0,.55); backdrop-filter:blur(8px); color:#fff;
+                      display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity .2s; }
+  .big.hover .bigep:hover .kebab, .big.touch .bigep .kebab{ opacity:1; }
+  .big .bigcast{ flex:none; text-align:center; }
+  .big .bigcast img{ border-radius:50%; object-fit:cover; display:block; margin:0 auto; }
+  .big .bigcast .cn{ font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .big .bigcast .cc{ color:rgba(255,255,255,.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .big .bigsrc{ flex:none; border-radius:10px; background:rgba(255,255,255,.055); }
+  .big .bigsrc .sn{ display:flex; align-items:center; font-weight:600; }
+  .big .bigsrc .sn i{ font-style:normal; font-weight:700; border-radius:5px; background:rgba(226,61,76,.18); color:#E9707B; }
+  .big .bigsrc .sm{ color:rgba(255,255,255,.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+</style>
+</head>
+<body>
+
+<div class="top"><div class="topin">
+  <span class="brandmark">Debrify · Spotlight everywhere</span>
+  <nav class="jump">
+    <a href="#mobile">Mobile</a>
+    <a href="#tablet">Tablet</a>
+    <a href="#desktop">Desktop</a>
+    <a href="#spec">Spec</a>
+  </nav>
+</div></div>
+
+<div class="wrap">
+
+<h1>Spotlight &amp; Showcase on phone, tablet and desktop</h1>
+<p class="lede">
+  The TV design, carried to every other form factor — <b>same language, not the same layout</b>.
+  Tablet and desktop keep the TV composition (left identity, proportional shelves) and add pointer
+  affordances. The phone gets the Apple-phone idiom: <b>centered identity stack</b>, bigger cards,
+  captions below the art, an <b>integrated episode card</b>, and a <b>season dropdown</b>.
+  Search survives as a top button that unfolds into today's field + Catalog/Keyword toggle.
+</p>
+<p class="lede">
+  Everything below is live: <b>tap the search button</b>, <b>tap the season pill</b>, <b>tap the hero dots</b>
+  (the hero also advances itself every 6 seconds), hover the cards on the desktop frame. All frames scroll.
+</p>
+
+<!-- ═══════════════ MOBILE ═══════════════ -->
+<h2 id="mobile"><span class="num">01 · MOBILE — 390 × 844 LOGICAL</span>Phone, portrait</h2>
+<p class="sub">
+  Home leads with the hero — the search field no longer eats the top of the page; it lives behind the
+  magnifier and unfolds over the hero. Cards grow from 13.5% of the width (the TV fraction) to 24%,
+  matching both the Apple TV phone app and, incidentally, our own classic phone board. The detail page
+  keeps Showcase's band structure but re-cuts every cell: episodes become one integrated card at 62%
+  width — still, eyebrow, title, synopsis, runtime, kebab — and the season rail becomes a pill + anchored
+  popup.
+</p>
+<div class="devrow">
+  <div class="dev">
+    <div class="devlabel">Home</div>
+    <div class="phone" id="phHome"></div>
+  </div>
+  <div class="dev">
+    <div class="devlabel">Series detail</div>
+    <div class="phone" id="phDetail"></div>
+  </div>
+</div>
+<div class="note">
+  <b>The hero art on the detail page is the backdrop, cover-cropped.</b> Apple uses purpose-made portrait
+  key art there; catalogs don't give us that, so the crop is the honest fallback — the scrim carries
+  legibility regardless of where the crop lands. If a portrait-art source ever exists (some addons expose
+  <code>poster</code> art without baked titles), the slot upgrades for free.
+</div>
+
+<!-- ═══════════════ TABLET ═══════════════ -->
+<h2 id="tablet"><span class="num">02 · TABLET — 1194 × 834 LOGICAL, LANDSCAPE</span>Tablet</h2>
+<p class="sub">
+  The TV layout survives almost verbatim — left-aligned identity, full-bleed hero, shelves riding over its
+  lower edge. Two touch adaptations: the poster fraction gets a bump (13.5% → 16%) because fingers need
+  targets a remote never did, and every episode card carries a visible kebab instead of hold-OK. The season
+  chips stay chips — there's room.
+</p>
+<div class="dev">
+  <div class="devlabel">Home → scroll · Series detail below</div>
+  <div class="bigdev" id="tabHome"></div>
+</div>
+<div style="height:26px"></div>
+<div class="dev">
+  <div class="bigdev" id="tabDetail"></div>
+</div>
+
+<!-- ═══════════════ DESKTOP ═══════════════ -->
+<h2 id="desktop"><span class="num">03 · DESKTOP — 1440 × 810 LOGICAL</span>Desktop</h2>
+<p class="sub">
+  The TV proportions verbatim — this is the panel the design was drawn for, minus ten feet. Pointer replaces
+  DPAD: cards lift on hover exactly as they lift on focus, the hero pages from the dots, and the search
+  button unfolds a centered bar with the same field + toggle. Wheel scrolls; nothing needs a keyboard.
+</p>
+<div class="dev">
+  <div class="devlabel">Home → scroll · Series detail below</div>
+  <div class="bigdev" id="dtopHome"></div>
+</div>
+<div style="height:26px"></div>
+<div class="dev">
+  <div class="bigdev" id="dtopDetail"></div>
+</div>
+
+<!-- ═══════════════ SPEC ═══════════════ -->
+<h2 id="spec"><span class="num">04 · SPEC</span>The metric table</h2>
+<p class="sub">
+  One table per class, keyed off the drawable width. TV keeps the mock's measured 1920-scale fractions —
+  those are pinned by <code>spotlight_spec_test.dart</code> and don't move. Desktop and tablet share the TV
+  column with two bumps. The phone column is measured off the Apple TV Android app on the reference device.
+</p>
+<table>
+  <tr><th>Token</th><th>TV (unchanged)</th><th>Desktop / tablet</th><th>Phone (compact)</th></tr>
+  <tr><td>Page gutter</td><td><code>4.375%</code></td><td><code>4.375%</code></td><td><code>4.8%</code></td></tr>
+  <tr><td>Poster width</td><td><code>13.5%</code></td><td><code>13.5%</code> / <code>16%</code> tablet</td><td><code>24.3%</code> (~2.9 per screen + peek)</td></tr>
+  <tr><td>Poster gap</td><td><code>2.1%</code></td><td><code>2.1%</code></td><td><code>4.6%</code></td></tr>
+  <tr><td>Card radius</td><td><code>7px</code></td><td><code>8px</code></td><td><code>10px</code></td></tr>
+  <tr><td>Card caption</td><td>below art, width-scaled</td><td>below art</td><td>below art, fixed 12pt</td></tr>
+  <tr><td>Row heading</td><td><code>w·26/1920</code></td><td>same</td><td>fixed <code>19pt</code> + chevron, tappable</td></tr>
+  <tr><td>Hero</td><td>100% height, identity left</td><td>same + dots + CTA pills</td><td><code>~64%</code> height, centered stack, CTA + dots</td></tr>
+  <tr><td>Hero advance</td><td>DPAD ←/→</td><td>dots + auto (6s)</td><td>swipe + dots + auto (6s)</td></tr>
+  <tr><td>Episode cell</td><td><code>23.75%</code>, caption below</td><td>same + kebab</td><td><code>62%</code> integrated card, 3-line synopsis</td></tr>
+  <tr><td>Cast circle</td><td><code>13%</code></td><td><code>13%</code></td><td><code>23%</code></td></tr>
+  <tr><td>Season control</td><td>chip rail</td><td>chip rail</td><td>pill + anchored popup</td></tr>
+  <tr><td>Episode options</td><td>hold OK</td><td>kebab on hover / visible on touch</td><td>kebab, always visible</td></tr>
+  <tr><td>Search</td><td>sidebar</td><td>top-right button → centered bar</td><td>top-right button → sheet</td></tr>
+</table>
+<div class="note">
+  <b>What doesn't change anywhere:</b> the Spotlight palette (void ground, crimson accent), the band
+  grammar on detail (identity → seasons → episodes → cast → sources → more), the shelf-over-hero overlap,
+  and the trailer engine — it already runs on phone and desktop today.
+</div>
+
+</div>
+
+<script>
+const ART = '../apple_look_mockup/art/';
+
+/* ── data ─────────────────────────────────────────────────── */
+const HEROES = [
+  { name:'Furious', logo:'logo_tt36303968.png', bg:'bg_tt36303968.jpg', badge:'New Season',
+    meta:'Series · Crime · Thriller', desc:'A determined FBI agent delves into a female killer’s history while partnering with a seasoned investigator to track her down.' },
+  { name:'Silo', logo:'logo_tt14688458.png', bg:'bg_tt14688458.jpg', badge:'',
+    meta:'Series · Drama · Sci-Fi', desc:'Men and women live in a giant silo underground with several regulations which they believe are in place to protect them.' },
+  { name:'Spider-Man: No Way Home', logo:'logo_tt10872600.png', bg:'bg_tt10872600.jpg', badge:'',
+    meta:'Film · Action · Adventure', desc:'With Spider-Man’s identity now revealed, Peter asks Doctor Strange for help.' },
+];
+const CW = [
+  { poster:'p_tt14688458.jpg', name:'Silo', ep:'S1 · E4', prog:62 },
+  { poster:'p_tt0944947.jpg', name:'Game of Thrones', ep:'S3 · E2', prog:30 },
+];
+const ROWS = [
+  { label:'Popular Series', items:[
+    ['p_tt36303968.jpg','Furious','Crime'], ['p_tt14688458.jpg','Silo','Drama'],
+    ['p_tt13592494.jpg','Pan Am 103','Action'], ['p_tt34675596.jpg','Cape Fear','Crime'],
+    ['p_tt30494226.jpg','Ride or Die','Action'], ['p_tt28088031.jpg','Ransom Canyon','Drama'],
+    ['p_tt13111078.jpg','Lioness','Action'], ['p_tt34771210.jpg','I Will Find You','Crime'],
+    ['p_tt0944947.jpg','Game of Thrones','Action'] ]},
+  { label:'Popular Movies', items:[
+    ['p_tt37287335.jpg','Obsession','Horror'], ['p_tt10872600.jpg','No Way Home','Action'],
+    ['p_tt15047880.jpg','Disclosure Day','Action'], ['p_tt33612209.jpg','Devil Wears Prada 2','Comedy'],
+    ['p_tt12042730.jpg','Project Hail Mary','Adventure'], ['p_tt18259538.jpg','Avatar Aang','Animation'],
+    ['p_tt26657236.jpg','Backrooms','Horror'], ['p_tt32565993.jpg','The Sheep Detectives','Comedy'],
+    ['p_tt2250912.jpg','Homecoming','Action'] ]},
+  { label:'Featured', items:[
+    ['p_tt16418808.jpg','Sugar','Action'], ['p_tt27497393.jpg','Stuart Fails…','Comedy'],
+    ['p_tt12327578.jpg','Strange New Worlds','Action'], ['p_tt9892936.jpg','100 Years of Solitude','Drama'],
+    ['p_tt26450613.jpg','A Shop for Killers','Action'], ['p_tt22640400.jpg','The Traitors AU','Game-Show'],
+    ['p_tt16026746.jpg','X-Men ’97','Animation'], ['p_tt0437741.jpg','Project Runway','Reality-TV'] ]},
+];
+const DETAIL = {
+  name:'Silo', logo:'logo_tt14688458.png', bg:'bg_tt14688458.jpg',
+  meta:'Series · Drama · Sci-Fi', imdb:'8.1', year:'2023–', runtime:'50 min',
+  desc:'Men and women live in a giant silo underground with several regulations which they believe are in place to protect them from the toxic and ruined world on the surface.',
+  seasons:[1,2,3],
+  episodes:[
+    [1,'Freedom Day','ep_tt14688458_1.jpg','2023-05-05','Sheriff Becker’s plans for the future are thrown off course after his wife meets a hacker with information about the silo.', 'seen', 0],
+    [2,'Holston’s Pick','ep_tt14688458_2.jpg','2023-05-05','Juliette, an engineer, pieces together what might have led to a co-worker’s mysterious death.', 'seen', 0],
+    [3,'Machines','ep_tt14688458_3.jpg','2023-05-12','In her hunt for a new sheriff, Mayor Jahns clashes with Bernard. Juliette strikes a deal to keep the generator running.', '', 0],
+    [4,'Truth','ep_tt14688458_4.jpg','2023-05-19','Juliette tries gaining the trust of Deputy Marnes as they work to uncover the truth about recent tragedies.', '', 44],
+    [5,'The Janitor’s Boy','ep_tt14688458_5.jpg','2023-05-26','Sims appoints Billings as chief deputy to keep tabs on Juliette, whose efforts to solve two murders lead to a discovery.', '', 0],
+    [6,'The Relic','ep_tt14688458_6.jpg','2023-06-02','During her investigation, Juliette uncovers disturbing secrets about someone she thought she knew.', '', 0],
+    [7,'The Flamekeepers','ep_tt14688458_7.jpg','2023-06-09','Bernard seeks Juliette’s cooperation as he grows increasingly concerned about the silo’s security.', '', 0],
+    [8,'Hanna','ep_tt14688458_8.jpg','2023-06-16','New information causes Juliette to see her family’s past differently — and she finally gains access.', '', 0],
+  ],
+  cast:[
+    ['Rebecca Ferguson','Juliette Nichols','cast_rebecca_ferguson.jpg'],
+    ['Common','Robert Sims','cast_common.jpg'],
+    ['Tim Robbins','Bernard Holland','cast_tim_robbins.jpg'],
+    ['Chinaza Uche','Paul Billings','cast_chinaza_uche.jpg'],
+    ['Harriet Walter','Martha Walker','cast_harriet_walter.jpg'],
+    ['Remmie Milner','Shirley Campbell','cast_remmie_milner.jpg'],
+    ['Shane McRae','Knox','cast_shane_mcrae.jpg'],
+  ],
+  sources:[
+    ['Torrentio','4K','Silo S01 2160p ATVP WEB-DL DDP5.1 Atmos DV HEVC — 28.4 GB'],
+    ['Torrentio','1080p','Silo S01 1080p ATVP WEB-DL DDP5.1 H.264-NTb — 12.1 GB'],
+    ['Comet','1080p','Silo Season 1 Complete BluRay x265-RARBG — 9.8 GB'],
+    ['MediaFusion','720p','Silo S01 720p WEB x264-MiNX — 3.2 GB'],
+  ],
+  more:[
+    ['p_tt36303968.jpg','Furious','Crime'], ['p_tt13592494.jpg','Pan Am 103','Action'],
+    ['p_tt34675596.jpg','Cape Fear','Crime'], ['p_tt30494226.jpg','Ride or Die','Action'],
+    ['p_tt28088031.jpg','Ransom Canyon','Drama'], ['p_tt13111078.jpg','Lioness','Action'],
+    ['p_tt0944947.jpg','Game of Thrones','Action'] ],
+};
+
+const SVG_SEARCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>';
+const SVG_PLAY = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style="flex:none"><path d="M8 5.5v13l11-6.5z"/></svg>';
+const SVG_HOME = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10.5 12 3l9 7.5V21h-6v-6h-6v6H3z"/></svg>';
+const SVG_DISC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>';
+const SVG_TVI  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="m9 2 3 4 3-4"/></svg>';
+const SVG_MORE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/></svg>';
+
+/* ── shared search sheet (phone) ──────────────────────────── */
+function searchSheet(){
+  return `<div class="searchsheet">
+    <div class="ssfield">${SVG_SEARCH}<span>Search or paste link</span>
+      <button class="ssclose" onclick="this.closest('.searchsheet').classList.remove('open')">✕</button></div>
+    <div class="seg"><b class="on">Catalog</b><b>Keyword</b></div>
+  </div>`;
+}
+function wireSearchBtn(frame){
+  const btn = frame.querySelector('.searchbtn');
+  const sheet = frame.querySelector('.searchsheet');
+  if (btn && sheet) btn.onclick = () => sheet.classList.add('open');
+}
+
+/* ── hero paging (shared) ─────────────────────────────────── */
+function mountHero(frame, artSel, dotSel, apply){
+  const arts = frame.querySelectorAll(artSel);
+  const dots = frame.querySelectorAll(dotSel + ' i');
+  let cur = 0, timer;
+  function show(i){
+    cur = i;
+    arts.forEach((a, k) => a.classList.toggle('on', k === i));
+    dots.forEach((d, k) => d.classList.toggle('on', k === i));
+    if (apply) apply(i);
+  }
+  function arm(){ clearInterval(timer); timer = setInterval(() => show((cur + 1) % HEROES.length), 6000); }
+  dots.forEach((d, k) => d.onclick = () => { show(k); arm(); });
+  show(0); arm();
+}
+
+/* ═══════════ PHONE HOME ═══════════ */
+function phoneHome(el){
+  const heroArts = HEROES.map((h, i) =>
+    `<div class="art" data-i="${i}" style="background-image:url('${ART}${h.bg}')"></div>`).join('');
+  const rows = [`
+    <div class="ph-row">
+      <div class="rh"><b>Continue Watching</b><span class="chev">›</span></div>
+      <div class="rail">${CW.map(c => `
+        <div class="ph-card">
+          <div class="artbox"><img src="${ART}${c.poster}" alt="">
+            <div class="epb">${c.ep}</div>
+            <div class="prog"><i style="width:${c.prog}%"></i></div></div>
+          <div class="cap">${c.name}</div>
+        </div>`).join('')}
+      </div>
+    </div>`,
+    ...ROWS.map(r => `
+    <div class="ph-row">
+      <div class="rh"><b>${r.label}</b><span class="chev">›</span></div>
+      <div class="rail">${r.items.map(([p, n, g]) => `
+        <div class="ph-card">
+          <div class="artbox"><img src="${ART}${p}" alt="" loading="lazy"></div>
+          <div class="cap">${g}</div>
+        </div>`).join('')}
+      </div>
+    </div>`)].join('');
+
+  el.innerHTML = `
+    <div class="scroller app">
+      <div class="ph-hero">
+        ${heroArts}
+        <div class="scrim"></div>
+        <div class="ph-id">
+          <div class="badge" id="phBadge">New Season</div>
+          <img class="hlogo" id="phLogo" src="${ART}${HEROES[0].logo}" alt="">
+          <div class="meta" id="phMeta">${HEROES[0].meta}</div>
+          <div class="ph-cta">
+            <button class="play">${SVG_PLAY} Play</button>
+            <button class="circ">＋</button>
+          </div>
+          <div class="dots">${HEROES.map(() => '<i></i>').join('')}</div>
+        </div>
+      </div>
+      <div class="ph-rows">${rows}</div>
+    </div>
+    <button class="searchbtn">${SVG_SEARCH}</button>
+    ${searchSheet()}
+    <nav class="bnav">
+      <a class="on">${SVG_HOME}Home</a>
+      <a>${SVG_DISC}Discover</a>
+      <a>${SVG_TVI}IPTV</a>
+      <a>${SVG_MORE}More</a>
+    </nav>`;
+
+  wireSearchBtn(el);
+  mountHero(el, '.ph-hero .art', '.dots', i => {
+    const h = HEROES[i];
+    el.querySelector('#phLogo').src = ART + h.logo;
+    el.querySelector('#phMeta').textContent = h.meta;
+    const b = el.querySelector('#phBadge');
+    b.style.display = h.badge ? '' : 'none';
+    b.textContent = h.badge || '';
+  });
+}
+
+/* ═══════════ PHONE DETAIL ═══════════ */
+function phoneDetail(el){
+  const d = DETAIL;
+  el.innerHTML = `
+    <div class="scroller app" style="background:#000">
+      <div class="dt-hero">
+        <div class="art" style="background-image:url('${ART}${d.bg}')"></div>
+        <div class="scrim"></div>
+        <div class="dt-id">
+          <img class="hlogo" src="${ART}${d.logo}" alt="">
+          <div class="meta">${d.meta}<span class="star">★ <em>${d.imdb}</em></span></div>
+          <div class="syn">${d.desc.slice(0, 96)}…<b>MORE</b></div>
+          <div class="caps"><i>4K</i><i>DV</i><i>CC</i><i>SDH</i><i>AD</i></div>
+          <div class="dt-cta">
+            <button class="play">${SVG_PLAY} Resume · S1E4</button>
+            <button class="circ">＋</button>
+            <button class="circ" style="font-size:13px">▶</button>
+            <button class="circ">⋯</button>
+          </div>
+        </div>
+      </div>
+      <div class="dt-body">
+        <div class="seasonwrap">
+          <button class="seasonpill" id="spill">Season <b id="snum" style="font-weight:600">1</b><span class="cv">▼</span></button>
+          <div class="seasonmenu" id="smenu">
+            ${d.seasons.map(s => `<button data-s="${s}" class="${s === 1 ? 'on' : ''}">Season ${s}</button>`).join('')}
+          </div>
+        </div>
+        <div class="dt-band" style="margin-top:14px">
+          <div class="rail">${d.episodes.map(([n, t, th, rel, ov, seen, prog]) => `
+            <div class="epcard">
+              <div class="still"><img src="${ART}${th}" alt="" loading="lazy">
+                ${seen ? '<div class="seen">✓</div>' : ''}
+                ${prog ? `<div class="prog"><i style="width:${prog}%"></i></div>` : ''}</div>
+              <div class="plate">
+                <div class="eyebrow">Episode ${n}</div>
+                <div class="et">${t}</div>
+                <div class="eo">${ov}</div>
+                <div class="efoot">${SVG_PLAY}&nbsp; ${d.runtime}<button class="kebab">⋮</button></div>
+              </div>
+            </div>`).join('')}
+          </div>
+        </div>
+        <div class="dt-band">
+          <div class="rh">Cast &amp; Crew</div>
+          <div class="rail">${d.cast.map(([n, c, p]) => `
+            <div class="castcell"><img src="${ART}${p}" alt="" loading="lazy">
+              <div class="cn">${n}</div><div class="cc">${c}</div></div>`).join('')}
+          </div>
+        </div>
+        <div class="dt-band">
+          <div class="rh">Sources</div>
+          <div class="rail">${d.sources.map(([a, q, m]) => `
+            <div class="srccard"><div class="sn">${a}<i>${q}</i></div><div class="sm">${m}</div></div>`).join('')}
+          </div>
+        </div>
+        <div class="dt-band">
+          <div class="rh">More Like This</div>
+          <div class="rail" style="gap:18px">${d.more.map(([p, n, g]) => `
+            <div class="ph-card">
+              <div class="artbox"><img src="${ART}${p}" alt="" loading="lazy"></div>
+              <div class="cap">${n}</div>
+            </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="backbtn">‹</button>`;
+
+  const pill = el.querySelector('#spill'), menu = el.querySelector('#smenu');
+  pill.onclick = () => { pill.classList.toggle('open'); menu.classList.toggle('open'); };
+  menu.querySelectorAll('button').forEach(b => b.onclick = () => {
+    menu.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    el.querySelector('#snum').textContent = b.dataset.s;
+    pill.classList.remove('open'); menu.classList.remove('open');
+  });
+}
+
+/* ═══════════ BIG HOME (tablet & desktop share this) ═══════════ */
+function bigHome(el, W, H, M){
+  const g = W * M.gutter, poster = W * M.poster, posterH = poster * 1.5, gap = W * M.gap;
+  const title = Math.round(W * 26 / 1920), cap = Math.round(W * 21 / 1920);
+  const heroArts = HEROES.map((h, i) =>
+    `<div class="art" data-i="${i}" style="background-image:url('${ART}${h.bg}')"></div>`).join('');
+  const idW = W * 0.43, logoH = W * 0.075;
+  const overlap = H * (88 / 540) * 0.55;
+
+  const row = (label, cards) => `
+    <div class="row" style="margin-top:${Math.round(H * 0.037)}px">
+      <div class="rh" style="font-size:${title}px; padding:0 ${g}px ${Math.round(H * 0.018)}px">${label}
+        <span class="chev" style="font-size:${title * 0.8}px; margin-left:7px">›</span></div>
+      <div class="rail" style="gap:${gap}px; padding:2px ${g}px 14px">${cards}</div>
+    </div>`;
+  const pcard = ([p, n, gg], extra = '') => `
+    <div class="card" style="width:${poster}px">
+      <div class="artbox" style="width:${poster}px; height:${posterH}px; border-radius:${M.radius}px">
+        <img src="${ART}${p}" alt="" loading="lazy">${extra}</div>
+      <div class="cap" style="font-size:${cap}px; margin-top:7px">${gg}</div>
+    </div>`;
+
+  const rows = [
+    row('Continue Watching', CW.map(c => pcard([c.poster, c.name, c.name],
+      `<div class="epb" style="left:${poster * 0.055}px; bottom:${poster * 0.055}px; padding:3px 8px; font-size:${cap * 0.85}px">${c.ep}</div>
+       <div class="prog" style="height:4px"><i style="width:${c.prog}%"></i></div>`)).join('')),
+    ...ROWS.map(r => row(r.label, r.items.map(it => pcard(it)).join(''))),
+  ].join('');
+
+  el.innerHTML = `
+    <div class="zoomer app big ${M.hover ? 'hover' : 'touch'}" data-w="${W}" style="height:${H}px">
+      <div style="width:${W}px">
+        <div class="bighero" style="height:${H - overlap}px">
+          <div style="position:absolute; inset:0; height:${H}px">
+            ${heroArts}
+            <div class="scrim"></div>
+            <div class="idstack" style="left:${g}px; bottom:${H * 0.24}px; width:${idW}px">
+              <img class="hlogo biglogo" src="${ART}${HEROES[0].logo}" alt="" style="max-height:${logoH}px; max-width:${idW * 0.8}px">
+              <div class="meta bigmeta" style="font-size:${Math.round(W * 21 / 1920)}px">${HEROES[0].meta}</div>
+              <div class="syn bigsyn" style="font-size:${Math.round(W * 20 / 1920)}px; max-width:${idW * 0.94}px">${HEROES[0].desc}</div>
+              <div class="bigcta" style="gap:${W * 0.008}px">
+                <button class="play" style="height:${W * 0.031}px; padding:0 ${W * 0.022}px; font-size:${Math.round(W * 22 / 1920)}px; gap:8px">${SVG_PLAY} Play</button>
+                <button class="glass" style="height:${W * 0.031}px; padding:0 ${W * 0.019}px; font-size:${Math.round(W * 22 / 1920)}px">＋ My List</button>
+              </div>
+            </div>
+            <div class="dots" style="bottom:${H * 0.155}px">${HEROES.map(() => '<i></i>').join('')}</div>
+          </div>
+        </div>
+        <div class="rows" style="padding-bottom:${H * 0.06}px">${rows}</div>
+      </div>
+      <button class="searchbtn2" style="top:${H * 0.038}px; right:${g}px; width:${W * 0.031}px; height:${W * 0.031}px">${SVG_SEARCH}</button>
+      <div class="searchbar" style="top:${H * 0.03}px; width:${W * 0.42}px; padding:${W * 0.008}px; gap:${W * 0.008}px; border-radius:${W * 0.012}px">
+        <div class="ssfield" style="height:${W * 0.028}px; border-radius:${W * 0.008}px">${SVG_SEARCH}<span style="font-size:${Math.round(W * 22 / 1920)}px">Search or paste link</span>
+          <button class="ssclose" onclick="this.closest('.searchbar').classList.remove('open')">✕</button></div>
+        <div class="seg" style="border-radius:${W * 0.008}px"><b class="on" style="font-size:${Math.round(W * 20 / 1920)}px; padding:${W * 0.006}px ${W * 0.012}px">Catalog</b><b style="font-size:${Math.round(W * 20 / 1920)}px; padding:${W * 0.006}px ${W * 0.012}px">Keyword</b></div>
+      </div>
+    </div>`;
+
+  const zoomer = el.querySelector('.zoomer');
+  const searchbtn = el.querySelector('.searchbtn2');
+  const bar = el.querySelector('.searchbar');
+  searchbtn.onclick = () => bar.classList.add('open');
+  /* the search chrome is fixed to the frame, not the page */
+  zoomer.style.position = 'relative';
+  searchbtn.style.position = 'absolute';
+  bar.style.position = 'absolute';
+
+  mountHero(el, '.bighero .art', '.dots', i => {
+    const h = HEROES[i];
+    el.querySelector('.biglogo').src = ART + h.logo;
+    el.querySelector('.bigmeta').textContent = h.meta;
+    el.querySelector('.bigsyn').textContent = h.desc;
+  });
+}
+
+/* ═══════════ BIG DETAIL ═══════════ */
+function bigDetail(el, W, H, M){
+  const d = DETAIL;
+  const g = W * M.gutter;
+  const epW = W * M.epCell, stillH = epW * 9 / 16, epGap = W * (46 / 1920);
+  const circ = W * (250 / 1920) * (M.hover ? 1 : 1.05), castGap = W * (52 / 1920);
+  const srcW = W * (560 / 1920), srcH = W * (120 / 1920), srcGap = W * (26 / 1920);
+  const poster = W * M.poster, posterH = poster * 1.5, pGap = W * M.gap;
+  const title = Math.round(W * 26 / 1920), cap = Math.round(W * 21 / 1920);
+  const eyebrow = Math.round(W * 16 / 1920), et = Math.round(W * 24 / 1920), eo = Math.round(W * 18 / 1920);
+  const band = (label, rail, gapv) => `
+    <div style="margin-top:${Math.round(H * 0.05)}px">
+      <div class="rh" style="font-size:${title}px; font-weight:600; color:rgba(255,255,255,.84); padding:0 ${g}px ${Math.round(H * 0.02)}px">${label}</div>
+      <div class="rail" style="gap:${gapv}px; padding:2px ${g}px 8px">${rail}</div>
+    </div>`;
+
+  el.innerHTML = `
+    <div class="zoomer app big ${M.hover ? 'hover' : 'touch'}" data-w="${W}" style="height:${H}px">
+      <div style="width:${W}px">
+        <div class="dt-bighero" style="height:${H * 0.92}px">
+          <div class="art" style="background-image:url('${ART}${d.bg}')"></div>
+          <div class="scrim"></div>
+          <div class="idstack" style="left:${g}px; bottom:${H * 0.1}px; width:${W * 0.44}px">
+            <img class="hlogo" src="${ART}${d.logo}" alt="" style="max-height:${W * 0.07}px; max-width:${W * 0.3}px">
+            <div class="meta" style="font-size:${Math.round(W * 21 / 1920)}px">${d.meta} &nbsp;·&nbsp; ★ <span style="color:#F5C518">${d.imdb}</span> &nbsp;·&nbsp; ${d.year} · ${d.runtime}</div>
+            <div class="syn" style="font-size:${Math.round(W * 20 / 1920)}px; max-width:${W * 0.41}px">${d.desc}</div>
+            <div class="bigcta" style="gap:${W * 0.008}px">
+              <button class="play" style="height:${W * 0.031}px; padding:0 ${W * 0.02}px; font-size:${Math.round(W * 22 / 1920)}px; gap:8px">${SVG_PLAY} Resume · S1E4</button>
+              <button class="glass" style="width:${W * 0.031}px; height:${W * 0.031}px; font-size:${Math.round(W * 24 / 1920)}px">＋</button>
+              <button class="glass" style="width:${W * 0.031}px; height:${W * 0.031}px; font-size:${Math.round(W * 18 / 1920)}px">▶</button>
+              <button class="glass" style="width:${W * 0.031}px; height:${W * 0.031}px; font-size:${Math.round(W * 24 / 1920)}px">⋯</button>
+            </div>
+          </div>
+        </div>
+        <div class="dt-bands" style="padding-bottom:${H * 0.07}px">
+          <div class="schips" style="gap:${W * 0.007}px; padding:${Math.round(H * 0.015)}px ${g}px 0">
+            ${d.seasons.map(s => `<button class="schip ${s === 1 ? 'on' : ''}" style="height:${W * 0.024}px; padding:0 ${W * 0.014}px; font-size:${Math.round(W * 20 / 1920)}px">Season ${s}</button>`).join('')}
+          </div>
+          <div style="margin-top:${Math.round(H * 0.028)}px">
+            <div class="rail" style="gap:${epGap}px; padding:2px ${g}px 8px">${d.episodes.map(([n, t, th, rel, ov, seen, prog]) => `
+              <div class="bigep" style="width:${epW}px">
+                <div class="still" style="width:${epW}px; height:${stillH}px">
+                  <img src="${ART}${th}" alt="" loading="lazy">
+                  <button class="kebab" style="width:${epW * 0.1}px; height:${epW * 0.1}px; font-size:${epW * 0.05}px">⋮</button>
+                  ${seen ? `<div class="seen" style="position:absolute; top:8px; left:8px; width:${epW * 0.075}px; height:${epW * 0.075}px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; font-size:${epW * 0.04}px; display:flex; align-items:center; justify-content:center">✓</div>` : ''}
+                  ${prog ? `<div class="prog" style="position:absolute; left:0; right:0; bottom:0; height:4px; background:rgba(255,255,255,.22)"><i style="display:block; height:100%; width:${prog}%; background:#E23D4C"></i></div>` : ''}
+                </div>
+                <div class="ecap" style="padding:${epW * 0.03}px 2px 0">
+                  <div class="eyebrow" style="font-size:${eyebrow}px; margin-bottom:3px">Episode ${n} · ${rel}</div>
+                  <div class="et" style="font-size:${et}px; margin-bottom:4px">${t}</div>
+                  <div class="eo" style="font-size:${eo}px; line-height:1.4">${ov}</div>
+                </div>
+              </div>`).join('')}
+            </div>
+          </div>
+          ${band('Cast & Crew', d.cast.map(([n, c, p]) => `
+            <div class="bigcast" style="width:${circ}px">
+              <img src="${ART}${p}" alt="" loading="lazy" style="width:${circ}px; height:${circ}px; margin-bottom:${circ * 0.07}px">
+              <div class="cn" style="font-size:${cap}px">${n}</div>
+              <div class="cc" style="font-size:${cap * 0.9}px">${c}</div>
+            </div>`).join(''), castGap)}
+          ${band('Sources', d.sources.map(([a, q, m]) => `
+            <div class="bigsrc" style="width:${srcW}px; min-height:${srcH}px; padding:${srcW * 0.03}px ${srcW * 0.04}px">
+              <div class="sn" style="font-size:${Math.round(W * 22 / 1920)}px; gap:9px; margin-bottom:6px">${a}<i style="font-size:${Math.round(W * 16 / 1920)}px; padding:2px 8px">${q}</i></div>
+              <div class="sm" style="font-size:${Math.round(W * 18 / 1920)}px">${m}</div>
+            </div>`).join(''), srcGap)}
+          ${band('More Like This', d.more.map(([p, n, gg]) => `
+            <div class="card" style="width:${poster}px">
+              <div class="artbox" style="width:${poster}px; height:${posterH}px; border-radius:${M.radius}px">
+                <img src="${ART}${p}" alt="" loading="lazy"></div>
+              <div class="cap" style="font-size:${cap}px; margin-top:7px">${n}</div>
+            </div>`).join(''), pGap)}
+        </div>
+      </div>
+      <button class="backbtn" style="position:absolute">‹</button>
+    </div>`;
+  el.querySelector('.zoomer').style.position = 'relative';
+
+  el.querySelectorAll('.schip').forEach(b => b.onclick = () => {
+    el.querySelectorAll('.schip').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+  });
+}
+
+/* ── mount everything ─────────────────────────────────────── */
+phoneHome(document.getElementById('phHome'));
+phoneDetail(document.getElementById('phDetail'));
+
+const TABLET = { gutter:0.04375, poster:0.16, gap:0.024, radius:8, epCell:0.30, hover:false };
+const DESKTOP = { gutter:0.04375, poster:0.135, gap:0.021, radius:8, epCell:0.2375, hover:true };
+
+bigHome(document.getElementById('tabHome'), 1194, 834, TABLET);
+bigDetail(document.getElementById('tabDetail'), 1194, 834, TABLET);
+bigHome(document.getElementById('dtopHome'), 1440, 810, DESKTOP);
+bigDetail(document.getElementById('dtopDetail'), 1440, 810, DESKTOP);
+
+/* zoom each big frame to its container width */
+function fit(){
+  document.querySelectorAll('.bigdev .zoomer').forEach(z => {
+    const w = +z.dataset.w;
+    const avail = z.parentElement.clientWidth;
+    z.style.zoom = (avail / w).toFixed(4);
+  });
+}
+fit();
+addEventListener('resize', fit);
+</script>
+</body>
+</html>

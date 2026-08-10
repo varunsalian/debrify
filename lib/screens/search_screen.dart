@@ -1,6 +1,7 @@
 import '../theme/app_surfaces.dart';
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' as ui show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -85,6 +86,7 @@ import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import 'catalog_item_detail_screen.dart';
 import 'merged_series_detail_screen.dart';
+import 'settings/tv_home_style_page.dart' show effectiveOffTvHomeStyle;
 import 'debrid_downloads_screen.dart';
 import 'episodes_screen.dart';
 import 'stremio_tv/stremio_tv_service.dart';
@@ -1347,6 +1349,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // trailer-suppression listener; this one is just the latch that tells the
     // post-playback refresh whether anything was actually played).
     MainPageBridge.addPlayerLaunchListener(_markPlaybackStarted);
+    // Restore a keyword search preserved from a prior tab visit (results +
+    // scroll) BEFORE the async default-view load below can start: restoration
+    // sets keyword mode synchronously, and a later-resolving catalog default
+    // would flip the mode back and could fire a catalog search with the
+    // restored keyword text. A successful restore therefore also suppresses
+    // the default-view load outright.
+    final restoredKeyword =
+        widget.isTelevision && !widget.searchMode && !widget.discoverMode
+        ? false
+        : _restoreKeywordState();
     // Home board only: live-refresh when the Home Rows manager changes which
     // rows are hidden (on non-TV, Settings is a pushed route so the board isn't
     // rebuilt on return; on TV a tab switch already reloads it fresh).
@@ -1356,14 +1368,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // reconcile, import) all bump the store revision — the only signal a
       // Home that stays alive across tab switches gets about them.
       IptvMediaStore.listsRevision.addListener(_onIptvListsRevision);
-      unawaited(_loadHomeDefaultView());
-      // TV home layout pref (classic/canvas): loaded once here, then
-      // live-reloaded whenever the Settings picker fires the bridge. HOME
-      // board instance only — the Search tab keeps classic and must not
-      // steal the single bridge slot.
+      if (!restoredKeyword) unawaited(_loadHomeDefaultView());
+      // Home layout pref: loaded once here, then live-reloaded whenever the
+      // Settings picker fires the bridge. HOME board instance only — the
+      // Search tab keeps classic and must not steal the single bridge slot.
+      // EVERY platform now: off-TV the pref decides Classic vs Spotlight,
+      // and without this load the off-TV field would sit on its 'canvas'
+      // initial forever (resolved to classic) whatever was chosen.
+      unawaited(_loadTvHomeStyle());
+      MainPageBridge.tvHomeStyleChanged = _onTvHomeStyleChanged;
       if (widget.isTelevision) {
-        unawaited(_loadTvHomeStyle());
-        MainPageBridge.tvHomeStyleChanged = _onTvHomeStyleChanged;
         MainPageBridge.tvHeroArtworkQualityChanged =
             _onTvHeroArtworkQualityChanged;
         // Canvas theater mode: a dwell after trailer frames land recedes the
@@ -1373,6 +1387,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _heroTrailerShowing.addListener(_onCanvasTrailerShowingChanged);
         HardwareKeyboard.instance.addHandler(_onCanvasTheaterKey);
         HardwareKeyboard.instance.addHandler(_onStageHoldKey);
+      } else {
+        // Off-TV Home: system Back closes the Spotlight search sheet before
+        // anything else may handle it. Routed through the bridge's tab-back
+        // mechanism — a nested PopScope would race the root scope in
+        // main.dart (its didPop==false path continues into double-back-exit
+        // arming even when an inner scope consumed the press).
+        MainPageBridge.registerTabBackHandler('home', _handleHomeBack);
+        // Restored keyword results must come back with the sheet open — the
+        // full-bleed shell would otherwise hide them behind a hero.
+        if (restoredKeyword) _searchSheetOpen = true;
       }
     }
     // Unified (non-TV) layout: drive the catalog Sources bar off search-field
@@ -1382,6 +1406,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (!widget.isTelevision && !widget.searchMode) {
       _searchFocusNode.addListener(_onSearchFocusForSources);
     }
+    // The focus latch: interacting with the field pins the sheet open, even
+    // while the Spotlight shell is not yet eligible — an async style/hero
+    // arrival can then never unmount a focused (still blank) field.
+    if (!widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
+      _searchFocusNode.addListener(_onSearchFocusLatchSheet);
+    }
     _boardScroll.addListener(_onBoardScroll);
     _kwScroll.addListener(() {
       if (_kwScroll.hasClients) _kwLastScroll = _kwScroll.offset;
@@ -1390,15 +1420,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _refreshSimklAuthState();
     _refreshMdblistAuthState();
     _loadMergedSeriesFlag();
-    // Restore a keyword search preserved from a prior tab visit (results +
-    // scroll). If one restored, it carries its own filters, so don't overwrite
-    // them with the saved defaults.
-    final restoredKeyword =
-        widget.isTelevision && !widget.searchMode && !widget.discoverMode
-        ? false
-        : _restoreKeywordState();
-    // Seed keyword filters from the user's saved defaults (parity with the old
-    // search screen). Harmless in variants that never expose keyword mode.
+    // (The keyword restore itself ran earlier — before _loadHomeDefaultView —
+    // see the ordering comment there.) A restored search carries its own
+    // filters, so don't overwrite them with the saved defaults.
     if (!restoredKeyword) unawaited(_loadDefaultKeywordFilters());
     // The dedicated Search tab only shows a field + blank prompt until a query,
     // so it skips the whole board pipeline (home catalogs, Continue Watching,
@@ -1484,6 +1508,50 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       });
     }
     return true;
+  }
+
+  /// Off-TV Home's Back (via the bridge, tab key 'home'): close the Spotlight
+  /// search sheet if it is up. Consuming the press here is what keeps the
+  /// root handler from arming double-back-exit while the user is merely
+  /// backing out of search.
+  bool _handleHomeBack() => _closeSearchSheet();
+
+  /// Focus on the search field latches the sheet open — see [_searchSheetOpen].
+  void _onSearchFocusLatchSheet() {
+    if (!_searchFocusNode.hasFocus || _searchSheetOpen) return;
+    setState(() => _searchSheetOpen = true);
+  }
+
+  /// The one reset the sheet's close button and system Back share.
+  ///
+  /// Atomic by design (plan rev 4): mode returns to catalog BEFORE the close
+  /// (`_clearQuery` alone never restores the mode — that lived only in the
+  /// Search tab's handler), and the in-flight keyword search is invalidated
+  /// (`_kwSearchToken`) so a late batch can't repopulate state Back just
+  /// cleared. Returns whether there was a sheet to close, which is also the
+  /// "did Back consume the press" answer.
+  bool _closeSearchSheet() {
+    if (!_searchSheetOpen) return false;
+    // Whether this press visibly did something — deliberately captured
+    // BEFORE the reset. The guard used to be `_spotlightSelected`, which
+    // reopened the race the focus latch exists to close: the style pref
+    // loads async, so on a cold start a user could focus the field (latch
+    // set) and press Back before the read landed — the handler refused to
+    // consume, and the root handler armed double-back-exit under an open
+    // sheet. Content/focus is the honest test: it is true throughout that
+    // window, and false only for a stale latch on a classic Home, where
+    // falling through to the root handler is exactly right.
+    final hadContent = _sheetForced ||
+        _searchController.text.isNotEmpty ||
+        _searchFocusNode.hasFocus;
+    _kwSearchToken++;
+    _kwSearching = false;
+    _kwLoading = false;
+    _mode = _Mode.catalog;
+    _clearQuery(); // clears the field, kw/lists state, and the catalog query
+    _searchFocusNode.unfocus();
+    setState(() => _searchSheetOpen = false);
+    return _spotlightSelected || hadContent;
   }
 
   /// An integration (Trakt / a debrid provider) was connected or disconnected
@@ -1609,6 +1677,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
     if (widget.searchMode) {
       MainPageBridge.unregisterTabBackHandler('search', _handleSearchBack);
+    }
+    if (!widget.isTelevision && !widget.searchMode && !widget.discoverMode) {
+      // Same closure that registered — the bridge's mid-transition contract.
+      MainPageBridge.unregisterTabBackHandler('home', _handleHomeBack);
+      _searchFocusNode.removeListener(_onSearchFocusLatchSheet);
     }
     // Safe no-op in the variants that never registered it.
     FocusManager.instance.removeListener(_onGlobalFocusChange);
@@ -4588,14 +4661,63 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   // ── TV Home layout (classic / canvas) ────────────────────────────────────
 
-  /// Active TV home layout, from `tv_home_style`. Only the HOME board renders
-  /// non-classic — Search tab, phone and desktop always render classic (via
-  /// [_homeStyleEffective], regardless of this field). Canvas is the product
-  /// default; matching it here avoids a one-frame classic flash at boot.
+  /// Active home layout, from `tv_home_style`. The HOME board renders it on
+  /// TV; off-TV the pref is resolved through [effectiveOffTvHomeStyle] and
+  /// only Spotlight passes through — Search tab and Discover always render
+  /// classic (via [_homeStyleEffective], regardless of this field). Canvas is
+  /// the TV default; matching it here avoids a one-frame classic flash at
+  /// boot there, and resolves to classic off-TV.
   String _tvHomeStyle = 'canvas';
 
   bool get _homeBoardMode =>
       widget.isTelevision && !widget.searchMode && !widget.discoverMode;
+
+  // ── Off-TV Spotlight shell state ─────────────────────────────────────────
+  //
+  // Four separate questions, deliberately not one predicate (the sheet is a
+  // latched state machine — see SPOTLIGHT_RESPONSIVE_PLAN.md):
+  //  • [_spotlightSelected] — the resolved pref says Spotlight.
+  //  • [_spotlightShellActive] — this Home instance renders the shell branch
+  //    (either of its two states) instead of the plain classic Column.
+  //  • [_sheetForced] — search state that REQUIRES the header on screen.
+  //  • [_searchSheetOpen] — the latch. Set by the search button, by field
+  //    focus, and silently whenever [_sheetForced] is observed true; cleared
+  //    only by the explicit close/back reset. The latch is what stops the
+  //    header collapsing under a focused field when its force condition
+  //    momentarily clears (deleting the last character of a query).
+
+  /// The stored style, resolved for this platform, is Spotlight. Off-TV only.
+  bool get _spotlightSelected =>
+      !widget.isTelevision &&
+      effectiveOffTvHomeStyle(_tvHomeStyle) == 'spotlight';
+
+  /// Whether the off-TV Home renders the Spotlight shell branch. The hero
+  /// guard matters: CW/favourites-only content passes a "shelves have items"
+  /// test but would render a large empty hero — the hero reel only ever comes
+  /// from a catalog section.
+  bool get _spotlightShellActive =>
+      _spotlightSelected &&
+      !widget.searchMode &&
+      !widget.discoverMode &&
+      _spotlightHero.isNotEmpty;
+
+  /// Search state that forces the header/sheet to be visible. Typing is
+  /// covered by the focus latch (one can only type while the field is
+  /// focused, and focus latches [_searchSheetOpen]); this covers the states
+  /// that arrive WITHOUT the field being touched: the async keyword-default
+  /// restore, preserved keyword results, and a committed catalog search.
+  bool get _sheetForced =>
+      _mode == _Mode.keyword ||
+      _catalogQuery.isNotEmpty ||
+      _catalogSearching ||
+      // Belt to the focus latch's braces: interactive typing always comes
+      // through a focused field, but autofill or a programmatic controller
+      // write would not — and text on screen must force the header that
+      // renders it.
+      _searchController.text.isNotEmpty;
+
+  /// The sheet latch. See the block comment above.
+  bool _searchSheetOpen = false;
 
   int get _tvHeroArtworkCacheWidth =>
       TvHeroArtworkQualityController.decodeSize.landscapeWidth;
@@ -4603,7 +4725,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       TvHeroArtworkQualityController.decodeSize.posterHeight;
 
   /// The layout the CURRENT surface should render (guards non-home surfaces).
-  String get _homeStyleEffective => _homeBoardMode ? _tvHomeStyle : 'classic';
+  /// The layout the CURRENT surface should render. TV: the stored style on
+  /// the Home board, classic everywhere else. Off-TV: Spotlight only while
+  /// the full-bleed shell is actually on screen — results, keyword mode and
+  /// the open search sheet all dispatch to the classic board, so the search
+  /// experience is byte-identical to today whenever search is in play.
+  String get _homeStyleEffective {
+    if (widget.isTelevision) return _homeBoardMode ? _tvHomeStyle : 'classic';
+    return _spotlightShellActive && !_searchSheetOpen ? 'spotlight' : 'classic';
+  }
 
   /// Any of the STAGE layouts (everything except classic). They all share one
   /// model — a single active rail, identified by key, whose focused cell owns
@@ -5323,6 +5453,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       sections: _spotlightShelves,
       heroNode: _spotlightHeroNode,
       heroAddon: _spotlightHeroSection?.addon,
+      dpad: widget.isTelevision,
       onHeroOpen: _openItem,
       onLoadMoreRow: (row) {
         final catalogRow = row - leading;
@@ -5349,11 +5480,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               takeover: _heroTrailerTakeover,
             )
           : null,
-      onAmbient: (art, tint) {
-        if (!mounted) return;
-        MainPageBridge.tvAmbientArt.value = art;
-        MainPageBridge.tvHeroTint.value = tint;
-      },
+      // TV only: the glass stage the publish feeds exists behind the TV
+      // sidebar rail. Off-TV there is no consumer, and writing the shared
+      // notifiers from a phone Home would leave stale art for the next TV
+      // session of a hot-restarted debug run.
+      onAmbient: widget.isTelevision
+          ? (art, tint) {
+              if (!mounted) return;
+              MainPageBridge.tvAmbientArt.value = art;
+              MainPageBridge.tvHeroTint.value = tint;
+            }
+          : null,
     );
   }
 
@@ -11841,26 +11978,100 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         decoration: glassHome
             ? null
             : BoxDecoration(gradient: app.home.wash),
-        child: SafeArea(
-          // Three layouts:
-          //  • Dedicated Search tab (searchMode) — the field + Catalog/Keyword
-          //    toggle over a blank prompt until the user types (TV only).
-          //  • Home-New board on TV — chrome-free hero + rows, no search bar
-          //    (search lives in its own tab).
-          //  • Home-New board on desktop/mobile — keeps a persistent search bar
-          //    above the board (no separate Search tab there).
-          child: widget.discoverMode
-              ? _buildDiscover()
-              : (widget.isTelevision && !widget.searchMode)
-              ? _buildBoard()
-              : Column(
+        // Four layouts:
+        //  • Dedicated Search tab (searchMode) — the field + Catalog/Keyword
+        //    toggle over a blank prompt until the user types (TV only).
+        //  • Home-New board on TV — chrome-free hero + rows, no search bar
+        //    (search lives in its own tab).
+        //  • Off-TV Home with Spotlight selected — the full-bleed shell with
+        //    search behind a button (see _buildSpotlightShell). The hero owns
+        //    the status-bar region, so SafeArea's top inset is the shell's to
+        //    manage.
+        //  • Home-New board on desktop/mobile classic — keeps a persistent
+        //    search bar above the board (no separate Search tab there).
+        child: widget.discoverMode
+            ? SafeArea(child: _buildDiscover())
+            : (widget.isTelevision && !widget.searchMode)
+            ? SafeArea(child: _buildBoard())
+            : _spotlightShellActive
+            ? _buildSpotlightShell()
+            : SafeArea(
+                child: Column(
                   children: [
                     _buildHeader(),
                     _buildUnifiedCatalogSourcesBar(),
                     Expanded(child: _buildBody()),
                   ],
                 ),
+              ),
+      ),
+    );
+  }
+
+  /// Off-TV Home while Spotlight is selected: one branch, two states.
+  ///
+  /// Sheet hidden — the board is full-bleed (the hero owns the status-bar
+  /// region, like the detail page already does) with a search button floating
+  /// top-right. Sheet open — today's search layout exactly: the same
+  /// `_buildHeader()` + Sources bar + `_buildBody()` the classic branch
+  /// renders, so nothing about search is a copy. `_buildBody` (never
+  /// `_buildBoard` directly): Keyword-mode routing lives there.
+  ///
+  /// The latch line below is the belt to the focus-listener's braces: any
+  /// build that observes a force condition (keyword mode, committed query,
+  /// in-flight search) pins the sheet open, so a state that arrives without
+  /// the field ever being touched — the async keyword-default restore — still
+  /// opens it. Plain field write, deliberately not setState: we are already
+  /// inside build, and the value participates in this very frame.
+  Widget _buildSpotlightShell() {
+    if (_sheetForced) _searchSheetOpen = true;
+    if (_searchSheetOpen) {
+      return SafeArea(
+        child: Column(
+          children: [
+            // Close affordance: only on the blank catalog prompt — with any
+            // query or keyword state active, Back (hardware or gesture) is
+            // the way out, and it resets atomically via _closeSearchSheet.
+            if (!_sheetForced && _searchController.text.isEmpty)
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8, top: 4),
+                  child: IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    tooltip: 'Hide search',
+                    onPressed: _closeSearchSheet,
+                  ),
+                ),
+              ),
+            _buildHeader(),
+            _buildUnifiedCatalogSourcesBar(),
+            Expanded(child: _buildBody()),
+          ],
         ),
+      );
+    }
+    final topInset = MediaQuery.viewPaddingOf(context).top;
+    return SafeArea(
+      top: false,
+      child: Stack(
+        children: [
+          Positioned.fill(child: _buildBody()),
+          Positioned(
+            top: topInset + 10,
+            right: 14,
+            child: _SpotlightSearchButton(
+              onTap: () => setState(() {
+                _searchSheetOpen = true;
+                // Focus the field once the sheet's frame exists, so the
+                // keyboard comes up in the same gesture.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _searchFocusNode.requestFocus();
+                });
+              }),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -16714,6 +16925,40 @@ Widget _heroEdgeFeather(Alignment begin, Alignment end, Color c, double frac) {
 /// Any hero change tears the trailer down (the host nulls the listenable → the
 /// video unmounts and the region fades out). A trailer that stops for content
 /// playback drops on its own via [HeroTrailerBackdrop.onPlayingChanged](false).
+/// The Spotlight shell's floating search button — a frosted circle over the
+/// hero, mirroring the approved mock. Deliberately plain Material ink-free
+/// (the board underneath is a photograph; a splash reads as damage).
+class _SpotlightSearchButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _SpotlightSearchButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipOval(
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0x8C1E1E20),
+              border: Border.all(color: const Color(0x1FFFFFFF)),
+            ),
+            child: const Icon(
+              Icons.search_rounded,
+              size: 20,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HeroTrailerLayer extends StatefulWidget {
   final ValueListenable<YoutubeResolvedStreams?> trailer;
 

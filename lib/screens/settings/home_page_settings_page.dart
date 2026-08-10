@@ -317,13 +317,25 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 SettingsSection(
                   title: '',
                   children: [
-                    if (PlatformUtil.isAndroidTvCached)
-                      SettingsTile.spec(
-                        SettingsRows.tvHomeStyle,
-                        subtitle: tvHomeStyleLabel(_tvHomeStyle),
-                        onTap: _openTvHomeStyle,
-                        focusNode: _firstTileFocusNode,
+                    // Unconditional now: phones and desktop choose between
+                    // Classic and Spotlight (the picker narrows its own list
+                    // off-TV), and gating on isAndroidTvCached silently hid
+                    // the row on Apple TV. Off-TV the caption shows the
+                    // RESOLVED style — a stored 'canvas' reads as Classic.
+                    SettingsTile.spec(
+                      SettingsRows.tvHomeStyle,
+                      subtitle: tvHomeStyleLabel(
+                        PlatformUtil.isTelevision
+                            ? _tvHomeStyle
+                            : effectiveOffTvHomeStyle(_tvHomeStyle),
                       ),
+                      onTap: _openTvHomeStyle,
+                      // Home Layout is now always the first tile, so it owns
+                      // the entry focus node on every platform — the old
+                      // conditional handoff to Home Rows is gone with the
+                      // condition.
+                      focusNode: _firstTileFocusNode,
+                    ),
                     // Home Rows manager entry — hide/show individual rows.
                     // SettingsTile (not bare ListTile) so DPAD focus shows.
                     SettingsTile(
@@ -333,9 +345,6 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                           ? 'Loading your lists…'
                           : 'Choose which rows appear on Home',
                       onTap: _openHomeRowsManager,
-                      focusNode: PlatformUtil.isAndroidTvCached
-                          ? null
-                          : _firstTileFocusNode,
                     ),
                   ],
                 ),

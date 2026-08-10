@@ -1210,27 +1210,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'tv',
           ],
         ),
-      // Android TV only — the layout branch only exists on the TV home board.
-      if (_isAndroidTv)
-        nav(
-          SettingsRows.tvHomeStyle,
-          'Appearance',
-          _openTvHomeStyle,
-          subtitle: tvHomeStyleLabel(_tvHomeStyle),
-          keywords: const [
-            'home',
-            'layout',
-            'home screen',
-            'canvas',
-            'shelf',
-            'classic',
-            'rows',
-            'redesign',
-            'view',
-            'display',
-            'home & display',
-          ],
+      // Every platform now: TV picks among the eight layouts, phones and
+      // desktop between Classic and Spotlight (the picker narrows itself).
+      nav(
+        SettingsRows.tvHomeStyle,
+        'Appearance',
+        _openTvHomeStyle,
+        subtitle: tvHomeStyleLabel(
+          _isAndroidTv ? _tvHomeStyle : effectiveOffTvHomeStyle(_tvHomeStyle),
         ),
+        keywords: const [
+          'home',
+          'layout',
+          'home screen',
+          'canvas',
+          'spotlight',
+          'shelf',
+          'classic',
+          'rows',
+          'redesign',
+          'view',
+          'display',
+          'home & display',
+        ],
+      ),
       // Android TV only — the stage layout is a TV-canvas design; phones and
       // desktop always browse Discover as a grid.
       if (_isAndroidTv)

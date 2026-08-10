@@ -951,12 +951,46 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.calendar_month_rounded, // 19: Calendar (Trakt/Simkl)
   ];
 
+  /// Tab index → bridge back-handler key, in ONE place. Every path that
+  /// assigns [_selectedIndex] must publish through this — cold start lands
+  /// directly on Home (15) via the field initializer without ever passing
+  /// through [_onItemTapped], and Back on the very first screen would
+  /// otherwise bypass the tab's handler entirely.
+  static String? _tabKeyFor(int index) {
+    switch (index) {
+      case 4:
+        return 'realdebrid';
+      case 5:
+        return 'torbox';
+      case 6:
+        return 'pikpak';
+      case 10:
+        return 'webdav';
+      case 11:
+        return 'premiumize';
+      case 12:
+        return 'alldebrid';
+      case 15:
+        // Off-TV Home: its handler closes the Spotlight search sheet on Back
+        // before the root fallback may arm double-back-exit.
+        return 'home';
+      case 17:
+        // Dedicated Search tab: its handler clears an active query on Back
+        // (returning to the blank prompt) before letting Back leave the tab.
+        return 'search';
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
     // Active-surface signal: the initializer above picked the boot tab before
     // any tap could, so system-bar ownership needs it published explicitly.
     AppSurfaceState.instance.publishTab(_selectedIndex);
+    // Same rule for the bridge's back routing: the boot tab was chosen by the
+    // field initializer, not a tap.
+    MainPageBridge.setActiveTab(_tabKeyFor(_selectedIndex));
     // Startup channel: show the cover immediately so the user never sees the
     // IPTV page assembling itself underneath, and publish the splash hand-off
     // signal — AppInitializer waits on homeBoardReady, which only the Home
@@ -2064,34 +2098,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     _animationController.forward();
 
     // Notify MainPageBridge which tab is now active for back navigation
-    // Map tab indices to handler keys
-    String? activeTabKey;
-    switch (index) {
-      case 4:
-        activeTabKey = 'realdebrid';
-        break;
-      case 5:
-        activeTabKey = 'torbox';
-        break;
-      case 6:
-        activeTabKey = 'pikpak';
-        break;
-      case 10:
-        activeTabKey = 'webdav';
-        break;
-      case 11:
-        activeTabKey = 'premiumize';
-        break;
-      case 12:
-        activeTabKey = 'alldebrid';
-        break;
-      case 17:
-        // Dedicated Search tab: its handler clears an active query on Back
-        // (returning to the blank prompt) before letting Back leave the tab.
-        activeTabKey = 'search';
-        break;
-    }
-    MainPageBridge.setActiveTab(activeTabKey);
+    MainPageBridge.setActiveTab(_tabKeyFor(index));
 
     // Update active tab for TV sidebar navigation
     MainPageBridge.setActiveTvTab(index);
@@ -2257,6 +2264,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _selectedIndex = nextIndex;
     });
     AppSurfaceState.instance.publishTab(nextIndex);
+    // Keep back routing in step: this path can move the user off a hidden
+    // tab without a tap ever happening.
+    MainPageBridge.setActiveTab(_tabKeyFor(nextIndex));
   }
 
   /// Insert the Trakt Calendar tab (screen-ID 19) just before Downloads (2)

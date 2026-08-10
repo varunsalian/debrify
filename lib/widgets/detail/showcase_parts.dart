@@ -22,45 +22,75 @@ import 'detail_model.dart';
 /// The divisors below are the raw 1920-scale numbers from the mock.
 class ShowcaseMetrics {
   final double w;
-  const ShowcaseMetrics(this.w);
+
+  /// Compact — the phone presentation, chosen by [DetailShowcase] from its
+  /// own width AND input (never by width alone: a narrow TV keeps the wide
+  /// presentation so the DPAD ladder's widgets all exist). Compact values are
+  /// measured off the Apple TV phone app on the reference device — see
+  /// spotlight_responsive_mockup/.
+  final bool compact;
+
+  const ShowcaseMetrics(this.w, {this.compact = false});
 
   /// From the space actually GIVEN, not from the screen.
   ///
   /// tvOS reports a full-screen size while the shell insets the content for
   /// overscan safe area, so `MediaQuery.sizeOf` overstates the drawable width
   /// and every card comes out proportionally too large for the band it sits
-  /// in. `maxWidth` here is whatever the rail was handed.
-  /// The DRAWABLE width, not the screen.
-  ///
-  /// tvOS reports a full-screen size while the shell insets the content for
-  /// overscan safe area, so sizing off `MediaQuery.sizeOf` alone makes every
-  /// card proportionally too large for the band it is drawn in. Subtracting
-  /// the safe-area padding is exactly that correction, and unlike probing the
-  /// render object it is stable during build.
+  /// in. Prefers a [ShowcaseMetricsScope] installed by the page (which knows
+  /// both the LayoutBuilder width and the input axis); the MediaQuery
+  /// subtraction is the fallback for callers outside the Showcase page.
   factory ShowcaseMetrics.of(BuildContext c) {
+    final scoped =
+        c.dependOnInheritedWidgetOfExactType<ShowcaseMetricsScope>();
+    if (scoped != null) return scoped.metrics;
     final mq = MediaQuery.of(c);
     final w = mq.size.width - mq.padding.horizontal;
     return ShowcaseMetrics(w > 0 ? w : mq.size.width);
   }
 
-  double get gutter => w * (84 / 1920);
-  double get title => w * (26 / 1920);
+  double get gutter => compact ? w * 0.048 : w * (84 / 1920);
+  double get title => compact ? 19.0 : w * (26 / 1920);
 
-  double get stillW => w * (432 / 1920);
+  /// Compact: the integrated episode card — 62% of the width, the still on
+  /// top and a caption plate inside the same rounded rect. Wide: the 1920-
+  /// scale mock table, caption below bare art.
+  double get epCell => compact ? w * 0.62 : w * (456 / 1920);
+  double get stillW => compact ? epCell : w * (432 / 1920);
   double get stillH => stillW * (243 / 432);
-  double get epCell => w * (456 / 1920);
-  double get epGap => w * (46 / 1920);
+  double get epGap => compact ? w * 0.035 : w * (46 / 1920);
 
-  double get circle => w * (250 / 1920);
-  double get castGap => w * (52 / 1920);
+  /// The compact card's caption plate: eyebrow, title, 3-line synopsis,
+  /// runtime + kebab footer, plus padding.
+  double get epPlate => compact ? 128.0 : 0;
 
-  double get srcW => w * (560 / 1920);
+  double get circle => compact ? w * 0.23 : w * (250 / 1920);
+  double get castGap => compact ? w * 0.04 : w * (52 / 1920);
+
+  double get srcW => compact ? w * 0.75 : w * (560 / 1920);
   double get srcH => w * (132 / 1920);
-  double get srcGap => w * (26 / 1920);
+  double get srcGap => compact ? w * 0.03 : w * (26 / 1920);
 
-  double get poster => w * (260 / 1920);
+  double get poster => compact ? w * 0.243 : w * (260 / 1920);
   double get posterH => poster * (390 / 260);
-  double get posterGap => w * (40 / 1920);
+  double get posterGap => compact ? w * 0.046 : w * (40 / 1920);
+}
+
+/// The page's metrics, computed once by [DetailShowcase] from its
+/// LayoutBuilder width and input axis, and read by every band through
+/// [ShowcaseMetrics.of].
+class ShowcaseMetricsScope extends InheritedWidget {
+  final ShowcaseMetrics metrics;
+
+  const ShowcaseMetricsScope({
+    super.key,
+    required this.metrics,
+    required super.child,
+  });
+
+  @override
+  bool updateShouldNotify(ShowcaseMetricsScope old) =>
+      old.metrics.w != metrics.w || old.metrics.compact != metrics.compact;
 }
 
 /// Kept for callers that only need the page margin.
@@ -210,16 +240,67 @@ class ShowcaseAmbient extends StatelessWidget {
 class ShowcaseBackdropScrim extends StatelessWidget {
   final bool visible;
 
-  const ShowcaseBackdropScrim({super.key, required this.visible});
+  /// The ambient trailer is rolling: pull the bed in tight so the video
+  /// plays clear, keeping only what text legibility strictly needs — the
+  /// same move the home hero makes while its picture rolls. Never true on
+  /// TV (the page passes it only when `dpad` is false).
+  final bool thinned;
+
+  const ShowcaseBackdropScrim({
+    super.key,
+    required this.visible,
+    this.thinned = false,
+  });
 
   @override
-  Widget build(BuildContext context) => IgnorePointer(
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 550),
-          opacity: visible ? 1 : 0,
-          child: const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
+  Widget build(BuildContext context) {
+    // Two different jobs on two form factors. Wide: the identity sits at the
+    // LEFT, so the bed is a diagonal sweep and the art's right half stays
+    // clear. Compact: the identity is a centered stack at the FOOT, and that
+    // same diagonal just washes the whole portrait frame grey — the art is
+    // narrow, so "68% across" is everything. The phone scrim is vertical: a
+    // light cap for the status bar, clear art through the middle, and a bed
+    // under the identity text only.
+    final compact = ShowcaseMetrics.of(context).compact;
+    final gradient = compact
+        ? (thinned
+            ? const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0x2E000000),
+                  Color(0x00000000),
+                  Color(0x00000000),
+                  Color(0x66000000),
+                  Color(0xA8000000),
+                ],
+                stops: [0, 0.14, 0.6, 0.86, 1],
+              )
+            : const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0x66000000),
+                  Color(0x00000000),
+                  Color(0x00000000),
+                  Color(0xB3000000),
+                  Color(0xE6000000),
+                ],
+                stops: [0, 0.18, 0.42, 0.78, 1],
+              ))
+        : (thinned
+            ? const LinearGradient(
+                begin: Alignment(-1, -0.2),
+                end: Alignment(1, 0.2),
+                colors: [
+                  Color(0x9E000000),
+                  Color(0x66000000),
+                  Color(0x1C000000),
+                  Color(0x00000000),
+                ],
+                stops: [0, 0.26, 0.52, 0.68],
+              )
+            : const LinearGradient(
                 begin: Alignment(-1, -0.2),
                 end: Alignment(1, 0.2),
                 colors: [
@@ -229,11 +310,17 @@ class ShowcaseBackdropScrim extends StatelessWidget {
                   Color(0x00000000),
                 ],
                 stops: [0, 0.26, 0.52, 0.68],
-              ),
-            ),
-          ),
+              ));
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 550),
+        opacity: visible ? 1 : 0,
+        child: DecoratedBox(
+          decoration: BoxDecoration(gradient: gradient),
         ),
-      );
+      ),
+    );
+  }
 }
 
 /// The logo re-forming as a centred header once you descend.
@@ -356,9 +443,72 @@ class ShowcaseIdentity extends StatelessWidget {
     // not `MediaQuery`: the body is already inside the overscan `SafeArea`, so
     // the screen height overstates it by the top AND bottom insets and the peek
     // would be pushed off the bottom.
+    //
+    // Compact: the height is a MINIMUM, not a fix — the centered stack's
+    // synopsis expands in place (MORE), and growing the band is the only
+    // honest response; a fixed box would overflow.
+    final metrics = ShowcaseMetrics.of(context);
+    if (metrics.compact) {
+      return Container(
+        constraints: BoxConstraints(minHeight: height),
+        alignment: Alignment.bottomCenter,
+        child: _identityColumnCompact(context, m, actions, metrics),
+      );
+    }
     return SizedBox(
       height: height,
       child: _identityColumn(context, m, actions),
+    );
+  }
+
+  /// The phone identity — the Apple phone idiom: everything centered and
+  /// stacked, synopsis clamped to two lines with an inline MORE.
+  Widget _identityColumnCompact(
+    BuildContext context,
+    DetailModel m,
+    List<Widget> actions,
+    ShowcaseMetrics metrics,
+  ) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(metrics.gutter, 0, metrics.gutter, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Chip(label: m.isMovie ? 'Film' : 'Series'),
+          const SizedBox(height: 9),
+          _LogoOrTitle(url: m.logo, name: m.name, centered: true),
+          const SizedBox(height: 10),
+          _MetaLine(model: m),
+          const SizedBox(height: 8),
+          if ((m.synopsis ?? '').isNotEmpty) ...[
+            _ExpandableSynopsis(text: m.synopsis!),
+            const SizedBox(height: 10),
+          ],
+          _TechLine(model: m),
+          const SizedBox(height: 12),
+          // Wrap, not Row: a Resume pill plus four circles can pass 390
+          // logical on a long episode code, and a phone identity that
+          // overflows sideways is worse than one that wraps.
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (m.showPrimary)
+                _Primary(
+                  node: primaryNode,
+                  label: m.primaryLabel,
+                  onTap: m.onPrimary,
+                  onFocused: onFocused,
+                ),
+              ...actions,
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -368,7 +518,8 @@ class ShowcaseIdentity extends StatelessWidget {
     List<Widget> actions,
   ) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(kShowcaseGutter, 0, kShowcaseGutter, 26),
+      padding: EdgeInsets.fromLTRB(ShowcaseMetrics.of(context).gutter, 0,
+          ShowcaseMetrics.of(context).gutter, 26),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         // Anchored to the FOOT of the screenful, as the reference is.
@@ -417,7 +568,14 @@ class _LogoOrTitle extends StatelessWidget {
   final String? url;
   final String name;
 
-  const _LogoOrTitle({required this.url, required this.name});
+  /// Compact identity centers its whole stack; the logo art follows.
+  final bool centered;
+
+  const _LogoOrTitle({
+    required this.url,
+    required this.name,
+    this.centered = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -427,9 +585,10 @@ class _LogoOrTitle extends StatelessWidget {
     final text = Text(
       name,
       maxLines: 2,
+      textAlign: centered ? TextAlign.center : TextAlign.start,
       overflow: TextOverflow.ellipsis,
-      style: const TextStyle(
-        fontSize: 39,
+      style: TextStyle(
+        fontSize: centered ? 32 : 39,
         height: 1,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.8,
@@ -442,10 +601,51 @@ class _LogoOrTitle extends StatelessWidget {
       child: CachedNetworkImage(
         imageUrl: url!,
         fit: BoxFit.contain,
-        alignment: Alignment.bottomLeft,
+        alignment: centered ? Alignment.bottomCenter : Alignment.bottomLeft,
         cacheManager: DebrifyImageCache.manager,
         memCacheWidth: 520,
         errorWidget: (_, __, ___) => text,
+      ),
+    );
+  }
+}
+
+/// Two lines + MORE; tapping expands in place (the identity band grows).
+/// Collapse comes back with LESS — a one-way expander leaves a wall of text
+/// parked over the artwork.
+class _ExpandableSynopsis extends StatefulWidget {
+  final String text;
+  const _ExpandableSynopsis({required this.text});
+
+  @override
+  State<_ExpandableSynopsis> createState() => _ExpandableSynopsisState();
+}
+
+class _ExpandableSynopsisState extends State<_ExpandableSynopsis> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => setState(() => _open = !_open),
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            widget.text,
+            maxLines: _open ? null : 2,
+            textAlign: TextAlign.center,
+            overflow: _open ? null : TextOverflow.ellipsis,
+            style: _t(12.5, a: 0.78).copyWith(height: 1.5),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            _open ? 'LESS' : 'MORE',
+            style: _t(10.5, w: FontWeight.w700, a: 0.9)
+                .copyWith(letterSpacing: 0.8),
+          ),
+        ],
       ),
     );
   }
@@ -606,38 +806,46 @@ class _PrimaryState extends State<_Primary> {
         onKeyEvent: (_, e) => _activate(e, widget.onTap),
         child: GestureDetector(
           onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            height: 30,
-            padding: const EdgeInsets.symmetric(horizontal: 17),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              // The focus flip: ghost at rest, SOLID WHITE on black when
-              // focused. The reference's primary is the one thing that does not
-              // merely lift.
-              color: _f ? _ink : _ink.withValues(alpha: 0.22),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.play_arrow_rounded,
-                  size: 14,
-                  color: _f ? Colors.black : _ink,
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  widget.label,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: _f ? Colors.black : _ink,
+          child: Builder(builder: (context) {
+            // TV draws at the mock's 960-canvas numbers; a phone needs a real
+            // finger target and the phone type ramp — the Apple reference
+            // pill is 42pt with 15pt text, and SOLID white at rest (there is
+            // no focus state to flip through on touch).
+            final compact = ShowcaseMetrics.of(context).compact;
+            final solid = _f || compact;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              height: compact ? 44 : 30,
+              padding: EdgeInsets.symmetric(horizontal: compact ? 24 : 17),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                // The focus flip: ghost at rest, SOLID WHITE on black when
+                // focused. The reference's primary is the one thing that does
+                // not merely lift.
+                color: solid ? _ink : _ink.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(compact ? 22 : 15),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.play_arrow_rounded,
+                    size: compact ? 20 : 14,
+                    color: solid ? Colors.black : _ink,
                   ),
-                ),
-              ],
-            ),
-          ),
+                  const SizedBox(width: 5),
+                  Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontSize: compact ? 15 : 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: solid ? Colors.black : _ink,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
         ),
       );
 }
@@ -668,21 +876,25 @@ class _CircleState extends State<_Circle> {
         onKeyEvent: (_, e) => _activate(e, widget.onTap),
         child: GestureDetector(
           onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            width: 26,
-            height: 26,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _f ? _ink : _ink.withValues(alpha: 0.18),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              widget.icon,
-              size: 13,
-              color: _f ? Colors.black : _ink,
-            ),
-          ),
+          child: Builder(builder: (context) {
+            final compact = ShowcaseMetrics.of(context).compact;
+            final d = compact ? 44.0 : 26.0;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              width: d,
+              height: d,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _f ? _ink : _ink.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                widget.icon,
+                size: compact ? 20 : 13,
+                color: _f ? Colors.black : _ink,
+              ),
+            );
+          }),
         ),
       );
 }
@@ -696,26 +908,131 @@ class ShowcaseSeasons extends StatelessWidget {
   const ShowcaseSeasons({super.key, required this.view, required this.nodes});
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-        height: 34,
-        child: ListView.separated(
-          clipBehavior: Clip.none,
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: kShowcaseGutter),
-          itemCount: view.seasons.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 7),
-          itemBuilder: (context, i) {
-            final s = view.seasons[i];
-            final active = s.number == view.selectedSeasonNumber;
-            return _SeasonPill(
-              node: nodes[i],
-              label: 'Season ${s.number}',
-              active: active,
-              onTap: () => view.selectSeason(s.number),
-            );
-          },
+  Widget build(BuildContext context) {
+    final m = ShowcaseMetrics.of(context);
+    // Compact: one pill + an anchored popup — Apple's phone idiom, measured
+    // off the reference (no scrim, no sheet, the page stays live behind it).
+    // The band carries exactly ONE node then, supplied by the layout.
+    if (m.compact) {
+      return Padding(
+        padding: EdgeInsets.only(left: m.gutter, right: m.gutter, top: 10),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: _SeasonDropdown(view: view, node: nodes.first),
         ),
       );
+    }
+    return SizedBox(
+      height: 34,
+      child: ListView.separated(
+        clipBehavior: Clip.none,
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: m.gutter),
+        itemCount: view.seasons.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 7),
+        itemBuilder: (context, i) {
+          final s = view.seasons[i];
+          final active = s.number == view.selectedSeasonNumber;
+          return _SeasonPill(
+            node: nodes[i],
+            label: 'Season ${s.number}',
+            active: active,
+            onTap: () => view.selectSeason(s.number),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// The compact season control: a tinted pill that opens an anchored popup
+/// menu at its own position. `showMenu` supplies the parts a hand-rolled
+/// overlay always forgets — outside-tap dismissal, Escape/Back, viewport-edge
+/// repositioning, an internal scroll past ~8 seasons — and returns focus to
+/// the anchor's route when it closes.
+class _SeasonDropdown extends StatefulWidget {
+  final EpisodesPanelView view;
+  final FocusNode node;
+
+  const _SeasonDropdown({required this.view, required this.node});
+
+  @override
+  State<_SeasonDropdown> createState() => _SeasonDropdownState();
+}
+
+class _SeasonDropdownState extends State<_SeasonDropdown> {
+  bool _f = false;
+
+  Future<void> _open() async {
+    final box = context.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) return;
+    final origin = box.localToGlobal(Offset.zero, ancestor: overlay);
+    final selected = await showMenu<int>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        origin.dx,
+        origin.dy + box.size.height + 6,
+        overlay.size.width - origin.dx - 220,
+        0,
+      ),
+      color: const Color(0xFF1B1B1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      constraints: const BoxConstraints(minWidth: 200, maxHeight: 380),
+      items: [
+        for (final s in widget.view.seasons)
+          PopupMenuItem<int>(
+            value: s.number,
+            child: Text(
+              'Season ${s.number}',
+              style: TextStyle(
+                fontSize: 14.5,
+                fontWeight: s.number == widget.view.selectedSeasonNumber
+                    ? FontWeight.w600
+                    : FontWeight.w400,
+                color: s.number == widget.view.selectedSeasonNumber
+                    ? AppThemeScope.of(context).core.accent
+                    : Colors.white,
+              ),
+            ),
+          ),
+      ],
+    );
+    if (selected != null) widget.view.selectSeason(selected);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      focusNode: widget.node,
+      onFocusChange: (v) => setState(() => _f = v),
+      onKeyEvent: (_, e) => _activate(e, _open),
+      child: GestureDetector(
+        onTap: _open,
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: _ink.withValues(alpha: _f ? 0.22 : 0.12),
+            borderRadius: BorderRadius.circular(17),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Season ${widget.view.selectedSeasonNumber}',
+                style: _t(14, w: FontWeight.w600),
+              ),
+              const SizedBox(width: 7),
+              const Icon(Icons.keyboard_arrow_down_rounded,
+                  size: 17, color: Colors.white70),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _SeasonPill extends StatefulWidget {
@@ -786,6 +1103,10 @@ class ShowcaseEpisodeCell extends StatelessWidget {
   final bool isNext;
   final String? fallbackImage;
 
+  /// Touch/pointer surfaces only: a visible ⋮ over the still, the discoverable
+  /// stand-in for hold-OK. TV passes null and renders exactly as before.
+  final VoidCallback? onOptions;
+
   const ShowcaseEpisodeCell({
     super.key,
     required this.episode,
@@ -796,6 +1117,7 @@ class ShowcaseEpisodeCell extends StatelessWidget {
     this.cellWidth,
     this.stillWidth,
     this.stillHeight,
+    this.onOptions,
   });
 
   @override
@@ -878,6 +1200,12 @@ class ShowcaseEpisodeCell extends StatelessWidget {
                         bottom: 6,
                         child: _Badge(label: '▶ ${episode.runtime}m'),
                       ),
+                    if (onOptions != null)
+                      Positioned(
+                        right: 5,
+                        bottom: 5,
+                        child: _KebabButton(onTap: onOptions!),
+                      ),
                   ],
                 ),
               ),
@@ -927,6 +1255,169 @@ class ShowcaseEpisodeCell extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The compact episode card — one integrated rounded rect: still on top,
+/// caption plate inside the same card (eyebrow, title, three-line synopsis,
+/// runtime + kebab). The measured Apple phone idiom: ~62% of the width, next
+/// card peeking. Tap-to-play and the focus lift are supplied by the
+/// `DetailEpisodeInteraction` wrapper, exactly as for the wide cell.
+class ShowcaseEpisodeCardCompact extends StatelessWidget {
+  final TraktEpisode episode;
+  final bool focused;
+  final double? progress;
+  final bool isNext;
+  final String? fallbackImage;
+  final VoidCallback onOptions;
+
+  const ShowcaseEpisodeCardCompact({
+    super.key,
+    required this.episode,
+    required this.focused,
+    required this.progress,
+    required this.isNext,
+    required this.fallbackImage,
+    required this.onOptions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final m = ShowcaseMetrics.of(context);
+    final app = AppThemeScope.of(context);
+    final p = progress ?? 0;
+    final watched = p >= 100;
+    final url = episode.thumbnailUrl ?? fallbackImage;
+    final slot = _slotFill(app);
+
+    return ParallaxFocus(
+      focused: focused,
+      shape: ParallaxShape.episodeStill,
+      radius: BorderRadius.circular(12),
+      child: Container(
+        width: m.epCell,
+        height: m.stillH + m.epPlate,
+        decoration: BoxDecoration(
+          // A step off the page, like every card slot — on the Spotlight
+          // palette this lands on the mock's #141416-on-black.
+          color: slot,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: m.epCell,
+              height: m.stillH,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (url != null && url.isNotEmpty)
+                    CachedNetworkImage(
+                      imageUrl: url,
+                      fit: BoxFit.cover,
+                      cacheManager: DebrifyImageCache.manager,
+                      memCacheWidth: 500,
+                      placeholder: (_, __) => ColoredBox(color: slot),
+                      errorWidget: (_, __, ___) => ColoredBox(color: slot),
+                    ),
+                  if (watched)
+                    ColoredBox(color: Colors.black.withValues(alpha: 0.45)),
+                  if (isNext && !watched)
+                    Positioned(
+                      left: 7,
+                      top: 7,
+                      child: _Badge(label: 'UP NEXT'),
+                    ),
+                  if (watched)
+                    const Positioned(
+                      right: 7,
+                      top: 7,
+                      child: Icon(Icons.check_rounded,
+                          size: 14, color: Colors.white),
+                    ),
+                  if (p > 0 && p < 100)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: LinearProgressIndicator(
+                        value: p / 100,
+                        minHeight: 3,
+                        backgroundColor:
+                            Colors.black.withValues(alpha: 0.4),
+                        valueColor: AlwaysStoppedAnimation(app.core.accent),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 9, 12, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'EPISODE ${episode.number}',
+                      style: _t(10, a: 0.5).copyWith(letterSpacing: 0.9),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      episode.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _t(14.5, w: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                    Expanded(
+                      child: Text(
+                        episode.overview ?? '',
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: _t(11.5, a: 0.55).copyWith(height: 1.4),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        if ((episode.runtime ?? 0) > 0) ...[
+                          const Icon(Icons.play_arrow_rounded,
+                              size: 13, color: Colors.white70),
+                          const SizedBox(width: 3),
+                          Text('${episode.runtime}m', style: _t(11.5, a: 0.7)),
+                        ] else if ((episode.firstAired ?? '').isNotEmpty)
+                          Text(episode.firstAired!.split('T').first,
+                              style: _t(11.5, a: 0.5)),
+                        const Spacer(),
+                        _KebabButton(onTap: onOptions),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The visible stand-in for hold-OK on touch surfaces: ⋮ with a real finger
+/// target behind a small glyph.
+class _KebabButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _KebabButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: const Padding(
+          padding: EdgeInsets.all(6),
+          child: Icon(Icons.more_vert_rounded, size: 17, color: Colors.white70),
+        ),
+      );
 }
 
 class _Badge extends StatelessWidget {
@@ -1145,7 +1636,14 @@ class _SourceCardState extends State<_SourceCard> {
             shape: ParallaxShape.sourceCard,
             radius: BorderRadius.circular(7),
             child: Container(
-              width: widget.add ? 150 : 280,
+              // Wide keeps the shipped 280/150 exactly; compact grows the
+              // bound card to 75% of the width (the mock's source card) and
+              // the add chip a touch for fingers.
+              width: () {
+                final mm = ShowcaseMetrics.of(context);
+                if (!mm.compact) return widget.add ? 150.0 : 280.0;
+                return widget.add ? 160.0 : mm.srcW;
+              }(),
               height: 66,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
               decoration: BoxDecoration(
@@ -1310,18 +1808,26 @@ class _Band extends StatelessWidget {
   const _Band({required this.title, required this.height, required this.child});
 
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.only(left: kShowcaseGutter, bottom: 10),
-            child: Text(title, style: _t(13, w: FontWeight.w600, a: 0.84)),
+  Widget build(BuildContext context) {
+    final m = ShowcaseMetrics.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 20),
+        Padding(
+          padding: EdgeInsets.only(left: m.gutter, bottom: 10),
+          // Compact band titles use the phone heading size; wide keeps the
+          // shipped 13pt (the 960-canvas number the TV mock pins).
+          child: Text(
+            title,
+            style: _t(m.compact ? 19 : 13, w: FontWeight.w600, a: 0.84),
           ),
-          SizedBox(height: height, child: child),
-        ],
-      );
+        ),
+        SizedBox(height: height, child: child),
+      ],
+    );
+  }
 }
 
 
@@ -1348,7 +1854,8 @@ class ShowcaseBandNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(kShowcaseGutter, 22, kShowcaseGutter, 8),
+        padding: EdgeInsets.fromLTRB(ShowcaseMetrics.of(context).gutter, 22,
+            ShowcaseMetrics.of(context).gutter, 8),
         child: Row(
           children: [
             Text(text, style: _t(11.5, a: 0.66)),
@@ -1423,7 +1930,8 @@ class ShowcaseDetails extends StatelessWidget {
   Widget build(BuildContext context) {
     if (rows.isEmpty && (awards ?? '').isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(kShowcaseGutter, 26, kShowcaseGutter, 10),
+      padding: EdgeInsets.fromLTRB(ShowcaseMetrics.of(context).gutter, 26,
+          ShowcaseMetrics.of(context).gutter, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
