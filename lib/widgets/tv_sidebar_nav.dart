@@ -330,7 +330,10 @@ class TvSidebarNavState extends State<TvSidebarNav>
     widget.onTap(index);
     _collapse();
     Future.delayed(const Duration(milliseconds: _pageTransitionDelay), () {
-      if (mounted) _focusContent();
+      // !_hasSidebarFocus: if the rail was re-entered during the delay
+      // (BACK/Menu at root, or LEFT), stealing focus back to content would
+      // slam the just-reopened rail shut.
+      if (mounted && !_hasSidebarFocus) _focusContent();
     });
   }
 
@@ -343,7 +346,8 @@ class TvSidebarNavState extends State<TvSidebarNav>
   void _moveToContent() {
     _collapse();
     Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) _focusContent();
+      // Same re-entry guard as _selectMenuItem.
+      if (mounted && !_hasSidebarFocus) _focusContent();
     });
   }
 
@@ -405,11 +409,23 @@ class TvSidebarNavState extends State<TvSidebarNav>
     super.dispose();
   }
 
-  /// Called from the parent when DPAD-left lands on the sidebar.
+  /// Called from the parent when DPAD-left lands on the sidebar (and, at the
+  /// true root, BACK/Menu — see _onRootPopInvoked in main.dart).
   void requestFocus() {
     if (_focusNodes.isEmpty) return;
     final targetIndex = widget.currentIndex.clamp(0, _focusNodes.length - 1);
-    _focusNodes[targetIndex].requestFocus();
+    final node = _focusNodes[targetIndex];
+    if (node.hasFocus) {
+      // Re-entry during the collapse→content handoff: _collapse() has already
+      // marked the rail closed while this node still holds real focus (the
+      // handoff moves it out 100–400ms later — or never, when the content has
+      // nothing focusable). requestFocus() on an already-focused node fires
+      // no focus event, so the enter path must run by hand or the press that
+      // got us here is silently swallowed.
+      _handleFocusChange(targetIndex, true);
+      return;
+    }
+    node.requestFocus();
   }
 
   bool get hasFocus => _hasSidebarFocus;

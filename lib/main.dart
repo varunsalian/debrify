@@ -2683,6 +2683,117 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         });
   }
 
+  /// Root-level BACK/Menu handler for the MainPage PopScope below. Runs only
+  /// when the press wasn't already meaningful somewhere deeper: the startup
+  /// cover, per-tab folder handlers, pushed routes and the non-Home tab-walk
+  /// all keep their behavior — this decides what BACK means when there is
+  /// nothing left to go back FROM.
+  Future<void> _onRootPopInvoked(bool didPop) async {
+    if (didPop) return;
+
+    // The startup-channel cover owns BACK while it is up: this is the
+    // promised escape hatch, and it has to win over every other handler
+    // (including the root exit contract) or a hung launch would be
+    // uninterruptible.
+    if (_showIptvStartupOverlay) {
+      _cancelIptvStartup();
+      return;
+    }
+
+    // First, check if any child screen wants to handle back navigation
+    // (e.g., folder navigation in RealDebrid, TorBox, PikPak, Playlist screens)
+    if (MainPageBridge.handleBackNavigation()) {
+      return; // Back was handled by child screen (navigated up a folder)
+    }
+
+    // Allow navigation within app for all platforms
+    if (Navigator.canPop(context)) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    // Classic bottom-nav contract (non-TV): BACK from any non-Home
+    // tab walks to the Home tab first. Without this every tab was
+    // exit-adjacent — the first press armed the exit timer right
+    // there, so two quick presses anywhere closed the whole app,
+    // which read as "back randomly exits". Only Home arms
+    // double-back-to-exit.
+    // Apple TV takes this path too. Menu on tvOS means "go back", and
+    // its root is the Home tab — without this, BACK from any other tab
+    // did nothing at all, because the Android-TV branch below skips the
+    // walk and the old `Platform.isIOS` guard (true on tvOS) then
+    // swallowed the press. Android TV keeps its sidebar contract.
+    if ((!_isAndroidTv || PlatformUtil.isTvOS) && _selectedIndex != 15) {
+      final visible = _computeVisibleNavIndices();
+      if (visible.contains(15)) {
+        _onItemTapped(15);
+        return;
+      }
+    }
+
+    // At root level - platform-specific exit behavior
+
+    // Desktop platforms: Don't exit on back button
+    // Users close windows using OS controls (X button, Cmd+Q, etc.)
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      return; // Do nothing
+    }
+
+    // iPhone / iPad: don't force exit — there is no back button, and
+    // users leave by swiping up. NOT tvOS: `Platform.isIOS` is true
+    // there, and this guard was why BACK did nothing on Apple TV.
+    if (PlatformUtil.isIosMobile) {
+      return; // Do nothing
+    }
+
+    // Apple TV: Menu at the true root opens the rail. The rail being open
+    // flips the PopScope's canPop true, so the NEXT press goes unhandled and
+    // tvOS returns to its own Home screen — the platform's only real "exit"
+    // (`SystemNavigator.pop()` cannot exit a tvOS app: the Darwin
+    // implementation only pops a navigation controller, and this app
+    // installs its FlutterViewController as the window root).
+    if (PlatformUtil.isTvOS) {
+      MainPageBridge.focusTvSidebar?.call();
+      return;
+    }
+
+    // Android TV: BACK at root is the sidebar's door — one press opens the
+    // rail, a press while the rail is open exits. The bridge null-check
+    // keeps the first frames after launch (TV probe unresolved, callbacks
+    // not wired yet) on the mobile double-back path below instead of a
+    // dead press.
+    if (_isAndroidTv && MainPageBridge.focusTvSidebar != null) {
+      if (!(MainPageBridge.isTvSidebarFocused?.call() ?? false)) {
+        MainPageBridge.focusTvSidebar!();
+        return;
+      }
+      SystemNavigator.pop();
+      return;
+    }
+
+    // Android mobile: Double back press to exit
+    if (Platform.isAndroid) {
+      final currentTime = DateTime.now();
+      final backButtonPressedTwice =
+          _lastBackPressTime != null &&
+          currentTime.difference(_lastBackPressTime!) < _backPressDuration;
+
+      if (backButtonPressedTwice) {
+        SystemNavigator.pop();
+        return;
+      }
+
+      // First press - show message
+      _lastBackPressTime = currentTime;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Press back again to exit'),
+          duration: _backPressDuration,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleIndices = _computeVisibleNavIndices();
@@ -2697,107 +2808,27 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     return Stack(
       children: [
         // Main app content
-        PopScope(
-          // Apple TV at the Home tab lets the press through, so tvOS can do
-          // what Menu-at-root means there: return to its Home screen. Every
-          // other platform and every other tab keeps the interception, which
-          // is what drives folder-back, tab-walk and double-back-to-exit.
-          canPop: PlatformUtil.isTvOS &&
-              _selectedIndex == 15 &&
-              !_showIptvStartupOverlay,
-          onPopInvoked: (bool didPop) async {
-            if (didPop) return;
-
-            // The startup-channel cover owns BACK while it is up: this is the
-            // promised escape hatch, and it has to win over every other handler
-            // (including double-back-to-exit) or a hung launch would be
-            // uninterruptible.
-            if (_showIptvStartupOverlay) {
-              _cancelIptvStartup();
-              return;
-            }
-
-            // First, check if any child screen wants to handle back navigation
-            // (e.g., folder navigation in RealDebrid, TorBox, PikPak, Playlist screens)
-            if (MainPageBridge.handleBackNavigation()) {
-              return; // Back was handled by child screen (navigated up a folder)
-            }
-
-            // Allow navigation within app for all platforms
-            if (Navigator.canPop(context)) {
-              Navigator.of(context).pop();
-              return;
-            }
-
-            // Classic bottom-nav contract (non-TV): BACK from any non-Home
-            // tab walks to the Home tab first. Without this every tab was
-            // exit-adjacent — the first press armed the exit timer right
-            // there, so two quick presses anywhere closed the whole app,
-            // which read as "back randomly exits". Only Home arms
-            // double-back-to-exit.
-            // Apple TV takes this path too. Menu on tvOS means "go back", and
-            // its root is the Home tab — without this, BACK from any other tab
-            // did nothing at all, because the Android-TV branch below skips the
-            // walk and the old `Platform.isIOS` guard (true on tvOS) then
-            // swallowed the press. Android TV keeps its sidebar contract.
-            if ((!_isAndroidTv || PlatformUtil.isTvOS) && _selectedIndex != 15) {
-              final visible = _computeVisibleNavIndices();
-              if (visible.contains(15)) {
-                _onItemTapped(15);
-                return;
-              }
-            }
-
-            // At root level - platform-specific exit behavior
-
-            // Desktop platforms: Don't exit on back button
-            // Users close windows using OS controls (X button, Cmd+Q, etc.)
-            if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-              return; // Do nothing
-            }
-
-            // iPhone / iPad: don't force exit — there is no back button, and
-            // users leave by swiping up. NOT tvOS: `Platform.isIOS` is true
-            // there, and this guard was why BACK did nothing on Apple TV.
-            if (PlatformUtil.isIosMobile) {
-              return; // Do nothing
-            }
-
-            // Apple TV: nothing to do here, and deliberately so.
-            //
-            // `SystemNavigator.pop()` does NOT exit a tvOS app — the Darwin
-            // implementation only pops a navigation controller, and this app
-            // installs its FlutterViewController as the window root. A
-            // double-press "exit" would promise something it cannot deliver.
-            // What DOES work is not consuming the press: tvOS returns to its
-            // own Home screen when an app leaves Menu unhandled at its root,
-            // which is the platform's convention anyway (users leave via Menu
-            // or the TV button, not by killing the app). See the canPop below.
-            if (PlatformUtil.isTvOS) return;
-
-            // Android (both mobile and TV): Double back press to exit
-            if (Platform.isAndroid) {
-              final currentTime = DateTime.now();
-              final backButtonPressedTwice =
-                  _lastBackPressTime != null &&
-                  currentTime.difference(_lastBackPressTime!) <
-                      _backPressDuration;
-
-              if (backButtonPressedTwice) {
-                SystemNavigator.pop();
-                return;
-              }
-
-              // First press - show message
-              _lastBackPressTime = currentTime;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Press back again to exit'),
-                  duration: _backPressDuration,
-                ),
-              );
-            }
-          },
+        // ValueListenableBuilder, not plain state: sidebar focus enter/exit
+        // deliberately avoids setState (see _tvSidebarExpanded), yet tvOS
+        // needs canPop to follow the rail — so only this PopScope shell
+        // rebuilds on it, and the app content rides through as `shell`.
+        ValueListenableBuilder<bool>(
+          valueListenable: _tvSidebarExpanded,
+          builder: (context, tvSidebarOpen, shell) => PopScope(
+            // Apple TV at the Home tab lets the press through ONLY while the
+            // rail is open: Menu at the true root first opens the rail (see
+            // _onRootPopInvoked), and the next press then goes unhandled so
+            // tvOS returns to its own Home screen. Every other platform and
+            // every other tab keeps the interception, which is what drives
+            // folder-back, tab-walk and the rail/exit contract.
+            canPop:
+                PlatformUtil.isTvOS &&
+                _selectedIndex == 15 &&
+                !_showIptvStartupOverlay &&
+                tvSidebarOpen,
+            onPopInvoked: _onRootPopInvoked,
+            child: shell!,
+          ),
           child: AnimatedPremiumBackground(
             child: LayoutBuilder(
               builder: (context, constraints) {
