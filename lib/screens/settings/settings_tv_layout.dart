@@ -90,6 +90,8 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenDetailPageStyle;
   final String looksLabel;
   final Future<void> Function() onOpenLooks;
+  final Future<void> Function() onOpenThemeTokens;
+  final String themeTokensLabel;
 
   /// Withheld like [detailThemeLabel]: Theme Lab is a preview TOOL, not a
   /// setting — it changes nothing. Page and wiring stay.
@@ -168,6 +170,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenDetailPageStyle,
     required this.looksLabel,
     required this.onOpenLooks,
+    required this.onOpenThemeTokens,
+    required this.themeTokensLabel,
     required this.onOpenThemeLab,
     required this.appThemeLabel,
     required this.onOpenAppTheme,
@@ -650,6 +654,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: widget.onOpenLooks,
                 focusNode: _paneNodes[0],
               ),
+              SettingsTile.spec(
+                SettingsRows.themeTokens,
+                subtitle: widget.themeTokensLabel,
+                onTap: widget.onOpenThemeTokens,
+                focusNode: _paneNodes[1],
+              ),
             ],
           ),
           const SizedBox(height: 18),
@@ -666,13 +676,13 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.textBrightness,
                 subtitle: widget.textBrightnessLabel,
                 onTap: widget.onOpenTextBrightness,
-                focusNode: _paneNodes[1],
+                focusNode: _paneNodes[2],
               ),
               SettingsTile.spec(
                 SettingsRows.launchAnimation,
                 subtitle: widget.launchAnimationLabel,
                 onTap: widget.onOpenLaunchAnimation,
-                focusNode: _paneNodes[2],
+                focusNode: _paneNodes[3],
               ),
             ],
           ),
@@ -685,43 +695,43 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.tvHomeStyle,
                 subtitle: widget.tvHomeStyleLabel,
                 onTap: widget.onOpenTvHomeStyle,
-                focusNode: _paneNodes[3],
+                focusNode: _paneNodes[4],
               ),
               SettingsTile.spec(
                 SettingsRows.discoverLayout,
                 subtitle: widget.discoverLayoutLabel,
                 onTap: widget.onOpenDiscoverLayout,
-                focusNode: _paneNodes[4],
+                focusNode: _paneNodes[5],
               ),
               SettingsTile.spec(
                 SettingsRows.detailPageStyle,
                 subtitle: widget.detailPageStyleLabel,
                 onTap: widget.onOpenDetailPageStyle,
-                focusNode: _paneNodes[5],
+                focusNode: _paneNodes[6],
               ),
               SettingsTile.spec(
                 SettingsRows.tvSidebarStyle,
                 subtitle: widget.tvSidebarStyleLabel,
                 onTap: widget.onOpenTvSidebarStyle,
-                focusNode: _paneNodes[6],
+                focusNode: _paneNodes[7],
               ),
               SettingsTile.spec(
                 SettingsRows.iptvAppearance,
                 subtitle: widget.iptvStyleLabel,
                 onTap: widget.onOpenIptvStyle,
-                focusNode: _paneNodes[7],
+                focusNode: _paneNodes[8],
               ),
               SettingsTile.spec(
                 SettingsRows.playerGuideStyle,
                 subtitle: widget.playerGuideStyleLabel,
                 onTap: widget.onOpenPlayerGuideStyle,
-                focusNode: _paneNodes[8],
+                focusNode: _paneNodes[9],
               ),
               SettingsTile.spec(
                 SettingsRows.parentsGuideStyle,
                 subtitle: widget.parentsGuideStyleLabel,
                 onTap: widget.onOpenParentsGuideStyle,
-                focusNode: _paneNodes[9],
+                focusNode: _paneNodes[10],
               ),
             ],
           ),
@@ -735,19 +745,19 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 SettingsRows.tvScreenSize,
                 subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
                 onTap: widget.onOpenTvScreenSize,
-                focusNode: _paneNodes[10],
+                focusNode: _paneNodes[11],
               ),
               SettingsTile.spec(
                 SettingsRows.tvRenderQuality,
                 subtitle: widget.tvRenderQualityLabel,
                 onTap: widget.onOpenTvRenderQuality,
-                focusNode: _paneNodes[11],
+                focusNode: _paneNodes[12],
               ),
               SettingsTile.spec(
                 SettingsRows.tvHeroArtworkQuality,
                 subtitle: widget.tvHeroArtworkQualityLabel,
                 onTap: widget.onOpenTvHeroArtworkQuality,
-                focusNode: _paneNodes[12],
+                focusNode: _paneNodes[13],
               ),
             ],
           ),

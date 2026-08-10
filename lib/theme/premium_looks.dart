@@ -214,24 +214,52 @@ abstract final class PremiumLooks {
     id: 'spotlight',
     label: 'Spotlight',
     subtitle: 'Full-bleed art, borderless focus, ambient detail',
-    // MEASURED off the reference, not chosen: rgb(28,28,28) at every gutter of
-    // a scrolled frame — a neutral grey, not black.
-    ground: Color(0xFF1B1C1C),
-    sunken: Color(0xFF151616),
-    raised: Color(0xFF242525),
+    // BLACK AND CRIMSON, over the reference's own structure.
+    //
+    // The reference's own colours — a measured `#1B1C1C` ground and a white,
+    // hueless accent — were faithful, and did not survive this Look becoming
+    // the app's default. Apple can afford both because artwork covers most of
+    // every screen it has. This app has whole surfaces with none, and on those
+    // the result was a flat grey page carrying grey badges, down to a grey
+    // YouTube logo.
+    //
+    // Two rounds of picking better values did not fix it, which was the
+    // evidence that the values were never the constraint. What this Look is
+    // FOR is its structure — the full-bleed hero, the parallax lift, the
+    // settle spring, the showcase detail page. None of that is colour.
+    //
+    // Settled on black and crimson, chosen on the device rather than derived:
+    // a true black ground so artwork and cards separate from the page without
+    // any material work, and one saturated hue so every badge, brand mark and
+    // fill on an artwork-free screen has something to be.
+    ground: Color(0xFF000000),
+    sunken: Color(0xFF000000),
+    raised: Color(0xFF0C0C0E),
     ink: Color(0xFFFFFFFF),
-    // White, not a hue. The reference has no accent colour anywhere: state is
-    // carried by the lift and by a solid-white primary button.
-    accent: Color(0xFFFFFFFF),
-    accentButton: true,
+    accent: Color(0xFFE23D4C),
+    state: Color(0xFFE23D4C),
+    callout: Color(0xFFE23D4C),
+    focusColor: Color(0xFFE23D4C),
+    // The primary is NOT accent-filled.
+    //
+    // Crimson with a white label scores 4.19:1, under the 4.5 bar the
+    // vocabulary test holds every primary to — the contrast scorer stops at
+    // 4.0 and would have shipped it. A near-white fill with dark text is also
+    // closer to the reference, whose primary is a solid white button; crimson
+    // still carries every badge, focus ring, progress bar and callout.
+    accentButton: false,
     separation: SeparationModel.fill,
     scrim: ScrimStyle.bottomGradient,
     frame: ArtFrame.bleed,
+    // ── the structure, unchanged ──────────────────────────────────────────
     focusExpression: FocusExpression.parallax,
     motion: MotionCharacter.settle,
     entrance: EntranceStyle.fadeUp,
     idle: IdlePolicy.dimChrome,
     radius: 7,
+    // Held at 0: the room following the artwork is the biggest change it could
+    // make to Home and the detail page, and those two are what this Look
+    // already gets right.
     reactiveRoom: 0,
   );
 

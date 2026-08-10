@@ -58,20 +58,35 @@ void main() {
       // reproduced under the Look it was measured from and merely followed
       // elsewhere.
       final spec = PremiumLooks.byId('spotlight')!;
-      expect(spec.ground, const Color(0xFF1B1C1C));
-      // Not black, and not the app's near-black either.
-      expect(spec.ground, isNot(const Color(0xFF000000)));
-      expect(spec.ground, isNot(const Color(0xFF0A0A0B)));
+
+      // The reference's `#1B1C1C` was measured and shipped, and then RETIRED
+      // when this Look became the default. Apple can afford a mid grey because
+      // artwork covers most of every screen it has; this app has surfaces with
+      // none, and there a mid grey under 7%-ink panels is a flat box.
+      //
+      // What survived the change is the property the measurement was actually
+      // protecting: the ground is NEUTRAL, so it disappears behind a poster
+      // instead of fighting it. Classic's navy would not have done that.
+      expect(spec.ground.r, closeTo(spec.ground.g, 0.02),
+          reason: 'a hue behind full-bleed artwork fights the poster');
+      expect(spec.ground.g, closeTo(spec.ground.b, 0.02));
+      // And it is properly dark now, not a mid grey.
+      expect(spec.ground.computeLuminance(), lessThan(0.02));
+
+      // The accent carries identity on screens that have no artwork to do it.
+      // White was faithful to the reference and left the YouTube page
+      // monochrome down to its own logo.
+      expect(spec.accent, isNot(const Color(0xFFFFFFFF)),
+          reason: 'a white accent renders every badge and brand mark grey');
 
       final theme = spec.build();
       expect(SpotlightBoard.groundOf(theme), theme.home.bg,
           reason: 'the board must paint the theme\'s ground, not its own');
-      expect(SpotlightBoard.groundOf(theme), const Color(0xFF1B1C1C),
-          reason: 'and under Spotlight that IS the measured value');
-      // The reference drifts a few levels lighter down the page.
+      // The reference drifts a few levels lighter down the page. Off TV, where
+      // it renders as a drift rather than as banding — see `groundLowOf`.
       expect(
         SpotlightBoard.groundLowOf(theme).computeLuminance(),
-        greaterThan(SpotlightBoard.groundOf(theme).computeLuminance()),
+        greaterThanOrEqualTo(SpotlightBoard.groundOf(theme).computeLuminance()),
       );
     });
 

@@ -51,6 +51,7 @@ import '../widgets/launch/launch_ident.dart';
 import 'settings/detail_page_style_page.dart';
 import 'settings/app_theme_page.dart';
 import 'settings/looks_page.dart';
+import 'settings/theme_tokens_page.dart';
 import 'settings/theme_lab_page.dart';
 import 'settings/detail_theme_page.dart';
 import '../widgets/detail/theme/detail_themes.dart';
@@ -797,6 +798,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appThemeLabel: appThemeLabel(AppThemeController.instance.id),
       looksLabel: AppLooks.active()?.label ?? 'Custom',
       onOpenLooks: _openLooksPage,
+      onOpenThemeTokens: _openThemeTokensPage,
+      themeTokensLabel: _themeTokensLabel,
       onOpenThemeLab: _openThemeLab,
       onOpenAppTheme: _openAppThemePage,
       detailThemeLabel: detailThemeLabel(_detailTheme),
@@ -883,6 +886,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenDetailPageStyle: _openDetailPageStylePage,
       appThemeLabel: appThemeLabel(AppThemeController.instance.id),
       onOpenLooks: _openLooksPage,
+      onOpenThemeTokens: _openThemeTokensPage,
+      themeTokensLabel: _themeTokensLabel,
       onOpenThemeLab: _openThemeLab,
       onOpenAppTheme: _openAppThemePage,
       detailThemeLabel: detailThemeLabel(_detailTheme),
@@ -1358,10 +1363,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // types "theme" should land somewhere, and the honest destination is the
       // Looks page rather than nothing at all.
       nav(
+        SettingsRows.themeTokens,
+        'Appearance',
+        _openThemeTokensPage,
+        subtitle: _themeTokensLabel,
+        keywords: [
+          'advanced',
+          'token',
+          'colour',
+          'color',
+          'accent',
+          'background',
+          'font',
+          'corner',
+          'motion',
+        ],
+      ),
+      nav(
         SettingsRows.looks,
         'Appearance',
         _openLooksPage,
-        subtitle: 'Looks and Advanced tokens',
+        subtitle: AppLooks.active()?.label ?? 'Custom',
         keywords: [
           'app',
           'theme',
@@ -4036,6 +4058,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {});
   }
 
+  Future<void> _openThemeTokensPage() async {
+    await pushSettingsPage(context, const ThemeTokensPage());
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// How many tokens have been taken over, or the invitation when none have.
+  ///
+  /// Computed from the live overrides rather than stored, for the same reason
+  /// `AppLooks.active()` is: there is nothing to keep in sync and no way for a
+  /// remembered answer to go stale.
+  String get _themeTokensLabel {
+    final n = AppThemeController.instance.overrides.count;
+    if (n == 0) return 'Colour, shape, motion — one token at a time';
+    return '$n ${n == 1 ? "token" : "tokens"} changed';
+  }
+
   Future<void> _openAppThemePage() async {
     await pushSettingsPage(context, const AppThemePage());
     if (!mounted) return;
@@ -4303,6 +4342,8 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenDetailPageStyle;
   final String appThemeLabel;
   final Future<void> Function() onOpenLooks;
+  final Future<void> Function() onOpenThemeTokens;
+  final String themeTokensLabel;
 
   /// Withheld like [detailThemeLabel]: Theme Lab is a preview TOOL, not a
   /// setting — it changes nothing, and a row that changes nothing is noise in
@@ -4373,6 +4414,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenDetailPageStyle,
     required this.appThemeLabel,
     required this.onOpenLooks,
+    required this.onOpenThemeTokens,
+    required this.themeTokensLabel,
     required this.onOpenThemeLab,
     required this.onOpenAppTheme,
     required this.detailThemeLabel,
@@ -4434,6 +4477,11 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.looks,
                       subtitle: AppLooks.active()?.label ?? 'Custom',
                       onTap: onOpenLooks,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.themeTokens,
+                      subtitle: themeTokensLabel,
+                      onTap: onOpenThemeTokens,
                     ),
                   ],
                 ),

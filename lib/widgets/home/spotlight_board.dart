@@ -10,6 +10,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/dominant_color.dart';
+import '../../utils/platform_util.dart';
 
 /// What a card is, once a shelf stops being a list of TITLES.
 ///
@@ -193,8 +194,24 @@ class SpotlightBoard extends StatefulWidget {
   /// The gradient's lower stop. The reference drifts a few levels lighter down
   /// the page; derived rather than fixed so it drifts from whatever the ground
   /// now is.
-  static Color groundLowOf(AppTheme app) =>
-      Color.lerp(app.home.bg, app.core.tx, 0.015)!;
+  ///
+  /// **Flat on Android TV**, where the drift renders as banding rather than as
+  /// a drift.
+  ///
+  /// It is about three 8-bit levels spread over the full screen height — which
+  /// is the most fragile thing you can hand that pipeline. Those boxes raster
+  /// at ~720p on GLES2-class hardware and let the TV's scaler upscale, and the
+  /// Flutter surface is TRANSLUCENT so the underlay trailer can show through;
+  /// three levels through a low-res upscale and a blend become wide contour
+  /// bands. Apple TV has neither constraint and draws it as intended.
+  ///
+  /// Returning the ground itself rather than skipping the gradient keeps one
+  /// code path: a two-stop gradient between identical colours IS a flat fill.
+  /// The drift is below the threshold anyone notices when it works, so nothing
+  /// is lost where it is dropped.
+  static Color groundLowOf(AppTheme app) => PlatformUtil.isAndroidTvCached
+      ? app.home.bg
+      : Color.lerp(app.home.bg, app.core.tx, 0.015)!;
 
   /// Above this, the backdrop's left third is too busy for text and the
   /// identity stack flips to the right edge. Without it, text lands on a face
@@ -1149,24 +1166,23 @@ class _CardState extends State<_Card> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // A contained mark needs a LIGHTER plate behind it: channel logos
-              // are frequently light-on-transparent and vanish on the ground.
+              // Both plates step AWAY from the page, toward the ink, so a
+              // card still reads as a card whatever the Background is set to —
+              // and a contained mark gets the bigger step, because a channel
+              // logo needs more of a backing than an empty poster slot does.
               //
-              // Both are steps off the page rather than literals, so an empty
-              // slot still reads as a slot once the Background is changed —
-              // pointing them at the ground itself would make loading cards
-              // dissolve into it.
+              // The contained one used to DARKEN instead, so light-on-
+              // transparent logos had something to sit on. That is degenerate
+              // on a black ground — `lerp(black, black)` is black — and an
+              // entire row of channels went invisible while still being
+              // painted. A step toward the ink works on any ground, and a light
+              // mark still reads on it because the step is small.
               ColoredBox(
-                color: contained
-                    // A plate for a CONTAINED mark is not a step off the page,
-                    // it is a dark backing: these logos are overwhelmingly
-                    // light-on-transparent, and on a pale ground a plate that
-                    // merely stepped 10% off it would let them vanish. So it
-                    // darkens regardless of polarity.
-                    ? Color.lerp(app.home.bg, const Color(0xFF000000), 0.82)!
-                    // An empty poster slot only has to read as a slot, which a
-                    // step toward the ink does in either direction.
-                    : Color.lerp(app.home.bg, app.core.tx, 0.045)!,
+                color: Color.lerp(
+                  app.home.bg,
+                  app.core.tx,
+                  contained ? 0.10 : 0.045,
+                )!,
               ),
               if (url != null && url.isNotEmpty)
                 Padding(

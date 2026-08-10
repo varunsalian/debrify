@@ -567,4 +567,40 @@ void main() {
     expect(short, lessThan(0.92),
         reason: 'the first shelf must ride ON the artwork, not sit under it');
   });
+
+  testWidgets('a card is never the same colour as the page it sits on',
+      (tester) async {
+    // The channel plate used to DARKEN off the ground, to give light-on-
+    // transparent logos a dark backing. On a black ground that is degenerate —
+    // `lerp(black, black)` is black — and an entire row of channels went
+    // invisible while still being painted. Any ground the theme can produce
+    // must leave a card distinguishable from the page.
+    final a = _meta('tt1', 'Alpha');
+    await tester.pumpWidget(host([a], [
+      SpotlightShelf(
+        title: 'Channels',
+        nodes: _rowNodes(1),
+        items: [
+          SpotlightCard(
+            title: 'CH 1',
+            onOpen: () {},
+            shape: SpotlightCardShape.channel,
+          ),
+        ],
+      ),
+    ]));
+    await tester.pumpAndSettle();
+
+    final ground = SpotlightBoard.groundOf(
+      AppTheme.fromDetail(DetailThemes.byId('signal')),
+    );
+    final plate = tester
+        .widgetList<ColoredBox>(find.descendant(
+          of: find.byType(ClipRRect),
+          matching: find.byType(ColoredBox),
+        ))
+        .first;
+    expect(plate.color, isNot(ground),
+        reason: 'a card the colour of the page is an invisible card');
+  });
 }

@@ -217,6 +217,14 @@ abstract final class SettingsRows {
     title: 'Looks',
     subtitle: '',
   );
+  /// Sits directly under Looks, in the same section. It was reachable only by
+  /// opening Looks first, which put the entire token layer two levels down
+  /// behind a row that gave no hint it was there.
+  static const themeTokens = SettingsRowContent(
+    icon: Icons.tune_rounded,
+    title: 'Advanced',
+    subtitle: '',
+  );
   static const appTheme = SettingsRowContent(
     icon: Icons.format_paint_rounded,
     // Just 'Theme': the section header above it already says THEME, and

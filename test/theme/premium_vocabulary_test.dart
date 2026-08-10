@@ -653,13 +653,19 @@ void main() {
       'hearth': (0xFF141110, 0xFFF6EFE6, 0xFFE8A13C, 0xFFE8A13C, 12.0, 8.0, 12.0),
       'console': (0xFF080B09, 0xFFD8E0D8, 0xFF8CE0A8, 0xFF8CE0A8, 0.0, 0.0, 0.0),
       'reel': (0xFF0A0908, 0xFFEDE4D8, 0xFFD9A441, 0xFFD9A441, 4.0, 3.0, 4.0),
-      // White accent AND white button fill: the reference carries no accent
-      // colour at all — state is the lift and a solid-white primary.
+      // Was `0xFF1B1C1C` with a white accent and a white button fill — the
+      // reference carries no accent colour at all, state being the lift and a
+      // solid-white primary. Both were retired when this Look became the
+      // default: the mid grey and the colourless accent are affordable when
+      // artwork covers the screen, and this app has whole surfaces with none.
       'spotlight': (
-        0xFF1B1C1C,
+        0xFF000000,
         0xFFFFFFFF,
-        0xFFFFFFFF,
-        0xFFFFFFFF,
+        0xFFE23D4C,
+        // Not the accent: crimson with a white label scores 4.19:1, under the
+        // bar the primary-button test holds, so the fill stays the neutral
+        // near-white — which is also what the reference's primary is.
+        0xFFF0F0F0,
         7.0,
         5.0,
         7.0
