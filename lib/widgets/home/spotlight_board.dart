@@ -903,6 +903,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final url = item.background ?? item.poster;
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
+    final rolling = _rolling;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -925,29 +926,52 @@ class SpotlightBoardState extends State<SpotlightBoard> {
               key: ValueKey(url),
               fit: BoxFit.cover,
               cacheManager: DebrifyImageCache.manager,
-              memCacheWidth: 900,
+              // Decode at the PANEL's resolution, not a guessed constant —
+              // 900 was under a 1080-class phone's physical width (390 × 3),
+              // so the one full-bleed image on the screen was the soft one.
+              // Clamped: metahub art tops out around 1920.
+              memCacheWidth: (MediaQuery.devicePixelRatioOf(context) *
+                      MediaQuery.sizeOf(context).width)
+                  .round()
+                  .clamp(720, 1920),
               fadeInDuration: const Duration(milliseconds: 420),
               placeholder: (_, __) => ColoredBox(color: ground),
               errorWidget: (_, __, ___) => ColoredBox(color: ground),
             ),
+          // The trailer, when the host supplies one. This was mounted only in
+          // the WIDE hero — so the phone resolved a stream into a layer that
+          // was never in the tree, which read as "trailers don't load".
+          if (widget.trailer != null) Positioned.fill(child: widget.trailer!),
           // One vertical scrim doing both jobs: a light cap up top so the
           // status-bar clock stays readable over bright art, and a heavy bed
           // below for the identity — ending ON the ground so the hero meets
-          // the rows without a seam.
+          // the rows without a seam. Thinned while the picture rolls, same
+          // rule as everywhere else tonight: snapped, and the bottom stop is
+          // still the ground exactly so the seam never opens.
           IgnorePointer(
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    const Color(0x6B000000),
-                    const Color(0x00000000),
-                    const Color(0x00000000),
-                    ground.withValues(alpha: 0.78),
-                    ground,
-                  ],
-                  stops: const [0, 0.24, 0.46, 0.8, 1],
+                  colors: rolling
+                      ? [
+                          const Color(0x2E000000),
+                          const Color(0x00000000),
+                          const Color(0x00000000),
+                          ground.withValues(alpha: 0.55),
+                          ground,
+                        ]
+                      : [
+                          const Color(0x6B000000),
+                          const Color(0x00000000),
+                          const Color(0x00000000),
+                          ground.withValues(alpha: 0.78),
+                          ground,
+                        ],
+                  stops: rolling
+                      ? const [0, 0.18, 0.62, 0.88, 1]
+                      : const [0, 0.24, 0.46, 0.8, 1],
                 ),
               ),
             ),

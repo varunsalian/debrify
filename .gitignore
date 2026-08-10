@@ -59,3 +59,4 @@ discord/nightly_logs/
 # Dart) is the real work and is tracked; re-fetch the binaries with
 # packages/media_kit_libs_tvos_video/fetch_frameworks.sh.
 packages/media_kit_libs_tvos_video/tvos/Frameworks/
+tvos/build/

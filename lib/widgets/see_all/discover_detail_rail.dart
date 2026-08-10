@@ -461,6 +461,7 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
     final streams = await YoutubeService.resolveStreams(
       ytId,
       maxHeightOverride: YoutubeService.ambientTrailerMaxHeight,
+      preferVp9: true,
     );
     if (stale()) return;
     if (streams == null || !streams.hasPlayable) return fail();

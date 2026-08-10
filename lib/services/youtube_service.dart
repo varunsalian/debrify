@@ -336,11 +336,25 @@ class YoutubeService {
   /// feathers came off) while still lighter than a 1080p decode+composite on
   /// weak TV silicon — the boxes this was tuned against.
   ///
-  /// 1080p on Apple TV: an A15 with hardware HEVC/H.264 is not that hardware,
-  /// and the hero is full-bleed on a 1080p surface, so a 720p stream is being
-  /// upscaled across the whole screen. This is the one place the platform
-  /// difference is worth spending decode on.
-  static int get ambientTrailerMaxHeight => PlatformUtil.isTvOS ? 1080 : 720;
+  /// Per-platform, matched to what each box can actually decode:
+  ///
+  ///  * Phones and desktop: **1440.** Trailers are uploaded in 4K, and the
+  ///    1440p rung is VP9 — a much higher bitrate than 1080p AVC. Downscaled
+  ///    into a 1080-class panel that is supersampling: visibly crisper, and
+  ///    every phone this app meets hardware-decodes VP9.
+  ///  * Apple TV: **1080.** VideoToolbox has no VP9 decode on the A15, so
+  ///    anything above 1080 would software-decode in mpv — the one place the
+  ///    hard-won trailer pipeline must not be gambled with. It still gets the
+  ///    VP9 1080 encode via [preferVp9], which YouTube serves at every rung.
+  ///  * Android TV: **1080** (up from 720 — these boxes certify VP9 hardware
+  ///    decode, and the Exo underlay plays full-screen now, where 720 read
+  ///    soft). Not 1440: the UI rasters at ~720p on this class of hardware
+  ///    and the extra decode would feed pixels nothing displays.
+  static int get ambientTrailerMaxHeight => PlatformUtil.isTvOS
+      ? 1080
+      : PlatformUtil.isAndroidTvCached
+          ? 1080
+          : 1440;
 
   /// Resolve a YouTube [videoId] into playable/downloadable stream URLs.
   ///
@@ -366,8 +380,10 @@ class YoutubeService {
     String videoId, {
     int? maxHeightOverride,
     bool withCaptions = false,
+    bool preferVp9 = false,
   }) {
-    final key = _resolveKey(videoId, maxHeightOverride, withCaptions);
+    final key =
+        _resolveKey(videoId, maxHeightOverride, withCaptions, preferVp9);
     final cached = _resolveCache[key];
     if (cached != null &&
         DateTime.now().difference(cached.at) < _resolveCacheTtl) {
@@ -379,6 +395,7 @@ class YoutubeService {
       videoId,
       maxHeightOverride: maxHeightOverride,
       withCaptions: withCaptions,
+      preferVp9: preferVp9,
     );
     _resolveInFlight[key] = future;
     return future.whenComplete(() => _resolveInFlight.remove(key));
@@ -388,10 +405,12 @@ class YoutubeService {
     String videoId,
     int? maxHeightOverride,
     bool withCaptions,
+    bool preferVp9,
   ) {
-    final base = maxHeightOverride == null
+    var base = maxHeightOverride == null
         ? videoId
         : '$videoId#h$maxHeightOverride';
+    if (preferVp9) base = '$base#vp9';
     return withCaptions ? '$base#cc' : base;
   }
 
@@ -399,6 +418,7 @@ class YoutubeService {
     String videoId, {
     int? maxHeightOverride,
     bool withCaptions = false,
+    bool preferVp9 = false,
   }) async {
     // Read the user's resolution cap on the MAIN isolate — SharedPreferences is
     // a platform channel and isn't available in the background isolate below.
@@ -412,13 +432,15 @@ class YoutubeService {
       // it tries. Run it in a throwaway background isolate so the main isolate
       // only awaits (the network calls are already async).
       final streams = await Isolate.run(
-        () => _resolveStreamsBlocking(videoId, maxHeight, withCaptions),
+        () => _resolveStreamsBlocking(
+            videoId, maxHeight, withCaptions, preferVp9),
       );
       if (streams != null) {
         // Prune expired entries so the cache stays bounded to the active window.
         _resolveCache
             .removeWhere((_, e) => DateTime.now().difference(e.at) >= _resolveCacheTtl);
-        _resolveCache[_resolveKey(videoId, maxHeightOverride, withCaptions)] =
+        _resolveCache[_resolveKey(
+                videoId, maxHeightOverride, withCaptions, preferVp9)] =
             _ResolvedCacheEntry(streams, DateTime.now());
       }
       return streams;
@@ -441,6 +463,7 @@ class YoutubeService {
     String videoId,
     int maxHeight,
     bool withCaptions,
+    bool preferVp9,
   ) async {
     final yt = yt_explode.YoutubeExplode();
     try {
@@ -503,15 +526,24 @@ class YoutubeService {
           .where((s) => s.container.name.toLowerCase() == 'mp4')
           .toList();
       if (videoOnly.isNotEmpty && audioStreams.isNotEmpty) {
-        // Highest first; within a single height prefer H.264 so the <=1080p
-        // rungs keep the exact stream they used before VP9 was allowed.
+        // Highest first; within a single height the tie-break is the caller's
+        // call. Content playback keeps H.264 so the <=1080p rungs resolve to
+        // the exact stream they used before VP9 was allowed (the risk-
+        // containment contract above). Ambient trailers pass [preferVp9]:
+        // YouTube serves VP9 at every rung, its encodes run visibly cleaner
+        // at trailer bitrates, and every ambient surface's decoder handles it
+        // (phone/desktop hardware VP9; Apple TV software VP9 at its 1080 cap;
+        // Android TV certifies VP9 hardware decode for the Exo underlay).
         videoOnly.sort((a, b) {
           final byHeight =
               b.videoResolution.height.compareTo(a.videoResolution.height);
           if (byHeight != 0) return byHeight;
-          final aAvc = isAvc(a.videoCodec), bAvc = isAvc(b.videoCodec);
-          if (aAvc == bAvc) return 0;
-          return aAvc ? -1 : 1; // H.264 before VP9 at the same height
+          final aPreferred =
+              preferVp9 ? isVp9(a.videoCodec) : isAvc(a.videoCodec);
+          final bPreferred =
+              preferVp9 ? isVp9(b.videoCodec) : isAvc(b.videoCodec);
+          if (aPreferred == bPreferred) return 0;
+          return aPreferred ? -1 : 1;
         });
 
         // One switchable entry per distinct height (highest first). Dedup keeps

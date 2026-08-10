@@ -5537,6 +5537,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           ? _HeroTrailerLayer(
               trailer: _heroTrailer,
               heroHeight: 540,
+              // Full bleed on every form factor — a letterboxed 16:9 band
+              // was tried on the phone and read as a TV set embedded in the
+              // artwork (user call). The portrait cover-crop is the design;
+              // it gets its sharpness from the 1080p resolve and the
+              // medium-filter texture sampling instead.
               fullBleed: true,
               volume: _heroTrailerVolume,
               loading: _heroTrailerLoading,
@@ -8698,6 +8703,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       final streams = await YoutubeService.resolveStreams(
         ytId,
         maxHeightOverride: YoutubeService.ambientTrailerMaxHeight,
+        preferVp9: true,
       );
       if (!mounted || req != _heroTrailerReq) return;
       if (streams == null || !streams.hasPlayable) return fail();

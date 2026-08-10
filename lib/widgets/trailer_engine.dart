@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../utils/media_kit_init.dart';
+import '../utils/platform_util.dart';
 import 'video_output_lease.dart';
 
 import 'package:flutter/material.dart';
@@ -187,7 +188,19 @@ class MediaKitTrailerEngine implements TrailerEngine {
 
   @override
   Widget buildVideo({required BoxFit fit, bool revealed = true}) =>
-      mkv.Video(controller: _controller, controls: null, fit: fit);
+      mkv.Video(
+        controller: _controller,
+        controls: null,
+        fit: fit,
+        // The package default is FilterQuality.low — bilinear. A portrait
+        // hero cover-crops a 1080p stream ~1.5× up, and low sampling is
+        // visibly soft at that scale; medium adds mipmaps for nearly free on
+        // phone/desktop GPUs. TV keeps the default: the tvOS hero renders
+        // 1:1-ish, and TV paint paths stay untouched on principle.
+        filterQuality: PlatformUtil.isTelevision
+            ? FilterQuality.low
+            : FilterQuality.medium,
+      );
 }
 
 /// Immutable render state for the Exo texture (id + intrinsic video size).
