@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
+import '../../utils/platform_util.dart';
 import '../app_focus.dart';
 import '../app_theme_scope.dart';
 
@@ -243,6 +244,21 @@ class _ParallaxBodyState extends State<_ParallaxBody>
       return;
     }
 
+    // Android TV: a ζ0.82 settle spring animates for the best part of a
+    // second, and on a box that pays real raster cost for every animated
+    // frame the tail IS the lag — a held key keeps two cards perpetually
+    // mid-spring. A short ease-out reaches the same endpoint in about a
+    // tenth of the frames and reads crisper under DPAD repeat. Same
+    // policy family as the lite body below.
+    if (PlatformUtil.isAndroidTvCached) {
+      _c.animateTo(
+        target,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+
     final spring = widget.spring;
     if (spring == null) {
       _c.animateTo(
@@ -308,6 +324,37 @@ class _ParallaxBodyState extends State<_ParallaxBody>
           if (lift <= 0.0001 && _c.velocity.abs() < 0.01) return child!;
 
           final scale = 1 + (widget.shape.scale - 1) * lift;
+
+          // The Android TV LITE body — the per-frame raster budget of an
+          // Amlogic/Mali GLES2 box. Keeps what makes the cursor a cursor
+          // (lift, rise, a soft shadow) and sheds what it pays for every
+          // animated frame ×2 cards per step: the tilt (whose perspective
+          // matrix re-rasters the subtree), the specular glare (a full-card
+          // RadialGradient) and with it the rounded ClipRRect (a saveLayer
+          // on that pipeline). Same compromise-per-box family as grain-off
+          // and the flattened ground gradient; Apple TV and pointer devices
+          // keep the full effect below.
+          if (PlatformUtil.isAndroidTvCached) {
+            return Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..translateByDouble(0, -_risePerScale * (scale - 1), 0, 1)
+                ..scaleByDouble(scale, scale, 1, 1),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: radius == BorderRadius.zero ? null : radius,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.45 * unit),
+                      offset: const Offset(0, 16),
+                      blurRadius: 12,
+                    ),
+                  ],
+                ),
+                child: child!,
+              ),
+            );
+          }
 
           // Tilt rides the spring's VELOCITY, not a bell curve over its
           // position. That is what makes the card swing THROUGH neutral: the

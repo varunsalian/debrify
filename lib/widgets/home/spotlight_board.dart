@@ -802,7 +802,13 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final at = _liveCol(nodes);
     final next = at + delta;
     if (next < 0 || next >= nodes.length) return;
-    setState(() => _col[_row] = next);
+    // No setState: a horizontal step changes nothing this board PAINTS —
+    // the cursor's visuals live inside each cell's own Focus widget, and
+    // `_col` is read only by the focus-targeting helpers. Wrapped in
+    // setState it rebuilt the hero stack and every shelf shell on every
+    // LEFT/RIGHT of a held key — per-keypress cost a MiBox-class CPU
+    // renders as visible lag.
+    _col[_row] = next;
     _go(nodes[next], Offset(delta.toDouble(), 0));
     // Four from the end is roughly one screen of posters — enough lead time
     // for a page to land before the cursor reaches where it would have
@@ -979,11 +985,18 @@ class SpotlightBoardState extends State<SpotlightBoard> {
           : Stack(
               fit: StackFit.expand,
               children: [
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: SizedBox(
-                    height: heroH,
-                    child: _heroBackdrop(heroH),
+                // Its own layer: the backdrop is a full-screen image under
+                // two full-screen gradients — the most expensive paint on
+                // the page. Isolated, a board rebuild (row moves, the
+                // trailer's rolling flips) re-composites a cached texture
+                // instead of re-rasterising all three.
+                RepaintBoundary(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      height: heroH,
+                      child: _heroBackdrop(heroH),
+                    ),
                   ),
                 ),
                 content,
@@ -1338,35 +1351,46 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             ),
           ),
         ),
-        // The scroll veil — what going DOWN does to the picture now that it
-        // no longer scrolls away. Ground-coloured for the same reason the
-        // fade above ends on ground: the rows and their titles are inked for
-        // the page ground, so the picture must dim TOWARD it — a black veil
+        // The veil — what going DOWN does to the picture now that it no
+        // longer scrolls away. Ground-coloured for the same reason the fade
+        // above ends on ground: the rows and their titles are inked for the
+        // page ground, so the picture must dim TOWARD it — a black veil
         // would put theme-inked text on a surface the theme never chose.
         //
-        // A solid fill, not a gradient: it re-paints on every scrolled frame,
-        // and a full-screen gradient per frame is what the TV veil policy
-        // exists to avoid. Opacity is linear in offset and fully opaque by
-        // 80% of a hero-height — deep in the board the page is exactly the
-        // flat ground it always was; the art only ghosts through during the
-        // descent.
-        IgnorePointer(
-          child: AnimatedBuilder(
-            animation: _scroll,
-            builder: (context, _) {
-              final off = _scroll.hasClients ? _scroll.offset : 0.0;
-              final t = (off / (heroH * 0.8)).clamp(0.0, 1.0);
-              if (t == 0) return const SizedBox.shrink();
-              return Opacity(
-                opacity: t,
-                child: ColoredBox(color: ground),
-              );
-            },
+        // A solid fill whose alpha lives in the COLOUR — an Opacity widget
+        // would add a compositing layer per change — inside its own
+        // RepaintBoundary, so a veil change redraws one flat quad and never
+        // dirties the layer holding the art and both gradients.
+        //
+        // TWO drivers, per input. TV snaps it off the CURSOR — hero clear,
+        // first shelf 0.72, deeper opaque — because tracking the scroll
+        // glide repaints every frame of every row move, which is exactly
+        // what the TV veil policy exists to avoid (and what a MiBox-class
+        // GPU renders as lag). Touch and desktop keep the continuous
+        // scroll-driven ramp: free scrolling has no discrete states to snap
+        // between, and those GPUs absorb the fill.
+        RepaintBoundary(
+          child: IgnorePointer(
+            child: widget.dpad
+                ? _veil(ground, _row < 0 ? 0.0 : (_row == 0 ? 0.72 : 1.0))
+                : AnimatedBuilder(
+                    animation: _scroll,
+                    builder: (context, _) {
+                      final off = _scroll.hasClients ? _scroll.offset : 0.0;
+                      final t = (off / (heroH * 0.8)).clamp(0.0, 1.0);
+                      return _veil(ground, t);
+                    },
+                  ),
           ),
         ),
       ],
     );
   }
+
+  /// One alpha-in-the-colour fill. Fully transparent paints nothing at all.
+  static Widget _veil(Color ground, double t) => t <= 0
+      ? const SizedBox.shrink()
+      : ColoredBox(color: ground.withValues(alpha: t));
 
   Widget _heroForeground(_M m, StremioMeta item) {
     final flip = _flip;
@@ -1872,7 +1896,13 @@ class _CardState extends State<_Card> {
           Scrollable.ensureVisible(
             context,
             alignment: 0.5,
-            duration: const Duration(milliseconds: 220),
+            // Snap on TV — the detail rails' rule: a held key retargets an
+            // in-flight glide every repeat, so the cursor perpetually
+            // trails the press, and every glide frame is scroll paint a
+            // MiBox-class GPU visibly drops. Pointer/touch keeps the glide.
+            duration: PlatformUtil.isAndroidTvCached
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
           );
         }

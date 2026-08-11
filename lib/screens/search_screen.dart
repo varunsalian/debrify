@@ -23627,6 +23627,13 @@ class _DiscoverStageBackdropState extends State<_DiscoverStageBackdrop> {
             errorWidget: (_, __, ___) => const SizedBox.shrink(),
           );
     if (!widget.crossfade) return art;
+    // Android TV keeps the two-pane's SNAP even on the stage: the switcher's
+    // crossfade is a full-screen saveLayer on that GLES2 pipeline — the exact
+    // cost the two-pane documented when it declined the fade — and a rest can
+    // pay it twice (the raw list art, then the /meta-enriched background a
+    // moment later). On an Amlogic box those frames land right when the user
+    // is about to move again, which reads as navigation lag.
+    if (PlatformUtil.isAndroidTvCached) return art;
     // Between two SETTLED titles — at most one swap per rest — so the
     // saveLayer this costs is bounded, exactly as on the Home board's stage.
     return AnimatedSwitcher(
@@ -23712,7 +23719,15 @@ class _DiscoverStageVeils extends StatelessWidget {
                 ? const Duration(milliseconds: 1200)
                 : on
                     ? const Duration(milliseconds: 900)
-                    : const Duration(milliseconds: 250),
+                    // Lights-up fires on the KEYPRESS that interrupts a
+                    // trailer, and each of its frames re-lerps and repaints
+                    // three full-screen gradients — on an Amlogic/Mali box
+                    // that lands as input lag on the exact frame the user
+                    // pressed. Snap it there; the slow lights-down legs run
+                    // at rest, where nobody is waiting on a frame.
+                    : PlatformUtil.isAndroidTvCached
+                        ? Duration.zero
+                        : const Duration(milliseconds: 250),
             curve: Curves.easeInOutCubic,
             builder: (_, t, __) => stage
                 ? Stack(

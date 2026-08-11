@@ -8,6 +8,7 @@ import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/theme_spec.dart';
 import 'package:debrify/theme/widgets/focus_expression.dart';
 import 'package:debrify/theme/widgets/parallax_focus.dart';
+import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -327,6 +328,46 @@ void main() {
         lift: 0,
       );
       expect(t.drawsRing, isFalse);
+    });
+  });
+
+  group('the Android TV lite body', () {
+    setUp(ParallaxTravel.resetForTest);
+
+    testWidgets('keeps the lift, sheds the glare and the rounded clip',
+        (tester) async {
+      PlatformUtil.debugSetAndroidTvCached(true);
+      addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+
+      Widget build(bool focused) => host(
+            themeWith(FocusExpression.parallax),
+            ParallaxFocus(
+              focused: focused,
+              radius: BorderRadius.circular(7),
+              child: const SizedBox(width: 100, height: 60),
+            ),
+          );
+
+      await tester.pumpWidget(build(false));
+      final rest = tester.getRect(find.byType(SizedBox).first).width;
+      await tester.pumpWidget(build(true));
+      await tester.pumpAndSettle();
+
+      // The cursor is still a cursor: full lift, exact same endpoint the
+      // full body settles on.
+      final settled = tester.getRect(find.byType(SizedBox).first).width;
+      expect(settled, closeTo(rest * ParallaxShape.poster.scale, 0.5));
+
+      // The per-frame luxuries are gone — no rounded clip (a saveLayer per
+      // frame on that GLES2 pipeline) and no radial-gradient glare. These
+      // are what an Amlogic/Mali box rendered as cursor lag.
+      expect(find.byType(ClipRRect), findsNothing);
+      final glare = tester
+          .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+          .where((d) =>
+              d.decoration is BoxDecoration &&
+              (d.decoration as BoxDecoration).gradient is RadialGradient);
+      expect(glare, isEmpty);
     });
   });
 }
