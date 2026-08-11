@@ -25,6 +25,15 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- The marker every iOS-FAMILY bundle carries, tvOS included (Xcode's own
+	     tvOS template emits it; so does every shipping tvOS app we compared
+	     against). flutter-tvos's generated plist omits it, and sideloaders
+	     read it to decide whether an IPA is installable at all: without it
+	     Sideloadly rejects the bundle as "This does not look like valid iOS
+	     app!" during parsing, before it ever reaches signing. ios/Runner has
+	     carried it since the Flutter template — this is the tvOS gap. -->
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
 	<key>FLTAssetsPath</key>
 	<string>flutter_assets</string>
 	<key>UIMainStoryboardFile</key>
