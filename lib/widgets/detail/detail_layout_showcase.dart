@@ -290,14 +290,22 @@ class _DetailShowcaseState extends State<DetailShowcase> {
       // traversal, which happily lands on a cast tile sitting below-left.
       //
       // Through `focusEntry`, not a bare request on `primaryEntry`: this is a
-      // LONG jump, and from a low band the identity is scrolled out of the
-      // list and disposed, so the entry node is unmounted exactly as often as
-      // a far card is. `focusEntry` falls back to the always-mounted back
-      // button rather than no-op into the same dead end. The episode rail's
-      // own LEFT edge already crosses this way.
+      // LONG jump, and from a low band the identity can be scrolled out of the
+      // list and disposed, so the entry node is unmounted just as a far card
+      // is. `focusEntry` falls back to the always-mounted back button rather
+      // than no-op into the same dead end.
+      //
+      // The band only follows when the identity is where focus actually WENT.
+      // On the fallback the cursor is on a shell control and the list has not
+      // moved, so claiming 'identity' would publish a shallow depth: the shell
+      // reads that to restore the sharp key art and to hand the trailer a play
+      // URL again, which would start a decoder behind a page still parked on a
+      // low band. `_step`'s own exit to the back button leaves the band alone
+      // for exactly this reason.
+      final toIdentity = detailNodeMounted(widget.model.focus.primaryEntry);
       ParallaxTravel.note(const Offset(-1, 0));
       widget.model.focus.focusEntry();
-      _setBand('identity');
+      if (toIdentity) _setBand('identity');
       return;
     }
     if (next >= band.nodes.length) return;
