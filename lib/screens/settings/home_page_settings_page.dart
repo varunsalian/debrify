@@ -35,7 +35,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   int _ambientTrailerVolume = 70;
   bool _tvTrailerUnderlayEnabled = true;
   String _tvHomeStyle = 'canvas';
-  HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.auto, ids: []);
+  HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.random, ids: []);
   List<StremioAddon> _addons = [];
 
   /// Whether the RESOLVED home layout is Spotlight — the only layout with the

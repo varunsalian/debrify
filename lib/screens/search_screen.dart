@@ -658,7 +658,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// hero reel is built from. Read in [_load], refreshed by
   /// [_reloadForHomeSettings]; resolved into [_spotlightHeroOverride] by
   /// [_resolveSpotlightHeroSource].
-  HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.auto, ids: const []);
+  HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.random, ids: const []);
 
   /// Whether any Trakt/Simkl list row is opted in — gates the tracker-row
   /// resolve in [_load] and the integrations-triggered reload.

@@ -65,7 +65,7 @@ class SpotlightHeroSourcePage extends StatefulWidget {
 
 class _SpotlightHeroSourcePageState extends State<SpotlightHeroSourcePage> {
   bool _loading = true;
-  HomeHeroSourceMode _mode = HomeHeroSourceMode.auto;
+  HomeHeroSourceMode _mode = HomeHeroSourceMode.random;
 
   /// Picked catalog leaves (`addonId:type:catalogId`), in pick order. Kept
   /// across mode flips — see [StorageService.getHomeHeroSource] — so trying
