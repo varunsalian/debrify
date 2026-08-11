@@ -37,27 +37,25 @@ class PlaylistSheet {
   }) async {
     if (playlist.isEmpty) return;
 
+    // Spotlight material, bottom-sheet geometry: an episodes grid genuinely
+    // wants the full width, so unlike the small pickers this keeps its shape
+    // and only adopts the black glass + hairline.
     await showModalBottomSheet(
       context: context,
-      backgroundColor: VideoPlayerColors.darkBackground,
+      backgroundColor: const Color(0xFF101012),
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+        side: BorderSide(
+          color: Colors.white.withValues(alpha: 0.14),
+          width: 0.75,
+        ),
       ),
       builder: (context) {
         return SafeArea(
           top: false,
           child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  VideoPlayerColors.darkerBackground,
-                  VideoPlayerColors.darkBackground,
-                ],
-              ),
-            ),
+            decoration: const BoxDecoration(color: Color(0xFF101012)),
             child: seriesPlaylist != null && seriesPlaylist.isSeries
                 ? SeriesBrowser(
                     seriesPlaylist: seriesPlaylist,

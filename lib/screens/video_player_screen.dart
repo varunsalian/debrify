@@ -76,6 +76,7 @@ import 'video_player/widgets/transition_overlay.dart';
 import 'video_player/widgets/pikpak_retry_overlay.dart';
 import 'video_player/widgets/buffering_indicator.dart';
 import 'video_player/widgets/tracks_sheet.dart';
+import 'video_player/widgets/player_menu_panel.dart';
 import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
 import 'video_player/widgets/iptv_channel_sheet.dart';
@@ -92,6 +93,8 @@ import 'video_player/services/android_renderer_startup_fallback.dart';
 import 'video_player/widgets/subtitle_line_picker_overlay.dart';
 import 'video_player/widgets/skip_segment_button.dart';
 import 'video_player/widgets/sleep_timer_sheet.dart';
+import 'video_player/widgets/sync_stepper_overlay.dart';
+import 'video_player/widgets/spotlight_dialog.dart';
 import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
@@ -901,6 +904,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // Sources grown by the sheet's "Load more" (append-only merge over
   // widget.stremioSources; the fetcher's flags track what was searched)
   List<Torrent>? _augmentedSources;
+
+  // Unified player menu (Spotlight panel) state. The subtitle-identity
+  // context is captured at open time, exactly like the old tracks sheet
+  // captured it in its `show` arguments.
+  bool _showPlayerMenu = false;
+  PlayerMenuSection _playerMenuInitialSection = PlayerMenuSection.subtitles;
+  final GlobalKey<PlayerMenuPanelState> _playerMenuKey =
+      GlobalKey<PlayerMenuPanelState>();
+  String? _menuImdbId;
+  String? _menuContentType;
+  int? _menuSeason;
+  int? _menuEpisode;
+  List<AddonSubtitleSlot>? _menuCachedSlots;
+  String? _menuCacheKey;
 
   // Stremio TV guide state
   bool _showStremioTvGuide = false;
@@ -3670,6 +3687,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
+    if (kUnifiedPlayerMenuEnabled) {
+      _openPlayerMenuQuick(PlayerMenuSection.shuffle);
+      return;
+    }
+
     _hideTimer?.cancel();
     final choice = await showDialog<String>(
       context: context,
@@ -3717,24 +3739,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (choice == 'once') {
       await _playRandomOnce(disableContinuousShuffle: true);
     } else if (choice == 'continuous') {
-      if (_continuousShuffleEnabled) {
-        setState(() {
-          _continuousShuffleEnabled = false;
-          _shuffleBag.clear();
-        });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Continuous shuffle off')));
-      } else {
-        setState(() {
-          _continuousShuffleEnabled = true;
-          _shuffleBag.clear();
-        });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Continuous shuffle on')));
-        await _playRandomOnce(disableContinuousShuffle: false);
-      }
+      await _toggleContinuousShuffle();
+    }
+  }
+
+  Future<void> _toggleContinuousShuffle() async {
+    if (_continuousShuffleEnabled) {
+      setState(() {
+        _continuousShuffleEnabled = false;
+        _shuffleBag.clear();
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Continuous shuffle off')));
+    } else {
+      setState(() {
+        _continuousShuffleEnabled = true;
+        _shuffleBag.clear();
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Continuous shuffle on')));
+      await _playRandomOnce(disableContinuousShuffle: false);
     }
   }
 
@@ -4238,6 +4264,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Update subtitle style settings
   void _onSubtitleStyleChanged(SubtitleSettingsData settings) {
+    // Style saves are awaited before this fires, so it can land after the
+    // whole player route is gone (close right after adjusting a style).
+    if (!mounted) return;
     final offsetChanged =
         _subtitleSettings?.syncOffsetMs != settings.syncOffsetMs;
     setState(() {
@@ -4312,211 +4341,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Widget _buildSliderSyncOverlay() {
-    final settings = _subtitleSettings;
-    final ms = settings?.syncOffsetMs ?? 0;
-    final accent = settings?.syncOffsetColor ?? const Color(0xFF4CAF50);
-    final label = settings?.syncOffsetLabel ?? '0';
-    const minMs = SubtitleSettingsService.syncOffsetMinMs;
-    const maxMs = SubtitleSettingsService.syncOffsetMaxMs;
-    const step = SubtitleSettingsService.syncOffsetStepMs;
-
-    void update(int newMs) async {
-      final clamped = newMs.clamp(minMs, maxMs);
-      await SubtitleSettingsService.instance.setSyncOffsetMs(clamped);
-      _applySubtitleSyncOffset(clamped);
-      if (mounted) {
-        setState(() {
-          _subtitleSettings = _subtitleSettings?.copyWith(
-            syncOffsetMs: clamped,
-          );
-        });
-      }
-    }
-
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      child: GestureDetector(
-        onTap: () {},
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(32, 16, 32, 28),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.bottomCenter,
-              end: Alignment.topCenter,
-              colors: [Color(0xCC000000), Color(0x00000000)],
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    'SUBTITLE SYNC',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: accent,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  TvTappable(
-                    autofocus: true,
-                    onTap: () => update(0),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'Reset',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  TvTappable(
-                    onTap: _hideSyncOverlay,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'Done',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  TvTappable(
-                    onTap: () => update(ms - step),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.remove_rounded,
-                        color: Colors.white70,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderThemeData(
-                        activeTrackColor: accent,
-                        inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
-                        thumbColor: Colors.white,
-                        overlayColor: accent.withValues(alpha: 0.2),
-                        trackHeight: 4,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 8,
-                        ),
-                      ),
-                      child: Slider(
-                        value: ms.toDouble(),
-                        min: minMs.toDouble(),
-                        max: maxMs.toDouble(),
-                        divisions: (maxMs - minMs) ~/ step,
-                        onChanged: (v) => update(v.round()),
-                      ),
-                    ),
-                  ),
-                  TvTappable(
-                    onTap: () => update(ms + step),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.add_rounded,
-                        color: Colors.white70,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: Text(
-                  'Line picker is only available for addon subtitles',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    fontSize: 10,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 40),
-                    child: Text(
-                      '-1hr',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.35),
-                        fontSize: 9,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '0',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      fontSize: 9,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 40),
-                    child: Text(
-                      '+1hr',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.35),
-                        fontSize: 9,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+    return SyncStepperOverlay(
+      offsetMs: _subtitleSettings?.syncOffsetMs ?? 0,
+      onOffsetChanged: (ms) async {
+        final clamped = ms.clamp(
+          SubtitleSettingsService.syncOffsetMinMs,
+          SubtitleSettingsService.syncOffsetMaxMs,
+        );
+        await SubtitleSettingsService.instance.setSyncOffsetMs(clamped);
+        _applySubtitleSyncOffset(clamped);
+        if (mounted) {
+          setState(() {
+            _subtitleSettings = _subtitleSettings?.copyWith(
+              syncOffsetMs: clamped,
+            );
+          });
+        }
+      },
+      onDismiss: _hideSyncOverlay,
     );
   }
 
@@ -9225,8 +9067,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           scrubPreview: _tvScrubTarget,
           onPlayPause: _togglePlay,
           onShowTracks: () => _showTracksSheet(context),
-          onSpeed: _changeSpeed,
-          onAspect: _cycleAspectMode,
+          onSpeed: _onSpeedButton,
+          onAspect: _onAspectButton,
           onSleepTimer: _showSleepTimerSheet,
           sleepTimerLabel: _sleepTimerButtonLabel,
           speed: _playbackSpeed,
@@ -9287,12 +9129,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _showChannelGuide ||
       _showIptvChannelSheet ||
       _showSourceSheet ||
-      _showStremioTvGuide;
+      _showStremioTvGuide ||
+      _showPlayerMenu;
 
   /// Closes the topmost overlay and returns focus to the player root, which the
   /// individual hide methods do not do on their own.
   void _closeTopPlayerOverlay() {
-    if (_showSyncOverlay) {
+    if (_showPlayerMenu) {
+      // Delegate: BACK inside the menu walks values -> rail before closing
+      // (tvOS Menu arrives here via PopScope, never as a key).
+      if (_playerMenuKey.currentState?.handleHostBack() != true) {
+        _hidePlayerMenu();
+      }
+      // Still open means the press was spent on a pane change.
+      if (_showPlayerMenu) return;
+    } else if (_showSyncOverlay) {
       _hideSyncOverlay();
     } else if (_showChannelGuide) {
       _hideChannelGuideOverlay();
@@ -9929,6 +9780,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   };
 
   Future<void> _showSleepTimerSheet() async {
+    if (kUnifiedPlayerMenuEnabled) {
+      _openPlayerMenuQuick(PlayerMenuSection.sleep);
+      return;
+    }
     _hideTimer?.cancel();
     final picked = await SleepTimerSheet.show(
       context,
@@ -9942,7 +9797,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted) return;
     _scheduleAutoHide();
     if (picked == null) return;
+    _applySleepTimerSelection(picked);
+  }
 
+  void _applySleepTimerSelection(SleepTimerSelection picked) {
     switch (picked.mode) {
       case SleepTimerMode.off:
         _cancelSleepTimer();
@@ -10015,6 +9873,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _player.setRate(next);
     setState(() => _playbackSpeed = next);
     _scheduleAutoHide();
+    _saveResume();
+  }
+
+  /// Speed button: the menu's Speed pane when the unified menu is on, the
+  /// old blind cycle otherwise. Keyboard/long-press cycling is untouched.
+  void _onSpeedButton() {
+    if (kUnifiedPlayerMenuEnabled) {
+      _openPlayerMenuQuick(PlayerMenuSection.speed);
+      return;
+    }
+    _changeSpeed();
+  }
+
+  void _onAspectButton() {
+    if (kUnifiedPlayerMenuEnabled) {
+      _openPlayerMenuQuick(PlayerMenuSection.aspect);
+      return;
+    }
+    _cycleAspectMode();
+  }
+
+  void _setPlaybackSpeed(double v) {
+    _player.setRate(v);
+    setState(() => _playbackSpeed = v);
+    _saveResume();
+  }
+
+  void _setAspectModeDirect(AspectMode m) {
+    if (m == _aspectMode) return;
+    setState(() => _aspectMode = m);
     _saveResume();
   }
 
@@ -10237,6 +10125,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           onKey: (node, event) {
             if (event is! RawKeyDownEvent) return KeyEventResult.ignored;
             final key = event.logicalKey;
+
+            // Unified menu is open. Like the IPTV sheet, it owns every key
+            // including BACK (values -> rail -> close, with TvOverlayBack
+            // marking the closing press); its KeyboardListener holds focus.
+            if (_showPlayerMenu) {
+              return KeyEventResult.ignored;
+            }
 
             // Sync overlay is open - handle its keys first
             if (_showSyncOverlay) {
@@ -10851,8 +10746,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   isReady: isReady,
                                   onPlayPause: _togglePlay,
                                   onBack: () => Navigator.of(context).pop(),
-                                  onAspect: _cycleAspectMode,
-                                  onSpeed: _changeSpeed,
+                                  onAspect: _onAspectButton,
+                                  onSpeed: _onSpeedButton,
                                   onSleepTimer: _showSleepTimerSheet,
                                   sleepTimerLabel: _sleepTimerButtonLabel,
                                   speed: _playbackSpeed,
@@ -11222,6 +11117,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       onClose: _hideStremioTvGuide,
                     ),
                   ),
+                // Unified player menu (Spotlight panel)
+                if (_showPlayerMenu && !inPip)
+                  Positioned.fill(child: _buildPlayerMenuPanel()),
                 // Subtitle sync overlay
                 if (_showSyncOverlay && !inPip) _buildSyncOverlay(),
               ],
@@ -11253,7 +11151,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _showChannelGuide ||
       _showIptvChannelSheet ||
       _showSourceSheet ||
-      _showStremioTvGuide;
+      _showStremioTvGuide ||
+      _showPlayerMenu;
 
   /// Called on mouse movement: reveal controls (and the cursor) if hidden and
   /// (re)start the auto-hide countdown so continuous movement keeps them alive.
@@ -11506,13 +11405,32 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     }
 
+    // Right-side glass panel (the player menu's grammar) rather than the old
+    // Material bottom sheet — the picture stays visible on the left.
     final selected =
-        await showModalBottomSheet<StremioMeta>(
+        await showGeneralDialog<StremioMeta>(
           context: context,
-          isScrollControlled: true,
-          useSafeArea: true,
-          backgroundColor: Colors.transparent,
-          builder: (sheetContext) {
+          barrierDismissible: true,
+          barrierLabel: 'dismiss',
+          barrierColor: Colors.black.withValues(alpha: 0.45),
+          transitionDuration: const Duration(milliseconds: 280),
+          transitionBuilder: (context, anim, _, child) {
+            final curved = CurvedAnimation(
+              parent: anim,
+              curve: Curves.easeOutCubic,
+            );
+            return FadeTransition(
+              opacity: curved,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0.12, 0),
+                  end: Offset.zero,
+                ).animate(curved),
+                child: child,
+              ),
+            );
+          },
+          pageBuilder: (sheetContext, _, __) {
             var initialSearchStarted = false;
             return StatefulBuilder(
               builder: (sheetContext, setSheetState) {
@@ -11522,138 +11440,155 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 }
 
                 final screenSize = MediaQuery.of(sheetContext).size;
-                final sheetHeight = screenSize.height * 0.82;
+                final compact = screenSize.width < 720;
+                final panelWidth = compact
+                    ? screenSize.width
+                    : (screenSize.width * 0.46).clamp(430.0, 560.0);
 
-                return Container(
-                  height: sheetHeight,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF141414),
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(20),
+                final panel = Container(
+                  width: panelWidth,
+                  height: double.infinity,
+                  decoration: BoxDecoration(
+                    color: PlatformUtil.isAndroidTvCached
+                        ? const Color(0xF5101012)
+                        : const Color(0xFF101012).withValues(alpha: 0.86),
+                    border: Border(
+                      left: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        width: 0.75,
+                      ),
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.only(top: 12),
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.search_rounded,
-                              color: VideoPlayerColors.netflixRed,
-                              size: 22,
-                            ),
-                            const SizedBox(width: 10),
-                            const Expanded(
-                              child: Text(
-                                'Search Subtitle',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
+                  child: SafeArea(
+                    left: false,
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 24, 14, 0),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'FIX THE TITLE',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.42),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 1.8,
+                                  ),
                                 ),
                               ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close_rounded),
-                              color: Colors.white70,
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                            ),
-                          ],
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded),
+                                color: Colors.white70,
+                                onPressed: () =>
+                                    Navigator.of(sheetContext).pop(),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                        child: TvTextField(
-                          controller: controller,
-                          autofocus: initialQuery.trim().isEmpty,
-                          onSubmitted: (value) =>
-                              runSearch(value, setSheetState),
-                          style: const TextStyle(color: Colors.white),
-                          textInputAction: TextInputAction.search,
-                          decoration: InputDecoration(
-                            hintText: 'Search movie or show',
-                            hintStyle: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.42),
-                            ),
-                            prefixIcon: Icon(
-                              Icons.search_rounded,
-                              color: Colors.white.withValues(alpha: 0.5),
-                            ),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.arrow_forward_rounded),
-                              color: VideoPlayerColors.netflixRed,
-                              onPressed: () =>
-                                  runSearch(controller.text, setSheetState),
-                            ),
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.08),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                          child: TvTextField(
+                            controller: controller,
+                            autofocus: initialQuery.trim().isEmpty,
+                            onSubmitted: (value) =>
+                                runSearch(value, setSheetState),
+                            style: const TextStyle(color: Colors.white),
+                            textInputAction: TextInputAction.search,
+                            decoration: InputDecoration(
+                              hintText: 'Search movie or show',
+                              hintStyle: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.42),
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search_rounded,
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.arrow_forward_rounded),
+                                color: Colors.white70,
+                                onPressed: () =>
+                                    runSearch(controller.text, setSheetState),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white.withValues(alpha: 0.08),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: Builder(
-                          builder: (_) {
-                            if (isSearching) {
-                              return const Center(
-                                child: CircularProgressIndicator(
-                                  color: VideoPlayerColors.netflixRed,
-                                ),
-                              );
-                            }
-
-                            if (errorMessage != null) {
-                              return Center(
-                                child: Text(
-                                  errorMessage!,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.65),
-                                    fontSize: 14,
+                        Expanded(
+                          child: Builder(
+                            builder: (_) {
+                              if (isSearching) {
+                                return Center(
+                                  child: SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              );
-                            }
+                                );
+                              }
 
-                            if (hasSearched && results.isEmpty) {
-                              return Center(
-                                child: Text(
-                                  'No IMDb-backed results found',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.65),
-                                    fontSize: 14,
+                              if (errorMessage != null) {
+                                return Center(
+                                  child: Text(
+                                    errorMessage!,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.65,
+                                      ),
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                ),
-                              );
-                            }
+                                );
+                              }
 
-                            return ListView.separated(
-                              padding: const EdgeInsets.only(bottom: 20),
-                              itemCount: results.length,
-                              separatorBuilder: (_, __) => Divider(
-                                height: 1,
-                                color: Colors.white.withValues(alpha: 0.06),
-                              ),
-                              itemBuilder: (_, index) =>
-                                  _buildIdentifyTitleResultTile(results[index]),
-                            );
-                          },
+                              if (hasSearched && results.isEmpty) {
+                                return Center(
+                                  child: Text(
+                                    'No IMDb-backed results found',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.65,
+                                      ),
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              return ListView.separated(
+                                padding: const EdgeInsets.only(bottom: 20),
+                                itemCount: results.length,
+                                separatorBuilder: (_, __) => Divider(
+                                  height: 1,
+                                  color: Colors.white.withValues(alpha: 0.06),
+                                ),
+                                itemBuilder: (_, index) =>
+                                    _buildIdentifyTitleResultTile(
+                                      results[index],
+                                    ),
+                              );
+                            },
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                );
+
+                return Align(
+                  alignment: Alignment.centerRight,
+                  child: Material(color: Colors.transparent, child: panel),
                 );
               },
             );
@@ -11704,30 +11639,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final episodeController = TextEditingController();
     String? errorText;
 
-    final result = await showDialog<_SeasonEpisodeSelection>(
-      context: context,
+    final result = await showSpotlightDialog<_SeasonEpisodeSelection>(
+      context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF1C1C1E),
-              title: const Text(
-                'Episode',
-                style: TextStyle(color: Colors.white),
-              ),
-              content: Column(
+            return SpotlightDialogCard(
+              title: 'Which episode?',
+              bodyText: title,
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   Row(
                     children: [
                       Expanded(
@@ -11764,7 +11686,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     Text(
                       errorText!,
                       style: const TextStyle(
-                        color: VideoPlayerColors.netflixRed,
+                        color: SpotlightDialogCard.statusRed,
                         fontSize: 12,
                       ),
                     ),
@@ -11772,29 +11694,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ],
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
+                SpotlightDialogAction(
+                  'Cancel',
+                  () => Navigator.of(dialogContext).pop(),
                 ),
-                TextButton(
-                  onPressed: () {
-                    final season = int.tryParse(seasonController.text.trim());
-                    final episode = int.tryParse(episodeController.text.trim());
-                    if (season == null ||
-                        season <= 0 ||
-                        episode == null ||
-                        episode <= 0) {
-                      setDialogState(() {
-                        errorText = 'Enter a valid season and episode.';
-                      });
-                      return;
-                    }
-                    Navigator.of(dialogContext).pop(
-                      _SeasonEpisodeSelection(season: season, episode: episode),
-                    );
-                  },
-                  child: const Text('Apply'),
-                ),
+                // solid: the recommended action, and on TV the autofocus
+                // anchor — without it the dialog opens with nothing focused
+                // and the first OK press dies.
+                SpotlightDialogAction('Apply', solid: true, () {
+                  final season = int.tryParse(seasonController.text.trim());
+                  final episode = int.tryParse(episodeController.text.trim());
+                  if (season == null ||
+                      season <= 0 ||
+                      episode == null ||
+                      episode <= 0) {
+                    setDialogState(() {
+                      errorText = 'Enter a valid season and episode.';
+                    });
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop(
+                    _SeasonEpisodeSelection(season: season, episode: episode),
+                  );
+                }),
               ],
             );
           },
@@ -12024,6 +11946,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     if (!context.mounted) return;
+
+    if (kUnifiedPlayerMenuEnabled) {
+      _openPlayerMenuAt(
+        PlayerMenuSection.subtitles,
+        imdbId: effectiveImdbId,
+        contentType: effectiveContentType,
+        season: subtitleSeason,
+        episode: subtitleEpisode,
+        cachedSlots: cachedSlots,
+        cacheKey: cacheKey,
+      );
+      return;
+    }
+
     await TracksSheet.show(
       context,
       _player,
@@ -12080,6 +12016,250 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
+  // ── Unified player menu (Spotlight panel) ─────────────────────────────
+
+  /// Opens the menu with the subtitle-identity context already resolved
+  /// (the tracks-button path, which may await a metadata fetch first).
+  void _openPlayerMenuAt(
+    PlayerMenuSection section, {
+    String? imdbId,
+    String? contentType,
+    int? season,
+    int? episode,
+    List<AddonSubtitleSlot>? cachedSlots,
+    String? cacheKey,
+  }) {
+    _hideIptvZapBanner();
+    _hideTimer?.cancel();
+    _tvReleaseFocusForOverlay();
+    setState(() {
+      _playerMenuInitialSection = section;
+      _menuImdbId = imdbId;
+      _menuContentType = contentType;
+      _menuSeason = season;
+      _menuEpisode = episode;
+      _menuCachedSlots = cachedSlots;
+      _menuCacheKey = cacheKey;
+      _showPlayerMenu = true;
+      _controlsVisible.value = false;
+    });
+  }
+
+  /// Opens the menu from a non-subtitle entry (speed, sleep, aspect,
+  /// shuffle) without awaiting anything: identity comes from caches only.
+  /// If the IMDb id was never fetched, the Subtitles pane still offers the
+  /// "Fix the title" recovery, so nothing is lost — just not pre-fetched.
+  void _openPlayerMenuQuick(PlayerMenuSection section) {
+    final currentTitle = _currentPlaybackTitleForIdentity();
+    final seriesInfo = SeriesParser.parseFilename(currentTitle);
+    final season =
+        seriesInfo.season ?? _manualContentSeason ?? _effectiveContentSeason;
+    final episode =
+        seriesInfo.episode ?? _manualContentEpisode ?? _effectiveContentEpisode;
+
+    String? imdbId;
+    final seriesPlaylist = _seriesPlaylist;
+    if (_manualContentImdbId != null && _manualContentImdbId!.isNotEmpty) {
+      imdbId = _manualContentImdbId;
+    } else if (seriesPlaylist != null) {
+      imdbId = seriesPlaylist.isSeries
+          ? (seriesPlaylist.imdbId ?? _effectiveContentImdbId)
+          : (seriesPlaylist.getImdbIdForIndex(_currentIndex) ??
+                _effectiveContentImdbId);
+    } else {
+      imdbId = _singleFileImdbId ?? _effectiveContentImdbId;
+    }
+
+    String? contentType = _manualContentType ?? _effectiveContentType;
+    if (contentType == null) {
+      if (seriesPlaylist?.isSeries == true) {
+        contentType = 'series';
+      } else if (imdbId != null) {
+        contentType = 'movie';
+      }
+    }
+
+    final subtitleSeason = contentType == 'series' ? season : null;
+    final subtitleEpisode = contentType == 'series' ? episode : null;
+    final String? cacheKey = imdbId != null
+        ? (subtitleSeason != null && subtitleEpisode != null
+              ? '$imdbId:$subtitleSeason:$subtitleEpisode'
+              : imdbId)
+        : null;
+    final baseSlots = (cacheKey != null && _cachedSubtitleKey == cacheKey)
+        ? _cachedAddonSlots
+        : null;
+    final cachedSlots = _injectedSubtitleSlots != null
+        ? [...?baseSlots, ..._injectedSubtitleSlots!]
+        : baseSlots;
+
+    _openPlayerMenuAt(
+      section,
+      imdbId: imdbId,
+      contentType: contentType,
+      season: subtitleSeason,
+      episode: subtitleEpisode,
+      cachedSlots: cachedSlots,
+      cacheKey: cacheKey,
+    );
+  }
+
+  void _hidePlayerMenu() {
+    if (!_showPlayerMenu) return;
+    setState(() => _showPlayerMenu = false);
+    if (PlatformUtil.isTelevision) _tvRootFocus.requestFocus();
+  }
+
+  /// The old tracks-sheet `onTrackChanged` closure, verbatim: shared tail of
+  /// every track selection made from the menu.
+  Future<void> _menuApplyTrackChange(String audioId, String subtitleId) async {
+    _userManuallySelectedSubtitle = true;
+    if (!subtitleId.startsWith('stremio:')) {
+      _activeExternalSubtitlePath = null;
+    }
+    _captureIptvAudioLanguage(audioId);
+    await _persistTrackChoice(audioId, subtitleId);
+  }
+
+  Future<void> _menuSelectAudio(String audioId, String currentSubId) async {
+    final track = _player.state.tracks.audio
+        .where((a) => a.id == audioId)
+        .firstOrNull;
+    if (track == null) return;
+    await _player.setAudioTrack(track);
+    await _menuApplyTrackChange(audioId, currentSubId);
+  }
+
+  Future<void> _menuSubtitlesOff(String audioId) async {
+    _selectedStremioSubtitleId = null;
+    await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+    await _menuApplyTrackChange(audioId, 'no');
+  }
+
+  Future<void> _menuSelectEmbeddedSubtitle(String subId, String audioId) async {
+    final track = _player.state.tracks.subtitle
+        .where((s) => s.id == subId)
+        .firstOrNull;
+    if (track == null) return;
+    _selectedStremioSubtitleId = null;
+    await _player.setSubtitleTrack(track);
+    await _menuApplyTrackChange(audioId, subId);
+  }
+
+  /// Returns false when the download/apply failed — the panel keeps the
+  /// previous selection (and its sync offset) in that case.
+  Future<bool> _menuSelectAddonSubtitle(
+    StremioSubtitle sub,
+    String audioId,
+  ) async {
+    // Playback continues behind the menu: if the content switches while the
+    // download is in flight (auto-advance, zap), applying the stale subtitle
+    // would attach it — and persist its ids — against the NEW item.
+    final token = _addonSubtitleFetchToken;
+    try {
+      final filePath = await _downloadStremioSubtitleToTempFile(sub);
+      if (filePath == null || token != _addonSubtitleFetchToken || !mounted) {
+        return false;
+      }
+      final track = mk.SubtitleTrack.uri(
+        filePath,
+        title: sub.displayName,
+        language: sub.lang,
+      );
+      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+      // Each await is a window for the content to switch under us; persisting
+      // the stale id would also suppress the new item's subtitle auto-select.
+      if (token != _addonSubtitleFetchToken || !mounted) return false;
+      await _player.setSubtitleTrack(track);
+      if (token != _addonSubtitleFetchToken || !mounted) return false;
+      _selectedStremioSubtitleId = sub.id;
+      await _menuApplyTrackChange(audioId, 'stremio:${sub.id}');
+      return true;
+    } catch (e) {
+      debugPrint('PlayerMenu: subtitle apply failed - $e');
+      return false;
+    }
+  }
+
+  Widget _buildPlayerMenuPanel() {
+    final audios = _player.state.tracks.audio
+        .where((a) => a.id.toLowerCase() != 'no')
+        .toList(growable: false);
+    final embedded = _player.state.tracks.subtitle
+        .where(
+          (s) => s.id.toLowerCase() != 'auto' && s.id.toLowerCase() != 'no',
+        )
+        .toList(growable: false);
+    final selectedSub = _selectedStremioSubtitleId != null
+        ? 'stremio:$_selectedStremioSubtitleId'
+        : _player.state.track.subtitle.id;
+    // Captured, not read live: cache write-back must be keyed to the identity
+    // the menu opened with (an identity fix re-keys through its own path).
+    final cacheKey = _menuCacheKey;
+
+    return PlayerMenuPanel(
+      key: _playerMenuKey,
+      initialSection: _playerMenuInitialSection,
+      onClose: _hidePlayerMenu,
+      audioTracks: [
+        for (final (i, a) in audios.indexed)
+          PlayerMenuTrackOption(a.id, LanguageMapper.labelForTrack(a, i)),
+      ],
+      selectedAudioId: _player.state.track.audio.id,
+      onAudioSelected: _menuSelectAudio,
+      audioPassthrough: !kIsWeb && Platform.isAndroid
+          ? _audioPassthroughEnabled
+          : null,
+      onAudioPassthroughChanged: !kIsWeb && Platform.isAndroid
+          ? _setAudioPassthroughLive
+          : null,
+      embeddedSubtitles: [
+        for (final (i, s) in embedded.indexed)
+          PlayerMenuTrackOption(s.id, LanguageMapper.labelForTrack(s, i)),
+      ],
+      selectedSubtitleId: selectedSub,
+      onSubtitlesOff: _menuSubtitlesOff,
+      onEmbeddedSubtitleSelected: _menuSelectEmbeddedSubtitle,
+      onAddonSubtitleSelected: _menuSelectAddonSubtitle,
+      onSubtitleTrackChanged: _resetSubtitleSyncOffset,
+      contentImdbId: _menuImdbId,
+      contentType: _menuContentType,
+      contentSeason: _menuSeason,
+      contentEpisode: _menuEpisode,
+      cachedAddonSlots: _menuCachedSlots,
+      onAddonSlotsFetched: (slots) {
+        if (cacheKey == null) return;
+        if (_cachedSubtitleKey != null && _cachedSubtitleKey != cacheKey) {
+          return;
+        }
+        _cachedAddonSlots = slots;
+        _cachedStremioSubtitles = AddonSubtitleSlot.flatten(slots);
+        _cachedSubtitleKey = cacheKey;
+      },
+      onIdentifyTitle: _identifyTitleAndFetchSubtitles,
+      subtitleIdentityLabel: _subtitleIdentityLabelForSheet(),
+      onSubtitleStyleChanged: _onSubtitleStyleChanged,
+      onSyncRequested: _showSyncOverlayPanel,
+      showSpeed: !_iptvZapBannerOwnsIdentity,
+      speed: _playbackSpeed,
+      onSpeedSelected: _setPlaybackSpeed,
+      aspectMode: _aspectMode,
+      onAspectSelected: _setAspectModeDirect,
+      sleepMode: _sleepTimerMode,
+      sleepArmedMinutes: _sleepTimerArmedMinutes,
+      sleepMinutesLeft: _sleepTimerMinutesLeft,
+      allowEndOfItem: _currentIptvChannel?.isLive != true,
+      onSleepSelected: _applySleepTimerSelection,
+      hasPlaylist: _activePlaylist != null && _activePlaylist!.isNotEmpty,
+      continuousShuffle: _continuousShuffleEnabled,
+      onShuffleOnce: () {
+        _hidePlayerMenu();
+        unawaited(_playRandomOnce(disableContinuousShuffle: true));
+      },
+      onShuffleContinuousToggle: () => unawaited(_toggleContinuousShuffle()),
+    );
+  }
+
   /// Reset subtitle-related state when switching content.
   void _resetSubtitleState() {
     _cachedStremioSubtitles = null;
@@ -12098,6 +12278,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _cleanupTempSubtitleFilesSync();
     _activeExternalSubtitlePath = null;
     _showSyncOverlay = false;
+    // The menu's subtitle pane is keyed to the outgoing item's identity.
+    _showPlayerMenu = false;
     // Content changed: the previous item's sync offset no longer applies.
     _resetSubtitleSyncOffset();
   }

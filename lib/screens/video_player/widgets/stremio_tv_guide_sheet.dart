@@ -78,9 +78,9 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
   final Set<String> _loadingIds = {};
 
   // Design tokens (matching IptvChannelSheet)
-  static const _accent = Color(0xFF00E5FF);
-  static const _accentAlt = Color(0xFF00B8D4);
-  static const _surfaceDark = Color(0xFF101016);
+  static const _accent = Color(0xFFFFFFFF);
+  static const _accentAlt = Color(0xFFE9E9EE);
+  static const _surfaceDark = Color(0xFF101012);
 
   @override
   void initState() {
@@ -513,18 +513,13 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: _accent.withOpacity(0.25),
+                  color: Colors.black.withOpacity(0.35),
                   blurRadius: 16,
                   spreadRadius: 2,
                 ),
-                BoxShadow(
-                  color: _accentAlt.withOpacity(0.15),
-                  blurRadius: 24,
-                  spreadRadius: 4,
-                ),
               ],
             ),
-            child: const Icon(Icons.tv_rounded, color: Colors.white, size: 22),
+            child: const Icon(Icons.tv_rounded, color: Colors.black, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -891,8 +886,8 @@ class _ChannelTile extends StatelessWidget {
   final Animation<double> pulseAnim;
   final VoidCallback onTap;
 
-  static const _accent = Color(0xFF00E5FF);
-  static const _accentAlt = Color(0xFF00BCD4);
+  static const _accent = Color(0xFFFFFFFF);
+  static const _accentAlt = Color(0xFFE9E9EE);
   static const _goldStar = Color(0xFFFFD700);
 
   static Color _avatarColor(String name) {
@@ -1331,7 +1326,7 @@ class _ChannelTile extends StatelessWidget {
           child: const Text(
             'NOW',
             style: TextStyle(
-              color: Colors.white,
+              color: Colors.black,
               fontSize: 8,
               fontWeight: FontWeight.w800,
               letterSpacing: 1,

@@ -19,6 +19,7 @@ import '../../../widgets/iptv/iptv_epg_panel.dart';
 import '../../../widgets/iptv/styles/iptv_style.dart';
 import '../../../widgets/tv_text_field.dart';
 import 'player_guide_style.dart';
+import 'spotlight_dialog.dart';
 
 typedef IptvGuideChannelSelected =
     Future<void> Function(List<IptvChannel> channels, int index);
@@ -999,7 +1000,10 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   /// The header line each styled look owns. The sub-line logic (schedule
   /// channel name / press-enter prompt / count) is shared with classic —
   /// it's state, not paint.
-  Widget _buildHeaderStyled({required bool compact, required IptvStyleTokens t}) {
+  Widget _buildHeaderStyled({
+    required bool compact,
+    required IptvStyleTokens t,
+  }) {
     final isSchedule = _compactPane == _CompactPane.schedule && compact;
     final title = isSchedule ? 'Programme Guide' : 'Live TV Guide';
     final subtitle = isSchedule
@@ -1075,7 +1079,9 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: t.fg,
-                    fontSize: console ? (compact ? 15 : 17) : (compact ? 17 : 20),
+                    fontSize: console
+                        ? (compact ? 15 : 17)
+                        : (compact ? 17 : 20),
                     fontWeight: FontWeight.w700,
                     fontFamily: console && t.nameFamily.isNotEmpty
                         ? t.nameFamily
@@ -1447,9 +1453,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   }
 
   Widget _buildFilterBar() {
-    final categoryLabel = _favoritesOnly
-        ? 'All'
-        : (_selectedCategory ?? 'All');
+    final categoryLabel = _favoritesOnly ? 'All' : (_selectedCategory ?? 'All');
     // Console readouts are uppercase mono, per the instrument grammar.
     final console = _t != null && widget.style == PlayerGuideStyle.console;
     final labelFamily = console ? _t!.monoFamily : '';
@@ -1540,7 +1544,12 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
           padding: EdgeInsets.fromLTRB(compact ? 18 : 24, 12, 18, 12),
           child: Row(
             children: [
-              _GuideLogo(channel: channel, size: 46, tokens: t, circle: edition),
+              _GuideLogo(
+                channel: channel,
+                size: 46,
+                tokens: t,
+                circle: edition,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1591,9 +1600,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
                   // active, edition cream; inactive always fgFaint.
                   color: t == null
                       ? (favorited ? const Color(0xFFF43F5E) : Colors.white54)
-                      : (favorited
-                            ? (edition ? t.fg : t.accent)
-                            : t.fgFaint),
+                      : (favorited ? (edition ? t.fg : t.accent) : t.fgFaint),
                 ),
               ),
             ],
@@ -1618,7 +1625,8 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
             // at alarm time there is no player probe, so only URLs KNOWN to be
             // progressive TS may be scheduled (an extensionless HLS URL would
             // record playlist text and call it saved).
-            onRecordProgramme: !_recordSchedulingAvailable ||
+            onRecordProgramme:
+                !_recordSchedulingAvailable ||
                     !LiveRecordingService.isSchedulableUrl(channel.url)
                 ? null
                 : (programme) {
@@ -1641,8 +1649,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
     if (!LiveRecordingService.isSchedulableUrl(channel.url)) return;
     final recordUrl = LiveRecordingService.engineRecordableUrl(channel.url);
     if (recordUrl == null || !mounted) return;
-    if (Platform.isAndroid &&
-        !await LiveRecordingService.ensureEngineReady()) {
+    if (Platform.isAndroid && !await LiveRecordingService.ensureEngineReady()) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1661,34 +1668,30 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
       return;
     }
     if (!mounted) return;
-    String clock(DateTime t) => MaterialLocalizations.of(context)
-        .formatTimeOfDay(TimeOfDay.fromDateTime(t));
-    final airsNow = !programme.start.isAfter(DateTime.now()) &&
+    String clock(DateTime t) => MaterialLocalizations.of(
+      context,
+    ).formatTimeOfDay(TimeOfDay.fromDateTime(t));
+    final airsNow =
+        !programme.start.isAfter(DateTime.now()) &&
         programme.stop.isAfter(DateTime.now());
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF14141D),
-        title: const Text(
-          'Record programme',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-        ),
-        content: Text(
-          '${programme.title}\n'
-          '${channel.name} · ${clock(programme.start)} – ${clock(programme.stop)}'
-          '${airsNow ? '\n\nAlready airing — records the rest, '
-              'from now until it ends.' : ''}',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
-        ),
+    final confirmed = await showSpotlightDialog<bool>(
+      context,
+      builder: (dialogContext) => SpotlightDialogCard(
+        title: 'Record programme?',
+        statusDot: SpotlightDialogCard.statusRed,
+        bodyText: '${programme.title} · ${channel.name}',
+        metaText:
+            '${clock(programme.start)} – ${clock(programme.stop)}'
+            '${airsNow ? ' · already airing — records the rest' : ''}',
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+          SpotlightDialogAction(
+            'Cancel',
+            () => Navigator.of(dialogContext).pop(false),
           ),
-          TextButton(
-            autofocus: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Record'),
+          SpotlightDialogAction(
+            'Record',
+            () => Navigator.of(dialogContext).pop(true),
+            solid: true,
           ),
         ],
       ),
@@ -1740,7 +1743,9 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
             'bad_time' => 'This programme is already over',
             _ => "Couldn't schedule recording",
           };
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _buildKeyboardHints() {
@@ -1751,7 +1756,9 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
-            color: t == null ? Colors.white.withValues(alpha: 0.06) : t.hairline,
+            color: t == null
+                ? Colors.white.withValues(alpha: 0.06)
+                : t.hairline,
           ),
         ),
       ),
@@ -1794,9 +1801,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                pending
-                    ? Icons.search_rounded
-                    : Icons.satellite_alt_rounded,
+                pending ? Icons.search_rounded : Icons.satellite_alt_rounded,
                 color: t == null
                     ? Colors.white.withValues(alpha: 0.1)
                     : t.fgFaint,
@@ -1807,7 +1812,9 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
             Text(
               pending ? 'Search all channels' : 'No channels found',
               style: TextStyle(
-                color: t == null ? Colors.white.withValues(alpha: 0.4) : t.fgDim,
+                color: t == null
+                    ? Colors.white.withValues(alpha: 0.4)
+                    : t.fgDim,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
@@ -1926,61 +1933,172 @@ class _GuideMenuButton extends StatelessWidget {
     this.upperLabels = false,
   });
 
+  /// The stock Material popup sat jarringly inside the themed guide — this
+  /// opens a select dialog in the guide's own picker chrome instead (same
+  /// grammar as the category picker).
+  Future<void> _openMenu(BuildContext context) async {
+    final choice = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      builder: (_) => _GuideSelectDialog(
+        icon: icon,
+        title: label,
+        options: options,
+        tokens: tokens,
+      ),
+    );
+    if (choice != null) onSelected(choice);
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = tokens;
-    return PopupMenuButton<Map<String, dynamic>>(
-      enabled: options.isNotEmpty,
-      // Menus need an opaque surface; the token panel carries over-video
-      // alpha, so it is flattened to full opacity here.
-      color: t == null ? const Color(0xFF1A1A24) : t.panel.withAlpha(0xFF),
-      onSelected: onSelected,
-      itemBuilder: (_) => [
-        for (final option in options)
-          PopupMenuItem(
-            value: option.value,
-            child: Text(
-              option.label,
-              style: t == null ? null : TextStyle(color: t.fg),
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(radius),
+      child: InkWell(
+        onTap: options.isEmpty ? null : () => _openMenu(context),
+        borderRadius: BorderRadius.circular(radius),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 92, maxWidth: 170),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+          decoration: BoxDecoration(
+            color: t == null
+                ? Colors.white.withValues(alpha: 0.06)
+                : t.focusTint,
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(
+              color: t == null
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : t.hairline,
             ),
           ),
-      ],
-      child: Container(
-        constraints: const BoxConstraints(minWidth: 92, maxWidth: 170),
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-        decoration: BoxDecoration(
-          color: t == null ? Colors.white.withValues(alpha: 0.06) : t.focusTint,
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(
-            color: t == null ? Colors.white.withValues(alpha: 0.06) : t.hairline,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: t == null ? Colors.white54 : t.fgDim, size: 15),
-            const SizedBox(width: 7),
-            Flexible(
-              child: Text(
-                upperLabels ? label.toUpperCase() : label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: t == null ? Colors.white70 : t.fgMid,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: labelFamily.isEmpty ? null : labelFamily,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: t == null ? Colors.white54 : t.fgDim, size: 15),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  upperLabels ? label.toUpperCase() : label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: t == null ? Colors.white70 : t.fgMid,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: labelFamily.isEmpty ? null : labelFamily,
+                  ),
                 ),
               ),
-            ),
-            if (options.isNotEmpty) ...[
-              const SizedBox(width: 5),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: t == null ? Colors.white38 : t.fgFaint,
-                size: 16,
-              ),
+              if (options.isNotEmpty) ...[
+                const SizedBox(width: 5),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: t == null ? Colors.white38 : t.fgFaint,
+                  size: 16,
+                ),
+              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Select dialog behind [_GuideMenuButton] — the guide's picker chrome
+/// (token panel, hairline, [_CategoryPickerRow]s) for short option lists.
+class _GuideSelectDialog extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final List<_GuideMenuOption> options;
+  final IptvStyleTokens? tokens;
+
+  const _GuideSelectDialog({
+    required this.icon,
+    required this.title,
+    required this.options,
+    this.tokens,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final t = tokens;
+    return Dialog(
+      // Dialogs need an opaque surface — the token panel's over-video alpha
+      // is flattened here (same rule as the category picker).
+      backgroundColor: t == null
+          ? const Color(0xFF14141C)
+          : t.panel.withAlpha(0xFF),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: t == null ? BorderSide.none : BorderSide(color: t.hairline2),
+      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 420,
+          maxHeight: size.height * 0.7,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+              child: Row(
+                children: [
+                  Icon(
+                    icon,
+                    color: t == null ? Colors.white54 : t.fgDim,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: t == null ? Colors.white : t.fg,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${options.length}',
+                    style: TextStyle(
+                      color: t == null
+                          ? Colors.white.withValues(alpha: 0.35)
+                          : t.fgFaint,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 12),
+                itemCount: options.length,
+                itemBuilder: (_, index) {
+                  final option = options[index];
+                  return _CategoryPickerRow(
+                    label: option.label,
+                    // The button doesn't know the active entry, same as the
+                    // popup it replaces — rows render unselected.
+                    selected: false,
+                    onTap: () => Navigator.of(context).pop(option.value),
+                    tokens: t,
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
@@ -2382,9 +2500,7 @@ class _FilterChip extends StatelessWidget {
               ? null
               : BoxDecoration(
                   borderRadius: BorderRadius.circular(radius),
-                  border: Border.all(
-                    color: selected ? t.accent : t.hairline,
-                  ),
+                  border: Border.all(color: selected ? t.accent : t.hairline),
                 ),
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           child: Row(
@@ -2434,7 +2550,9 @@ class _KeyHint extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
           decoration: BoxDecoration(
-            color: t == null ? Colors.white.withValues(alpha: 0.08) : t.focusTint,
+            color: t == null
+                ? Colors.white.withValues(alpha: 0.08)
+                : t.focusTint,
             borderRadius: BorderRadius.circular(5),
             border: t == null ? null : Border.all(color: t.hairline),
           ),
@@ -2481,7 +2599,9 @@ class _GuideLogo extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: t == null ? Colors.white.withValues(alpha: 0.06) : t.selectedTint,
+        color: t == null
+            ? Colors.white.withValues(alpha: 0.06)
+            : t.selectedTint,
         shape: circle ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: circle ? null : BorderRadius.circular(10),
         border: Border.all(
@@ -2774,114 +2894,112 @@ class _ChannelTile extends StatelessWidget {
             ? IptvFocusBracketsPainter(t!.accent)
             : null,
         child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOutCubic,
-        margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: _decoration(t),
-        child: Row(
-          children: [
-            // Channel number
-            SizedBox(
-              width: 30,
-              child: Text(
-                _console
-                    ? channelNumber.toString().padLeft(3, '0')
-                    : channelNumber.toString().padLeft(2, ' '),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: t == null
-                      ? (isCurrent
-                            ? _accent.withValues(alpha: 0.8)
-                            : isFocused
-                            ? Colors.white.withValues(alpha: 0.5)
-                            : Colors.white.withValues(alpha: 0.18))
-                      : (isCurrent
-                            ? (_edition ? t.fg : t.accent)
-                            : isFocused
-                            ? t.fgDim
-                            : t.fgFaint),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  fontFamily: _console && t!.monoFamily.isNotEmpty
-                      ? t.monoFamily
-                      : null,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+          margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: _decoration(t),
+          child: Row(
+            children: [
+              // Channel number
+              SizedBox(
+                width: 30,
+                child: Text(
+                  _console
+                      ? channelNumber.toString().padLeft(3, '0')
+                      : channelNumber.toString().padLeft(2, ' '),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: t == null
+                        ? (isCurrent
+                              ? _accent.withValues(alpha: 0.8)
+                              : isFocused
+                              ? Colors.white.withValues(alpha: 0.5)
+                              : Colors.white.withValues(alpha: 0.18))
+                        : (isCurrent
+                              ? (_edition ? t.fg : t.accent)
+                              : isFocused
+                              ? t.fgDim
+                              : t.fgFaint),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: _console && t!.monoFamily.isNotEmpty
+                        ? t.monoFamily
+                        : null,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 10),
-            // Logo
-            _buildLogo(),
-            const SizedBox(width: 12),
-            // Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    channel.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: t == null
-                          ? (isCurrent
-                                ? _accent
-                                : isFocused
-                                ? Colors.white
-                                : Colors.white.withValues(alpha: 0.85))
-                          : (isCurrent
-                                ? (_edition ? t.fg : t.accent)
-                                : isFocused
-                                ? t.fg
-                                : t.fgMid),
-                      fontSize: 13.5,
-                      fontWeight: isFocused || isCurrent
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                      fontFamily: _console && t!.nameFamily.isNotEmpty
-                          ? t.nameFamily
-                          : null,
-                      letterSpacing: -0.2,
+              const SizedBox(width: 10),
+              // Logo
+              _buildLogo(),
+              const SizedBox(width: 12),
+              // Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      channel.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: t == null
+                            ? (isCurrent
+                                  ? _accent
+                                  : isFocused
+                                  ? Colors.white
+                                  : Colors.white.withValues(alpha: 0.85))
+                            : (isCurrent
+                                  ? (_edition ? t.fg : t.accent)
+                                  : isFocused
+                                  ? t.fg
+                                  : t.fgMid),
+                        fontSize: 13.5,
+                        fontWeight: isFocused || isCurrent
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        fontFamily: _console && t!.nameFamily.isNotEmpty
+                            ? t.nameFamily
+                            : null,
+                        letterSpacing: -0.2,
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: _TileSubLine(
-                      channel: channel,
-                      isFocused: isFocused,
-                      tokens: t,
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: _TileSubLine(
+                        channel: channel,
+                        isFocused: isFocused,
+                        tokens: t,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            _TileAction(
-              tooltip: isFavorited ? 'Remove favorite' : 'Add favorite',
-              icon: isFavorited
-                  ? Icons.favorite_rounded
-                  : Icons.favorite_border_rounded,
-              color: t == null
-                  ? (isFavorited ? const Color(0xFFF43F5E) : Colors.white38)
-                  : (isFavorited
-                        ? (_edition ? t.fg : t.accent)
-                        : t.fgFaint),
-              onTap: onFavorite,
-            ),
-            _TileAction(
-              tooltip: 'Programme guide',
-              icon: Icons.calendar_month_rounded,
-              color: t == null ? _accent.withValues(alpha: 0.75) : t.fgDim,
-              onTap: onSchedule,
-            ),
-            if (isCurrent)
-              _buildNowBadge()
-            else if (channel.isLive)
-              _buildLiveBadge(),
-          ],
-        ),
+              const SizedBox(width: 8),
+              _TileAction(
+                tooltip: isFavorited ? 'Remove favorite' : 'Add favorite',
+                icon: isFavorited
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                color: t == null
+                    ? (isFavorited ? const Color(0xFFF43F5E) : Colors.white38)
+                    : (isFavorited ? (_edition ? t.fg : t.accent) : t.fgFaint),
+                onTap: onFavorite,
+              ),
+              _TileAction(
+                tooltip: 'Programme guide',
+                icon: Icons.calendar_month_rounded,
+                color: t == null ? _accent.withValues(alpha: 0.75) : t.fgDim,
+                onTap: onSchedule,
+              ),
+              if (isCurrent)
+                _buildNowBadge()
+              else if (channel.isLive)
+                _buildLiveBadge(),
+            ],
+          ),
         ),
       ),
     );
@@ -2899,7 +3017,9 @@ class _ChannelTile extends StatelessWidget {
         borderRadius: _edition
             ? null
             : BorderRadius.circular(t == null ? 10 : (_console ? 4 : 10)),
-        color: t == null ? Colors.white.withValues(alpha: 0.05) : t.selectedTint,
+        color: t == null
+            ? Colors.white.withValues(alpha: 0.05)
+            : t.selectedTint,
         border: Border.all(
           color: t == null
               ? (isCurrent
