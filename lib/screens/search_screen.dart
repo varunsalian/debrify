@@ -2248,7 +2248,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (rowIndex < 0 || rowIndex >= _sections.length) return;
     final section = _sections[rowIndex];
     if (section.loadingMore || section.exhausted) return;
-    setState(() => section.loadingMore = true);
+    // Android TV: flip the guard silently. The setState exists to show the
+    // classic row's tail spinner, but it fires on the exact keypress that
+    // crossed the row-end threshold — a full-screen rebuild landing on the
+    // input frame, which an Amlogic box renders as the cursor hitching every
+    // time a row pages. The spinner is a nicety; the page landing repaints
+    // either way.
+    if (PlatformUtil.isAndroidTvCached) {
+      section.loadingMore = true;
+    } else {
+      setState(() => section.loadingMore = true);
+    }
     try {
       // Advance `skip` by the addon's RAW returned count (via onRawCount), not
       // the post-filter `page.length`, so we stay aligned with the addon's own

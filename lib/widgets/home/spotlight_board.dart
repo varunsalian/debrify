@@ -962,8 +962,16 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final content = NotificationListener<ScrollMetricsNotification>(
       onNotification: (n) {
         if (n.depth == 0) {
+          // Always re-run the crossing detector — a clamped offset never
+          // notifies the controller (cheap: no rebuild of its own).
           _onBoardScrolled();
-          if (mounted) setState(() {});
+          // The rebuild exists ONLY for the touch veil, whose ramp reads
+          // the clamped offset. The TV veil snaps off the cursor row and
+          // never reads the offset — and on TV every board-entry batch
+          // append changes the extent, so this setState was a second full
+          // rebuild per append, stacked on the append's own, during the
+          // exact seconds a MiBox is busiest.
+          if (!widget.dpad && mounted) setState(() {});
         }
         return false;
       },
@@ -1773,6 +1781,21 @@ class _CardState extends State<_Card> {
                     fit: c.shape.fit,
                     cacheManager: DebrifyImageCache.manager,
                     memCacheWidth: 400,
+                    // Android TV pops, no fade. The package defaults are a
+                    // 500ms image fade over a 1000ms placeholder fade —
+                    // fine for one image, but a board entry lands 20-30
+                    // posters inside a few seconds, and that many
+                    // concurrent per-frame opacity composites is exactly
+                    // the first-seconds jank a MiBox reports. Fades never
+                    // run again once the memory cache is warm, which is
+                    // why the page "becomes smooth" — this makes the first
+                    // seconds behave like every second after them.
+                    fadeInDuration: PlatformUtil.isAndroidTvCached
+                        ? Duration.zero
+                        : const Duration(milliseconds: 500),
+                    fadeOutDuration: PlatformUtil.isAndroidTvCached
+                        ? Duration.zero
+                        : const Duration(milliseconds: 1000),
                     placeholder: (_, __) => const SizedBox.shrink(),
                     errorWidget: (_, __, ___) => const SizedBox.shrink(),
                   ),

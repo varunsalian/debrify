@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../models/stremio_addon.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/widgets/themed_artwork.dart';
+import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import 'home/card_focus_rise.dart';
 import 'home/home_theme.dart';
@@ -376,8 +377,17 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
               // offset, and a short glide converges fast enough that the
               // motion never reads as trailing the keypress. Classic chrome
               // keeps the instant jump its grids were tuned around.
+              //
+              // Android TV snaps EVERYWHERE, board chrome included: even the
+              // short glide is a scrolled repaint on every frame of every
+              // step, and after the Spotlight board switched to the snap a
+              // MiBox reported Discover — whose stage shelves ride this exact
+              // path — as the one place navigation still dragged. Apple TV
+              // keeps the glide.
               duration: widget.isTelevision
-                  ? (board ? const Duration(milliseconds: 140) : Duration.zero)
+                  ? (board && !PlatformUtil.isAndroidTvCached
+                      ? const Duration(milliseconds: 140)
+                      : Duration.zero)
                   : const Duration(milliseconds: 280),
               curve: Curves.easeOutCubic,
             );

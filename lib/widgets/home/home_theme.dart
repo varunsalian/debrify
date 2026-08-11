@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../utils/platform_util.dart';
+
 /// Design tokens for the cinematic Home screen.
 ///
 /// Apple-TV-inspired: content carries the color, chrome stays out of the way.
@@ -86,10 +88,22 @@ class HomeTheme {
   /// which IO already staggers). One helper so every site stays in lockstep —
   /// including catalog_item_tile's board-chrome path, which opts into this
   /// fade; its classic path keeps its own intentionally snappier one.
-  static Duration imageFadeIn(bool isTelevision) =>
-      isTelevision ? const Duration(milliseconds: 150) : const Duration(milliseconds: 500);
-  static Duration imageFadeOut(bool isTelevision) =>
-      isTelevision ? const Duration(milliseconds: 150) : const Duration(milliseconds: 1000);
+  // Android TV pops, no fade at all: a board or stage entry lands a burst of
+  // posters inside a few seconds, and even the short 150ms crossfade is a
+  // per-image opacity composite × the burst — the classic grid's own comment
+  // ("a saveLayer per poster janks the weak GPU when a whole grid fills in
+  // at once") applies to shelves on an Amlogic box too. Apple TV keeps the
+  // 150ms board fade; pointer devices keep the long one.
+  static Duration imageFadeIn(bool isTelevision) => isTelevision
+      ? (PlatformUtil.isAndroidTvCached
+          ? Duration.zero
+          : const Duration(milliseconds: 150))
+      : const Duration(milliseconds: 500);
+  static Duration imageFadeOut(bool isTelevision) => isTelevision
+      ? (PlatformUtil.isAndroidTvCached
+          ? Duration.zero
+          : const Duration(milliseconds: 150))
+      : const Duration(milliseconds: 1000);
 
   // ── Responsive ────────────────────────────────────────────────────────────
   /// Returns sizing tokens scaled to the current screen width.
