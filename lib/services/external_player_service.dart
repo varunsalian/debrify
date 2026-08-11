@@ -1,6 +1,7 @@
 import 'dart:io';
 import '../utils/platform_util.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/external_player.dart';
 import '../models/ios_external_player.dart';
@@ -440,13 +441,30 @@ class ExternalPlayerService {
   // ============================================================
 
   /// Check if an iOS player is likely installed by checking if we can open its URL scheme
+  /// iOS AND Apple TV: same enum, same schemes, same storage — tvOS just
+  /// has a smaller catalog ([iOSExternalPlayerExtension.availableOnTvos])
+  /// and a different transport (url_launcher has no tvOS implementation in
+  /// this fork, so a tiny Runner channel does UIApplication.open there).
+  static bool get _isAppleSchemePlatform =>
+      PlatformUtil.isIosMobile || PlatformUtil.isTvOS;
+
+  static Future<bool> _appleCanOpen(Uri uri) => PlatformUtil.isTvOS
+      ? _TvosUrl.canOpen(uri.toString())
+      : canLaunchUrl(uri);
+
+  static Future<bool> _appleOpen(Uri uri) async {
+    if (PlatformUtil.isTvOS) return _TvosUrl.open(uri.toString());
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   static Future<bool> isIOSPlayerInstalled(iOSExternalPlayer player) async {
-    if (!PlatformUtil.isIosMobile) return false;
+    if (!_isAppleSchemePlatform) return false;
+    if (PlatformUtil.isTvOS && !player.availableOnTvos) return false;
     if (player == iOSExternalPlayer.customScheme) return true;
 
     try {
       final schemeUrl = Uri.parse(player.urlScheme);
-      return await canLaunchUrl(schemeUrl);
+      return await _appleCanOpen(schemeUrl);
     } catch (e) {
       debugPrint('Error checking iOS player installation: $e');
       return false;
@@ -455,7 +473,7 @@ class ExternalPlayerService {
 
   /// Detect which iOS players are installed
   static Future<Map<iOSExternalPlayer, bool>> detectInstalledIOSPlayers() async {
-    if (!PlatformUtil.isIosMobile) return {};
+    if (!_isAppleSchemePlatform) return {};
 
     final results = <iOSExternalPlayer, bool>{};
 
@@ -475,8 +493,8 @@ class ExternalPlayerService {
     String url, {
     String? title,
   }) async {
-    if (!PlatformUtil.isIosMobile) {
-      return iOSExternalPlayerLaunchResult.failed('Not running on iOS');
+    if (!_isAppleSchemePlatform) {
+      return iOSExternalPlayerLaunchResult.failed('Not running on iOS/tvOS');
     }
 
     // Get user's preferred iOS player
@@ -492,8 +510,13 @@ class ExternalPlayerService {
     iOSExternalPlayer player, {
     String? title,
   }) async {
-    if (!PlatformUtil.isIosMobile) {
-      return iOSExternalPlayerLaunchResult.failed('Not running on iOS');
+    if (!_isAppleSchemePlatform) {
+      return iOSExternalPlayerLaunchResult.failed('Not running on iOS/tvOS');
+    }
+    if (PlatformUtil.isTvOS && !player.availableOnTvos) {
+      return iOSExternalPlayerLaunchResult.failed(
+        '${player.displayName} has no Apple TV app',
+      );
     }
 
     try {
@@ -528,12 +551,12 @@ class ExternalPlayerService {
       // custom schemes aren't in LSApplicationQueriesSchemes)
       // Just try to launch and let iOS handle if app isn't installed
       if (player == iOSExternalPlayer.customScheme) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        await _appleOpen(uri);
         return iOSExternalPlayerLaunchResult.succeeded(player);
       }
 
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (await _appleCanOpen(uri)) {
+        await _appleOpen(uri);
         return iOSExternalPlayerLaunchResult.succeeded(player);
       } else {
         // Player not installed
@@ -546,6 +569,31 @@ class ExternalPlayerService {
       return iOSExternalPlayerLaunchResult.failed(
         'Failed to open ${player.displayName}: $e',
       );
+    }
+  }
+}
+
+/// The tvOS URL bridge — url_launcher has no tvOS implementation in this
+/// fork, so the Runner exposes UIApplication over a channel (same idiom as
+/// debrify/tvlog and debrify/tvkeyboard).
+class _TvosUrl {
+  static const MethodChannel _channel = MethodChannel('debrify/tvurl');
+
+  static Future<bool> canOpen(String url) async {
+    try {
+      return await _channel.invokeMethod<bool>('canOpen', url) ?? false;
+    } catch (e) {
+      debugPrint('TvosUrl: canOpen failed: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> open(String url) async {
+    try {
+      return await _channel.invokeMethod<bool>('open', url) ?? false;
+    } catch (e) {
+      debugPrint('TvosUrl: open failed: $e');
+      return false;
     }
   }
 }

@@ -6,6 +6,7 @@ class AppDelegate: FlutterAppDelegate {
     /// Retained so the channel outlives `application(_:didFinishLaunchingWithOptions:)`.
     private var logChannel: FlutterMethodChannel?
     private var keyboardChannel: FlutterMethodChannel?
+    private var urlChannel: FlutterMethodChannel?
 
     override func application(
         _ application: UIApplication,
@@ -46,6 +47,34 @@ class AppDelegate: FlutterAppDelegate {
         self.logChannel = logChannel
 
         GeneratedPluginRegistrant.register(with: self)
+
+        // External player launch. url_launcher has no tvOS implementation in
+        // this fork, and porting it for two UIApplication calls would be the
+        // long way round — the Dart side (ExternalPlayerService._TvosUrl)
+        // opens Infuse/VLC through this instead. `canOpen` answers honestly
+        // only for schemes listed in LSApplicationQueriesSchemes; `open`
+        // reports whether tvOS accepted the launch.
+        let urlChannel = FlutterMethodChannel(
+            name: "debrify/tvurl",
+            binaryMessenger: flutterViewController.binaryMessenger)
+        urlChannel.setMethodCallHandler { call, result in
+            guard let urlString = call.arguments as? String,
+                  let url = URL(string: urlString) else {
+                result(false)
+                return
+            }
+            switch call.method {
+            case "canOpen":
+                result(UIApplication.shared.canOpenURL(url))
+            case "open":
+                UIApplication.shared.open(url, options: [:]) { ok in
+                    result(ok)
+                }
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+        self.urlChannel = urlChannel
 
         // Apple TV's keyboard never tells Flutter the user finished.
         //

@@ -388,7 +388,7 @@ class _ExternalPlayerSettingsPageState
       String iosPreferredKey = 'vlc';
       String? iosCustomScheme;
 
-      if (PlatformUtil.isIosMobile) {
+      if (PlatformUtil.isIosMobile || PlatformUtil.isTvOS) {
         installedIOS = await ExternalPlayerService.detectInstalledIOSPlayers();
         iosPreferredKey = await StorageService.getPreferredIOSExternalPlayer();
         iosCustomScheme = await StorageService.getIOSCustomSchemeTemplate();
@@ -1949,10 +1949,15 @@ class _ExternalPlayerSettingsPageState
   @override
   Widget build(BuildContext context) {
     final t = AppThemeScope.of(context).settings;
+    // tvOS joined with the audio toggles and external-player support — the
+    // old gate predates both and was quietly serving Apple TV the
+    // "not available" stub while the page's own tvOS rows sat unreachable
+    // behind it.
     final isSupportedPlatform =
         Platform.isMacOS ||
         Platform.isAndroid ||
         PlatformUtil.isIosMobile ||
+        PlatformUtil.isTvOS ||
         Platform.isLinux ||
         Platform.isWindows;
 
@@ -2807,8 +2812,9 @@ class _ExternalPlayerSettingsPageState
                   ),
                 ],
 
-                // iOS-specific player selection
-                if (PlatformUtil.isIosMobile &&
+                // iOS + Apple TV player selection (same catalog; tvOS shows
+                // only the players that ship an Apple TV app)
+                if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
                     _defaultPlayerMode == 'external') ...[
                   const SizedBox(height: 16),
                   Card(
@@ -2834,19 +2840,19 @@ class _ExternalPlayerSettingsPageState
                           ),
                         ),
                         const SizedBox(height: 8),
-                        _buildIOSPlayerTile(iOSExternalPlayer.vlc),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.infuse),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.outplayer),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.nplayer),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.playerXtreme),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.vimu),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.customScheme),
+                        // tvOS lists only players with a real Apple TV app —
+                        // a row that can never launch is worse than no row.
+                        ...[
+                          for (final (i, player) in iOSExternalPlayer.values
+                              .where(
+                                (p) =>
+                                    !PlatformUtil.isTvOS || p.availableOnTvos,
+                              )
+                              .indexed) ...[
+                            if (i > 0) const Divider(height: 1),
+                            _buildIOSPlayerTile(player),
+                          ],
+                        ],
                         const SizedBox(height: 8),
                       ],
                     ),
@@ -2854,7 +2860,7 @@ class _ExternalPlayerSettingsPageState
                 ],
 
                 // iOS Custom URL Scheme configuration
-                if (PlatformUtil.isIosMobile &&
+                if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
                     _defaultPlayerMode == 'external' &&
                     _selectedIOSPlayer == iOSExternalPlayer.customScheme) ...[
                   const SizedBox(height: 16),
@@ -2990,7 +2996,7 @@ class _ExternalPlayerSettingsPageState
                 ],
 
                 // iOS external player info
-                if (PlatformUtil.isIosMobile &&
+                if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
                     _defaultPlayerMode == 'external') ...[
                   const SizedBox(height: 16),
                   SettingsInfoBanner(

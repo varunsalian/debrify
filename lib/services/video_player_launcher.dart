@@ -1173,8 +1173,10 @@ class VideoPlayerLauncher {
         debugPrint('Failed to launch external player on Android: $e');
         return false;
       }
-    } else if (PlatformUtil.isIosMobile) {
-      // iOS: Use URL scheme to launch preferred external player
+    } else if (PlatformUtil.isIosMobile || PlatformUtil.isTvOS) {
+      // iOS + Apple TV: URL scheme to launch the preferred external player
+      // (same catalog and storage; tvOS offers only the players with real
+      // Apple TV apps and opens through the Runner's UIApplication bridge).
       final result = await ExternalPlayerService.launchWithPreferredIOSPlayer(
         url,
         title: title,
