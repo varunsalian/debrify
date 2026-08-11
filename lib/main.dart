@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'dart:ui' show AppExitResponse;
+import 'dart:ui' show AppExitResponse, PointerDeviceKind;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -663,6 +663,25 @@ class _DebrifyAppState extends State<DebrifyApp> {
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         // Optimize scroll physics for TV
         physics: const ClampingScrollPhysics(),
+        // A mouse can drag a list, which by default it cannot: Flutter's
+        // dragDevices defaults to touch-like devices only and deliberately
+        // leaves `mouse` out. That is survivable on a vertical page, where
+        // the wheel scrolls anyway, and fatal on a horizontal rail — the
+        // wheel reports only dy, and a horizontal Scrollable reads dx, so
+        // the rail answers to nothing a mouse user would try. Shift+wheel
+        // flips the axis but nobody discovers that.
+        //
+        // It went unnoticed because a trackpad is BOTH in the default set
+        // and a real source of dx, so every rail behaves perfectly on a
+        // laptop. Only a mouse shows the bug.
+        //
+        // Touch and DPAD are unaffected; this only adds an input.
+        dragDevices: const {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.trackpad,
+          PointerDeviceKind.stylus,
+        },
       ),
       // Memoized in AppThemeController — under `legacy` this is byte-for-byte
       // the theme the app has always shipped (the construction moved verbatim
