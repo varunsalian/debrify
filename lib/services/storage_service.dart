@@ -1170,6 +1170,7 @@ class StorageService {
     'glass',
     'edition',
     'console',
+    'spotlight',
   };
 
   /// In-player IPTV guide look (zap banner, channel sheet, native guide
@@ -1183,7 +1184,10 @@ class StorageService {
   static Future<String> getIptvPlayerGuideStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_iptvPlayerGuideStyleKey);
-    return _iptvPlayerGuideStyles.contains(raw) ? raw! : 'classic';
+    if (_iptvPlayerGuideStyles.contains(raw)) return raw!;
+    // Never chosen: Apple TV gets its native idiom, everything else keeps
+    // the shipped look. An explicit pick (either way) is stored and wins.
+    return PlatformUtil.isTvOS ? 'spotlight' : 'classic';
   }
 
   static Future<void> setIptvPlayerGuideStyle(String style) async {

@@ -31,6 +31,19 @@ const List<PlayerGuideStyleChoice> kPlayerGuideStyleChoices = [
     'Master Control',
     'Black instrument — mono numerals, amber machinery',
   ),
+  PlayerGuideStyleChoice(
+    'spotlight',
+    'Spotlight',
+    'Full-bleed black glass, white-pill focus — the tvOS idiom',
+  ),
+];
+
+/// The choices this device can actually render. Spotlight exists only in
+/// the Dart player — the native Android TV player's GuideStyle falls back
+/// to Classic for it, so offering it there would be a lie.
+List<PlayerGuideStyleChoice> playerGuideStyleChoicesForPlatform() => [
+  for (final c in kPlayerGuideStyleChoices)
+    if (c.value != 'spotlight' || !PlatformUtil.isAndroidTvCached) c,
 ];
 
 /// Row caption for the current choice (Appearance row subtitle).
@@ -140,7 +153,8 @@ class _PlayerGuideStylePageState extends State<PlayerGuideStylePage> {
                   child: SettingsSection(
                     title: '',
                     children: [
-                      for (final choice in kPlayerGuideStyleChoices)
+                      for (final choice
+                          in playerGuideStyleChoicesForPlatform())
                         _optionRow(choice),
                     ],
                   ),

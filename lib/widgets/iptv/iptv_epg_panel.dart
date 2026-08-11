@@ -593,7 +593,16 @@ class _EpgRecordChip extends StatelessWidget {
   /// Styled-look emphasized-label color (the style's fg) — no literal white
   /// in styled paint.
   final Color? fgOn;
-  const _EpgRecordChip({required this.emphasized, this.rec, this.fgOn});
+
+  /// Spotlight's white focus pill: translucent crimson washes out there, so
+  /// the chip goes SOLID crimson with white ink.
+  final bool solid;
+  const _EpgRecordChip({
+    required this.emphasized,
+    this.rec,
+    this.fgOn,
+    this.solid = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -602,9 +611,13 @@ class _EpgRecordChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
-        color: base.withValues(alpha: emphasized ? 0.30 : 0.12),
+        color: solid
+            ? base
+            : base.withValues(alpha: emphasized ? 0.30 : 0.12),
         border: Border.all(
-          color: base.withValues(alpha: emphasized ? 0.9 : 0.45),
+          color: solid
+              ? base
+              : base.withValues(alpha: emphasized ? 0.9 : 0.45),
         ),
       ),
       child: Row(
@@ -613,13 +626,18 @@ class _EpgRecordChip extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: base),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: solid ? Colors.white : base,
+            ),
           ),
           const SizedBox(width: 5),
           Text(
             'Record',
             style: TextStyle(
-              color: rec == null
+              color: solid
+                  ? Colors.white
+                  : rec == null
                   ? (emphasized
                         ? const Color(0xFFFFD9E0)
                         : const Color(0xFFFF8CA3))
@@ -1194,12 +1212,16 @@ class _ScheduleRowState extends State<_ScheduleRow> {
         : (widget.isNow ? 1.0 : 0.85);
 
     final t = widget.tokens;
+    // Spotlight inverse focus: solid white pill, dark ink (focusFill/focusInk
+    // come as an asserted pair).
+    final inverse = _focused && t?.focusFill != null;
+    final ink = inverse ? t!.focusInk! : null;
     final row = Container(
       height: _EpgScheduleListState._rowExtent,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: _focused
-            ? (t == null ? app.iptv.rowFocusFill : t.focusTint)
+            ? (t == null ? app.iptv.rowFocusFill : (t.focusFill ?? t.focusTint))
             : (widget.isNow
                   ? (t == null
                         ? app.iptv.surfaceTint
@@ -1207,11 +1229,20 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                   : Colors.transparent),
         borderRadius: app.shape.br(10),
         border: Border.all(
-          color: _focused
+          color: _focused && !inverse
               ? (t == null ? app.home.focus : t.accent)
               : Colors.transparent,
           width: 2,
         ),
+        boxShadow: inverse
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
       child: Row(
         children: [
@@ -1220,13 +1251,14 @@ class _ScheduleRowState extends State<_ScheduleRow> {
             child: Text(
               _clock(context, p.start),
               style: TextStyle(
-                color: widget.isNow
-                    ? (t == null ? app.home.focus : t.accent)
-                    : (t == null
-                          ? app.core.tx.withValues(
-                              alpha: widget.isPast ? 0.3 : 0.5,
-                            )
-                          : (widget.isPast ? t.fgFaint : t.fgDim)),
+                color: ink?.withValues(alpha: widget.isPast ? 0.45 : 0.6) ??
+                    (widget.isNow
+                        ? (t == null ? app.home.focus : t.accent)
+                        : (t == null
+                              ? app.core.tx.withValues(
+                                  alpha: widget.isPast ? 0.3 : 0.5,
+                                )
+                              : (widget.isPast ? t.fgFaint : t.fgDim))),
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 fontFamily: t != null && t.monoFamily.isNotEmpty
@@ -1246,9 +1278,10 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: t == null
-                        ? app.core.tx.withValues(alpha: titleAlpha)
-                        : t.fg.withValues(alpha: titleAlpha),
+                    color: ink?.withValues(alpha: titleAlpha) ??
+                        (t == null
+                            ? app.core.tx.withValues(alpha: titleAlpha)
+                            : t.fg.withValues(alpha: titleAlpha)),
                     fontSize: 13.5,
                     fontWeight: widget.isNow
                         ? FontWeight.w700
@@ -1259,8 +1292,10 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                   const SizedBox(height: 5),
                   _EpgProgressBar(
                     progress: p.progressAt(DateTime.now()),
-                    accent: t?.accent,
-                    track: t?.hairline2,
+                    accent: ink ?? t?.accent,
+                    track: inverse
+                        ? ink!.withValues(alpha: 0.18)
+                        : t?.hairline2,
                   ),
                 ],
               ],
@@ -1269,12 +1304,18 @@ class _ScheduleRowState extends State<_ScheduleRow> {
           if (widget.isNow)
             Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: _EpgTag('NOW', accent: t?.accent),
+              child: _EpgTag('NOW', accent: ink ?? t?.accent),
             ),
           if (replayable)
             Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: _EpgTag('REPLAY', dim: true, dimColor: t?.rec),
+              child: _EpgTag(
+                'REPLAY',
+                dim: true,
+                // Crimson at 9px sits just under contrast on the white
+                // pill — deepen it there.
+                dimColor: inverse ? const Color(0xFFB8202F) : t?.rec,
+              ),
             ),
           // A chip that reads as the button it is (the dim "REC" text looked
           // like metadata). Sits beside NOW on the airing row: "record the
@@ -1286,6 +1327,7 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                 emphasized: _focused,
                 rec: t?.rec,
                 fgOn: t?.fg,
+                solid: inverse,
               ),
             ),
         ],

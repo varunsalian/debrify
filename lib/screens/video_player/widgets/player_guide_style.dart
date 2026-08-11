@@ -20,12 +20,14 @@ enum PlayerGuideStyle {
   classic,
   glass,
   edition,
-  console;
+  console,
+  spotlight;
 
   static PlayerGuideStyle fromPref(String raw) => switch (raw) {
     'glass' => PlayerGuideStyle.glass,
     'edition' => PlayerGuideStyle.edition,
     'console' => PlayerGuideStyle.console,
+    'spotlight' => PlayerGuideStyle.spotlight,
     _ => PlayerGuideStyle.classic,
   };
 
@@ -96,10 +98,32 @@ abstract final class PlayerGuideTokens {
     monoFamily: 'JetBrainsMono',
   );
 
+  /// Spotlight — the tvOS idiom: black glass, white ink, no chrome color,
+  /// and the white-pill inverse focus ([IptvStyleTokens.focusFill]).
+  /// Crimson is a status color only (rec/live).
+  static const IptvStyleTokens spotlight = IptvStyleTokens(
+    bg: Color(0x8C101012), // 55% glass — the video stays present behind
+    panel: Color(0xF2101012),
+    fg: Color(0xFFFFFFFF),
+    fgMid: Color(0xCCFFFFFF), // 80%
+    fgDim: Color(0x8CFFFFFF), // 55%
+    fgFaint: Color(0x54FFFFFF), // 33%
+    hairline: Color(0x24FFFFFF), // 14%
+    hairline2: Color(0x3DFFFFFF), // 24%
+    accent: Color(0xFFFFFFFF), // white — spotlight has no chrome color
+    rec: Color(0xFFE23D4C),
+    live: Color(0xFFE23D4C),
+    selectedTint: Color(0x1AFFFFFF), // 10%
+    focusTint: Color(0x14FFFFFF), // 8% (fallback where fill isn't used)
+    focusFill: Color(0xFFFFFFFF),
+    focusInk: Color(0xFF000000),
+  );
+
   static IptvStyleTokens? of(PlayerGuideStyle style) => switch (style) {
     PlayerGuideStyle.classic => null,
     PlayerGuideStyle.glass => glass,
     PlayerGuideStyle.edition => edition,
     PlayerGuideStyle.console => console,
+    PlayerGuideStyle.spotlight => spotlight,
   };
 }

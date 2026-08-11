@@ -97,7 +97,7 @@ class IptvChannelSheet extends StatefulWidget {
   State<IptvChannelSheet> createState() => IptvChannelSheetState();
 }
 
-enum _FocusZone { search, channels }
+enum _FocusZone { search, channels, filters }
 
 enum _CompactPane { channels, schedule }
 
@@ -118,6 +118,17 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   List<IptvChannel> _filteredChannels = [];
   int _focusedIndex = 0;
   _FocusZone _focusZone = _FocusZone.channels;
+
+  /// DPAD position in the filter row: 0 source, 1 category, 2 favorites.
+  int _filterIndex = 0;
+
+  /// Scope around the schedule pane. Entering the pane hands REAL focus to
+  /// its rows (they were always focusable — the guide just never let go),
+  /// and the scope keeps directional traversal from escaping into the
+  /// search field or header buttons.
+  final FocusScopeNode _scheduleScope = FocusScopeNode(
+    debugLabel: 'iptv-guide-schedule',
+  );
   _CompactPane _compactPane = _CompactPane.channels;
   IptvChannel? _scheduleChannel;
 
@@ -163,6 +174,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
     PlayerGuideStyle.glass => 18,
     PlayerGuideStyle.edition => 10,
     PlayerGuideStyle.console => 4,
+    PlayerGuideStyle.spotlight => 12,
     PlayerGuideStyle.classic => 14,
   };
 
@@ -267,6 +279,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
     _searchController.dispose();
     _searchFocusNode.dispose();
     _keyboardFocusNode.dispose();
+    _scheduleScope.dispose();
     _scrollController.dispose();
     _animController.dispose();
     _pulseController.dispose();
@@ -613,61 +626,149 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   /// Returns true when it consumed the press.
   bool handleHostBack() {
     if (_compactPane == _CompactPane.schedule) {
-      setState(() => _compactPane = _CompactPane.channels);
+      _leaveSchedulePane();
+      return true;
+    }
+    if (_focusZone == _FocusZone.filters) {
+      setState(() => _focusZone = _FocusZone.channels);
       return true;
     }
     _handleClose();
     return true;
   }
 
-  void _handleKeyEvent(KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return;
+  /// Walks the schedule pane back to the channel list and takes the DPAD
+  /// back from the pane's rows.
+  void _leaveSchedulePane() {
+    setState(() => _compactPane = _CompactPane.channels);
+    _keyboardFocusNode.requestFocus();
+  }
 
-    if (event.logicalKey == LogicalKeyboardKey.escape ||
-        event.logicalKey == LogicalKeyboardKey.goBack) {
-      // Signal the host ONLY when this press actually closed the sheet. A
-      // press that merely walks the schedule pane back leaves the sheet open,
-      // so the host never consumes the mark — and a stale mark would later
-      // swallow an unrelated BACK.
-      if (_compactPane == _CompactPane.schedule) {
-        setState(() => _compactPane = _CompactPane.channels);
+  /// EVERY way into the schedule pane goes through here: on TV the pane's
+  /// rows must be handed real focus, or a touch/pointer entry would leave
+  /// the DPAD stranded outside a pane that now gates its focusability.
+  void _enterSchedulePane(IptvChannel channel) {
+    setState(() {
+      _scheduleChannel = channel;
+      _compactPane = _CompactPane.schedule;
+    });
+    if (!PlatformUtil.isTelevision) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _compactPane != _CompactPane.schedule) return;
+      _scheduleScope.traversalDescendants.firstOrNull?.requestFocus();
+    });
+  }
+
+  /// CONSUMES every key it owns (returns handled) — a KeyboardListener
+  /// cannot consume, and unconsumed arrows also run directional focus
+  /// traversal, which can move primary focus somewhere invisible and kill
+  /// the DPAD (the player-menu failure, measured on the Apple TV).
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    final isRepeat = event is KeyRepeatEvent;
+    final back =
+        key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack;
+
+    // BACK and OK act on the initial press only — a held BACK would
+    // otherwise walk schedule->channels AND close on the next repeat.
+    // Arrows keep their repeat (that's how a long list is scrolled).
+    if (isRepeat && (back || isActivateOrSpaceKey(key))) {
+      return KeyEventResult.handled;
+    }
+
+    // Schedule pane active: REAL focus lives on the pane's rows, which own
+    // OK, and directional traversal moves between them inside the scope.
+    // The guide takes only LEFT and BACK — both walk back to the channels.
+    if (_compactPane == _CompactPane.schedule) {
+      if (back || key == LogicalKeyboardKey.arrowLeft) {
+        _leaveSchedulePane();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+
+    if (back) {
+      // Consumed outright, so no TvOverlayBack tail: the press never
+      // reaches the player root (a lingering mark would swallow the NEXT
+      // deliberate back instead).
+      if (_focusZone == _FocusZone.filters) {
+        setState(() => _focusZone = _FocusZone.channels);
       } else {
-        TvOverlayBack.mark();
         _handleClose();
       }
-      return;
+      return KeyEventResult.handled;
     }
 
     switch (_focusZone) {
       case _FocusZone.search:
-        _handleSearchKeys(event);
-        break;
+        return _handleSearchKeys(event);
+      case _FocusZone.filters:
+        return _handleFilterKeys(event);
       case _FocusZone.channels:
-        _handleChannelKeys(event);
-        break;
+        return _handleChannelKeys(event);
     }
   }
 
-  void _handleSearchKeys(KeyEvent event) {
+  KeyEventResult _handleSearchKeys(KeyEvent event) {
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _searchFocusNode.unfocus();
       // Reclaim the sheet's key listener: unfocusing clears the scope's
       // focused child, and without this the list paints a focused row but
       // stops receiving DPAD keys entirely.
       _keyboardFocusNode.requestFocus();
-      setState(() => _focusZone = _FocusZone.channels);
+      setState(() => _focusZone = _FocusZone.filters);
+      return KeyEventResult.handled;
     }
+    return KeyEventResult.ignored;
   }
 
-  void _handleChannelKeys(KeyEvent event) {
-    if (_compactPane == _CompactPane.schedule) {
-      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-        setState(() => _compactPane = _CompactPane.channels);
-      }
-      // Everything else is swallowed: moving the channel selection from here
-      // would rebuild the very schedule being read.
-      return;
+  /// The filter row is a real zone now — Source / Category / Favorites were
+  /// unreachable by DPAD before this.
+  KeyEventResult _handleFilterKeys(KeyEvent event) {
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      if (_filterIndex > 0) setState(() => _filterIndex--);
+      return KeyEventResult.handled;
     }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (_filterIndex < 2) setState(() => _filterIndex++);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      setState(() => _focusZone = _FocusZone.channels);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _searchFocusNode.requestFocus();
+      setState(() => _focusZone = _FocusZone.search);
+      return KeyEventResult.handled;
+    }
+    if (isActivateKey(key)) {
+      switch (_filterIndex) {
+        case 0:
+          unawaited(_openSourceMenu());
+        case 1:
+          unawaited(_openCategoryPicker());
+        case 2:
+          _toggleFavoritesFilter();
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _toggleFavoritesFilter() {
+    setState(() {
+      _favoritesOnly = !_favoritesOnly;
+      if (_favoritesOnly) _selectedCategory = null;
+    });
+    _applyFilters();
+  }
+
+  KeyEventResult _handleChannelKeys(KeyEvent event) {
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       if (_focusedIndex > 0) {
         setState(() {
@@ -676,10 +777,11 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
         });
         _scrollToFocused();
       } else {
-        _searchFocusNode.requestFocus();
-        setState(() => _focusZone = _FocusZone.search);
+        setState(() => _focusZone = _FocusZone.filters);
       }
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       if (_focusedIndex < _filteredChannels.length - 1) {
         setState(() {
           _focusedIndex++;
@@ -687,14 +789,15 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
         });
         _scrollToFocused();
       }
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
       if (_filteredChannels.isNotEmpty) {
-        setState(() {
-          _scheduleChannel = _filteredChannels[_focusedIndex];
-          _compactPane = _CompactPane.schedule;
-        });
+        _enterSchedulePane(_filteredChannels[_focusedIndex]);
       }
-    } else if (isActivateKey(event.logicalKey)) {
+      return KeyEventResult.handled;
+    }
+    if (isActivateKey(event.logicalKey)) {
       if (_filteredChannels.isNotEmpty) {
         final ch = _filteredChannels[_focusedIndex];
         final oi = _channels.indexWhere(
@@ -702,7 +805,9 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
         );
         if (oi >= 0) unawaited(widget.onChannelSelected(_channels, oi));
       }
+      return KeyEventResult.handled;
     }
+    return KeyEventResult.ignored;
   }
 
   int _getOriginalIndex(IptvChannel channel) {
@@ -726,7 +831,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
 
   @override
   Widget build(BuildContext context) {
-    return KeyboardListener(
+    return Focus(
       focusNode: _keyboardFocusNode,
       autofocus: true,
       onKeyEvent: _handleKeyEvent,
@@ -737,7 +842,13 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
               constraints.maxWidth < 720;
           final wide =
               constraints.maxWidth >= 1050 && constraints.maxHeight >= 560;
-          final width = compact
+          // Spotlight goes full-bleed on the big screen: the guide IS the
+          // surface, over the dimmed picture — no floating card chrome.
+          final fullBleed =
+              widget.style == PlayerGuideStyle.spotlight && !compact;
+          final width = fullBleed
+              ? constraints.maxWidth
+              : compact
               ? constraints.maxWidth
               : math.min(
                   constraints.maxWidth * (wide ? 0.82 : 0.72),
@@ -747,7 +858,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
               ? math.min(constraints.maxHeight * 0.94, 760.0)
               : constraints.maxHeight;
           final t = _t;
-          final BorderRadius radius;
+          BorderRadius radius;
           if (t == null) {
             radius = compact
                 ? const BorderRadius.vertical(top: Radius.circular(24))
@@ -766,6 +877,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
                     bottomLeft: Radius.circular(r),
                   );
           }
+          if (fullBleed) radius = BorderRadius.zero;
 
           return Stack(
             children: [
@@ -801,7 +913,9 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
                             : BoxDecoration(
                                 color: t.panel,
                                 borderRadius: radius,
-                                border: Border.all(color: t.hairline),
+                                border: fullBleed
+                                    ? null
+                                    : Border.all(color: t.hairline),
                               ),
                         child: _buildResponsivePanel(
                           compact: compact,
@@ -965,8 +1079,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
           if (compact && _compactPane == _CompactPane.schedule)
             IconButton(
               tooltip: 'Back to channels',
-              onPressed: () =>
-                  setState(() => _compactPane = _CompactPane.channels),
+              onPressed: _leaveSchedulePane,
               icon: const Icon(Icons.arrow_back_rounded, color: Colors.white70),
             ),
           Material(
@@ -1118,8 +1231,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
           if (compact && _compactPane == _CompactPane.schedule)
             IconButton(
               tooltip: 'Back to channels',
-              onPressed: () =>
-                  setState(() => _compactPane = _CompactPane.channels),
+              onPressed: _leaveSchedulePane,
               icon: Icon(Icons.arrow_back_rounded, color: t.fgMid),
             ),
           Material(
@@ -1162,10 +1274,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
           borderRadius: radius,
           child: InkWell(
             borderRadius: radius,
-            onTap: () => setState(() {
-              _scheduleChannel = channel;
-              _compactPane = _CompactPane.schedule;
-            }),
+            onTap: () => _enterSchedulePane(channel),
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: radius,
@@ -1245,10 +1354,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          onTap: () => setState(() {
-            _scheduleChannel = channel;
-            _compactPane = _CompactPane.schedule;
-          }),
+          onTap: () => _enterSchedulePane(channel),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
@@ -1448,8 +1554,39 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
         tokens: _t,
       ),
     );
-    if (choice == null || !mounted) return;
+    if (!mounted) return;
+    // The dialog route held focus — take the DPAD back either way.
+    _keyboardFocusNode.requestFocus();
+    if (choice == null) return;
     await _selectCategory(choice.value);
+  }
+
+  bool _dpadOnFilter(int i) =>
+      _focusZone == _FocusZone.filters && _filterIndex == i;
+
+  /// Source picker — shared by the pill's tap and the filter zone's OK.
+  Future<void> _openSourceMenu() async {
+    final options = [
+      for (final source in _sources)
+        _GuideMenuOption(
+          value: source,
+          label: source['name'] as String? ?? 'IPTV',
+        ),
+    ];
+    if (options.isEmpty) return;
+    final choice = await showDialog<Map<String, dynamic>>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      builder: (_) => _GuideSelectDialog(
+        icon: Icons.dns_rounded,
+        title: _sourceName,
+        options: options,
+        tokens: _t,
+      ),
+    );
+    if (!mounted) return;
+    _keyboardFocusNode.requestFocus();
+    if (choice != null) unawaited(_selectSource(choice));
   }
 
   Widget _buildFilterBar() {
@@ -1469,14 +1606,9 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
               child: _GuideMenuButton(
                 icon: Icons.dns_rounded,
                 label: _sourceName,
-                options: [
-                  for (final source in _sources)
-                    _GuideMenuOption(
-                      value: source,
-                      label: source['name'] as String? ?? 'IPTV',
-                    ),
-                ],
-                onSelected: (value) => unawaited(_selectSource(value)),
+                hasOptions: _sources.isNotEmpty,
+                onOpen: () => unawaited(_openSourceMenu()),
+                dpadFocused: _dpadOnFilter(0),
                 tokens: _t,
                 radius: _t == null ? 10 : _styledRadius,
                 labelFamily: labelFamily,
@@ -1492,6 +1624,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
                 // as selected the way the old chip did.
                 selected: !_favoritesOnly && _selectedCategory != null,
                 onTap: () => unawaited(_openCategoryPicker()),
+                dpadFocused: _dpadOnFilter(1),
                 tokens: _t,
                 radius: _t == null ? 10 : _styledRadius,
                 labelFamily: labelFamily,
@@ -1503,13 +1636,8 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
               icon: Icons.favorite_rounded,
               label: 'Saved',
               selected: _favoritesOnly,
-              onTap: () {
-                setState(() {
-                  _favoritesOnly = !_favoritesOnly;
-                  if (_favoritesOnly) _selectedCategory = null;
-                });
-                _applyFilters();
-              },
+              onTap: _toggleFavoritesFilter,
+              dpadFocused: _dpadOnFilter(2),
               tokens: _t,
               radius: _t == null ? 10 : _styledRadius,
               labelFamily: labelFamily,
@@ -1611,7 +1739,14 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
           color: t == null ? Colors.white.withValues(alpha: 0.08) : t.hairline,
         ),
         Expanded(
-          child: EpgScheduleList(
+          child: FocusScope(
+            node: _scheduleScope,
+            // Gated: in wide layouts this pane is always mounted, and its
+            // rows/anchors carry autofocus — ungated they could steal
+            // primary focus (e.g. when loading settles) while the DPAD is
+            // still on the channel list.
+            descendantsAreFocusable: _compactPane == _CompactPane.schedule,
+            child: EpgScheduleList(
             key: ValueKey('schedule-${channel.url}'),
             channel: channel,
             isTelevision: PlatformUtil.isTelevision,
@@ -1632,6 +1767,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
                 : (programme) {
                     unawaited(_confirmScheduleRecording(channel, programme));
                   },
+            ),
           ),
         ),
       ],
@@ -1896,10 +2032,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
             }
           },
           onFavorite: () => unawaited(_toggleFavorite(channel)),
-          onSchedule: () => setState(() {
-            _scheduleChannel = channel;
-            _compactPane = _CompactPane.schedule;
-          }),
+          onSchedule: () => _enterSchedulePane(channel),
         );
       },
     );
@@ -1915,8 +2048,12 @@ class _GuideMenuOption {
 class _GuideMenuButton extends StatelessWidget {
   final IconData icon;
   final String label;
-  final List<_GuideMenuOption> options;
-  final ValueChanged<Map<String, dynamic>> onSelected;
+  final bool hasOptions;
+
+  /// Opens the select dialog (owned by the sheet state, so the filter
+  /// zone's OK and this tap share one path).
+  final VoidCallback onOpen;
+  final bool dpadFocused;
   final IptvStyleTokens? tokens;
   final double radius;
   final String labelFamily;
@@ -1925,58 +2062,53 @@ class _GuideMenuButton extends StatelessWidget {
   const _GuideMenuButton({
     required this.icon,
     required this.label,
-    required this.options,
-    required this.onSelected,
+    required this.hasOptions,
+    required this.onOpen,
+    this.dpadFocused = false,
     this.tokens,
     this.radius = 10,
     this.labelFamily = '',
     this.upperLabels = false,
   });
 
-  /// The stock Material popup sat jarringly inside the themed guide — this
-  /// opens a select dialog in the guide's own picker chrome instead (same
-  /// grammar as the category picker).
-  Future<void> _openMenu(BuildContext context) async {
-    final choice = await showDialog<Map<String, dynamic>>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.6),
-      builder: (_) => _GuideSelectDialog(
-        icon: icon,
-        title: label,
-        options: options,
-        tokens: tokens,
-      ),
-    );
-    if (choice != null) onSelected(choice);
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = tokens;
+    // Spotlight inverse focus: solid fill + flipped ink; other styles get
+    // an accent ring so the new filter zone is visible everywhere.
+    final fill = dpadFocused ? t?.focusFill : null;
+    final ink = fill != null ? t!.focusInk! : null;
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(radius),
       child: InkWell(
-        onTap: options.isEmpty ? null : () => _openMenu(context),
+        onTap: hasOptions ? onOpen : null,
         borderRadius: BorderRadius.circular(radius),
         child: Container(
           constraints: const BoxConstraints(minWidth: 92, maxWidth: 170),
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           decoration: BoxDecoration(
-            color: t == null
-                ? Colors.white.withValues(alpha: 0.06)
-                : t.focusTint,
+            color: fill ??
+                (t == null ? Colors.white.withValues(alpha: 0.06) : t.focusTint),
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(
-              color: t == null
-                  ? Colors.white.withValues(alpha: 0.06)
-                  : t.hairline,
+              color: dpadFocused && fill == null
+                  ? (t == null ? Colors.white : t.accent)
+                  : t == null
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : t.hairline,
+              width: dpadFocused && fill == null ? 1.5 : 1,
             ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: t == null ? Colors.white54 : t.fgDim, size: 15),
+              Icon(
+                icon,
+                color: ink?.withValues(alpha: 0.7) ??
+                    (t == null ? Colors.white54 : t.fgDim),
+                size: 15,
+              ),
               const SizedBox(width: 7),
               Flexible(
                 child: Text(
@@ -1984,18 +2116,19 @@ class _GuideMenuButton extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: t == null ? Colors.white70 : t.fgMid,
+                    color: ink ?? (t == null ? Colors.white70 : t.fgMid),
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     fontFamily: labelFamily.isEmpty ? null : labelFamily,
                   ),
                 ),
               ),
-              if (options.isNotEmpty) ...[
+              if (hasOptions) ...[
                 const SizedBox(width: 5),
                 Icon(
                   Icons.keyboard_arrow_down_rounded,
-                  color: t == null ? Colors.white38 : t.fgFaint,
+                  color: ink?.withValues(alpha: 0.55) ??
+                      (t == null ? Colors.white38 : t.fgFaint),
                   size: 16,
                 ),
               ],
@@ -2122,6 +2255,7 @@ class _GuideDropdownButton extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final bool dpadFocused;
   final IptvStyleTokens? tokens;
   final double radius;
   final String labelFamily;
@@ -2132,6 +2266,7 @@ class _GuideDropdownButton extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.dpadFocused = false,
     this.tokens,
     this.radius = 10,
     this.labelFamily = '',
@@ -2141,14 +2276,17 @@ class _GuideDropdownButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = tokens;
-    // Styled selected state: a quiet token tint + accent text instead of the
-    // legacy purple slab — each look keeps its single accent.
+    // Spotlight inverse focus first, then the styled selected state: a quiet
+    // token tint + accent text instead of the legacy purple slab.
+    final fill = dpadFocused ? t?.focusFill : null;
+    final ink = fill != null ? t!.focusInk! : null;
     return Material(
-      color: t == null
-          ? (selected
-                ? const Color(0xFF7C5CFF)
-                : Colors.white.withValues(alpha: 0.06))
-          : (selected ? t.selectedTint : t.focusTint),
+      color: fill ??
+          (t == null
+              ? (selected
+                    ? const Color(0xFF7C5CFF)
+                    : Colors.white.withValues(alpha: 0.06))
+              : (selected ? t.selectedTint : t.focusTint)),
       borderRadius: BorderRadius.circular(radius),
       child: InkWell(
         onTap: onTap,
@@ -2159,11 +2297,14 @@ class _GuideDropdownButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(
-              color: t == null
-                  ? (selected
-                        ? Colors.transparent
-                        : Colors.white.withValues(alpha: 0.06))
-                  : (selected ? t.accent : t.hairline),
+              color: dpadFocused && fill == null
+                  ? (t == null ? Colors.white : t.accent)
+                  : t == null
+                      ? (selected
+                            ? Colors.transparent
+                            : Colors.white.withValues(alpha: 0.06))
+                      : (selected ? t.accent : t.hairline),
+              width: dpadFocused && fill == null ? 1.5 : 1,
             ),
           ),
           child: Row(
@@ -2171,9 +2312,10 @@ class _GuideDropdownButton extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                color: t == null
-                    ? (selected ? Colors.white : Colors.white54)
-                    : (selected ? t.accent : t.fgDim),
+                color: ink?.withValues(alpha: 0.7) ??
+                    (t == null
+                        ? (selected ? Colors.white : Colors.white54)
+                        : (selected ? t.accent : t.fgDim)),
                 size: 15,
               ),
               const SizedBox(width: 7),
@@ -2183,9 +2325,10 @@ class _GuideDropdownButton extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: t == null
-                        ? (selected ? Colors.white : Colors.white70)
-                        : (selected ? t.accent : t.fgMid),
+                    color: ink ??
+                        (t == null
+                            ? (selected ? Colors.white : Colors.white70)
+                            : (selected ? t.accent : t.fgMid)),
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     fontFamily: labelFamily.isEmpty ? null : labelFamily,
@@ -2195,9 +2338,10 @@ class _GuideDropdownButton extends StatelessWidget {
               const SizedBox(width: 5),
               Icon(
                 Icons.keyboard_arrow_down_rounded,
-                color: t == null
-                    ? (selected ? Colors.white70 : Colors.white38)
-                    : (selected ? t.fgMid : t.fgFaint),
+                color: ink?.withValues(alpha: 0.55) ??
+                    (t == null
+                        ? (selected ? Colors.white70 : Colors.white38)
+                        : (selected ? t.fgMid : t.fgFaint)),
                 size: 16,
               ),
             ],
@@ -2466,6 +2610,7 @@ class _FilterChip extends StatelessWidget {
   final IconData? icon;
   final bool selected;
   final VoidCallback onTap;
+  final bool dpadFocused;
   final IptvStyleTokens? tokens;
   final double radius;
   final String labelFamily;
@@ -2476,6 +2621,7 @@ class _FilterChip extends StatelessWidget {
     this.icon,
     required this.selected,
     required this.onTap,
+    this.dpadFocused = false,
     this.tokens,
     this.radius = 10,
     this.labelFamily = '',
@@ -2485,23 +2631,31 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = tokens;
+    final fill = dpadFocused ? t?.focusFill : null;
+    final ink = fill != null ? t!.focusInk! : null;
     return Material(
-      color: t == null
-          ? (selected
-                ? const Color(0xFF7C5CFF)
-                : Colors.white.withValues(alpha: 0.05))
-          : (selected ? t.selectedTint : t.focusTint),
+      color: fill ??
+          (t == null
+              ? (selected
+                    ? const Color(0xFF7C5CFF)
+                    : Colors.white.withValues(alpha: 0.05))
+              : (selected ? t.selectedTint : t.focusTint)),
       borderRadius: BorderRadius.circular(radius),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(radius),
         child: Container(
-          decoration: t == null
-              ? null
-              : BoxDecoration(
-                  borderRadius: BorderRadius.circular(radius),
-                  border: Border.all(color: selected ? t.accent : t.hairline),
-                ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(radius),
+            border: dpadFocused && fill == null
+                ? Border.all(
+                    color: t == null ? Colors.white : t.accent,
+                    width: 1.5,
+                  )
+                : t == null
+                    ? null
+                    : Border.all(color: selected ? t.accent : t.hairline),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -2510,18 +2664,20 @@ class _FilterChip extends StatelessWidget {
                 Icon(
                   icon,
                   size: 14,
-                  color: t == null
-                      ? (selected ? Colors.white : Colors.white54)
-                      : (selected ? t.accent : t.fgDim),
+                  color: ink?.withValues(alpha: 0.7) ??
+                      (t == null
+                          ? (selected ? Colors.white : Colors.white54)
+                          : (selected ? t.accent : t.fgDim)),
                 ),
                 const SizedBox(width: 5),
               ],
               Text(
                 upperLabels ? label.toUpperCase() : label,
                 style: TextStyle(
-                  color: t == null
-                      ? (selected ? Colors.white : Colors.white60)
-                      : (selected ? t.accent : t.fgMid),
+                  color: ink ??
+                      (t == null
+                          ? (selected ? Colors.white : Colors.white60)
+                          : (selected ? t.accent : t.fgMid)),
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
                   fontFamily: labelFamily.isEmpty ? null : labelFamily,
@@ -2790,12 +2946,36 @@ class _ChannelTile extends StatelessWidget {
   bool get _edition => tokens != null && guideStyle == PlayerGuideStyle.edition;
   bool get _console => tokens != null && guideStyle == PlayerGuideStyle.console;
 
+  /// Spotlight inverse focus: the focused row is a solid [focusFill] pill
+  /// and every ink on it flips to [focusInk].
+  bool get _inverse => tokens?.focusFill != null && isFocused;
+
   /// Row chrome per look. Classic keeps its verbatim gradient/border/glow;
   /// glass swaps to a quiet token tint + accent ring; edition rules a ledger
   /// (hairline under every row, cream left rule when focused); console is a
   /// squared instrument row whose focus cue is the corner brackets painted
   /// by [IptvFocusBracketsPainter] below.
   BoxDecoration _decoration(IptvStyleTokens? t) {
+    final fill = t?.focusFill;
+    if (fill != null) {
+      return BoxDecoration(
+        color: isFocused
+            ? fill
+            : isCurrent
+            ? t!.selectedTint
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(11),
+        boxShadow: isFocused
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  blurRadius: 18,
+                  offset: const Offset(0, 5),
+                ),
+              ]
+            : const [],
+      );
+    }
     if (t == null) {
       return BoxDecoration(
         gradient: isFocused
@@ -2916,6 +3096,8 @@ class _ChannelTile extends StatelessWidget {
                               : isFocused
                               ? Colors.white.withValues(alpha: 0.5)
                               : Colors.white.withValues(alpha: 0.18))
+                        : _inverse
+                        ? t.focusInk!.withValues(alpha: 0.45)
                         : (isCurrent
                               ? (_edition ? t.fg : t.accent)
                               : isFocused
@@ -2951,6 +3133,8 @@ class _ChannelTile extends StatelessWidget {
                                   : isFocused
                                   ? Colors.white
                                   : Colors.white.withValues(alpha: 0.85))
+                            : _inverse
+                            ? t.focusInk!
                             : (isCurrent
                                   ? (_edition ? t.fg : t.accent)
                                   : isFocused
@@ -2972,6 +3156,9 @@ class _ChannelTile extends StatelessWidget {
                         channel: channel,
                         isFocused: isFocused,
                         tokens: t,
+                        inkOverride: _inverse
+                            ? t!.focusInk!.withValues(alpha: 0.55)
+                            : null,
                       ),
                     ),
                   ],
@@ -2985,13 +3172,19 @@ class _ChannelTile extends StatelessWidget {
                     : Icons.favorite_border_rounded,
                 color: t == null
                     ? (isFavorited ? const Color(0xFFF43F5E) : Colors.white38)
+                    : _inverse
+                    ? t.focusInk!.withValues(alpha: isFavorited ? 0.85 : 0.45)
                     : (isFavorited ? (_edition ? t.fg : t.accent) : t.fgFaint),
                 onTap: onFavorite,
               ),
               _TileAction(
                 tooltip: 'Programme guide',
                 icon: Icons.calendar_month_rounded,
-                color: t == null ? _accent.withValues(alpha: 0.75) : t.fgDim,
+                color: t == null
+                    ? _accent.withValues(alpha: 0.75)
+                    : _inverse
+                    ? t.focusInk!.withValues(alpha: 0.55)
+                    : t.fgDim,
                 onTap: onSchedule,
               ),
               if (isCurrent)
@@ -3019,6 +3212,8 @@ class _ChannelTile extends StatelessWidget {
             : BorderRadius.circular(t == null ? 10 : (_console ? 4 : 10)),
         color: t == null
             ? Colors.white.withValues(alpha: 0.05)
+            : _inverse
+            ? t.focusInk!.withValues(alpha: 0.16)
             : t.selectedTint,
         border: Border.all(
           color: t == null
@@ -3027,6 +3222,8 @@ class _ChannelTile extends StatelessWidget {
                     : isFocused
                     ? Colors.white.withValues(alpha: 0.08)
                     : Colors.white.withValues(alpha: 0.03))
+              : _inverse
+              ? t.focusInk!.withValues(alpha: 0.15)
               : t.hairline,
         ),
         boxShadow: isCurrent && t == null
@@ -3059,7 +3256,7 @@ class _ChannelTile extends StatelessWidget {
         child: Text(
           letter,
           style: TextStyle(
-            color: t.fg,
+            color: _inverse ? t.focusInk!.withValues(alpha: 0.6) : t.fg,
             fontSize: 17,
             fontWeight: FontWeight.w700,
           ),
@@ -3229,10 +3426,14 @@ class _TileSubLine extends StatefulWidget {
   final IptvChannel channel;
   final bool isFocused;
   final IptvStyleTokens? tokens;
+
+  /// Set on Spotlight's white focus pill — the row ink flipped dark.
+  final Color? inkOverride;
   const _TileSubLine({
     required this.channel,
     required this.isFocused,
     this.tokens,
+    this.inkOverride,
   });
 
   @override
@@ -3309,17 +3510,18 @@ class _TileSubLineState extends State<_TileSubLine> {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        color: t == null
-            ? (now != null
-                  ? const Color(
-                      0xFF00E5FF,
-                    ).withValues(alpha: widget.isFocused ? 0.75 : 0.5)
-                  : Colors.white.withValues(
-                      alpha: widget.isFocused ? 0.4 : 0.22,
-                    ))
-            : (now != null
-                  ? (widget.isFocused ? t.fgMid : t.fgDim)
-                  : t.fgFaint),
+        color: widget.inkOverride ??
+            (t == null
+                ? (now != null
+                      ? const Color(
+                          0xFF00E5FF,
+                        ).withValues(alpha: widget.isFocused ? 0.75 : 0.5)
+                      : Colors.white.withValues(
+                          alpha: widget.isFocused ? 0.4 : 0.22,
+                        ))
+                : (now != null
+                      ? (widget.isFocused ? t.fgMid : t.fgDim)
+                      : t.fgFaint)),
         fontSize: 10.5,
         fontWeight: now != null ? FontWeight.w500 : FontWeight.w400,
       ),
