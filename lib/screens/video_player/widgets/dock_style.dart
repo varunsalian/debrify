@@ -12,7 +12,7 @@
 /// The dock also lives over video whose colour grade changes every second,
 /// which is a different problem from skinning a settings page.
 ///
-/// See `plan/PLAYER_DOCK_STYLES_PLAN.md` for the full contract; the section
+/// See `design/plans/PLAYER_DOCK_STYLES_PLAN.md` for the full contract; the section
 /// numbers cited below refer to it.
 library;
 

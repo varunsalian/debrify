@@ -30,7 +30,7 @@ class ShowcaseMetrics {
   /// own width AND input (never by width alone: a narrow TV keeps the wide
   /// presentation so the DPAD ladder's widgets all exist). Compact values are
   /// measured off the Apple TV phone app on the reference device — see
-  /// spotlight_responsive_mockup/.
+  /// design/mockups/spotlight_responsive_mockup/.
   final bool compact;
 
   /// The INPUT axis, carried so [k] can tell a wide tablet from a TV. False

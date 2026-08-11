@@ -1,6 +1,6 @@
 # Premium Looks — five concepts (2026-08-09)
 
-Open `index.html`. Week 1 of `plan/PREMIUM_LOOKS_PLAN.md`, and the gate the
+Open `index.html`. Week 1 of `design/plans/PREMIUM_LOOKS_PLAN.md`, and the gate the
 rest of the programme waits on: **approve the five directions before the
 vocabulary is extracted from them.**
 
@@ -80,7 +80,7 @@ id can never silently resolve to a new theme (plan §8).
 ## Regenerating
 
 ```
-python3 premium_looks_mockup/build.py
+python3 design/mockups/premium_looks_mockup/build.py
 ```
 
 Edit the `LOOKS` list in `build.py`; never edit the generated HTML, or the

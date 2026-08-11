@@ -9,8 +9,8 @@ alternative visual styles, selected by a new `iptv_style` preference:
 | value | name | language |
 |---|---|---|
 | `command` | Command Center | today's look — the DEFAULT, via the untouched legacy code path |
-| `edition` | First Edition | editorial warm ink, serif headline, hairline ledger (mock `iptv_premium_mockup/p1_first_edition.html`) |
-| `console` | Master Control | pure-black instrument, mono numerals, amber playhead (mock `iptv_premium_mockup/p3_master_control.html`) |
+| `edition` | First Edition | editorial warm ink, serif headline, hairline ledger (mock `design/mockups/iptv_premium_mockup/p1_first_edition.html`) |
+| `console` | Master Control | pure-black instrument, mono numerals, amber playhead (mock `design/mockups/iptv_premium_mockup/p3_master_control.html`) |
 
 Mocks are the design source of truth for color/type/spacing. This is a **restyle,
 not a re-layout**: same widget-tree shape, same data flow, no new focusables.

@@ -1,7 +1,7 @@
 # Spotlight & Showcase on phone, tablet and desktop — rev 6
 
 Carrying the TV Spotlight home and Showcase detail to the other three form
-factors, per the approved mock in `spotlight_responsive_mockup/`. **Same
+factors, per the approved mock in `design/mockups/spotlight_responsive_mockup/`. **Same
 language, not the same layout.** Everything lands **uncommitted**.
 
 Rev 2 incorporated the first Codex review (9 majors); rev 3 the second

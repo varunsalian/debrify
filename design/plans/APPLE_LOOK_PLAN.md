@@ -1,6 +1,6 @@
 # Spotlight & Showcase — the tvOS idiom as two layouts and one Look
 
-Ship the two mocked layouts (`apple_look_mockup/`) plus the focus mechanic that
+Ship the two mocked layouts (`design/mockups/apple_look_mockup/`) plus the focus mechanic that
 makes them feel like the reference, and bundle them as a **Look** in
 Appearance → Presets.
 
@@ -10,7 +10,7 @@ Appearance → Presets.
 | **Showcase** | Series/movie detail | new `detail_page_style` value `showcase` |
 | **Spotlight** (Look) | Appearance → Presets | new `AppLook` |
 
-The mock is the specification. `apple_look_mockup/index.html` is drawn at
+The mock is the specification. `design/mockups/apple_look_mockup/index.html` is drawn at
 1920×1080; **every number here is logical (÷2)** unless it says otherwise.
 
 > **Revised twice against codex review.** Round 1 (9 P1s): LEFT edge policy,

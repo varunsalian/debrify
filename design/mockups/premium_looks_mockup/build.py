@@ -13,7 +13,7 @@ one layout and produced twenty palettes. Same method, different question:
 this one varies material, separation, scrim, artwork treatment, focus and
 density — the things a palette cannot reach.
 
-    python3 premium_looks_mockup/build.py
+    python3 design/mockups/premium_looks_mockup/build.py
 """
 import os
 
@@ -717,7 +717,7 @@ cannot reach — <b>separation</b> (how things are told apart), <b>scrim</b>
 (how text sits on artwork), <b>artwork treatment</b> (framing and grading),
 <b>focus</b> (what the cursor does), <b>motion</b> and <b>density</b>. If
 these five read as five different apps with the DOM held fixed, the
-vocabulary in <b>plan/PREMIUM_LOOKS_PLAN.md §3</b> is the right one. If they
+vocabulary in <b>design/plans/PREMIUM_LOOKS_PLAN.md §3</b> is the right one. If they
 read as one app in five tints, we learned it in week one.</p>
 <div class="grid">{cards}</div>
 <table><thead><tr><th>look</th><th>separation</th><th>scrim</th>

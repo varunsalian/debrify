@@ -1,6 +1,6 @@
 # Detail page layouts — six new looks for `MergedDetailScreen`, plus Classic
 
-Ship the six mocked concepts (`merged_detail_mockup/`) as selectable **body
+Ship the six mocked concepts (`design/mockups/merged_detail_mockup/`) as selectable **body
 layouts** for the merged details page, chosen in **Appearance → Details Page**.
 Seven picker choices: Classic (default, today's screen unchanged) plus Marquee,
 Dossier, Broadsheet, Stage, Filmstrip, Console.

@@ -1,4 +1,4 @@
-# C3 Command Center — Build Plan (approved mock: iptv_redesign_mockup/c3)
+# C3 Command Center — Build Plan (approved mock: design/mockups/iptv_redesign_mockup/c3)
 
 Scope: IPTV page TV/desktop two-pane becomes rail → list → stage-right cockpit.
 Phone/classic layout untouched. Player untouched. Additive + surgical: the

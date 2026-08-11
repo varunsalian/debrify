@@ -296,7 +296,7 @@ class _M {
   double get k => (dpad || compact) ? 1.0 : wideTouchScale(w);
 
   /// Compact values are MEASURED off the Apple TV phone app on the reference
-  /// device (see spotlight_responsive_mockup/): gutter 4.8%, posters 24.3%
+  /// device (see design/mockups/spotlight_responsive_mockup/): gutter 4.8%, posters 24.3%
   /// with 4.6% gaps (~2.9 per screen plus a peek), fixed type. Mid is the
   /// tablet tier — the TV fractions with the posters bumped for fingers.
   /// Wide is the TV mock's 1920-scale table, byte-for-byte what shipped.

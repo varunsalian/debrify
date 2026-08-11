@@ -8,7 +8,7 @@
 /// Three arrangements, chosen from the viewport (never persisted):
 /// `narrow` is a single row, `regular` is two tiers, `wide` is zoned.
 ///
-/// See `plan/PLAYER_DOCK_STYLES_PLAN.md` §3.
+/// See `design/plans/PLAYER_DOCK_STYLES_PLAN.md` §3.
 library;
 
 import 'dart:ui' show FontFeature;

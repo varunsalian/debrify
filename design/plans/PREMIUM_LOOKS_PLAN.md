@@ -279,7 +279,7 @@ second has a budget and a fallback instead).
 
 | Week | Work | Gate |
 | --- | --- | --- |
-| **W1** | Mockups (3 d): five looks, one shared layout, real artwork, `premium_looks_mockup/`. **Spike (2 d):** tvOS release-build/no-op audio check + Mi-Box latency (0.75) · grading fling benchmark (0.5) · glass + sheet/dialog enumeration (0.5) · D2 sets + migration prototype (0.25) | **User approves the five directions + blesses the audio dependency**; spike verdicts can demote D5 before anything builds on it |
+| **W1** | Mockups (3 d): five looks, one shared layout, real artwork, `design/mockups/premium_looks_mockup/`. **Spike (2 d):** tvOS release-build/no-op audio check + Mi-Box latency (0.75) · grading fling benchmark (0.5) · glass + sheet/dialog enumeration (0.5) · D2 sets + migration prototype (0.25) | **User approves the five directions + blesses the audio dependency**; spike verdicts can demote D5 before anything builds on it |
 | **W2** | Token classes + pins (1.5) · **`ThemeSpec` + provisional five (1)** · gallery route (1) · surface model start (1) | Codex; Friday build shows five provisional looks |
 | **W3** | Surface + `GlassSurface` finish (2) · light (2) · wait (0.5) | Codex |
 | **W4** | Art inventory + treatment + grading (2) · focus expression (1.5) · motion character (1) | Codex |

@@ -5,7 +5,7 @@
 > fail, and those 8 fail identically on a clean tree (pre-existing).
 > Selectable from Appearance → Home Screen → Home Layout. Additive only:
 > Canvas and Classic are unchanged in behaviour.
-> Mocks: `tv_home_layouts_mockup/` (artifact e35fe51f).
+> Mocks: `design/mockups/tv_home_layouts_mockup/` (artifact e35fe51f).
 >
 > **Plan corrections found by review (the code is right, the plan text was
 > not):**

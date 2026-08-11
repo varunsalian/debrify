@@ -19,7 +19,7 @@ is what that surface must answer for, not a de-duplicated inventory.
     NO_P1=1    do not subtract phase-one-owned files
     RAW=1      do not stop at route boundaries (shows the overcount)
 
-Roots for the surfaces in plan/APP_THEME_PHASE_TWO_PLAN.md — note YouTube and
+Roots for the surfaces in design/plans/APP_THEME_PHASE_TWO_PLAN.md — note YouTube and
 IPTV need two, because main.dart injects their results view into BrowseScreen
 through a callback rather than an import (main.dart:2400, :2416):
 

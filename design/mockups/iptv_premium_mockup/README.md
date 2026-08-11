@@ -1,6 +1,6 @@
 # IPTV Premium — restyle concepts (2026-08-05)
 
-Open `index.html` for the gallery. Successor to `iptv_redesign_mockup/` — that round
+Open `index.html` for the gallery. Successor to `design/mockups/iptv_redesign_mockup/` — that round
 picked the layout (the Command Center cockpit now ships unconditionally: rail → guide →
 stage, `lib/widgets/iptv/iptv_results_view.dart`); this round is about making it *feel*
 expensive. Same skeleton, same feature carry, three different visual languages.

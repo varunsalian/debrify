@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// The mock's numbers, made executable.
 ///
-/// `apple_look_mockup/index.html` is the specification and it is drawn at
+/// `design/mockups/apple_look_mockup/index.html` is the specification and it is drawn at
 /// 1920×1080; everything in the Dart is logical, so **half**. A pixel diff
 /// between Chrome and Flutter would be fake precision — different text
 /// engines, different rasterisers — so instead the constants themselves are
@@ -114,11 +114,12 @@ void main() {
     // Grepping the mock keeps this honest in the other direction: if someone
     // retunes the HTML, the number it now states must still be the one the
     // Dart implements.
-    final mock = File('apple_look_mockup/index.src.html');
+    final mock = File('design/mockups/apple_look_mockup/index.src.html');
 
     test('the mock is present — it IS the spec', () {
       expect(mock.existsSync(), isTrue,
-          reason: 'apple_look_mockup/index.src.html is the source of truth');
+          reason:
+              'design/mockups/apple_look_mockup/index.src.html is the source of truth');
     });
 
     test('the ambient field is damped the same way', () {
