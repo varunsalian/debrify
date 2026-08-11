@@ -507,6 +507,23 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // Never an advance — see the cadence comment.
   }
 
+  /// Best full-bleed art for [item]: its own backdrop, else a metahub 16:9
+  /// still derived from its IMDb id — the same synchronous trick the other
+  /// stage layouts use, because catalog and Continue Watching items carry a
+  /// poster but rarely a backdrop — and the poster only as a last resort.
+  /// The poster fallback is what blurry heroes are made of (~350px of 2:3
+  /// art cover-cropped over a full screen), so it is LAST, not second.
+  static String? _heroArt(StremioMeta item) {
+    final b = item.background;
+    if (b != null && b.isNotEmpty) return b;
+    final tt = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
+    if (tt != null) {
+      return 'https://images.metahub.space/background/medium/$tt/img';
+    }
+    final p = item.poster;
+    return (p != null && p.isNotEmpty) ? p : null;
+  }
+
   int get _heroIndex {
     if (widget.hero.isEmpty) return 0;
     final i = widget.hero.indexWhere((m) => m.id == _heroId);
@@ -616,7 +633,10 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   final Map<String, Color?> _tints = {};
 
   Future<void> _probe() async {
-    final url = _heroItem?.background ?? _heroItem?.poster;
+    // The RESOLVED art, not the raw fields — tint and side-flip must be
+    // measured on the image actually drawn.
+    final item = _heroItem;
+    final url = item == null ? null : _heroArt(item);
     if (url == null || url.isEmpty) return;
     final gen = ++_probeGen;
 
@@ -655,7 +675,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   Future<void> _warmNext() async {
     if (widget.hero.length < 2) return;
     final next = widget.hero[(_heroIndex + 1) % widget.hero.length];
-    final url = next.background ?? next.poster;
+    final url = _heroArt(next);
     if (url == null || url.isEmpty || _tints.containsKey(url)) return;
     final tint = await extractDominantColor(
       CachedNetworkImageProvider(url, cacheManager: DebrifyImageCache.manager),
@@ -684,7 +704,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     if (item == null) return false;
     if (_flipFor != item.id) {
       _flipFor = item.id;
-      final url = item.background ?? item.poster;
+      final url = _heroArt(item);
       _flipValue = url != null &&
           (_leftThird[url] ?? 0) > SpotlightBoard.leftThirdBusy;
     }
@@ -987,7 +1007,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   Widget _heroCompact(_M m) {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
-    final url = item.background ?? item.poster;
+    final url = _heroArt(item);
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
     final rolling = _rolling;
@@ -1023,7 +1043,22 @@ class SpotlightBoardState extends State<SpotlightBoard> {
                   .clamp(720, 1920),
               fadeInDuration: const Duration(milliseconds: 420),
               placeholder: (_, __) => ColoredBox(color: ground),
-              errorWidget: (_, __, ___) => ColoredBox(color: ground),
+              // Same guess-404 fallback as the wide backdrop: derived
+              // metahub art can miss, and the poster beats a blank hero.
+              errorWidget: (_, __, ___) =>
+                  (item.poster != null &&
+                          item.poster!.isNotEmpty &&
+                          item.poster != url)
+                      ? CachedNetworkImage(
+                          imageUrl: item.poster!,
+                          fit: BoxFit.cover,
+                          cacheManager: DebrifyImageCache.manager,
+                          memCacheWidth: 900,
+                          placeholder: (_, __) => ColoredBox(color: ground),
+                          errorWidget: (_, __, ___) =>
+                              ColoredBox(color: ground),
+                        )
+                      : ColoredBox(color: ground),
             ),
           // The trailer, when the host supplies one. This was mounted only in
           // the WIDE hero — so the phone resolved a stream into a layer that
@@ -1153,7 +1188,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   Widget _heroBackdrop(double heroH) {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
-    final url = item.background ?? item.poster;
+    final url = _heroArt(item);
     final flip = _flip;
     // Both scrims below were tuned against a STILL, where they only have to
     // keep white text off busy artwork. Left at that strength over a moving
@@ -1185,10 +1220,37 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             key: ValueKey(url),
             fit: BoxFit.cover,
             cacheManager: DebrifyImageCache.manager,
-            memCacheWidth: 1400,
+            // Decode at the PANEL's resolution off-TV, same as the compact
+            // hero — 1400 flat was under a retina desktop's physical width,
+            // so the one full-bleed image on the screen was the soft one.
+            // TV keeps the 1400: its panels sit behind the box's own
+            // upscaler and the decode budget there is the tighter constraint
+            // (see TvHeroArtworkQuality).
+            memCacheWidth: widget.dpad
+                ? 1400
+                : (MediaQuery.devicePixelRatioOf(context) *
+                        MediaQuery.sizeOf(context).width)
+                    .round()
+                    .clamp(720, 1920),
             fadeInDuration: const Duration(milliseconds: 420),
             placeholder: (_, __) => ColoredBox(color: ground),
-            errorWidget: (_, __, ___) => ColoredBox(color: ground),
+            // The derived metahub URL is a GUESS — when it 404s (no still
+            // for that title), fall back to the poster rather than a flat
+            // ground: a soft hero beats a blank one.
+            errorWidget: (_, __, ___) =>
+                (item.poster != null &&
+                        item.poster!.isNotEmpty &&
+                        item.poster != url)
+                    ? CachedNetworkImage(
+                        imageUrl: item.poster!,
+                        fit: BoxFit.cover,
+                        cacheManager: DebrifyImageCache.manager,
+                        memCacheWidth: 1400,
+                        placeholder: (_, __) => ColoredBox(color: ground),
+                        errorWidget: (_, __, ___) =>
+                            ColoredBox(color: ground),
+                      )
+                    : ColoredBox(color: ground),
           ),
         // Mounted whenever the HOST supplies one — never gated on this
         // board's own `_rolling`.
