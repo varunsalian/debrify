@@ -433,7 +433,12 @@ jobs:
 
   linux:
     if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'linux'
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: the bundled libmpv drags in the base image's
+    # glibc floor (24.04 => 2.38), so the minimum host glibc our AppImage runs
+    # on is now a property of this line. Let it float and a runner image bump
+    # silently drops older distros. Moving it DOWN is not a one-word change —
+    # 22.04 ships libmpv.so.1 rather than .so.2.
+    runs-on: ubuntu-24.04
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -457,6 +462,12 @@ jobs:
 
     - name: Build Linux app
       run: flutter build linux --release
+
+    # media_kit ships no libmpv on Linux — see the header of the script. Without
+    # this the AppImage only runs where the host happens to have libmpv.so.2,
+    # which rules out immutable distros like SteamOS.
+    - name: Bundle libmpv into the app bundle
+      run: scripts/bundle_linux_mpv.sh build/linux/x64/release/bundle
 
     - name: Create AppImage
       run: |
@@ -489,15 +500,9 @@ jobs:
 
         cp AppDir/debrify.desktop AppDir/usr/share/applications/
 
-        # Create AppRun
-        cat > AppDir/AppRun << 'EOF'
-        #!/bin/bash
-        SELF=$(readlink -f "$0")
-        HERE=${SELF%/*}
-        export PATH="${HERE}/usr/bin:${PATH}"
-        export LD_LIBRARY_PATH="${HERE}/usr/bin/lib:${LD_LIBRARY_PATH}"
-        exec "${HERE}/usr/bin/debrify" "$@"
-        EOF
+        # Create AppRun. Checked in at linux/AppRun so both arch jobs share one
+        # copy — it carries the libmpv and GPU driver path setup.
+        cp linux/AppRun AppDir/AppRun
         chmod +x AppDir/AppRun
 
         # Build AppImage
@@ -553,6 +558,10 @@ jobs:
     - name: Build Linux app
       run: flutter build linux --release
 
+    # See the x64 job — same reason, same script, arm64 bundle path.
+    - name: Bundle libmpv into the app bundle
+      run: scripts/bundle_linux_mpv.sh build/linux/arm64/release/bundle
+
     - name: Create AppImage
       run: |
         # Download appimagetool for aarch64
@@ -584,15 +593,9 @@ jobs:
 
         cp AppDir/debrify.desktop AppDir/usr/share/applications/
 
-        # Create AppRun
-        cat > AppDir/AppRun << 'EOF'
-        #!/bin/bash
-        SELF=$(readlink -f "$0")
-        HERE=${SELF%/*}
-        export PATH="${HERE}/usr/bin:${PATH}"
-        export LD_LIBRARY_PATH="${HERE}/usr/bin/lib:${LD_LIBRARY_PATH}"
-        exec "${HERE}/usr/bin/debrify" "$@"
-        EOF
+        # Create AppRun. Checked in at linux/AppRun so both arch jobs share one
+        # copy — it carries the libmpv and GPU driver path setup.
+        cp linux/AppRun AppDir/AppRun
         chmod +x AppDir/AppRun
 
         # Build AppImage
