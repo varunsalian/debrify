@@ -115,6 +115,13 @@ abstract final class ThemePalette {
     Swatch('wine_deep', 'Deep Wine', Color(0xFF1A0E12)),
     Swatch('espresso', 'Espresso', Color(0xFF171210)),
     Swatch('storm', 'Storm', Color(0xFF262A30)),
+    // Measured off the Apple TV app's scrolled home on a real box (adb
+    // frame, cross-checked against a swatch of known value through the same
+    // capture pipeline). Their "charcoal" is far more lifted than anything
+    // this list called charcoal — a neutral gray, no blue cast. Not plain
+    // `graphite`: the MARK palette above owns that id, and swatch ids must
+    // stay unique across the two lists.
+    Swatch('graphite_ground', 'Graphite', Color(0xFF2C2C2E)),
     Swatch('stone', 'Stone', Color(0xFF3A3D42)),
     Swatch('putty', 'Putty', Color(0xFF6E6A64)),
     Swatch('linen', 'Linen', Color(0xFFE8E4DC)),

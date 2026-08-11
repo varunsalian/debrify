@@ -232,9 +232,19 @@ abstract final class PremiumLooks {
     // a true black ground so artwork and cards separate from the page without
     // any material work, and one saturated hue so every badge, brand mark and
     // fill on an artwork-free screen has something to be.
-    ground: Color(0xFF000000),
-    sunken: Color(0xFF000000),
-    raised: Color(0xFF0C0C0E),
+    //
+    // ROUND FOUR, also chosen on the device: the ground moves from true
+    // black to the palette's Deep Navy. The black won its argument against
+    // the measured Apple grey, but side-by-side with the real Apple TV app
+    // on a panel it read as a void rather than a room — cards and the
+    // 8%-ink surfaces derived from it stayed nearly invisible. Deep Navy
+    // keeps the darkness (the neutrality pin was retired with it — see the
+    // spotlight spec test) while giving the derived surfaces something to
+    // step off. Sunken and raised are the same hue walked down and up, so
+    // the three stay one material.
+    ground: Color(0xFF0D1420),
+    sunken: Color(0xFF080D16),
+    raised: Color(0xFF151D2A),
     ink: Color(0xFFFFFFFF),
     accent: Color(0xFFE23D4C),
     state: Color(0xFFE23D4C),

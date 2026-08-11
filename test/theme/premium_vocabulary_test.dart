@@ -659,13 +659,17 @@ void main() {
       // default: the mid grey and the colourless accent are affordable when
       // artwork covers the screen, and this app has whole surfaces with none.
       'spotlight': (
-        0xFF000000,
+        // True black in round three; Deep Navy in round four, chosen against
+        // the real Apple TV app on a panel — see PremiumLooks.spotlight.
+        0xFF0D1420,
         0xFFFFFFFF,
         0xFFE23D4C,
         // Not the accent: crimson with a white label scores 4.19:1, under the
-        // bar the primary-button test holds, so the fill stays the neutral
-        // near-white — which is also what the reference's primary is.
-        0xFFF0F0F0,
+        // bar the primary-button test holds, so the fill stays the
+        // near-white — which is also what the reference's primary is. It
+        // derives off the ground, so the Deep Navy move gave it this faint
+        // cool cast.
+        0xFFF0F1F2,
         7.0,
         5.0,
         7.0

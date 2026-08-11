@@ -203,10 +203,11 @@ class SpotlightBoard extends StatefulWidget {
   ///
   /// That stopped being defensible once tokens became editable: this was the
   /// one surface that ignored the Background setting, so changing it moved the
-  /// whole app EXCEPT Home, with nothing on screen to explain why. The
-  /// measurement is not lost — the `spotlight` theme's own ground is exactly
-  /// `0xFF1B1C1C`, so the reference is reproduced under the Look it was
-  /// measured from, and merely followed everywhere else.
+  /// whole app EXCEPT Home, with nothing on screen to explain why. The value
+  /// moved into the Look — whose ground has since been re-chosen twice on
+  /// real panels (true black, then the palette's Deep Navy; the story lives
+  /// on `PremiumLooks.spotlight`) — and this getter simply follows whatever
+  /// the active theme says.
   static Color groundOf(AppTheme app) => app.home.bg;
 
   /// The gradient's lower stop. The reference drifts a few levels lighter down

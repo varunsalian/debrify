@@ -59,19 +59,26 @@ void main() {
       // elsewhere.
       final spec = PremiumLooks.byId('spotlight')!;
 
-      // The reference's `#1B1C1C` was measured and shipped, and then RETIRED
-      // when this Look became the default. Apple can afford a mid grey because
-      // artwork covers most of every screen it has; this app has surfaces with
-      // none, and there a mid grey under 7%-ink panels is a flat box.
-      //
-      // What survived the change is the property the measurement was actually
-      // protecting: the ground is NEUTRAL, so it disappears behind a poster
-      // instead of fighting it. Classic's navy would not have done that.
-      expect(spec.ground.r, closeTo(spec.ground.g, 0.02),
-          reason: 'a hue behind full-bleed artwork fights the poster');
-      expect(spec.ground.g, closeTo(spec.ground.b, 0.02));
-      // And it is properly dark now, not a mid grey.
+      // The reference's `#1B1C1C` was measured and shipped, then RETIRED for
+      // true black when this Look became the default (a mid grey under
+      // 7%-ink panels is a flat box on artwork-free surfaces) — and the
+      // black was retired in turn, chosen against the real Apple TV app on a
+      // panel: a pure-black ground read as a void, and every surface derived
+      // by stepping off it stayed nearly invisible. The neutrality pin
+      // ("a hue fights the poster") went with it — Deep Navy is the ground
+      // now, dark enough to sit behind artwork, hued enough that the 8%-ink
+      // derivations have something to be.
+      expect(spec.ground, const Color(0xFF0D1420),
+          reason: 'the palette\'s Deep Navy, chosen on the device');
+      // Still properly dark — behind full-bleed artwork, not competing.
       expect(spec.ground.computeLuminance(), lessThan(0.02));
+      // Sunken and raised walk the SAME hue down and up — three values, one
+      // material. A raised surface in a different hue would read as a second
+      // room.
+      expect(spec.sunken.computeLuminance(),
+          lessThan(spec.ground.computeLuminance()));
+      expect(spec.raised.computeLuminance(),
+          greaterThan(spec.ground.computeLuminance()));
 
       // The accent carries identity on screens that have no artwork to do it.
       // White was faithful to the reference and left the YouTube page
