@@ -1385,6 +1385,26 @@ class StorageService {
     await prefs.setString(_tvSidebarStyleKey, normalized);
   }
 
+  static const String _desktopSidebarStyleKey = 'desktop_sidebar_style';
+  static const Set<String> _desktopSidebarStyles = {'rail', 'pill'};
+
+  /// Desktop/tablet sidebar chrome, read only at the wide (≥600) non-TV
+  /// layout: 'rail' (the fixed icon rail, the default) or 'pill' (no rail —
+  /// content runs full-bleed and a floating capsule shows the current tab;
+  /// clicking it opens the menu as an overlay). The TV rail has its own key
+  /// above and never reads this; phones never reach the wide layout.
+  static Future<String> getDesktopSidebarStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_desktopSidebarStyleKey);
+    return (raw != null && _desktopSidebarStyles.contains(raw)) ? raw : 'rail';
+  }
+
+  static Future<void> setDesktopSidebarStyle(String style) async {
+    final normalized = _desktopSidebarStyles.contains(style) ? style : 'rail';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_desktopSidebarStyleKey, normalized);
+  }
+
   /// The classic bar's user-chosen middle slots, as REAL tab indices (Home
   /// and More are fixed anchors and never stored). Null = never customized
   /// (defaults apply); an explicit short list is a deliberate choice and the

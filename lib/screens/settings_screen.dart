@@ -64,6 +64,7 @@ import 'settings/tv_render_quality_page.dart';
 import 'settings/tv_hero_artwork_quality_page.dart';
 import 'settings/tv_screen_size_page.dart';
 import 'settings/recordings_page.dart';
+import 'settings/desktop_sidebar_style_page.dart';
 import 'settings/tv_sidebar_style_page.dart';
 import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
@@ -211,6 +212,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _detailTheme = 'signal';
   String _parentsGuideStyle = 'compass';
   String _phoneNavStyle = 'classic';
+  String _desktopSidebarStyle = 'rail';
   String _textBrightness = 'bright';
   String _launchAnimation = 'horizon';
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
@@ -295,6 +297,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getPlayerDockStyle(),
       StorageService.getPlayerDockPalette(),
       StorageService.getPlayerDockSize(),
+      StorageService.getDesktopSidebarStyle(),
     ]);
 
     if (!mounted) return;
@@ -337,6 +340,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final playerDockStyle = results[33] as String;
     final playerDockPalette = results[34] as String;
     final playerDockSize = results[35] as String;
+    final desktopSidebarStyle = results[36] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -480,6 +484,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _playerDockPalette = playerDockPalette;
     _playerDockSize = playerDockSize;
     _phoneNavStyle = phoneNavStyle;
+    _desktopSidebarStyle = desktopSidebarStyle;
     _textBrightness = textBrightness;
     _launchAnimation = launchAnimation;
     _detailPageStyle = detailPageStyle;
@@ -897,6 +902,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       phoneNavStyleLabel: _phoneNavStyle == 'floating'
           ? 'Floating button'
           : 'Classic bar',
+      desktopSidebarStyleLabel:
+          desktopSidebarStyleLabel(_desktopSidebarStyle),
+      onOpenDesktopSidebarStyle: _openDesktopSidebarStyle,
     );
   }
 
@@ -1274,6 +1282,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'marquee',
             'badge',
             'dock',
+            'display',
+            'home & display',
+          ],
+        ),
+      // Desktop/tablet — the wide-window rail's own picker.
+      if (!_isAndroidTv && !PlatformUtil.isTelevision)
+        nav(
+          SettingsRows.desktopSidebarStyle,
+          'Appearance',
+          _openDesktopSidebarStyle,
+          subtitle: desktopSidebarStyleLabel(_desktopSidebarStyle),
+          keywords: const [
+            'sidebar',
+            'nav',
+            'navigation',
+            'rail',
+            'menu',
+            'pill',
+            'desktop',
+            'tablet',
+            'ipad',
             'display',
             'home & display',
           ],
@@ -4027,6 +4056,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Same contract, for the desktop/tablet sidebar picker.
+  Future<void> _openDesktopSidebarStyle() async {
+    await pushSettingsPage(context, const DesktopSidebarStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getDesktopSidebarStyle();
+    if (!mounted) return;
+    setState(() {
+      _desktopSidebarStyle = style;
+    });
+  }
+
   /// Same contract as [_openTvHomeStyle], for the IPTV page look picker.
   Future<void> _openIptvStylePage() async {
     await pushSettingsPage(context, const IptvStylePage());
@@ -4409,6 +4449,8 @@ class _SettingsLayout extends StatelessWidget {
   final String parentsGuideStyleLabel;
   final Future<void> Function() onOpenParentsGuideStyle;
   final String phoneNavStyleLabel;
+  final String desktopSidebarStyleLabel;
+  final Future<void> Function() onOpenDesktopSidebarStyle;
 
   const _SettingsLayout({
     required this.connections,
@@ -4469,6 +4511,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.parentsGuideStyleLabel,
     required this.onOpenParentsGuideStyle,
     required this.phoneNavStyleLabel,
+    required this.desktopSidebarStyleLabel,
+    required this.onOpenDesktopSidebarStyle,
   });
 
   @override
@@ -4591,6 +4635,15 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.navigationStyle,
                       subtitle: phoneNavStyleLabel,
                       onTap: onOpenNavigationSettings,
+                    ),
+                    // Wide-window chrome: the desktop/tablet rail's picker
+                    // (rail or pill). Phones never reach the wide layout but
+                    // an iPad rotates in and out of it, so the row is not
+                    // width-gated.
+                    SettingsTile.spec(
+                      SettingsRows.desktopSidebarStyle,
+                      subtitle: desktopSidebarStyleLabel,
+                      onTap: onOpenDesktopSidebarStyle,
                     ),
                   ],
                 ),

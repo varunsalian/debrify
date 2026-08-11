@@ -170,6 +170,13 @@ abstract final class SettingsRows {
     title: 'Sidebar Style',
     subtitle: '',
   );
+  // The desktop/tablet counterpart — never shown beside the TV row (each is
+  // platform-gated), so the shared title is unambiguous wherever it appears.
+  static const desktopSidebarStyle = SettingsRowContent(
+    icon: Icons.view_sidebar_rounded,
+    title: 'Sidebar Style',
+    subtitle: '',
+  );
   // Subtitle is dynamic (the chosen brightness) — passed per call site.
   static const textBrightness = SettingsRowContent(
     icon: Icons.brightness_6_rounded,

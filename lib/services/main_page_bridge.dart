@@ -39,6 +39,11 @@ class MainPageBridge {
   /// so the app shell re-reads the pref and reskins the rail live. Set by
   /// main.dart.
   static VoidCallback? tvSidebarStyleChanged;
+
+  /// Same contract for the desktop/tablet sidebar picker
+  /// (`desktop_sidebar_style`): the shell re-reads the pref and swaps the
+  /// fixed rail for the pill (or back) live. Set by main.dart.
+  static VoidCallback? desktopSidebarStyleChanged;
   static void Function(RDTorrent torrent)? openDebridOptions;
   static void Function(TorboxTorrent torrent)? openTorboxFolder;
   static void Function(String fileId, String folderName)? openPikPakFolder;

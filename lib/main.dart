@@ -61,6 +61,7 @@ import 'widgets/mobile_floating_nav.dart';
 import 'widgets/mobile_classic_nav.dart';
 import 'widgets/tv_ambient_art_stage.dart';
 import 'widgets/tv_sidebar_nav.dart';
+import 'widgets/desktop_pill_nav.dart';
 import 'widgets/desktop_sidebar_nav.dart';
 import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
@@ -777,6 +778,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// classic flash before the pref read lands.
   String _tvSidebarStyle = 'ghost';
 
+  /// Desktop/tablet sidebar chrome: 'rail' (fixed, the default) or 'pill'
+  /// (no rail — content full-bleed, a floating capsule opens the menu).
+  /// Same load/reload path as the TV style above.
+  String _desktopSidebarStyle = 'rail';
+
   /// The classic bar's stored middle-slot picks (real indices; may contain
   /// currently-hidden tabs — validated against visibility at build). Null =
   /// never customized.
@@ -1004,6 +1010,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
     unawaited(_loadPhoneNavPrefs());
     MainPageBridge.tvSidebarStyleChanged = () {
+      if (mounted) unawaited(_loadPhoneNavPrefs());
+    };
+    MainPageBridge.desktopSidebarStyleChanged = () {
       if (mounted) unawaited(_loadPhoneNavPrefs());
     };
     MainPageBridge.navPrefsChanged = () {
@@ -1239,6 +1248,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.switchTab = null;
     MainPageBridge.navPrefsChanged = null;
     MainPageBridge.tvSidebarStyleChanged = null;
+    MainPageBridge.desktopSidebarStyleChanged = null;
     MainPageBridge.openDebridOptions = null;
     MainPageBridge.openTorboxFolder = null;
     MainPageBridge.openPikPakFolder = null;
@@ -2039,12 +2049,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final style = await StorageService.getPhoneNavStyle();
     final picks = await StorageService.getPhoneNavBarIndices();
     final tvSidebar = await StorageService.getTvSidebarStyle();
+    final desktopSidebar = await StorageService.getDesktopSidebarStyle();
     if (!mounted) return;
     MainPageBridge.phoneNavStyleCached = style;
     setState(() {
       _phoneNavStyle = style;
       _phoneNavBarPicks = picks;
       _tvSidebarStyle = tvSidebar;
+      _desktopSidebarStyle = desktopSidebar;
       _phoneNavLoaded = true;
     });
   }
@@ -3027,9 +3039,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                     !kIsWeb &&
                     (Platform.isAndroid || Platform.isIOS) &&
                     !PlatformUtil.isTelevision;
-                final desktopSidebarWidth = expandDesktopSidebar
-                    ? DesktopSidebarNav.expandedWidth
-                    : DesktopSidebarNav.width;
+                // 'pill' is the one style that changes LAYOUT, exactly like
+                // its TV namesake: no rail, no reserved gutter — the content
+                // runs full-bleed and the capsule floats over it.
+                final desktopPill =
+                    isDesktopWide && _desktopSidebarStyle == 'pill';
+                final desktopSidebarWidth = desktopPill
+                    ? 0.0
+                    : expandDesktopSidebar
+                        ? DesktopSidebarNav.expandedWidth
+                        : DesktopSidebarNav.width;
 
                 final classicBottomNav =
                     !isDesktopWide &&
@@ -3105,7 +3124,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         left: isDesktopWide ? desktopSidebarWidth : 0,
                         child: ClipRect(
                           child: SafeArea(
-                            left: !isDesktopWide,
+                            // The rail absorbs the left inset when present;
+                            // under 'pill' there is no rail, so the content
+                            // must take the inset back (iPad landscape
+                            // notch) or the first column sits under it.
+                            left: !isDesktopWide || desktopPill,
                             child: Stack(
                               children: [
                                 // Page fills the whole area so its own
@@ -3127,12 +3150,35 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
-                      if (isDesktopWide)
+                      if (isDesktopWide && !desktopPill)
                         Positioned(
                           left: 0,
                           top: 0,
                           bottom: 0,
                           child: DesktopSidebarNav(
+                            expanded: expandDesktopSidebar,
+                            currentIndex: nonTvSelected == -1
+                                ? 0
+                                : nonTvSelected,
+                            entries: [
+                              for (final index in nonTvIndices)
+                                DesktopNavEntry(
+                                  _icons[index],
+                                  _titles[index],
+                                  _navSectionForIndex(index),
+                                ),
+                            ],
+                            onTap: (relativeIndex) {
+                              final actualIndex = nonTvIndices[relativeIndex];
+                              _onItemTapped(actualIndex);
+                            },
+                          ),
+                        ),
+                      // Full-screen layer, but hit-testable only at the
+                      // capsule while closed — see DesktopPillNav.
+                      if (desktopPill)
+                        Positioned.fill(
+                          child: DesktopPillNav(
                             expanded: expandDesktopSidebar,
                             currentIndex: nonTvSelected == -1
                                 ? 0
