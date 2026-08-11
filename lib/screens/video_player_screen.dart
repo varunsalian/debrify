@@ -18,6 +18,7 @@ import '../services/skip_segment_service.dart';
 import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
 import '../services/audio_effect_session_service.dart';
+import '../services/tvos_decode_remedy.dart';
 import '../services/android_native_downloader.dart';
 import '../services/desktop_recording_service.dart';
 import '../services/live_recording_service.dart';
@@ -358,6 +359,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   late mkv.VideoController _videoController;
   AndroidVideoRendererMode _androidVideoRendererMode =
       AndroidVideoRendererMode.automatic;
+
+  /// Apple TV blue-screen ladder (PLAYER_TVOS_10BIT_PLAN.md): watches what
+  /// the decoder produced and re-routes high-bit VideoToolbox surfaces the
+  /// GLES interop cannot represent. Null everywhere but tvOS.
+  TvosDecodeRemedy? _tvosDecodeRemedy;
+
+  /// tvOS manual escape hatch — forces `hwdec=no` at controller creation.
+  /// Preloaded in [_loadPlayerDefaults]; [_createPlayerInstance] is
+  /// synchronous and cannot read prefs itself.
+  bool _tvosForceSoftwareDecode = false;
   int _playerInstanceGeneration = 0;
   bool _playerPresentationInitialized = false;
 
@@ -2084,11 +2095,44 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       player,
       configuration: mkv.VideoControllerConfiguration(
         vo: rendererMode.videoOutput,
-        hwdec: rendererMode.hardwareDecoder,
+        // The tvOS escape hatch outranks the renderer mode (which is an
+        // Android concept; its decoder string is null off-Android anyway).
+        hwdec: PlatformUtil.isTvOS && _tvosForceSoftwareDecode
+            ? 'no'
+            : rendererMode.hardwareDecoder,
       ),
     );
+    _installTvosDecodeRemedy(player);
     _bindPlayerInstanceSubscriptions(instanceGeneration, player);
     unawaited(_installDecoderObservers(instanceGeneration, player));
+  }
+
+  /// tvOS only: the 10-bit remedy ladder, bound to THIS player instance's
+  /// property interface. Plain post-create property access — deliberately
+  /// not `mpv_observe_property` (see the SIGABRT note in
+  /// [_installDecoderObservers]); the ladder is driven by the existing
+  /// Dart-side videoParams stream instead.
+  void _installTvosDecodeRemedy(mk.Player player) {
+    if (!PlatformUtil.isTvOS) return;
+    final platform = player.platform;
+    if (platform is! mk.NativePlayer) return;
+    _tvosDecodeRemedy?.dispose();
+    _tvosDecodeRemedy = TvosDecodeRemedy(
+      getProperty: platform.getProperty,
+      setProperty: platform.setProperty,
+      // The standard 8-bit-surface pin, applied before every file's decoder
+      // exists: 8-bit content is NV12 already (no change), 10-bit decodes
+      // straight to NV12 with no blue flash and no mid-play cycle. The
+      // reactive ladder underneath only ever engages if VideoToolbox
+      // rejects the pin for some exotic stream.
+      pinNv12FromStart: true,
+      // A settle is a decode-path change the one-shot probe has already
+      // reported around — re-arm it so the diagnostic line carries the
+      // remedy journey.
+      onStateChanged: () {
+        if (mounted) _scheduleDecoderProbe();
+      },
+    );
   }
 
   void _onPlayerInstanceReady(int instanceGeneration) {
@@ -2599,6 +2643,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _decoderProbeParams = params;
     _scheduleDecoderProbe();
     _scheduleDirectSurfaceStartupValidation();
+    final remedy = _tvosDecodeRemedy;
+    if (remedy != null) {
+      // Only ever STARTS the ladder (from idle, on a triggering format) —
+      // the ladder's own transitional events are ignored inside it.
+      unawaited(remedy.evaluate(params, _decoderProbeGeneration));
+    }
   }
 
   Future<void> _installDecoderObservers(
@@ -2946,7 +2996,43 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final requestedRenderer = Platform.isAndroid
         ? _androidVideoRendererMode.storageKey
         : 'platform_default';
-    final signature = '$decoder|$normalizedOutput|$codec|${width}x$height';
+    // The remedy journey (tvOS): what the decoder produced originally, what
+    // it produces now, and where the ladder settled. In the signature too —
+    // a settle re-arms this probe, and dedupe on the old signature would
+    // swallow exactly the report that proves the remedy ran.
+    final remedy = _tvosDecodeRemedy;
+    final remedyState = switch (remedy?.state) {
+      null || TvosRemedyState.none => 'none',
+      TvosRemedyState.nv12 => 'nv12',
+      TvosRemedyState.software => 'software',
+      TvosRemedyState.gaveUp => 'gave_up',
+    };
+    // confirmed/failed mean the remedy's own settling poll verified the
+    // format by DIRECT read — the stream-captured params above can lag
+    // behind a settle (no final event is guaranteed after reconfig).
+    final remedyOutcome = remedy == null
+        ? 'none'
+        : remedy.applying
+        ? 'pending'
+        : switch (remedy.state) {
+            TvosRemedyState.none => 'none',
+            TvosRemedyState.nv12 ||
+            TvosRemedyState.software =>
+              'confirmed',
+            TvosRemedyState.gaveUp => 'failed',
+          };
+    final remedyFields = remedy == null
+        ? ''
+        : 'pixelformat=${params.pixelformat ?? 'unknown'} '
+              'hw_pixelformat=${params.hwPixelformat ?? 'none'} '
+              'detected_hw_pixelformat=${remedy.detectedHwPixelformat ?? 'none'} '
+              'verified_hw_pixelformat=${remedy.verifiedHwPixelformat ?? 'none'} '
+              'gamma=${params.gamma ?? 'unknown'} '
+              'primaries=${params.primaries ?? 'unknown'} '
+              'remedy=$remedyState remedy_outcome=$remedyOutcome ';
+    final signature =
+        '$decoder|$normalizedOutput|$codec|${width}x$height|'
+        '$remedyState|$remedyOutcome';
     _emitDecoderDiagnosticOnce(
       generation: generation,
       signature: signature,
@@ -2956,6 +3042,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           'codec=${codec.isEmpty ? 'unknown' : codec} '
           'decoder=${decoder.isEmpty ? 'unknown' : decoder} '
           'output=$normalizedOutput '
+          '$remedyFields'
           'requested_renderer=$requestedRenderer '
           'resolution=${width}x$height',
     );
@@ -2990,11 +3077,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     mk.Media media, {
     required bool play,
     bool? desiredPlay,
-  }) {
+  }) async {
     _activeOpenedMedia = media;
     _activeMediaShouldPlay = desiredPlay ?? play;
     _activeMediaUserPaused = false;
     _beginMediaGeneration();
+    final remedy = _tvosDecodeRemedy;
+    if (remedy != null) {
+      // AWAITED before open: remedy properties are ordinary runtime options
+      // on a reused native player — this is the boundary that restores them
+      // (and pre-applies the session hint) so a previous file's ladder can
+      // never leak into this one.
+      final generation = _decoderProbeGeneration;
+      await remedy.onNewMedia(generation);
+      // A rapid zap can start a newer open while the restore ran; the newer
+      // call owns the player now.
+      if (_screenDisposed || generation != _decoderProbeGeneration) return;
+    }
     return _player.open(media, play: play);
   }
 
@@ -4001,6 +4100,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await StorageService.getIptvPlayerGuideStyle(),
     );
     _playerGuideTokens = PlayerGuideTokens.of(_playerGuideStyle);
+
+    if (PlatformUtil.isTvOS) {
+      _tvosForceSoftwareDecode =
+          await StorageService.getTvosForceSoftwareDecode();
+    }
 
     debugPrint('VideoPlayer: Loaded defaults - aspect=$_aspectMode');
   }
@@ -8221,6 +8325,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _playSub?.cancel();
     _lastLiveChannelTimer?.cancel();
     _paramsSub?.cancel();
+    _tvosDecodeRemedy?.dispose();
+    _tvosDecodeRemedy = null;
     _completedSub?.cancel();
     _bufferingSub?.cancel();
     _iptvErrorSub?.cancel();

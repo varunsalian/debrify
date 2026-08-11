@@ -198,6 +198,8 @@ class StorageService {
   static const String _playerStartPortraitKey = 'player_start_portrait';
   static const String _androidVideoRendererModeKey =
       'android_video_renderer_mode';
+  static const String _tvosForceSoftwareDecodeKey =
+      'tvos_force_software_decode';
   static const String _uiSoundsKey = 'ui_sounds';
   static const String _uiHapticsKey = 'ui_haptics';
   static const String _subtitleAutoSyncKey = 'subtitle_auto_sync_enabled';
@@ -6135,6 +6137,20 @@ class StorageService {
   static Future<void> setPlayerSystemAudioEffects(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
+  }
+
+  /// Apple TV only: force the media-kit player to software video decoding.
+  /// The escape hatch behind the automatic 10-bit remedy ladder (see
+  /// PLAYER_TVOS_10BIT_PLAN.md) — for files whose formats read clean but
+  /// render wrong. Default false: hardware decoding, today's behavior.
+  static Future<bool> getTvosForceSoftwareDecode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_tvosForceSoftwareDecodeKey) ?? false;
+  }
+
+  static Future<void> setTvosForceSoftwareDecode(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_tvosForceSoftwareDecodeKey, enabled);
   }
 
   /// Renderer used by the Flutter media-kit player on Android phones/tablets.

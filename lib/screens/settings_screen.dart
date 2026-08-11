@@ -2238,6 +2238,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Let equalizer apps process audio (Android)',
         const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
       ),
+      if (PlatformUtil.isTvOS)
+        leaf(
+          'Playback',
+          'Force software video decoding',
+          'Apple TV compatibility option for videos that render wrong',
+          const [
+            'software decoding',
+            'compatibility',
+            'blue screen',
+            'wrong colors',
+            'hardware decoding',
+            '10-bit',
+          ],
+        ),
       if (_isAndroid && !PlatformUtil.isAndroidTvCached)
         leaf(
           'Playback',

@@ -83,6 +83,7 @@ class _ExternalPlayerSettingsPageState
   int _defaultAspectIndex = 2; // Fit Width (mobile) / Fill (TV)
   int _nightModeIndex = 0; // Off
   bool _systemAudioEffects = false; // Android only, opt-in
+  bool _tvosForceSoftwareDecode = false; // Apple TV only, opt-in
   AndroidVideoRendererMode _androidVideoRendererMode =
       AndroidVideoRendererMode.automatic;
   bool _startPortrait = false; // Phone only, opt-in
@@ -111,6 +112,7 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _defaultAudioLangFocusNode = FocusNode();
   final FocusNode _defaultSubtitleLangFocusNode = FocusNode();
   final FocusNode _systemAudioEffectsFocusNode = FocusNode();
+  final FocusNode _tvosForceSwDecodeFocusNode = FocusNode();
   final FocusNode _androidVideoRendererFocusNode = FocusNode();
   final FocusNode _startPortraitFocusNode = FocusNode();
   final FocusNode _subtitleAutoSyncFocusNode = FocusNode();
@@ -126,6 +128,7 @@ class _ExternalPlayerSettingsPageState
   bool _defaultAudioLangFocused = false;
   bool _defaultSubtitleLangFocused = false;
   bool _systemAudioEffectsFocused = false;
+  bool _tvosForceSwDecodeFocused = false;
   bool _androidVideoRendererFocused = false;
   bool _startPortraitFocused = false;
   bool _subtitleAutoSyncFocused = false;
@@ -226,6 +229,12 @@ class _ExternalPlayerSettingsPageState
         _systemAudioEffectsFocused = _systemAudioEffectsFocusNode.hasFocus;
       });
     });
+    _tvosForceSwDecodeFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _tvosForceSwDecodeFocused = _tvosForceSwDecodeFocusNode.hasFocus;
+      });
+    });
     _androidVideoRendererFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -314,6 +323,7 @@ class _ExternalPlayerSettingsPageState
     _defaultAudioLangFocusNode.dispose();
     _defaultSubtitleLangFocusNode.dispose();
     _systemAudioEffectsFocusNode.dispose();
+    _tvosForceSwDecodeFocusNode.dispose();
     _androidVideoRendererFocusNode.dispose();
     _startPortraitFocusNode.dispose();
     _subtitleAutoSyncFocusNode.dispose();
@@ -423,6 +433,9 @@ class _ExternalPlayerSettingsPageState
       final nightModeIndex = await StorageService.getPlayerNightModeIndex();
       final systemAudioEffects =
           await StorageService.getPlayerSystemAudioEffects();
+      final tvosForceSoftwareDecode = PlatformUtil.isTvOS
+          ? await StorageService.getTvosForceSoftwareDecode()
+          : false;
       final androidVideoRendererMode =
           await StorageService.getAndroidVideoRendererMode();
       final startPortrait = await StorageService.getPlayerStartPortrait();
@@ -477,6 +490,7 @@ class _ExternalPlayerSettingsPageState
         _defaultAspectIndex = defaultAspectIndex;
         _nightModeIndex = nightModeIndex;
         _systemAudioEffects = systemAudioEffects;
+        _tvosForceSoftwareDecode = tvosForceSoftwareDecode;
         _androidVideoRendererMode = androidVideoRendererMode;
         _startPortrait = startPortrait;
         _subtitleAutoSync = subtitleAutoSync;
@@ -935,6 +949,11 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setSystemAudioEffects(bool enabled) async {
     setState(() => _systemAudioEffects = enabled);
     await StorageService.setPlayerSystemAudioEffects(enabled);
+  }
+
+  Future<void> _setTvosForceSoftwareDecode(bool enabled) async {
+    setState(() => _tvosForceSoftwareDecode = enabled);
+    await StorageService.setTvosForceSoftwareDecode(enabled);
   }
 
   Future<void> _setAndroidVideoRendererMode(String storageKey) async {
@@ -2143,6 +2162,28 @@ class _ExternalPlayerSettingsPageState
                                     ? t.dim
                                     : t.warning,
                               ),
+                            ),
+                          ],
+
+                          // Apple TV only. The automatic 10-bit remedy
+                          // (PLAYER_TVOS_10BIT_PLAN.md) handles what it can
+                          // detect; this forces software decoding for
+                          // anything it cannot — wrong colors on a
+                          // clean-reading format, most likely.
+                          if (PlatformUtil.isTvOS) ...[
+                            const SizedBox(height: 4),
+                            _buildCheckboxTile(
+                              context,
+                              title: 'Force software video decoding',
+                              subtitle:
+                                  'Compatibility option if a video plays with '
+                                  'wrong colors or a blank picture. Slower — '
+                                  '4K may stutter. Applies from the next '
+                                  'playback.',
+                              value: _tvosForceSoftwareDecode,
+                              onChanged: _setTvosForceSoftwareDecode,
+                              focusNode: _tvosForceSwDecodeFocusNode,
+                              isFocused: _tvosForceSwDecodeFocused,
                             ),
                           ],
 
