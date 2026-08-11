@@ -69,8 +69,6 @@ import 'video_player/widgets/controls.dart';
 import 'video_player/widgets/dock_style.dart';
 import 'video_player/widgets/tv_controls.dart';
 import 'video_player/widgets/tv_tappable.dart';
-import 'video_player/widgets/channel_badge.dart';
-import 'video_player/widgets/title_badge.dart';
 import 'video_player/widgets/aspect_ratio_video.dart';
 import 'video_player/widgets/transition_overlay.dart';
 import 'video_player/widgets/pikpak_retry_overlay.dart';
@@ -95,6 +93,7 @@ import 'video_player/widgets/skip_segment_button.dart';
 import 'video_player/widgets/sleep_timer_sheet.dart';
 import 'video_player/widgets/sync_stepper_overlay.dart';
 import 'video_player/widgets/spotlight_dialog.dart';
+import 'video_player/widgets/debrify_tv_banner.dart';
 import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
@@ -478,31 +477,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return _cachedSeriesPlaylist;
   }
 
-  String? get _channelBadgeText {
-    final String? nameSource = (_currentChannelName ?? widget.channelName)
-        ?.trim();
-    final int? numberSource = _currentChannelNumber;
-
-    final bool hasName = nameSource != null && nameSource.isNotEmpty;
-    if (!hasName && numberSource == null) {
-      return null;
-    }
-
-    String formattedNumber = '';
-    if (numberSource != null) {
-      final int safeNumber = numberSource < 0 ? 0 : numberSource;
-      formattedNumber = 'CH ${safeNumber.toString().padLeft(2, '0')}';
-    }
-    if (!hasName) {
-      return formattedNumber;
-    }
-
-    final upperName = nameSource!.toUpperCase();
-    if (formattedNumber.isEmpty) {
-      return upperName;
-    }
-    return '$formattedNumber • $upperName';
-  }
 
   Timer? _hideTimer;
 
@@ -555,12 +529,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Duration? _lastSliderSeekPos;
 
   // Channel badge auto-hide
-  bool _showChannelBadge = true;
-  Timer? _channelBadgeTimer;
-
-  // Title badge auto-hide
-  bool _showTitleBadge = true;
-  Timer? _titleBadgeTimer;
+  // Debrify TV lower-third (replaces the two legacy corner badges).
+  bool _showDebrifyBanner = false;
+  bool _debrifyBannerFloatingMounted = false;
+  Timer? _debrifyBannerTimer;
 
   // IPTV zap banner (live channels) — the broadcast lower third.
   //
@@ -659,7 +631,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// otherwise reset the cache continuously.
   String get _infoPanelSignature {
     final channel = _iptvZapChannel;
-    if (channel == null || !_iptvZapBannerOwnsIdentity) return '-';
+    if (channel == null || !_iptvZapBannerOwnsIdentity) {
+      // Debrify TV's flush identity row: presence of plate/title is the
+      // whole structure (single bounded row).
+      if (_debrifyTvOwnsIdentity) {
+        final name = (_currentChannelName ?? widget.channelName)?.trim();
+        return [
+          'dtv',
+          (name?.isNotEmpty ?? false) || _currentChannelNumber != null
+              ? 'p'
+              : '',
+          widget.showVideoTitle ? 't' : '',
+        ].join('|');
+      }
+      return '-';
+    }
     final epg = _iptvZapEpg;
     return [
       _playerGuideStyle.name,
@@ -2266,12 +2252,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _anchorIptvGuideCategory(iptvChannel);
       _ensureIptvZapPagingArmed();
     } else {
-      if (widget.showChannelName && _channelBadgeText != null) {
-        _showChannelBadgeWithTimer();
-      }
-      if (widget.showVideoTitle && widget.showChannelName) {
-        _showTitleBadgeWithTimer();
-      }
+      _raiseDebrifyBanner();
     }
   }
 
@@ -4200,7 +4181,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // on screen while `!hideOptions` is false.
     final dockVisible =
         controlsVisible &&
-        (_buildIptvInfoPanel(flush: true) != null || !widget.hideOptions);
+        (_buildIptvInfoPanel(flush: true) != null ||
+            _buildDebrifyTvInfoPanel(flush: true) != null ||
+            !widget.hideOptions);
     if (!dockVisible) return 28;
     final inset = MediaQuery.paddingOf(context).bottom;
     return math.max(28.0, dockExtent + 8 - inset);
@@ -6757,10 +6740,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     });
 
-    // Show channel badge
-    if (widget.showChannelName && _channelBadgeText != null) {
-      _showChannelBadgeWithTimer();
-    }
+    _raiseDebrifyBanner();
 
     if (nextUrl.isEmpty) {
       setState(() {
@@ -6884,10 +6864,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _currentChannelNumber = channelNumber;
         }
       });
-      // Show channel badge when switching channels
-      if (widget.showChannelName && _channelBadgeText != null) {
-        _showChannelBadgeWithTimer();
-      }
+      _raiseDebrifyBanner();
     }
 
     if (nextUrl.isEmpty) {
@@ -8265,8 +8242,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _hideTimer?.cancel();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
-    _channelBadgeTimer?.cancel();
-    _titleBadgeTimer?.cancel();
+    _debrifyBannerTimer?.cancel();
     _iptvZapHideTimer?.cancel();
     _iptvZapTicker?.cancel();
     _tvScrubGeneration++; // invalidate any scrub still in flight
@@ -9049,7 +9025,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           subtitle: widget.showVideoTitle && !widget.showChannelName
               ? _getCurrentEpisodeSubtitle()
               : null,
-          infoPanel: _buildIptvInfoPanel(flush: true),
+          infoPanel:
+              _buildIptvInfoPanel(flush: true) ??
+              _buildDebrifyTvInfoPanel(flush: true),
           clock: _playbackUiClock,
           isPlaying: _isPlaying,
           isLive: isLive,
@@ -9310,39 +9288,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _controlsVisible.value = !_controlsVisible.value;
     if (_controlsVisible.value) {
       _scheduleAutoHide();
-      // Live IPTV keeps its identity in the banner — already dismissed by the
-      // visibility listener above — so the corner badges stay down.
-      if (_iptvZapBannerOwnsIdentity) return;
-      // Show channel badge when controls appear (if enabled)
-      if (widget.showChannelName && _channelBadgeText != null) {
-        _showChannelBadgeWithTimer();
-      }
-      // Show title badge when controls appear (if enabled and in Debrify TV)
-      if (widget.showVideoTitle && widget.showChannelName) {
-        _showTitleBadgeWithTimer();
-      }
+      // Identity rides IN the bar (IPTV zap panel / Debrify TV banner both
+      // embed as the dock's info panel), so nothing floats when it rises.
     }
   }
 
-  void _showChannelBadgeWithTimer() {
-    // Cancel any existing timer
-    _channelBadgeTimer?.cancel();
-    // Show the badge
-    setState(() {
-      _showChannelBadge = true;
-    });
-    // Hide after 4 seconds (matching Android TV behavior)
-    _channelBadgeTimer = Timer(
-      VideoPlayerTimingConstants.badgeDisplayDuration,
-      () {
-        if (mounted) {
-          setState(() {
-            _showChannelBadge = false;
-          });
-        }
-      },
-    );
-  }
 
   /// Adopt [channel] as the banner's subject and start its guide lookup.
   ///
@@ -9392,12 +9342,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _onControlsVisibilityChanged() {
-    _playbackUiClock.setVisible(_controlsVisible.value);
+    _syncPlaybackClockVisibility();
     // The dock carries its own copy of the panel, so the floating one goes the
     // instant the dock opens. Fading it would cross-dissolve two copies of the
     // same panel at two different heights.
     if (_controlsVisible.value) {
       _hideIptvZapBanner(immediate: true);
+      _hideDebrifyBanner(immediate: true);
       // The Record button is about to be looked at — make sure it reflects
       // engine captures stopped from the notification (which this screen
       // otherwise never hears about).
@@ -9488,25 +9439,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
-  void _showTitleBadgeWithTimer() {
-    // Cancel any existing timer
-    _titleBadgeTimer?.cancel();
-    // Show the badge
-    setState(() {
-      _showTitleBadge = true;
-    });
-    // Hide after 4 seconds (matching Android TV behavior)
-    _titleBadgeTimer = Timer(
-      VideoPlayerTimingConstants.badgeDisplayDuration,
-      () {
-        if (mounted) {
-          setState(() {
-            _showTitleBadge = false;
-          });
-        }
-      },
-    );
-  }
 
   Future<void> _handleDoubleTap(TapDownDetails details) async {
     final box = context.findRenderObject() as RenderBox?;
@@ -10053,10 +9985,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  Widget _buildChannelBadge(String badgeText) =>
-      ChannelBadge(badgeText: badgeText);
-
-  Widget _buildTitleBadge(String title) => TitleBadge(title: title);
 
   /// One truth for "is this playback being recorded right now", shared by
   /// the dock's Record button and the styled zap banner's REC tag — the
@@ -10069,6 +9997,93 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// The live-IPTV panel, or null when this playback has no channel identity
   /// to present. [flush] embeds it in the controls dock; otherwise it floats.
+  /// Debrify TV owns the session identity when the launch asked for the
+  /// channel chrome and no live IPTV banner does.
+  bool get _debrifyTvOwnsIdentity =>
+      widget.showChannelName && !_iptvZapBannerOwnsIdentity;
+
+  Widget? _buildDebrifyTvInfoPanel({required bool flush}) {
+    if (!_debrifyTvOwnsIdentity) return null;
+    final name = (_currentChannelName ?? widget.channelName)?.trim();
+    final title = widget.showVideoTitle ? _getCurrentEpisodeTitle() : null;
+    if ((name == null || name.isEmpty) &&
+        _currentChannelNumber == null &&
+        (title == null || title.isEmpty)) {
+      return null;
+    }
+    return DebrifyTvBanner(
+      channelNumber: _currentChannelNumber,
+      channelName: name,
+      title: title,
+      clock: _playbackUiClock,
+      // hideSeekbar keeps runtimes a surprise — the banner must not leak
+      // what the dock hides.
+      showProgress: !widget.hideSeekbar,
+      flush: flush,
+    );
+  }
+
+  /// The clock is an optimization gate — it only publishes while something
+  /// on screen reads it. That used to mean "the bar"; the floating Debrify
+  /// banner's progress row reads it too (only when the session shows
+  /// progress at all).
+  void _syncPlaybackClockVisibility() {
+    _playbackUiClock.setVisible(
+      _controlsVisible.value ||
+          (_showDebrifyBanner && _debrifyTvOwnsIdentity &&
+              !widget.hideSeekbar),
+    );
+  }
+
+  /// Raises the floating lower-third (tune, zap, launch). The hide timer
+  /// re-arms while a channel switch is still resolving — the old corner
+  /// badges timed out DURING the resolve, which is why tvOS never saw them.
+  void _raiseDebrifyBanner() {
+    if (!_debrifyTvOwnsIdentity) return;
+    if (_anyPlayerOverlayOpen || _controlsVisible.value) return;
+    _debrifyBannerTimer?.cancel();
+    setState(() {
+      _showDebrifyBanner = true;
+      _debrifyBannerFloatingMounted = true;
+    });
+    _syncPlaybackClockVisibility();
+    _armDebrifyBannerTimer();
+  }
+
+  void _armDebrifyBannerTimer() {
+    // While resolving, poll fast — so the FULL display window is granted
+    // from (roughly) the moment the new stream lands, not from zap start.
+    final resolving = _isTransitioning;
+    _debrifyBannerTimer = Timer(
+      resolving
+          ? const Duration(milliseconds: 400)
+          : VideoPlayerTimingConstants.badgeDisplayDuration,
+      () {
+        if (!mounted) return;
+        if (resolving || _isTransitioning) {
+          // Either this was a resolve-poll, or a new switch began
+          // mid-window: keep the identity up and re-evaluate.
+          _armDebrifyBannerTimer();
+          return;
+        }
+        setState(() => _showDebrifyBanner = false);
+        _syncPlaybackClockVisibility();
+      },
+    );
+  }
+
+  void _hideDebrifyBanner({bool immediate = false}) {
+    _debrifyBannerTimer?.cancel();
+    if (!_showDebrifyBanner && !(immediate && _debrifyBannerFloatingMounted)) {
+      return;
+    }
+    setState(() {
+      _showDebrifyBanner = false;
+      if (immediate) _debrifyBannerFloatingMounted = false;
+    });
+    _syncPlaybackClockVisibility();
+  }
+
   Widget? _buildIptvInfoPanel({required bool flush}) {
     final channel = _iptvZapChannel;
     if (channel == null || !_iptvZapBannerOwnsIdentity) return null;
@@ -10107,7 +10122,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   Widget build(BuildContext context) {
     final isReady = _isReady;
-    final String? channelBadgeText = _channelBadgeText;
     // In the PiP window, hide every interactive/decorative layer so only the
     // video texture (and the buffering spinner) shows. Restores on exit.
     final inPip = _isPipActive;
@@ -10689,7 +10703,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                       : null,
                                   // Merged into the dock: the channel panel rides on
                                   // top of the transport bar as one surface.
-                                  infoPanel: _buildIptvInfoPanel(flush: true),
+                                  infoPanel:
+                                      _buildIptvInfoPanel(flush: true) ??
+                                      _buildDebrifyTvInfoPanel(flush: true),
                                   infoPanelHeight: _reservedInfoPanelHeight,
                                   geometryGeneration: _dockGeometryGeneration,
                                   infoPanelGeneration: _infoPanelGeneration,
@@ -10930,42 +10946,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       );
                     },
                   ),
-                // Title Badge with Glassy Blur Effect (top-left, Debrify TV only)
-                // Placed after controls to appear on top
-                if (widget.showVideoTitle &&
-                    widget.showChannelName &&
-                    !_iptvZapBannerOwnsIdentity &&
+                // Debrify TV lower-third — channel plate + playing title —
+                // floating over bare video (the dock embeds its own copy).
+                // Replaces the two legacy corner badges.
+                if (_debrifyBannerFloatingMounted &&
+                    _debrifyTvOwnsIdentity &&
                     !inPip)
                   Positioned(
-                    top: 20,
-                    left: 20,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
                     child: IgnorePointer(
                       ignoring: true,
                       child: AnimatedOpacity(
-                        opacity: _showTitleBadge ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 400),
+                        opacity: _showDebrifyBanner ? 1.0 : 0.0,
+                        duration: Duration(
+                          milliseconds: _showDebrifyBanner ? 200 : 350,
+                        ),
                         curve: Curves.easeInOut,
-                        child: _buildTitleBadge(_getCurrentEpisodeTitle()),
-                      ),
-                    ),
-                  ),
-                // Channel Badge with Glassy Blur Effect (top-right)
-                // Placed after controls to appear on top
-                if (widget.showChannelName &&
-                    channelBadgeText != null &&
-                    channelBadgeText.isNotEmpty &&
-                    !_iptvZapBannerOwnsIdentity &&
-                    !inPip)
-                  Positioned(
-                    top: 20,
-                    right: 20,
-                    child: IgnorePointer(
-                      ignoring: true,
-                      child: AnimatedOpacity(
-                        opacity: _showChannelBadge ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeInOut,
-                        child: _buildChannelBadge(channelBadgeText),
+                        // Unmount once faded: this screen rebuilds every
+                        // position tick, and a transparent banner would keep
+                        // re-laying out for the rest of the session.
+                        onEnd: () {
+                          if (!mounted || _showDebrifyBanner) return;
+                          setState(
+                            () => _debrifyBannerFloatingMounted = false,
+                          );
+                        },
+                        child:
+                            _buildDebrifyTvInfoPanel(flush: false) ??
+                            const SizedBox.shrink(),
                       ),
                     ),
                   ),
@@ -11013,6 +11023,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 _dockStyle.isStyled &&
                                 controlsVisible &&
                                 (_buildIptvInfoPanel(flush: true) != null ||
+                                    _buildDebrifyTvInfoPanel(flush: true) !=
+                                        null ||
                                     !widget.hideOptions);
                             return PikPakRetryOverlay(
                               message: _pikPakRetryMessage!,
