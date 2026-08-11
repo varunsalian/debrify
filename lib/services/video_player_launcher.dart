@@ -906,8 +906,24 @@ class VideoPlayerLauncher {
     // ever being pushed, so RouteAware can't tell those screens when playback
     // actually ended. See [_notifyOnReturnFromExternalActivity].
     if (!args.disableExternalPlayer && defaultPlayerMode == 'external') {
-      final launched = await _launchWithExternalPlayer(context, args);
+      int? chosenSeason;
+      int? chosenEpisode;
+      final launched = await _launchWithExternalPlayer(
+        context,
+        args,
+        onSeriesEntryChosen: (s, e) {
+          chosenSeason = s;
+          chosenEpisode = e;
+        },
+      );
       if (launched) {
+        unawaited(
+          _seedTrackerContinueWatching(
+            args,
+            seasonOverride: chosenSeason,
+            episodeOverride: chosenEpisode,
+          ),
+        );
         handoffWhenCovered();
         if (!isTrailer) _notifyOnReturnFromExternalActivity();
         MainPageBridge.notifyExternalPlayerLaunched();
@@ -919,6 +935,7 @@ class VideoPlayerLauncher {
         Platform.isAndroid) {
       final launched = await _launchWithDeoVR(context, args);
       if (launched) {
+        unawaited(_seedTrackerContinueWatching(args));
         handoffWhenCovered();
         if (!isTrailer) _notifyOnReturnFromExternalActivity();
         MainPageBridge.notifyExternalPlayerLaunched();
@@ -960,6 +977,103 @@ class VideoPlayerLauncher {
         onQuickPlayNextEpisode != null) {
       await onQuickPlayNextEpisode(result);
     }
+  }
+
+  /// Seed the connected tracker's Continue Watching when playback leaves the
+  /// app (external player / DeoVR).
+  ///
+  /// The shared pre-launch path already writes LOCAL Continue Watching for
+  /// untracked titles, but deliberately skips it when Trakt or Simkl owns the
+  /// row — and an external player can never scrobble back, so without this
+  /// the title lands in NO row at all. A ~1% scrobble is each tracker's own
+  /// idiom for "started watching" — start→pause for Trakt, a bare pause for
+  /// Simkl (whose start would CLEAR an existing session) — and both keep
+  /// sub-80% sessions as resumable playback, so the item appears in their CW.
+  /// The existing CW row menus then let the user mark it watched on return,
+  /// and if the external app scrobbles real progress itself (Infuse + Trakt),
+  /// that simply overwrites the seed.
+  ///
+  /// Fail-soft and fire-and-forget: both services no-op without a token, and
+  /// the handoff must never wait on tracker HTTP.
+  static Future<void> _seedTrackerContinueWatching(
+    VideoPlayerLaunchArgs args, {
+    int? seasonOverride,
+    int? episodeOverride,
+  }) async {
+    final imdbId = args.contentImdbId;
+    if (imdbId == null || imdbId.isEmpty) return;
+    // Channel rotation is not a watchable title; mirrors the local CW skip.
+    if (args.stremioTvChannels != null) return;
+    if (!args.traktScrobble && !args.simklScrobble) return;
+
+    // A series seed needs BOTH season and episode — both scrobble services
+    // refuse a lone half, and a series imdb id in a movie-shaped body would
+    // be worse than no seed. A movie sends neither. The overrides are the
+    // episode the external path actually CHOSE (resume/advance) and outrank
+    // the launch-time metadata.
+    int? season = (seasonOverride != null && episodeOverride != null)
+        ? seasonOverride
+        : args.contentSeason;
+    int? episode = (seasonOverride != null && episodeOverride != null)
+        ? episodeOverride
+        : args.contentEpisode;
+    final isSeries = args.contentType == 'series';
+    if (isSeries && ((season ?? 0) <= 0 || (episode ?? 0) <= 0)) return;
+    if (!isSeries) {
+      season = null;
+      episode = null;
+    }
+
+    // Just-started sentinel: comfortably under both trackers' ~80% "watched"
+    // thresholds, so the session lands as resumable playback.
+    const progress = 1.0;
+
+    // Concurrent, not serialized: this runs while another app is taking the
+    // foreground, and a suspension mid-sequence must not starve the second
+    // tracker of its seed.
+    final s = season;
+    final e = episode;
+    await Future.wait([
+      if (args.traktScrobble)
+        () async {
+          try {
+            // Trakt's documented idiom: start opens the session, pause
+            // checkpoints it into the playback-progress (CW) list.
+            await TraktService.instance.scrobbleStart(
+              imdbId,
+              progress,
+              season: s,
+              episode: e,
+            );
+            await TraktService.instance.scrobblePause(
+              imdbId,
+              progress,
+              season: s,
+              episode: e,
+            );
+          } catch (err) {
+            debugPrint('ExternalPlayer: Trakt CW seed failed: $err');
+          }
+        }(),
+      if (args.simklScrobble)
+        () async {
+          try {
+            // PAUSE ONLY, deliberately: Simkl's start CLEARS an existing
+            // paused playback (and its 20-second lock could then swallow the
+            // follow-up), while a bare pause creates the resumable row on
+            // its own — the pause-centric idiom the in-app player already
+            // uses.
+            await SimklService.instance.scrobblePause(
+              imdbId,
+              progress,
+              season: s,
+              episode: e,
+            );
+          } catch (err) {
+            debugPrint('ExternalPlayer: Simkl CW seed failed: $err');
+          }
+        }(),
+    ]);
   }
 
   /// Whether playback should leave the app entirely, per the user's default
@@ -1018,8 +1132,12 @@ class VideoPlayerLauncher {
   /// Returns true if successfully launched, false if should fall back to in-app player
   static Future<bool> _launchWithExternalPlayer(
     BuildContext context,
-    VideoPlayerLaunchArgs args,
-  ) async {
+    VideoPlayerLaunchArgs args, {
+    // Reports the series entry this path CHOSE — resume/advance can land on
+    // a different episode than args.contentSeason/Episode describe, and the
+    // tracker CW seed must tag the episode actually handed over.
+    void Function(int season, int episode)? onSeriesEntryChosen,
+  }) async {
     // Determine the correct URL to play (considering resume state for series)
     String url = args.videoUrl;
     String title = args.title;
@@ -1105,6 +1223,13 @@ class VideoPlayerLauncher {
               if (episode != null &&
                   episode.seriesInfo.season != null &&
                   episode.seriesInfo.episode != null) {
+                // BEFORE the storage write: a throw there is caught by the
+                // outer catch while the launch proceeds with this URL — the
+                // seed must still know which episode that was.
+                onSeriesEntryChosen?.call(
+                  episode.seriesInfo.season!,
+                  episode.seriesInfo.episode!,
+                );
                 await StorageService.markEpisodeAsFinished(
                   seriesTitle: seriesPlaylist.seriesTitle ?? 'Unknown Series',
                   season: episode.seriesInfo.season!,
