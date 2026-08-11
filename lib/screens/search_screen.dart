@@ -5612,14 +5612,28 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           items: [
             for (final ch in _stvFavChannels)
               SpotlightCard(
+                image: _stvFavArt(ch),
                 title: ch.displayName,
                 subtitle: 'STREMIO TV',
-                shape: SpotlightCardShape.channel,
+                // Poster, not channel: the art is the now-playing TITLE's
+                // 2:3 poster (same as the classic/canvas rails), not a
+                // square logo mark — the channel shape would letterbox it
+                // on a plate.
+                shape: SpotlightCardShape.poster,
                 onOpen: () => _playStremioTvChannel(ch),
               ),
           ],
         );
     }
+  }
+
+  /// A Stremio TV favourite's card art: the channel's rotating now-playing
+  /// poster — the same resolution the classic and Canvas rails use, poster
+  /// first with the landscape background as fallback. Null (placeholder)
+  /// until the channel's items load.
+  String? _stvFavArt(StremioTvChannel ch) {
+    final item = _stvNowPlaying(ch)?.item;
+    return _firstNonEmpty(item?.poster, item?.background);
   }
 
   Widget _buildSpotlightBoard() {
