@@ -228,10 +228,46 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     if (next >= bands.length) return;
     final band = bands[next];
     if (band.nodes.isEmpty) return;
-    final col = (_col[band.key] ?? 0).clamp(0, band.nodes.length - 1);
+    final col = _entryCol(band);
     _setBand(band.key);
     _go(band.nodes[col], Offset(0, delta.toDouble()));
     _reveal(band);
+  }
+
+  /// The column to LAND on when entering `band` from above or below.
+  ///
+  /// The remembered column can name a card that is no longer in the tree. A
+  /// band that scrolls out of the vertical list is disposed, and its rail keeps
+  /// no scroll offset of its own, so it rebuilds at 0 with only the first
+  /// screenful of cards built — while `_col` still remembers the sixth. Focus
+  /// requested on a node that is not in the focus tree is a SILENT no-op: the
+  /// node is merely armed for its next reparent. The band would then be
+  /// scrolled into view by `_reveal` with the ring left behind in the band
+  /// above, and every further press would repeat that, because the re-sync in
+  /// `_onKey` reads the ring back out of the band above. Enter at the nearest
+  /// card that IS mounted instead, so the press always moves the ring.
+  int _entryCol(_Band band) {
+    var col = (_col[band.key] ?? 0).clamp(0, band.nodes.length - 1);
+    if (!detailNodeMounted(band.nodes[col])) {
+      for (var d = 1; d < band.nodes.length; d++) {
+        final lo = col - d;
+        final hi = col + d;
+        if (lo >= 0 && detailNodeMounted(band.nodes[lo])) {
+          col = lo;
+          break;
+        }
+        if (hi < band.nodes.length && detailNodeMounted(band.nodes[hi])) {
+          col = hi;
+          break;
+        }
+      }
+      // Written back so the band is entered and then WALKED from where the
+      // cursor really is. Left stale, LEFT would read as an edge press from a
+      // middle card. If nothing in the band is built this is a no-op write and
+      // the move degrades to the old behaviour.
+      _col[band.key] = col;
+    }
+    return col;
   }
 
   /// Where the cursor ACTUALLY is in this band.
@@ -252,7 +288,15 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     if (next < 0) {
       // Column 0 and LEFT again: back to the primary action. Never geometric
       // traversal, which happily lands on a cast tile sitting below-left.
-      _go(widget.model.focus.primaryEntry, const Offset(-1, 0));
+      //
+      // Through `focusEntry`, not a bare request on `primaryEntry`: this is a
+      // LONG jump, and from a low band the identity is scrolled out of the
+      // list and disposed, so the entry node is unmounted exactly as often as
+      // a far card is. `focusEntry` falls back to the always-mounted back
+      // button rather than no-op into the same dead end. The episode rail's
+      // own LEFT edge already crosses this way.
+      ParallaxTravel.note(const Offset(-1, 0));
+      widget.model.focus.focusEntry();
       _setBand('identity');
       return;
     }
