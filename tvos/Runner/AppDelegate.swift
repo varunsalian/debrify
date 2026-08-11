@@ -7,6 +7,7 @@ class AppDelegate: FlutterAppDelegate {
     private var logChannel: FlutterMethodChannel?
     private var keyboardChannel: FlutterMethodChannel?
     private var urlChannel: FlutterMethodChannel?
+    private var systemChannel: FlutterMethodChannel?
 
     override func application(
         _ application: UIApplication,
@@ -75,6 +76,37 @@ class AppDelegate: FlutterAppDelegate {
             }
         }
         self.urlChannel = urlChannel
+
+        // Menu at the app's true root must land the user on the tvOS Home
+        // Screen — but Flutter's unhandled-pop fallback (SystemNavigator.pop)
+        // is a no-op here: its Darwin implementation only pops a navigation
+        // controller, and this app installs the FlutterViewController as the
+        // window root. UIKit's `suspend` selector does exactly what the TV
+        // button does — the scene resigns and tvOS takes over. (Private
+        // selector; this is a sideloaded app, App Store review is not a
+        // constraint.)
+        let systemChannel = FlutterMethodChannel(
+            name: "debrify/tvsystem",
+            binaryMessenger: flutterViewController.binaryMessenger)
+        systemChannel.setMethodCallHandler { call, result in
+            if call.method == "suspend" {
+                DispatchQueue.main.async {
+                    // Suspend first so the system's zoom-out to the Home
+                    // Screen plays; then actually terminate, so the next
+                    // launch is a cold start (boot ident and all) instead of
+                    // a warm resume. exit() alone looks like a crash — the
+                    // app vanishes with no animation.
+                    UIApplication.shared.perform(Selector(("suspend")))
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        exit(0)
+                    }
+                }
+                result(true)
+            } else {
+                result(FlutterMethodNotImplemented)
+            }
+        }
+        self.systemChannel = systemChannel
 
         // Apple TV's keyboard never tells Flutter the user finished.
         //

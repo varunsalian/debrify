@@ -2758,14 +2758,25 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       return; // Do nothing
     }
 
-    // Apple TV: Menu at the true root opens the rail. The rail being open
-    // flips the PopScope's canPop true, so the NEXT press goes unhandled and
-    // tvOS returns to its own Home screen — the platform's only real "exit"
-    // (`SystemNavigator.pop()` cannot exit a tvOS app: the Darwin
-    // implementation only pops a navigation controller, and this app
-    // installs its FlutterViewController as the window root).
+    // Apple TV: Menu at the true root opens the rail; Menu with the rail
+    // open leaves the app. The old design let the second press "go
+    // unhandled" expecting tvOS to take over — but Flutter's unhandled-pop
+    // fallback is `SystemNavigator.pop()`, which is a NO-OP on tvOS (its
+    // Darwin implementation only pops a navigation controller, and this app
+    // installs the FlutterViewController as the window root). So there was
+    // no way to exit at all. The runner's `suspend` channel resigns to the
+    // tvOS Home Screen (the TV-button animation), then terminates — so the
+    // next open is a cold start, boot ident included.
     if (PlatformUtil.isTvOS) {
-      MainPageBridge.focusTvSidebar?.call();
+      if (!(MainPageBridge.isTvSidebarFocused?.call() ?? false)) {
+        MainPageBridge.focusTvSidebar?.call();
+        return;
+      }
+      unawaited(
+        const MethodChannel(
+          'debrify/tvsystem',
+        ).invokeMethod<void>('suspend').catchError((_) {}),
+      );
       return;
     }
 
@@ -2827,17 +2838,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         ValueListenableBuilder<bool>(
           valueListenable: _tvSidebarExpanded,
           builder: (context, tvSidebarOpen, shell) => PopScope(
-            // Apple TV at the Home tab lets the press through ONLY while the
-            // rail is open: Menu at the true root first opens the rail (see
-            // _onRootPopInvoked), and the next press then goes unhandled so
-            // tvOS returns to its own Home screen. Every other platform and
-            // every other tab keeps the interception, which is what drives
-            // folder-back, tab-walk and the rail/exit contract.
-            canPop:
-                PlatformUtil.isTvOS &&
-                _selectedIndex == 15 &&
-                !_showIptvStartupOverlay &&
-                tvSidebarOpen,
+            // Always intercepted — including Apple TV. The old tvOS
+            // "let it through while the rail is open" passthrough dead-ended
+            // in SystemNavigator.pop (a no-op there); the handler now owns
+            // the whole rail/exit contract via the runner's suspend channel.
+            canPop: false,
             onPopInvoked: _onRootPopInvoked,
             child: shell!,
           ),
