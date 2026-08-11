@@ -1018,8 +1018,13 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
 
   // ── DPAD ──
 
-  void _handleKey(KeyEvent event) {
-    if (event is KeyUpEvent) return;
+  /// CONSUMES every key it recognizes (returns handled). A KeyboardListener
+  /// cannot consume, so each arrow press also ran the framework's directional
+  /// focus traversal — which could silently move primary focus onto the
+  /// opacity-hidden TV bar's buttons (LEFT had targets there), after which
+  /// the panel never heard another key. Measured on the Apple TV.
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
     final isRepeat = event is KeyRepeatEvent;
 
@@ -1029,34 +1034,37 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
     final right = key == LogicalKeyboardKey.arrowRight;
     final back =
         key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack;
+    final activate = isActivateKey(key);
+
+    if (!up && !down && !left && !right && !back && !activate) {
+      return KeyEventResult.ignored;
+    }
 
     if (up || down || left || right) {
       if (!_dpadActive) setState(() => _dpadActive = true);
     }
 
     if (back) {
-      if (isRepeat) return;
-      if (!handleHostBack()) {
-        // Key-driven close: the same press bubbles to the player root, which
-        // must not also quit — see TvOverlayBack.
-        TvOverlayBack.mark();
+      // Consumed here, so the press never reaches the player root — no
+      // TvOverlayBack tail needed (marking would swallow the NEXT back).
+      if (!isRepeat && !handleHostBack()) {
         widget.onClose();
       }
-      return;
+      return KeyEventResult.handled;
     }
 
     if (_zone == _Zone.rail) {
       if (up || down) {
         _moveRail(down ? 1 : -1);
-      } else if (right || (!isRepeat && isActivateKey(key))) {
+      } else if (right || (!isRepeat && activate)) {
         _enterSection();
       }
-      return;
+      return KeyEventResult.handled;
     }
 
     // ── values zone ──
     final rows = _rowsFor(_activeSection);
-    if (rows.isEmpty) return;
+    if (rows.isEmpty) return KeyEventResult.handled;
     // Rows can shrink under the focus (an addon settling with fewer
     // subtitles): re-anchor rather than acting on a visually unfocused row.
     if (_valueIndex >= rows.length || !rows[_valueIndex].focusable) {
@@ -1068,7 +1076,7 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
           _valueIndex = first;
         }
       });
-      return; // this press was spent on re-anchoring
+      return KeyEventResult.handled; // this press was spent on re-anchoring
     }
     final row = rows[_valueIndex];
 
@@ -1079,9 +1087,10 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
       fn?.call();
     } else if (left) {
       setState(() => _zone = _Zone.rail);
-    } else if (!isRepeat && isActivateKey(key)) {
+    } else if (!isRepeat && activate) {
       _activateRow(row);
     }
+    return KeyEventResult.handled;
   }
 
   void _moveRail(int delta) {
@@ -1221,7 +1230,7 @@ class PlayerMenuPanelState extends State<PlayerMenuPanel>
             child: SizedBox(
               width: panelWidth,
               height: double.infinity,
-              child: KeyboardListener(
+              child: Focus(
                 focusNode: _keyboardFocusNode,
                 onKeyEvent: _handleKey,
                 child: _buildGlass(

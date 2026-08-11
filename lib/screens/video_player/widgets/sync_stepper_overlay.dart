@@ -82,10 +82,14 @@ class _SyncStepperOverlayState extends State<SyncStepperOverlay> {
     });
   }
 
-  void _handleKey(KeyEvent event) {
+  /// CONSUMES the keys it handles — a KeyboardListener cannot, so every
+  /// arrow press also ran directional focus traversal, which could move
+  /// focus onto the hidden TV bar and kill the stepper (same failure as the
+  /// player menu, measured on the Apple TV).
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent) {
       _heldRepeats = 0;
-      return;
+      return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
     final isRepeat = event is KeyRepeatEvent;
@@ -94,17 +98,22 @@ class _SyncStepperOverlayState extends State<SyncStepperOverlay> {
     }
     if (key == LogicalKeyboardKey.arrowLeft) {
       _nudge(-1, held: isRepeat);
-    } else if (key == LogicalKeyboardKey.arrowRight) {
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
       _nudge(1, held: isRepeat);
-    } else if (!isRepeat &&
-        (key == LogicalKeyboardKey.enter ||
-            key == LogicalKeyboardKey.numpadEnter ||
-            key == LogicalKeyboardKey.select ||
-            key == LogicalKeyboardKey.gameButtonA)) {
-      widget.onOffsetChanged(0);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.gameButtonA) {
+      if (!isRepeat) widget.onOffsetChanged(0);
+      return KeyEventResult.handled;
     }
     // BACK/ESC deliberately not handled: it bubbles to the player root,
     // which hides the overlay (and tvOS Menu comes via PopScope anyway).
+    return KeyEventResult.ignored;
   }
 
   String get _valueLabel {
@@ -127,7 +136,7 @@ class _SyncStepperOverlayState extends State<SyncStepperOverlay> {
       left: 0,
       right: 0,
       bottom: 0,
-      child: KeyboardListener(
+      child: Focus(
         focusNode: _keyboardFocusNode,
         onKeyEvent: _handleKey,
         child: Column(
