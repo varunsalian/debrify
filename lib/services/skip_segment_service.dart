@@ -419,6 +419,26 @@ class TheIntroDbSegmentProvider extends _HttpSkipSegmentProvider {
   }
 }
 
+/// The earliest point a credits marker is believable, as a fraction of the
+/// episode's runtime.
+///
+/// The providers do sometimes return an outro that sits in the middle of the
+/// episode — far enough in that "Skip credits" was appearing halfway through a
+/// watch. Nothing downstream can tell a bad timestamp from a good one, and
+/// acting on one throws the viewer past a chunk of the episode they had not
+/// seen, so a marker that cannot be the credits is dropped at the door rather
+/// than offered and distrusted.
+///
+/// Inclusive: a marker at exactly this fraction is kept — `d * 0.9` rounds back
+/// onto the integer 90% mark for every duration an episode can report, so the
+/// boundary is exact despite 0.9 being unrepresentable.
+///
+/// Must stay in step with `MIN_OUTRO_START_FRACTION` in
+/// android/app/src/main/kotlin/com/debrify/app/tv/SkipDbSegmentClient.kt, which
+/// gates the native TV player. The two read the same providers and must not
+/// disagree about the same episode.
+const double _minOutroStartFraction = 0.9;
+
 SkipSegment? _parseBoundedSegment({
   required Object? value,
   required SkipSegmentType type,
@@ -446,6 +466,13 @@ SkipSegment? _parseBoundedSegment({
       endMs <= startMs ||
       startMs >= durationMs ||
       endMs > durationMs) {
+    return null;
+  }
+
+  // Intros are deliberately not gated: they legitimately begin anywhere in the
+  // opening minutes, and a cold open can push one surprisingly late.
+  if (type == SkipSegmentType.outro &&
+      startMs < durationMs * _minOutroStartFraction) {
     return null;
   }
 

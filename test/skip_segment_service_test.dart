@@ -351,6 +351,118 @@ void main() {
     });
   });
 
+  group('mid-episode credits gate', () {
+    // The providers do return outros that sit in the middle of the episode, and
+    // "Skip credits" was appearing halfway through a watch as a result. A
+    // marker that cannot be the credits must never reach the button, whichever
+    // provider produced it.
+
+    test('drops a SkipDB outro that starts before 90% of the runtime', () async {
+      final provider = SkipDbSegmentProvider(
+        client: MockClient(
+          (_) async => http.Response('''
+            {
+              "segments": {
+                "intro": {"start_ms": 60000, "end_ms": 90000},
+                "outro": {"start_ms": 1800000, "end_ms": 1860000}
+              }
+            }
+          ''', 200),
+        ),
+      );
+
+      // Outro at 50% of a 60-minute episode: in bounds, and nonsense.
+      final result = await provider.fetch(
+        imdbId: 'tt0903747',
+        season: 1,
+        episode: 1,
+        duration: const Duration(seconds: 3600),
+      );
+
+      expect(result.outro, isNull);
+      // The intro is judged on its own merits and survives.
+      expect(result.intro?.start, const Duration(seconds: 60));
+    });
+
+    test('keeps an outro at exactly 90% and drops one just under', () async {
+      Future<SkipSegments> fetchWithOutroStart(int startMs) {
+        return IntroDbSegmentProvider(
+          client: MockClient(
+            (_) async => http.Response('''
+              {
+                "outro": {"start_ms": $startMs, "end_ms": 1000000}
+              }
+            ''', 200),
+          ),
+        ).fetch(
+          imdbId: 'tt0903747',
+          season: 1,
+          episode: 1,
+          duration: const Duration(seconds: 1000),
+        );
+      }
+
+      // The boundary is inclusive, so 90% exactly is a credits marker.
+      expect(
+        (await fetchWithOutroStart(900000)).outro?.start,
+        const Duration(seconds: 900),
+      );
+      expect((await fetchWithOutroStart(899999)).outro, isNull);
+    });
+
+    test('gates TheIntroDB credits, including media-end nulls', () async {
+      final provider = TheIntroDbSegmentProvider(
+        client: MockClient(
+          (_) async => http.Response('''
+            {
+              "intro": [{"start_ms": null, "end_ms": 31000}],
+              "credits": [
+                {"start_ms": 1200000, "end_ms": null},
+                {"start_ms": 3400000, "end_ms": null}
+              ]
+            }
+          ''', 200),
+        ),
+      );
+
+      final result = await provider.fetch(
+        imdbId: 'tt0903747',
+        season: 1,
+        episode: 1,
+        duration: const Duration(seconds: 3500),
+      );
+
+      // A null end means "to the end of the media", which would have made the
+      // 34% marker a skip over two thirds of the episode.
+      expect(result.outros, hasLength(1));
+      expect(result.outro?.start, const Duration(seconds: 3400));
+      expect(result.intro?.end, const Duration(seconds: 31));
+    });
+
+    test('a gated outro leaves nothing to offer mid-episode', () async {
+      final provider = IntroDbSegmentProvider(
+        client: MockClient(
+          (_) async => http.Response('''
+            {
+              "outro": {"start_ms": 1740000, "end_ms": 1800000}
+            }
+          ''', 200),
+        ),
+      );
+
+      final result = await provider.fetch(
+        imdbId: 'tt0903747',
+        season: 1,
+        episode: 1,
+        duration: const Duration(seconds: 3600),
+      );
+
+      // What the player actually asks: is there a segment under the playhead?
+      expect(result.segmentAt(const Duration(seconds: 1750)), isNull);
+      expect(result.outros, isEmpty);
+    });
+  });
+
   test('provider registry exposes and creates every native provider', () {
     expect(SkipSegmentProviders.labels.keys, {
       SkipSegmentProviders.auto,

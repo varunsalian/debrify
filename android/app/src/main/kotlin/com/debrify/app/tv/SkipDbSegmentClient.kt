@@ -261,6 +261,23 @@ private fun parseSegmentArray(
     return result
 }
 
+/**
+ * The earliest point a credits marker is believable, as a fraction of the
+ * episode's runtime.
+ *
+ * The providers do sometimes return an outro that sits in the middle of the
+ * episode — far enough in that "Skip credits" was appearing halfway through a
+ * watch. Nothing downstream can tell a bad timestamp from a good one, and
+ * acting on one throws the viewer past a chunk of the episode they had not
+ * seen, so a marker that cannot be the credits is dropped at the door rather
+ * than offered and distrusted.
+ *
+ * Inclusive: a marker at exactly this fraction is kept. Must stay in step with
+ * `_minOutroStartFraction` in lib/services/skip_segment_service.dart — the two
+ * players read the same providers and must not disagree about the same episode.
+ */
+private const val MIN_OUTRO_START_FRACTION = 0.9
+
 private fun parseBoundedSegment(
     value: JSONObject?,
     type: TvSkipSegmentType,
@@ -285,6 +302,11 @@ private fun parseBoundedSegment(
         else -> return null
     }
     if (startMs < 0L || endMs <= startMs || startMs >= durationMs || endMs > durationMs) {
+        return null
+    }
+    // Intros are deliberately not gated: they legitimately begin anywhere in the
+    // opening minutes, and a cold open can push one surprisingly late.
+    if (type == TvSkipSegmentType.OUTRO && startMs < durationMs * MIN_OUTRO_START_FRACTION) {
         return null
     }
     return TvSkipSegment(type = type, startMs = startMs, endMs = endMs)
