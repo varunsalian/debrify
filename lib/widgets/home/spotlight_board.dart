@@ -6,8 +6,10 @@ import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/debrify_image_cache.dart';
+import '../../theme/app_focus.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
+import '../../theme/widgets/focus_expression.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/dominant_color.dart';
 import '../../utils/platform_util.dart';
@@ -1508,6 +1510,10 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   }
 
   Widget _dots({bool tappable = false}) => Row(
+        // Keyed so the single-page guard is pinnable: the board grew other
+        // AnimatedContainers (the off-parallax focus ring), so "no
+        // AnimatedContainer anywhere" stopped meaning "no dots".
+        key: const ValueKey('spotlight-hero-dots'),
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           for (var i = 0; i < widget.hero.length; i++)
@@ -1897,6 +1903,23 @@ class _CardState extends State<_Card> {
       ),
     );
 
+    // The parallax lift is this card's only cursor, and it is a THEME
+    // expression — under any other look ParallaxFocus returns the art
+    // untouched, so a focused card would be indistinguishable from a resting
+    // one (the Classic-look + Spotlight-layout combination shipped exactly
+    // that). Off-parallax the theme paints the cursor it asked for instead —
+    // CardFocusRise's delegation, from the other side. NOT unconditional
+    // FocusExpressionBox: its parallax arm clips the glare at the theme's
+    // scaled radius, and Spotlight's 0.7 shape scale would shrink the
+    // shipped look's clip from 7 to 4.9.
+    final cursored = app.focus.expression == FocusExpression.parallax
+        ? art
+        : FocusExpressionBox(
+            focused: _f || _h,
+            radius: widget.radius,
+            child: art,
+          );
+
     // Compact: art + a one-line caption below, one Column — the caption is
     // part of the card so the tap target covers both.
     final card = widget.captionBelow
@@ -1904,7 +1927,7 @@ class _CardState extends State<_Card> {
             width: w,
             child: Column(
               children: [
-                art,
+                cursored,
                 SizedBox(
                   height: widget.captionBlock,
                   child: Padding(
@@ -1924,7 +1947,7 @@ class _CardState extends State<_Card> {
               ],
             ),
           )
-        : art;
+        : cursored;
 
     // The gesture layer is UNCONDITIONAL now. It used to hang off the focus
     // wrapper, so a card whose row had run out of focus nodes silently lost

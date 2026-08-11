@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
+import 'package:debrify/theme/widgets/focus_expression.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 
@@ -487,7 +488,62 @@ void main() {
     await tester.pumpWidget(host([a], [_section('Top', [a])]));
     await tester.pumpAndSettle();
     // One page is not a carousel; dots there are chrome that says nothing.
-    expect(find.byType(AnimatedContainer), findsNothing);
+    // By key, not byType(AnimatedContainer): under a non-parallax theme every
+    // card wears a ring cursor that is also an AnimatedContainer.
+    expect(find.byKey(const ValueKey('spotlight-hero-dots')), findsNothing);
+  });
+
+  testWidgets('off-parallax themes still get a cursor on the shelf',
+      (tester) async {
+    final a = _meta('tt1', 'Alpha');
+
+    // Signal expresses focus as a ring. The parallax lift is a THEME
+    // expression — a no-op under every other look — so the board must
+    // delegate to the theme's own cursor or a focused card is
+    // indistinguishable from a resting one (the Classic-look +
+    // Spotlight-layout combination shipped exactly that).
+    final nodes = _rowNodes(1);
+    await tester.pumpWidget(host([a], [_section('Top', [a], nodes: nodes)]));
+    await tester.pumpAndSettle();
+    expect(find.byType(FocusExpressionBox), findsWidgets);
+
+    // And it is WIRED, not just mounted: focusing the cell lights the ring.
+    nodes[0].requestFocus();
+    await tester.pumpAndSettle();
+    final lit = tester
+        .widgetList<AnimatedContainer>(find.descendant(
+          of: find.byType(FocusExpressionBox),
+          matching: find.byType(AnimatedContainer),
+        ))
+        .any((c) {
+      final d = c.foregroundDecoration;
+      final border = d is BoxDecoration ? d.border : null;
+      return border is Border && border.top.color.a > 0;
+    });
+    expect(lit, isTrue,
+        reason: 'the focused card must paint the theme cursor');
+
+    // Under the Spotlight look the lift IS the cursor and the delegate must
+    // stay out of the tree: its parallax arm clips the glare at the theme's
+    // SCALED radius, which is not the shipped geometry.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AppThemeScope(
+          theme: AppThemes.byId('spotlight'),
+          child: Scaffold(
+            body: SpotlightBoard(
+              hero: [a],
+              sections: [_section('Top', [a])],
+              heroNode: hero,
+              heroAddon: _addon,
+              onHeroOpen: (_, __) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(FocusExpressionBox), findsNothing);
   });
 
   testWidgets('the card draws at the poster ratio, not the row viewport\'s',
