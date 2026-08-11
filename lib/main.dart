@@ -818,8 +818,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// never customized.
   List<int>? _phoneNavBarPicks;
 
+  /// The dedicated Search tab's screen index. Named because it is the one
+  /// destination whose presence depends on width rather than on which
+  /// providers are configured — sidebar layouts carry it, phones don't.
+  static const int _kSearchTabIndex = 17;
+
   /// Backfill order when picks are missing/invalid: Discover, IPTV, Cloud,
   /// Downloads, YouTube, Debrify TV, Stremio TV, Calendar, Addons, Settings.
+  /// Deliberately without [_kSearchTabIndex]: the classic bar's three slots
+  /// are all spoken for, and the phone reaches search from the Home board.
   static const List<int> _phoneNavDefaultOrder = [
     18,
     13,
@@ -959,7 +966,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'Home', // 15: the Stremio-style board — now THE Home (old index-0 Home is
     // deprecated). Built on demand in _buildPage as SearchScreen().
     'Cloud', // 16: consolidated cloud-provider hub (RD/Torbox/PikPak/…/WebDAV)
-    'Search', // 17: dedicated search tab (TV only)
+    'Search', // 17: dedicated search tab (TV + sidebar layouts)
     'Discover', // 18: source-dropdown browser (Continue Watching / Trakt / …)
     'Calendar', // 19: Trakt/Simkl calendar (visible when either is connected)
   ];
@@ -2368,9 +2375,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         3,
         9,
       ]; // Search, Home, Discover, Downloads, IPTV, YouTube,
-      // Debrify TV, Stremio TV. The dedicated Search tab (17) is TV-only; on
-      // desktop/mobile
-      // the Home-New board (15) keeps its own persistent search bar.
+      // Debrify TV, Stremio TV. The dedicated Search tab (17) is no longer
+      // TV-only — every non-TV layout WIDE enough for a sidebar carries it
+      // too (see the phone gate where nonTvIndices is built). The Home board
+      // (15) keeps its own persistent search bar regardless; the tab is an
+      // additional way in, not a replacement.
       // Consolidated Cloud tab: one entry when ANY provider is enabled & not
       // hidden (replaces the former per-provider RD/Torbox/PikPak/Premiumize/
       // AllDebrid/WebDAV tabs). The in-tab hub lists the available providers.
@@ -2402,6 +2411,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final adHidden = allDebridHidden ?? _allDebridHiddenFromNav;
     if (!rd && !tb && !pikpak && !webDav && !premiumize && !allDebrid) {
       final indices = <int>[
+        17,
         15,
         18,
         13,
@@ -2409,12 +2419,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         9,
         7,
         8,
-      ]; // Home, Discover, IPTV, YouTube, Stremio TV, Addons, Settings
+      ]; // Search, Home, Discover, IPTV, YouTube, Stremio TV, Addons, Settings
       _insertTraktCalendarTab(indices, calendar);
       return indices;
     }
 
-    final indices = <int>[15, 18, 2, 13, 14, 3, 9];
+    final indices = <int>[17, 15, 18, 2, 13, 14, 3, 9];
     // Consolidated Cloud tab (see TV branch above): one entry when any provider
     // is enabled & not hidden.
     if ((rd && !rdHidden) ||
@@ -2435,7 +2445,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// into [_pages]/[_titles], not the visible-nav position).
   String _navSectionForIndex(int screenIndex) {
     switch (screenIndex) {
-      case 17: // Search (TV only)
+      case 17: // Search (TV + sidebar layouts)
       case 15: // Home New (board)
       case 18: // Discover
       case 0: // Home
@@ -2540,7 +2550,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return SearchScreen(isTelevision: _isAndroidTv);
       case 16: // Cloud (consolidated provider hub)
         return CloudScreen(isTelevision: _isAndroidTv);
-      case 17: // Search (dedicated tab — TV only)
+      case 17: // Search (dedicated tab — TV + sidebar layouts)
         return SearchScreen(isTelevision: _isAndroidTv, searchMode: true);
       case 18: // Discover (source-dropdown browser)
         return SearchScreen(isTelevision: _isAndroidTv, discoverMode: true);
@@ -3062,7 +3072,38 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                 // of the same Stack/SafeArea chain at every non-TV width.
                 final isDesktopWide =
                     !_isAndroidTv && constraints.maxWidth >= 600;
-                final nonTvIndices = _sidebarOrderedIndices(visibleIndices);
+                // The Search tab rides the sidebar, so it appears wherever a
+                // sidebar does — desktop AND touch tablets. A phone stays out:
+                // its bottom bar holds three slots beside Home, all already
+                // spoken for, and the Home board's own search bar is the way
+                // in there.
+                //
+                // Width alone cannot express that. A phone in landscape clears
+                // 600 comfortably (a Pro Max is 844 wide), so gating on width
+                // would hand Search to the one device meant to skip it, and
+                // rotating back to portrait would stand the tab down while it
+                // was still the selected page — nav highlighting Home over a
+                // Search screen. shortestSide is orientation-independent, the
+                // standard tablet test, so a phone is excluded in EITHER
+                // orientation and every iPad and Android tablet qualifies.
+                // Desktop is judged by the window instead: it has no fixed
+                // shortest side, and a short wide window is still a desktop.
+                //
+                // Filtering here rather than in `_computeVisibleNavIndices` is
+                // deliberate — that list is what `_onItemTapped` validates
+                // against, so dropping 17 from it would make the tab
+                // unreachable by any route, not merely absent from the rail.
+                final isPhone =
+                    !kIsWeb &&
+                    (Platform.isAndroid || Platform.isIOS) &&
+                    !PlatformUtil.isTelevision &&
+                    MediaQuery.of(context).size.shortestSide < 600;
+                final nonTvIndices = _sidebarOrderedIndices(visibleIndices)
+                    .where(
+                      (i) =>
+                          (isDesktopWide && !isPhone) || i != _kSearchTabIndex,
+                    )
+                    .toList();
                 final nonTvSelected = nonTvIndices.indexOf(_selectedIndex);
                 // Touch tablets (iPad / Android tablet in landscape) get the
                 // wider rail. True desktop keeps the slim rail.

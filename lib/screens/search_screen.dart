@@ -12241,7 +12241,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         //    the status-bar region, so SafeArea's top inset is the shell's to
         //    manage.
         //  • Home-New board on desktop/mobile classic — keeps a persistent
-        //    search bar above the board (no separate Search tab there).
+        //    search bar above the board; the separate Search tab is an
+        //    additional way in on TV and sidebar layouts, not a replacement.
         child: widget.discoverMode
             ? SafeArea(child: _buildDiscover())
             : (widget.isTelevision && !widget.searchMode)
