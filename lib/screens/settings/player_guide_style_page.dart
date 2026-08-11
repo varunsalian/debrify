@@ -4,6 +4,7 @@ import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// One selectable in-player guide look.
 class PlayerGuideStyleChoice {
@@ -30,6 +31,19 @@ const List<PlayerGuideStyleChoice> kPlayerGuideStyleChoices = [
     'Master Control',
     'Black instrument — mono numerals, amber machinery',
   ),
+  PlayerGuideStyleChoice(
+    'spotlight',
+    'Spotlight',
+    'Full-bleed black glass, white-pill focus — the tvOS idiom',
+  ),
+];
+
+/// The choices this device can actually render. Spotlight exists only in
+/// the Dart player — the native Android TV player's GuideStyle falls back
+/// to Classic for it, so offering it there would be a lie.
+List<PlayerGuideStyleChoice> playerGuideStyleChoicesForPlatform() => [
+  for (final c in kPlayerGuideStyleChoices)
+    if (c.value != 'spotlight' || !PlatformUtil.isAndroidTvCached) c,
 ];
 
 /// Row caption for the current choice (Appearance row subtitle).
@@ -106,6 +120,7 @@ class _PlayerGuideStylePageState extends State<PlayerGuideStylePage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Player Guide',
@@ -138,7 +153,8 @@ class _PlayerGuideStylePageState extends State<PlayerGuideStylePage> {
                   child: SettingsSection(
                     title: '',
                     children: [
-                      for (final choice in kPlayerGuideStyleChoices)
+                      for (final choice
+                          in playerGuideStyleChoicesForPlatform())
                         _optionRow(choice),
                     ],
                   ),
@@ -150,7 +166,7 @@ class _PlayerGuideStylePageState extends State<PlayerGuideStylePage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ],
@@ -164,6 +180,7 @@ class _PlayerGuideStylePageState extends State<PlayerGuideStylePage> {
   /// Radio-style row — a plain [SettingsTile] (the DPAD-proven row) with a
   /// check on the active one.
   Widget _optionRow(PlayerGuideStyleChoice choice) {
+    final t = AppThemeScope.of(context).settings;
     final bool active = _style == choice.value;
     return SettingsTile(
       icon: active
@@ -172,7 +189,7 @@ class _PlayerGuideStylePageState extends State<PlayerGuideStylePage> {
       title: choice.label,
       subtitle: choice.subtitle,
       trailing: active
-          ? const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2)
+          ? Icon(Icons.check_rounded, size: 20, color: t.accent2)
           : const SizedBox.shrink(),
       onTap: () => _select(choice.value),
     );

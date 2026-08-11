@@ -1,0 +1,793 @@
+<title>Five Ways Home — Debrify TV layout concepts</title>
+<style>
+  :root{
+    --ink:#0B0912;
+    --panel:#131020;
+    --hair:rgba(167,139,250,.16);
+    --hair2:rgba(255,255,255,.07);
+    --tx:#EAE7F3;
+    --dim:#9A93B0;
+    --dimmer:#6E6785;
+    --acc:#A78BFA;
+    --gold:#F5C518;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --serif:"Iowan Old Style","Hoefler Text",Georgia,"Times New Roman",serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --ink:#E9E7EF; --panel:#FBFAFD; --hair:rgba(88,60,190,.20); --hair2:rgba(20,17,30,.10);
+           --tx:#17141F; --dim:#59526B; --dimmer:#8B849C; --acc:#5B3BD4; }
+  }
+  :root[data-theme="dark"]{ --ink:#0B0912; --panel:#131020; --hair:rgba(167,139,250,.16); --hair2:rgba(255,255,255,.07);
+           --tx:#EAE7F3; --dim:#9A93B0; --dimmer:#6E6785; --acc:#A78BFA; }
+  :root[data-theme="light"]{ --ink:#E9E7EF; --panel:#FBFAFD; --hair:rgba(88,60,190,.20); --hair2:rgba(20,17,30,.10);
+           --tx:#17141F; --dim:#59526B; --dimmer:#8B849C; --acc:#5B3BD4; }
+
+  body{ margin:0; background:var(--ink); color:var(--tx); font-family:var(--sans);
+        -webkit-font-smoothing:antialiased; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 28px 120px; }
+
+  /* ── masthead ─────────────────────────────────────────────── */
+  .top{ position:sticky; top:0; z-index:60; background:color-mix(in srgb, var(--ink) 88%, transparent);
+        border-bottom:1px solid var(--hair2); backdrop-filter:blur(14px); }
+  .topin{ max-width:1180px; margin:0 auto; padding:11px 28px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .brandmark{ font:600 12px/1 var(--mono); letter-spacing:.16em; color:var(--acc); text-transform:uppercase; }
+  .jump{ display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; }
+  .jump a{ font:600 11.5px/1 var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--dim);
+           text-decoration:none; padding:6px 9px; border-radius:6px; border:1px solid transparent; }
+  .jump a:hover,.jump a:focus-visible{ color:var(--tx); border-color:var(--hair); outline:none; }
+  .demotog{ font:600 11.5px/1 var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--dim);
+            background:none; border:1px solid var(--hair); border-radius:6px; padding:6px 10px; cursor:pointer; }
+  .demotog[aria-pressed="true"]{ color:var(--acc); border-color:var(--acc); }
+
+  header.lede{ padding:76px 0 46px; max-width:760px; }
+  .eyebrow{ font:600 11.5px/1 var(--mono); letter-spacing:.2em; text-transform:uppercase; color:var(--dimmer); }
+  h1{ font:400 clamp(40px,6.4vw,68px)/1.02 var(--serif); letter-spacing:-.02em; margin:20px 0 0; text-wrap:balance; }
+  h1 em{ font-style:italic; color:var(--acc); }
+  .lede p{ font:400 17px/1.62 var(--sans); color:var(--dim); margin:22px 0 0; max-width:62ch; }
+  .lede p b{ color:var(--tx); font-weight:600; }
+
+  .rulebox{ margin-top:34px; border:1px solid var(--hair); border-radius:10px; padding:16px 18px;
+            display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px 26px; }
+  .rulebox div{ font:400 13px/1.5 var(--sans); color:var(--dim); }
+  .rulebox b{ display:block; font:600 10.5px/1 var(--mono); letter-spacing:.14em; text-transform:uppercase;
+              color:var(--dimmer); margin-bottom:6px; }
+
+  /* ── concept chapter ──────────────────────────────────────── */
+  section.concept{ padding-top:74px; scroll-margin-top:64px; }
+  .chead{ display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; margin-bottom:6px; }
+  .cnum{ font:600 11.5px/1 var(--mono); letter-spacing:.18em; color:var(--acc); }
+  .cname{ font:700 30px/1.1 var(--sans); letter-spacing:-.015em; margin:0; }
+  .ctag{ font:600 10.5px/1 var(--mono); letter-spacing:.12em; text-transform:uppercase; color:var(--dimmer);
+         border:1px solid var(--hair2); border-radius:99px; padding:5px 9px; }
+  .cpitch{ font:400 19px/1.5 var(--serif); color:var(--dim); margin:0 0 22px; max-width:60ch; font-style:italic; }
+
+  /* the TV frame */
+  .frame{ position:relative; width:100%; aspect-ratio:16/9; border-radius:12px; overflow:hidden;
+          background:#0D0B1A; border:1px solid var(--hair2); cursor:pointer;
+          box-shadow:0 30px 70px -30px rgba(0,0,0,.85), 0 0 0 1px rgba(255,255,255,.02) inset; }
+  .frame:focus-visible{ outline:2px solid var(--acc); outline-offset:3px; }
+  .frame.live{ border-color:color-mix(in srgb,var(--acc) 55%, transparent); }
+  .stage{ position:absolute; top:0; left:0; width:1920px; height:1080px; transform-origin:top left;
+          background:#0D0B1A; color:#fff; overflow:hidden;
+          font-family:Roboto,system-ui,-apple-system,sans-serif; }
+  .livebadge{ position:absolute; z-index:80; right:12px; bottom:12px; font:600 10px/1 var(--mono); letter-spacing:.12em;
+              text-transform:uppercase; color:#0B0912; background:var(--acc); border-radius:5px; padding:5px 8px;
+              opacity:0; transition:opacity .18s; pointer-events:none; }
+  .frame.live .livebadge{ opacity:1; }
+  .keyhint{ margin:10px 0 0; font:500 12px/1.5 var(--mono); color:var(--dimmer); letter-spacing:.02em; }
+  .keyhint kbd{ font:inherit; color:var(--dim); border:1px solid var(--hair2); border-radius:4px; padding:1px 5px; }
+
+  /* spec strip */
+  .specs{ margin-top:26px; display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:0;
+          border:1px solid var(--hair2); border-radius:10px; overflow:hidden; }
+  .spec{ padding:18px 20px; border-right:1px solid var(--hair2); }
+  .spec:last-child{ border-right:none; }
+  .spec h4{ font:600 10.5px/1 var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--acc);
+            margin:0 0 9px; }
+  .spec p{ font:400 13.5px/1.58 var(--sans); color:var(--dim); margin:0; }
+  .spec p+p{ margin-top:8px; }
+  .spec code{ font:500 12px/1.4 var(--mono); color:var(--tx); background:var(--hair2); padding:1px 4px; border-radius:3px; }
+  .costline{ margin-top:14px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+             font:500 12px/1 var(--mono); color:var(--dimmer); letter-spacing:.04em; }
+  .pill{ border:1px solid var(--hair2); border-radius:99px; padding:6px 10px; color:var(--dim); }
+  .pill.warn{ border-color:color-mix(in srgb,#F59E0B 40%,transparent); color:#F59E0B; }
+  .pill.good{ border-color:color-mix(in srgb,#34D399 38%,transparent); color:#34D399; }
+
+  /* closing table */
+  .cmp{ width:100%; border-collapse:collapse; margin-top:26px; font-size:13.5px; }
+  .cmp th,.cmp td{ text-align:left; padding:13px 14px; border-bottom:1px solid var(--hair2); vertical-align:top; }
+  .cmp th{ font:600 10.5px/1 var(--mono); letter-spacing:.13em; text-transform:uppercase; color:var(--dimmer); }
+  .cmp td{ color:var(--dim); }
+  .cmp td:first-child{ color:var(--tx); font-weight:600; white-space:nowrap; }
+  .tblwrap{ overflow-x:auto; }
+  h2.sec{ font:400 34px/1.1 var(--serif); letter-spacing:-.01em; margin:0 0 10px; }
+  section.close{ padding-top:86px; }
+  .close p{ font:400 15.5px/1.65 var(--sans); color:var(--dim); max-width:64ch; }
+  .close p b{ color:var(--tx); font-weight:600; }
+
+  @media (prefers-reduced-motion: reduce){ .stage *{ transition:none !important; animation:none !important; } }
+
+  /* ══ TV STAGE INTERNALS (always dark — these are screens) ══ */
+  .stage img{ display:block; }
+  .ghost{ position:absolute; left:0; top:0; bottom:0; width:116px; z-index:40;
+          background:linear-gradient(90deg, rgba(11,9,20,.94) 0%, rgba(11,9,20,.62) 55%, rgba(11,9,20,0) 100%);
+          display:flex; flex-direction:column; align-items:center; padding:34px 0; gap:0; }
+  .ghost .g-logo{ margin-bottom:52px; opacity:.95; }
+  .ghost .g-ic{ width:52px; height:52px; display:grid; place-items:center; margin:16px 0; opacity:.42; }
+  .ghost .g-ic.on{ opacity:1; background:#fff; border-radius:99px; }
+  .ghost .g-ic.on svg{ stroke:#12101F; }
+  .ghost .g-sp{ flex:1; }
+  .g-ic svg{ width:26px; height:26px; fill:none; stroke:#fff; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+
+  .art{ position:absolute; background-size:cover; background-position:center 22%; }
+  .fade{ transition:opacity .26s ease; }
+
+  .imdb{ color:#F5C518; font-weight:800; }
+  .metaline{ font-size:25px; font-weight:600; letter-spacing:.2px; color:rgba(255,255,255,.72); white-space:nowrap; }
+  .metaline2{ font-size:23px; font-weight:600; letter-spacing:.2px; color:rgba(255,255,255,.74); }
+  .metaline .sep,.metaline2 .sep{ color:rgba(255,255,255,.28); padding:0 12px; }
+  .metaline2 .gen{ margin-top:10px; color:rgba(255,255,255,.46); font-weight:600; }
+  .syn{ font-size:25px; line-height:1.5; font-weight:500; color:rgba(255,255,255,.78);
+        text-shadow:0 1px 3px rgba(0,0,0,.75); }
+  /* `img.` (not `.`) so this outranks `.cell img`'s cover-fill — the Tonight
+     card's logo lives inside a .cell and was being cropped by it. */
+  /* `.stage img.logoimg` outranks the later `.cell img` cover-fill — the
+     Tonight card's logo lives inside a .cell and was being cropped by it. */
+  .stage img.logoimg{ width:auto; height:auto; max-height:112px; max-width:600px;
+                      object-fit:contain; object-position:left bottom; }
+  .logoimg.md{ max-height:88px; max-width:480px; }
+  .logoimg.sm{ max-height:64px; max-width:400px; }
+  .namefb{ font-size:52px; font-weight:800; letter-spacing:-1px; line-height:1.04; }
+  .namefb.md{ font-size:42px; }
+  .namefb.sm{ font-size:32px; }
+  .rlabel{ font-size:22px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:rgba(255,255,255,.86); }
+  .rlabel.off{ color:rgba(255,255,255,.34); font-weight:700; }
+
+  .cell{ position:relative; border-radius:8px; overflow:hidden; background:#171426;
+         box-shadow:0 8px 22px -10px rgba(0,0,0,.9);
+         transition:transform .13s cubic-bezier(.22,.61,.36,1), box-shadow .13s, opacity .18s; will-change:transform; }
+  .cell img{ width:100%; height:100%; object-fit:cover; }
+  .cell.on{ transform:scale(1.055); box-shadow:0 16px 34px -12px rgba(0,0,0,.95); }
+  .cell.on::after{ content:""; position:absolute; inset:0; border-radius:8px; border:4px solid #fff; }
+  .cell.violet.on::after{ border-color:#A78BFA; }
+  .track{ display:flex; transition:transform .18s cubic-bezier(.22,.61,.36,1); will-change:transform; }
+  .prog{ position:absolute; left:0; right:0; bottom:0; height:7px; background:rgba(255,255,255,.22); }
+  .prog i{ display:block; height:100%; background:#fff; }
+  .epbadge{ position:absolute; left:10px; bottom:20px; font-size:19px; font-weight:800; color:#fff;
+            background:rgba(10,8,18,.78); border-radius:5px; padding:5px 9px; letter-spacing:.02em; }
+  .trailerpill{ position:absolute; right:44px; top:38px; z-index:30; display:flex; align-items:center; gap:12px;
+                background:rgba(12,10,22,.72); border:1px solid rgba(255,255,255,.13); border-radius:99px;
+                padding:12px 22px; font-size:21px; font-weight:800; letter-spacing:.14em; color:#fff; }
+  .eqbar{ display:flex; align-items:flex-end; gap:3px; height:18px; }
+  .eqbar i{ width:4px; background:#FBBF24; border-radius:1px; }
+  .hintchip{ display:inline-flex; align-items:center; gap:10px; border:1px solid rgba(255,255,255,.16);
+             border-radius:99px; padding:10px 18px; font-size:20px; font-weight:700; color:rgba(255,255,255,.8); }
+  .hintchip b{ background:rgba(255,255,255,.9); color:#12101F; border-radius:5px; padding:3px 8px; font-size:17px; }
+</style>
+
+<div class="top"><div class="topin">
+  <span class="brandmark">Debrify · Android TV</span>
+  <nav class="jump">
+    <a href="#c1">I Atrium</a><a href="#c2">II Mosaic</a><a href="#c3">III Promenade</a>
+    <a href="#c4">IV Deck</a><a href="#c5">V Tonight</a><a href="#pick">Compare</a>
+    <button class="demotog" id="demotog" aria-pressed="true">Auto-demo</button>
+  </nav>
+</div></div>
+
+<div class="wrap">
+
+<header class="lede">
+  <div class="eyebrow">Home screen · five concepts</div>
+  <h1>Five ways <em>home</em></h1>
+  <p>Canvas is the shipping default — full-bleed art, one shelf, rail tabs. These five are alternatives
+     that sit beside it in <b>Settings → Home Layout</b>, not replacements. Every one is drawn at true TV
+     scale (1920×1080, which is 2× the app's logical pixels), uses the same 64px ghost rail, and is
+     built only from parts the app already has: the underlay trailer engine, the poster cells, the rails,
+     the logo-first identity block.</p>
+  <p><b>They're live.</b> Click a screen, then drive it with the arrow keys — the focus model is the
+     design. A layout that can't be navigated on a remote isn't a layout.</p>
+
+  <div class="rulebox">
+    <div><b>Smoothness budget</b>Transform and opacity only. No blur, no full-screen gradient tweens, no
+      saveLayer over the video hole — the rules the current home already lives by.</div>
+    <div><b>What can move</b>Card rise, rail glide, art cross-dissolve, identity fade. Everything else snaps.</div>
+    <div><b>What each costs</b>Called out per concept, in the same terms as the perf playbook: repaint area,
+      image decodes, and whether the trailer region changes shape.</div>
+  </div>
+</header>
+
+<!-- ══════════════════ I · ATRIUM ══════════════════ -->
+<section class="concept" id="c1">
+  <div class="chead">
+    <span class="cnum">I</span><h3 class="cname">Atrium</h3>
+    <span class="ctag">Vertical split · dossier + wall</span>
+  </div>
+  <p class="cpitch">The screen breaks the way a magazine spread breaks: type on one side, picture on the other.</p>
+  <div class="frame" id="f1" tabindex="0"><div class="stage" id="s1"></div><span class="livebadge">Live · arrows</span></div>
+  <p class="keyhint"><kbd>←</kbd><kbd>→</kbd> along a row · <kbd>↑</kbd><kbd>↓</kbd> between the two rows</p>
+  <div class="specs">
+    <div class="spec"><h4>Shape</h4><p>A hard vertical cut at 38%. Left is a flat ink column that never takes
+      focus — logo, IMDb, meta, four lines of synopsis, and the key hints. Right is art, full height, with a
+      two-row poster wall sitting on its lower half.</p></div>
+    <div class="spec"><h4>Motion</h4><p>Focus only ever lives in the wall. The art cross-dissolves at 260ms;
+      the dossier re-sets — logo swaps, meta and synopsis fade at 180ms. The seam gets one feather so the
+      cut reads as deliberate.</p></div>
+    <div class="spec"><h4>Cost</h4><p>The left third is a <code>ColoredBox</code>: no gradient, no tween,
+      zero repaint while you scrub. The trailer region is a fixed rect that never changes shape, so
+      start/stop has nothing to animate.</p></div>
+  </div>
+  <div class="costline"><span class="pill good">Cheapest identity block</span><span class="pill">Reuses: boxed
+    <code>_HeroTrailerLayer</code>, <code>_ArtPoster</code>, rails</span><span class="pill warn">Two rows = shorter art</span></div>
+</section>
+
+<!-- ══════════════════ II · MOSAIC ══════════════════ -->
+<section class="concept" id="c2">
+  <div class="chead">
+    <span class="cnum">II</span><h3 class="cname">Mosaic</h3>
+    <span class="ctag">Grid · no hero</span>
+  </div>
+  <p class="cpitch">For the night you don't want to be told what to watch — you want to see everything you own.</p>
+  <div class="frame" id="f2" tabindex="0"><div class="stage" id="s2"></div><span class="livebadge">Live · arrows</span></div>
+  <p class="keyhint"><kbd>←</kbd><kbd>→</kbd> across · <kbd>↑</kbd><kbd>↓</kbd> down the wall — the header is the only identity</p>
+  <div class="specs">
+    <div class="spec"><h4>Shape</h4><p>No hero at all. Seven posters across, rows running off the bottom edge,
+      on a heavily darkened wash of whatever has focus. Identity moves to a fixed top band; category tabs
+      sit opposite it.</p></div>
+    <div class="spec"><h4>Motion</h4><p>The card rises 1.055 with a white ring — the existing
+      <code>_CardFocusRise</code>, untouched. The wash <em>snaps</em> rather than tweens, the house rule for
+      full-screen layers. Rows glide at 140ms.</p></div>
+    <div class="spec"><h4>Cost</h4><p>The lightest of the five: one image, one flat veil, one
+      <code>GridView</code>. No trailer engine on the board — an optional 2s-dwell trailer can drop into the
+      top-right inset later.</p></div>
+  </div>
+  <div class="costline"><span class="pill good">Lowest GPU cost</span><span class="pill">Best for many catalogs</span><span class="pill warn">Browses, doesn't sit back</span></div>
+</section>
+
+<!-- ══════════════════ III · PROMENADE ══════════════════ -->
+<section class="concept" id="c3">
+  <div class="chead">
+    <span class="cnum">III</span><h3 class="cname">Promenade</h3>
+    <span class="ctag">Centre-locked strip</span>
+  </div>
+  <p class="cpitch">One title, dead centre, always. The strip travels — the focus never does.</p>
+  <div class="frame" id="f3" tabindex="0"><div class="stage" id="s3"></div><span class="livebadge">Live · arrows</span></div>
+  <p class="keyhint"><kbd>←</kbd><kbd>→</kbd> pull the strip through the centre · <kbd>↑</kbd><kbd>↓</kbd> change rail</p>
+  <div class="specs">
+    <div class="spec"><h4>Shape</h4><p>Full-bleed art like Canvas, but the composition is symmetric: logo and
+      meta centred in the lower third, and a strip of 16:9 stills below where the focused card is pinned to
+      the middle of the screen.</p></div>
+    <div class="spec"><h4>Motion</h4><p>Neighbours rest at 0.86 scale and 55% opacity, so the centre reads as
+      lit. Moving is one transform on the track. Rail changes announce themselves in a centred eyebrow with
+      chevrons.</p></div>
+    <div class="spec"><h4>Cost</h4><p>Free, essentially: rails already scroll with
+      <code>alignment: 0.5</code>, so centre-lock is the behaviour we <em>already ship</em> — this concept
+      just commits to it visually. Track moves by transform; no layout pass.</p></div>
+  </div>
+  <div class="costline"><span class="pill good">Calmest of the five</span><span class="pill">Reuses Canvas wholesale</span><span class="pill warn">Wants 16:9 stills; falls back to posters</span></div>
+</section>
+
+<!-- ══════════════════ IV · DECK ══════════════════ -->
+<section class="concept" id="c4">
+  <div class="chead">
+    <span class="cnum">IV</span><h3 class="cname">Deck</h3>
+    <span class="ctag">Object on a stage</span>
+  </div>
+  <p class="cpitch">The trailer stops being the wallpaper and becomes a thing sitting on the table.</p>
+  <div class="frame" id="f4" tabindex="0"><div class="stage" id="s4"></div><span class="livebadge">Live · arrows</span></div>
+  <p class="keyhint"><kbd>←</kbd><kbd>→</kbd> deal the next card forward</p>
+  <div class="specs">
+    <div class="spec"><h4>Shape</h4><p>Deep ink ground. The hero is a rounded 16:9 card floating right of
+      centre with the next two titles stacked behind it; identity stands to its left; one compact rail runs
+      along the bottom.</p></div>
+    <div class="spec"><h4>Motion</h4><p>Moving right <em>deals</em>: the stack slides left and the next card
+      lands in the slot at 260ms, transform and opacity only. The peek cards are static art — never a second
+      video.</p></div>
+    <div class="spec"><h4>Cost</h4><p>The punch hole follows the card's laid-out rect, which Canvas already
+      proved needs no native work. Rounded corners are four ink wedges painted <em>above</em> the hole — plain
+      paint over the hole is the proven pattern; only <code>Opacity</code> is banned.</p></div>
+  </div>
+  <div class="costline"><span class="pill">Boldest departure</span><span class="pill">Reuses <code>_CanvasIdentity</code> unchanged</span><span class="pill warn">One new corner painter</span></div>
+</section>
+
+<!-- ══════════════════ V · TONIGHT ══════════════════ -->
+<section class="concept" id="c5">
+  <div class="chead">
+    <span class="cnum">V</span><h3 class="cname">Tonight</h3>
+    <span class="ctag">Resume-first dashboard</span>
+  </div>
+  <p class="cpitch">It answers "what do I press play on" before you've finished asking.</p>
+  <div class="frame" id="f5" tabindex="0"><div class="stage" id="s5"></div><span class="livebadge">Live · arrows</span></div>
+  <p class="keyhint"><kbd>→</kbd> into Up Next · <kbd>↑</kbd><kbd>↓</kbd> through the queue · <kbd>↓</kbd> to the rail</p>
+  <div class="specs">
+    <div class="spec"><h4>Shape</h4><p>Three zones. A large 16:9 resume card carrying the show logo, episode,
+      progress and time left; a vertical Up Next queue beside it; one rail underneath for everything that
+      isn't already started.</p></div>
+    <div class="spec"><h4>Motion</h4><p>Crossing zones is a 140ms glide. Taking focus in the queue swaps the
+      big card's art — the only image change on screen, so the frame stays quiet while you read.</p></div>
+    <div class="spec"><h4>Cost</h4><p>No full-bleed art anywhere: a flat ground and one image rect. After
+      Mosaic, the lightest thing here — and the only one whose cost doesn't grow with catalogue size.</p></div>
+  </div>
+  <div class="costline"><span class="pill good">Most useful daily</span><span class="pill">Reuses CW rows + boxed trailer</span><span class="pill warn">Needs a real Continue Watching list</span></div>
+</section>
+
+<!-- ══════════════════ COMPARE ══════════════════ -->
+<section class="close" id="pick">
+  <h2 class="sec">Which one, and why</h2>
+  <p>All five are additive: a new value in <code>tv_home_style</code>, a new branch in the board build,
+     nothing removed. Canvas stays the default until you say otherwise.</p>
+  <div class="tblwrap"><table class="cmp">
+    <thead><tr><th>Concept</th><th>Reads as</th><th>Trailer region</th><th>New code</th><th>Best when</th></tr></thead>
+    <tbody>
+      <tr><td>I Atrium</td><td>Editorial, composed</td><td>Fixed right rect</td><td>Low — split scaffold + vertical identity</td><td>You want the synopsis to matter again</td></tr>
+      <tr><td>II Mosaic</td><td>A well-run store</td><td>None (optional inset)</td><td>Low — grid board, no hero</td><td>Many catalogs, you know what you want</td></tr>
+      <tr><td>III Promenade</td><td>Cinema marquee</td><td>Full-bleed, as today</td><td>Lowest — Canvas with a centred strip</td><td>You liked Canvas and want it calmer</td></tr>
+      <tr><td>IV Deck</td><td>Premium hardware</td><td>Card rect (follows widget)</td><td>Medium — deal animation + corner painter</td><td>You want the boldest visual change</td></tr>
+      <tr><td>V Tonight</td><td>A concierge</td><td>Card rect, optional</td><td>Medium — 2D zones, vertical queue</td><td>You mostly resume, rarely browse</td></tr>
+    </tbody>
+  </table></div>
+  <p style="margin-top:26px"><b>My pick to build first: III Promenade, then II Mosaic.</b> Promenade is
+    nearly free — it inherits Canvas's whole engine and its centre-lock is behaviour we already ship — so it
+    lands as a genuinely different feel for very little risk. Mosaic is the one that <em>complements</em>
+    rather than competes: it's the browse mode Canvas can't be, and it's the cheapest thing on the list to
+    run on the Mi Box. <b>Atrium</b> is the one I'd build if you want the most obviously "designed" screen,
+    and <b>Deck</b> is the showpiece — most expensive, most likely to be the screenshot people share.</p>
+</section>
+
+</div>
+
+<script>
+const IMG = __IMG_MAP__;
+
+/* ── content ─────────────────────────────────────────────────── */
+const T = [
+  {id:'tt3581920',  n:'The Last of Us',   t:'SERIES', y:'2023–', rt:'60 min', g:'Drama · Action',     r:'8.6',
+   s:'Twenty years after a fungal outbreak, a hardened survivor is hired to smuggle a fourteen-year-old girl out of a quarantine zone.', ep:'S1 · E5', pr:.71, sub:'Endure and Survive'},
+  {id:'tt14452776', n:'The Bear',         t:'SERIES', y:'2022–', rt:'30 min', g:'Comedy · Drama',     r:'8.6',
+   s:'A young chef from the fine-dining world returns to Chicago to run his family’s chaotic sandwich shop.', ep:'S3 · E7', pr:.34, sub:'Legacy'},
+  {id:'tt9253284',  n:'Andor',            t:'SERIES', y:'2022–', rt:'45 min', g:'Sci-Fi · Drama',     r:'8.4',
+   s:'Cassian Andor’s reluctant journey to becoming a rebel, in an era of danger, deception and intrigue under the Empire.', ep:'S2 · E1', pr:.18, sub:'Sagrona Teema'},
+  {id:'tt5753856',  n:'Dark',             t:'SERIES', y:'2017–2020',rt:'60 min',g:'Mystery · Sci-Fi', r:'8.7',
+   s:'A family saga with a supernatural twist, set in a German town where the disappearance of two children exposes the fractured relationships of four families.', ep:'S3 · E5', pr:.47, sub:'Das Paradies'},
+  {id:'tt15239678', n:'Dune: Part Two',   t:'MOVIE',  y:'2024',  rt:'166 min',g:'Sci-Fi · Adventure', r:'8.5',
+   s:'Paul Atreides unites with Chani and the Fremen while seeking revenge against the conspirators who destroyed his family.', ep:null, pr:0},
+  {id:'tt12637874', n:'Fallout',          t:'SERIES', y:'2024–', rt:'60 min', g:'Sci-Fi · Adventure', r:'8.4',
+   s:'In a future ravaged by nuclear war, a naive vault dweller ventures onto the surface and finds a violent, bizarre world.', ep:null, pr:0},
+  {id:'tt11126994', n:'Arcane',           t:'SERIES', y:'2021–', rt:'41 min', g:'Animation · Action', r:'9.0',
+   s:'Amid the unrest between utopian Piltover and the oppressed undercity of Zaun, two sisters fight on opposite sides of a war.', ep:null, pr:0},
+  {id:'tt1856101',  n:'Blade Runner 2049',t:'MOVIE',  y:'2017',  rt:'164 min',g:'Sci-Fi · Drama',     r:'8.0',
+   s:'A young blade runner uncovers a secret that could plunge what is left of society into chaos, and goes looking for a man missing thirty years.', ep:null, pr:0},
+  {id:'tt11198330', n:'House of the Dragon',t:'SERIES',y:'2022–',rt:'60 min', g:'Fantasy · Drama',    r:'8.3',
+   s:'An internal succession war within House Targaryen at the height of its power, two hundred years before the Iron Throne is lost.', ep:null, pr:0},
+  {id:'tt1877830',  n:'The Batman',       t:'MOVIE',  y:'2022',  rt:'176 min',g:'Action · Crime',     r:'7.8',
+   s:'When a sadistic killer leaves a trail of cryptic clues, Batman must forge new relationships and unmask the culprit.', ep:null, pr:0},
+  {id:'tt0903747',  n:'Breaking Bad',     t:'SERIES', y:'2008–2013',rt:'47 min',g:'Crime · Drama',    r:'9.5',
+   s:'A high-school chemistry teacher diagnosed with terminal cancer turns to making and selling methamphetamine to secure his family’s future.', ep:null, pr:0},
+  {id:'tt0816692',  n:'Interstellar',     t:'MOVIE',  y:'2014',  rt:'169 min',g:'Sci-Fi · Drama',     r:'8.7',
+   s:'A team of explorers travel through a wormhole in space in an attempt to ensure humanity’s survival.', ep:null, pr:0},
+  {id:'tt7660850',  n:'Succession',       t:'SERIES', y:'2018–2023',rt:'60 min',g:'Drama',            r:'8.9',
+   s:'The Roy family controls the biggest media conglomerate in the world, and their lives play out in the shadow of their father’s decline.', ep:null, pr:0},
+  {id:'tt6710474',  n:'Everything Everywhere All at Once', t:'MOVIE', y:'2022', rt:'139 min', g:'Action · Comedy', r:'7.8',
+   s:'An ageing Chinese immigrant is swept up in an insane adventure in which she alone can save existence by exploring other universes.', ep:null, pr:0},
+];
+const byId = Object.fromEntries(T.map(t=>[t.id,t]));
+const bg   = id => IMG['bg_'+id]   || '';
+const logo = id => IMG['logo_'+id] || '';
+const post = id => IMG['p_'+id]    || '';
+const ring = i => T[i % T.length];
+const posterIds = T.map(t=>t.id);
+const rot = (a,k) => [...a.slice(k), ...a.slice(0,k)];
+
+/* ── shared bits ─────────────────────────────────────────────── */
+const ICONS = {
+  search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+  home:'<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/>',
+  compass:'<circle cx="12" cy="12" r="9"/><path d="M15 9l-2 4-4 2 2-4z"/>',
+  dl:'<path d="M12 4v11"/><path d="M8 12l4 4 4-4"/><path d="M5 20h14"/>',
+  tv:'<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8"/>',
+  cloud:'<path d="M7 18h9a4 4 0 000-8 5.5 5.5 0 00-10.6 1.6A3.5 3.5 0 006 18z"/>'
+};
+const ic = (k,on) => `<div class="g-ic${on?' on':''}"><svg viewBox="0 0 24 24">${ICONS[k]}</svg></div>`;
+const ghost = () => `<div class="ghost">
+  <div class="g-logo"><svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M6 4l13 8-13 8z" fill="#7B5CFF"/></svg></div>
+  ${ic('search')}${ic('home',true)}${ic('compass')}${ic('dl')}
+  <div class="g-sp"></div>${ic('tv')}${ic('cloud')}</div>`;
+
+const metaHTML = t => `<span class="imdb">IMDb</span>&nbsp;${t.r}<span class="sep">·</span>${t.t}<span class="sep">·</span>${t.y}<span class="sep">·</span>${t.rt}<span class="sep">·</span>${t.g}`;
+// Two-line variant for the narrow identity columns (Atrium, Deck) — one line
+// of hard facts, genres beneath, so nothing ever overruns the column.
+const metaHTML2 = t => `<div><span class="imdb">IMDb</span>&nbsp;${t.r}<span class="sep">·</span>${t.t}<span class="sep">·</span>${t.y}<span class="sep">·</span>${t.rt}</div><div class="gen">${t.g}</div>`;
+const logoOrName = (t,cls='') => logo(t.id)
+  ? `<img class="logoimg ${cls}" src="${logo(t.id)}" alt="${t.n}">`
+  : `<div class="namefb ${cls}">${t.n}</div>`;
+const trailerPill = () => `<div class="trailerpill"><span class="eqbar"><i style="height:8px"></i><i style="height:16px"></i><i style="height:11px"></i></span>TRAILER</div>`;
+const poster = (id,w,h,cls='',cw=false) => {
+  const t = byId[id];
+  const overlay = (cw && t && t.pr)
+    ? `<div class="epbadge">${t.ep}</div><div class="prog"><i style="width:${t.pr*100}%"></i></div>` : '';
+  return `<div class="cell ${cls}" data-t="${id}" style="width:${w}px;height:${h}px;flex:0 0 ${w}px"><img src="${post(id)}" alt="">${overlay}</div>`;
+};
+
+/* ═══════════ I · ATRIUM ═══════════ */
+function atrium(){
+  const rowA = posterIds.slice(0,4), rowB = rot(posterIds,4);
+  const wall = (label,ids,r,cw) => `
+    <div style="margin-bottom:34px">
+      <div class="rlabel" style="margin:0 0 16px 2px">${label}</div>
+      <div style="overflow:hidden"><div class="track" data-track="${r}" style="gap:22px">
+        ${ids.map((id,c)=>`<div data-cell data-r="${r}" data-c="${c}" data-t="${id}">${poster(id,147,220,'',cw)}</div>`).join('')}
+      </div></div>
+    </div>`;
+  return `
+  <div class="art" id="at-art" style="left:38%;right:0;top:0;bottom:0"></div>
+  <div style="position:absolute;left:38%;right:0;top:0;bottom:0;background:
+       linear-gradient(90deg,rgba(13,11,26,.98) 0,rgba(13,11,26,.35) 170px,rgba(13,11,26,0) 340px)"></div>
+  <div style="position:absolute;left:38%;right:0;bottom:0;height:660px;background:
+       linear-gradient(0deg,rgba(13,11,26,.96) 0,rgba(13,11,26,.86) 22%,rgba(13,11,26,.30) 62%,rgba(13,11,26,0) 100%)"></div>
+  ${trailerPill()}
+  <div style="position:absolute;left:0;top:0;bottom:0;width:38%;background:#0D0B1A"></div>
+  <div style="position:absolute;left:38%;top:0;bottom:0;width:1px;background:rgba(255,255,255,.09)"></div>
+  <div style="position:absolute;left:212px;top:0;bottom:0;width:calc(38% - 292px);
+              display:flex;flex-direction:column;justify-content:center">
+    <div style="font:800 19px/1 Roboto,sans-serif;letter-spacing:.24em;color:#A78BFA;opacity:.85;margin-bottom:36px">SIMKL · CONTINUE</div>
+    <div style="min-height:120px;display:flex;align-items:flex-end" id="at-logo"></div>
+    <div class="metaline2 fade" id="at-meta" style="margin-top:28px"></div>
+    <div class="syn fade" id="at-syn" style="margin-top:24px"></div>
+    <div style="display:flex;gap:14px;margin-top:44px">
+      <span class="hintchip"><b>OK</b> Play</span><span class="hintchip"><b>▸</b> Details</span>
+    </div>
+  </div>
+  <div style="position:absolute;left:calc(38% + 72px);right:64px;bottom:52px">
+    ${wall('Continue Watching', rowA, 0, true)}
+    ${wall('Cinemeta · Popular', rowB, 1, false)}
+  </div>`;
+}
+function atriumSync(st,t){
+  st.q('#at-art').style.backgroundImage = `url(${bg(t.id)})`;
+  st.q('#at-logo').innerHTML = logoOrName(t,'');
+  st.q('#at-meta').innerHTML = metaHTML2(t);
+  st.q('#at-syn').textContent = t.s;
+}
+
+/* ═══════════ II · MOSAIC ═══════════ */
+function mosaic(){
+  const tabs = ['Continue','Popular · Movies','Popular · Series','Favorites','+6 more'];
+  const ids = [...posterIds, ...rot(posterIds,5)].slice(0,21);
+  const cells = ids.map((id,i)=>{
+    const r = Math.floor(i/7), c = i%7;
+    return `<div data-cell data-r="${r}" data-c="${c}" data-t="${id}">${poster(id,200,300)}</div>`;
+  }).join('');
+  return `
+  <div class="art" id="mo-art" style="inset:0"></div>
+  <div style="position:absolute;inset:0;background:rgba(13,11,26,.87)"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(120% 90% at 12% 8%,rgba(123,92,255,.18) 0,rgba(13,11,26,0) 60%)"></div>
+  <div style="position:absolute;left:212px;top:62px;right:96px;display:flex;align-items:flex-start;gap:40px">
+    <div style="flex:1;min-width:0">
+      <div style="height:96px;display:flex;align-items:flex-end" id="mo-logo"></div>
+      <div class="metaline fade" id="mo-meta" style="margin-top:20px;font-size:23px"></div>
+    </div>
+    <div style="display:flex;gap:34px;padding-top:14px">
+      ${tabs.map((x,i)=>`<div style="text-align:center">
+        <div class="rlabel ${i?'off':''}" style="font-size:21px">${x}</div>
+        ${i?'':'<div style="height:4px;background:#fff;border-radius:2px;margin-top:9px"></div>'}
+      </div>`).join('')}
+    </div>
+  </div>
+  <div style="position:absolute;left:212px;right:96px;top:274px;bottom:0;overflow:hidden">
+    <div class="track" data-track="v" style="display:grid;grid-template-columns:repeat(7,200px);gap:34px 26px">${cells}</div>
+  </div>`;
+}
+function mosaicSync(st,t){
+  st.q('#mo-art').style.backgroundImage = `url(${bg(t.id)})`;
+  st.q('#mo-logo').innerHTML = logoOrName(t,'md');
+  st.q('#mo-meta').innerHTML = metaHTML(t);
+}
+
+/* ═══════════ III · PROMENADE ═══════════ */
+const PROM_RAILS = [
+  { label:'CONTINUE WATCHING',          ids: rot(posterIds,0) },
+  { label:'CINEMETA · POPULAR · SERIES',ids: rot(posterIds,6) },
+  { label:'IPTV FAVOURITES',            ids: rot(posterIds,11) },
+];
+function promenade(){
+  const ids = PROM_RAILS[0].ids;
+  const stills = ids.map((id,c)=>`
+    <div data-cell data-r="0" data-c="${c}" data-t="${id}" style="flex:0 0 356px">
+      <div class="cell" style="width:356px;height:200px">
+        <img src="${bg(id)||post(id)}" alt="">
+        ${byId[id]&&byId[id].pr ? `<div class="prog"><i style="width:${byId[id].pr*100}%"></i></div>`:''}
+      </div>
+    </div>`).join('');
+  return `
+  <div class="art" id="pr-art" style="inset:0"></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(0deg,rgba(13,11,26,.97) 0,rgba(13,11,26,.80) 28%,rgba(13,11,26,.10) 62%,rgba(13,11,26,.34) 100%)"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(58% 40% at 50% 58%,rgba(13,11,26,.72) 0,rgba(13,11,26,0) 72%)"></div>
+  ${trailerPill()}
+  <div style="position:absolute;left:0;right:0;top:470px;text-align:center">
+    <div style="height:130px;display:flex;align-items:flex-end;justify-content:center" id="pr-logo"></div>
+    <div class="metaline fade" id="pr-meta" style="margin-top:26px;display:inline-block"></div>
+  </div>
+  <div style="position:absolute;left:0;right:0;top:790px;text-align:center">
+    <div style="font:800 20px/1 Roboto,sans-serif;letter-spacing:.3em;color:rgba(255,255,255,.62)">
+      <span style="opacity:.45">‹</span>&nbsp;&nbsp;<span id="pr-rail">CONTINUE WATCHING</span>&nbsp;&nbsp;<span style="opacity:.45">›</span>
+    </div>
+  </div>
+  <div style="position:absolute;left:0;right:0;top:846px;height:230px;overflow:hidden">
+    <div class="track" data-track="0" style="gap:28px;align-items:flex-start;padding-left:782px"
+         data-center="1">${stills}</div>
+  </div>`;
+}
+function promenadeSync(st,t,cell){
+  st.q('#pr-art').style.backgroundImage = `url(${bg(t.id)})`;
+  st.q('#pr-logo').innerHTML = logoOrName(t,'');
+  st.q('#pr-meta').innerHTML = metaHTML(t);
+  st.stage.querySelectorAll('[data-cell]').forEach(el=>{
+    const on = el===cell;
+    const c = el.querySelector('.cell');
+    c.style.transform = on ? 'scale(1)' : 'scale(.86)';
+    c.style.opacity   = on ? '1' : '.5';
+  });
+}
+
+/* ═══════════ IV · DECK ═══════════ */
+function deck(){
+  const ids = rot(posterIds,5);
+  const rail = ids.map((id,c)=>`<div data-cell data-r="0" data-c="${c}" data-t="${id}">${poster(id,140,210)}</div>`).join('');
+  return `
+  <div style="position:absolute;inset:0;background:
+       radial-gradient(90% 120% at 78% 30%,#1B1730 0,#0C0A16 62%,#08070F 100%)"></div>
+  <div id="dk-deck" style="position:absolute;left:748px;top:132px;width:1000px;height:562px">
+    <div class="cell" id="dk-p2" style="position:absolute;left:0;top:0;width:1000px;height:562px;border-radius:22px;
+         transform:translateX(186px) scale(.87);opacity:.30"></div>
+    <div class="cell" id="dk-p1" style="position:absolute;left:0;top:0;width:1000px;height:562px;border-radius:22px;
+         transform:translateX(98px) scale(.94);opacity:.52"></div>
+    <div class="cell" id="dk-hero" style="position:absolute;left:0;top:0;width:1000px;height:562px;border-radius:22px;
+         box-shadow:0 40px 90px -30px rgba(0,0,0,.95),0 0 0 1px rgba(255,255,255,.10) inset"></div>
+    <div style="position:absolute;left:26px;bottom:24px;display:flex;align-items:center;gap:12px;
+         background:rgba(10,8,18,.66);border:1px solid rgba(255,255,255,.14);border-radius:99px;padding:10px 18px;
+         font:800 18px/1 Roboto,sans-serif;letter-spacing:.14em">
+      <span class="eqbar"><i style="height:7px"></i><i style="height:14px"></i><i style="height:10px"></i></span>AMBIENT
+    </div>
+  </div>
+  <div style="position:absolute;left:212px;top:168px;width:462px">
+    <div style="font:800 19px/1 Roboto,sans-serif;letter-spacing:.24em;color:#A78BFA;opacity:.85;margin-bottom:30px">UP NEXT FOR YOU</div>
+    <div style="min-height:120px;display:flex;align-items:flex-end" id="dk-logo"></div>
+    <div class="metaline2 fade" id="dk-meta" style="margin-top:24px"></div>
+    <div class="syn fade" id="dk-syn" style="margin-top:20px"></div>
+    <div style="display:flex;gap:14px;margin-top:34px">
+      <span class="hintchip"><b>OK</b> Play</span><span class="hintchip"><b>▾</b> Sources</span>
+    </div>
+  </div>
+  <div style="position:absolute;left:212px;right:0;bottom:56px">
+    <div class="rlabel" style="margin:0 0 16px 2px">Cinemeta · Popular · Series</div>
+    <div style="overflow:hidden"><div class="track" data-track="0" style="gap:20px">${rail}</div></div>
+  </div>`;
+}
+function deckSync(st,t,cell){
+  const i = posterIds.indexOf(t.id);
+  const nx = k => posterIds[(i+k) % posterIds.length];
+  const setArt = (el,id)=>{ el.style.backgroundImage=`url(${bg(id)||post(id)})`; el.style.backgroundSize='cover';
+                            el.style.backgroundPosition='center 25%'; };
+  setArt(st.q('#dk-hero'), t.id); setArt(st.q('#dk-p1'), nx(1)); setArt(st.q('#dk-p2'), nx(2));
+  st.q('#dk-logo').innerHTML = logoOrName(t,'');
+  st.q('#dk-meta').innerHTML = metaHTML2(t);
+  st.q('#dk-syn').textContent = t.s;
+}
+
+/* ═══════════ V · TONIGHT ═══════════ */
+function tonight(){
+  const cw = T.slice(0,4);
+  const queue = cw.slice(1).map((t,i)=>`
+    <div data-cell data-r="${i}" data-c="1" data-t="${t.id}" style="margin-bottom:22px">
+      <div class="cell violet" style="width:626px;height:164px;background:rgba(255,255,255,.045);border-radius:10px;overflow:hidden">
+        <div style="display:flex;height:100%;align-items:center;gap:22px;padding-right:20px">
+          <div style="width:256px;height:100%;flex:0 0 256px;background:url(${bg(t.id)}) center/cover"></div>
+          <div style="min-width:0">
+            <div style="font:800 25px/1.15 Roboto,sans-serif;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.n}</div>
+            <div style="font:700 20px/1 Roboto,sans-serif;color:rgba(255,255,255,.56);margin-top:10px">${t.ep} · ${t.sub}</div>
+            <div style="height:6px;background:rgba(255,255,255,.18);border-radius:3px;margin-top:16px;width:300px">
+              <div style="height:100%;width:${t.pr*100}%;background:#fff;border-radius:3px"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>`).join('');
+  const rail = posterIds.slice(0,10).map((id,c)=>`<div data-cell data-r="3" data-c="${c}" data-t="${id}">${poster(id,133,200)}</div>`).join('');
+  return `
+  <div style="position:absolute;inset:0;background:
+       linear-gradient(160deg,#161227 0,#0E0C1B 46%,#0A0813 100%)"></div>
+  <div style="position:absolute;left:212px;top:56px;right:96px;display:flex;align-items:baseline;gap:20px">
+    <div style="font:800 34px/1 Roboto,sans-serif;letter-spacing:-.5px">Tonight</div>
+    <div style="font:700 21px/1 Roboto,sans-serif;letter-spacing:.16em;color:rgba(255,255,255,.42)">TUESDAY · 8:42 PM</div>
+    <div style="margin-left:auto;font:700 21px/1 Roboto,sans-serif;letter-spacing:.16em;color:rgba(255,255,255,.42)">4 SHOWS IN PROGRESS</div>
+  </div>
+  <div data-cell data-r="0" data-c="0" data-t="${cw[0].id}" style="position:absolute;left:212px;top:150px">
+    <div class="cell" id="tn-big" style="width:968px;height:545px;border-radius:12px">
+      <div style="position:absolute;inset:0;background:linear-gradient(0deg,rgba(9,8,16,.94) 0,rgba(9,8,16,.35) 42%,rgba(9,8,16,0) 72%)"></div>
+      <div style="position:absolute;left:38px;right:38px;bottom:34px">
+        <div style="height:72px;display:flex;align-items:flex-end" id="tn-logo"></div>
+        <div style="display:flex;align-items:center;gap:18px;margin-top:20px">
+          <span style="font:800 23px/1 Roboto,sans-serif;letter-spacing:.04em" id="tn-ep"></span>
+          <span style="color:rgba(255,255,255,.3)">·</span>
+          <span style="font:700 22px/1 Roboto,sans-serif;color:rgba(255,255,255,.66)" id="tn-left"></span>
+          <span class="hintchip" style="margin-left:auto"><b>OK</b> Resume</span>
+        </div>
+        <div style="height:8px;background:rgba(255,255,255,.2);border-radius:4px;margin-top:20px">
+          <div id="tn-bar" style="height:100%;background:#fff;border-radius:4px"></div></div>
+      </div>
+    </div>
+  </div>
+  <div style="position:absolute;left:1230px;top:150px;width:626px">
+    <div class="rlabel" style="margin:0 0 20px 2px">Up Next</div>
+    ${queue}
+  </div>
+  <div style="position:absolute;left:212px;right:0;bottom:48px">
+    <div class="rlabel" style="margin:0 0 16px 2px">Because you finished <span style="color:rgba(255,255,255,.45)">Dark</span></div>
+    <div style="overflow:hidden"><div class="track" data-track="3" style="gap:20px">${rail}</div></div>
+  </div>`;
+}
+function tonightSync(st,t){
+  const big = st.q('#tn-big');
+  big.style.backgroundImage = `url(${bg(t.id)})`;
+  big.style.backgroundSize='cover'; big.style.backgroundPosition='center 20%';
+  st.q('#tn-logo').innerHTML = logoOrName(t,'sm');
+  st.q('#tn-ep').textContent = t.ep || `${t.t} · ${t.y}`;
+  const pr = t.pr || 0;
+  st.q('#tn-left').textContent = pr ? `${Math.round((1-pr)*(parseInt(t.rt)||50))} min left` : `${t.rt} · IMDb ${t.r}`;
+  st.q('#tn-bar').style.width = `${(pr||0)*100}%`;
+}
+
+/* ── stage engine: spatial DPAD nav ─────────────────────────── */
+class Stage{
+  constructor(frameId, stageId, html, sync){
+    this.frame = document.getElementById(frameId);
+    this.stage = document.getElementById(stageId);
+    this.stage.innerHTML = ghost() + html();
+    this.sync  = sync;
+    this.cells = [...this.stage.querySelectorAll('[data-cell]')];
+    this.i = 0;
+    this.frame.addEventListener('click', ()=> setLive(this));
+    this.fit(); this.focus(0, true);
+  }
+  q(sel){ return this.stage.querySelector(sel); }
+  fit(){
+    const w = this.frame.clientWidth;
+    this.stage.style.transform = `scale(${w/1920})`;
+  }
+  rect(el){
+    // geometry in stage coordinates, independent of the frame's scale
+    const s = this.stage.getBoundingClientRect(), k = 1920 / (s.width||1920);
+    const r = el.getBoundingClientRect();
+    return { x:(r.left-s.left)*k + (r.width*k)/2, y:(r.top-s.top)*k + (r.height*k)/2 };
+  }
+  move(dx,dy){
+    const from = this.rect(this.cells[this.i]);
+    let best = -1, bestScore = Infinity;
+    this.cells.forEach((el,j)=>{
+      if (j===this.i) return;
+      const p = this.rect(el);
+      const along = dx ? (p.x-from.x)*dx : (p.y-from.y)*dy;
+      const off   = dx ? Math.abs(p.y-from.y) : Math.abs(p.x-from.x);
+      if (along <= 8) return;                       // must be in the pressed direction
+      const score = along + off*2.4;                // prefer straight ahead
+      if (score < bestScore){ bestScore = score; best = j; }
+    });
+    if (best >= 0) this.focus(best);
+    else if (dy && this.noVert) this.noVert(dy);   // single-row stages: swap the rail instead
+  }
+  focus(j, silent){
+    this.cells[this.i]?.querySelector('.cell')?.classList.remove('on');
+    this.i = j;
+    const cell = this.cells[j];
+    cell.querySelector('.cell')?.classList.add('on');
+    const t = byId[cell.dataset.t] || { ...ring(j), id:cell.dataset.t };
+    this.sync(this, t, cell);
+    this.scrollTo(cell);
+  }
+  scrollTo(cell){
+    const track = cell.closest('.track');
+    if (!track) return;
+    if (track.dataset.center){                      // Promenade: lock to centre
+      const off = cell.offsetLeft + cell.offsetWidth/2;
+      track.style.transform = `translateX(${-(off-960)}px)`;
+      return;
+    }
+    const view = track.parentElement;
+    const isGrid = getComputedStyle(track).display === 'grid';
+    if (isGrid){
+      const top = cell.offsetTop, pad = 20;
+      const cur = -(parseFloat(track.dataset.ty)||0);
+      let ty = cur;
+      if (top - cur < pad) ty = top - pad;
+      if (top + cell.offsetHeight - cur > view.clientHeight - pad) ty = top + cell.offsetHeight - view.clientHeight + pad;
+      track.dataset.ty = -ty;
+      track.style.transform = `translateY(${-ty}px)`;
+    } else {
+      const pad = 40, w = view.clientWidth || 1920;
+      const cur = -(parseFloat(track.dataset.tx)||0);
+      let tx = cur;
+      if (cell.offsetLeft - cur < pad) tx = cell.offsetLeft - pad;
+      if (cell.offsetLeft + cell.offsetWidth - cur > w - pad) tx = cell.offsetLeft + cell.offsetWidth - w + pad;
+      tx = Math.max(0, tx);
+      track.dataset.tx = -tx;
+      track.style.transform = `translateX(${-tx}px)`;
+    }
+  }
+}
+
+/* ── page wiring ─────────────────────────────────────────────── */
+const stages = [
+  new Stage('f1','s1', atrium,    atriumSync),
+  new Stage('f2','s2', mosaic,    mosaicSync),
+  new Stage('f3','s3', promenade, promenadeSync),
+  new Stage('f4','s4', deck,      deckSync),
+  new Stage('f5','s5', tonight,   tonightSync),
+];
+// Promenade has one row, so ↑↓ change the rail beneath the centre lock.
+const prom = stages[2];
+prom.railIdx = 0;
+prom.noVert = d => {
+  prom.railIdx = (prom.railIdx + (d > 0 ? 1 : PROM_RAILS.length - 1)) % PROM_RAILS.length;
+  const rail = PROM_RAILS[prom.railIdx];
+  prom.q('#pr-rail').textContent = rail.label;
+  prom.cells.forEach((el,i)=>{
+    const id = rail.ids[i];
+    el.dataset.t = id;
+    el.querySelector('img').src = bg(id) || post(id);
+    const bar = el.querySelector('.prog');
+    const t = byId[id];
+    if (bar) bar.remove();
+    if (t && t.pr) el.querySelector('.cell').insertAdjacentHTML('beforeend',
+      `<div class="prog"><i style="width:${t.pr*100}%"></i></div>`);
+  });
+  prom.focus(0);
+};
+
+let live = stages[0];
+function setLive(s){
+  if (live === s) return;
+  live = s;
+  stages.forEach(x => x.frame.classList.toggle('live', x===s));
+}
+stages.forEach(s => s.frame.classList.remove('live'));
+live.frame.classList.add('live');
+
+new ResizeObserver(()=> stages.forEach(s=>s.fit())).observe(document.body);
+
+// the stage nearest the middle of the viewport becomes live while scrolling
+const io = new IntersectionObserver(es=>{
+  es.forEach(e=>{ if (e.isIntersecting && e.intersectionRatio > .55) setLive(stages.find(s=>s.frame===e.target)); });
+}, { threshold:[.55,.8] });
+stages.forEach(s=> io.observe(s.frame));
+
+const KEYS = { ArrowLeft:[-1,0], ArrowRight:[1,0], ArrowUp:[0,-1], ArrowDown:[0,1] };
+addEventListener('keydown', e=>{
+  const k = KEYS[e.key];
+  if (!k) return;
+  e.preventDefault();
+  stopDemo();
+  live.move(k[0], k[1]);
+});
+
+/* auto-demo: proves the motion without asking anyone to press a key */
+let demoOn = true, demoTimer = null;
+const tog = document.getElementById('demotog');
+function tick(){
+  if (!demoOn) return;
+  const dir = Math.random() < .78 ? [1,0] : [0,1];
+  const before = live.i;
+  live.move(dir[0], dir[1]);
+  if (live.i === before) live.focus(0);            // ran off the end — wrap
+  demoTimer = setTimeout(tick, 2200);
+}
+function stopDemo(){
+  if (!demoOn) return;
+  demoOn = false; clearTimeout(demoTimer); tog.setAttribute('aria-pressed','false');
+}
+tog.addEventListener('click', ()=>{
+  demoOn = !demoOn; tog.setAttribute('aria-pressed', String(demoOn));
+  clearTimeout(demoTimer);
+  if (demoOn) demoTimer = setTimeout(tick, 700);
+});
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) demoTimer = setTimeout(tick, 1400);
+else stopDemo();
+</script>

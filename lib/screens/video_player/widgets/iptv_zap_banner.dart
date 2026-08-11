@@ -71,7 +71,10 @@ class IptvZapBanner extends StatelessWidget {
     final scale = (width / 960).clamp(0.62, 1.0);
     double s(double v) => v * scale;
     final child = switch (style) {
-      PlayerGuideStyle.glass => _buildGlass(t, s, width),
+      // Spotlight rides the glass banner shape — its tokens (white ink,
+      // crimson status) restyle it into the monochrome look on their own.
+      PlayerGuideStyle.glass ||
+      PlayerGuideStyle.spotlight => _buildGlass(t, s, width),
       PlayerGuideStyle.edition => _buildEdition(t, s),
       PlayerGuideStyle.console => _buildConsole(t, s),
       PlayerGuideStyle.classic => throw StateError('unreachable'),

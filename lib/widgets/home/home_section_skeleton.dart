@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../shimmer.dart';
+import '../../theme/widgets/themed_skeleton.dart';
 import 'home_theme.dart';
 
 enum HomeSectionSkeletonStyle {
@@ -40,7 +40,11 @@ class HomeSectionSkeleton extends StatelessWidget {
             m.sectionHPadding,
             m.sectionVPadding + 6,
           ),
-          child: Shimmer(
+          // `ThemedSkeleton`, not `Shimmer`: this is the app's own loading
+          // state, so it follows the look's wait style — shimmer under
+          // Classic and every old theme, static blocks under Console, a
+          // pulse elsewhere. `Shimmer` stays theme-blind for the player.
+          child: ThemedSkeleton(
             width: 140,
             height: m.headerFontSize + 4,
             borderRadius: BorderRadius.circular(6),
@@ -57,7 +61,7 @@ class HomeSectionSkeleton extends StatelessWidget {
             itemBuilder: (context, index) {
               return Padding(
                 padding: EdgeInsets.only(right: index < cardCount - 1 ? 14 : 0),
-                child: Shimmer(
+                child: ThemedSkeleton(
                   width: cardWidth,
                   height: cardHeight,
                   borderRadius: BorderRadius.circular(14),

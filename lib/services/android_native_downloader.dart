@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../utils/platform_util.dart';
+
 /// Result of a native start: either a [taskId] on success, or the reason the
 /// start failed (e.g. `fgs_not_allowed` on Android 12+ background starts).
 class AndroidStartResult {
@@ -263,6 +265,14 @@ class AndroidNativeDownloader {
   static Future<bool>? _isTelevisionInFlight;
 
   static Future<bool> isTelevision() {
+    // Apple TV is a television, and every caller of this asks the FORM-FACTOR
+    // question — 10-foot layouts, DPAD focus, the two-pane settings rail, no
+    // touch. Answering false here (there is no Android channel on tvOS) is
+    // what dropped Apple TV into the phone/desktop shell and hid every
+    // TV-only settings row. Callers that genuinely mean "Android the platform"
+    // — the native player handoff, Android intents, the recording engine —
+    // gate on Platform.isAndroid or PlatformUtil.isAndroidTvCached instead.
+    if (PlatformUtil.isTvOS) return Future<bool>.value(true);
     if (!Platform.isAndroid) return Future<bool>.value(false);
     final cached = _isTelevisionCached;
     if (cached != null) return Future<bool>.value(cached);

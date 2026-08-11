@@ -14,8 +14,8 @@ import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
 import '../../widgets/see_all/see_all_random_button.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../widgets/see_all/see_all_sort.dart';
-import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 
 /// Sort orders for the grid. [natural] keeps the API's own rank/interleave
@@ -69,6 +69,12 @@ class SimklSeeAllScreen extends StatefulWidget {
   final Widget? leading;
   final FocusNode? leadingNode;
 
+  /// Open directly on this list instead of the Continue Watching / Trending
+  /// auto-pick (a Home list row's See-All). Also disables the late-CW
+  /// auto-promotion, so an async CW arrival can't hijack the requested list.
+  /// Null keeps today's behavior exactly.
+  final SimklSeeAllList? initialList;
+
   const SimklSeeAllScreen({
     super.key,
     required this.onOpen,
@@ -83,6 +89,7 @@ class SimklSeeAllScreen extends StatefulWidget {
     this.embedded = false,
     this.leading,
     this.leadingNode,
+    this.initialList,
   });
 
   @override
@@ -177,9 +184,20 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
     AnalyticsService.screenView('simkl_see_all');
     // Land on Continue Watching when the host handed us some (the natural
     // "continue" context); otherwise Trending (public, always populated).
-    _list = widget.cwItems.isNotEmpty
-        ? SimklSeeAllList.continueWatching
-        : SimklSeeAllList.trending;
+    // A Home list row's See-All overrides the auto-pick with its own list —
+    // and pins it (_autoList off), so a CW load arriving a beat later can't
+    // promote itself over the list the user explicitly opened. An explicit
+    // Continue Watching is honored too (even with cwItems still empty —
+    // _fetchList mirrors them and didUpdateWidget re-syncs when they land).
+    final initial = widget.initialList;
+    if (initial != null) {
+      _list = initial;
+      _autoList = false;
+    } else {
+      _list = widget.cwItems.isNotEmpty
+          ? SimklSeeAllList.continueWatching
+          : SimklSeeAllList.trending;
+    }
     // Discover only: reopen on the order the user last picked for this source.
     // Read before the fetch so the arriving grid is sorted on its first paint.
     if (widget.embedded) {
@@ -415,7 +433,7 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
       );
     }
     return Scaffold(
-      backgroundColor: kSeeAllBg,
+      backgroundColor: AppThemeScope.of(context).seeAll.bg,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -528,6 +546,7 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
       return SkeletonPosterGrid(isTelevision: widget.isTelevision);
     }
     if (_visible.isEmpty) {
+      final app = AppThemeScope.of(context);
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(40),
@@ -537,14 +556,14 @@ class _SimklSeeAllScreenState extends State<SimklSeeAllScreen> {
               Icon(
                 _error ? Icons.cloud_off_rounded : Icons.inbox_rounded,
                 size: 44,
-                color: Colors.white.withValues(alpha: 0.25),
+                color: app.fade(app.core.tx, 0.25),
               ),
               const SizedBox(height: 14),
               Text(
                 _emptyMessage(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
+                  color: app.fade(app.core.tx, 0.7),
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                 ),

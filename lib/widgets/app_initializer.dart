@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
+import '../theme/app_theme_controller.dart';
+import '../theme/app_surfaces.dart';
+import '../theme/legacy_theme_boundary.dart';
 import 'launch/launch_ident.dart';
 import 'launch/loading_sweep.dart';
 import '../services/app_migration_service.dart';
@@ -10,6 +13,10 @@ import '../services/remote_control/remote_command_router.dart';
 import '../utils/platform_util.dart';
 import '../widgets/initial_setup_flow.dart';
 import '../main.dart';
+
+/// How long the corner spinner takes to fade out on TV. Shared so the widget's
+/// fade and _finishSplash's wait for it can never drift apart.
+const Duration _kSpinnerFade = Duration(milliseconds: 170);
 
 class AppInitializer extends StatefulWidget {
   const AppInitializer({super.key});
@@ -26,23 +33,25 @@ class _AppInitializerState extends State<AppInitializer>
   // main shell, so the user never sees the Home board's own loading state on
   // a cold start — the splash IS the loading screen, held until home is ready.
   bool _splashDone = false;
-  // Shows the loading sweep under the lockup during the hold-for-home phase.
+  // Shows the corner spinner during the hold-for-home phase.
   bool _holdingForHome = false;
-  bool _isAndroidTv = PlatformUtil.isAndroidTvCached;
+  bool _isAndroidTv = PlatformUtil.isTelevision;
   // On TV, let MainPage build and fetch behind an opacity-zero render object,
-  // but don't raster its first (very expensive) frame while the loading sweep
-  // is moving. _finishSplash gives it a short hidden prepaint window after the
-  // sweep has left the track.
-  bool _paintHomeBehindSplash = !PlatformUtil.isAndroidTvCached;
+  // but don't raster its first (very expensive) frame while the spinner is
+  // moving. _finishSplash gives it a short hidden prepaint window once the
+  // spinner has faded out.
+  bool _paintHomeBehindSplash = !PlatformUtil.isTelevision;
 
   late AnimationController _revealController;
   late AnimationController _exitController;
-  // Drives the loading sweep while the splash waits for the Home board.
+  // Drives the corner spinner while the splash waits for the Home board.
   late AnimationController _idleController;
   late Animation<double> _exitAnimation;
   // The chosen launch ident — its painter, backdrop and sweep accent.
   // Resolved synchronously from the cache warmed in main().
   late LaunchIdent _ident;
+  late IdentPalette _palette;
+  IdentPalette? _painterPalette;
   late CustomPainter _revealPainter;
   late LoadingSweepPainter _loadingPainter;
   Timer? _homeReadyTimeout;
@@ -52,7 +61,34 @@ class _AppInitializerState extends State<AppInitializer>
   void initState() {
     super.initState();
 
+    // The launch ident owns the screen from here until the splash fades —
+    // system bars and any theme decision must treat the surface as frozen.
+    // Re-published here (not only at process start) because the remote-config
+    // restart path pushes a fresh AppInitializer mid-session.
+    AppSurfaceState.instance.publishBootstrap(true);
+
     _ident = launchIdentFor(StorageService.launchAnimationCached);
+    // The ident's colours: its own by default, the app theme's when the user
+    // opted in.
+    //
+    // Read from `AppThemeController.instance` and NOT from an ambient scope.
+    // The splash renders under the bootstrap freeze — `publishBootstrap(true)`
+    // three lines up — so `AppThemeScope.of` here would resolve to LEGACY and
+    // the feature would silently do nothing. The controller is a singleton
+    // already warmed in `main()` before `runApp`, so it is both correct and
+    // synchronous, which is what `initState` needs.
+    final themed = StorageService.launchIdentPaletteCached == 'theme';
+    _palette = themed
+        ? IdentPalette.fromTheme(_ident, AppThemeController.instance.theme)
+        : _ident.palette;
+    // NULL unless the user opted in. `_ident.palette` exposes `sweepColors`
+    // as its accent/ink, which are the LOADING SWEEP's colours — not the
+    // ring, the tube or the wordmark. Handing that to a painter would repaint
+    // the default splash in the sweep's blue, which is a change to what
+    // Debrify Classic has always shown. "No palette" must mean "your own
+    // literals", and this is what makes that true at runtime as well as in
+    // the tests.
+    _painterPalette = themed ? _palette : null;
 
     // The reveal is progress-driven; the splash holds only as long as the
     // ident's animation (plus real init work) — no fixed delays.
@@ -77,9 +113,10 @@ class _AppInitializerState extends State<AppInitializer>
     _revealPainter = _ident.createPainter(
       _revealController,
       isTelevision: () => _isAndroidTv,
+      palette: _painterPalette,
     );
     _loadingPainter =
-        LoadingSweepPainter(_idleController, colors: _ident.sweepColors);
+        LoadingSweepPainter(_idleController, colors: _palette.sweep);
 
     _exitAnimation = Tween<double>(
       begin: 1.0,
@@ -162,9 +199,10 @@ class _AppInitializerState extends State<AppInitializer>
     } else {
       // Returning user: mount MainPage UNDER the still-covering splash (so the
       // Home board starts loading immediately) and switch the splash into its
-      // loading phase — the lockup stays put and a sweep animates beneath it —
-      // until the board reports its first rows ready. TV then prepaints behind
-      // a static lockup; other platforms keep the original fade handoff.
+      // loading phase — the lockup stays put and a small spinner turns in the
+      // bottom-right corner — until the board reports its first rows ready. TV
+      // then prepaints behind a static lockup; other platforms keep the
+      // original fade handoff.
       setState(() {
         _onboardingComplete = true;
         _holdingForHome = true;
@@ -193,37 +231,32 @@ class _AppInitializerState extends State<AppInitializer>
     _homeReadyTimeout?.cancel();
 
     if (_isAndroidTv) {
-      // Finish the moving segment before Home is allowed to paint. This keeps
-      // Home's first row/image raster burst from stealing frames from the only
-      // moving element the user can see. At t=1 the segment is fully clipped
-      // off the right edge, so the line can disappear without a visual jump.
-      if (_idleController.isAnimating) {
-        // homeBoardReady is published immediately after Home's setState. Hold
-        // the sweep still for that one pending build/layout frame, then let it
-        // leave the track without competing with a large UI-isolate rebuild.
-        _idleController.stop();
-        await WidgetsBinding.instance.endOfFrame;
-        if (!mounted) return;
-        try {
-          await _idleController.animateTo(
-            1,
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-          );
-        } catch (_) {}
-      }
+      // homeBoardReady is published immediately after Home's setState. Let
+      // that pending build/layout frame land before anything else moves.
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+
+      // Fade the spinner out while it is still the only moving element on
+      // screen. The ring is fully visible at every t — unlike the sweep line
+      // it replaced, which was clipped off its own track at t=1 and so could
+      // be cut away for free — so there is no orientation at which a
+      // zero-duration hide looks intentional. It keeps turning through the
+      // fade: freezing it first reads as a stall, and ramping the controller
+      // to a fixed angle compressed up to a whole revolution into the ramp,
+      // which whipped.
+      setState(() => _holdingForHome = false);
+      await Future.delayed(_kSpinnerFade);
       if (!mounted) return;
       _idleController.stop();
-      setState(() {
-        _holdingForHome = false;
-        _paintHomeBehindSplash = true;
-      });
 
-      // The splash is now completely static, so Home can spend one frame
-      // rasterizing rows and uploading its first visible textures invisibly.
+      // Only now is the splash completely static, so Home can spend a frame
+      // rasterizing rows and uploading its first visible textures invisibly
+      // without competing with the fade.
+      setState(() => _paintHomeBehindSplash = true);
       await Future.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;
       setState(() => _splashDone = true);
+      AppSurfaceState.instance.publishBootstrap(false);
       return;
     }
 
@@ -237,6 +270,7 @@ class _AppInitializerState extends State<AppInitializer>
     if (!mounted) return;
     _idleController.stop();
     setState(() => _splashDone = true);
+    AppSurfaceState.instance.publishBootstrap(false);
   }
 
   Future<void> _waitForReveal() async {
@@ -278,6 +312,7 @@ class _AppInitializerState extends State<AppInitializer>
       _paintHomeBehindSplash = true;
       _splashDone = true;
     });
+    AppSurfaceState.instance.publishBootstrap(false);
     _showPendingPostSetupSnackBarIfNeeded();
   }
 
@@ -326,7 +361,7 @@ class _AppInitializerState extends State<AppInitializer>
   Widget build(BuildContext context) {
     if (!_onboardingComplete) {
       return Scaffold(
-        backgroundColor: _ident.baseColor,
+        backgroundColor: _palette.base,
         body: _buildSplashBody(),
       );
     }
@@ -338,7 +373,7 @@ class _AppInitializerState extends State<AppInitializer>
       children: [
         // Opacity zero skips painting but not layout, state initialization, or
         // async loads. That is exactly what the TV splash needs: prepare Home
-        // without competing with the visible sweep for raster time.
+        // without competing with the visible spinner for raster time.
         Opacity(
           opacity: _isAndroidTv && !_paintHomeBehindSplash ? 0 : 1,
           child: const RepaintBoundary(child: MainPage()),
@@ -359,28 +394,36 @@ class _AppInitializerState extends State<AppInitializer>
       // it rasters once while only the animated elements repaint. Opaque on
       // purpose: as an overlay this must fully cover the shell until the exit
       // fade runs.
-      decoration: _ident.backdrop,
+      decoration: _palette.backdrop,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Boundary so the sweep's 60fps ticks don't re-rasterize the
+          // Boundary so the spinner's 60fps ticks don't re-rasterize the
           // (settled) lockup every frame during the hold-for-home phase.
           RepaintBoundary(
             child: CustomPaint(size: Size.infinite, painter: _revealPainter),
           ),
           Align(
-            // Proportional placement clears the lockup's bottom edge on both
-            // the TV's 16:9 canvas and phone portrait.
-            alignment: const Alignment(0, 0.55),
-            child: AnimatedOpacity(
-              opacity: _holdingForHome ? 1.0 : 0.0,
-              duration: _isAndroidTv
-                  ? Duration.zero
-                  : const Duration(milliseconds: 350),
-              child: RepaintBoundary(
-                child: CustomPaint(
-                  size: const Size(220, 4),
-                  painter: _loadingPainter,
+            // Bottom-right corner, well clear of the lockup. Inset further on
+            // TV: sets overscan the panel edges, and a status detail this
+            // small is the first thing a cropped edge would eat.
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              padding: EdgeInsets.all(_isAndroidTv ? 48 : 26),
+              child: AnimatedOpacity(
+                opacity: _holdingForHome ? 1.0 : 0.0,
+                // TV fades too, briefly. The ban on opacity layers during the
+                // TV handoff is about full-screen fades over an already-
+                // rendered Home; an 18x18 RepaintBoundary is nothing, and
+                // _finishSplash waits this out before letting Home raster.
+                duration: _isAndroidTv
+                    ? _kSpinnerFade
+                    : const Duration(milliseconds: 350),
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    size: const Size(18, 18),
+                    painter: _loadingPainter,
+                  ),
                 ),
               ),
             ),
@@ -392,7 +435,14 @@ class _AppInitializerState extends State<AppInitializer>
     // A full-screen opacity layer over an already-rendered Home page is one of
     // the costliest possible exit effects on weak TV GPUs. TV performs a clean
     // cut after the hidden prepaint above; other platforms retain the fade.
-    if (_isAndroidTv) return splash;
-    return FadeTransition(opacity: _exitAnimation, child: splash);
+    //
+    // LegacyThemeBoundary: launch idents are an excluded surface — they are
+    // in-route overlays, not tab bodies or pushed routes, so this is the
+    // third containment mechanism (the bootstrap boundary). No messenger:
+    // the splash is not a snackbar surface.
+    if (_isAndroidTv) return LegacyThemeBoundary(child: splash);
+    return LegacyThemeBoundary(
+      child: FadeTransition(opacity: _exitAnimation, child: splash),
+    );
   }
 }

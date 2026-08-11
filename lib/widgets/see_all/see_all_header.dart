@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
-import 'see_all_theme.dart';
 
 /// Shared top bar for the See-All screens: a back button + title/subtitle.
 ///
@@ -48,6 +48,7 @@ class SeeAllHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 24, 6),
       child: Row(
@@ -58,21 +59,21 @@ class SeeAllHeader extends StatelessWidget {
             child: Builder(builder: (context) {
               final focused = Focus.of(context).hasFocus;
               return InkWell(
-                borderRadius: BorderRadius.circular(11),
+                borderRadius: app.shape.br(11),
                 onTap: () => Navigator.of(context).maybePop(),
                 child: Container(
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: kSeeAllPanel,
-                    borderRadius: BorderRadius.circular(11),
+                    color: app.seeAll.panel,
+                    borderRadius: app.shape.br(11),
                     border: Border.all(
-                      color: focused ? kSeeAllAccent : kSeeAllLine,
+                      color: focused ? app.seeAll.accent : app.seeAll.line,
                       width: focused ? 2 : 1,
                     ),
                   ),
-                  child: const Icon(Icons.arrow_back_rounded,
-                      size: 20, color: Colors.white),
+                  child: Icon(Icons.arrow_back_rounded,
+                      size: 20, color: app.core.tx),
                 ),
               );
             }),
@@ -100,7 +101,7 @@ class SeeAllHeader extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.45),
+                    color: app.fade(app.core.tx, 0.45),
                   ),
                 ),
               ],

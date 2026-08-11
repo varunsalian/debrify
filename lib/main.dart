@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'dart:io' show Platform;
-import 'dart:math';
-import 'dart:ui' show AppExitResponse;
+import 'dart:ui' show AppExitResponse, PointerDeviceKind;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'utils/app_version_info.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -37,13 +36,21 @@ import 'services/android_native_downloader.dart';
 import 'services/discover_prefs.dart';
 import 'services/iptv_catalog_db.dart';
 import 'services/storage_service.dart';
+import 'services/tv_hero_artwork_quality_controller.dart';
 import 'services/simkl/simkl_service.dart';
 import 'services/trakt/trakt_service.dart';
 import 'widgets/app_initializer.dart';
 
 import 'widgets/animated_background.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'services/main_page_bridge.dart';
+import 'theme/app_surfaces.dart';
+import 'theme/app_theme_controller.dart';
+import 'theme/idle_dim.dart';
+import 'theme/ui_feedback.dart';
+import 'theme/app_texture.dart';
+import 'theme/app_theme_scope.dart';
+import 'theme/legacy_theme_boundary.dart';
+import 'theme/system_bars.dart';
 import 'models/rd_torrent.dart';
 import 'package:window_manager/window_manager.dart';
 import 'services/deep_link_service.dart';
@@ -54,8 +61,8 @@ import 'widgets/mobile_floating_nav.dart';
 import 'widgets/mobile_classic_nav.dart';
 import 'widgets/tv_ambient_art_stage.dart';
 import 'widgets/tv_sidebar_nav.dart';
+import 'widgets/desktop_pill_nav.dart';
 import 'widgets/desktop_sidebar_nav.dart';
-import 'widgets/home/home_theme.dart';
 import 'services/remote_control/remote_control_state.dart';
 import 'services/remote_control/remote_command_router.dart';
 import 'services/remote_control/remote_constants.dart';
@@ -85,6 +92,10 @@ Future<void> _capImageCache() async {
     // theme's page-transition builder reads on every route push.
     isTv = await PlatformUtil.isAndroidTV();
   } catch (_) {}
+  // Apple TV is a television too, and [PlatformUtil.isAndroidTV] short-circuits
+  // to false whenever the platform is not Android — so without this the caps
+  // below never reach a device that needs them just as much as a TV box does.
+  isTv = isTv || PlatformUtil.isTvOS;
   // When the TV probe FAILED (as opposed to answering "no"), cap any Android
   // device: the asymmetry decides it. A phone mistakenly capped loses a
   // little cache headroom; a 1 GB TV box mistakenly left on Flutter's stock
@@ -104,56 +115,16 @@ Future<void> _capImageCache() async {
   }
   final cache = PaintingBinding.instance.imageCache;
   cache.maximumSize = 140;
-  // 56 MB: the Home hero decodes 1080-wide backdrops (~2.6 MB each) per rest
-  // — at 40 MB the cache held only ~12 backdrop-equivalents alongside the
-  // posters, so long browse sessions were evicting and re-decoding posters
-  // on every scroll-back (decode churn + texture re-uploads). Still well
-  // under the largeHeap budget on a 2 GB box.
+  // 56 MB bounds the decoded-image working set. Hero Artwork Quality can use
+  // an ~8 MB Full HD landscape texture, but only the active/outgoing hero pair
+  // overlaps; the cache evicts older artwork rather than expanding resident
+  // memory on a constrained TV box.
   cache.maximumSizeBytes = 56 << 20; // 56 MB
 }
 
-/// TV-aware page transition: on Android TV every push/pop animates a
-/// full-screen layer, and the default Material zoom transition (scale + fade +
-/// snapshotting) is visibly janky on weak TV GPUs — it's a big part of why the
-/// app doesn't feel native there. TV gets a plain fast fade instead: the
-/// incoming page fades in over the first 40% of the route animation (~120ms of
-/// the standard 300ms), which reads as an instant, native-style switch and
-/// costs one opacity layer. Phones keep the stock zoom transition untouched.
-///
-/// The TV check reads [PlatformUtil.isAndroidTvCached] per transition build —
-/// warmed in main() before runApp — so the ThemeData stays const/synchronous.
-class _TvAwarePageTransitionsBuilder extends PageTransitionsBuilder {
-  const _TvAwarePageTransitionsBuilder();
-
-  static const PageTransitionsBuilder _phoneDefault =
-      ZoomPageTransitionsBuilder();
-
-  @override
-  Widget buildTransitions<T>(
-    PageRoute<T> route,
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    if (PlatformUtil.isAndroidTvCached) {
-      return FadeTransition(
-        opacity: CurvedAnimation(
-          parent: animation,
-          curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
-        ),
-        child: child,
-      );
-    }
-    return _phoneDefault.buildTransitions(
-      route,
-      context,
-      animation,
-      secondaryAnimation,
-      child,
-    );
-  }
-}
+// The TV-aware page transition moved to `theme/app_theme_adapter.dart`
+// (TvAwarePageTransitionsBuilder) along with the root ThemeData construction
+// it belongs to — both are shared by the legacy and themed builds.
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -166,6 +137,27 @@ Future<void> main() async {
     debugPrint('Unhandled async error: $error\n$stack');
     return true;
   };
+  // On a release tvOS build, Dart's print() lands on stdout, which the device
+  // console does not carry — so Flutter errors, and anything we log while
+  // bringing the port up, are simply invisible on real hardware. Forward
+  // debugPrint (which the framework's own error reporting also routes through)
+  // to a native channel that NSLogs it, where `devicectl --console` can see it.
+  // Debug/profile only: in release this would funnel every debugPrint in the
+  // app — tokens and URLs among them — into the device log.
+  if (PlatformUtil.isTvOS && !kReleaseMode) {
+    const channel = MethodChannel('debrify/tvlog');
+    final original = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      original(message, wrapWidth: wrapWidth);
+      if (message != null) {
+        channel.invokeMethod<void>('log', message).catchError((_) {});
+      }
+    };
+    final view = PlatformDispatcher.instance.views.first;
+    debugPrint(
+      '[tvOS] physicalSize=${view.physicalSize} dpr=${view.devicePixelRatio}',
+    );
+  }
   // Fire-and-forget: Pug's init does several platform-channel reads
   // (package_info/device_info/connectivity/timezone) + storage setup that are
   // slow on weak TV hardware. Never block first frame on analytics — it runs
@@ -189,15 +181,88 @@ Future<void> main() async {
   // Warms playerStartPortraitCached: the player picks its orientation while
   // building, and the IPTV startup channel can open one on the first frame.
   await StorageService.getPlayerStartPortrait();
+  // Update-aware defaults: one-time adoption of the current flagship look
+  // for every pref the user never wrote (see migrateDefaultsGeneration).
+  // MUST precede the brightness/theme warms below — they read migrated keys
+  // for the very first frame.
+  await StorageService.migrateDefaultsGeneration();
+  // Warm the layout prefs the shell reads through field initializers —
+  // without this the first frame paints canvas/ghost/rail and then snaps
+  // to the stored (possibly just-migrated) look.
+  await StorageService.getTvHomeStyle();
+  await StorageService.getTvSidebarStyle();
+  await StorageService.getDesktopSidebarStyle();
   // Warms the Appearance → Text Brightness preset: the root theme is built
   // synchronously in DebrifyApp.build, so the stored choice must be readable
   // before the first frame or text would flash bright and then dim.
   await TextBrightnessController.warm();
+  // Warms the app theme AFTER the preset (it is an input), for the same
+  // reason: the controller's memoized ThemeData is read in the first build.
+  await AppThemeController.warm();
+  // From here the system-bar owner is the authority — it re-applies on every
+  // active-surface or theme change (the _initOrientation call below remains
+  // the pre-warm default and matches the legacy style anyway).
+  SystemBarsOwner.init();
+  // The traversal-feedback dispatcher. Installed AFTER the theme controller
+  // because it reads the live theme's sound tokens, and it is a no-op under
+  // every theme that asks for silence — which is all of them except Console.
+  // Warm the two feedback vetoes before installing the dispatcher: it is
+  // consulted from a focus listener that cannot await, so an unwarmed read
+  // would use the default for the first few seconds of a session.
+  try {
+    await StorageService.getUiSounds();
+    await StorageService.getUiHaptics();
+  } catch (e) {
+    debugPrint('main: feedback prefs warm failed, using defaults: $e');
+  }
+  UiFeedback.instance.install();
+  // The idle compositor. Also a no-op under every look with no idle policy,
+  // and TV-only in v1 — a phone in a pocket already has a screen timeout.
+  IdleDim.instance.install();
+  // Bridge the trailer's chrome dim into the compositor's trailer input. The
+  // notifier stays where it is — the screens that publish it are the ones that
+  // know a trailer is playing — and the compositor only needs to SEE it. It
+  // also suspends the idle timer while a trailer runs: idle must never arm
+  // during playback, and it restarts from zero when the trailer ends.
+  MainPageBridge.tvChromeDim.addListener(() {
+    final v = MainPageBridge.tvChromeDim.value;
+    IdleDim.instance.trailerDim.value = v;
+    if (v > 0) {
+      IdleDim.instance.suspend(MainPageBridge.tvChromeDim);
+    } else {
+      IdleDim.instance.resume(MainPageBridge.tvChromeDim);
+    }
+  });
   // Warms the launch-ident choice: AppInitializer builds the splash in its
   // initState, so an async-only read would flash the default ident's world
   // for a frame. A cosmetic pref must never block startup.
   try {
     await StorageService.getLaunchAnimation();
+    await StorageService.getLaunchIdentPalette();
+  } catch (_) {}
+  // Warms the details-page layout choice: MergedDetailScreen picks its body in
+  // the first build, so an async-only read would paint Classic for a frame and
+  // then re-lay-out the entire page. Same rule — a cosmetic pref must never
+  // block startup.
+  try {
+    await StorageService.getDetailPageStyle();
+  } catch (_) {}
+  // And the details THEME, for the same reason — the page resolves both in its
+  // first build, so a stored choice must be readable before the first frame.
+  try {
+    await StorageService.getDetailTheme();
+  } catch (_) {}
+  // Parents Guide chooses its presentation synchronously when metadata lands.
+  // Warm the cosmetic preference so a stored Classic choice never flashes
+  // Compass for one frame.
+  try {
+    await StorageService.getParentsGuideStyle();
+  } catch (_) {}
+  // Resolve TV hero decode bounds before first paint. Otherwise a stored Full
+  // HD choice would first decode the default smaller image, then immediately
+  // throw it away and upload a second texture when the async preference lands.
+  try {
+    await TvHeroArtworkQualityController.warm();
   } catch (_) {}
   await _capImageCache();
   await _resolveStartupChannel();
@@ -421,15 +486,24 @@ class _DebrifyAppState extends State<DebrifyApp> {
     // in place — including const subtrees, which a mutable color token could
     // never reach (same instance → the element short-circuits the rebuild).
     TextBrightnessController.notifier.addListener(_onTextBrightnessChanged);
+    // Same contract for the app theme: the controller memoizes the derived
+    // ThemeData/AppTheme pair, so this rebuild only ever READS them — the
+    // recompute happened once, inside the controller, when the change fired.
+    AppThemeController.instance.addListener(_onAppThemeChanged);
   }
 
   void _onTextBrightnessChanged() {
     if (mounted) setState(() {});
   }
 
+  void _onAppThemeChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     TextBrightnessController.notifier.removeListener(_onTextBrightnessChanged);
+    AppThemeController.instance.removeListener(_onAppThemeChanged);
     super.dispose();
   }
 
@@ -449,7 +523,7 @@ class _DebrifyAppState extends State<DebrifyApp> {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _scaffoldMessengerKey,
-      navigatorObservers: [appRouteObserver],
+      navigatorObservers: [appRouteObserver, AppSurfaceRouteObserver()],
       title: 'Debrify',
       debugShowCheckedModeBanner: false,
       // Performance optimizations for TV with TV-aware text scaling
@@ -457,10 +531,34 @@ class _DebrifyAppState extends State<DebrifyApp> {
         // Synchronous TV flag — warmed in main() before runApp. The previous
         // FutureBuilder here re-issued an isTelevision channel call and
         // rebuilt the entire app subtree every time this builder ran.
-        final isTv = PlatformUtil.isAndroidTvCached;
+        final isTv = PlatformUtil.isTelevision;
 
-        // Wrap with global Escape key handler for desktop fullscreen exit
-        Widget content = child!;
+        // The app-theme token scope, ABOVE the root Navigator (builder's
+        // child IS the Navigator): every route, dialog, sheet and root
+        // overlay inherits it, and excluded surfaces shadow it lower down
+        // with a LegacyThemeBoundary. An open overlay restyles live on theme
+        // change for free — it inherits from here, not from a capture.
+        Widget content = AppThemeScope(
+          theme: AppThemeController.instance.theme,
+          // The theme's whole-page texture — film grain, Blueprint's rule.
+          // INSIDE the scope so it can read the tokens, and self-gating on
+          // AppSurfaceState so it never paints over the frozen player or the
+          // launch ident (see app_texture.dart). It short-circuits to `child`
+          // for legacy and for the seventeen themes that declare neither, so
+          // the common path costs one build and no layer.
+          child: AppTexture(child: child!),
+        );
+        // Pointer input counts as presence too — an Apple TV remote's
+        // trackpad and an attached mouse both arrive here rather than through
+        // the key handler. `Listener` at the root sees moves and downs
+        // regardless of what any descendant does with them, and behavior
+        // deferToChild keeps it from claiming a single hit.
+        content = Listener(
+          behavior: HitTestBehavior.deferToChild,
+          onPointerDown: (_) => IdleDim.instance.noteInput(),
+          onPointerHover: (_) => IdleDim.instance.noteInput(),
+          child: content,
+        );
         if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
           content = Focus(
             autofocus: false,
@@ -500,217 +598,98 @@ class _DebrifyAppState extends State<DebrifyApp> {
           child: content,
         );
 
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            // TV: No text scaling (1.0) to prevent zoom issues
-            // Mobile: Respect accessibility but cap at 1.3 for layout consistency
-            textScaler: TextScaler.linear(
-              isTv
-                  ? 1.0
-                  : min(MediaQuery.textScalerOf(context).scale(1.0), 1.3),
-            ),
-          ),
-          child: content,
+        final mq = MediaQuery.of(context).copyWith(
+          // TV: no text scaling at all — a 10-foot layout is already sized for
+          // the room, and scaling it overflows rows.
+          //
+          // Mobile: respect accessibility, capped at 1.3 so layouts hold. This
+          // CLAMPS the platform's own scaler rather than sampling it once at
+          // size 1.0 and rebuilding a linear one: Android's scaler is
+          // non-linear (it grows small text more than headings), so flattening
+          // it to a single multiplier threw that curve away and mis-sized
+          // large text for anyone using a non-default font size.
+          textScaler: isTv
+              ? TextScaler.noScaling
+              : MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3),
         );
+
+        // Apple TV hands Flutter a devicePixelRatio of 1.0, so the logical
+        // canvas is the full 1920x1080. Android TV reports 2.0 for the very
+        // same panel — a 960x540 canvas — and every dimension in this app (type
+        // scale, padding, card and row sizes, focus rings) was designed against
+        // that. Left alone, the entire UI draws at half its intended physical
+        // size: fine at a desk, unreadable from a sofa.
+        //
+        // The embedder won't tell us otherwise — the engine reads UIScreen.scale
+        // (pinned to 1.0 on tvOS) and ignores the view's contentScaleFactor — so
+        // halve the logical canvas here and scale the tree back up to fill the
+        // surface. Rasterisation still happens at the full 1920x1080, so this
+        // costs no sharpness. Placed inside MaterialApp.builder so routes,
+        // dialogs and overlays all sit within the scaled subtree.
+        if (PlatformUtil.isTvOS) {
+          const factor = 2.0;
+          final scaled = Size(
+            mq.size.width / factor,
+            mq.size.height / factor,
+          );
+          return MediaQuery(
+            data: mq.copyWith(
+              size: scaled,
+              devicePixelRatio: mq.devicePixelRatio * factor,
+              // Drop the tvOS overscan safe area. Apple TV reports ~80pt
+              // horizontal / ~60pt vertical insets; Android TV reports none,
+              // and this UI already carries its own 10-foot margins — so
+              // honouring these too insets everything a second time and leaves
+              // the whole app floating in the middle of the panel with the
+              // backdrop showing around it. The layouts are the safe area.
+              padding: EdgeInsets.zero,
+              viewPadding: EdgeInsets.zero,
+              viewInsets: mq.viewInsets / factor,
+            ),
+            child: FittedBox(
+              fit: BoxFit.fill,
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: scaled.width,
+                height: scaled.height,
+                child: content,
+              ),
+            ),
+          );
+        }
+
+        return MediaQuery(data: mq, child: content);
       },
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         // Optimize scroll physics for TV
         physics: const ClampingScrollPhysics(),
+        // A mouse can drag a list, which by default it cannot: Flutter's
+        // dragDevices defaults to touch-like devices only and deliberately
+        // leaves `mouse` out. That is survivable on a vertical page, where
+        // the wheel scrolls anyway, and fatal on a horizontal rail — the
+        // wheel reports only dy, and a horizontal Scrollable reads dx, so
+        // the rail answers to nothing a mouse user would try. Shift+wheel
+        // flips the axis but nobody discovers that.
+        //
+        // It went unnoticed because a trackpad is BOTH in the default set
+        // and a real source of dx, so every rail behaves perfectly on a
+        // laptop. Only a mouse shows the bug.
+        //
+        // Touch and DPAD are unaffected; this only adds an input.
+        dragDevices: const {
+          PointerDeviceKind.touch,
+          PointerDeviceKind.mouse,
+          PointerDeviceKind.trackpad,
+          PointerDeviceKind.stylus,
+        },
       ),
-      // Wrapped by the Text Brightness pass; the inner ThemeData stays
-      // byte-for-byte the theme the app has always shipped.
-      theme: _applyTextBrightness(ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        // TV: fast fade instead of the Material zoom push/pop (see
-        // _TvAwarePageTransitionsBuilder). Phones/desktop keep their defaults.
-        pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {TargetPlatform.android: _TvAwarePageTransitionsBuilder()},
-        ),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(
-            0xFF818CF8,
-          ), // Indigo 400 (brighter for contrast on dark)
-          onPrimary: Colors.white,
-          primaryContainer: Color(0xFF3730A3),
-          onPrimaryContainer: Colors.white,
-          secondary: Color(0xFF34D399), // Emerald 400
-          onSecondary: Colors.white,
-          secondaryContainer: Color(0xFF065F46),
-          onSecondaryContainer: Colors.white,
-          tertiary: Color(0xFFFBBF24), // Amber 400
-          onTertiary: Colors.white,
-          tertiaryContainer: Color(0xFF92400E),
-          onTertiaryContainer: Colors.white,
-          surface: Color(0xFF06080F), // Near black with blue tint
-          onSurface: Colors.white,
-          surfaceContainerHighest: Color(0xFF141824), // Dark elevated surface
-          surfaceContainerHigh: Color(0xFF1C2233), // Input fills
-          surfaceContainer: Color(0xFF2A3040), // Mid containers
-          surfaceContainerLow: Color(0xFF3A4050), // Lighter containers
-          surfaceContainerLowest: Color(0xFF94A3B8), // Slate 400
-          background: Color(0xFF020408), // True near-black
-          onBackground: Colors.white,
-          error: Color(0xFFEF4444), // Red 500
-          onError: Colors.white,
-          errorContainer: Color(0xFF7F1D1D), // Red 900
-          onErrorContainer: Colors.white,
-          outline: Color(0xFF475569), // Slate 600
-          outlineVariant: Color(0xFF334155), // Slate 700
-          shadow: Color(0xFF000000),
-          scrim: Color(0xFF000000),
-          inverseSurface: Color(0xFFF8FAFC), // Slate 50
-          onInverseSurface: Color(0xFF0F172A), // Slate 900
-          inversePrimary: Color(0xFF818CF8), // Indigo 400
-          surfaceTint: Color(0xFF6366F1), // Indigo 500
-        ),
-        textTheme: GoogleFonts.interTextTheme(
-          const TextTheme(
-            displayLarge: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.5,
-            ),
-            displayMedium: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.25,
-            ),
-            displaySmall: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-            headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
-            headlineMedium: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
-            headlineSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            titleLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            titleMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-            titleSmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-            bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
-            bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.normal),
-            bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-            labelLarge: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.1,
-            ),
-            labelMedium: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.5,
-            ),
-            labelSmall: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ),
-        cardTheme: CardThemeData(
-          elevation: 8,
-          shadowColor: Colors.black.withValues(alpha: 0.3),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          color: const Color(0xFF141824),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 4,
-            shadowColor: Colors.black.withValues(alpha: 0.3),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            side: const BorderSide(color: Color(0xFF2A3040)),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: const Color(0xFF1C2233),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF818CF8), width: 2),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFEF4444), width: 2),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 12,
-          ),
-        ),
-        appBarTheme: const AppBarTheme(
-          elevation: 0,
-          backgroundColor: Color(0xFF06080F),
-          foregroundColor: Colors.white,
-          centerTitle: true,
-          titleTextStyle: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        drawerTheme: const DrawerThemeData(backgroundColor: Color(0xFF141824)),
-        snackBarTheme: SnackBarThemeData(
-          backgroundColor: const Color(0xFF141824),
-          contentTextStyle: const TextStyle(color: Colors.white),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          behavior: SnackBarBehavior.floating,
-          elevation: 8,
-        ),
-      ), TextBrightnessController.current),
+      // Memoized in AppThemeController — under `legacy` this is byte-for-byte
+      // the theme the app has always shipped (the construction moved verbatim
+      // into theme/app_theme_adapter.dart, Text Brightness pass included).
+      theme: AppThemeController.instance.themeData,
       home: const AppInitializer(),
     );
   }
-}
-
-/// Tones the theme's text down per the Appearance → Text Brightness preset.
-///
-/// A POST-transform of the finished theme rather than different construction
-/// inputs, so [TextBrightness.bright] returns [base] untouched — the default
-/// look cannot regress by construction. For soft/dim it retargets only what
-/// text reads: `onSurface` (+ `onSurfaceVariant` where the preset says so),
-/// every `textTheme` color (the theme has merged typography defaults in by
-/// now, so `apply` covers all fifteen styles), the app-bar title and the
-/// snackbar body. Icons, buttons, on-accent text and surfaces are none of
-/// this pass's business.
-ThemeData _applyTextBrightness(ThemeData base, TextBrightness preset) {
-  final Color? text = preset.primary;
-  if (text == null) return base;
-  return base.copyWith(
-    colorScheme: base.colorScheme.copyWith(
-      onSurface: text,
-      onSurfaceVariant: preset.secondary,
-    ),
-    textTheme: base.textTheme.apply(bodyColor: text, displayColor: text),
-    appBarTheme: base.appBarTheme.copyWith(
-      titleTextStyle: base.appBarTheme.titleTextStyle?.copyWith(color: text),
-    ),
-    snackBarTheme: base.snackBarTheme.copyWith(
-      contentTextStyle:
-          base.snackBarTheme.contentTextStyle?.copyWith(color: text),
-    ),
-  );
 }
 
 class MainPage extends StatefulWidget {
@@ -827,15 +806,27 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// nav prefs; live-reloaded when the Settings picker fires the bridge.
   /// Ghost is the product default — matching it here avoids a one-frame
   /// classic flash before the pref read lands.
-  String _tvSidebarStyle = 'ghost';
+  String _tvSidebarStyle = StorageService.tvSidebarStyleCached;
+
+  /// Desktop/tablet sidebar chrome: 'rail' (fixed, the default) or 'pill'
+  /// (no rail — content full-bleed, a floating capsule opens the menu).
+  /// Same load/reload path as the TV style above.
+  String _desktopSidebarStyle = StorageService.desktopSidebarStyleCached;
 
   /// The classic bar's stored middle-slot picks (real indices; may contain
   /// currently-hidden tabs — validated against visibility at build). Null =
   /// never customized.
   List<int>? _phoneNavBarPicks;
 
+  /// The dedicated Search tab's screen index. Named because it is the one
+  /// destination whose presence depends on width rather than on which
+  /// providers are configured — sidebar layouts carry it, phones don't.
+  static const int _kSearchTabIndex = 17;
+
   /// Backfill order when picks are missing/invalid: Discover, IPTV, Cloud,
   /// Downloads, YouTube, Debrify TV, Stremio TV, Calendar, Addons, Settings.
+  /// Deliberately without [_kSearchTabIndex]: the classic bar's three slots
+  /// are all spoken for, and the phone reaches search from the Home board.
   static const List<int> _phoneNavDefaultOrder = [
     18,
     13,
@@ -873,7 +864,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   // frame already builds the right layout branch — waiting for the async
   // platform check here used to flash the non-TV chrome (the old top bar) on
   // TV for a frame or two before setState flipped the flag.
-  bool _isAndroidTv = PlatformUtil.isAndroidTvCached;
+  bool _isAndroidTv = PlatformUtil.isTelevision;
 
   /// Covers the boot while the IPTV startup channel resolves and launches.
   /// Torn down by [MainPageBridge.notifyPlayerLaunching] (which every playback
@@ -975,7 +966,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     'Home', // 15: the Stremio-style board — now THE Home (old index-0 Home is
     // deprecated). Built on demand in _buildPage as SearchScreen().
     'Cloud', // 16: consolidated cloud-provider hub (RD/Torbox/PikPak/…/WebDAV)
-    'Search', // 17: dedicated search tab (TV only)
+    'Search', // 17: dedicated search tab (TV + sidebar layouts)
     'Discover', // 18: source-dropdown browser (Continue Watching / Trakt / …)
     'Calendar', // 19: Trakt/Simkl calendar (visible when either is connected)
   ];
@@ -1003,9 +994,46 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     Icons.calendar_month_rounded, // 19: Calendar (Trakt/Simkl)
   ];
 
+  /// Tab index → bridge back-handler key, in ONE place. Every path that
+  /// assigns [_selectedIndex] must publish through this — cold start lands
+  /// directly on Home (15) via the field initializer without ever passing
+  /// through [_onItemTapped], and Back on the very first screen would
+  /// otherwise bypass the tab's handler entirely.
+  static String? _tabKeyFor(int index) {
+    switch (index) {
+      case 4:
+        return 'realdebrid';
+      case 5:
+        return 'torbox';
+      case 6:
+        return 'pikpak';
+      case 10:
+        return 'webdav';
+      case 11:
+        return 'premiumize';
+      case 12:
+        return 'alldebrid';
+      case 15:
+        // Off-TV Home: its handler closes the Spotlight search sheet on Back
+        // before the root fallback may arm double-back-exit.
+        return 'home';
+      case 17:
+        // Dedicated Search tab: its handler clears an active query on Back
+        // (returning to the blank prompt) before letting Back leave the tab.
+        return 'search';
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
+    // Active-surface signal: the initializer above picked the boot tab before
+    // any tap could, so system-bar ownership needs it published explicitly.
+    AppSurfaceState.instance.publishTab(_selectedIndex);
+    // Same rule for the bridge's back routing: the boot tab was chosen by the
+    // field initializer, not a tap.
+    MainPageBridge.setActiveTab(_tabKeyFor(_selectedIndex));
     // Startup channel: show the cover immediately so the user never sees the
     // IPTV page assembling itself underneath, and publish the splash hand-off
     // signal — AppInitializer waits on homeBoardReady, which only the Home
@@ -1019,6 +1047,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     }
     unawaited(_loadPhoneNavPrefs());
     MainPageBridge.tvSidebarStyleChanged = () {
+      if (mounted) unawaited(_loadPhoneNavPrefs());
+    };
+    MainPageBridge.desktopSidebarStyleChanged = () {
       if (mounted) unawaited(_loadPhoneNavPrefs());
     };
     MainPageBridge.navPrefsChanged = () {
@@ -1195,8 +1226,16 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     );
     _animationController.forward();
 
-    AndroidNativeDownloader.isTelevision().then((isTv) async {
+    AndroidNativeDownloader.isTelevision().then((isTvProbe) async {
       if (!mounted) return;
+
+      // The probe is an ANDROID method channel: on Apple TV there is no such
+      // channel, so it answers false and would drop a living-room device into
+      // the phone/desktop shell — and skip the block below, leaving the sidebar
+      // with no focus callbacks, so LEFT does nothing. [PlatformUtil] already
+      // knows the platform-level answer; this probe can only ever ADD Android
+      // TV to it, never take a television away.
+      final isTv = isTvProbe || PlatformUtil.isTelevision;
 
       setState(() {
         _isAndroidTv = isTv;
@@ -1246,6 +1285,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.switchTab = null;
     MainPageBridge.navPrefsChanged = null;
     MainPageBridge.tvSidebarStyleChanged = null;
+    MainPageBridge.desktopSidebarStyleChanged = null;
     MainPageBridge.openDebridOptions = null;
     MainPageBridge.openTorboxFolder = null;
     MainPageBridge.openPikPakFolder = null;
@@ -1653,7 +1693,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     try {
       final autoEnabled = await StorageService.getUpdateAutoCheckEnabled();
       if (!autoEnabled) return true;
-      final packageInfo = await PackageInfo.fromPlatform();
+      final packageInfo = await AppVersionInfo.get();
       UpdateSummary summary;
       try {
         summary = await UpdateService.checkForUpdates(
@@ -2046,12 +2086,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final style = await StorageService.getPhoneNavStyle();
     final picks = await StorageService.getPhoneNavBarIndices();
     final tvSidebar = await StorageService.getTvSidebarStyle();
+    final desktopSidebar = await StorageService.getDesktopSidebarStyle();
     if (!mounted) return;
     MainPageBridge.phoneNavStyleCached = style;
     setState(() {
       _phoneNavStyle = style;
       _phoneNavBarPicks = picks;
       _tvSidebarStyle = tvSidebar;
+      _desktopSidebarStyle = desktopSidebar;
       _phoneNavLoaded = true;
     });
   }
@@ -2100,38 +2142,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     setState(() {
       _selectedIndex = index;
     });
+    AppSurfaceState.instance.publishTab(index);
     _animationController.reset();
     _animationController.forward();
 
     // Notify MainPageBridge which tab is now active for back navigation
-    // Map tab indices to handler keys
-    String? activeTabKey;
-    switch (index) {
-      case 4:
-        activeTabKey = 'realdebrid';
-        break;
-      case 5:
-        activeTabKey = 'torbox';
-        break;
-      case 6:
-        activeTabKey = 'pikpak';
-        break;
-      case 10:
-        activeTabKey = 'webdav';
-        break;
-      case 11:
-        activeTabKey = 'premiumize';
-        break;
-      case 12:
-        activeTabKey = 'alldebrid';
-        break;
-      case 17:
-        // Dedicated Search tab: its handler clears an active query on Back
-        // (returning to the blank prompt) before letting Back leave the tab.
-        activeTabKey = 'search';
-        break;
-    }
-    MainPageBridge.setActiveTab(activeTabKey);
+    MainPageBridge.setActiveTab(_tabKeyFor(index));
 
     // Update active tab for TV sidebar navigation
     MainPageBridge.setActiveTvTab(index);
@@ -2296,6 +2312,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _simklAuthenticated = simklAuthenticated;
       _selectedIndex = nextIndex;
     });
+    AppSurfaceState.instance.publishTab(nextIndex);
+    // Keep back routing in step: this path can move the user off a hidden
+    // tab without a tap ever happening.
+    MainPageBridge.setActiveTab(_tabKeyFor(nextIndex));
   }
 
   /// Insert the Trakt Calendar tab (screen-ID 19) just before Downloads (2)
@@ -2355,9 +2375,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         3,
         9,
       ]; // Search, Home, Discover, Downloads, IPTV, YouTube,
-      // Debrify TV, Stremio TV. The dedicated Search tab (17) is TV-only; on
-      // desktop/mobile
-      // the Home-New board (15) keeps its own persistent search bar.
+      // Debrify TV, Stremio TV. The dedicated Search tab (17) is no longer
+      // TV-only — every non-TV layout WIDE enough for a sidebar carries it
+      // too (see the phone gate where nonTvIndices is built). The Home board
+      // (15) keeps its own persistent search bar regardless; the tab is an
+      // additional way in, not a replacement.
       // Consolidated Cloud tab: one entry when ANY provider is enabled & not
       // hidden (replaces the former per-provider RD/Torbox/PikPak/Premiumize/
       // AllDebrid/WebDAV tabs). The in-tab hub lists the available providers.
@@ -2389,6 +2411,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final adHidden = allDebridHidden ?? _allDebridHiddenFromNav;
     if (!rd && !tb && !pikpak && !webDav && !premiumize && !allDebrid) {
       final indices = <int>[
+        17,
         15,
         18,
         13,
@@ -2396,12 +2419,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         9,
         7,
         8,
-      ]; // Home, Discover, IPTV, YouTube, Stremio TV, Addons, Settings
+      ]; // Search, Home, Discover, IPTV, YouTube, Stremio TV, Addons, Settings
       _insertTraktCalendarTab(indices, calendar);
       return indices;
     }
 
-    final indices = <int>[15, 18, 2, 13, 14, 3, 9];
+    final indices = <int>[17, 15, 18, 2, 13, 14, 3, 9];
     // Consolidated Cloud tab (see TV branch above): one entry when any provider
     // is enabled & not hidden.
     if ((rd && !rdHidden) ||
@@ -2422,7 +2445,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// into [_pages]/[_titles], not the visible-nav position).
   String _navSectionForIndex(int screenIndex) {
     switch (screenIndex) {
-      case 17: // Search (TV only)
+      case 17: // Search (TV + sidebar layouts)
       case 15: // Home New (board)
       case 18: // Discover
       case 0: // Home
@@ -2476,11 +2499,18 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     return ordered;
   }
 
-  /// Resolve the widget for a nav index. Most come straight from the const
-  /// [_pages] list; the "Browse" tabs (IPTV/YouTube) are built here so the
-  /// already-resolved [_isAndroidTv] flag can be passed in (avoiding a
-  /// first-frame layout/focus flash from async re-detection).
-  Widget _buildPage(int index) {
+  /// Resolve the widget for a nav index, routed through the tab-boundary
+  /// factory: FROZEN destinations (see [AppSurfaces.tabs]) are wrapped in a
+  /// [LegacyThemeBoundary] so they render today's look under any app theme;
+  /// themed destinations inherit the live scope above the Navigator.
+  Widget _buildPage(int index) =>
+      AppSurfaces.wrapTab(index, _buildTabContent(index));
+
+  /// Most tabs come straight from the const [_pages] list; the "Browse" tabs
+  /// (IPTV/YouTube) are built here so the already-resolved [_isAndroidTv]
+  /// flag can be passed in (avoiding a first-frame layout/focus flash from
+  /// async re-detection).
+  Widget _buildTabContent(int index) {
     switch (index) {
       case 9: // Stremio TV — built here (not from the const _pages list) so it
         // gets the resolved native TV flag, like IPTV/YouTube/Home. Without it
@@ -2520,7 +2550,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         return SearchScreen(isTelevision: _isAndroidTv);
       case 16: // Cloud (consolidated provider hub)
         return CloudScreen(isTelevision: _isAndroidTv);
-      case 17: // Search (dedicated tab — TV only)
+      case 17: // Search (dedicated tab — TV + sidebar layouts)
         return SearchScreen(isTelevision: _isAndroidTv, searchMode: true);
       case 18: // Discover (source-dropdown browser)
         return SearchScreen(isTelevision: _isAndroidTv, discoverMode: true);
@@ -2705,90 +2735,157 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         });
   }
 
+  /// Root-level BACK/Menu handler for the MainPage PopScope below. Runs only
+  /// when the press wasn't already meaningful somewhere deeper: the startup
+  /// cover, per-tab folder handlers, pushed routes and the non-Home tab-walk
+  /// all keep their behavior — this decides what BACK means when there is
+  /// nothing left to go back FROM.
+  Future<void> _onRootPopInvoked(bool didPop) async {
+    if (didPop) return;
+
+    // The startup-channel cover owns BACK while it is up: this is the
+    // promised escape hatch, and it has to win over every other handler
+    // (including the root exit contract) or a hung launch would be
+    // uninterruptible.
+    if (_showIptvStartupOverlay) {
+      _cancelIptvStartup();
+      return;
+    }
+
+    // First, check if any child screen wants to handle back navigation
+    // (e.g., folder navigation in RealDebrid, TorBox, PikPak, Playlist screens)
+    if (MainPageBridge.handleBackNavigation()) {
+      return; // Back was handled by child screen (navigated up a folder)
+    }
+
+    // Allow navigation within app for all platforms
+    if (Navigator.canPop(context)) {
+      Navigator.of(context).pop();
+      return;
+    }
+
+    // Classic bottom-nav contract (non-TV): BACK from any non-Home
+    // tab walks to the Home tab first. Without this every tab was
+    // exit-adjacent — the first press armed the exit timer right
+    // there, so two quick presses anywhere closed the whole app,
+    // which read as "back randomly exits". Only Home arms
+    // double-back-to-exit.
+    // Apple TV takes this path too. Menu on tvOS means "go back", and
+    // its root is the Home tab — without this, BACK from any other tab
+    // did nothing at all, because the Android-TV branch below skips the
+    // walk and the old `Platform.isIOS` guard (true on tvOS) then
+    // swallowed the press. Android TV keeps its sidebar contract.
+    if ((!_isAndroidTv || PlatformUtil.isTvOS) && _selectedIndex != 15) {
+      final visible = _computeVisibleNavIndices();
+      if (visible.contains(15)) {
+        _onItemTapped(15);
+        return;
+      }
+    }
+
+    // At root level - platform-specific exit behavior
+
+    // Desktop platforms: Don't exit on back button
+    // Users close windows using OS controls (X button, Cmd+Q, etc.)
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      return; // Do nothing
+    }
+
+    // iPhone / iPad: don't force exit — there is no back button, and
+    // users leave by swiping up. NOT tvOS: `Platform.isIOS` is true
+    // there, and this guard was why BACK did nothing on Apple TV.
+    if (PlatformUtil.isIosMobile) {
+      return; // Do nothing
+    }
+
+    // Apple TV: Menu at the true root opens the rail; Menu with the rail
+    // open leaves the app. The old design let the second press "go
+    // unhandled" expecting tvOS to take over — but Flutter's unhandled-pop
+    // fallback is `SystemNavigator.pop()`, which is a NO-OP on tvOS (its
+    // Darwin implementation only pops a navigation controller, and this app
+    // installs the FlutterViewController as the window root). So there was
+    // no way to exit at all. The runner's `suspend` channel resigns to the
+    // tvOS Home Screen (the TV-button animation), then terminates — so the
+    // next open is a cold start, boot ident included.
+    if (PlatformUtil.isTvOS) {
+      if (!(MainPageBridge.isTvSidebarFocused?.call() ?? false)) {
+        MainPageBridge.focusTvSidebar?.call();
+        return;
+      }
+      unawaited(
+        const MethodChannel(
+          'debrify/tvsystem',
+        ).invokeMethod<void>('suspend').catchError((_) {}),
+      );
+      return;
+    }
+
+    // Android TV: BACK at root is the sidebar's door — one press opens the
+    // rail, a press while the rail is open exits. The bridge null-check
+    // keeps the first frames after launch (TV probe unresolved, callbacks
+    // not wired yet) on the mobile double-back path below instead of a
+    // dead press.
+    if (_isAndroidTv && MainPageBridge.focusTvSidebar != null) {
+      if (!(MainPageBridge.isTvSidebarFocused?.call() ?? false)) {
+        MainPageBridge.focusTvSidebar!();
+        return;
+      }
+      SystemNavigator.pop();
+      return;
+    }
+
+    // Android mobile: Double back press to exit
+    if (Platform.isAndroid) {
+      final currentTime = DateTime.now();
+      final backButtonPressedTwice =
+          _lastBackPressTime != null &&
+          currentTime.difference(_lastBackPressTime!) < _backPressDuration;
+
+      if (backButtonPressedTwice) {
+        SystemNavigator.pop();
+        return;
+      }
+
+      // First press - show message
+      _lastBackPressTime = currentTime;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Press back again to exit'),
+          duration: _backPressDuration,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleIndices = _computeVisibleNavIndices();
+    // Read ONCE here and captured by every builder below. The scrim and veil
+    // sit inside ValueListenableBuilders that re-run on each sidebar focus
+    // enter/exit — frequent enough that this file already avoids setState for
+    // them — and the Scaffold sits inside a LayoutBuilder that re-runs on
+    // every resize, so a lookup at any of those sites repeats an
+    // inherited-widget walk on a hot path.
+    final app = AppThemeScope.of(context);
 
     return Stack(
       children: [
         // Main app content
-        PopScope(
-          canPop: false,
-          onPopInvoked: (bool didPop) async {
-            if (didPop) return;
-
-            // The startup-channel cover owns BACK while it is up: this is the
-            // promised escape hatch, and it has to win over every other handler
-            // (including double-back-to-exit) or a hung launch would be
-            // uninterruptible.
-            if (_showIptvStartupOverlay) {
-              _cancelIptvStartup();
-              return;
-            }
-
-            // First, check if any child screen wants to handle back navigation
-            // (e.g., folder navigation in RealDebrid, TorBox, PikPak, Playlist screens)
-            if (MainPageBridge.handleBackNavigation()) {
-              return; // Back was handled by child screen (navigated up a folder)
-            }
-
-            // Allow navigation within app for all platforms
-            if (Navigator.canPop(context)) {
-              Navigator.of(context).pop();
-              return;
-            }
-
-            // Classic bottom-nav contract (non-TV): BACK from any non-Home
-            // tab walks to the Home tab first. Without this every tab was
-            // exit-adjacent — the first press armed the exit timer right
-            // there, so two quick presses anywhere closed the whole app,
-            // which read as "back randomly exits". Only Home arms
-            // double-back-to-exit.
-            if (!_isAndroidTv && _selectedIndex != 15) {
-              final visible = _computeVisibleNavIndices();
-              if (visible.contains(15)) {
-                _onItemTapped(15);
-                return;
-              }
-            }
-
-            // At root level - platform-specific exit behavior
-
-            // Desktop platforms: Don't exit on back button
-            // Users close windows using OS controls (X button, Cmd+Q, etc.)
-            if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-              return; // Do nothing
-            }
-
-            // iOS: Don't force exit - iOS apps don't have back buttons
-            // Users exit by swiping up or using home button
-            if (Platform.isIOS) {
-              return; // Do nothing
-            }
-
-            // Android (both mobile and TV): Double back press to exit
-            if (Platform.isAndroid) {
-              final currentTime = DateTime.now();
-              final backButtonPressedTwice =
-                  _lastBackPressTime != null &&
-                  currentTime.difference(_lastBackPressTime!) <
-                      _backPressDuration;
-
-              if (backButtonPressedTwice) {
-                SystemNavigator.pop();
-                return;
-              }
-
-              // First press - show message
-              _lastBackPressTime = currentTime;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Press back again to exit'),
-                  duration: _backPressDuration,
-                ),
-              );
-            }
-          },
+        // ValueListenableBuilder, not plain state: sidebar focus enter/exit
+        // deliberately avoids setState (see _tvSidebarExpanded), yet tvOS
+        // needs canPop to follow the rail — so only this PopScope shell
+        // rebuilds on it, and the app content rides through as `shell`.
+        ValueListenableBuilder<bool>(
+          valueListenable: _tvSidebarExpanded,
+          builder: (context, tvSidebarOpen, shell) => PopScope(
+            // Always intercepted — including Apple TV. The old tvOS
+            // "let it through while the rail is open" passthrough dead-ended
+            // in SystemNavigator.pop (a no-op there); the handler now owns
+            // the whole rail/exit contract via the runner's suspend channel.
+            canPop: false,
+            onPopInvoked: _onRootPopInvoked,
+            child: shell!,
+          ),
           child: AnimatedPremiumBackground(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -2823,7 +2920,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         // scaffolds simply cover it.
                         const Positioned.fill(child: TvAmbientArtStage()),
                         Positioned.fill(
-                          left: TvSidebarNav.collapsedWidth,
+                          // Through the helper, not the constant: 'pill' draws
+                          // no rail at rest, and a hardcoded 64 would leave a
+                          // dead margin down the left of every screen under
+                          // the one style whose point is to reclaim it.
+                          left: TvSidebarNav.contentInsetFor(_tvSidebarStyle),
                           child: SafeArea(
                             left: false,
                             // The sidebar's nodes are skipTraversal, so DPAD can
@@ -2850,8 +2951,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                     opacity: expanded ? 1.0 : 0.0,
                                     duration: const Duration(milliseconds: 200),
                                     curve: Curves.easeOut,
-                                    child: const ColoredBox(
-                                      color: Color(0x8A05060E),
+                                    child: ColoredBox(
+                                      color: app.shell.sidebarScrim,
                                     ),
                                   ),
                             ),
@@ -2872,8 +2973,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           // which kills the trailer, so it's already fading
                           // back in as it expands — the user never actually
                           // sees an empty menu.
+                          // Reads the COMPOSITOR, not the trailer notifier
+                          // directly. Two things want the rail out of the way
+                          // — a trailer taking the screen, and the room going
+                          // idle — and `IdleDim.effective` is their max,
+                          // computed once so the two can never fight. Under
+                          // legacy the idle half is always 0, so this is
+                          // `tvChromeDim` and nothing else.
                           child: ValueListenableBuilder<double>(
-                            valueListenable: MainPageBridge.tvChromeDim,
+                            valueListenable: IdleDim.instance.effective,
                             builder: (context, target, child) =>
                                 TweenAnimationBuilder<double>(
                                   tween: Tween<double>(end: target),
@@ -2933,7 +3041,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           left: 0,
                           top: 0,
                           bottom: 0,
-                          width: TvSidebarNav.collapsedWidth,
+                          // Matches the rail it veils — zero-width under
+                          // 'pill', where there is no rail to darken.
+                          width: TvSidebarNav.contentInsetFor(_tvSidebarStyle),
                           child: IgnorePointer(
                             child: ValueListenableBuilder<bool>(
                               valueListenable: MainPageBridge.tvStageLightsOff,
@@ -2943,9 +3053,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                     ? const Duration(milliseconds: 900)
                                     : const Duration(milliseconds: 250),
                                 curve: Curves.easeOut,
-                                child: const ColoredBox(
-                                  color: Color(0xEB0D0B1A),
-                                ),
+                                child: ColoredBox(color: app.shell.railVeil),
                               ),
                             ),
                           ),
@@ -2964,15 +3072,59 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                 // of the same Stack/SafeArea chain at every non-TV width.
                 final isDesktopWide =
                     !_isAndroidTv && constraints.maxWidth >= 600;
-                final nonTvIndices = _sidebarOrderedIndices(visibleIndices);
+                // The Search tab rides the sidebar, so it appears wherever a
+                // sidebar does — desktop AND touch tablets. A phone stays out:
+                // its bottom bar holds three slots beside Home, all already
+                // spoken for, and the Home board's own search bar is the way
+                // in there.
+                //
+                // Width alone cannot express that. A phone in landscape clears
+                // 600 comfortably (a Pro Max is 844 wide), so gating on width
+                // would hand Search to the one device meant to skip it, and
+                // rotating back to portrait would stand the tab down while it
+                // was still the selected page — nav highlighting Home over a
+                // Search screen. shortestSide is orientation-independent, the
+                // standard tablet test, so a phone is excluded in EITHER
+                // orientation and every iPad and Android tablet qualifies.
+                // Desktop is judged by the window instead: it has no fixed
+                // shortest side, and a short wide window is still a desktop.
+                //
+                // Filtering here rather than in `_computeVisibleNavIndices` is
+                // deliberate — that list is what `_onItemTapped` validates
+                // against, so dropping 17 from it would make the tab
+                // unreachable by any route, not merely absent from the rail.
+                final isPhone =
+                    !kIsWeb &&
+                    (Platform.isAndroid || Platform.isIOS) &&
+                    !PlatformUtil.isTelevision &&
+                    MediaQuery.of(context).size.shortestSide < 600;
+                final nonTvIndices = _sidebarOrderedIndices(visibleIndices)
+                    .where(
+                      (i) =>
+                          (isDesktopWide && !isPhone) || i != _kSearchTabIndex,
+                    )
+                    .toList();
                 final nonTvSelected = nonTvIndices.indexOf(_selectedIndex);
                 // Touch tablets (iPad / Android tablet in landscape) get the
                 // wider rail. True desktop keeps the slim rail.
+                //
+                // The television exclusion is load-bearing: Platform.isIOS is
+                // TRUE on Apple TV, so without it a TV would be classed as a
+                // touch tablet and given the finger-sized rail.
                 final expandDesktopSidebar =
-                    !kIsWeb && (Platform.isAndroid || Platform.isIOS);
-                final desktopSidebarWidth = expandDesktopSidebar
-                    ? DesktopSidebarNav.expandedWidth
-                    : DesktopSidebarNav.width;
+                    !kIsWeb &&
+                    (Platform.isAndroid || Platform.isIOS) &&
+                    !PlatformUtil.isTelevision;
+                // 'pill' is the one style that changes LAYOUT, exactly like
+                // its TV namesake: no rail, no reserved gutter — the content
+                // runs full-bleed and the capsule floats over it.
+                final desktopPill =
+                    isDesktopWide && _desktopSidebarStyle == 'pill';
+                final desktopSidebarWidth = desktopPill
+                    ? 0.0
+                    : expandDesktopSidebar
+                        ? DesktopSidebarNav.expandedWidth
+                        : DesktopSidebarNav.width;
 
                 final classicBottomNav =
                     !isDesktopWide &&
@@ -2991,17 +3143,18 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                   // static now: once this went opaque nothing could see it
                   // move, so the animation was dropped.)
                   //
-                  // #0D0B1A is already the app's de-facto ink (kStremioBg,
-                  // _kStremioBg, kSeeAllBg and HomeTheme.bg are all this exact
-                  // colour), so the strips now match every page that uses it and
-                  // sit within a hair of the few that don't. Safe to make opaque
-                  // because no non-TV page is translucent down to the wallpaper:
-                  // the one page that goes transparent on purpose is the glass
-                  // Home board, which is TV-gated (`_heroTrailerActive`).
+                  // shell.ink pins #0D0B1A under legacy — the app's de-facto
+                  // ink (kStremioBg, kSeeAllBg and HomeTheme.bg are all this
+                  // exact colour) — so the strips match every page that uses
+                  // it, and under a real app theme they follow its ground.
+                  // Safe to keep opaque because no non-TV page is translucent
+                  // down to the wallpaper: the one page that goes transparent
+                  // on purpose is the glass Home board, which is TV-gated
+                  // (`_heroTrailerActive`).
                   //
                   // TV keeps its transparent shell above — TvAmbientArtStage is
                   // the real background there.
-                  backgroundColor: HomeTheme.bg,
+                  backgroundColor: app.shell.ink,
                   // The REAL Scaffold slot, not a body child: Scaffold then
                   // owns the geometry — body inset above the bar, descendant
                   // MediaQuery stripped of the bottom padding the bar
@@ -3047,7 +3200,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                         left: isDesktopWide ? desktopSidebarWidth : 0,
                         child: ClipRect(
                           child: SafeArea(
-                            left: !isDesktopWide,
+                            // The rail absorbs the left inset when present;
+                            // under 'pill' there is no rail, so the content
+                            // must take the inset back (iPad landscape
+                            // notch) or the first column sits under it.
+                            left: !isDesktopWide || desktopPill,
                             child: Stack(
                               children: [
                                 // Page fills the whole area so its own
@@ -3069,12 +3226,35 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
-                      if (isDesktopWide)
+                      if (isDesktopWide && !desktopPill)
                         Positioned(
                           left: 0,
                           top: 0,
                           bottom: 0,
                           child: DesktopSidebarNav(
+                            expanded: expandDesktopSidebar,
+                            currentIndex: nonTvSelected == -1
+                                ? 0
+                                : nonTvSelected,
+                            entries: [
+                              for (final index in nonTvIndices)
+                                DesktopNavEntry(
+                                  _icons[index],
+                                  _titles[index],
+                                  _navSectionForIndex(index),
+                                ),
+                            ],
+                            onTap: (relativeIndex) {
+                              final actualIndex = nonTvIndices[relativeIndex];
+                              _onItemTapped(actualIndex);
+                            },
+                          ),
+                        ),
+                      // Full-screen layer, but hit-testable only at the
+                      // capsule while closed — see DesktopPillNav.
+                      if (desktopPill)
+                        Positioned.fill(
+                          child: DesktopPillNav(
                             expanded: expandDesktopSidebar,
                             currentIndex: nonTvSelected == -1
                                 ? 0
@@ -3126,15 +3306,18 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           ),
         ),
         // Startup-channel cover — last child so it sits above everything,
-        // including the nav chrome.
+        // including the nav chrome. Frozen: it covers the boot into IPTV (a
+        // frozen tab) and is an in-route overlay no tab boundary can reach.
         if (_showIptvStartupOverlay)
           Positioned.fill(
-            child: AutoLaunchOverlay(
-              launchTitle: 'Starting channel',
-              channelName: _iptvStartupChannelName,
-              channelNumber: _iptvStartupChannelNumber,
-              cancelHint: 'Press BACK to cancel',
-              onTimeout: _cancelIptvStartup,
+            child: LegacyThemeBoundary(
+              child: AutoLaunchOverlay(
+                launchTitle: 'Starting channel',
+                channelName: _iptvStartupChannelName,
+                channelNumber: _iptvStartupChannelNumber,
+                cancelHint: 'Press BACK to cancel',
+                onTimeout: _cancelIptvStartup,
+              ),
             ),
           ),
       ],

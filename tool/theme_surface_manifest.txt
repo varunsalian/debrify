@@ -1,0 +1,28 @@
+# Phase-one theming surfaces. One line per surface: label = glob(s).
+# Consumed by tool/measure_theme_surface.sh so the plan's table is reproducible.
+calendar = lib/screens/trakt_calendar_screen.dart
+addons = lib/screens/addons_screen.dart lib/screens/addons/*.dart
+cloud = lib/screens/cloud_screen.dart lib/screens/debrid_downloads_screen.dart lib/screens/torbox/*.dart lib/screens/premiumize/*.dart lib/screens/pikpak/*.dart lib/screens/alldebrid/*.dart lib/widgets/cloud/*.dart lib/screens/webdav/*.dart
+settings = lib/screens/settings_screen.dart lib/screens/settings/*.dart lib/screens/settings/widgets/*.dart
+home_search_discover = lib/screens/search_screen.dart
+home_widgets = lib/widgets/home/*.dart
+see_all = lib/widgets/see_all/*.dart lib/screens/see_all/*.dart
+shell = lib/main.dart lib/widgets/tv_sidebar_nav.dart lib/widgets/mobile_classic_nav.dart lib/widgets/mobile_floating_nav.dart lib/widgets/desktop_sidebar_nav.dart lib/widgets/tv_ambient_art_stage.dart lib/widgets/animated_background.dart
+details_themed = lib/screens/merged_series_detail_screen.dart lib/widgets/detail/*.dart lib/widgets/detail/theme/*.dart
+
+# ── Phase two (see plan/APP_THEME_PHASE_TWO_PLAN.md) ────────────────────────
+# Rendered sets, not directory globs: each line lists the files that actually
+# paint the surface, including shared widgets it pulls in. Shared widgets are
+# listed under every surface that renders them and are counted more than once
+# on purpose — the point is what each surface has to answer for, not a
+# de-duplicated total.
+p2_downloads = lib/screens/downloads_screen.dart lib/widgets/shimmer.dart lib/widgets/tv_text_field.dart
+p2_youtube = lib/widgets/youtube/*.dart lib/screens/browse_screen.dart
+p2_playlist = lib/screens/playlist_screen.dart lib/screens/playlist_content_view_screen.dart lib/widgets/adaptive_playlist_section.dart lib/widgets/tv_text_field.dart
+p2_classic_details = lib/screens/catalog_item_detail_screen.dart lib/screens/episodes_screen.dart lib/widgets/episodes_panel.dart
+p2_stremio_tv = lib/screens/stremio_tv/*.dart
+p2_debrify_tv = lib/screens/magic_tv_screen.dart lib/screens/debrify_tv/*.dart lib/screens/debrify_tv/*/*.dart
+p2_iptv = lib/widgets/iptv/*.dart lib/screens/iptv/*.dart lib/screens/browse_screen.dart
+p2_player_dart = lib/screens/video_player_screen.dart lib/screens/video_player/*.dart lib/screens/video_player/*/*.dart
+p2_onboarding = lib/widgets/initial_setup_flow.dart
+p2_launch = lib/widgets/launch/*.dart

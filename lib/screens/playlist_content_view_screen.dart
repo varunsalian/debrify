@@ -21,6 +21,7 @@ import '../services/tvmaze_service.dart';
 import '../services/webdav_service.dart';
 import '../services/premiumize_service.dart';
 import '../models/premiumize_file.dart';
+import '../theme/app_theme_scope.dart';
 import '../utils/series_parser.dart';
 import '../utils/file_utils.dart';
 import '../utils/formatters.dart';
@@ -1112,12 +1113,15 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     try {
       // Show loading dialog
+      final app = AppThemeScope.of(context);
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          backgroundColor: Color(0xFF1E293B),
-          content: Row(
+        builder: (context) => AlertDialog(
+          // A MODAL ground, which is why it is cloud.dialogSurface and not
+          // playlist.card — legacy spells both #1E293B.
+          backgroundColor: app.cloud.dialogSurface,
+          content: const Row(
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 16),
@@ -1254,6 +1258,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Build the search bar widget
   Widget _buildSearchBar() {
+    final app = AppThemeScope.of(context);
     final hasText = _searchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -1269,13 +1274,23 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               onDownArrow: () => _searchFocusNode.unfocus(),
               onRightArrow:
                   hasText ? () => _searchClearFocusNode.requestFocus() : null,
+              // The shared TV shell/keyboard chrome follows settings.accent,
+              // as Downloads established. The panel's ground and ink are the
+              // keyboard's own roles rather than this surface's, so they come
+              // from `youtube.keyboardPanel` / `core.tx`; the keycap label is
+              // scored against the accent actually being painted.
+              accent: app.settings.accent,
+              keyboardGround: app.youtube.keyboardPanel,
+              keyboardInk: app.core.tx,
+              keyboardInkOnAccent: app.inkOn(app.settings.accent),
               decoration: InputDecoration(
                 hintText: 'Search all files...',
+                // Colors.grey left literal: no token carries it.
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 filled: true,
-                fillColor: const Color(0xFF1E293B),
+                fillColor: app.playlist.fieldFill,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(
@@ -1323,10 +1338,10 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(8),
+                        color: app.playlist.fieldFill,
+                        borderRadius: app.shape.br(8),
                         border: isFocused
-                            ? Border.all(color: Colors.white, width: 2)
+                            ? Border.all(color: app.core.tx, width: 2)
                             : null,
                       ),
                       child: IconButton(
@@ -1378,6 +1393,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Build a card for a search result
   Widget _buildSearchResultCard(_SearchResult result) {
+    final app = AppThemeScope.of(context);
     final node = result.node;
 
     // Get progress for this file
@@ -1395,7 +1411,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: const Color(0xFF1E293B),
+      color: app.playlist.card,
       child: InkWell(
         onTap: () => _playFile(node),
         child: Stack(
@@ -1455,13 +1471,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: isFinished ? Colors.green : Colors.blue,
-                        borderRadius: BorderRadius.circular(4),
+                        // Colors.green (#4CAF50) left literal: it is NOT
+                        // playlist.statusWatched (#059669), so no token holds
+                        // it. The in-progress half is progressPlayed.
+                        color: isFinished
+                            ? Colors.green
+                            : app.playlist.progressPlayed,
+                        borderRadius: app.shape.br(4),
                       ),
                       child: Text(
                         isFinished ? 'DONE' : '${(progress * 100).toInt()}%',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: app.core.tx,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1479,7 +1500,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 child: LinearProgressIndicator(
                   value: progress,
                   backgroundColor: Colors.transparent,
-                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    app.playlist.progressPlayed,
+                  ),
                   minHeight: 3,
                 ),
               ),
@@ -1590,6 +1613,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   }
 
   Widget _buildFileCard(RDFileNode node) {
+    final app = AppThemeScope.of(context);
     final isFolder = node.isFolder;
     final isVideo = !isFolder && FileUtils.isVideoFile(node.name);
 
@@ -1631,7 +1655,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       },
       child: Card(
         margin: const EdgeInsets.only(bottom: 12),
-        color: const Color(0xFF1E293B),
+        color: app.playlist.card,
         child: InkWell(
           onTap: () {
             if (isFolder) {
@@ -1676,8 +1700,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                             isFolder
                                 ? '${node.fileCount} files • ${Formatters.formatFileSize(node.totalBytes)}'
                                 : Formatters.formatFileSize(node.bytes ?? 0),
-                            style: const TextStyle(
-                              color: Colors.white70,
+                            style: TextStyle(
+                              color: app.playlist.ink2,
                               fontSize: 12,
                             ),
                           ),
@@ -1687,7 +1711,11 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
                     // Arrow for folders or progress indicator for videos
                     if (isFolder)
-                      const Icon(Icons.chevron_right, color: Colors.white54)
+                      Icon(
+                        Icons.chevron_right,
+                        // Colors.white54 at its exact alpha, off the page ink.
+                        color: app.core.tx.withValues(alpha: 0x8A / 255),
+                      )
                     else if (isVideo && progress > 0.0)
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -1696,14 +1724,29 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         ),
                         decoration: BoxDecoration(
                           color: isFinished
-                              ? const Color(0xFF059669)
-                              : Colors.blue,
-                          borderRadius: BorderRadius.circular(4),
+                              ? app.playlist.statusWatched
+                              : app.playlist.progressPlayed,
+                          borderRadius: app.shape.br(4),
                         ),
                         child: Text(
                           isFinished ? 'DONE' : '${(progress * 100).round()}%',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            // Legacy keeps its shipped WHITE explicitly. It
+                            // cannot be left to inkOn: white scores 3.77 on
+                            // legacy's #059669 and 3.12 on Colors.blue, both
+                            // under the 4.0 threshold, so inkOn returns
+                            // core.ground and the badge would flip to
+                            // near-black — a visible change to today's app.
+                            //
+                            // Every other theme scores, because white on a
+                            // DERIVED success green is ~1.9:1 and unreadable.
+                            color: app.isLegacy
+                                ? app.core.tx
+                                : app.inkOn(
+                                    isFinished
+                                        ? app.playlist.statusWatched
+                                        : app.playlist.progressPlayed,
+                                  ),
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                           ),
@@ -1730,8 +1773,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                       child: Container(
                         decoration: BoxDecoration(
                           color: isFinished
-                              ? const Color(0xFF059669)
-                              : Colors.blue,
+                              ? app.playlist.statusWatched
+                              : app.playlist.progressPlayed,
                         ),
                       ),
                     ),
@@ -1814,16 +1857,27 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.info_outline, size: 48, color: Colors.white70),
+              Icon(
+                Icons.info_outline,
+                size: 48,
+                color: AppThemeScope.of(context).playlist.ink2,
+              ),
               const SizedBox(height: 16),
               const Text(
                 'No series detected in this content',
                 style: TextStyle(fontSize: 16),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Switching to Sort (A-Z) view...',
-                style: TextStyle(color: Colors.white60, fontSize: 14),
+                // Colors.white60 at its exact alpha, off the page ink.
+                style: TextStyle(
+                  color: AppThemeScope.of(context)
+                      .core
+                      .tx
+                      .withValues(alpha: 0x99 / 255),
+                  fontSize: 14,
+                ),
               ),
             ],
           ),
@@ -2415,6 +2469,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   /// Build season selector dropdown
   Widget _buildSeasonSelector() {
     if (_seriesPlaylist == null) return const SizedBox.shrink();
+    final app = AppThemeScope.of(context);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2433,7 +2488,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         children: [
           DropdownButton<int>(
             value: _selectedSeasonNumber,
-            dropdownColor: const Color(0xFF1E293B),
+            dropdownColor: app.cloud.dialogSurface,
             underline: const SizedBox.shrink(),
             items: _seriesPlaylist!.seasons.map((season) {
               return DropdownMenuItem(
@@ -2468,26 +2523,26 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             color: Colors.transparent,
             child: InkWell(
               onTap: _showFixMetadataDialog,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: app.shape.br(8),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  color: app.playlist.warning.withValues(alpha: 0.2),
+                  borderRadius: app.shape.br(8),
                   border: Border.all(
-                    color: Colors.orange.withValues(alpha: 0.5),
+                    color: app.playlist.warning.withValues(alpha: 0.5),
                     width: 1,
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.build, color: Colors.orange, size: 14),
-                    SizedBox(width: 4),
+                    Icon(Icons.build, color: app.playlist.warning, size: 14),
+                    const SizedBox(width: 4),
                     Text(
                       'Fix Metadata',
                       style: TextStyle(
-                        color: Colors.orange,
+                        color: app.playlist.warning,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
@@ -2593,6 +2648,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Build episode card with responsive layout (vertical on mobile, horizontal on desktop)
   Widget _buildEpisodeCard(SeriesEpisode episode) {
+    final app = AppThemeScope.of(context);
     // Get progress for this episode
     double progress = 0.0;
     bool isFinished = false;
@@ -2697,16 +2753,18 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           return Stack(
             children: [
               Card(
+                // The focused state is the idle veil LIFTED, so it is spelled
+                // off rowFill rather than as an unrelated white.
                 color: isFocused
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.white.withValues(alpha: 0.03),
+                    ? app.playlist.rowFill.withValues(alpha: 0.08)
+                    : app.playlist.rowFill,
                 clipBehavior: Clip.antiAlias,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: app.shape.br(12),
                   side: BorderSide(
                     color: isFocused
-                        ? Colors.white.withValues(alpha: 0.3)
-                        : Colors.white.withValues(alpha: 0.06),
+                        ? app.playlist.focusRing
+                        : app.fade(app.core.tx, 0.06),
                     width: isFocused ? 1.5 : 1,
                   ),
                 ),
@@ -2743,8 +2801,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(6),
+                      // Black glass stays black on every theme.
+                      color: Colors.black.withValues(alpha: 0.8),
+                      borderRadius: app.shape.br(6),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -2752,7 +2811,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         Icon(
                           isFinished ? Icons.remove_done : Icons.done_all,
                           size: 14,
-                          color: Colors.white.withOpacity(0.9),
+                          color: app.onGlass.withValues(alpha: 0.9),
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -2760,7 +2819,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                               ? 'Hold to unmark'
                               : 'Hold to mark watched',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: app.onGlass.withValues(alpha: 0.9),
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                           ),
@@ -2784,6 +2843,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     bool hasMetadata,
     EpisodeInfo? episodeInfo,
   ) {
+    final app = AppThemeScope.of(context);
     final epNum = episode.seriesInfo.episode;
     final titlePrefix = epNum != null
         ? 'E${epNum.toString().padLeft(2, '0')} - '
@@ -2796,7 +2856,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         children: [
           // Left: Compact thumbnail
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: app.shape.brImg(8),
             child: SizedBox(
               width: 120,
               height: 68,
@@ -2815,6 +2875,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                     _buildThumbnailPlaceholder(episode),
 
                   if (isFinished)
+                    // Black scrim over artwork — stays black on every theme.
                     Container(color: Colors.black.withValues(alpha: 0.6)),
 
                   // Thin progress bar at bottom
@@ -2830,15 +2891,19 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                           child: Container(
                             height: 3,
                             decoration: BoxDecoration(
+                              // The finished half is statusWatched; the
+                              // in-progress indigo is left literal — it is
+                              // NOT playlist.progressPlayed (Material blue),
+                              // and playlist.accent's role is the surface's
+                              // action colour, not a progress bar.
                               gradient: LinearGradient(
                                 colors: [
                                   isFinished
-                                      ? const Color(0xFF059669)
+                                      ? app.playlist.statusWatched
                                       : const Color(0xFF6366F1),
                                   isFinished
-                                      ? const Color(
-                                          0xFF059669,
-                                        ).withValues(alpha: 0.7)
+                                      ? app.playlist.statusWatched
+                                          .withValues(alpha: 0.7)
                                       : const Color(
                                           0xFF6366F1,
                                         ).withValues(alpha: 0.7),
@@ -2883,7 +2948,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   Text(
                     episodeInfo.plot!,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.45),
+                      color: app.core.tx.withValues(alpha: 0.45),
                       fontSize: 11,
                       height: 1.3,
                     ),
@@ -2905,19 +2970,21 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               height: 30,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
+                // #4CAF50 left literal: playlist.statusWatched is #059669,
+                // so no token carries this green.
                 color: isFinished
                     ? const Color(0xFF4CAF50)
-                    : Colors.white.withValues(alpha: 0.15),
+                    : app.playlist.controlFill,
                 border: Border.all(
                   color: isFinished
                       ? const Color(0xFF4CAF50)
-                      : Colors.white.withValues(alpha: 0.4),
+                      : app.fade(app.core.tx, 0.4),
                   width: 1.5,
                 ),
               ),
               child: Icon(
                 isFinished ? Icons.check : Icons.circle_outlined,
-                color: Colors.white,
+                color: app.core.tx,
                 size: 16,
               ),
             ),
@@ -2935,6 +3002,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     bool hasMetadata,
     EpisodeInfo? episodeInfo,
   ) {
+    final app = AppThemeScope.of(context);
     final epNum = episode.seriesInfo.episode;
     final titlePrefix = epNum != null
         ? 'E${epNum.toString().padLeft(2, '0')} - '
@@ -2947,7 +3015,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         children: [
           // Left: Compact thumbnail
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: app.shape.brImg(8),
             child: SizedBox(
               width: 155,
               height: 88,
@@ -2967,6 +3035,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
                   // Dim overlay for watched episodes
                   if (isFinished)
+                    // Black scrim over artwork — stays black on every theme.
                     Container(color: Colors.black.withValues(alpha: 0.6)),
 
                   // Thin progress bar at bottom of thumbnail
@@ -2982,15 +3051,19 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                           child: Container(
                             height: 3,
                             decoration: BoxDecoration(
+                              // The finished half is statusWatched; the
+                              // in-progress indigo is left literal — it is
+                              // NOT playlist.progressPlayed (Material blue),
+                              // and playlist.accent's role is the surface's
+                              // action colour, not a progress bar.
                               gradient: LinearGradient(
                                 colors: [
                                   isFinished
-                                      ? const Color(0xFF059669)
+                                      ? app.playlist.statusWatched
                                       : const Color(0xFF6366F1),
                                   isFinished
-                                      ? const Color(
-                                          0xFF059669,
-                                        ).withValues(alpha: 0.7)
+                                      ? app.playlist.statusWatched
+                                          .withValues(alpha: 0.7)
                                       : const Color(
                                           0xFF6366F1,
                                         ).withValues(alpha: 0.7),
@@ -3041,7 +3114,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                   Text(
                     episodeInfo.plot!,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.45),
+                      color: app.core.tx.withValues(alpha: 0.45),
                       fontSize: 11,
                       height: 1.4,
                     ),
@@ -3063,19 +3136,21 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               height: 36,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
+                // #4CAF50 left literal: playlist.statusWatched is #059669,
+                // so no token carries this green.
                 color: isFinished
                     ? const Color(0xFF4CAF50)
-                    : Colors.white.withValues(alpha: 0.15),
+                    : app.playlist.controlFill,
                 border: Border.all(
                   color: isFinished
                       ? const Color(0xFF4CAF50)
-                      : Colors.white.withValues(alpha: 0.4),
+                      : app.fade(app.core.tx, 0.4),
                   width: 1.5,
                 ),
               ),
               child: Icon(
                 isFinished ? Icons.check : Icons.circle_outlined,
-                color: Colors.white,
+                color: app.core.tx,
                 size: 18,
               ),
             ),
@@ -3116,6 +3191,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     double progress,
     bool isFinished,
   ) {
+    final app = AppThemeScope.of(context);
     final seString = episode.seasonEpisodeString;
 
     return Wrap(
@@ -3123,13 +3199,13 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
       runSpacing: 4,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        // Green S01E01 badge
+        // Green S01E01 badge. #34D399 left literal: no token carries it.
         if (seString.isNotEmpty)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: const Color(0xFF34D399).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: app.shape.br(4),
             ),
             child: Text(
               seString,
@@ -3144,7 +3220,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           Text(
             _formatAirDate(episodeInfo!.airDate!),
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
+              color: app.playlist.ink3,
               fontSize: 11,
             ),
           ),
@@ -3152,7 +3228,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           Text(
             '${episodeInfo!.runtime} min',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
+              color: app.playlist.ink3,
               fontSize: 11,
             ),
           ),
@@ -3160,6 +3236,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Left literal on purpose: value-equal to the DPAD cursor but a
+              // RATING, whose real destination (core.rating, #F5C518) is a
+              // different colour and therefore a separate sweep decision.
               const Icon(
                 Icons.star_rounded,
                 size: 13,
@@ -3169,7 +3248,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               Text(
                 episodeInfo!.rating!.toStringAsFixed(1),
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
+                  color: app.core.tx.withValues(alpha: 0.7),
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
                 ),
@@ -3180,7 +3259,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
           Text(
             isFinished ? 'Watched' : '${(progress * 100).round()}%',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
+              color: app.core.tx.withValues(alpha: 0.45),
               fontSize: 11,
             ),
           ),
@@ -3190,17 +3269,21 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
   /// Build thumbnail placeholder
   Widget _buildThumbnailPlaceholder(SeriesEpisode episode) {
+    final app = AppThemeScope.of(context);
+    // `Colors.white38` at its exact alpha, spelled off the page ink.
+    final ink38 = app.core.tx.withValues(alpha: 0x62 / 255);
     return Container(
+      // Colors.grey.shade900 left literal: no token carries it.
       color: Colors.grey.shade900,
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.video_library, color: Colors.white38, size: 48),
+            Icon(Icons.video_library, color: ink38, size: 48),
             const SizedBox(height: 8),
             Text(
               episode.seasonEpisodeString,
-              style: const TextStyle(color: Colors.white38, fontSize: 12),
+              style: TextStyle(color: ink38, fontSize: 12),
             ),
           ],
         ),
@@ -3290,12 +3373,15 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
 
     try {
       // Show loading dialog
+      final app = AppThemeScope.of(context);
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          backgroundColor: Color(0xFF1E293B),
-          content: Row(
+        builder: (context) => AlertDialog(
+          // A MODAL ground, which is why it is cloud.dialogSurface and not
+          // playlist.card — legacy spells both #1E293B.
+          backgroundColor: app.cloud.dialogSurface,
+          content: const Row(
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 16),

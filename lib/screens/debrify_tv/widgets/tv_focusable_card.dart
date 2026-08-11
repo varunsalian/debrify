@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../theme/app_theme.dart';
+import '../../../theme/app_theme_scope.dart';
+import '../../../theme/ui_feedback.dart';
+import '../../../theme/widgets/focus_expression.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 
@@ -41,6 +45,14 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
+    // Legacy keeps painting the cursor itself; every other theme hands it to
+    // `_cursor` below. The split is a width problem as much as an expression
+    // one — this card has always drawn 3px, `FocusTokens.legacy` is 2.5, and
+    // the expression box takes no width override, so routing legacy through it
+    // would thin a border the app has shipped for years.
+    final ownRing = app.isLegacy;
     return Focus(
       onFocusChange: (focused) {
         setState(() {
@@ -86,6 +98,10 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
 
             // If not a long press and not immediately after closing dialog, trigger regular press
             if (!_longPressTriggered && timeSinceLongPress > 300) {
+              // Explicit activation feedback at the chokepoint — never
+              // inferred from focus, and after the long-press and
+              // dialog-dismissal guards so a swallowed press stays silent too.
+              UiFeedback.instance.activate();
               widget.onPressed();
             }
             _longPressTriggered = false;
@@ -107,6 +123,9 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
           if (timeSinceLongPress <= 300) {
             return;
           }
+          // After the dialog-dismiss guard, for the same reason the key path
+          // sits after its guards: a swallowed activation must stay silent.
+          UiFeedback.instance.activate();
           widget.onPressed();
         },
         onLongPress: widget.onLongPress != null
@@ -116,13 +135,13 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
               }
             : null,
         child: RepaintBoundary(
-          child: Stack(
+          child: _cursor(app, Stack(
           children: [
             AnimatedContainer(
               // TV: snap instead of animating — a 200ms tween of a blurred
               // shadow + gradient repaints the card every frame of every
               // focus move, the main jank source in the channel grid.
-              duration: PlatformUtil.isAndroidTvCached
+              duration: PlatformUtil.isTelevision
                   ? Duration.zero
                   : const Duration(milliseconds: 200),
               width: double.infinity,
@@ -132,23 +151,36 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
+                  // The resting gradient's deep stop is `dialogBg` — the only
+                  // role holding this value. A role stretch (it is a card
+                  // gradient, not a dialog ground), taken because the
+                  // alternative is a near-black bottom edge on a paper theme.
                   colors: _isFocused
-                      ? [const Color(0xFF2A2A2A), const Color(0xFF1A1A1A)]
-                      : [const Color(0xFF1A1A1A), const Color(0xFF0F0F0F)],
+                      ? [tv.cardFocusBg, tv.cardBg]
+                      : [tv.cardBg, tv.dialogBg],
                 ),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: app.shape.br(16),
                 border: Border.all(
-                  color: _isFocused ? Colors.white : Colors.white12,
-                  width: _isFocused ? 3 : 1,
+                  color: _isFocused && ownRing ? tv.focusRing : tv.hairline,
+                  // Legacy keeps its shipped 3px: that literal is what the
+                  // card has always drawn. Under every other theme the ring
+                  // moved out to the expression box, so the card's own border
+                  // stays the resting hairline and the content no longer
+                  // shifts by a pixel and a half when focus lands.
+                  width: _isFocused && ownRing ? 3 : 1,
                 ),
                 // TV: the 3px white border is the focus cue; blurred shadows
                 // are the expensive part of the repaint, so skip them there.
-                boxShadow: PlatformUtil.isAndroidTvCached
+                // Off legacy the bloom belongs to the theme's light rig, which
+                // is why the focused glow is gated with the ring it bleeds.
+                boxShadow: PlatformUtil.isTelevision
                     ? null
-                    : _isFocused
+                    : _isFocused && ownRing
                     ? [
                         BoxShadow(
-                          color: Colors.white.withOpacity(0.2),
+                          // The focus ring bled out. 51 = the source's
+                          // `withOpacity(0.2)` (see TvFocusableButton).
+                          color: tv.focusRing.withAlpha(51),
                           blurRadius: 24,
                           spreadRadius: 0,
                         ),
@@ -179,10 +211,12 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
+                      // Black glass floating over the card's artwork — it stays
+                      // black on every theme, so its ink is `onGlass`.
                       color: Colors.black.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: app.shape.br(6),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.3),
+                        color: app.onGlass.withAlpha(77),
                         width: 1,
                       ),
                     ),
@@ -192,13 +226,13 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                         Icon(
                           Icons.more_vert_rounded,
                           size: 14,
-                          color: Colors.white.withOpacity(0.9),
+                          color: app.onGlass.withAlpha(230),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           'Long press for options',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.9),
+                            color: app.onGlass.withAlpha(230),
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                           ),
@@ -209,9 +243,27 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                 ),
               ),
           ],
-          ),
+          )),
         ),
       ),
     );
   }
+
+  /// The cursor, off legacy.
+  ///
+  /// Wrapped rather than branched inside the decoration because the theme may
+  /// answer with something a `BoxDecoration` cannot say — a scale, a lift, a
+  /// flood. Legacy is returned untouched so its tree keeps exactly the shape
+  /// it has always had, ring included.
+  ///
+  /// `on:` is the card's own focused fill: a theme whose cursor happens to
+  /// match that gradient stop would otherwise draw an invisible ring.
+  Widget _cursor(AppTheme app, Widget child) => app.isLegacy
+      ? child
+      : FocusExpressionBox(
+          focused: _isFocused,
+          radius: 16,
+          on: app.debrifyTv.cardFocusBg,
+          child: child,
+        );
 }

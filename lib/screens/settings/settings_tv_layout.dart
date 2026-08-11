@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/main_page_bridge.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// TV-only two-pane Settings shell (the "Mock 1" layout): a category rail on
 /// the left, the selected category's rows on the right.
@@ -68,6 +69,13 @@ class SettingsTvLayout extends StatefulWidget {
   // at — 100 is the panel's own size, and smaller fits more on screen.
   final int tvUiScalePercent;
   final Future<void> Function() onOpenTvScreenSize;
+  // Rendering: whether the UI is rastered at the panel's own resolution or at
+  // a ~720p buffer the TV scales back up. Label, not enum — this file only
+  // captions the row.
+  final String tvRenderQualityLabel;
+  final Future<void> Function() onOpenTvRenderQuality;
+  final String tvHeroArtworkQualityLabel;
+  final Future<void> Function() onOpenTvHeroArtworkQuality;
   final String tvSidebarStyleLabel;
   final Future<void> Function() onOpenTvSidebarStyle;
   final String discoverLayoutLabel;
@@ -78,6 +86,29 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenIptvStyle;
   final String playerGuideStyleLabel;
   final Future<void> Function() onOpenPlayerGuideStyle;
+  final String detailPageStyleLabel;
+  final Future<void> Function() onOpenDetailPageStyle;
+  final String looksLabel;
+  final Future<void> Function() onOpenLooks;
+  final Future<void> Function() onOpenThemeTokens;
+  final String themeTokensLabel;
+
+  /// Withheld like [detailThemeLabel]: Theme Lab is a preview TOOL, not a
+  /// setting — it changes nothing. Page and wiring stay.
+  final Future<void> Function() onOpenThemeLab;
+  final String appThemeLabel;
+  final Future<void> Function() onOpenAppTheme;
+
+  /// Still plumbed, deliberately: the Details Theme ROW is withheld from the
+  /// Appearance list because App Theme write-through-mirrors into
+  /// `detail_theme`, so two rows set the same thing and one silently
+  /// overwrote the other. The page and its wiring stay so restoring the row is
+  /// a few lines rather than an archaeology exercise — the same
+  /// withheld-not-deleted pattern `kDetailThemesShipped` uses.
+  final String detailThemeLabel;
+  final Future<void> Function() onOpenDetailTheme;
+  final String parentsGuideStyleLabel;
+  final Future<void> Function() onOpenParentsGuideStyle;
   // Live TV & DVR.
   final Future<void> Function() onOpenRecordings;
   final Future<void> Function() onOpenIptvSettings;
@@ -121,6 +152,10 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenLaunchAnimation,
     required this.tvUiScalePercent,
     required this.onOpenTvScreenSize,
+    required this.tvRenderQualityLabel,
+    required this.onOpenTvRenderQuality,
+    required this.tvHeroArtworkQualityLabel,
+    required this.onOpenTvHeroArtworkQuality,
     required this.tvSidebarStyleLabel,
     required this.onOpenTvSidebarStyle,
     required this.discoverLayoutLabel,
@@ -131,6 +166,19 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenIptvStyle,
     required this.playerGuideStyleLabel,
     required this.onOpenPlayerGuideStyle,
+    required this.detailPageStyleLabel,
+    required this.onOpenDetailPageStyle,
+    required this.looksLabel,
+    required this.onOpenLooks,
+    required this.onOpenThemeTokens,
+    required this.themeTokensLabel,
+    required this.onOpenThemeLab,
+    required this.appThemeLabel,
+    required this.onOpenAppTheme,
+    required this.detailThemeLabel,
+    required this.onOpenDetailTheme,
+    required this.parentsGuideStyleLabel,
+    required this.onOpenParentsGuideStyle,
     required this.onOpenRecordings,
     required this.onOpenIptvSettings,
     required this.showSupportDonation,
@@ -202,10 +250,18 @@ const List<_Category> _kCategories = [
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   /// Max focusable rows in any single FIXED category — one whose rows are
   /// written out here rather than driven by a provider list (Appearance has
-  /// exactly 8; About up to 6 with the conditional donation row;
+  /// exactly 14 — Looks from the theme work and Hero Artwork Quality from the
+  /// player-dock merge, less Details Theme (App Theme covers it) and Theme Lab
+  /// (a tool, not a setting); About has up to 6 with the conditional donation
+  /// row;
   /// Data & Backup up to 5). Connections and Trackers are sized from their
   /// own lists; see the pool computation in [initState].
-  static const int _kMaxCategoryRows = 8;
+  ///
+  /// MUST cover the largest category: the pane indexes [_paneNodes] directly,
+  /// so a row added past the pool throws on build.
+  /// Appearance is the longest fixed category. The pool must cover it, or the
+  /// last row of that category has no node and cannot be reached.
+  static const int _kMaxCategoryRows = 14;
 
   /// Selected category. A [ValueNotifier] (not setState) so a rail focus-move
   /// only rebuilds the pane and the two affected rail items via their
@@ -419,6 +475,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return SettingsBackground(
       child: SafeArea(
         child: Row(
@@ -435,7 +492,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 child: const SizedBox.shrink(),
               ),
             _buildRail(),
-            Container(width: 1, color: kSettingsLine),
+            Container(width: 1, color: t.line),
             // Only the pane rebuilds when the category changes.
             Expanded(
               child: ValueListenableBuilder<int>(
@@ -575,59 +632,132 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ],
           ),
         ];
-      case 3: // Appearance — every look/layout pref, one place.
+      case 3: // Appearance — grouped by the QUESTION each row answers.
+        // Four groups, not one list of fifteen. The rows used to interleave
+        // four different kinds of decision — a global theme, a per-screen
+        // layout, a per-device performance cap and a preset that sets several
+        // of the others — which is what made the category read as noise.
+        //
+        // `_paneNodes` is indexed POSITIONALLY and `_paneKey` wires Up/Down as
+        // index ± 1, so the numbering has to stay contiguous across the group
+        // boundaries: 0..14 top to bottom, headers excluded. Section headers
+        // are plain text and take no focus, so DPAD steps over them.
         return [
           SettingsSection(
-            title: '',
+            title: 'Presets',
+            blurb: 'One pick that sets the theme, layouts and launch '
+                'animation together.',
             children: [
-              // App-wide first, then the TV-specific pickers.
+              SettingsTile.spec(
+                SettingsRows.looks,
+                subtitle: widget.looksLabel,
+                onTap: widget.onOpenLooks,
+                focusNode: _paneNodes[0],
+              ),
+              SettingsTile.spec(
+                SettingsRows.themeTokens,
+                subtitle: widget.themeTokensLabel,
+                onTap: widget.onOpenThemeTokens,
+                focusNode: _paneNodes[1],
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          // The App Theme row is gone: a Look is the single top-level choice
+          // now, and Advanced under it edits the individual tokens. The rows
+          // below were RENUMBERED rather than left with a hole — the pane
+          // indexes `_paneNodes` directly and a test asserts the indices are
+          // contiguous from zero, because a gap is a row the remote skips.
+          SettingsSection(
+            title: 'Theme',
+            blurb: 'Colour, focus and motion. Applies everywhere in the app.',
+            children: [
               SettingsTile.spec(
                 SettingsRows.textBrightness,
                 subtitle: widget.textBrightnessLabel,
                 onTap: widget.onOpenTextBrightness,
-                focusNode: _paneNodes[0],
+                focusNode: _paneNodes[2],
               ),
               SettingsTile.spec(
                 SettingsRows.launchAnimation,
                 subtitle: widget.launchAnimationLabel,
                 onTap: widget.onOpenLaunchAnimation,
-                focusNode: _paneNodes[1],
+                focusNode: _paneNodes[3],
               ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          SettingsSection(
+            title: 'Screen layouts',
+            blurb: 'Where things sit. Each screen is chosen separately.',
+            children: [
               SettingsTile.spec(
                 SettingsRows.tvHomeStyle,
                 subtitle: widget.tvHomeStyleLabel,
                 onTap: widget.onOpenTvHomeStyle,
-                focusNode: _paneNodes[2],
+                focusNode: _paneNodes[4],
               ),
               SettingsTile.spec(
                 SettingsRows.discoverLayout,
                 subtitle: widget.discoverLayoutLabel,
                 onTap: widget.onOpenDiscoverLayout,
-                focusNode: _paneNodes[3],
+                focusNode: _paneNodes[5],
+              ),
+              SettingsTile.spec(
+                SettingsRows.detailPageStyle,
+                subtitle: widget.detailPageStyleLabel,
+                onTap: widget.onOpenDetailPageStyle,
+                focusNode: _paneNodes[6],
               ),
               SettingsTile.spec(
                 SettingsRows.tvSidebarStyle,
                 subtitle: widget.tvSidebarStyleLabel,
                 onTap: widget.onOpenTvSidebarStyle,
-                focusNode: _paneNodes[4],
-              ),
-              SettingsTile.spec(
-                SettingsRows.tvScreenSize,
-                subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
-                onTap: widget.onOpenTvScreenSize,
-                focusNode: _paneNodes[5],
+                focusNode: _paneNodes[7],
               ),
               SettingsTile.spec(
                 SettingsRows.iptvAppearance,
                 subtitle: widget.iptvStyleLabel,
                 onTap: widget.onOpenIptvStyle,
-                focusNode: _paneNodes[6],
+                focusNode: _paneNodes[8],
               ),
               SettingsTile.spec(
                 SettingsRows.playerGuideStyle,
                 subtitle: widget.playerGuideStyleLabel,
                 onTap: widget.onOpenPlayerGuideStyle,
-                focusNode: _paneNodes[7],
+                focusNode: _paneNodes[9],
+              ),
+              SettingsTile.spec(
+                SettingsRows.parentsGuideStyle,
+                subtitle: widget.parentsGuideStyleLabel,
+                onTap: widget.onOpenParentsGuideStyle,
+                focusNode: _paneNodes[10],
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          SettingsSection(
+            title: 'Display',
+            blurb: 'How this device draws. These affect performance, not '
+                'style.',
+            children: [
+              SettingsTile.spec(
+                SettingsRows.tvScreenSize,
+                subtitle: tvUiScaleLabel(widget.tvUiScalePercent),
+                onTap: widget.onOpenTvScreenSize,
+                focusNode: _paneNodes[11],
+              ),
+              SettingsTile.spec(
+                SettingsRows.tvRenderQuality,
+                subtitle: widget.tvRenderQualityLabel,
+                onTap: widget.onOpenTvRenderQuality,
+                focusNode: _paneNodes[12],
+              ),
+              SettingsTile.spec(
+                SettingsRows.tvHeroArtworkQuality,
+                subtitle: widget.tvHeroArtworkQualityLabel,
+                onTap: widget.onOpenTvHeroArtworkQuality,
+                focusNode: _paneNodes[13],
               ),
             ],
           ),
@@ -889,6 +1019,8 @@ class _RailItemState extends State<_RailItem> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Focus(
@@ -899,10 +1031,10 @@ class _RailItemState extends State<_RailItem> {
         onKeyEvent: (node, event) => widget.onKey(node, event, widget.index),
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: app.shape.br(12),
           child: InkWell(
             focusNode: widget.focusNode,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             onTap: widget.onActivate,
             onFocusChange: (f) {
               setState(() => _focused = f);
@@ -920,16 +1052,16 @@ class _RailItemState extends State<_RailItem> {
                 final bool selected = sel == widget.index;
                 final bool focused = _focused;
                 final Color fg = (focused || selected)
-                    ? Colors.white
-                    : kSettingsDim;
+                    ? app.core.tx
+                    : t.dim;
                 final Color iconColor = (focused || selected)
-                    ? kSettingsAccent2
-                    : kSettingsDim;
+                    ? t.accent2
+                    : t.dim;
                 // Subtitle brightens with the row but stays a step dimmer than
                 // the title so the label still reads as primary.
                 final Color subColor = (focused || selected)
-                    ? Colors.white.withValues(alpha: 0.60)
-                    : kSettingsDim2;
+                    ? app.fade(app.core.tx, 0.60)
+                    : t.dim2;
                 return Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -938,12 +1070,12 @@ class _RailItemState extends State<_RailItem> {
                   decoration: BoxDecoration(
                     color: selected
                         ? (focused
-                              ? kSettingsPanel2
-                              : kSettingsAccent.withValues(alpha: 0.12))
-                        : (focused ? kSettingsPanel2 : Colors.transparent),
-                    borderRadius: BorderRadius.circular(12),
+                              ? t.panel2
+                              : t.accent.withValues(alpha: 0.12))
+                        : (focused ? t.panel2 : Colors.transparent),
+                    borderRadius: app.shape.br(12),
                     border: Border.all(
-                      color: focused ? kSettingsAccent : Colors.transparent,
+                      color: focused ? t.accent : Colors.transparent,
                       width: 1.5,
                     ),
                   ),
@@ -1018,8 +1150,10 @@ class _RailSearchItemState extends State<_RailSearchItem> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final bool focused = _focused;
-    final Color fg = focused ? Colors.white : kSettingsDim;
+    final Color fg = focused ? app.core.tx : t.dim;
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
       child: Focus(
@@ -1028,10 +1162,10 @@ class _RailSearchItemState extends State<_RailSearchItem> {
         onKeyEvent: widget.onKey,
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: app.shape.br(12),
           child: InkWell(
             focusNode: widget.focusNode,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             onTap: widget.onActivate,
             onFocusChange: (f) {
               setState(() => _focused = f);
@@ -1045,10 +1179,10 @@ class _RailSearchItemState extends State<_RailSearchItem> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: focused ? kSettingsPanel2 : kSettingsPanel,
-                borderRadius: BorderRadius.circular(12),
+                color: focused ? t.panel2 : t.panel,
+                borderRadius: app.shape.br(12),
                 border: Border.all(
-                  color: focused ? kSettingsAccent : kSettingsLine,
+                  color: focused ? t.accent : t.line,
                   width: focused ? 1.5 : 1,
                 ),
               ),
@@ -1057,7 +1191,7 @@ class _RailSearchItemState extends State<_RailSearchItem> {
                   Icon(
                     Icons.search_rounded,
                     size: 20,
-                    color: focused ? kSettingsAccent2 : kSettingsDim,
+                    color: focused ? t.accent2 : t.dim,
                   ),
                   const SizedBox(width: 13),
                   Expanded(

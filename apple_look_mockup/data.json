@@ -1,0 +1,484 @@
+{
+ "hero": [
+  {
+   "id": "tt36303968",
+   "kind": "series",
+   "name": "Furious",
+   "bg": "bg_tt36303968.jpg",
+   "logo": "logo_tt36303968.png",
+   "logoLuma": 1.0,
+   "leftThird": 0.2,
+   "genres": [
+    "Crime",
+    "Drama",
+    "Thriller"
+   ],
+   "year": "2026\u2013",
+   "desc": "A determined FBI agent delves into a female killer's history while partnering with a seasoned investigator to track her down.",
+   "imdb": "",
+   "runtime": "54 min"
+  },
+  {
+   "id": "tt37287335",
+   "kind": "movie",
+   "name": "Obsession",
+   "bg": "bg_tt37287335.jpg",
+   "logo": "logo_tt37287335.png",
+   "logoLuma": 0.985,
+   "leftThird": 0.175,
+   "genres": [
+    "Horror",
+    "Romance",
+    "Thriller"
+   ],
+   "year": "2026",
+   "desc": "Baron \"Bear\" Bailey breaks a novelty charm to force his co-worker Nikki Freeman to love him, but the supernatural compulsion warps her mind into violent obsession, trapping him in a nightmare he cannot wish away.",
+   "imdb": "7.9",
+   "runtime": "109 min"
+  },
+  {
+   "id": "tt14688458",
+   "kind": "series",
+   "name": "Silo",
+   "bg": "bg_tt14688458.jpg",
+   "logo": "logo_tt14688458.png",
+   "logoLuma": 0.639,
+   "leftThird": 0.233,
+   "genres": [
+    "Drama",
+    "Mystery",
+    "Sci-Fi"
+   ],
+   "year": "2023\u2013",
+   "desc": "Men and women live in a giant silo underground with several regulations which they believe are in place to protect them from the toxic and ruined world on the surface.",
+   "imdb": "8.1",
+   "runtime": "50 min"
+  },
+  {
+   "id": "tt10872600",
+   "kind": "movie",
+   "name": "Spider-Man: No Way Home",
+   "bg": "bg_tt10872600.jpg",
+   "logo": "logo_tt10872600.png",
+   "logoLuma": 0.356,
+   "leftThird": 0.153,
+   "genres": [
+    "Action",
+    "Adventure",
+    "Fantasy"
+   ],
+   "year": "2021",
+   "desc": "With Spider-Man's identity now revealed, Peter asks Doctor Strange for help. When a spell goes wrong, dangerous foes from other worlds start to appear.",
+   "imdb": "8.1",
+   "runtime": "148 min"
+  },
+  {
+   "id": "tt13592494",
+   "kind": "series",
+   "name": "The Bombing of Pan Am 103",
+   "bg": "bg_tt13592494.jpg",
+   "logo": "logo_tt13592494.png",
+   "logoLuma": 1.0,
+   "leftThird": 0.128,
+   "genres": [
+    "Action",
+    "Drama",
+    "History"
+   ],
+   "year": "2025",
+   "desc": "Based on the events surrounding the 1988 Lockerbie bombing. Lockerbie will focus on the investigation into the crash on both sides of the Atlantic and the devastating effect it had on the small town and the families who lost loved...",
+   "imdb": "7.3",
+   "runtime": "58 min"
+  },
+  {
+   "id": "tt15047880",
+   "kind": "movie",
+   "name": "Disclosure Day",
+   "bg": "bg_tt15047880.jpg",
+   "logo": "logo_tt15047880.png",
+   "logoLuma": 0.888,
+   "leftThird": 0.166,
+   "genres": [
+    "Action",
+    "Drama",
+    "Mystery"
+   ],
+   "year": "2026",
+   "desc": "If you found out we weren't alone, if someone showed you, proved it to you, would that frighten you?",
+   "imdb": "6.5",
+   "runtime": "146 min"
+  }
+ ],
+ "rows": [
+  {
+   "label": "Popular Series",
+   "items": [
+    {
+     "id": "tt36303968",
+     "name": "Furious",
+     "poster": "p_tt36303968.jpg",
+     "genre": "Crime",
+     "year": "2026\u2013"
+    },
+    {
+     "id": "tt14688458",
+     "name": "Silo",
+     "poster": "p_tt14688458.jpg",
+     "genre": "Drama",
+     "year": "2023\u2013"
+    },
+    {
+     "id": "tt13592494",
+     "name": "The Bombing of Pan Am 103",
+     "poster": "p_tt13592494.jpg",
+     "genre": "Action",
+     "year": "2025"
+    },
+    {
+     "id": "tt34675596",
+     "name": "Cape Fear",
+     "poster": "p_tt34675596.jpg",
+     "genre": "Crime",
+     "year": "2026\u2013"
+    },
+    {
+     "id": "tt30494226",
+     "name": "Ride or Die",
+     "poster": "p_tt30494226.jpg",
+     "genre": "Action",
+     "year": "2026\u2013"
+    },
+    {
+     "id": "tt28088031",
+     "name": "Ransom Canyon",
+     "poster": "p_tt28088031.jpg",
+     "genre": "Drama",
+     "year": "2025\u2013"
+    },
+    {
+     "id": "tt13111078",
+     "name": "Lioness",
+     "poster": "p_tt13111078.jpg",
+     "genre": "Action",
+     "year": "2023\u2013"
+    },
+    {
+     "id": "tt34771210",
+     "name": "I Will Find You",
+     "poster": "p_tt34771210.jpg",
+     "genre": "Crime",
+     "year": "2026"
+    },
+    {
+     "id": "tt0944947",
+     "name": "Game of Thrones",
+     "poster": "p_tt0944947.jpg",
+     "genre": "Action",
+     "year": "2011\u20132019"
+    }
+   ]
+  },
+  {
+   "label": "Popular Movies",
+   "items": [
+    {
+     "id": "tt37287335",
+     "name": "Obsession",
+     "poster": "p_tt37287335.jpg",
+     "genre": "Horror",
+     "year": "2026"
+    },
+    {
+     "id": "tt10872600",
+     "name": "Spider-Man: No Way Home",
+     "poster": "p_tt10872600.jpg",
+     "genre": "Action",
+     "year": "2021"
+    },
+    {
+     "id": "tt15047880",
+     "name": "Disclosure Day",
+     "poster": "p_tt15047880.jpg",
+     "genre": "Action",
+     "year": "2026"
+    },
+    {
+     "id": "tt33612209",
+     "name": "The Devil Wears Prada 2",
+     "poster": "p_tt33612209.jpg",
+     "genre": "Comedy",
+     "year": "2026"
+    },
+    {
+     "id": "tt12042730",
+     "name": "Project Hail Mary",
+     "poster": "p_tt12042730.jpg",
+     "genre": "Adventure",
+     "year": "2026"
+    },
+    {
+     "id": "tt18259538",
+     "name": "Avatar Aang: The Last Airbender",
+     "poster": "p_tt18259538.jpg",
+     "genre": "Animation",
+     "year": "2026"
+    },
+    {
+     "id": "tt26657236",
+     "name": "Backrooms",
+     "poster": "p_tt26657236.jpg",
+     "genre": "Horror",
+     "year": "2026"
+    },
+    {
+     "id": "tt32565993",
+     "name": "The Sheep Detectives",
+     "poster": "p_tt32565993.jpg",
+     "genre": "Comedy",
+     "year": "2026"
+    },
+    {
+     "id": "tt2250912",
+     "name": "Spider-Man: Homecoming",
+     "poster": "p_tt2250912.jpg",
+     "genre": "Action",
+     "year": "2017"
+    }
+   ]
+  },
+  {
+   "label": "Featured",
+   "items": [
+    {
+     "id": "tt14688458",
+     "name": "Silo",
+     "poster": "p_tt14688458.jpg",
+     "genre": "Drama",
+     "year": "2023\u2013"
+    },
+    {
+     "id": "tt16418808",
+     "name": "Sugar",
+     "poster": "p_tt16418808.jpg",
+     "genre": "Action",
+     "year": "2024\u2013"
+    },
+    {
+     "id": "tt27497393",
+     "name": "Stuart Fails to Save the Universe",
+     "poster": "p_tt27497393.jpg",
+     "genre": "Comedy",
+     "year": "2026\u2013"
+    },
+    {
+     "id": "tt12327578",
+     "name": "Star Trek: Strange New Worlds",
+     "poster": "p_tt12327578.jpg",
+     "genre": "Action",
+     "year": "2022\u20132027"
+    },
+    {
+     "id": "tt0437741",
+     "name": "Project Runway",
+     "poster": "p_tt0437741.jpg",
+     "genre": "Reality-TV",
+     "year": "2004\u2013"
+    },
+    {
+     "id": "tt9892936",
+     "name": "One Hundred Years of Solitude",
+     "poster": "p_tt9892936.jpg",
+     "genre": "Drama",
+     "year": "2024\u20132026"
+    },
+    {
+     "id": "tt26450613",
+     "name": "A Shop for Killers",
+     "poster": "p_tt26450613.jpg",
+     "genre": "Action",
+     "year": "2024\u2013"
+    },
+    {
+     "id": "tt22640400",
+     "name": "The Traitors Australia",
+     "poster": "p_tt22640400.jpg",
+     "genre": "Game-Show",
+     "year": "2022\u2013"
+    },
+    {
+     "id": "tt16026746",
+     "name": "X-Men '97",
+     "poster": "p_tt16026746.jpg",
+     "genre": "Animation",
+     "year": "2024\u2013"
+    }
+   ]
+  }
+ ],
+ "detail": {
+  "id": "tt14688458",
+  "name": "Silo",
+  "bg": "bg_tt14688458.jpg",
+  "logo": "logo_tt14688458.png",
+  "desc": "Men and women live in a giant silo underground with several regulations which they believe are in place to protect them from the toxic and ruined world on the surface.",
+  "genres": [
+   "Drama",
+   "Mystery",
+   "Sci-Fi"
+  ],
+  "year": "2023\u2013",
+  "imdb": "8.1",
+  "runtime": "50 min",
+  "seasons": [
+   1,
+   2,
+   3
+  ],
+  "episodes": [
+   {
+    "n": 1,
+    "name": "Freedom Day",
+    "thumb": "ep_tt14688458_1.jpg",
+    "overview": "Sheriff Becker\u2019s plans for the future are thrown off course after his wife meets a hacker with information about the silo.",
+    "released": "2023-05-05"
+   },
+   {
+    "n": 2,
+    "name": "Holston\u2019s Pick",
+    "thumb": "ep_tt14688458_2.jpg",
+    "overview": "Juliette, an engineer, pieces together what might have led to a co-worker\u2019s mysterious death.",
+    "released": "2023-05-05"
+   },
+   {
+    "n": 3,
+    "name": "Machines",
+    "thumb": "ep_tt14688458_3.jpg",
+    "overview": "In her hunt for a new sheriff, Mayor Jahns clashes with Bernard. Juliette strikes a deal to keep the generator running.",
+    "released": "2023-05-12"
+   },
+   {
+    "n": 4,
+    "name": "Truth",
+    "thumb": "ep_tt14688458_4.jpg",
+    "overview": "Juliette tries gaining the trust of Deputy Marnes as they work to uncover the truth about recent tragedies.",
+    "released": "2023-05-19"
+   },
+   {
+    "n": 5,
+    "name": "The Janitor\u2019s Boy",
+    "thumb": "ep_tt14688458_5.jpg",
+    "overview": "Sims appoints Billings as chief deputy to keep tabs on Juliette, whose efforts to solve two murders lead to a showdown.",
+    "released": "2023-05-26"
+   },
+   {
+    "n": 6,
+    "name": "The Relic",
+    "thumb": "ep_tt14688458_6.jpg",
+    "overview": "During her investigation, Juliette uncovers disturbing secrets about someone she thought she knew.",
+    "released": "2023-06-02"
+   },
+   {
+    "n": 7,
+    "name": "The Flamekeepers",
+    "thumb": "ep_tt14688458_7.jpg",
+    "overview": "Bernard seeks Juliette\u2019s cooperation as he grows increasingly concerned about the silo\u2019s security. Juliette asks her father for a favor.",
+    "released": "2023-06-09"
+   },
+   {
+    "n": 8,
+    "name": "Hanna",
+    "thumb": "ep_tt14688458_8.jpg",
+    "overview": "New information causes Juliette to see her family\u2019s past differently\u2014and she finally gains access to the silo\u2019s biggest secrets.",
+    "released": "2023-06-16"
+   }
+  ],
+  "cast": [
+   {
+    "name": "Shane McRae",
+    "character": "Knox",
+    "photo": "cast_shane_mcrae.jpg"
+   },
+   {
+    "name": "Rebecca Ferguson",
+    "character": "Juliette Nichols",
+    "photo": "cast_rebecca_ferguson.jpg"
+   },
+   {
+    "name": "Common",
+    "character": "Robert Sims",
+    "photo": "cast_common.jpg"
+   },
+   {
+    "name": "Tim Robbins",
+    "character": "Bernard Holland",
+    "photo": "cast_tim_robbins.jpg"
+   },
+   {
+    "name": "Chinaza Uche",
+    "character": "Paul Billings",
+    "photo": "cast_chinaza_uche.jpg"
+   },
+   {
+    "name": "Harriet Walter",
+    "character": "Martha Walker",
+    "photo": "cast_harriet_walter.jpg"
+   },
+   {
+    "name": "Remmie Milner",
+    "character": "Shirley Campbell",
+    "photo": "cast_remmie_milner.jpg"
+   }
+  ],
+  "more": [
+   {
+    "id": "tt36303968",
+    "name": "Furious",
+    "poster": "p_tt36303968.jpg",
+    "genre": "Crime",
+    "year": "2026\u2013"
+   },
+   {
+    "id": "tt14688458",
+    "name": "Silo",
+    "poster": "p_tt14688458.jpg",
+    "genre": "Drama",
+    "year": "2023\u2013"
+   },
+   {
+    "id": "tt13592494",
+    "name": "The Bombing of Pan Am 103",
+    "poster": "p_tt13592494.jpg",
+    "genre": "Action",
+    "year": "2025"
+   },
+   {
+    "id": "tt34675596",
+    "name": "Cape Fear",
+    "poster": "p_tt34675596.jpg",
+    "genre": "Crime",
+    "year": "2026\u2013"
+   },
+   {
+    "id": "tt30494226",
+    "name": "Ride or Die",
+    "poster": "p_tt30494226.jpg",
+    "genre": "Action",
+    "year": "2026\u2013"
+   },
+   {
+    "id": "tt28088031",
+    "name": "Ransom Canyon",
+    "poster": "p_tt28088031.jpg",
+    "genre": "Drama",
+    "year": "2025\u2013"
+   },
+   {
+    "id": "tt13111078",
+    "name": "Lioness",
+    "poster": "p_tt13111078.jpg",
+    "genre": "Action",
+    "year": "2023\u2013"
+   }
+  ]
+ }
+}

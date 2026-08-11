@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/iptv_media_store.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/dialog_tap_guard.dart';
 import '../../utils/tv_keys.dart';
 import '../tv_text_field.dart';
@@ -95,7 +96,6 @@ class _IptvListPickerDialog extends StatefulWidget {
 
 class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
   static const _accent = Color(0xFF8B5CF6);
-  static const _surface = Color(0xFF141019);
 
   List<IptvListMeta> _lists = const [];
   Set<String> _membership = {};
@@ -237,11 +237,12 @@ class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final width = MediaQuery.of(context).size.width;
     return Dialog(
-      backgroundColor: _surface,
+      backgroundColor: app.sheetSurface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: app.shape.br(20)),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: width < 520 ? width : 460,
@@ -256,12 +257,13 @@ class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
   }
 
   Widget _buildHeader() {
+    final app = AppThemeScope.of(context);
     final logo = widget.channelLogoUrl;
     return Row(
       children: [
         if (logo != null && logo.isNotEmpty) ...[
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: app.shape.brImg(8),
             child: Image.network(
               logo,
               width: 34,
@@ -276,10 +278,10 @@ class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Add to list',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: app.core.tx,
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                 ),
@@ -289,10 +291,7 @@ class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
                 widget.channelName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.55),
-                  fontSize: 12.5,
-                ),
+                style: TextStyle(color: app.iptv.inkDim, fontSize: 12.5),
               ),
             ],
           ),
@@ -302,6 +301,7 @@ class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
   }
 
   Widget _buildList() {
+    final app = AppThemeScope.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -330,8 +330,8 @@ class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
                           ? Icons.favorite_rounded
                           : Icons.playlist_play_rounded,
                       iconColor: _lists[i].isFavorites
-                          ? const Color(0xFFF43F5E)
-                          : Colors.white.withValues(alpha: 0.7),
+                          ? app.iptv.favoriteAccent
+                          : app.iptv.inkMid,
                       checked: _membership.contains(_lists[i].id),
                       accent: _accent,
                       onTap: () => _toggle(_lists[i]),
@@ -374,6 +374,7 @@ class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
   }
 
   Widget _buildCreateForm() {
+    final app = AppThemeScope.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -404,27 +405,38 @@ class _IptvListPickerDialogState extends State<_IptvListPickerDialog> {
           child: TvTextField(
             controller: _nameController,
             focusNode: _nameFieldNode,
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: app.core.tx),
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _confirmNode.requestFocus(),
+            // The shared TV shell/keyboard chrome follows settings.accent.
+            // NOT this dialog's `_accent` (#8B5CF6) — a different violet from
+            // the keyboard's, so passing it would move a shipped pixel — and
+            // IptvTokens carries no accent role of its own.
+            accent: app.settings.accent,
+            keyboardGround: app.youtube.keyboardPanel,
+            keyboardInk: app.core.tx,
+            keyboardInkOnAccent: app.inkOn(app.settings.accent),
             decoration: InputDecoration(
               labelText: 'List name',
-              labelStyle: const TextStyle(color: Colors.white60),
+              // 0x99 / 0x61 are Colors.white60 / white38 exactly — the
+              // shorthands' alphas are 8-bit, so `withValues(0.6)` would be a
+              // different value, not the same colour.
+              labelStyle: TextStyle(color: app.core.tx.withAlpha(0x99)),
               hintText: 'e.g. Kids, Sports, Weekend',
-              hintStyle: const TextStyle(color: Colors.white38),
+              hintStyle: TextStyle(color: app.core.tx.withAlpha(0x61)),
               errorText: _nameError,
               filled: true,
-              fillColor: const Color(0xFF0F0B14),
+              fillColor: app.iptv.fieldFill,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF2A2233)),
+                borderRadius: app.shape.br(12),
+                borderSide: BorderSide(color: app.iptv.fieldBorder),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFF2A2233)),
+                borderRadius: app.shape.br(12),
+                borderSide: BorderSide(color: app.iptv.fieldBorder),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: app.shape.br(12),
                 borderSide: const BorderSide(color: _accent, width: 2),
               ),
             ),
@@ -495,6 +507,7 @@ class _ListRowState extends State<_ListRow> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (value) => setState(() => _focused = value),
@@ -522,12 +535,12 @@ class _ListRowState extends State<_ListRow> {
           decoration: BoxDecoration(
             color: _focused
                 ? widget.accent.withValues(alpha: 0.18)
-                : Colors.white.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(12),
+                : app.iptv.surfaceTint,
+            borderRadius: app.shape.br(12),
             border: Border.all(
               color: _focused
                   ? widget.accent
-                  : Colors.white.withValues(alpha: 0.07),
+                  : app.core.tx.withValues(alpha: 0.07),
               width: _focused ? 2 : 1,
             ),
           ),
@@ -544,8 +557,8 @@ class _ListRowState extends State<_ListRow> {
                       widget.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: app.core.tx,
                         fontSize: 14.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -555,7 +568,7 @@ class _ListRowState extends State<_ListRow> {
                       Text(
                         widget.subtitle!,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.45),
+                          color: app.core.tx.withValues(alpha: 0.45),
                           fontSize: 11.5,
                         ),
                       ),
@@ -571,7 +584,7 @@ class _ListRowState extends State<_ListRow> {
                   size: 20,
                   color: widget.checked
                       ? widget.accent
-                      : Colors.white.withValues(alpha: 0.3),
+                      : app.core.tx.withValues(alpha: 0.3),
                 ),
             ],
           ),
@@ -605,6 +618,7 @@ class _DialogButtonState extends State<_DialogButton> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (value) => setState(() => _focused = value),
@@ -631,19 +645,21 @@ class _DialogButtonState extends State<_DialogButton> {
           decoration: BoxDecoration(
             color: widget.filled
                 ? widget.accent.withValues(alpha: _focused ? 1 : 0.85)
-                : Colors.white.withValues(alpha: _focused ? 0.16 : 0.06),
-            borderRadius: BorderRadius.circular(10),
+                : app.core.tx.withValues(alpha: _focused ? 0.16 : 0.06),
+            borderRadius: app.shape.br(10),
             border: Border.all(
               color: _focused
-                  ? Colors.white.withValues(alpha: 0.9)
+                  ? app.core.tx.withValues(alpha: 0.9)
                   : Colors.transparent,
               width: 2,
             ),
           ),
           child: Text(
             widget.label,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              // Filled = ink ON the accent swatch; ghost = page ink. Both are
+              // white under legacy.
+              color: widget.filled ? app.inkOn(widget.accent) : app.core.tx,
               fontSize: 13.5,
               fontWeight: FontWeight.w700,
             ),

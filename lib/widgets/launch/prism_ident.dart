@@ -39,6 +39,7 @@ class PrismIdent extends LaunchIdent {
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
       _PrismPainter(animation, isTelevision: isTelevision);
 }

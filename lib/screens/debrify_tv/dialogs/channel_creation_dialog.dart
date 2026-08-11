@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../widgets/gradient_spinner.dart';
 
 /// A dialog shown while creating/warming a new channel.
@@ -59,6 +60,7 @@ class _ChannelCreationDialogState extends State<ChannelCreationDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final tv = AppThemeScope.of(context).debrifyTv;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onReady(context);
     });
@@ -72,12 +74,20 @@ class _ChannelCreationDialogState extends State<ChannelCreationDialog> {
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1B1B1F), Color(0xFF101014)],
+          gradient: LinearGradient(
+            // 0xFF101014 is the gradient's deep stop and no role holds it —
+            // nearest are `controlBg` 0xFF141414 and `dialogBg` 0xFF0F0F0F,
+            // both different colours. So the card is HALF themed: top stop
+            // follows the theme, bottom stop is pinned dark. The title and
+            // body ink below stay theme ink for that reason — on a paper
+            // theme no single ink reads over both halves, and scoring against
+            // one stop would only relocate the unreadable half. Fixing this
+            // properly needs a deep-stop role in DebrifyTvTokens.
+            colors: [tv.noticeBg, tv.dialogDeep],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          border: Border.all(color: Colors.white.withOpacity(0.1), width: 1.4),
+          border: Border.all(color: tv.fillWeak, width: 1.4),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.45),
@@ -101,12 +111,12 @@ class _ChannelCreationDialogState extends State<ChannelCreationDialog> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 10),
-            const SizedBox(
+            SizedBox(
               width: 240,
               child: Text(
                 'Fetching torrents and getting everything ready. Hang tight!',
                 style: TextStyle(
-                  color: Colors.white70,
+                  color: tv.textDim,
                   fontSize: 13,
                   height: 1.4,
                 ),
@@ -119,7 +129,7 @@ class _ChannelCreationDialogState extends State<ChannelCreationDialog> {
                 _remainingSeconds != null && _remainingSeconds! > 0
                     ? 'About ${_remainingSeconds!}s remaining…'
                     : 'Taking longer than usual…',
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                style: TextStyle(color: tv.textDim, fontSize: 12),
                 textAlign: TextAlign.center,
               ),
             ],

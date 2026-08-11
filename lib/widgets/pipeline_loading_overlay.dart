@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/overlay_theme.dart';
 import '../utils/platform_util.dart';
 
 /// The real resolve stages a play flows through. The overlay shows the subset
@@ -17,6 +18,7 @@ enum PlayLoadStage { searching, cacheCheck, preparing, starting }
 ///
 /// Handle-based like the poster overlay: [dismiss] pops exactly once, and
 /// [setStage] advances the checklist live as the play flow progresses.
+
 class PipelineLoadingOverlay {
   static const Color accent = Color(0xFF8B6BFF);
 
@@ -38,6 +40,12 @@ class PipelineLoadingOverlay {
     required Color providerColor,
     bool bound = false,
     bool hasCacheCheck = false,
+    Color? loaderGround,
+    Color? loaderAccent,
+    Color? loaderAccent2,
+    Color? railFar,
+    Color? ink,
+    Color? inkOnFill,
     VoidCallback? onCancel,
   }) {
     final steps = <PlayLoadStage>[
@@ -52,7 +60,13 @@ class PipelineLoadingOverlay {
     // while the loader is up.
     final nav = Navigator.of(context, rootNavigator: true);
     final handle = PipelineLoadingOverlay._(nav, state, steps);
-    final tv = PlatformUtil.isAndroidTvCached;
+    final tv = PlatformUtil.isTelevision;
+
+    // RawDialogRoute skips InheritedTheme capture, and this loader is SHARED:
+    // search_screen (themed) and Stremio TV (frozen) both launch it. Snapshot
+    // the launcher's themes so it renders what its launcher renders — the
+    // freeze included when launched from inside a LegacyThemeBoundary.
+    final capturedThemes = captureAppThemes(context);
 
     // Pushed as an explicit route (not showGeneralDialog) so [dismiss] can
     // target THIS route: the play flow now keeps the loader up while the
@@ -62,7 +76,7 @@ class PipelineLoadingOverlay {
       barrierDismissible: false,
       barrierColor: Colors.black.withValues(alpha: 0.55),
       transitionDuration: const Duration(milliseconds: 280),
-      pageBuilder: (_, __, ___) => PopScope(
+      pageBuilder: (_, __, ___) => capturedThemes.wrap(PopScope(
         canPop: false,
         // Back cancels a cancelable play: dismiss immediately, THEN run the
         // caller's cancel — matching the Cancel button, so the overlay never
@@ -83,6 +97,12 @@ class PipelineLoadingOverlay {
           providerCode: providerCode,
           providerColor: providerColor,
           isTv: tv,
+          loaderGround: loaderGround,
+          loaderAccent: loaderAccent,
+          loaderAccent2: loaderAccent2,
+          railFar: railFar,
+          ink: ink,
+          inkOnFill: inkOnFill,
           onCancel: onCancel == null
               ? null
               : () {
@@ -90,7 +110,7 @@ class PipelineLoadingOverlay {
                   onCancel();
                 },
         ),
-      ),
+      )),
       transitionBuilder: (context, animation, _, child) => FadeTransition(
         opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
         child: child,
@@ -175,6 +195,23 @@ class _PlContent extends StatefulWidget {
   final String providerCode;
   final Color providerColor;
   final bool isTv;
+
+  /// Caller-supplied palette, each defaulting to the literal it replaces.
+  ///
+  /// This overlay is pushed as a `RawDialogRoute`, so it deliberately does not
+  /// resolve `AppThemeScope` itself — its launcher passes the tokens down and
+  /// `captureAppThemes` carries the rest. Both launchers (Stremio TV and the
+  /// Search/Home play path in `torrent_playback_service`) now pass real
+  /// `stremioTv.loader*` tokens; omit them and it renders exactly as it
+  /// shipped, which is what the overlay's own tests pump.
+  final Color? loaderGround;
+  final Color? loaderAccent;
+  final Color? loaderAccent2;
+  final Color? ink;
+  final Color? inkOnFill;
+
+  /// The progress rail's far gradient stop, paired with [loaderAccent].
+  final Color? railFar;
   final VoidCallback? onCancel;
 
   const _PlContent({
@@ -188,6 +225,12 @@ class _PlContent extends StatefulWidget {
     required this.providerColor,
     required this.isTv,
     required this.onCancel,
+    this.loaderGround,
+    this.loaderAccent,
+    this.loaderAccent2,
+    this.ink,
+    this.inkOnFill,
+    this.railFar,
   });
 
   @override
@@ -198,8 +241,6 @@ class _PlContentState extends State<_PlContent>
     with SingleTickerProviderStateMixin {
   late final AnimationController _kb;
   bool _reduceMotion = false;
-
-  static const _accent = PipelineLoadingOverlay.accent;
 
   @override
   void initState() {
@@ -229,10 +270,21 @@ class _PlContentState extends State<_PlContent>
 
   bool get _hasPoster => widget.posterUrl != null && widget.posterUrl!.isNotEmpty;
 
+  // The palette, resolved once: each falls back to the literal it replaced, so
+  // a caller that passes nothing renders exactly as this overlay shipped.
+  Color get _ground => widget.loaderGround ?? const Color(0xFF201636);
+  Color get _accent => widget.loaderAccent ?? const Color(0xFF8B6BFF);
+  Color get _accent2 => widget.loaderAccent2 ?? const Color(0xFFB9A6FF);
+  Color get _ink => widget.ink ?? Colors.white;
+  Color get _inkOnFill => widget.inkOnFill ?? const Color(0xFF0A0712);
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final landscape = widget.isTv || size.width >= 880;
+    // This surface stays a dark cinematic plate on every theme (its Material
+    // ground, scrims and vignettes are all black at alpha), so its ink is
+    // `onGlass` — page ink would go near-black on a paper theme and vanish.
     return Material(
       color: Colors.black,
       child: Stack(
@@ -240,7 +292,12 @@ class _PlContentState extends State<_PlContent>
         children: [
           _backdrop(),
           _scrim(landscape),
-          _TopRail(state: widget.state, steps: widget.steps),
+          _TopRail(
+            state: widget.state,
+            steps: widget.steps,
+            accent: _accent,
+            railFar: widget.railFar ?? const Color(0xFFC4B2FF),
+          ),
           SafeArea(
             child: landscape ? _landscape(size) : _portrait(),
           ),
@@ -256,12 +313,16 @@ class _PlContentState extends State<_PlContent>
     // gradient (the no-poster look) is free; the foreground poster card still
     // carries the artwork.
     if (!_hasPoster || widget.isTv) {
-      return const DecoratedBox(
+      return DecoratedBox(
         decoration: BoxDecoration(
           gradient: RadialGradient(
-            center: Alignment(0, -0.3),
+            center: const Alignment(0, -0.3),
             radius: 1.1,
-            colors: [Color(0xFF201636), Color(0xFF08060D)],
+            colors: [
+              _ground,
+              // No token holds this near-black far stop; it stays a literal.
+              const Color(0xFF08060D),
+            ],
           ),
         ),
       );
@@ -316,13 +377,17 @@ class _PlContentState extends State<_PlContent>
 
   // ── Poster card ─────────────────────────────────────────────────────────
   Widget _posterCard(double width) {
+    final loaderAccent = _accent;
     return Container(
       width: width,
       height: width * 1.5,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: _accent.withValues(alpha: 0.32), blurRadius: 34, spreadRadius: 1),
+          BoxShadow(
+              color: loaderAccent.withValues(alpha: 0.32),
+              blurRadius: 34,
+              spreadRadius: 1),
           const BoxShadow(color: Colors.black54, blurRadius: 24, offset: Offset(0, 14)),
         ],
       ),
@@ -337,15 +402,20 @@ class _PlContentState extends State<_PlContent>
     );
   }
 
-  Widget _posterFallback() => ColoredBox(
-        color: Colors.white.withValues(alpha: 0.06),
-        child: const Center(
-          child: Icon(Icons.movie_rounded, color: Colors.white24, size: 34),
-        ),
-      );
+  Widget _posterFallback() {
+    final ink = _ink;
+    return ColoredBox(
+      color: ink.withValues(alpha: 0.06),
+      child: Center(
+        child:
+            Icon(Icons.movie_rounded, color: ink.withAlpha(0x3D), size: 34),
+      ),
+    );
+  }
 
   // ── Layouts ─────────────────────────────────────────────────────────────
   Widget _portrait() {
+    final ink = _ink;
     // Centered when it fits, scrollable when it doesn't (short / split-screen
     // phones), so the checklist + poster can never RenderFlex-overflow.
     return LayoutBuilder(
@@ -377,7 +447,7 @@ class _PlContentState extends State<_PlContent>
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.66), fontSize: 12.5),
+              style: TextStyle(color: ink.withValues(alpha: 0.66), fontSize: 12.5),
             ),
           ],
           const SizedBox(height: 26),
@@ -386,8 +456,20 @@ class _PlContentState extends State<_PlContent>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _StepsList(state: widget.state, steps: widget.steps, scale: 1),
-                _NoteLine(state: widget.state, scale: 1),
+                _StepsList(
+                  state: widget.state,
+                  steps: widget.steps,
+                  scale: 1,
+                  accent: _accent,
+                  ink: ink,
+                  inkOnFill: _inkOnFill,
+                ),
+                _NoteLine(
+                  state: widget.state,
+                  scale: 1,
+                  accent2: _accent2,
+                  ink: ink,
+                ),
               ],
             ),
           ),
@@ -395,7 +477,13 @@ class _PlContentState extends State<_PlContent>
           _providerChip(),
                 if (widget.onCancel != null) ...[
                   const SizedBox(height: 26),
-                  _CancelButton(onCancel: widget.onCancel!, isTv: false, scale: 1),
+                  _CancelButton(
+                    onCancel: widget.onCancel!,
+                    isTv: false,
+                    scale: 1,
+                    accent: _accent,
+                    ink: ink,
+                  ),
                 ],
               ],
             ),
@@ -420,7 +508,7 @@ class _PlContentState extends State<_PlContent>
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: const Color(0xFFB9A6FF),
+              color: _accent2,
               fontSize: 12.5 * scale,
               fontWeight: FontWeight.w700,
               letterSpacing: tv ? 1.2 : 0.2,
@@ -439,15 +527,33 @@ class _PlContentState extends State<_PlContent>
           ),
         ),
         SizedBox(height: (tv ? 20 : 16) * scale),
-        _StepsList(state: widget.state, steps: widget.steps, scale: tv ? 1.15 * scale : 1),
-        _NoteLine(state: widget.state, scale: tv ? 1.15 * scale : 1),
+        _StepsList(
+          state: widget.state,
+          steps: widget.steps,
+          scale: tv ? 1.15 * scale : 1,
+          accent: _accent,
+          ink: _ink,
+          inkOnFill: _inkOnFill,
+        ),
+        _NoteLine(
+          state: widget.state,
+          scale: tv ? 1.15 * scale : 1,
+          accent2: _accent2,
+          ink: _ink,
+        ),
         SizedBox(height: (tv ? 22 : 16) * scale),
         Row(
           children: [
             _providerChip(),
             const Spacer(),
             if (widget.onCancel != null)
-              _CancelButton(onCancel: widget.onCancel!, isTv: tv, scale: scale),
+              _CancelButton(
+                onCancel: widget.onCancel!,
+                isTv: tv,
+                scale: scale,
+                accent: _accent,
+                ink: _ink,
+              ),
           ],
         ),
       ],
@@ -485,13 +591,15 @@ class _PlContentState extends State<_PlContent>
           margin: const EdgeInsets.symmetric(horizontal: 24),
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
+            // The card's own two-stop plate: no token holds either literal, so
+            // both stay pinned.
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [Color(0xD1221A34), Color(0xCC0F0B19)],
             ),
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            border: Border.all(color: _ink.withValues(alpha: 0.12)),
             boxShadow: [
               const BoxShadow(color: Colors.black, blurRadius: 90, offset: Offset(0, 40), spreadRadius: -46),
               BoxShadow(color: _accent.withValues(alpha: 0.32), blurRadius: 70, offset: const Offset(0, 22), spreadRadius: -46),
@@ -505,12 +613,13 @@ class _PlContentState extends State<_PlContent>
 
   // ── Provider chip ───────────────────────────────────────────────────────
   Widget _providerChip() {
+    final ink = _ink;
     return Container(
       padding: const EdgeInsets.fromLTRB(6, 5, 12, 5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: ink.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
+        border: Border.all(color: ink.withValues(alpha: 0.13)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -548,7 +657,19 @@ class _PlContentState extends State<_PlContent>
 class _TopRail extends StatelessWidget {
   final ValueNotifier<_PlState> state;
   final List<PlayLoadStage> steps;
-  const _TopRail({required this.state, required this.steps});
+
+  /// Both gradient stops. Previously pinned because the far stop had no token;
+  /// it has one now (`stremioTv.loaderRailFar`), so the rail themes with the
+  /// rest of the loader instead of running from a themed accent into a fixed
+  /// violet.
+  final Color accent;
+  final Color railFar;
+  const _TopRail({
+    required this.state,
+    required this.steps,
+    required this.accent,
+    required this.railFar,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -571,12 +692,12 @@ class _TopRail extends StatelessWidget {
               child: FractionallySizedBox(
                 widthFactor: (0.08 + 0.9 * frac).clamp(0.08, 1.0),
                 child: Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [PipelineLoadingOverlay.accent, Color(0xFFC4B2FF)],
+                      colors: [accent, railFar],
                     ),
                     boxShadow: [
-                      BoxShadow(color: PipelineLoadingOverlay.accent, blurRadius: 10),
+                      BoxShadow(color: accent, blurRadius: 10),
                     ],
                   ),
                 ),
@@ -594,9 +715,23 @@ class _StepsList extends StatelessWidget {
   final ValueNotifier<_PlState> state;
   final List<PlayLoadStage> steps;
   final double scale;
-  const _StepsList({required this.state, required this.steps, required this.scale});
 
-  static const _accent = PipelineLoadingOverlay.accent;
+  /// Threaded down from [_PlContent] rather than read off `AppThemeScope`:
+  /// the overlay's route skips ambient inheritance, so its launcher owns the
+  /// palette. [inkOnFill] is the check glyph sitting ON the accent dot — a
+  /// contrast-scored token, never page ink.
+  final Color accent;
+  final Color ink;
+  final Color inkOnFill;
+
+  const _StepsList({
+    required this.state,
+    required this.steps,
+    required this.scale,
+    required this.accent,
+    required this.ink,
+    required this.inkOnFill,
+  });
 
   String _label(PlayLoadStage s) {
     switch (s) {
@@ -643,10 +778,10 @@ class _StepsList extends StatelessWidget {
     final done = i < active;
     final isActive = i == active;
     final labelColor = done
-        ? Colors.white.withValues(alpha: 0.85)
+        ? ink.withValues(alpha: 0.85)
         : isActive
-            ? Colors.white
-            : Colors.white.withValues(alpha: 0.5);
+            ? ink
+            : ink.withValues(alpha: 0.5);
     final count = _count(s, st);
     final iconSize = 22.0 * scale;
 
@@ -665,7 +800,9 @@ class _StepsList extends StatelessWidget {
                     width: 2,
                     height: 8 * scale,
                     decoration: BoxDecoration(
-                      color: done ? _accent.withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.15),
+                      color: done
+                          ? accent.withValues(alpha: 0.6)
+                          : ink.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -692,7 +829,7 @@ class _StepsList extends StatelessWidget {
               child: Text(
                 count,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: ink.withValues(alpha: 0.5),
                   fontSize: 11.5 * scale,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -710,8 +847,8 @@ class _StepsList extends StatelessWidget {
         width: size,
         height: size,
         alignment: Alignment.center,
-        decoration: const BoxDecoration(color: _accent, shape: BoxShape.circle),
-        child: Icon(Icons.check_rounded, size: size * 0.62, color: const Color(0xFF0A0712)),
+        decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+        child: Icon(Icons.check_rounded, size: size * 0.62, color: inkOnFill),
       );
     }
     if (active) {
@@ -721,15 +858,15 @@ class _StepsList extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: _accent, width: 2),
-          boxShadow: [BoxShadow(color: _accent.withValues(alpha: 0.16), blurRadius: 0, spreadRadius: 4)],
+          border: Border.all(color: accent, width: 2),
+          boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.16), blurRadius: 0, spreadRadius: 4)],
         ),
         child: SizedBox(
           width: size * 0.5,
           height: size * 0.5,
-          child: const CircularProgressIndicator(
+          child: CircularProgressIndicator(
             strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation(_accent),
+            valueColor: AlwaysStoppedAnimation(accent),
           ),
         ),
       );
@@ -740,12 +877,12 @@ class _StepsList extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 2),
+        border: Border.all(color: ink.withValues(alpha: 0.18), width: 2),
       ),
       child: Text(
         '${i + 1}',
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.42),
+          color: ink.withValues(alpha: 0.42),
           fontSize: size * 0.42,
           fontWeight: FontWeight.w700,
         ),
@@ -760,7 +897,17 @@ class _StepsList extends StatelessWidget {
 class _NoteLine extends StatelessWidget {
   final ValueNotifier<_PlState> state;
   final double scale;
-  const _NoteLine({required this.state, required this.scale});
+
+  /// Threaded down from [_PlContent] — see [_StepsList].
+  final Color accent2;
+  final Color ink;
+
+  const _NoteLine({
+    required this.state,
+    required this.scale,
+    required this.accent2,
+    required this.ink,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -777,7 +924,7 @@ class _NoteLine extends StatelessWidget {
               Icon(
                 Icons.filter_alt_rounded,
                 size: 13 * scale,
-                color: const Color(0xFFB9A6FF).withValues(alpha: 0.85),
+                color: accent2.withValues(alpha: 0.85),
               ),
               SizedBox(width: 6 * scale),
               Flexible(
@@ -786,7 +933,7 @@ class _NoteLine extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.62),
+                    color: ink.withValues(alpha: 0.62),
                     fontSize: 11.5 * scale,
                     height: 1.35,
                   ),
@@ -806,7 +953,18 @@ class _CancelButton extends StatefulWidget {
   final VoidCallback onCancel;
   final bool isTv;
   final double scale;
-  const _CancelButton({required this.onCancel, required this.isTv, required this.scale});
+
+  /// Threaded down from [_PlContent] — see [_StepsList].
+  final Color accent;
+  final Color ink;
+
+  const _CancelButton({
+    required this.onCancel,
+    required this.isTv,
+    required this.scale,
+    required this.accent,
+    required this.ink,
+  });
 
   @override
   State<_CancelButton> createState() => _CancelButtonState();
@@ -832,6 +990,8 @@ class _CancelButtonState extends State<_CancelButton> {
 
   @override
   Widget build(BuildContext context) {
+    final accent = widget.accent;
+    final ink = widget.ink;
     final tvFocused = widget.isTv && _focused;
     final s = widget.scale;
     return Focus(
@@ -853,22 +1013,29 @@ class _CancelButtonState extends State<_CancelButton> {
           duration: const Duration(milliseconds: 140),
           padding: EdgeInsets.symmetric(horizontal: 18 * s, vertical: 8 * s),
           decoration: BoxDecoration(
-            color: tvFocused ? Colors.white : Colors.white.withValues(alpha: 0.05),
+            color: tvFocused ? ink : ink.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: tvFocused ? Colors.white : Colors.white.withValues(alpha: 0.22),
+              color: tvFocused ? ink : ink.withValues(alpha: 0.22),
             ),
             boxShadow: tvFocused
                 ? [
-                    BoxShadow(color: PipelineLoadingOverlay.accent.withValues(alpha: 0.6), blurRadius: 0, spreadRadius: 3),
-                    BoxShadow(color: PipelineLoadingOverlay.accent.withValues(alpha: 0.5), blurRadius: 24, offset: const Offset(0, 8)),
+                    BoxShadow(color: accent.withValues(alpha: 0.6), blurRadius: 0, spreadRadius: 3),
+                    BoxShadow(color: accent.withValues(alpha: 0.5), blurRadius: 24, offset: const Offset(0, 8)),
                   ]
                 : null,
           ),
           child: Text(
             'Cancel',
             style: TextStyle(
-              color: tvFocused ? const Color(0xFF17131F) : Colors.white.withValues(alpha: 0.82),
+              // Ink on the focused pill, whose fill is [ink] — always a light
+              // colour, since `onGlass` is scored against black on every
+              // theme. No token holds this exact near-black, and `inkOn(ink)`
+              // would resolve to the page ground (a different value), so it
+              // stays pinned rather than shifting today's pixel.
+              color: tvFocused
+                  ? const Color(0xFF17131F)
+                  : ink.withValues(alpha: 0.82),
               fontSize: 12.5 * s,
               fontWeight: FontWeight.w700,
             ),

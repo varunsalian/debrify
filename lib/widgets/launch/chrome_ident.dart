@@ -53,6 +53,7 @@ class ChromeIdent extends LaunchIdent {
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
       _ChromePainter(animation, isTelevision: isTelevision);
 }

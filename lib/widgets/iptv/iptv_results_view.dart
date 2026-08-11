@@ -34,9 +34,8 @@ import '../../utils/iptv_player_paging.dart';
 import '../../screens/iptv/xtream_series_detail.dart';
 import '../../screens/settings/iptv_settings_page.dart';
 import '../hero_trailer_backdrop.dart';
-import '../home/home_theme.dart';
+import '../../theme/app_theme_scope.dart';
 import '../see_all/see_all_filter_bar.dart';
-import '../see_all/see_all_theme.dart';
 import '../see_all/stremio_dropdown.dart';
 import '../../services/iptv_epg_service.dart';
 import 'db_channel_list.dart';
@@ -2761,16 +2760,17 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// it's a destructive-looking change reached from a control whose normal
   /// press just selects.
   Future<void> _promptHideCategory(String category) async {
+    final app = AppThemeScope.of(context);
     final snap = _dbSnapshot;
     if (snap == null || category.isEmpty) return;
     final count = _categoryCounts[category] ?? 0;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF14141D),
-        title: const Text(
+        backgroundColor: app.iptv.modalBg,
+        title: Text(
           'Hide this category?',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          style: TextStyle(color: app.core.tx, fontWeight: FontWeight.w700),
         ),
         content: Text(
           '$category\n\n'
@@ -2779,7 +2779,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           'will stop showing up in IPTV — in the list, in search and in the '
           'player\'s guide. Nothing is deleted: bring it back any time from '
           'Settings › IPTV › Hidden categories.',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
+          style: TextStyle(color: app.core.tx.withAlpha(0xB3), height: 1.4),
         ),
         actions: [
           TextButton(
@@ -4604,13 +4604,14 @@ class IptvResultsViewState extends State<IptvResultsView>
     final airsNow =
         !programme.start.isAfter(DateTime.now()) &&
         programme.stop.isAfter(DateTime.now());
+    final app = AppThemeScope.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF14141D),
-        title: const Text(
+        backgroundColor: app.iptv.modalBg,
+        title: Text(
           'Record programme',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          style: TextStyle(color: app.core.tx, fontWeight: FontWeight.w700),
         ),
         content: Text(
           '${programme.title}\n'
@@ -4618,7 +4619,7 @@ class IptvResultsViewState extends State<IptvResultsView>
           '${clock(programme.stop)}'
           '${airsNow ? '\n\nAlready airing — records the rest, '
                     'from now until it ends.' : ''}',
-          style: const TextStyle(color: Colors.white70, height: 1.4),
+          style: TextStyle(color: app.core.tx.withAlpha(0xB3), height: 1.4),
         ),
         actions: [
           TextButton(
@@ -4802,20 +4803,21 @@ class IptvResultsViewState extends State<IptvResultsView>
 
   /// The iOS-only "no recording here" banner: dismiss is remembered forever.
   Widget _buildIosRecordingNotice() {
+    final app = AppThemeScope.of(context);
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 2),
       padding: const EdgeInsets.fromLTRB(12, 8, 2, 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: app.iptv.surfaceTint,
+        borderRadius: app.shape.br(10),
+        border: Border.all(color: app.iptv.hairline),
       ),
       child: Row(
         children: [
           Icon(
             Icons.fiber_manual_record_rounded,
             size: 14,
-            color: Colors.white.withValues(alpha: 0.3),
+            color: app.core.tx.withValues(alpha: 0.3),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -4825,7 +4827,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               style: TextStyle(
                 fontSize: 12,
                 height: 1.35,
-                color: Colors.white.withValues(alpha: 0.55),
+                color: app.iptv.inkDim,
               ),
             ),
           ),
@@ -4835,7 +4837,7 @@ class IptvResultsViewState extends State<IptvResultsView>
             icon: Icon(
               Icons.close_rounded,
               size: 16,
-              color: Colors.white.withValues(alpha: 0.45),
+              color: app.core.tx.withValues(alpha: 0.45),
             ),
             onPressed: _dismissIosRecordingNotice,
           ),
@@ -4857,14 +4859,18 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// display: no focusables, no hit-testing — DPAD and touch pass straight
   /// through. Snap show/hide, no tween (TV GPU rule).
   Widget _buildCatalogChip() {
+    final app = AppThemeScope.of(context);
     if (_chipState == _CatalogChipState.hidden) {
       return const SizedBox.shrink();
     }
     final Widget leading = switch (_chipState) {
-      _CatalogChipState.updating => const SizedBox(
+      _CatalogChipState.updating => SizedBox(
         width: 13,
         height: 13,
-        child: CircularProgressIndicator(strokeWidth: 2, color: kSeeAllAccent2),
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: app.seeAll.accent2,
+        ),
       ),
       _CatalogChipState.success => const Icon(
         Icons.check_circle_rounded,
@@ -4885,9 +4891,9 @@ class IptvResultsViewState extends State<IptvResultsView>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
           decoration: BoxDecoration(
-            color: const Color(0xF0141225),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+            color: app.iptv.chipSurface,
+            borderRadius: app.shape.br(22),
+            border: Border.all(color: app.core.tx.withValues(alpha: 0.10)),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x66000000),
@@ -4905,7 +4911,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                 _chipMessage,
                 style: TextStyle(
                   fontSize: 12.5,
-                  color: Colors.white.withValues(alpha: 0.92),
+                  color: app.core.tx.withValues(alpha: 0.92),
                   fontWeight: FontWeight.w500,
                   letterSpacing: 0.1,
                 ),
@@ -5152,6 +5158,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// (IptvStagePanel). One RepaintBoundary so the preview's frames never
   /// re-rasterize the panel and vice versa.
   Widget _buildCockpitStage() {
+    final app = AppThemeScope.of(context);
     return _stageHoverGuard(
       Padding(
         padding: const EdgeInsets.fromLTRB(4, 16, 14, 16),
@@ -5162,11 +5169,11 @@ class IptvResultsViewState extends State<IptvResultsView>
             builder: (context, ch, _) {
               return RepaintBoundary(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: app.shape.br(10),
                   child: ColoredBox(
                     color:
                         IptvStyleTokens.of(_iptvStyle)?.panel ??
-                        const Color(0xFF0B0914),
+                        app.iptv.stageBg,
                     child: ch == null
                         ? const SizedBox.expand()
                         : Column(
@@ -5291,6 +5298,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// Compact identity header for the cockpit: logo chip, CH number + name,
   /// group/resolution sub-line, then the shared now/next EPG card.
   Widget _cockpitIdentity(IptvChannel channel) {
+    final app = AppThemeScope.of(context);
     final t = IptvStyleTokens.of(_iptvStyle);
     final isConsole = _iptvStyle == IptvStyle.console;
     // Styled looks never paint the brand color.
@@ -5318,9 +5326,9 @@ class IptvResultsViewState extends State<IptvResultsView>
               height: 34,
               decoration: t == null
                   ? BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: app.shape.br(8),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: app.iptv.hairline,
                       ),
                       color: Color.alphaBlend(
                         brand.withValues(alpha: 0.18),
@@ -5329,7 +5337,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                     )
                   : BoxDecoration(
                       shape: isConsole ? BoxShape.rectangle : BoxShape.circle,
-                      borderRadius: isConsole ? BorderRadius.circular(6) : null,
+                      borderRadius: isConsole ? app.shape.br(6) : null,
                       border: Border.all(color: t.hairline2),
                       color: t.fg.withValues(alpha: 0.03),
                     ),
@@ -5369,8 +5377,8 @@ class IptvResultsViewState extends State<IptvResultsView>
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: t == null
-                        ? const TextStyle(
-                            color: Colors.white,
+                        ? TextStyle(
+                            color: app.core.tx,
                             fontSize: 15.5,
                             fontWeight: FontWeight.w800,
                             height: 1.1,
@@ -5392,7 +5400,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                       overflow: TextOverflow.ellipsis,
                       style: t == null
                           ? TextStyle(
-                              color: Colors.white.withValues(alpha: 0.5),
+                              color: app.core.tx.withValues(alpha: 0.5),
                               fontSize: 10.5,
                               fontWeight: FontWeight.w600,
                             )
@@ -5424,6 +5432,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// The Discover-style quiet filter line: bare dot-separated text segments
   /// (source • [Live/Movies] • category • count) instead of boxed pills.
   Widget _buildQuietFilters() {
+    final app = AppThemeScope.of(context);
     return SeeAllFilterBar(
       isTelevision: widget.isTelevision,
       quiet: true,
@@ -5515,7 +5524,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                       // partial count as final.
                       '${_isLoadingMore ? ' • loading more…' : ''}',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.40),
+              color: app.core.tx.withValues(alpha: 0.40),
               fontSize: 12,
               fontWeight: FontWeight.w600,
               fontFeatures: const [FontFeature.tabularFigures()],
@@ -5723,6 +5732,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Widget _buildPreviewRail({required bool touchSelector}) {
+    final app = AppThemeScope.of(context);
     return _stageHoverGuard(
       Padding(
         padding: const EdgeInsets.fromLTRB(14, 16, 12, 16),
@@ -5749,23 +5759,27 @@ class IptvResultsViewState extends State<IptvResultsView>
                             ? null
                             : () => unawaited(_playChannel(ch)),
                         style: FilledButton.styleFrom(
-                          backgroundColor: kSeeAllAccent,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: kSeeAllPanel2.withValues(
+                          backgroundColor: app.seeAll.accent,
+                          foregroundColor: app.inkOn(app.seeAll.accent),
+                          disabledBackgroundColor: app.seeAll.panel2.withValues(
                             alpha: 0.72,
                           ),
-                          disabledForegroundColor: Colors.white.withValues(
+                          disabledForegroundColor: app.core.tx.withValues(
                             alpha: 0.30,
                           ),
-                          overlayColor: kSeeAllAccent2.withValues(alpha: 0.18),
-                          shadowColor: kSeeAllAccent.withValues(alpha: 0.34),
+                          overlayColor: app.seeAll.accent2.withValues(
+                            alpha: 0.18,
+                          ),
+                          shadowColor: app.seeAll.accent.withValues(
+                            alpha: 0.34,
+                          ),
                           elevation: 0,
                           side: BorderSide(
-                            color: kSeeAllAccent2.withValues(alpha: 0.46),
+                            color: app.seeAll.accent2.withValues(alpha: 0.46),
                           ),
                           minimumSize: const Size.fromHeight(46),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(13),
+                            borderRadius: app.shape.br(13),
                           ),
                         ),
                         icon: Icon(
@@ -5787,7 +5801,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                       child: Text(
                         'Scroll channels through the arrow to preview',
                         style: TextStyle(
-                          color: kSeeAllAccent2.withValues(alpha: 0.66),
+                          color: app.seeAll.accent2.withValues(alpha: 0.66),
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.1,
@@ -5800,7 +5814,7 @@ class IptvResultsViewState extends State<IptvResultsView>
                       child: Text(
                         'Hover a channel to preview  ·  Click to watch',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.35),
+                          color: app.iptv.inkFaint,
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.2,
@@ -5821,10 +5835,11 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// surface. Keeping chrome outside the video avoids cover-cropping a normal
   /// broadcast into a tall stage.
   Widget _buildTvFocusStage(IptvChannel? ch, int epoch) {
+    final app = AppThemeScope.of(context);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: app.shape.br(8),
       child: ColoredBox(
-        color: const Color(0xFF0B0914),
+        color: app.iptv.stageBg,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -6443,8 +6458,9 @@ class _IptvStageFloorState extends State<_IptvStageFloor>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final ch = widget.channel;
-    final brand = ch != null ? brandAccentFor(ch.name) : kSeeAllAccent;
+    final brand = ch != null ? brandAccentFor(ch.name) : app.seeAll.accent;
     final logo = ch?.logoUrl;
     final animate = widget.tuning && ch != null;
 
@@ -6455,13 +6471,13 @@ class _IptvStageFloorState extends State<_IptvStageFloor>
               Icon(
                 Icons.live_tv_rounded,
                 size: 42,
-                color: Colors.white.withValues(alpha: 0.22),
+                color: app.core.tx.withValues(alpha: 0.22),
               ),
               const SizedBox(height: 10),
               Text(
                 'Browse channels to preview',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.45),
+                  color: app.core.tx.withValues(alpha: 0.45),
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -6612,7 +6628,6 @@ class _IptvStageChip extends StatefulWidget {
 
 class _IptvStageChipState extends State<_IptvStageChip>
     with SingleTickerProviderStateMixin {
-  static const Color _live = Color(0xFF34D399);
   static const Color _amber = Color(0xFFFBBF24);
 
   late final AnimationController _ctrl = AnimationController(
@@ -6650,17 +6665,25 @@ class _IptvStageChipState extends State<_IptvStageChip>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final ch = widget.channel;
     if (ch == null) return const SizedBox.shrink();
     final isLive = ch.isLive;
     final label = widget.showing ? (isLive ? 'LIVE' : 'PREVIEW') : 'TUNING';
-    final dot = isLive ? _live : kSeeAllAccent2;
+    final dot = isLive ? app.iptv.liveDot : app.seeAll.accent2;
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 4, 9, 4),
       decoration: BoxDecoration(
+        // Deliberately NOT iptv.chipSurface: this chip floats over LIVE
+        // VIDEO, so it must stay black glass and legible over an arbitrary
+        // picture rather than follow the page (see the token's doc).
         color: const Color(0xB00B0918),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        borderRadius: app.shape.brPill,
+        // `onGlass`, not `core.tx`: the fill above is black on EVERY theme by
+        // design, so its ink must be what reads on black — a paper theme's
+        // near-black page ink would draw an invisible edge here. Same reason
+        // the label below uses it.
+        border: Border.all(color: app.onGlass.withValues(alpha: 0.10)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -6684,8 +6707,8 @@ class _IptvStageChipState extends State<_IptvStageChip>
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: app.onGlass,
               fontSize: 9.5,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.0,
@@ -6736,6 +6759,7 @@ class _IptvFocusStageInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final brand = brandAccentFor(channel.name);
     final resMatch = _railResExp.firstMatch(channel.name);
     final resolution = resMatch?.group(1)?.toLowerCase();
@@ -6756,7 +6780,7 @@ class _IptvFocusStageInfo extends StatelessWidget {
         final dense = constraints.maxHeight < 250;
         final logoSize = dense ? 32.0 : 44.0;
         return ColoredBox(
-          color: const Color(0xFF0B0914),
+          color: app.iptv.stageBg,
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               dense ? 18 : 24,
@@ -6773,9 +6797,9 @@ class _IptvFocusStageInfo extends StatelessWidget {
                       width: logoSize,
                       height: logoSize,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: app.shape.brImg(8),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.08),
+                          color: app.iptv.hairline,
                         ),
                         color: Color.alphaBlend(
                           brand.withValues(alpha: 0.18),
@@ -6820,7 +6844,7 @@ class _IptvFocusStageInfo extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: Colors.white,
+                              color: app.core.tx,
                               fontSize: dense ? 15 : 19,
                               fontWeight: FontWeight.w800,
                               height: 1.1,
@@ -6833,7 +6857,7 @@ class _IptvFocusStageInfo extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.52),
+                                color: app.core.tx.withValues(alpha: 0.52),
                                 fontSize: dense ? 10.5 : 11.5,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -6848,7 +6872,7 @@ class _IptvFocusStageInfo extends StatelessWidget {
                 Container(
                   width: double.infinity,
                   height: 1,
-                  color: Colors.white.withValues(alpha: 0.13),
+                  color: app.core.tx.withValues(alpha: 0.13),
                 ),
                 SizedBox(height: dense ? 5 : 12),
                 IptvRailEpgCard(
@@ -6878,6 +6902,7 @@ class _IptvRailInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final ch = channel;
     if (ch == null) return const SizedBox.shrink();
     final brand = brandAccentFor(ch.name);
@@ -6909,16 +6934,19 @@ class _IptvRailInfo extends StatelessWidget {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                borderRadius: app.shape.br(11),
+                border: Border.all(color: app.core.tx.withValues(alpha: 0.06)),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
                     Color.alphaBlend(
                       brand.withValues(alpha: 0.16),
-                      const Color(0xFF1E2030),
+                      app.iptv.logoPlate,
                     ),
+                    // The plate's lower stop — value-equal to iptv.modalBg,
+                    // but that role is a dialog ground and must not repaint
+                    // logos when a theme moves its sheets.
                     const Color(0xFF14141D),
                   ],
                 ),
@@ -6955,8 +6983,8 @@ class _IptvRailInfo extends StatelessWidget {
                     displayName,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: app.core.tx,
                       fontSize: 16.5,
                       fontWeight: FontWeight.w800,
                       height: 1.15,
@@ -6969,7 +6997,7 @@ class _IptvRailInfo extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.52),
+                        color: app.core.tx.withValues(alpha: 0.52),
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -7003,25 +7031,25 @@ class _IptvRailHints extends StatelessWidget {
       children: [
         const _KeyCap('OK'),
         const SizedBox(width: 6),
-        _hint('Watch'),
+        _hint(context, 'Watch'),
         const SizedBox(width: 16),
         const _KeyCap('HOLD OK'),
         const SizedBox(width: 6),
-        _hint(hasLists ? 'Add to list' : 'Favorite'),
+        _hint(context, hasLists ? 'Add to list' : 'Favorite'),
         if (showGuide) ...[
           const SizedBox(width: 16),
           const _KeyCap('▶'),
           const SizedBox(width: 6),
-          _hint('Guide'),
+          _hint(context, 'Guide'),
         ],
       ],
     );
   }
 
-  Widget _hint(String text) => Text(
+  Widget _hint(BuildContext context, String text) => Text(
     text,
     style: TextStyle(
-      color: Colors.white.withValues(alpha: 0.45),
+      color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.45),
       fontSize: 11,
       fontWeight: FontWeight.w600,
     ),
@@ -7034,16 +7062,17 @@ class _KeyCap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+        borderRadius: app.shape.br(5),
+        border: Border.all(color: app.core.tx.withValues(alpha: 0.22)),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: HomeTheme.focusGold.withValues(alpha: 0.95),
+          color: app.home.focus.withValues(alpha: 0.95),
           fontSize: 8.5,
           fontWeight: FontWeight.w800,
           letterSpacing: 0.7,

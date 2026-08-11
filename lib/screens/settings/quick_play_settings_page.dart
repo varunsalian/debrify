@@ -4,6 +4,7 @@ import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// Quick Play settings page for configuring torrent search quick play behavior.
 class QuickPlaySettingsPage extends StatefulWidget {
@@ -73,7 +74,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
       _loading = false;
     });
     // TV entry focus: land DPAD users on the first field instead of nothing.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         // Don't yank focus if it already landed on a real node (only the
@@ -193,13 +194,15 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     required int value,
     required ValueChanged<int> onSelected,
   }) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final theme = Theme.of(context);
 
     return Container(
       decoration: BoxDecoration(
-        color: kSettingsPanel,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kSettingsLine),
+        color: t.panel,
+        borderRadius: app.shape.br(16),
+        border: Border.all(color: t.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -208,9 +211,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.timer_rounded,
-                  color: kSettingsAccent2,
+                  color: t.accent2,
                   size: 24,
                 ),
                 const SizedBox(width: 12),
@@ -218,18 +221,18 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                   title,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: app.core.tx,
                   ),
                 ),
               ],
             ),
           ),
-          Divider(height: 1, color: kSettingsLine),
+          Divider(height: 1, color: t.line),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
               description,
-              style: theme.textTheme.bodySmall?.copyWith(color: kSettingsDim),
+              style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
             ),
           ),
           // Dropdown instead of the old tap-row + SimpleDialog picker: the
@@ -262,13 +265,15 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   }
 
   Widget _buildSeriesAutoPinSection(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final theme = Theme.of(context);
 
     return Container(
       decoration: BoxDecoration(
-        color: kSettingsPanel,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kSettingsLine),
+        color: t.panel,
+        borderRadius: app.shape.br(16),
+        border: Border.all(color: t.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,9 +282,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.push_pin_rounded,
-                  color: kSettingsAccent2,
+                  color: t.accent2,
                   size: 24,
                 ),
                 const SizedBox(width: 12),
@@ -287,13 +292,13 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                   'Series Auto-Pin',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: app.core.tx,
                   ),
                 ),
               ],
             ),
           ),
-          Divider(height: 1, color: kSettingsLine),
+          Divider(height: 1, color: t.line),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
@@ -301,7 +306,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
               'complete-series pack first (then a season pack, then the single '
               'episode) and pin whatever plays — so later episodes start '
               'instantly from the pinned source.',
-              style: theme.textTheme.bodySmall?.copyWith(color: kSettingsDim),
+              style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
             ),
           ),
           _buildCheckboxTile(
@@ -320,13 +325,15 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
   }
 
   Widget _buildCacheFallbackSection(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final theme = Theme.of(context);
 
     return Container(
       decoration: BoxDecoration(
-        color: kSettingsPanel,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kSettingsLine),
+        color: t.panel,
+        borderRadius: app.shape.br(16),
+        border: Border.all(color: t.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -336,9 +343,9 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.cached_rounded,
-                  color: kSettingsAccent2,
+                  color: t.accent2,
                   size: 24,
                 ),
                 const SizedBox(width: 12),
@@ -346,20 +353,20 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                   'Cache Fallback',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: app.core.tx,
                   ),
                 ),
               ],
             ),
           ),
-          Divider(height: 1, color: kSettingsLine),
+          Divider(height: 1, color: t.line),
 
           // Description
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(
               'Control what happens when a torrent is not cached on your debrid service.',
-              style: theme.textTheme.bodySmall?.copyWith(color: kSettingsDim),
+              style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
             ),
           ),
 
@@ -378,7 +385,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
           // Dropdown instead of the old tap-row + SimpleDialog picker — see
           // the timeout cards for the DPAD rationale.
           if (_tryMultipleTorrents) ...[
-            Divider(height: 1, color: kSettingsLine),
+            Divider(height: 1, color: t.line),
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -388,14 +395,14 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                     'Max torrents to try',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w500,
-                      color: Colors.white,
+                      color: app.core.tx,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     'Higher values increase chance of finding cached content',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: kSettingsDim,
+                      color: t.dim,
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -463,21 +470,23 @@ class _FocusableCheckboxTileState extends State<_FocusableCheckboxTile> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final theme = Theme.of(context);
     // Snap, don't tween — per-keypress decoration lerps add cost on TV.
     return Container(
       decoration: BoxDecoration(
-        color: _focused ? kSettingsPanel2 : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+        color: _focused ? t.panel2 : Colors.transparent,
+        borderRadius: app.shape.br(12),
         border: Border.all(
-          color: _focused ? kSettingsAccent : Colors.transparent,
+          color: _focused ? t.accent : Colors.transparent,
           width: 1,
         ),
       ),
       child: InkWell(
         onTap: () => widget.onChanged(!widget.value),
         onFocusChange: (f) => setState(() => _focused = f),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -499,13 +508,13 @@ class _FocusableCheckboxTileState extends State<_FocusableCheckboxTile> {
                       widget.title,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w500,
-                        color: Colors.white,
+                        color: app.core.tx,
                       ),
                     ),
                     Text(
                       widget.subtitle,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: kSettingsDim,
+                        color: t.dim,
                       ),
                     ),
                   ],

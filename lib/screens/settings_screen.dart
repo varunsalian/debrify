@@ -9,8 +9,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../utils/app_version_info.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import '../utils/app_storage.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -46,10 +48,23 @@ import 'settings/iptv_style_page.dart';
 import 'settings/text_brightness_page.dart';
 import 'settings/launch_animation_page.dart';
 import '../widgets/launch/launch_ident.dart';
+import 'settings/detail_page_style_page.dart';
+import 'settings/app_theme_page.dart';
+import 'settings/looks_page.dart';
+import 'settings/theme_tokens_page.dart';
+import 'settings/theme_lab_page.dart';
+import 'settings/detail_theme_page.dart';
+import '../widgets/detail/theme/detail_themes.dart';
+import '../theme/app_theme_controller.dart';
+import 'settings/parents_guide_style_page.dart';
+import 'settings/player_dock_page.dart';
 import 'settings/player_guide_style_page.dart';
 import 'settings/tv_home_style_page.dart';
+import 'settings/tv_render_quality_page.dart';
+import 'settings/tv_hero_artwork_quality_page.dart';
 import 'settings/tv_screen_size_page.dart';
 import 'settings/recordings_page.dart';
+import 'settings/desktop_sidebar_style_page.dart';
 import 'settings/tv_sidebar_style_page.dart';
 import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
@@ -71,6 +86,9 @@ import 'settings/mdblist_settings_page.dart';
 import 'settings/webdav_settings_page.dart';
 import 'settings/stremio_tv_settings_page.dart';
 import '../widgets/remote/remote_role_picker_screen.dart';
+import '../theme/app_looks.dart';
+import '../theme/app_theme_scope.dart';
+import '../models/tv_hero_artwork_quality.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -95,6 +113,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // condition the page uses.
 
   bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+  bool get _isTelevision => PlatformUtil.isTelevision;
 
   /// Handsets only. The player's start-orientation control is hidden on TV
   /// (no portrait to open in) and on desktop (the orientation call is a no-op
@@ -177,12 +196,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoUpdateChecksEnabled = true;
   bool _tvKeyboardEnabled = true;
   int _tvUiScalePercent = StorageService.kTvUiScaleDefault;
+  TvRenderQuality _tvRenderQuality = TvRenderQuality.auto;
+  TvHeroArtworkQuality _tvHeroArtworkQuality = TvHeroArtworkQuality.automatic;
   String _tvHomeStyle = 'canvas';
   String _discoverLayout = 'stage';
   String _tvSidebarStyle = 'ghost';
   String _iptvStyle = 'command';
   String _playerGuideStyle = 'classic';
+  String _playerDockStyle = 'classic';
+  String _playerDockPalette = 'ultraviolet';
+  String _playerDockSize = 'auto';
+  // The placeholder the Appearance row shows for the one frame before the
+  // async load lands; a literal here would flash the wrong label.
+  String _detailPageStyle = StorageService.kDetailPageStyleDefault;
+  String _detailTheme = 'signal';
+  String _parentsGuideStyle = 'compass';
   String _phoneNavStyle = 'classic';
+  String _desktopSidebarStyle = 'rail';
   String _textBrightness = 'bright';
   String _launchAnimation = 'horizon';
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
@@ -239,7 +269,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getTraktAccessToken(),
       StorageService.getTraktTokenExpiry(),
       StorageService.getTraktUsername(),
-      PackageInfo.fromPlatform(),
+      AppVersionInfo.get(),
       AndroidNativeDownloader.isTelevision(),
       StorageService.getUpdateAutoCheckEnabled(),
       StorageService.getIndexerManagerConfigs(),
@@ -259,6 +289,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getPhoneNavStyle(),
       StorageService.getTextBrightness(),
       StorageService.getLaunchAnimation(),
+      StorageService.getDetailPageStyle(),
+      StorageService.getTvRenderQuality(),
+      StorageService.getDetailTheme(),
+      StorageService.getParentsGuideStyle(),
+      StorageService.getTvHeroArtworkQuality(),
+      StorageService.getPlayerDockStyle(),
+      StorageService.getPlayerDockPalette(),
+      StorageService.getPlayerDockSize(),
+      StorageService.getDesktopSidebarStyle(),
     ]);
 
     if (!mounted) return;
@@ -291,6 +330,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final phoneNavStyle = results[25] as String;
     final textBrightness = results[26] as String;
     final launchAnimation = results[27] as String;
+    final detailPageStyle = results[28] as String;
+    final tvRenderQuality = results[29] as TvRenderQuality;
+    final detailTheme = results[30] as String;
+    final parentsGuideStyle = results[31] as String;
+    final tvHeroArtworkQuality = results[32] as TvHeroArtworkQuality;
+    // Appended at the END of the Future.wait above, so no existing index
+    // moves. The list holds 33 entries (0..32) as of b525f2dc.
+    final playerDockStyle = results[33] as String;
+    final playerDockPalette = results[34] as String;
+    final playerDockSize = results[35] as String;
+    final desktopSidebarStyle = results[36] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -424,14 +474,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _autoUpdateChecksEnabled = autoCheckEnabled;
     _tvKeyboardEnabled = tvKeyboardEnabled;
     _tvUiScalePercent = tvUiScalePercent;
+    _tvRenderQuality = tvRenderQuality;
     _tvHomeStyle = tvHomeStyle;
     _tvSidebarStyle = tvSidebarStyle;
     _discoverLayout = discoverLayout;
     _iptvStyle = iptvStyle;
     _playerGuideStyle = playerGuideStyle;
+    _playerDockStyle = playerDockStyle;
+    _playerDockPalette = playerDockPalette;
+    _playerDockSize = playerDockSize;
     _phoneNavStyle = phoneNavStyle;
+    _desktopSidebarStyle = desktopSidebarStyle;
     _textBrightness = textBrightness;
     _launchAnimation = launchAnimation;
+    _detailPageStyle = detailPageStyle;
+    _detailTheme = detailTheme;
+    _parentsGuideStyle = parentsGuideStyle;
+    _tvHeroArtworkQuality = tvHeroArtworkQuality;
 
     setState(() {});
 
@@ -723,6 +782,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenLaunchAnimation: _openLaunchAnimationPage,
       tvUiScalePercent: _tvUiScalePercent,
       onOpenTvScreenSize: _openTvScreenSize,
+      tvRenderQualityLabel: tvRenderQualityLabel(_tvRenderQuality),
+      onOpenTvRenderQuality: _openTvRenderQuality,
+      tvHeroArtworkQualityLabel: tvHeroArtworkQualityLabel(
+        _tvHeroArtworkQuality,
+      ),
+      onOpenTvHeroArtworkQuality: _openTvHeroArtworkQuality,
       tvSidebarStyleLabel: tvSidebarStyleLabel(_tvSidebarStyle),
       onOpenTvSidebarStyle: _openTvSidebarStyle,
       discoverLayoutLabel: discoverLayoutLabel(_discoverLayout),
@@ -733,6 +798,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenIptvStyle: _openIptvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
+      detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
+      onOpenDetailPageStyle: _openDetailPageStylePage,
+      appThemeLabel: appThemeLabel(AppThemeController.instance.id),
+      looksLabel: AppLooks.active()?.label ?? 'Custom',
+      onOpenLooks: _openLooksPage,
+      onOpenThemeTokens: _openThemeTokensPage,
+      themeTokensLabel: _themeTokensLabel,
+      onOpenThemeLab: _openThemeLab,
+      onOpenAppTheme: _openAppThemePage,
+      detailThemeLabel: detailThemeLabel(_detailTheme),
+      onOpenDetailTheme: _openDetailThemePage,
+      parentsGuideStyleLabel: parentsGuideStyleLabel(_parentsGuideStyle),
+      onOpenParentsGuideStyle: _openParentsGuideStylePage,
       onOpenRecordings: _openRecordings,
       onOpenIptvSettings: _openIptvSettings,
       showSupportDonation: _supportDonation.hasProviders,
@@ -802,10 +880,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
       iptvStyleLabel: iptvStyleLabel(_iptvStyle),
       onOpenIptvStyle: _openIptvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
+      playerDockLabel: playerDockLabel(
+        _playerDockStyle,
+        _playerDockPalette,
+        _playerDockSize,
+      ),
+      onOpenPlayerDock: _openPlayerDockPage,
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
+      detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
+      onOpenDetailPageStyle: _openDetailPageStylePage,
+      appThemeLabel: appThemeLabel(AppThemeController.instance.id),
+      onOpenLooks: _openLooksPage,
+      onOpenThemeTokens: _openThemeTokensPage,
+      themeTokensLabel: _themeTokensLabel,
+      onOpenThemeLab: _openThemeLab,
+      onOpenAppTheme: _openAppThemePage,
+      detailThemeLabel: detailThemeLabel(_detailTheme),
+      onOpenDetailTheme: _openDetailThemePage,
+      parentsGuideStyleLabel: parentsGuideStyleLabel(_parentsGuideStyle),
+      onOpenParentsGuideStyle: _openParentsGuideStylePage,
       phoneNavStyleLabel: _phoneNavStyle == 'floating'
           ? 'Floating button'
           : 'Classic bar',
+      desktopSidebarStyleLabel:
+          desktopSidebarStyleLabel(_desktopSidebarStyle),
+      onOpenDesktopSidebarStyle: _openDesktopSidebarStyle,
     );
   }
 
@@ -1052,27 +1151,97 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'home & display',
           ],
         ),
-      // Android TV only — the layout branch only exists on the TV home board.
+      // Android TV only — the render scale is applied natively in
+      // MainActivity, so the row would be inert anywhere else. Keyworded for
+      // the SYMPTOM: nobody searches "render scale", they search "stutter".
       if (_isAndroidTv)
         nav(
-          SettingsRows.tvHomeStyle,
+          SettingsRows.tvRenderQuality,
           'Appearance',
-          _openTvHomeStyle,
-          subtitle: tvHomeStyleLabel(_tvHomeStyle),
+          _openTvRenderQuality,
+          subtitle: tvRenderQualityLabel(_tvRenderQuality),
           keywords: const [
-            'home',
-            'layout',
-            'home screen',
-            'canvas',
-            'shelf',
-            'classic',
-            'rows',
-            'redesign',
-            'view',
+            'stutter',
+            'stuttering',
+            'lag',
+            'laggy',
+            'jank',
+            'janky',
+            'choppy',
+            'slow',
+            'smooth',
+            'smoothness',
+            'performance',
+            'fps',
+            'frame rate',
+            'speed',
+            'scrolling',
+            'resolution',
+            'render',
+            'rendering',
+            '720p',
+            '1080p',
+            'sharp',
+            'sharpness',
+            'blurry',
+            'soft',
+            'quality',
+            'gpu',
+            'graphics',
             'display',
             'home & display',
           ],
         ),
+      // Android TV + tvOS: this controls Flutter image decode bounds, so it is
+      // independent of Android's native render-scale picker above.
+      if (_isTelevision)
+        nav(
+          SettingsRows.tvHeroArtworkQuality,
+          'Appearance',
+          _openTvHeroArtworkQuality,
+          subtitle: tvHeroArtworkQualityLabel(_tvHeroArtworkQuality),
+          keywords: const [
+            'hero',
+            'artwork',
+            'image',
+            'picture',
+            'poster',
+            'backdrop',
+            'quality',
+            'resolution',
+            '1080p',
+            'full hd',
+            'sharp',
+            'memory',
+            'performance',
+            'home',
+            'tv',
+          ],
+        ),
+      // Every platform now: TV picks among the eight layouts, phones and
+      // desktop between Classic and Spotlight (the picker narrows itself).
+      nav(
+        SettingsRows.tvHomeStyle,
+        'Appearance',
+        _openTvHomeStyle,
+        subtitle: tvHomeStyleLabel(
+          _isAndroidTv ? _tvHomeStyle : effectiveOffTvHomeStyle(_tvHomeStyle),
+        ),
+        keywords: const [
+          'home',
+          'layout',
+          'home screen',
+          'canvas',
+          'spotlight',
+          'shelf',
+          'classic',
+          'rows',
+          'redesign',
+          'view',
+          'display',
+          'home & display',
+        ],
+      ),
       // Android TV only — the stage layout is a TV-canvas design; phones and
       // desktop always browse Discover as a grid.
       if (_isAndroidTv)
@@ -1113,6 +1282,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'marquee',
             'badge',
             'dock',
+            'display',
+            'home & display',
+          ],
+        ),
+      // Desktop/tablet — the wide-window rail's own picker.
+      if (!_isAndroidTv && !PlatformUtil.isTelevision)
+        nav(
+          SettingsRows.desktopSidebarStyle,
+          'Appearance',
+          _openDesktopSidebarStyle,
+          subtitle: desktopSidebarStyleLabel(_desktopSidebarStyle),
+          keywords: const [
+            'sidebar',
+            'nav',
+            'navigation',
+            'rail',
+            'menu',
+            'pill',
+            'desktop',
+            'tablet',
+            'ipad',
             'display',
             'home & display',
           ],
@@ -1169,7 +1359,133 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'live tv & dvr',
         ],
       ),
-      if (!PlatformUtil.isAndroidTvCached)
+      if (!PlatformUtil.isTelevision)
+        nav(
+          SettingsRows.playerDock,
+          'Appearance',
+          _openPlayerDockPage,
+          subtitle: playerDockLabel(
+            _playerDockStyle,
+            _playerDockPalette,
+            _playerDockSize,
+          ),
+          keywords: const [
+            'player',
+            'controls',
+            'dock',
+            'buttons',
+            'seekbar',
+            'scrubber',
+            'size',
+            'colour',
+            'color',
+            'palette',
+            'style',
+            'look',
+            'big',
+            'small',
+            'layout',
+            'accent',
+          ],
+        ),
+      // Settings SEARCH still finds it, deliberately.
+      //
+      // The row is gone from the Appearance list because a Look is the single
+      // top-level choice now — but someone who knows the app has themes and
+      // types "theme" should land somewhere, and the honest destination is the
+      // Looks page rather than nothing at all.
+      nav(
+        SettingsRows.themeTokens,
+        'Appearance',
+        _openThemeTokensPage,
+        subtitle: _themeTokensLabel,
+        keywords: [
+          'advanced',
+          'token',
+          'colour',
+          'color',
+          'accent',
+          'background',
+          'font',
+          'corner',
+          'motion',
+        ],
+      ),
+      nav(
+        SettingsRows.looks,
+        'Appearance',
+        _openLooksPage,
+        subtitle: AppLooks.active()?.label ?? 'Custom',
+        keywords: [
+          'app',
+          'theme',
+          'app theme',
+          'whole app',
+          'colour',
+          'color',
+          'palette',
+          'look',
+          'style',
+          'skin',
+          'dark',
+          'light',
+          'legacy',
+          'classic',
+          'experimental',
+          // Every theme by NAME, derived rather than typed out. The names used
+          // to live on the Details Theme entry; withholding that row would
+          // otherwise have made searching "velvet" or "deep field" find
+          // nothing, and a hardcoded copy had already gone stale — it listed
+          // the twenty old cores and none of the five new looks.
+          for (final t in DetailThemes.catalogue) t.label.toLowerCase(),
+        ],
+      ),
+      nav(
+        SettingsRows.parentsGuideStyle,
+        'Appearance',
+        _openParentsGuideStylePage,
+        subtitle: parentsGuideStyleLabel(_parentsGuideStyle),
+        keywords: const [
+          'parents',
+          'parental',
+          'guide',
+          'advisory',
+          'content rating',
+          'severity',
+          'compass',
+          'classic',
+          'family',
+        ],
+      ),
+      // Ungated: the details page opens on every platform.
+      nav(
+        SettingsRows.detailPageStyle,
+        'Appearance',
+        _openDetailPageStylePage,
+        subtitle: detailPageStyleLabel(_detailPageStyle),
+        keywords: const [
+          'details',
+          'detail',
+          'page',
+          'layout',
+          'style',
+          'theme',
+          'look',
+          'movie',
+          'series',
+          'show',
+          'episodes',
+          'episode list',
+          'marquee',
+          'dossier',
+          'broadsheet',
+          'stage',
+          'filmstrip',
+          'console',
+          'classic',
+        ],
+      ),
+      if (!PlatformUtil.isTelevision)
         nav(
           SettingsRows.navigationStyle,
           'Appearance',
@@ -1951,6 +2267,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Let equalizer apps process audio (Android)',
         const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
       ),
+      if (_isAndroid)
+        leaf(
+          'Playback',
+          'Audio passthrough (AC3 · EAC3 · DTS core)',
+          'Bitstream audio to your receiver instead of decoding',
+          const [
+            'passthrough',
+            'bitstream',
+            'dts',
+            'ac3',
+            'dolby',
+            'receiver',
+            'avr',
+          ],
+        ),
+      if (PlatformUtil.isTvOS || PlatformUtil.isIosMobile)
+        leaf(
+          'Playback',
+          'Multichannel audio (LPCM over HDMI)',
+          'Surround tracks as 5.1/7.1 PCM on capable receivers',
+          const [
+            'multichannel',
+            'surround',
+            '5.1',
+            '7.1',
+            'lpcm',
+            'audio channels',
+          ],
+        ),
+      if (PlatformUtil.isTvOS)
+        leaf(
+          'Playback',
+          'Force software video decoding',
+          'Apple TV compatibility option for videos that render wrong',
+          const [
+            'software decoding',
+            'compatibility',
+            'blue screen',
+            'wrong colors',
+            'hardware decoding',
+            '10-bit',
+          ],
+        ),
+      if (_isAndroid && !PlatformUtil.isAndroidTvCached)
+        leaf(
+          'Playback',
+          'Video renderer',
+          'Choose the Android phone/tablet video output path',
+          const [
+            'renderer',
+            'mediacodec',
+            'direct surface',
+            'battery',
+            'performance',
+            'hardware decoding',
+          ],
+        ),
       if (_isAndroid && PlatformUtil.isAndroidTvCached)
         leaf(
           'Playback',
@@ -2566,6 +2939,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _createBackup() async {
+    final app = AppThemeScope.of(context);
     // Build the payload first so we can warn if it's empty.
     final Map<String, dynamic> payload;
     try {
@@ -2613,7 +2987,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   '${iptvProviders.fileImported == 1 ? '' : 's'} imported from '
                   'a file won\'t be included — re-import the file on the other '
                   'device. Starred channels from them still travel.',
-                  style: const TextStyle(fontSize: 12, color: Colors.white60),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: app.fade(app.core.tx, 0x99 / 0xFF),
+                  ),
                 ),
               ),
             const SizedBox(height: 12),
@@ -2687,7 +3064,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // never left without a copy when saveFile is unavailable (some TV
       // platforms lack a system save dialog).
       try {
-        final dir = await getApplicationDocumentsDirectory();
+        final dir = await AppStorage.documents();
         final fallbackPath = '${dir.path}/$fileName';
         await File(fallbackPath).writeAsBytes(bytes, flush: true);
         if (!mounted) return;
@@ -2707,6 +3084,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _restoreBackup() async {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final FilePickerResult? pick;
     try {
       // FileType.any instead of custom: Android's MIME mapping for `json` is
@@ -2792,7 +3171,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
                   'Created: ${summary.createdAt}',
-                  style: const TextStyle(fontSize: 12, color: Colors.white60),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: app.fade(app.core.tx, 0x99 / 0xFF),
+                  ),
                 ),
               ),
             const Text('This backup contains:'),
@@ -2808,22 +3190,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(fontSize: 12),
             ),
             if (summary.addonCount > 0 || summary.searchEngineCount > 0)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'Restoring addons and search engines needs a network '
                   'connection.',
-                  style: TextStyle(fontSize: 12, color: Colors.white60),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: app.fade(app.core.tx, 0x99 / 0xFF),
+                  ),
                 ),
               ),
             if (summary.webDavServerCount > 0 ||
                 summary.indexerManagerCount > 0)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'WebDAV and Jackett/Prowlarr URLs may be local-network '
                   'only — they won\'t work on a different network.',
-                  style: TextStyle(fontSize: 12, color: Colors.white60),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: app.fade(app.core.tx, 0x99 / 0xFF),
+                  ),
                 ),
               ),
           ],
@@ -2886,7 +3274,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
-        backgroundColor: report.hasAnyFailure ? kSettingsAmber : null,
+        backgroundColor: report.hasAnyFailure ? t.warning : null,
         duration: const Duration(seconds: 5),
       ),
     );
@@ -3080,7 +3468,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF0B1220),
+      backgroundColor: AppThemeScope.of(context).settings.sheetBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -3424,6 +3812,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showReleaseDetails(UpdateSummary summary) async {
+    final app = AppThemeScope.of(context);
     if (!mounted) return;
     final release = summary.release;
     final theme = Theme.of(context);
@@ -3452,25 +3841,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (sheetContext) {
         final baseTheme = Theme.of(sheetContext);
         final textTheme = baseTheme.textTheme;
-        final Color bodyColor = Colors.white.withValues(alpha: 0.85);
+        final Color bodyColor = app.fade(app.core.tx, 0.85);
         final markdownStyle = MarkdownStyleSheet.fromTheme(baseTheme).copyWith(
           h1: textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w700,
-            color: Colors.white,
+            color: app.core.tx,
           ),
           h2: textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w700,
-            color: Colors.white,
+            color: app.core.tx,
           ),
           h3: textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w600,
-            color: Colors.white,
+            color: app.core.tx,
           ),
           p: textTheme.bodyMedium?.copyWith(color: bodyColor, height: 1.45),
           strong: const TextStyle(fontWeight: FontWeight.w700),
           listBullet: textTheme.bodyMedium?.copyWith(color: bodyColor),
           blockquote: textTheme.bodyMedium?.copyWith(
-            color: Colors.white.withValues(alpha: 0.7),
+            color: app.fade(app.core.tx, 0.7),
           ),
         );
         return FractionallySizedBox(
@@ -3486,8 +3875,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(2),
+                        color: app.fade(app.core.tx, 0.2),
+                        borderRadius: app.shape.br(2),
                       ),
                     ),
                   ),
@@ -3504,14 +3893,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Text(
                     'Installed: $_appVersion',
                     style: textTheme.bodyMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: app.fade(app.core.tx, 0.6),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Latest: $latestLabel',
                     style: textTheme.bodyMedium?.copyWith(
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: app.fade(app.core.tx, 0.6),
                     ),
                   ),
                   if (publishedLabel != null) ...[
@@ -3519,7 +3908,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       'Published $publishedLabel',
                       style: textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.5),
+                        color: app.fade(app.core.tx, 0.5),
                       ),
                     ),
                   ],
@@ -3610,6 +3999,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Same contract as [_openTvScreenSize] — MainActivity reads the render
+  /// pref in `onCreate` too, so the page owns the write and the restart
+  /// notice; we only re-read for the row's caption.
+  Future<void> _openTvRenderQuality() async {
+    await pushSettingsPage(context, const TvRenderQualityPage());
+    if (!mounted) return;
+    final quality = await StorageService.getTvRenderQuality();
+    if (!mounted) return;
+    setState(() {
+      _tvRenderQuality = quality;
+    });
+  }
+
+  Future<void> _openTvHeroArtworkQuality() async {
+    await pushSettingsPage(context, const TvHeroArtworkQualityPage());
+    if (!mounted) return;
+    final quality = await StorageService.getTvHeroArtworkQuality();
+    if (!mounted) return;
+    setState(() {
+      _tvHeroArtworkQuality = quality;
+    });
+  }
+
   /// The page writes the pref and live-applies via MainPageBridge; re-read it
   /// on the way back so the rail row's caption matches.
   Future<void> _openTvHomeStyle() async {
@@ -3644,6 +4056,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Same contract, for the desktop/tablet sidebar picker.
+  Future<void> _openDesktopSidebarStyle() async {
+    await pushSettingsPage(context, const DesktopSidebarStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getDesktopSidebarStyle();
+    if (!mounted) return;
+    setState(() {
+      _desktopSidebarStyle = style;
+    });
+  }
+
   /// Same contract as [_openTvHomeStyle], for the IPTV page look picker.
   Future<void> _openIptvStylePage() async {
     await pushSettingsPage(context, const IptvStylePage());
@@ -3663,6 +4086,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {
       _playerGuideStyle = style;
+    });
+  }
+
+  /// Same contract as [_openTvHomeStyle], for the player control dock.
+  Future<void> _openPlayerDockPage() async {
+    await pushSettingsPage(context, const PlayerDockPage());
+    if (!mounted) return;
+    final style = await StorageService.getPlayerDockStyle();
+    final palette = await StorageService.getPlayerDockPalette();
+    final size = await StorageService.getPlayerDockSize();
+    if (!mounted) return;
+    setState(() {
+      _playerDockStyle = style;
+      _playerDockPalette = palette;
+      _playerDockSize = size;
+    });
+  }
+
+  /// Same contract as [_openTvHomeStyle], for the details-page layout picker.
+  Future<void> _openDetailPageStylePage() async {
+    await pushSettingsPage(context, const DetailPageStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getDetailPageStyle();
+    if (!mounted) return;
+    setState(() {
+      _detailPageStyle = style;
+    });
+  }
+
+  /// Same contract as [_openTvHomeStyle], for the details-page theme picker.
+  Future<void> _openDetailThemePage() async {
+    await pushSettingsPage(context, const DetailThemePage());
+    if (!mounted) return;
+    final theme = await StorageService.getDetailTheme();
+    if (!mounted) return;
+    setState(() {
+      _detailTheme = theme;
+    });
+  }
+
+  /// Appearance → Theme Lab. The setState on return covers the feedback
+  /// toggles the lab hosts — their values are read from the synchronous
+  /// mirrors, so one rebuild is the whole refresh.
+  Future<void> _openThemeLab() async {
+    await pushSettingsPage(context, const ThemeLabPage());
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// Appearance → Looks. Re-reads nothing on return: the row's subtitle is
+  /// COMPUTED from the live prefs (`AppLooks.active()`), so one setState is
+  /// the whole refresh — there is no stored "current Look" that could drift.
+  Future<void> _openLooksPage() async {
+    await pushSettingsPage(context, const LooksPage());
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _openThemeTokensPage() async {
+    await pushSettingsPage(context, const ThemeTokensPage());
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// How many tokens have been taken over, or the invitation when none have.
+  ///
+  /// Computed from the live overrides rather than stored, for the same reason
+  /// `AppLooks.active()` is: there is nothing to keep in sync and no way for a
+  /// remembered answer to go stale.
+  String get _themeTokensLabel {
+    final n = AppThemeController.instance.overrides.count;
+    if (n == 0) return 'Colour, shape, motion — one token at a time';
+    return '$n ${n == 1 ? "token" : "tokens"} changed';
+  }
+
+  Future<void> _openAppThemePage() async {
+    await pushSettingsPage(context, const AppThemePage());
+    if (!mounted) return;
+    final theme = await StorageService.getDetailTheme();
+    if (!mounted) return;
+    setState(() {
+      _detailTheme = theme;
+    });
+  }
+
+  Future<void> _openParentsGuideStylePage() async {
+    await pushSettingsPage(context, const ParentsGuideStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getParentsGuideStyle();
+    if (!mounted) return;
+    setState(() {
+      _parentsGuideStyle = style;
     });
   }
 
@@ -3907,7 +4422,35 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenIptvStyle;
   final String playerGuideStyleLabel;
   final Future<void> Function() onOpenPlayerGuideStyle;
+  final String playerDockLabel;
+  final Future<void> Function() onOpenPlayerDock;
+  final String detailPageStyleLabel;
+  final Future<void> Function() onOpenDetailPageStyle;
+  final String appThemeLabel;
+  final Future<void> Function() onOpenLooks;
+  final Future<void> Function() onOpenThemeTokens;
+  final String themeTokensLabel;
+
+  /// Withheld like [detailThemeLabel]: Theme Lab is a preview TOOL, not a
+  /// setting — it changes nothing, and a row that changes nothing is noise in
+  /// a list of rows that do. Page and wiring stay so restoring it is a few
+  /// lines.
+  final Future<void> Function() onOpenThemeLab;
+  final Future<void> Function() onOpenAppTheme;
+
+  /// Still plumbed, deliberately: the Details Theme ROW is withheld from the
+  /// Appearance list because App Theme write-through-mirrors into
+  /// `detail_theme`, so two rows set the same thing and one silently
+  /// overwrote the other. The page and its wiring stay so restoring the row is
+  /// a few lines rather than an archaeology exercise — the same
+  /// withheld-not-deleted pattern `kDetailThemesShipped` uses.
+  final String detailThemeLabel;
+  final Future<void> Function() onOpenDetailTheme;
+  final String parentsGuideStyleLabel;
+  final Future<void> Function() onOpenParentsGuideStyle;
   final String phoneNavStyleLabel;
+  final String desktopSidebarStyleLabel;
+  final Future<void> Function() onOpenDesktopSidebarStyle;
 
   const _SettingsLayout({
     required this.connections,
@@ -3953,11 +4496,28 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenIptvStyle,
     required this.playerGuideStyleLabel,
     required this.onOpenPlayerGuideStyle,
+    required this.playerDockLabel,
+    required this.onOpenPlayerDock,
+    required this.detailPageStyleLabel,
+    required this.onOpenDetailPageStyle,
+    required this.appThemeLabel,
+    required this.onOpenLooks,
+    required this.onOpenThemeTokens,
+    required this.themeTokensLabel,
+    required this.onOpenThemeLab,
+    required this.onOpenAppTheme,
+    required this.detailThemeLabel,
+    required this.onOpenDetailTheme,
+    required this.parentsGuideStyleLabel,
+    required this.onOpenParentsGuideStyle,
     required this.phoneNavStyleLabel,
+    required this.desktopSidebarStyleLabel,
+    required this.onOpenDesktopSidebarStyle,
   });
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return SettingsBackground(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
@@ -3999,9 +4559,28 @@ class _SettingsLayout extends StatelessWidget {
                 // pickers live in the TV layout's Appearance category — this
                 // layout never renders on Android TV.
                 SettingsSection(
-                  title: 'Appearance',
+                  title: 'Presets',
+                  blurb: 'One pick that sets the theme, layouts and launch '
+                      'animation together.',
                   children: [
-                    // App-wide first, then the feature looks.
+                    SettingsTile.spec(
+                      SettingsRows.looks,
+                      subtitle: AppLooks.active()?.label ?? 'Custom',
+                      onTap: onOpenLooks,
+                    ),
+                    SettingsTile.spec(
+                      SettingsRows.themeTokens,
+                      subtitle: themeTokensLabel,
+                      onTap: onOpenThemeTokens,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Theme',
+                  blurb: 'Colour, focus and motion. Applies everywhere in the '
+                      'app.',
+                  children: [
                     SettingsTile.spec(
                       SettingsRows.textBrightness,
                       subtitle: textBrightnessLabel,
@@ -4011,6 +4590,18 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.launchAnimation,
                       subtitle: launchAnimationLabel,
                       onTap: onOpenLaunchAnimation,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SettingsSection(
+                  title: 'Screen layouts',
+                  blurb: 'Where things sit. Each screen is chosen separately.',
+                  children: [
+                    SettingsTile.spec(
+                      SettingsRows.detailPageStyle,
+                      subtitle: detailPageStyleLabel,
+                      onTap: onOpenDetailPageStyle,
                     ),
                     if (showIptvAppearance)
                       SettingsTile.spec(
@@ -4023,12 +4614,36 @@ class _SettingsLayout extends StatelessWidget {
                       subtitle: playerGuideStyleLabel,
                       onTap: onOpenPlayerGuideStyle,
                     ),
+                    // Televisions build TvControls, not Controls, so this
+                    // pref has no consumer there. SettingsTvLayout omits the
+                    // row entirely; this gate covers Apple TV, which shares
+                    // the TV layout via AndroidNativeDownloader.isTelevision.
+                    if (!PlatformUtil.isTelevision)
+                      SettingsTile.spec(
+                        SettingsRows.playerDock,
+                        subtitle: playerDockLabel,
+                        onTap: onOpenPlayerDock,
+                      ),
+                    SettingsTile.spec(
+                      SettingsRows.parentsGuideStyle,
+                      subtitle: parentsGuideStyleLabel,
+                      onTap: onOpenParentsGuideStyle,
+                    ),
                     // Phone/small-window chrome — TVs navigate by sidebar
                     // and never read the style.
                     SettingsTile.spec(
                       SettingsRows.navigationStyle,
                       subtitle: phoneNavStyleLabel,
                       onTap: onOpenNavigationSettings,
+                    ),
+                    // Wide-window chrome: the desktop/tablet rail's picker
+                    // (rail or pill). Phones never reach the wide layout but
+                    // an iPad rotates in and out of it, so the row is not
+                    // width-gated.
+                    SettingsTile.spec(
+                      SettingsRows.desktopSidebarStyle,
+                      subtitle: desktopSidebarStyleLabel,
+                      onTap: onOpenDesktopSidebarStyle,
                     ),
                   ],
                 ),
@@ -4181,7 +4796,7 @@ class _SettingsLayout extends StatelessWidget {
                 // the page, isolated in their own red section on purpose.
                 SettingsSection(
                   title: 'Danger Zone',
-                  accentColor: kSettingsRed.withValues(alpha: 0.85),
+                  accentColor: t.danger.withValues(alpha: 0.85),
                   children: [
                     SettingsTile.spec(
                       SettingsRows.resetDebrify,
@@ -4216,6 +4831,7 @@ class _SettingsSearchBarState extends State<_SettingsSearchBar> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     final bool lit = _focused || _hovered;
     return Material(
       color: Colors.transparent,
@@ -4228,10 +4844,10 @@ class _SettingsSearchBarState extends State<_SettingsSearchBar> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
-            color: lit ? kSettingsPanel2 : kSettingsPanel,
+            color: lit ? t.panel2 : t.panel,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: _focused ? kSettingsAccent : kSettingsLine,
+              color: _focused ? t.accent : t.line,
               width: _focused ? 1.5 : 1,
             ),
           ),
@@ -4240,12 +4856,12 @@ class _SettingsSearchBarState extends State<_SettingsSearchBar> {
               Icon(
                 Icons.search_rounded,
                 size: 20,
-                color: lit ? kSettingsAccent2 : kSettingsDim,
+                color: lit ? t.accent2 : t.dim,
               ),
               const SizedBox(width: 12),
               Text(
                 'Search settings',
-                style: TextStyle(fontSize: 13.5, color: kSettingsDim),
+                style: TextStyle(fontSize: 13.5, color: t.dim),
               ),
             ],
           ),

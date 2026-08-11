@@ -8,6 +8,7 @@ import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
 import '../../services/discover_prefs.dart';
 import '../../services/main_page_bridge.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../widgets/skeleton_poster.dart';
 import '../../services/stremio_service.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
@@ -15,7 +16,6 @@ import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
 import '../../widgets/see_all/see_all_random_button.dart';
-import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 
 /// Full-screen Stremio-styled catalog browser — the "See All" destination for a
@@ -473,7 +473,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       );
     }
     return Scaffold(
-      backgroundColor: kSeeAllBg,
+      backgroundColor: AppThemeScope.of(context).seeAll.bg,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -580,6 +580,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
       return SkeletonPosterGrid(isTelevision: widget.isTelevision);
     }
     if (_items.isEmpty) {
+      final app = AppThemeScope.of(context);
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(40),
@@ -587,12 +588,12 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.movie_filter_rounded,
-                  size: 44, color: Colors.white.withValues(alpha: 0.25)),
+                  size: 44, color: app.fade(app.core.tx, 0.25)),
               const SizedBox(height: 14),
               Text(
                 _searching ? 'No matches for “$_searchQuery”' : 'Nothing in this catalog',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
+                  color: app.fade(app.core.tx, 0.7),
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                 ),
@@ -607,7 +608,7 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
                     : 'This may be empty, or the addon failed to respond.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
+                  color: app.fade(app.core.tx, 0.4),
                   fontSize: 13,
                 ),
               ),
@@ -630,12 +631,12 @@ class _CatalogSeeAllScreenState extends State<CatalogSeeAllScreen> {
                   icon: const Icon(Icons.refresh_rounded, size: 18),
                   label: const Text('Retry'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: BorderSide(color: kSeeAllAccentBorder),
+                    foregroundColor: app.core.tx,
+                    side: BorderSide(color: app.seeAll.accentBorder),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 12),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(11),
+                      borderRadius: app.shape.br(11),
                     ),
                   ),
                 ),

@@ -8,9 +8,12 @@ import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// Focused IconButtons get the accent outline + lit fill — the stock
 /// Material focus overlay is invisible on the dark settings theme (TV DPAD).
+/// TOP-LEVEL final, so it cannot read a BuildContext: this one keeps the
+/// `kSettings*` constants until it becomes a function of context.
 final ButtonStyle _focusableIconStyle = ButtonStyle(
   backgroundColor: WidgetStateProperty.resolveWith(
     (states) => states.contains(WidgetState.focused) ? kSettingsPanel2 : null,
@@ -61,7 +64,7 @@ class _IndexerManagersSettingsPageState
     // On TV, land DPAD focus on the first interactive element so users
     // aren't stranded (the first row's switch, or Add when the list is
     // empty).
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         // Only a bare FocusScopeNode as primary focus means DPAD is
@@ -103,7 +106,7 @@ class _IndexerManagersSettingsPageState
             borderRadius: 12,
             child: TextButton(
               // TV: seed DPAD focus inside the dialog (BACK still dismisses).
-              autofocus: PlatformUtil.isAndroidTvCached,
+              autofocus: PlatformUtil.isTelevision,
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancel'),
             ),
@@ -122,7 +125,7 @@ class _IndexerManagersSettingsPageState
     await _saveConfigs(_configs.where((item) => item.id != config.id).toList());
     // The deleted row unmounted under the focused Delete button — reseed
     // DPAD focus on a surviving row (or Add when the list empties).
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         (_configs.isEmpty ? _addButtonFocus : _firstRowFocus).requestFocus();
@@ -147,6 +150,7 @@ class _IndexerManagersSettingsPageState
   }
 
   Future<void> _testConfig(IndexerManagerConfig config) async {
+    final t = AppThemeScope.of(context).settings;
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       SnackBar(content: Text('Testing ${config.displayName}...')),
@@ -156,7 +160,7 @@ class _IndexerManagersSettingsPageState
     messenger.showSnackBar(
       SnackBar(
         content: Text(result.message),
-        backgroundColor: result.success ? kSettingsGreen : kSettingsRed,
+        backgroundColor: result.success ? t.success : t.danger,
       ),
     );
   }
@@ -202,19 +206,24 @@ class _IndexerManagersSettingsPageState
   }
 
   Widget? _buildAddEngineButton(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final isCompact = MediaQuery.sizeOf(context).width < 720;
 
     if (isCompact) return null;
 
-    // Snap white ring — an accent ring (and the stock focus overlay) is
-    // invisible on the accent-filled FAB (TV DPAD).
+    // Ring and label both sit ON the accent-filled FAB, so both take
+    // on-accent ink — an accent ring (and the stock focus overlay) is
+    // invisible against the fill (TV DPAD), and so is a white one once the
+    // theme's accent is itself light.
+    final onAccent = app.inkOn(t.accent);
     return _FocusRing(
       borderRadius: 16,
-      color: Colors.white,
+      color: onAccent,
       child: FloatingActionButton.extended(
         onPressed: () => _openEditor(),
-        backgroundColor: kSettingsAccent,
-        foregroundColor: Colors.white,
+        backgroundColor: t.accent,
+        foregroundColor: onAccent,
         icon: const Icon(Icons.add_rounded),
         label: const Text('Add Engine'),
       ),
@@ -231,18 +240,20 @@ class _IndexerManagersSettingsPageState
   }
 
   Widget _buildEmptyState(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            Icon(Icons.search_off_rounded, size: 40, color: kSettingsDim2),
+            Icon(Icons.search_off_rounded, size: 40, color: t.dim2),
             const SizedBox(height: 12),
             Text(
               'No indexer managers yet',
               style: Theme.of(
                 context,
-              ).textTheme.titleMedium?.copyWith(color: Colors.white),
+              ).textTheme.titleMedium?.copyWith(color: app.core.tx),
             ),
             const SizedBox(height: 8),
             Text(
@@ -250,7 +261,7 @@ class _IndexerManagersSettingsPageState
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
-              ).textTheme.bodySmall?.copyWith(color: kSettingsDim),
+              ).textTheme.bodySmall?.copyWith(color: t.dim),
             ),
           ],
         ),
@@ -259,13 +270,15 @@ class _IndexerManagersSettingsPageState
   }
 
   Widget _buildConfigTile(IndexerManagerConfig config) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final theme = Theme.of(context);
     final bool isFirst = _configs.isNotEmpty && config.id == _configs.first.id;
     final icon = Icon(
       config.type == IndexerManagerType.prowlarr
           ? Icons.hub_rounded
           : Icons.manage_search_rounded,
-      color: kSettingsDim,
+      color: t.dim,
     );
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,7 +288,7 @@ class _IndexerManagersSettingsPageState
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
-          style: theme.textTheme.titleMedium?.copyWith(color: Colors.white),
+          style: theme.textTheme.titleMedium?.copyWith(color: app.core.tx),
         ),
         const SizedBox(height: 2),
         Text(
@@ -283,7 +296,7 @@ class _IndexerManagersSettingsPageState
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
-          style: theme.textTheme.bodySmall?.copyWith(color: kSettingsDim),
+          style: theme.textTheme.bodySmall?.copyWith(color: t.dim),
         ),
       ],
     );
@@ -503,7 +516,7 @@ class _IndexerManagerEditorDialogState
                         value: _type,
                         // TV: seed DPAD focus on the first control (not a
                         // text field — that would pop the soft keyboard).
-                        autofocus: PlatformUtil.isAndroidTvCached,
+                        autofocus: PlatformUtil.isTelevision,
                         decoration: const InputDecoration(labelText: 'Type'),
                         isExpanded: true,
                         items: IndexerManagerType.values
@@ -725,6 +738,9 @@ InputDecoration _engineFieldDecoration(
 /// focus — the stock Material focus overlay is invisible on the dark
 /// settings theme. The wrapper node itself never takes focus.
 class _FocusRing extends StatefulWidget {
+  // `color` defaults to the accent CONSTANT, not the token: a const
+  // constructor default cannot read a BuildContext. Callers that want the
+  // themed accent pass it explicitly.
   const _FocusRing({
     required this.child,
     required this.borderRadius,

@@ -7,6 +7,7 @@ import '../../services/main_page_bridge.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 class RealDebridSettingsPage extends StatefulWidget {
   const RealDebridSettingsPage({super.key});
@@ -77,7 +78,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   // was on. Re-seed focus once the new subtree is on screen. TV-only: touch
   // users don't rely on focus.
   void _refocusOnTv(FocusNode node) {
-    if (!PlatformUtil.isAndroidTvCached) return;
+    if (!PlatformUtil.isTelevision) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         node.requestFocus();
@@ -90,7 +91,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   // somewhere (e.g. the back button) while this page was loading — don't
   // steal focus from them.
   bool get _seedEntryFocus {
-    if (!PlatformUtil.isAndroidTvCached) return false;
+    if (!PlatformUtil.isTelevision) return false;
     final primary = FocusManager.instance.primaryFocus;
     return primary == null || primary is FocusScopeNode;
   }
@@ -120,8 +121,14 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   }
 
   void _snack(String m, {bool err = false}) {
+    // Callers reach this after storage/network awaits without their own
+    // mounted check, so both lookups below could run on a disposed State.
+    // The messenger lookup was always lifecycle-sensitive; reading the
+    // theme added a second one, so guard once here for both.
+    if (!mounted) return;
+    final t = AppThemeScope.of(context).settings;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(m), backgroundColor: err ? kSettingsRed : null),
+      SnackBar(content: Text(m), backgroundColor: err ? t.danger : null),
     );
   }
 
@@ -303,6 +310,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Real Debrid Settings',
@@ -381,7 +389,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                           ? Icons.visibility_off
                                           : Icons.visibility,
                                       color: _hiddenFromNav
-                                          ? kSettingsAmber
+                                          ? t.warning
                                           : null,
                                     ),
                                     contentPadding: const EdgeInsets.symmetric(
@@ -411,9 +419,9 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(
+                                      Icon(
                                         Icons.key,
-                                        color: kSettingsAccent2,
+                                        color: t.accent2,
                                         size: 20,
                                       ),
                                       const SizedBox(width: 8),
@@ -434,31 +442,31 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                             vertical: 4,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: kSettingsGreen.withValues(
+                                            color: t.success.withValues(
                                               alpha: 0.1,
                                             ),
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
                                             border: Border.all(
-                                              color: kSettingsGreen.withValues(
+                                              color: t.success.withValues(
                                                 alpha: 0.3,
                                               ),
                                             ),
                                           ),
-                                          child: const Row(
+                                          child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               Icon(
                                                 Icons.check_circle,
-                                                color: kSettingsGreen,
+                                                color: t.success,
                                                 size: 14,
                                               ),
-                                              SizedBox(width: 4),
+                                              const SizedBox(width: 4),
                                               Text(
                                                 'Connected',
                                                 style: TextStyle(
-                                                  color: kSettingsGreen,
+                                                  color: t.success,
                                                   fontSize: 12,
                                                 ),
                                               ),
@@ -478,14 +486,14 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                         ),
                                         border: _apiKeyFocused
                                             ? Border.all(
-                                                color: kSettingsAccent,
+                                                color: t.accent,
                                                 width: 1.8,
                                               )
                                             : null,
                                         boxShadow: _apiKeyFocused
                                             ? [
                                                 BoxShadow(
-                                                  color: kSettingsAccent
+                                                  color: t.accent
                                                       .withValues(
                                                         alpha: 0.25,
                                                       ),
@@ -519,7 +527,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                           suffixIcon: IconButton(
                                             // Default focus highlight is
                                             // invisible on TV.
-                                            focusColor: kSettingsAccent
+                                            focusColor: t.accent
                                                 .withValues(alpha: 0.4),
                                             icon: Icon(
                                               _obscure
@@ -577,12 +585,12 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                       Container(
                                         padding: const EdgeInsets.all(12),
                                         decoration: BoxDecoration(
-                                          color: kSettingsPanel2,
+                                          color: t.panel2,
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
                                           border: Border.all(
-                                            color: kSettingsLine,
+                                            color: t.line,
                                           ),
                                         ),
                                         child: Row(
@@ -591,13 +599,13 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                               child: Text(
                                                 '••••••••••••••••••••••••••••••••',
                                                 style: TextStyle(
-                                                  color: kSettingsDim,
+                                                  color: t.dim,
                                                 ),
                                               ),
                                             ),
                                             Icon(
                                               Icons.visibility_off,
-                                              color: kSettingsDim2,
+                                              color: t.dim2,
                                               size: 16,
                                             ),
                                           ],
@@ -614,7 +622,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                             icon: const Icon(Icons.logout),
                                             label: const Text('Logout'),
                                             style: OutlinedButton.styleFrom(
-                                              foregroundColor: kSettingsRed,
+                                              foregroundColor: t.danger,
                                             ),
                                           ),
                                         ),
@@ -646,9 +654,9 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                   children: [
                                     Row(
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.account_circle,
-                                          color: kSettingsAccent2,
+                                          color: t.accent2,
                                           size: 20,
                                         ),
                                         const SizedBox(width: 8),
@@ -681,9 +689,9 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(
+                                      Icon(
                                         Icons.folder_open,
-                                        color: kSettingsAccent2,
+                                        color: t.accent2,
                                         size: 20,
                                       ),
                                       const SizedBox(width: 8),
@@ -702,7 +710,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                   Text(
                                     'Choose how Real Debrid handles file selection when adding torrents',
                                     style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(color: kSettingsDim),
+                                        ?.copyWith(color: t.dim),
                                   ),
                                   const SizedBox(height: 12),
                                   SettingsSelectDropdown(
@@ -744,9 +752,9 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(
+                                      Icon(
                                         Icons.play_circle_outline,
-                                        color: kSettingsAccent2,
+                                        color: t.accent2,
                                         size: 20,
                                       ),
                                       const SizedBox(width: 8),
@@ -765,7 +773,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                   Text(
                                     'Choose what happens after adding a torrent to Real Debrid',
                                     style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(color: kSettingsDim),
+                                        ?.copyWith(color: t.dim),
                                   ),
                                   const SizedBox(height: 12),
                                   SettingsSelectDropdown(
@@ -822,9 +830,9 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(
+                                      Icon(
                                         Icons.shield_outlined,
-                                        color: kSettingsAccent2,
+                                        color: t.accent2,
                                         size: 20,
                                       ),
                                       const SizedBox(width: 8),
@@ -845,7 +853,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                     'When enabled, Quick Play will skip torrents likely to be blocked, '
                                     'trying only ones that should work.',
                                     style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(color: kSettingsDim),
+                                        ?.copyWith(color: t.dim),
                                   ),
                                   const SizedBox(height: 8),
                                   _FocusRing(
@@ -883,9 +891,9 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(
+                                      Icon(
                                         Icons.help_outline,
-                                        color: kSettingsAccent2,
+                                        color: t.accent2,
                                         size: 20,
                                       ),
                                       const SizedBox(width: 8),
@@ -910,7 +918,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                         .textTheme
                                         .bodyMedium
                                         ?.copyWith(
-                                          color: kSettingsDim,
+                                          color: t.dim,
                                           height: 1.5,
                                         ),
                                   ),
@@ -952,6 +960,7 @@ class _FocusRingState extends State<_FocusRing> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     // hasFocus includes descendants, so this lights up when the wrapped
     // control (switch/button) receives DPAD focus.
     return Focus(
@@ -960,10 +969,10 @@ class _FocusRingState extends State<_FocusRing> {
       onFocusChange: (f) => setState(() => _focused = f),
       child: Container(
         decoration: BoxDecoration(
-          color: (_focused && widget.fill) ? kSettingsPanel2 : null,
+          color: (_focused && widget.fill) ? t.panel2 : null,
           borderRadius: BorderRadius.circular(widget.radius),
           border: Border.all(
-            color: _focused ? kSettingsAccent : Colors.transparent,
+            color: _focused ? t.accent : Colors.transparent,
             width: 1,
           ),
         ),

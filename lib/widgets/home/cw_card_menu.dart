@@ -2,6 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_theme_scope.dart';
+import '../../theme/widgets/themed_artwork.dart';
 import '../../utils/dialog_tap_guard.dart';
 import '../../utils/tv_keys.dart';
 
@@ -80,7 +82,6 @@ class _CwCardMenu extends StatefulWidget {
 class _CwCardMenuState extends State<_CwCardMenu> {
   static const _accent = Color(0xFF8B5CF6);
   static const _danger = Color(0xFFF87171);
-  static const _surface = Color(0xFF141019);
 
   final FocusNode _playNode = FocusNode(debugLabel: 'cw-menu-play');
   final FocusNode _removeNode = FocusNode(debugLabel: 'cw-menu-remove');
@@ -110,13 +111,17 @@ class _CwCardMenuState extends State<_CwCardMenu> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
+    final app = AppThemeScope.of(context);
     // Phones take the full width (minus the inset); anything wider caps at a
     // comfortable reading width so the rows never stretch into a banner.
     final maxWidth = size.width < 520 ? size.width : 430.0;
     return Dialog(
-      backgroundColor: _surface,
+      // Tokenised with the ink, not after it: the rows below now draw their
+      // text from `app.core.tx`, so a surface pinned dark would put a light
+      // theme's near-black text on a near-black sheet.
+      backgroundColor: app.sheetSurface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: app.shape.br(20)),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: maxWidth,
@@ -159,20 +164,26 @@ class _CwCardMenuState extends State<_CwCardMenu> {
   }
 
   Widget _buildHeader() {
+    final app = AppThemeScope.of(context);
     final poster = widget.posterUrl;
     final subtitle = widget.subtitle;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            width: 44,
-            height: 66,
-            child: (poster != null && poster.isNotEmpty)
+        SizedBox(
+          width: 44,
+          height: 66,
+          // The poster's frame is the theme's, so [ThemedArtwork] owns the
+          // clip this site used to draw for itself.
+          child: ThemedArtwork(
+            role: ArtRole.poster,
+            radius: 8,
+            builder: (context, blend) => (poster != null && poster.isNotEmpty)
                 ? CachedNetworkImage(
                     imageUrl: poster,
                     fit: BoxFit.cover,
+                    color: blend?.$1,
+                    colorBlendMode: blend?.$2,
                     memCacheWidth: 132,
                     fadeInDuration: Duration.zero,
                     placeholder: (_, __) => const _PosterFallback(),
@@ -204,7 +215,7 @@ class _CwCardMenuState extends State<_CwCardMenu> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: app.fade(app.core.tx, 0.5),
                     fontSize: 12.5,
                     fontWeight: FontWeight.w500,
                   ),
@@ -223,12 +234,13 @@ class _PosterFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return ColoredBox(
-      color: Colors.white.withValues(alpha: 0.06),
+      color: app.fade(app.core.tx, 0.06),
       child: Icon(
         Icons.movie_rounded,
         size: 18,
-        color: Colors.white.withValues(alpha: 0.3),
+        color: app.fade(app.core.tx, 0.3),
       ),
     );
   }
@@ -266,6 +278,7 @@ class _MenuRowState extends State<_MenuRow> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (value) => setState(() => _focused = value),
@@ -297,12 +310,12 @@ class _MenuRowState extends State<_MenuRow> {
             decoration: BoxDecoration(
               color: _active
                   ? widget.accent.withValues(alpha: 0.16)
-                  : Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(14),
+                  : app.fade(app.core.tx, 0.04),
+              borderRadius: app.shape.br(14),
               border: Border.all(
                 color: _active
                     ? widget.accent
-                    : Colors.white.withValues(alpha: 0.07),
+                    : app.fade(app.core.tx, 0.07),
                 width: _active ? 2 : 1,
               ),
             ),
@@ -330,7 +343,7 @@ class _MenuRowState extends State<_MenuRow> {
                       Text(
                         widget.description,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.5),
+                          color: app.fade(app.core.tx, 0.5),
                           fontSize: 12.5,
                           height: 1.35,
                         ),

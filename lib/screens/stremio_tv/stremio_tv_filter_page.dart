@@ -4,8 +4,8 @@ import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
-import '../../widgets/home/home_theme.dart';
 
 /// Full-screen DPAD-first channel filter — the "Two-Pane Manager".
 ///
@@ -78,9 +78,6 @@ class _FilterAddon {
 }
 
 class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
-  static const Color _onColor = Color(0xFF34D399);
-  static const Color _offColor = Color(0xFF4B465F);
-
   late final List<_FilterAddon> _addons;
   int _selectedAddon = 0;
   int _selectedCat = 0;
@@ -595,6 +592,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final (on, total) = _totals;
     _narrow = MediaQuery.sizeOf(context).width < 640;
     // A resize back to wide shows both panes again; drop the stale flag so
@@ -617,7 +615,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: Container(
-          decoration: HomeTheme.pageBackground,
+          decoration: BoxDecoration(gradient: app.home.wash),
           child: SafeArea(
             child: Column(
               children: [
@@ -628,7 +626,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                           child: Text(
                             'No addons with catalogs found.',
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.55),
+                              color: app.core.tx.withValues(alpha: 0.55),
                               fontSize: 15,
                             ),
                           ),
@@ -645,6 +643,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   }
 
   Widget _buildHeader(int on, int total) {
+    final app = AppThemeScope.of(context);
     final backButton = IconButton(
       // Explicit close affordance: skip the hierarchical BACK walk
       // (maybePop would step list→rail first), just close the wall if
@@ -658,13 +657,13 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
       },
       icon: Icon(
         Icons.arrow_back_rounded,
-        color: Colors.white.withValues(alpha: 0.7),
+        color: app.core.tx.withValues(alpha: 0.7),
       ),
     );
-    const title = Text(
+    final title = Text(
       'Channel Filters',
       style: TextStyle(
-        color: Colors.white,
+        color: app.core.tx,
         fontSize: 19,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.2,
@@ -673,16 +672,16 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
     final countPill = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(99),
+        color: app.core.tx.withValues(alpha: 0.06),
+        borderRadius: app.shape.brPill,
       ),
       child: Text.rich(
         TextSpan(
           children: [
             TextSpan(
               text: '$on',
-              style: const TextStyle(
-                color: _onColor,
+              style: TextStyle(
+                color: app.stremioTv.toggleOn,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -691,7 +690,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
           ],
         ),
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.65),
+          color: app.core.tx.withValues(alpha: 0.65),
           fontSize: 12.5,
         ),
       ),
@@ -745,6 +744,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   }
 
   Widget _actionButton(int i, String label) {
+    final app = AppThemeScope.of(context);
     final node = _headerNodes[i];
     return Focus(
       focusNode: node,
@@ -774,18 +774,17 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(99),
+                borderRadius: app.shape.brPill,
                 border: Border.all(
                   color: focused
-                      ? HomeTheme.focusGold
-                      : Colors.white.withValues(alpha: 0.16),
+                      ? app.home.focus
+                      : app.core.tx.withValues(alpha: 0.16),
                   width: focused ? 2 : 1,
                 ),
                 boxShadow: focused
                     ? [
                         BoxShadow(
-                          color:
-                              HomeTheme.focusGoldDeep.withValues(alpha: 0.4),
+                          color: app.home.focusDeep.withValues(alpha: 0.4),
                           blurRadius: 12,
                         ),
                       ]
@@ -795,8 +794,8 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                 label,
                 style: TextStyle(
                   color: focused
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.7),
+                      ? app.core.tx
+                      : app.core.tx.withValues(alpha: 0.7),
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -811,6 +810,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   // ─── Two panes ────────────────────────────────────────────────────────────
 
   Widget _buildPanes() {
+    final app = AppThemeScope.of(context);
     // Narrow: one pane at a time — the rail, or the selected addon's
     // catalogs behind a breadcrumb.
     if (_narrow) {
@@ -827,7 +827,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(width: 300, child: _buildRail()),
-        Container(width: 0.5, color: Colors.white.withValues(alpha: 0.07)),
+        Container(width: 0.5, color: app.core.tx.withValues(alpha: 0.07)),
         Expanded(child: _buildCatalogList()),
       ],
     );
@@ -836,6 +836,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   /// Narrow-mode header above the catalog list: tappable "‹ addon" trail
   /// back to the rail (DPAD users get there with LEFT/BACK).
   Widget _buildNarrowBreadcrumb() {
+    final app = AppThemeScope.of(context);
     final a = _addons[_selectedAddon];
     return GestureDetector(
       onTap: _showRailPane,
@@ -847,7 +848,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
             Icon(
               Icons.chevron_left_rounded,
               size: 18,
-              color: Colors.white.withValues(alpha: 0.6),
+              color: app.core.tx.withValues(alpha: 0.6),
             ),
             const SizedBox(width: 2),
             Flexible(
@@ -856,7 +857,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.6),
+                  color: app.core.tx.withValues(alpha: 0.6),
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -869,6 +870,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   }
 
   Widget _buildRail() {
+    final app = AppThemeScope.of(context);
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 4, 10, 12),
       itemCount: _addons.length,
@@ -908,19 +910,19 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                   ),
                   decoration: BoxDecoration(
                     color: selected
-                        ? HomeTheme.chromeAccent.withValues(alpha: 0.10)
+                        ? app.home.chromeAccent.withValues(alpha: 0.10)
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: app.shape.br(12),
                     border: Border.all(
                       color: focused
-                          ? HomeTheme.focusGold
+                          ? app.home.focus
                           : Colors.transparent,
                       width: focused ? 2 : 1.5,
                     ),
                     boxShadow: focused
                         ? [
                             BoxShadow(
-                              color: HomeTheme.focusGoldDeep
+                              color: app.home.focusDeep
                                   .withValues(alpha: 0.4),
                               blurRadius: 12,
                             ),
@@ -938,8 +940,8 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: focused || selected
-                                ? Colors.white
-                                : Colors.white.withValues(alpha: 0.72),
+                                ? app.core.tx
+                                : app.core.tx.withValues(alpha: 0.72),
                             fontSize: 13.5,
                             fontWeight: FontWeight.w600,
                           ),
@@ -949,7 +951,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                       Text(
                         '$on/$total',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.42),
+                          color: app.core.tx.withValues(alpha: 0.42),
                           fontSize: 11,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
@@ -961,7 +963,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                         Icon(
                           Icons.chevron_right_rounded,
                           size: 16,
-                          color: Colors.white.withValues(alpha: 0.6),
+                          color: app.core.tx.withValues(alpha: 0.6),
                         ),
                       ],
                     ],
@@ -978,13 +980,14 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   /// Small glassy affordance (same language as the dial's OPTIONS chip)
   /// telling the user RIGHT opens this catalog's genre wall.
   Widget _genresHintChip() {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.62),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: app.shape.br(6),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.16),
+          color: app.onGlass.withValues(alpha: 0.16),
           width: 0.5,
         ),
       ),
@@ -994,13 +997,13 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
           Icon(
             Icons.keyboard_arrow_right_rounded,
             size: 12,
-            color: Colors.white.withValues(alpha: 0.85),
+            color: app.onGlass.withValues(alpha: 0.85),
           ),
           const SizedBox(width: 3),
           Text(
             'GENRES',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.85),
+              color: app.onGlass.withValues(alpha: 0.85),
               fontSize: 8.5,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
@@ -1015,13 +1018,14 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   /// chip that reads as a button (fill + outline + chevron), unlike the old
   /// bare "▸ genres" text which looked like a status label.
   Widget _genresButton() {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: HomeTheme.chromeAccent.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(9),
+        color: app.home.chromeAccent.withValues(alpha: 0.14),
+        borderRadius: app.shape.br(9),
         border: Border.all(
-          color: HomeTheme.chromeAccent.withValues(alpha: 0.45),
+          color: app.home.chromeAccent.withValues(alpha: 0.45),
         ),
       ),
       child: Row(
@@ -1030,7 +1034,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
           Text(
             'Genres',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.9),
+              color: app.core.tx.withValues(alpha: 0.9),
               fontSize: 11.5,
               fontWeight: FontWeight.w700,
             ),
@@ -1039,7 +1043,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
           Icon(
             Icons.chevron_right_rounded,
             size: 15,
-            color: Colors.white.withValues(alpha: 0.8),
+            color: app.core.tx.withValues(alpha: 0.8),
           ),
         ],
       ),
@@ -1047,6 +1051,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   }
 
   Widget _buildCatalogList() {
+    final app = AppThemeScope.of(context);
     final cats = _addons[_selectedAddon].cats;
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(14, 4, 18, 12),
@@ -1081,18 +1086,18 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                     vertical: 12,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.025),
-                    borderRadius: BorderRadius.circular(13),
+                    color: app.core.tx.withValues(alpha: 0.025),
+                    borderRadius: app.shape.br(13),
                     border: Border.all(
                       color: focused
-                          ? HomeTheme.focusGold
-                          : Colors.white.withValues(alpha: 0.05),
+                          ? app.home.focus
+                          : app.core.tx.withValues(alpha: 0.05),
                       width: focused ? 2 : 1.5,
                     ),
                     boxShadow: focused
                         ? [
                             BoxShadow(
-                              color: HomeTheme.focusGoldDeep
+                              color: app.home.focusDeep
                                   .withValues(alpha: 0.4),
                               blurRadius: 12,
                             ),
@@ -1112,8 +1117,8 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                                     c.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: app.core.tx,
                                       fontSize: 13.5,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -1129,7 +1134,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                                   ? '$on of ${c.total} genres on'
                                   : (on > 0 ? 'on' : 'off'),
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.42),
+                                color: app.core.tx.withValues(alpha: 0.42),
                                 fontSize: 11,
                                 fontFeatures: const [
                                   FontFeature.tabularFigures(),
@@ -1160,7 +1165,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                                       : Text(
                                           '▸ genres',
                                           style: TextStyle(
-                                            color: Colors.white
+                                            color: app.core.tx
                                                 .withValues(alpha: 0.42),
                                             fontSize: 11,
                                           ),
@@ -1183,6 +1188,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   // ─── Genre wall ───────────────────────────────────────────────────────────
 
   Widget _buildWall(_FilterCatalog c) {
+    final app = AppThemeScope.of(context);
     final addon = _addons[_selectedAddon];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1195,8 +1201,8 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                 TextSpan(text: '${addon.name} ▸ '),
                 TextSpan(
                   text: '${c.name} (${c.type})',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: app.core.tx,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1204,7 +1210,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
               ],
             ),
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
+              color: app.core.tx.withValues(alpha: 0.45),
               fontSize: 12.5,
             ),
           ),
@@ -1244,6 +1250,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   }
 
   Widget _wallAction(int i, String label) {
+    final app = AppThemeScope.of(context);
     final node = _wallActionNodes[i];
     return Focus(
       focusNode: node,
@@ -1265,11 +1272,11 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 13, vertical: 6),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(99),
+                borderRadius: app.shape.brPill,
                 border: Border.all(
                   color: focused
-                      ? HomeTheme.focusGold
-                      : Colors.white.withValues(alpha: 0.16),
+                      ? app.home.focus
+                      : app.core.tx.withValues(alpha: 0.16),
                   width: focused ? 2 : 1,
                 ),
               ),
@@ -1277,8 +1284,8 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                 label,
                 style: TextStyle(
                   color: focused
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.65),
+                      ? app.core.tx
+                      : app.core.tx.withValues(alpha: 0.65),
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1291,6 +1298,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   }
 
   Widget _wallChip(_FilterCatalog c, int i) {
+    final app = AppThemeScope.of(context);
     final node = _wallChipNodes[i];
     return Focus(
       focusNode: node,
@@ -1312,22 +1320,21 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: on
-                    ? HomeTheme.chromeAccent.withValues(alpha: 0.28)
+                    ? app.home.chromeAccent.withValues(alpha: 0.28)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: app.shape.br(10),
                 border: Border.all(
                   color: focused
-                      ? HomeTheme.focusGold
+                      ? app.home.focus
                       : (on
-                          ? HomeTheme.chromeAccent.withValues(alpha: 0.6)
-                          : Colors.white.withValues(alpha: 0.12)),
+                          ? app.home.chromeAccent.withValues(alpha: 0.6)
+                          : app.core.tx.withValues(alpha: 0.12)),
                   width: focused ? 2 : 1.5,
                 ),
                 boxShadow: focused
                     ? [
                         BoxShadow(
-                          color:
-                              HomeTheme.focusGoldDeep.withValues(alpha: 0.4),
+                          color: app.home.focusDeep.withValues(alpha: 0.4),
                           blurRadius: 10,
                         ),
                       ]
@@ -1339,8 +1346,8 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: on || focused
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.45),
+                      ? app.core.tx
+                      : app.core.tx.withValues(alpha: 0.45),
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1355,17 +1362,18 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   // ─── Small pieces ─────────────────────────────────────────────────────────
 
   Widget _stateDot(int on, int total) {
+    final app = AppThemeScope.of(context);
     final Color color;
     Gradient? gradient;
     if (on == 0) {
-      color = _offColor;
+      color = app.stremioTv.toggleOff;
     } else if (on == total) {
-      color = _onColor;
+      color = app.stremioTv.toggleOn;
     } else {
       color = Colors.transparent;
-      gradient = const LinearGradient(
-        colors: [_onColor, _offColor],
-        stops: [0.5, 0.5],
+      gradient = LinearGradient(
+        colors: [app.stremioTv.toggleOn, app.stremioTv.toggleOff],
+        stops: const [0.5, 0.5],
       );
     }
     return Container(
@@ -1380,19 +1388,22 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   }
 
   Widget _switchPill(int on, int total) {
+    final app = AppThemeScope.of(context);
     final bool isOn = on == total && total > 0;
     final bool isMixed = on > 0 && on < total;
+    // The thumb sits ON this fill, so its ink is chosen against it.
+    final Color track = isOn
+        ? app.home.chromeAccent
+        : (isMixed
+            ? app.home.chromeAccent.withValues(alpha: 0.45)
+            : app.stremioTv.toggleOff);
     return Container(
       width: 38,
       height: 21,
       padding: const EdgeInsets.all(2.5),
       decoration: BoxDecoration(
-        color: isOn
-            ? HomeTheme.chromeAccent
-            : (isMixed
-                ? HomeTheme.chromeAccent.withValues(alpha: 0.45)
-                : _offColor),
-        borderRadius: BorderRadius.circular(99),
+        color: track,
+        borderRadius: app.shape.brPill,
       ),
       child: AnimatedAlign(
         duration: const Duration(milliseconds: 120),
@@ -1402,8 +1413,8 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
         child: Container(
           width: 16,
           height: 16,
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: app.inkOn(track),
             shape: BoxShape.circle,
           ),
         ),
@@ -1412,16 +1423,17 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   }
 
   Widget _typeBadge(String type) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: HomeTheme.chromeAccent.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(5),
+        color: app.home.chromeAccent.withValues(alpha: 0.2),
+        borderRadius: app.shape.br(5),
       ),
       child: Text(
         type.toUpperCase(),
         style: TextStyle(
-          color: HomeTheme.chromeAccent.withValues(alpha: 0.95),
+          color: app.home.chromeAccent.withValues(alpha: 0.95),
           fontSize: 9.5,
           fontWeight: FontWeight.w800,
           letterSpacing: 0.8,
@@ -1431,6 +1443,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
   }
 
   Widget _buildHintBar() {
+    final app = AppThemeScope.of(context);
     final inWall = _wall != null;
     final hints = inWall
         ? const [
@@ -1449,7 +1462,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
-            color: Colors.white.withValues(alpha: 0.07),
+            color: app.core.tx.withValues(alpha: 0.07),
             width: 0.5,
           ),
         ),
@@ -1463,13 +1476,13 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.07),
-                borderRadius: BorderRadius.circular(5),
+                color: app.core.tx.withValues(alpha: 0.07),
+                borderRadius: app.shape.br(5),
               ),
               child: Text(
                 key,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.65),
+                  color: app.core.tx.withValues(alpha: 0.65),
                   fontSize: 10.5,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1479,7 +1492,7 @@ class _StremioTvFilterPageState extends State<StremioTvFilterPage> {
             Text(
               label,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.38),
+                color: app.core.tx.withValues(alpha: 0.38),
                 fontSize: 11,
               ),
             ),

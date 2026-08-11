@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/youtube_service.dart';
+import '../../theme/app_theme_scope.dart';
 import '../browse/brand_accent.dart';
-import '../see_all/see_all_theme.dart';
 import '../../utils/tv_keys.dart';
 
 /// Vertical grid card for a YouTube video: 16:9 thumbnail on top, then a
@@ -77,6 +77,7 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final app = AppThemeScope.of(context);
     final video = widget.video;
 
     final metaParts = <String>[
@@ -155,7 +156,7 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
                   child: AnimatedContainer(
                     duration: fx,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: app.shape.br(14),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black
@@ -165,14 +166,14 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
                         ),
                         if (_active)
                           BoxShadow(
-                            color: kSeeAllAccent.withValues(alpha: 0.5),
+                            color: app.youtube.focus.withValues(alpha: 0.5),
                             blurRadius: 30,
                             spreadRadius: 1,
                           ),
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: app.shape.brImg(14),
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
@@ -198,12 +199,14 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: Colors.black.withValues(alpha: 0.82),
-                                  borderRadius: BorderRadius.circular(5),
+                                  borderRadius: app.shape.br(5),
                                 ),
                                 child: Text(
                                   _formatDuration(video.durationSeconds!),
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    // On the badge's black glass, not on the
+                                    // page: page ink would vanish here.
+                                    color: app.onGlass,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -217,9 +220,9 @@ class _YoutubeVideoCardState extends State<YoutubeVideoCard> {
                               child: IgnorePointer(
                                 child: DecoratedBox(
                                   decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(14),
+                                    borderRadius: app.shape.br(14),
                                     border: Border.all(
-                                      color: kSeeAllAccent,
+                                      color: app.youtube.focus,
                                       width: 2.5,
                                     ),
                                   ),
@@ -316,6 +319,9 @@ class _PlayOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The scrim and the disc are black glass over an arbitrary thumbnail and
+    // stay black on every theme, so their ink is `onGlass`, not page text.
+    final onGlass = AppThemeScope.of(context).onGlass;
     return IgnorePointer(
       child: Container(
         color: Colors.black.withValues(alpha: 0.28),
@@ -327,12 +333,11 @@ class _PlayOverlay extends StatelessWidget {
             color: Colors.black.withValues(alpha: 0.45),
             shape: BoxShape.circle,
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.55),
+              color: onGlass.withValues(alpha: 0.55),
               width: 1.5,
             ),
           ),
-          child: const Icon(Icons.play_arrow_rounded,
-              size: 26, color: Colors.white),
+          child: Icon(Icons.play_arrow_rounded, size: 26, color: onGlass),
         ),
       ),
     );
@@ -363,6 +368,10 @@ class _ChannelAvatar extends StatelessWidget {
       ),
       child: Text(
         letter,
+        // Deliberately literal: the disc is a RUNTIME brand accent, so no
+        // token holds this value. `app.inkOn(color)` is the right role but
+        // would flip the monogram to near-black on the lighter hues — a
+        // visible change today — so this waits for its own pass.
         style: const TextStyle(
           color: Colors.white,
           fontSize: 14,

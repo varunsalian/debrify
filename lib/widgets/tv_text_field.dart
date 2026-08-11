@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 
 import '../services/storage_service.dart';
 import '../services/tv_voice_input.dart';
+import '../theme/overlay_theme.dart';
+import '../services/tvos_keyboard_signal.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import 'tv_keyboard.dart';
@@ -45,6 +47,10 @@ class TvTextField extends StatefulWidget {
     this.autofillHints,
     this.validator,
     this.shellRing = true,
+    this.accent = const Color(0xFF7B5CFF),
+    this.keyboardGround = const Color(0xF01A1630),
+    this.keyboardInk = Colors.white,
+    this.keyboardInkOnAccent = Colors.white,
     this.onChanged,
     this.onSubmitted,
     this.onUpArrow,
@@ -93,6 +99,31 @@ class TvTextField extends StatefulWidget {
   /// Set false when the call site draws its own focus ring around the field
   /// (otherwise the shell's fallback accent ring would double it up).
   final bool shellRing;
+
+  // ─────────────────────────────────────────────────────── caller-supplied ink
+  //
+  // This field is rendered by themed surfaces, by surfaces still scheduled for
+  // conversion, and by the video player — which stays legacy permanently — so
+  // it can neither read the app theme nor keep a fixed palette. Each token
+  // below is OPTIONAL and defaults to the exact literal it replaces, so a call
+  // site that passes nothing renders byte-identically to what shipped and each
+  // surface can opt in on its own schedule.
+
+  /// The shell's focus ring, and every filled accent on the keyboard panel
+  /// this field owns (highlighted keycap, latched shift, mic disc + halo,
+  /// notice bar).
+  final Color? accent;
+
+  /// The keyboard panel's ground.
+  final Color? keyboardGround;
+
+  /// All keyboard-panel foreground; today's alphas ride on top of it.
+  final Color? keyboardInk;
+
+  /// Keyboard foreground ON a filled [accent] — separate from [keyboardInk]
+  /// because half the shipped themes have light accents, where white ink on
+  /// the highlighted keycap would be invisible.
+  final Color? keyboardInkOnAccent;
 
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
@@ -281,14 +312,29 @@ class TvTextFieldState extends State<TvTextField> {
   /// the focus-loss listener doesn't read it as "editing was abandoned".
   bool _imeSwitch = false;
 
+  /// Apple TV takes this path too.
+  ///
+  /// It was Android-TV-only on the reasoning that tvOS has a real system
+  /// keyboard — it does, but on the flutter-tvos fork that keyboard never
+  /// delivers its submit action back to Dart, so `onSubmitted` never fires and
+  /// every field on the platform is a dead end: text goes in, nothing happens.
+  /// The in-app keyboard sidesteps the platform IME entirely, which is the
+  /// same reason it exists on Android TV.
   bool get _tvShell =>
-      PlatformUtil.isAndroidTvCached &&
+      PlatformUtil.isTelevision &&
       StorageService.tvKeyboardEnabledCached &&
       widget.enabled;
+
+  /// Cancels the Apple TV "editing finished" subscription.
+  VoidCallback? _tvosEndEditing;
+
 
   @override
   void initState() {
     super.initState();
+    if (PlatformUtil.isTvOS) {
+      _tvosEndEditing = TvosKeyboardSignal.listen(_handleTvosEndEditing);
+    }
     _shellNode.addListener(_handleFocusChange);
     _editNode.addListener(_handleFocusChange);
   }
@@ -306,6 +352,7 @@ class TvTextFieldState extends State<TvTextField> {
 
   @override
   void dispose() {
+    _tvosEndEditing?.call();
     _popGuardTimer?.cancel();
     _noticeTimer?.cancel();
     _cancelVoiceSession();
@@ -371,14 +418,31 @@ class TvTextFieldState extends State<TvTextField> {
           widget.controller.text.isEmpty,
     );
     final overlay = Overlay.of(context, rootOverlay: true);
+    // A bare OverlayEntry inherits nothing local — and this keyboard opens
+    // from INCLUDED and FROZEN surfaces alike. Snapshot the field's ambient
+    // themes so the panel renders what its field renders (the legacy freeze
+    // included when the field sits inside a LegacyThemeBoundary). Inside the
+    // Positioned: CapturedThemes.wrap inserts plain widgets, and Positioned
+    // must stay the overlay Stack's direct child.
+    final capturedThemes = captureAppThemes(context);
     _overlay = OverlayEntry(
       builder: (_) => Positioned(
         left: 0,
         right: 0,
         bottom: 16,
-        child: SafeArea(
-          child: Center(child: TvKeyboardPanel(controller: _kb!)),
-        ),
+        child: capturedThemes.wrap(SafeArea(
+          child: Center(
+            child: TvKeyboardPanel(
+              controller: _kb!,
+              // The panel's own defaults are these same literals, so a token
+              // left null lands on exactly what shipped either way.
+              accent: widget.accent,
+              ground: widget.keyboardGround,
+              ink: widget.keyboardInk,
+              inkOnAccent: widget.keyboardInkOnAccent,
+            ),
+          ),
+        )),
       ),
     );
     overlay.insert(_overlay!);
@@ -716,14 +780,24 @@ class TvTextFieldState extends State<TvTextField> {
   /// phone-remote app) — treat it like our Search key: session over, back to
   /// the shell.
   void _onFieldSubmitted(String text) {
-    if (_tvShell) {
-      _endEdit();
-      if (_useSystemIme) {
-        setState(() => _useSystemIme = false);
-        _shellNode.requestFocus();
-      }
-    }
+    _endPlatformImeSession();
     widget.onSubmitted?.call(text);
+  }
+
+  /// Close out a platform-IME hand-off and hand the shell back its focus.
+  ///
+  /// Separate from [_onFieldSubmitted] because the session can end WITHOUT a
+  /// submission — on Apple TV the keyboard can be dismissed having changed
+  /// nothing — and that still has to unwind, or the field stays in hand-off
+  /// mode with the in-app keyboard gone. Nothing else unwinds it there: the
+  /// dismissal produces no Dart focus change.
+  void _endPlatformImeSession() {
+    if (!_tvShell) return;
+    _endEdit();
+    if (_useSystemIme) {
+      setState(() => _useSystemIme = false);
+      _shellNode.requestFocus();
+    }
   }
 
   // ------------------------------------------------------------------- keys
@@ -837,6 +911,7 @@ class TvTextFieldState extends State<TvTextField> {
     required ValueChanged<String>? onSubmitted,
     bool autofocus = false,
     bool enabled = true,
+    bool readOnly = false,
     GestureTapCallback? onTap,
   }) {
     if (widget.validator != null) {
@@ -851,6 +926,7 @@ class TvTextFieldState extends State<TvTextField> {
         textCapitalization: widget.textCapitalization,
         keyboardType: keyboardType,
         enabled: enabled,
+        readOnly: readOnly,
         obscureText: widget.obscureText,
         cursorColor: widget.cursorColor,
         inputFormatters: widget.inputFormatters,
@@ -872,6 +948,7 @@ class TvTextFieldState extends State<TvTextField> {
       textCapitalization: widget.textCapitalization,
       keyboardType: keyboardType,
       enabled: enabled,
+      readOnly: readOnly,
       obscureText: widget.obscureText,
       cursorColor: widget.cursorColor,
       inputFormatters: widget.inputFormatters,
@@ -907,7 +984,7 @@ class TvTextFieldState extends State<TvTextField> {
   /// leave only from the text edges, via a Shortcuts override because the
   /// editable otherwise consumes edge presses silently. Never active off TV.
   Widget _wrapPassthroughArrows(Widget field) {
-    if (!PlatformUtil.isAndroidTvCached) return field;
+    if (!PlatformUtil.isTelevision) return field;
     if (widget.onLeftArrow != null || widget.onRightArrow != null) {
       field = Shortcuts(
         shortcuts: const <ShortcutActivator, Intent>{
@@ -956,6 +1033,37 @@ class TvTextFieldState extends State<TvTextField> {
     );
   }
 
+  /// Apple TV finished a platform-keyboard session — the only "submit" signal
+  /// the OS gives us (see [TvosKeyboardSignal]).
+  ///
+  /// Deliberately narrow, because the signal is app-wide and cannot tell a
+  /// commit from a cancel:
+  /// * only the field actually being edited reacts, so one keyboard session
+  ///   can't submit every mounted field;
+  /// * only when the platform keyboard was really in play — with the Debrify
+  ///   keyboard on, the field is `readOnly` and never opens a platform
+  ///   session, so this must not fire there.
+  ///
+  /// Beyond that it does NOT second-guess the user: see the comment inside.
+  void _handleTvosEndEditing() {
+    if (!mounted || !PlatformUtil.isTvOS) return;
+    final usingPlatformKeyboard = !_tvShell || _useSystemIme;
+    if (!usingPlatformKeyboard) return;
+    final node = _tvShell ? _editNode : _shellNode;
+    if (!node.hasFocus) return;
+    // Submit unconditionally — no "did the text change" test.
+    //
+    // That test looked prudent (it stopped a BACK press from submitting when
+    // nothing was typed) but it bought that by breaking the case the fix
+    // exists for: pressing the action key on a PREFILLED or deliberately
+    // unchanged field then did nothing, and neither did submitting the same
+    // search twice. Since the action key and BACK are indistinguishable here,
+    // suppressing one necessarily suppresses the other — and of the two, a
+    // dead action key is a bug while a redundant re-submit of identical text
+    // is merely redundant.
+    _onFieldSubmitted(widget.controller.text);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_tvShell) {
@@ -981,6 +1089,19 @@ class TvTextFieldState extends State<TvTextField> {
       keyboardType: _useSystemIme
           ? (widget.keyboardType ?? TextInputType.text)
           : TextInputType.none,
+      // tvOS presents its fullscreen keyboard for ANY focused text field, and
+      // `TextInputType.none` does not stop it the way it does on Android — so
+      // pressing a key on the Debrify keyboard summoned Apple's on top of it.
+      // `readOnly` is the stronger statement: Flutter never opens a platform
+      // text-input connection at all.
+      //
+      // The trade, stated honestly: without that connection there is no
+      // system caret and a paired Bluetooth keyboard cannot type into the
+      // field either — the Debrify keys write to the controller directly, so
+      // they are unaffected. On tvOS that is the better half of the deal,
+      // because the alternative is Apple's keyboard covering ours on every
+      // keypress. Lifted for the explicit hand-off below.
+      readOnly: PlatformUtil.isTvOS && !_useSystemIme,
       onSubmitted: _onFieldSubmitted,
       // During a system-IME hand-off a tap belongs to the stock field (it
       // re-shows the IME); otherwise it starts a Debrify-keyboard session.
@@ -996,7 +1117,10 @@ class TvTextFieldState extends State<TvTextField> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: shellFocused && !_editing && !_useSystemIme
-              ? Border.all(color: const Color(0xFF7B5CFF), width: 2)
+              ? Border.all(
+                  color: widget.accent ?? const Color(0xFF7B5CFF),
+                  width: 2,
+                )
               : null,
         ),
         child: field,

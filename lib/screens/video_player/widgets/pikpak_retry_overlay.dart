@@ -8,15 +8,18 @@ class PikPakRetryOverlay extends StatelessWidget {
   /// Message to display (e.g., "Reactivating video... (1/5)")
   final String message;
 
-  const PikPakRetryOverlay({
-    Key? key,
-    required this.message,
-  }) : super(key: key);
+  /// Distance from the bottom edge. 80 is the legacy constant, kept as the
+  /// default so `classic` is unchanged; the styled dock passes its measured
+  /// height so this never sits inside a taller dock.
+  final double bottom;
+
+  const PikPakRetryOverlay({Key? key, required this.message, this.bottom = 80})
+    : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      bottom: 80,
+      bottom: bottom,
       right: 20,
       child: IgnorePointer(
         ignoring: true,
@@ -25,10 +28,7 @@ class PikPakRetryOverlay extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.black.withOpacity(0.75),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.2),
-              width: 1,
-            ),
+            border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

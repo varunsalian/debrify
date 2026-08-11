@@ -14,6 +14,8 @@ import '../../widgets/tv_text_field.dart';
 import '../../services/storage_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/webdav_service.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
@@ -605,8 +607,8 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppThemeScope.of(ctx).cloud.dialogSurface,
         content: Row(
           children: [
             const CircularProgressIndicator(),
@@ -635,11 +637,12 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
     // CloudScaffold paints the bloom edge-to-edge and provides the Material
     // ancestor the pushed route needs; the SafeArea keeps the toolbar clear
     // of the status bar without cutting the gradient off at the inset.
+    final app = AppThemeScope.of(context);
     return CloudScaffold(
       body: SafeArea(
         child: Column(
           children: [
-            _buildToolbar(),
+            _buildToolbar(app),
             Expanded(child: _buildContent()),
           ],
         ),
@@ -647,14 +650,14 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
     );
   }
 
-  Widget _buildToolbar() {
+  Widget _buildToolbar(AppTheme app) {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: app.fade(app.core.tx, 0.05),
+        borderRadius: app.shape.br(16),
+        border: Border.all(color: app.fade(app.core.tx, 0.08)),
       ),
       child: Row(
         children: [
@@ -679,11 +682,11 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
                     Navigator.of(context).maybePop();
                   }
                 },
-                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                icon: Icon(Icons.arrow_back_rounded, color: app.core.tx),
                 tooltip: 'Back',
               ),
             ),
-          Expanded(child: _buildServerAndSearch()),
+          Expanded(child: _buildServerAndSearch(app)),
           const SizedBox(width: 8),
           CallbackShortcuts(
             bindings: {
@@ -695,6 +698,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
               const SingleActivator(LogicalKeyboardKey.enter): _toggleSearch,
             },
             child: _buildToolbarIconButton(
+              app: app,
               focusNode: _searchToggleFocusNode,
               onKeyEvent: _handleSearchToggleKey,
               onTap: _toggleSearch,
@@ -705,13 +709,13 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
           IconButton(
             focusNode: _refreshFocusNode,
             onPressed: _refresh,
-            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+            icon: Icon(Icons.refresh_rounded, color: app.core.tx),
             tooltip: 'Refresh',
           ),
           IconButton(
             focusNode: _settingsFocusNode,
             onPressed: _openSettings,
-            icon: const Icon(Icons.settings_rounded, color: Colors.white),
+            icon: Icon(Icons.settings_rounded, color: app.core.tx),
             tooltip: 'Settings',
           ),
         ],
@@ -719,7 +723,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
     );
   }
 
-  Widget _buildServerAndSearch() {
+  Widget _buildServerAndSearch(AppTheme app) {
     if (_searchActive) {
       return TvTextField(
         controller: _searchController,
@@ -740,24 +744,24 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
         },
         decoration: InputDecoration(
           hintText: 'Search $_currentTitle',
-          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.38)),
-          prefixIcon: const Icon(
+          hintStyle: TextStyle(color: app.fade(app.core.tx, 0.38)),
+          prefixIcon: Icon(
             Icons.search_rounded,
-            color: CloudTheme.accent,
+            color: app.cloud.accent,
           ),
           filled: true,
-          fillColor: Colors.white.withValues(alpha: 0.06),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          fillColor: app.fade(app.core.tx, 0.06),
+          border: OutlineInputBorder(borderRadius: app.shape.br(10)),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             borderSide: BorderSide(
-              color: Colors.white.withValues(alpha: 0.10),
+              color: app.fade(app.core.tx, 0.10),
             ),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(
-              color: CloudTheme.accent,
+            borderRadius: app.shape.br(10),
+            borderSide: BorderSide(
+              color: app.cloud.accent,
               width: 1.6,
             ),
           ),
@@ -789,30 +793,30 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
               focusNode: _serverDropdownFocusNode,
               value: _config?.id,
               isExpanded: true,
-              dropdownColor: CloudTheme.menuSurface,
+              dropdownColor: app.cloud.menuSurface,
               decoration: InputDecoration(
-                prefixIcon: const Icon(
+                prefixIcon: Icon(
                   Icons.cloud_sync_rounded,
-                  color: CloudTheme.accent,
+                  color: app.cloud.accent,
                 ),
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.06),
+                fillColor: app.fade(app.core.tx, 0.06),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: app.shape.br(10),
                   borderSide: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.12),
+                    color: app.fade(app.core.tx, 0.12),
                   ),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: app.shape.br(10),
                   borderSide: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.10),
+                    color: app.fade(app.core.tx, 0.10),
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(
-                    color: CloudTheme.accent,
+                  borderRadius: app.shape.br(10),
+                  borderSide: BorderSide(
+                    color: app.cloud.accent,
                     width: 1.6,
                   ),
                 ),
@@ -868,6 +872,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
   }
 
   Widget _buildToolbarIconButton({
+    required AppTheme app,
     required FocusNode focusNode,
     required IconData icon,
     required String tooltip,
@@ -891,13 +896,13 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
                 height: 48,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: focused ? const Color(0xFF312E81) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
+                  color: focused ? app.cloud.focusSurface : Colors.transparent,
+                  borderRadius: app.shape.br(12),
                   border: focused
-                      ? Border.all(color: CloudTheme.accent, width: 1.4)
+                      ? Border.all(color: app.cloud.accent, width: 1.4)
                       : null,
                 ),
-                child: Icon(icon, color: Colors.white, size: 28),
+                child: Icon(icon, color: app.core.tx, size: 28),
               ),
             );
           },

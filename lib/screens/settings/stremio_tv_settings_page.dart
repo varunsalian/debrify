@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 class StremioTvSettingsPage extends StatefulWidget {
   const StremioTvSettingsPage({super.key});
@@ -196,24 +197,28 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
   }
 
   Widget _settingLabel(String title, String subtitle) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: Colors.white,
+            color: app.core.tx,
           ),
         ),
-        Text(subtitle, style: TextStyle(fontSize: 12, color: kSettingsDim)),
+        Text(subtitle, style: TextStyle(fontSize: 12, color: t.dim)),
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return SettingsPageScaffold(
       title: 'Stremio TV Settings',
       body: _loading
@@ -242,12 +247,12 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'Channel Settings',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+                                  color: app.core.tx,
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -263,7 +268,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                   const SizedBox(width: 16),
                                   DropdownButton<int>(
                                     value: _rotationMinutes,
-                                    dropdownColor: kSettingsPanel2,
+                                    dropdownColor: t.panel2,
                                     items: const [
                                       DropdownMenuItem(
                                         value: 30,
@@ -307,7 +312,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                   const SizedBox(width: 16),
                                   DropdownButton<int>(
                                     value: _seriesRotationMinutes,
-                                    dropdownColor: kSettingsPanel2,
+                                    dropdownColor: t.panel2,
                                     items: const [
                                       DropdownMenuItem(
                                         value: 15,
@@ -382,7 +387,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                   const SizedBox(width: 16),
                                   DropdownButton<String>(
                                     value: _preferredQuality,
-                                    dropdownColor: kSettingsPanel2,
+                                    dropdownColor: t.panel2,
                                     items: const [
                                       DropdownMenuItem(
                                         value: 'auto',
@@ -422,7 +427,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                   const SizedBox(width: 16),
                                   DropdownButton<int>(
                                     value: _maxStartPercent,
-                                    dropdownColor: kSettingsPanel2,
+                                    dropdownColor: t.panel2,
                                     items: const [
                                       DropdownMenuItem(
                                         value: 0,
@@ -471,7 +476,7 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
                                     const SizedBox(width: 16),
                                     DropdownButton<String>(
                                       value: _debridProvider,
-                                      dropdownColor: kSettingsPanel2,
+                                      dropdownColor: t.panel2,
                                       items: [
                                         DropdownMenuItem(
                                           value: 'auto',

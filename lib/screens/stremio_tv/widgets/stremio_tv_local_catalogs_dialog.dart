@@ -12,6 +12,7 @@ import '../../../services/mdblist/mdblist_service.dart';
 import '../../../services/storage_service.dart';
 import '../../../services/trakt/trakt_item_transformer.dart';
 import '../../../services/trakt/trakt_service.dart';
+import '../../../theme/app_theme_scope.dart';
 import 'stremio_tv_repo_browser_dialog.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../widgets/tv_text_field.dart';
@@ -672,16 +673,17 @@ class _StremioTvLocalCatalogEditorDialogState
   }
 
   Widget _buildPoster(Map<String, dynamic> item, bool compact) {
+    final app = AppThemeScope.of(context);
     final posterUrl = item['poster'] as String?;
     final width = compact ? 52.0 : 60.0;
     final height = compact ? 74.0 : 86.0;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: app.shape.brImg(10),
       child: Container(
         width: width,
         height: height,
-        color: Colors.white.withValues(alpha: 0.05),
+        color: app.core.tx.withValues(alpha: 0.05),
         child: posterUrl != null && posterUrl.isNotEmpty
             ? Image.network(
                 posterUrl,
@@ -694,11 +696,12 @@ class _StremioTvLocalCatalogEditorDialogState
   }
 
   Widget _buildPosterFallback(bool compact) {
+    final app = AppThemeScope.of(context);
     return Center(
       child: Icon(
         widget.catalogType == 'series' ? Icons.tv_rounded : Icons.movie_rounded,
         size: compact ? 22 : 26,
-        color: Colors.white.withValues(alpha: 0.25),
+        color: app.core.tx.withValues(alpha: 0.25),
       ),
     );
   }
@@ -710,6 +713,7 @@ class _StremioTvLocalCatalogEditorDialogState
     bool compact,
   ) {
     final theme = Theme.of(context);
+    final app = AppThemeScope.of(context);
     final itemName = item['name'] as String? ?? 'Unknown item';
     final yearValue = item['year'];
     final year = yearValue?.toString();
@@ -725,9 +729,9 @@ class _StremioTvLocalCatalogEditorDialogState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        color: Colors.white.withValues(alpha: 0.04),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        borderRadius: app.shape.br(16),
+        color: app.stremioTv.surfaceFill,
+        border: Border.all(color: app.core.tx.withValues(alpha: 0.08)),
       ),
       child: compact
           ? Column(
@@ -1650,6 +1654,7 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return AlertDialog(
       title: const Text('Import from URL'),
       content: Column(
@@ -1662,10 +1667,14 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
               focusNode: _nameFocusNode,
               onUpArrow: () => _cancelFocusNode.requestFocus(),
               onDownArrow: () => _urlFocusNode.requestFocus(),
+              accent: app.youtube.focus,
+              keyboardGround: app.youtube.keyboardPanel,
+              keyboardInk: app.core.tx,
+              keyboardInkOnAccent: app.inkOn(app.youtube.focus),
               decoration: InputDecoration(
                 hintText: 'Catalog name (required for Trakt lists)',
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: app.shape.br(12),
                 ),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
@@ -1683,10 +1692,14 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
             focusNode: _urlFocusNode,
             onUpArrow: () => _nameFocusNode.requestFocus(),
             onDownArrow: () => _importFocusNode.requestFocus(),
+            accent: app.youtube.focus,
+            keyboardGround: app.youtube.keyboardPanel,
+            keyboardInk: app.core.tx,
+            keyboardInkOnAccent: app.inkOn(app.youtube.focus),
             decoration: InputDecoration(
               hintText: 'https://example.com/catalog.json',
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: app.shape.br(12),
               ),
               errorText: _error,
               isDense: true,
@@ -1879,6 +1892,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return AlertDialog(
       title: const Text('Paste JSON'),
       content: Column(
@@ -1891,10 +1905,14 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
               focusNode: _nameFocusNode,
               onUpArrow: () => _cancelFocusNode.requestFocus(),
               onDownArrow: () => _jsonFocusNode.requestFocus(),
+              accent: app.youtube.focus,
+              keyboardGround: app.youtube.keyboardPanel,
+              keyboardInk: app.core.tx,
+              keyboardInkOnAccent: app.inkOn(app.youtube.focus),
               decoration: InputDecoration(
                 hintText: 'Catalog name (required for Trakt lists)',
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: app.shape.br(12),
                 ),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(
@@ -1913,7 +1931,7 @@ class _ImportJsonDialogState extends State<_ImportJsonDialog> {
               hintText:
                   '{"name": "My Catalog", "items": [...]}\nor paste Trakt list JSON',
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: app.shape.br(12),
               ),
               errorText: _error,
               contentPadding: const EdgeInsets.all(12),

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../utils/app_storage.dart';
 
 /// Metadata for an imported engine
 class ImportedEngineMetadata {
@@ -55,7 +56,7 @@ class LocalEngineStorage {
   Future<void> initialize() async {
     if (_enginesDir != null) return;
 
-    final appDir = await getApplicationDocumentsDirectory();
+    final appDir = await AppStorage.documents();
     _enginesDir = Directory('${appDir.path}/$_enginesDirName');
 
     if (!await _enginesDir!.exists()) {

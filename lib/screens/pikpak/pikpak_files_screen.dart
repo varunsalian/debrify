@@ -12,6 +12,7 @@ import '../../services/series_source_service.dart';
 import '../../utils/file_utils.dart';
 import '../../utils/formatters.dart';
 import '../../utils/series_parser.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/cloud/cloud_file_row.dart';
 import '../../widgets/cloud/cloud_row_skeleton.dart';
@@ -1254,7 +1255,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Delete $count $itemType',
@@ -1347,6 +1348,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }) {
     if (!mounted) return;
 
+    final app = AppThemeScope.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -1357,7 +1359,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                 color: isError
                     ? const Color(0xFFEF4444)
                     : const Color(0xFF22C55E),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: app.shape.br(8),
               ),
               child: Icon(
                 isError ? Icons.error : Icons.check_circle,
@@ -1374,9 +1376,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             ),
           ],
         ),
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: app.shape.br(12)),
         margin: const EdgeInsets.all(16),
         duration: duration ?? const Duration(seconds: 3),
       ),
@@ -1471,11 +1473,12 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   void _showFallbackToSorted(String reason, List<Map<String, dynamic>>? allFiles) {
     if (!mounted) return;
 
+    final app = AppThemeScope.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('No series detected in this folder. Switching to Sort (A-Z) view.'),
-        duration: Duration(seconds: 3),
-        backgroundColor: Color(0xFF1E293B),
+      SnackBar(
+        content: const Text('No series detected in this folder. Switching to Sort (A-Z) view.'),
+        duration: const Duration(seconds: 3),
+        backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -1815,6 +1818,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   /// Build the search bar widget
   Widget _buildSearchBar() {
+    final app = AppThemeScope.of(context);
     final hasText = _searchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -1834,9 +1838,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                 hintText: 'Search files...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.06),
+                fillColor: app.fade(app.core.tx, 0.06),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1878,10 +1882,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(8),
+                        color: app.fade(app.core.tx, 0.06),
+                        borderRadius: app.shape.br(8),
                         border: isFocused
-                            ? Border.all(color: Colors.white, width: 2)
+                            ? Border.all(color: app.core.tx, width: 2)
                             : null,
                       ),
                       child: IconButton(
@@ -2195,6 +2199,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   Widget _buildNotEnabled() {
+    final app = AppThemeScope.of(context);
     return CloudScaffold(
       appBar: AppBar(title: const Text('PikPak Files')),
       body: FocusTraversalGroup(
@@ -2233,7 +2238,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   style: FilledButton.styleFrom().copyWith(
                     side: WidgetStateProperty.resolveWith((states) {
                       if (states.contains(WidgetState.focused)) {
-                        return const BorderSide(color: Colors.white, width: 3);
+                        return BorderSide(color: app.core.tx, width: 3);
                       }
                       return null;
                     }),
@@ -2248,6 +2253,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   Widget _buildError() {
+    final app = AppThemeScope.of(context);
     return CloudScaffold(
       appBar: AppBar(title: const Text('PikPak Files')),
       body: FocusTraversalGroup(
@@ -2280,7 +2286,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   style: FilledButton.styleFrom().copyWith(
                     side: WidgetStateProperty.resolveWith((states) {
                       if (states.contains(WidgetState.focused)) {
-                        return const BorderSide(color: Colors.white, width: 3);
+                        return BorderSide(color: app.core.tx, width: 3);
                       }
                       return null;
                     }),
@@ -2324,6 +2330,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   Widget _buildSelectionBar() {
+    final app = AppThemeScope.of(context);
     final theme = Theme.of(context);
     final count = _selectedFileIds.length;
     return Container(
@@ -2331,7 +2338,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         color: theme.colorScheme.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: app.shape.br(12),
         border: Border.all(
           color: theme.colorScheme.primary.withValues(alpha: 0.3),
         ),
@@ -2362,7 +2369,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             ).copyWith(
               side: WidgetStateProperty.resolveWith((states) {
                 if (states.contains(WidgetState.focused)) {
-                  return const BorderSide(color: Colors.white, width: 3);
+                  return BorderSide(color: app.core.tx, width: 3);
                 }
                 return null;
               }),
@@ -3110,7 +3117,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text(
           'Add Link',
@@ -3261,7 +3268,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         content: Column(
           mainAxisSize: MainAxisSize.min,

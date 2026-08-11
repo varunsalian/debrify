@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 import '../tv_text_field.dart';
-import 'see_all_theme.dart';
 
 /// One row in a [StremioDropdown] — a selectable option, or a section header
 /// when [isHeader] is set.
@@ -50,14 +50,15 @@ class StremioDropdownSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Row(
       children: [
         Container(
           width: 3,
           height: 14,
           decoration: BoxDecoration(
-            color: kSeeAllAccent2.withValues(alpha: 0.75),
-            borderRadius: BorderRadius.circular(2),
+            color: app.fade(app.seeAll.accent2, 0.75),
+            borderRadius: app.shape.br(2),
           ),
         ),
         const SizedBox(width: 9),
@@ -67,7 +68,7 @@ class StremioDropdownSectionHeader extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.62),
+              color: app.fade(app.core.tx, 0.62),
               fontWeight: FontWeight.w800,
               letterSpacing: 1.1,
               fontSize: 11.5,
@@ -218,14 +219,15 @@ class _StremioDropdownState<T extends Object>
     // Resolved once per open rather than per item: the items loop below would
     // otherwise rescan the whole option list for every row it builds.
     final hasSections = widget.options.any((o) => o.isHeader);
+    final app = AppThemeScope.of(context);
     final result = await showMenu<T>(
       context: context,
       position: pos,
-      color: kSeeAllPanel2,
+      color: app.seeAll.panel2,
       elevation: 12,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: kSeeAllLine),
+        borderRadius: app.shape.br(14),
+        side: BorderSide(color: app.seeAll.line),
       ),
       constraints: const BoxConstraints(minWidth: 190, maxWidth: 320),
       // Sectioned menus indent their options so each group reads as belonging
@@ -274,7 +276,7 @@ class _StremioDropdownState<T extends Object>
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: o.value == widget.value
-                            ? kSeeAllAccent2
+                            ? app.seeAll.accent2
                             : Theme.of(context).colorScheme.onSurface,
                         fontSize: 13.5,
                         fontWeight: o.value == widget.value
@@ -284,10 +286,10 @@ class _StremioDropdownState<T extends Object>
                     ),
                   ),
                   if (o.value == widget.value)
-                    const Icon(
+                    Icon(
                       Icons.check_rounded,
                       size: 16,
-                      color: kSeeAllAccent2,
+                      color: app.seeAll.accent2,
                     ),
                 ],
               ),
@@ -319,6 +321,7 @@ class _StremioDropdownState<T extends Object>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final active = _focused || _hovered;
     return Focus(
       focusNode: widget.focusNode,
@@ -366,8 +369,8 @@ class _StremioDropdownState<T extends Object>
                       key: _btnKey,
                       padding: const EdgeInsets.fromLTRB(14, 9, 11, 9),
                       decoration: BoxDecoration(
-                        color: kSeeAllPanel,
-                        borderRadius: BorderRadius.circular(11),
+                        color: app.seeAll.panel,
+                        borderRadius: app.shape.br(11),
                         // Constant width: Container feeds the border's thickness into
                         // its layout padding, so a 1→2px focus ring RESIZES the pill
                         // and reflows the whole filter row (reads as the screen shaking
@@ -375,8 +378,10 @@ class _StremioDropdownState<T extends Object>
                         border: Border.all(
                           width: 2,
                           color: _focused
-                              ? kSeeAllAccent
-                              : (active ? kSeeAllAccentBorder : kSeeAllLine),
+                              ? app.seeAll.accent
+                              : (active
+                                  ? app.seeAll.accentBorder
+                                  : app.seeAll.line),
                         ),
                       ),
                       child: Row(
@@ -388,7 +393,7 @@ class _StremioDropdownState<T extends Object>
                             Text(
                               widget.label!.toUpperCase(),
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.42),
+                                color: app.fade(app.core.tx, 0.42),
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 0.8,
@@ -407,7 +412,7 @@ class _StremioDropdownState<T extends Object>
                           Icon(
                             Icons.keyboard_arrow_down_rounded,
                             size: 18,
-                            color: Colors.white.withValues(alpha: 0.5),
+                            color: app.fade(app.core.tx, 0.5),
                           ),
                         ],
                       ),
@@ -445,21 +450,22 @@ class _StremioDropdownState<T extends Object>
   }
 
   Widget _buildQuiet(bool active) {
+    final app = AppThemeScope.of(context);
     return Container(
       key: _btnKey,
       padding: const EdgeInsets.fromLTRB(9, 6, 6, 6),
       decoration: BoxDecoration(
         color: _focused
-            ? kSeeAllAccent.withValues(alpha: 0.30)
+            ? app.fade(app.seeAll.accent, 0.30)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: app.shape.brPill,
         // Constant thickness — only the color changes on focus, so the row
         // never reflows on DPAD moves (same rule as the boxed pill).
         border: Border.all(
           width: 1.2,
           color: _focused
-              ? kSeeAllAccent2.withValues(alpha: 0.45)
-              : (active ? kSeeAllAccentBorder : Colors.transparent),
+              ? app.fade(app.seeAll.accent2, 0.45)
+              : (active ? app.seeAll.accentBorder : Colors.transparent),
         ),
       ),
       child: Row(
@@ -475,10 +481,10 @@ class _StremioDropdownState<T extends Object>
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: _focused
-                    ? Colors.white
+                    ? app.core.tx
                     : widget.quietAccent
-                    ? kSeeAllAccent2
-                    : Colors.white.withValues(alpha: 0.78),
+                    ? app.seeAll.accent2
+                    : app.fade(app.core.tx, 0.78),
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
@@ -488,7 +494,7 @@ class _StremioDropdownState<T extends Object>
           Icon(
             Icons.keyboard_arrow_down_rounded,
             size: 15,
-            color: Colors.white.withValues(alpha: 0.45),
+            color: app.fade(app.core.tx, 0.45),
           ),
         ],
       ),
@@ -597,15 +603,16 @@ class _LazyPickerDialogState<T extends Object>
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final maxH = (MediaQuery.of(context).size.height * 0.72).clamp(
       260.0,
       560.0,
     );
     return Dialog(
-      backgroundColor: kSeeAllPanel,
+      backgroundColor: app.seeAll.panel,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: kSeeAllLine),
+        borderRadius: app.shape.br(16),
+        side: BorderSide(color: app.seeAll.line),
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: 340, maxHeight: maxH),
@@ -620,7 +627,7 @@ class _LazyPickerDialogState<T extends Object>
                   Text(
                     widget.title.toUpperCase(),
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.55),
+                      color: app.fade(app.core.tx, 0.55),
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.0,
@@ -632,7 +639,7 @@ class _LazyPickerDialogState<T extends Object>
                     // "8" over a four-source list.
                     '${_shown.where((o) => !o.isHeader).length}',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.35),
+                      color: app.fade(app.core.tx, 0.35),
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
@@ -654,31 +661,31 @@ class _LazyPickerDialogState<T extends Object>
                     isDense: true,
                     hintText: 'Filter…',
                     hintStyle: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.35),
+                      color: app.fade(app.core.tx, 0.35),
                       fontSize: 13.5,
                     ),
-                    prefixIcon: const Icon(
+                    prefixIcon: Icon(
                       Icons.search_rounded,
                       size: 18,
-                      color: Colors.white38,
+                      color: app.core.tx.withValues(alpha: 0x62 / 0xFF),
                     ),
                     filled: true,
-                    fillColor: kSeeAllPanel2,
+                    fillColor: app.seeAll.panel2,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 10,
                       vertical: 9,
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: kSeeAllLine),
+                      borderRadius: app.shape.br(10),
+                      borderSide: BorderSide(color: app.seeAll.line),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: kSeeAllLine),
+                      borderRadius: app.shape.br(10),
+                      borderSide: BorderSide(color: app.seeAll.line),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: kSeeAllAccent),
+                      borderRadius: app.shape.br(10),
+                      borderSide: BorderSide(color: app.seeAll.accent),
                     ),
                   ),
                 ),
@@ -836,6 +843,7 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Focus(
       autofocus: widget.autofocus,
       onFocusChange: (f) {
@@ -882,11 +890,11 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
             ),
             decoration: BoxDecoration(
               color: _focused
-                  ? kSeeAllAccent.withValues(alpha: 0.26)
+                  ? app.fade(app.seeAll.accent, 0.26)
                   : _hovered
-                  ? Colors.white.withValues(alpha: 0.05)
+                  ? app.fade(app.core.tx, 0.05)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: app.shape.br(10),
             ),
             child: Row(
               children: [
@@ -896,7 +904,8 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: widget.selected ? kSeeAllAccent2 : Colors.white,
+                      color:
+                          widget.selected ? app.seeAll.accent2 : app.core.tx,
                       fontSize: 13.5,
                       fontWeight: widget.selected
                           ? FontWeight.w800
@@ -915,7 +924,7 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
                     child: Text(
                       widget.holdHint!,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.45),
+                        color: app.fade(app.core.tx, 0.45),
                         fontSize: 9.5,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.7,
@@ -923,10 +932,10 @@ class _LazyPickerRowState extends State<_LazyPickerRow> {
                     ),
                   ),
                 if (widget.selected)
-                  const Icon(
+                  Icon(
                     Icons.check_rounded,
                     size: 16,
-                    color: kSeeAllAccent2,
+                    color: app.seeAll.accent2,
                   ),
               ],
             ),

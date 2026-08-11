@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/stremio_addon.dart';
+import '../theme/app_theme_scope.dart';
+import '../theme/widgets/themed_artwork.dart';
+import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import 'home/card_focus_rise.dart';
 import 'home/home_theme.dart';
@@ -96,6 +99,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final item = widget.item;
     final poster = item.poster;
     final rating = item.imdbRating;
@@ -108,15 +112,23 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         ? Duration.zero
         : const Duration(milliseconds: 180);
 
-    // The poster and everything drawn over it, shared by both chromes. The
-    // selection ring is deliberately NOT here: the classic tree appends its
-    // own gold one, and [CardFocusRise] draws the board's above whatever it
-    // is handed.
-    final layers = <Widget>[
+    // The POSTER, and nothing else. Split from [chrome] because
+    // `ThemedArtwork`'s frame is a treatment of the image: handing it the
+    // whole stack made a `faded` look dissolve the progress bar and the
+    // badges along with the artwork, and a `matted` one shrink them into
+    // the mount.
+    //
+    // A function of the theme's grade rather than a plain list, because the
+    // blend has to reach the image constructor itself: compositing inside the
+    // image's own paint is what makes grading affordable in a grid at all,
+    // where a filter layer per poster would not be.
+    List<Widget> artwork((Color, BlendMode)? blend) => <Widget>[
       if (poster != null && poster.isNotEmpty)
         CachedNetworkImage(
           imageUrl: poster,
           fit: BoxFit.cover,
+          color: blend?.$1,
+          colorBlendMode: blend?.$2,
           // Decode posters at a capped width instead of full source
           // resolution (~780px → ~3.6MB each). Tiles never exceed ~320px
           // wide, so this roughly thirds the decoded bytes per poster —
@@ -143,7 +155,11 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         )
       else
         _placeholder(item.name),
+    ];
 
+    // Everything painted ON the poster: the focus wash, the badges, the
+    // inline title and the progress bar. Never framed, never graded.
+    List<Widget> chrome() => <Widget>[
       // Bottom gradient — only when focused — for the inline title. Board
       // chrome skips it: board cards carry no focus wash, and on a stage the
       // focused title is named at full size below the shelf anyway.
@@ -175,14 +191,14 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         Positioned(top: 10, right: 10, child: _RatingChip(value: rating)),
 
       if (widget.hasBoundSource)
-        const Positioned(
+        Positioned(
           bottom: 10,
           right: 10,
           child: Icon(
             Icons.bookmark_rounded,
             size: 18,
-            color: Colors.white,
-            shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+            color: app.core.tx,
+            shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
           ),
         ),
 
@@ -216,7 +232,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                     child: Text(
                       item.year!,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.7),
+                        color: app.fade(app.core.tx, 0.7),
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.4,
@@ -250,7 +266,21 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         // White ring, like the Canvas board's cells — the violet stays with
         // classic chrome.
         ringColor: Colors.white,
-        children: layers,
+        // One child, not the layers spread straight in: the artwork's framing
+        // and grade belong together, so the whole card face goes through
+        // [ThemedArtwork]. [CardFocusRise] still owns the outer clip at the
+        // same radius, so under a bleeding frame the board card keeps its
+        // corners — that clip is the board's card shape, not the art's.
+        children: [
+          ThemedArtwork(
+            role: ArtRole.poster,
+            radius: 10,
+            inList: true,
+            builder: (context, blend) =>
+                Stack(fit: StackFit.expand, children: artwork(blend)),
+            overlay: Stack(fit: StackFit.expand, children: chrome()),
+          ),
+        ],
       );
     } else {
       card = AnimatedScale(
@@ -260,7 +290,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
         child: AnimatedContainer(
           duration: fx,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: app.shape.br(14),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: _active ? 0.7 : 0.35),
@@ -270,7 +300,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
               if (_active) ...[
                 // Tight bright gold rim.
                 BoxShadow(
-                  color: HomeTheme.focusGold.withValues(alpha: 0.6),
+                  color: app.fade(app.home.focus, 0.6),
                   blurRadius: 30,
                   spreadRadius: 1,
                 ),
@@ -279,29 +309,41 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
                 // is the main scroll-jank source on weak TV GPUs.
                 if (!widget.isTelevision)
                   BoxShadow(
-                    color: HomeTheme.focusGoldDeep.withValues(alpha: 0.32),
+                    color: app.fade(app.home.focusDeep, 0.32),
                     blurRadius: 90,
                     spreadRadius: 10,
                   ),
               ],
             ],
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: Stack(
+          // The framing is the artwork's, so [ThemedArtwork] owns it outright
+          // — everything drawn over the poster (the wash, the chips, the
+          // progress bar, the ring) lives inside that one clip rather than
+          // under a second one of our own.
+          child: ThemedArtwork(
+            role: ArtRole.poster,
+            radius: 14,
+            inList: true,
+            builder: (context, blend) => Stack(
+              fit: StackFit.expand,
+              children: artwork(blend),
+            ),
+            // Chrome and the focus ring together: badges, the inline title,
+            // the progress bar and the cursor are all things painted ON the
+            // poster, so none of them may be dissolved by a `faded` look or
+            // shrunk into a `matted` one.
+            overlay: Stack(
               fit: StackFit.expand,
               children: [
-                ...layers,
+                ...chrome(),
                 if (_active)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: HomeTheme.focusGold,
-                            width: 2.5,
-                          ),
+                  IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: app.shape.br(14),
+                        border: Border.all(
+                          color: app.home.focus,
+                          width: 2.5,
                         ),
                       ),
                     ),
@@ -335,8 +377,17 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
               // offset, and a short glide converges fast enough that the
               // motion never reads as trailing the keypress. Classic chrome
               // keeps the instant jump its grids were tuned around.
+              //
+              // Android TV snaps EVERYWHERE, board chrome included: even the
+              // short glide is a scrolled repaint on every frame of every
+              // step, and after the Spotlight board switched to the snap a
+              // MiBox reported Discover — whose stage shelves ride this exact
+              // path — as the one place navigation still dragged. Apple TV
+              // keeps the glide.
               duration: widget.isTelevision
-                  ? (board ? const Duration(milliseconds: 140) : Duration.zero)
+                  ? (board && !PlatformUtil.isAndroidTvCached
+                      ? const Duration(milliseconds: 140)
+                      : Duration.zero)
                   : const Duration(milliseconds: 280),
               curve: Curves.easeOutCubic,
             );
@@ -394,8 +445,9 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
   }
 
   Widget _placeholder(String title) {
+    final app = AppThemeScope.of(context);
     return Container(
-      color: const Color(0xFF111118),
+      color: app.home.posterPlaceholder,
       alignment: Alignment.center,
       child: Padding(
         padding: const EdgeInsets.all(8),
@@ -405,7 +457,7 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.5),
+            color: app.fade(app.core.tx, 0.5),
             fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
@@ -430,20 +482,22 @@ class _GlassChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: app.shape.br(6),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.18),
+          // On the glass, not the page — see AppTheme.onGlass.
+          color: app.fade(app.onGlass, 0.18),
           width: 0.5,
         ),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.9),
+          color: app.fade(app.core.tx, 0.9),
           fontSize: 9,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.8,
@@ -483,13 +537,15 @@ class _RatingChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: app.shape.br(6),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.18),
+          // On the glass, not the page — see AppTheme.onGlass.
+          color: app.fade(app.onGlass, 0.18),
           width: 0.5,
         ),
       ),
@@ -500,8 +556,8 @@ class _RatingChip extends StatelessWidget {
           const SizedBox(width: 3),
           Text(
             value.toStringAsFixed(1),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: app.core.tx,
               fontSize: 10,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.2,

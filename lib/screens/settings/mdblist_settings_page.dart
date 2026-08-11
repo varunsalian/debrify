@@ -8,6 +8,7 @@ import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// Settings page for the MDBList integration.
 ///
@@ -76,7 +77,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   // Save/Cancel/logout swap out the block the DPAD focus was on. Re-seed focus
   // once the new subtree is mounted. TV-only: touch users don't rely on focus.
   void _refocusOnTv(FocusNode node) {
-    if (!PlatformUtil.isAndroidTvCached) return;
+    if (!PlatformUtil.isTelevision) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) node.requestFocus();
     });
@@ -86,17 +87,18 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   // route's FocusScopeNode, so a non-scope node means the user already moved
   // somewhere (e.g. the back button) while this page loaded — don't steal it.
   bool get _seedEntryFocus {
-    if (!PlatformUtil.isAndroidTvCached) return false;
+    if (!PlatformUtil.isTelevision) return false;
     final primary = FocusManager.instance.primaryFocus;
     return primary == null || primary is FocusScopeNode;
   }
 
   void _snack(String message, {bool err = false}) {
+    final t = AppThemeScope.of(context).settings;
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: err ? kSettingsRed : null,
+        backgroundColor: err ? t.danger : null,
       ),
     );
   }
@@ -197,6 +199,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   }
 
   Widget _buildApiKeyCard(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -205,7 +208,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
           children: [
             Row(
               children: [
-                const Icon(Icons.key, color: kSettingsAccent2, size: 20),
+                Icon(Icons.key, color: t.accent2, size: 20),
                 const SizedBox(width: 8),
                 Text(
                   'API Key',
@@ -231,21 +234,22 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   }
 
   Widget _connectedBadge() {
+    final t = AppThemeScope.of(context).settings;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: kSettingsGreen.withValues(alpha: 0.1),
+        color: t.success.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: kSettingsGreen.withValues(alpha: 0.3)),
+        border: Border.all(color: t.success.withValues(alpha: 0.3)),
       ),
-      child: const Row(
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.check_circle, color: kSettingsGreen, size: 14),
-          SizedBox(width: 4),
+          Icon(Icons.check_circle, color: t.success, size: 14),
+          const SizedBox(width: 4),
           Text(
             'Connected',
-            style: TextStyle(color: kSettingsGreen, fontSize: 12),
+            style: TextStyle(color: t.success, fontSize: 12),
           ),
         ],
       ),
@@ -253,6 +257,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   }
 
   Widget _buildEditor() {
+    final t = AppThemeScope.of(context).settings;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -268,7 +273,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
             labelText: 'MDBList API Key',
             prefixIcon: const Icon(Icons.security),
             suffixIcon: IconButton(
-              focusColor: kSettingsAccent.withValues(alpha: 0.4),
+              focusColor: t.accent.withValues(alpha: 0.4),
               icon: Icon(
                 _obscure ? Icons.visibility : Icons.visibility_off,
               ),
@@ -325,25 +330,26 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   }
 
   Widget _buildConnectedActions() {
+    final t = AppThemeScope.of(context).settings;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: kSettingsPanel2,
+            color: t.panel2,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: kSettingsLine),
+            border: Border.all(color: t.line),
           ),
           child: Row(
             children: [
               Expanded(
                 child: Text(
                   '••••••••••••••••••••••••••••••••',
-                  style: TextStyle(color: kSettingsDim),
+                  style: TextStyle(color: t.dim),
                 ),
               ),
-              Icon(Icons.visibility_off, color: kSettingsDim2, size: 16),
+              Icon(Icons.visibility_off, color: t.dim2, size: 16),
             ],
           ),
         ),
@@ -356,8 +362,8 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
             icon: const Icon(Icons.logout),
             label: const Text('Logout'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: kSettingsRed,
-              side: BorderSide(color: kSettingsRed.withValues(alpha: 0.45)),
+              foregroundColor: t.danger,
+              side: BorderSide(color: t.danger.withValues(alpha: 0.45)),
             ),
           ),
         ),
@@ -387,6 +393,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   }
 
   Widget _buildAccountCard(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     final account = _account!;
     return Card(
       child: Padding(
@@ -396,9 +403,9 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
           children: [
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.account_circle,
-                  color: kSettingsAccent2,
+                  color: t.accent2,
                   size: 20,
                 ),
                 const SizedBox(width: 8),
@@ -432,6 +439,8 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   }
 
   Widget _accountRow(String label, String value) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
@@ -439,14 +448,14 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
         children: [
           SizedBox(
             width: 110,
-            child: Text(label, style: TextStyle(color: kSettingsDim)),
+            child: Text(label, style: TextStyle(color: t.dim)),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w500,
-                color: Colors.white,
+                color: app.core.tx,
               ),
             ),
           ),
@@ -469,6 +478,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   }
 
   Widget _buildHelpCard(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -477,9 +487,9 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
           children: [
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.help_outline,
-                  color: kSettingsAccent2,
+                  color: t.accent2,
                   size: 20,
                 ),
                 const SizedBox(width: 8),
@@ -500,7 +510,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
               '3. Find the "API Access" section and copy your key\n'
               '4. Paste it above and tap Save',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: kSettingsDim,
+                color: t.dim,
                 height: 1.5,
               ),
             ),
@@ -539,6 +549,7 @@ class _FocusRingState extends State<_FocusRing> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       skipTraversal: true,
       canRequestFocus: false,
@@ -547,7 +558,7 @@ class _FocusRingState extends State<_FocusRing> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(widget.radius),
           border: Border.all(
-            color: _focused ? kSettingsAccent : Colors.transparent,
+            color: _focused ? t.accent : Colors.transparent,
             width: 1,
           ),
         ),

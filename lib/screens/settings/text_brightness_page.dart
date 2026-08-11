@@ -1,9 +1,11 @@
+import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
 import '../../services/text_brightness.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// Row caption for the current choice (Appearance row subtitle).
 String textBrightnessLabel(String pref) => TextBrightness.fromPref(pref).label;
@@ -57,11 +59,15 @@ class _TextBrightnessPageState extends State<TextBrightnessPage> {
   Future<void> _select(TextBrightness choice) async {
     if (choice == _choice) return;
     setState(() => _choice = choice);
+    // Tell an in-flight Look apply that a human just chose this key, so it
+    // does not stamp over the choice. See theme/app_looks.dart.
+    LookApplier.noteExternalWrite('text_brightness');
     await TextBrightnessController.select(choice);
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return SettingsPageScaffold(
       title: 'Text Brightness',
       body: SingleChildScrollView(
@@ -99,7 +105,7 @@ class _TextBrightnessPageState extends State<TextBrightnessPage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ],
@@ -113,6 +119,7 @@ class _TextBrightnessPageState extends State<TextBrightnessPage> {
   /// Radio-style row — a plain [SettingsTile] (the DPAD-proven row) with a
   /// check on the active one.
   Widget _optionRow(TextBrightness choice) {
+    final t = AppThemeScope.of(context).settings;
     final bool active = _choice == choice;
     return SettingsTile(
       icon: active
@@ -121,7 +128,7 @@ class _TextBrightnessPageState extends State<TextBrightnessPage> {
       title: choice.label,
       subtitle: choice.subtitle,
       trailing: active
-          ? const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2)
+          ? Icon(Icons.check_rounded, size: 20, color: t.accent2)
           : const SizedBox.shrink(),
       onTap: () => _select(choice),
     );

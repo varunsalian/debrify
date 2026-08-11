@@ -6,11 +6,13 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.media.MediaCodecList
 import android.os.Bundle
 import android.view.animation.DecelerateInterpolator
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
+import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
@@ -51,8 +53,10 @@ import androidx.media3.common.text.Cue
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -190,6 +194,60 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var player: ExoPlayer? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var subtitleListener: Player.Listener? = null
+
+    private val decoderAnalyticsListener = object : AnalyticsListener {
+        private var inputFormat: Format? = null
+
+        override fun onVideoInputFormatChanged(
+            eventTime: AnalyticsListener.EventTime,
+            format: Format,
+            decoderReuseEvaluation: DecoderReuseEvaluation?,
+        ) {
+            inputFormat = format
+        }
+
+        override fun onVideoDecoderInitialized(
+            eventTime: AnalyticsListener.EventTime,
+            decoderName: String,
+            initializedTimestampMs: Long,
+            initializationDurationMs: Long,
+        ) {
+            val format = player?.videoFormat ?: inputFormat
+            val generation = eventTime.mediaPeriodId?.windowSequenceNumber ?: -1L
+            Log.i(
+                DECODER_LOG_TAG,
+                "generation=$generation phase=stable " +
+                    "status=${androidDecoderStatus(decoderName)} " +
+                    "platform=android_tv backend=media3 " +
+                    "codec=${format?.sampleMimeType ?: "unknown"} " +
+                    "decoder=$decoderName output=surface_view " +
+                    "resolution=${format?.width ?: 0}x${format?.height ?: 0}",
+            )
+        }
+    }
+
+    private fun androidDecoderStatus(decoderName: String): String {
+        val normalized = decoderName.lowercase(Locale.US)
+        if (
+            normalized.contains(".google.") ||
+            normalized.contains(".android.") ||
+            normalized.startsWith("c2.android") ||
+            normalized.startsWith("c2.google") ||
+            normalized.contains("ffmpeg")
+        ) {
+            return "software"
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val codecInfo = runCatching {
+                MediaCodecList(MediaCodecList.ALL_CODECS).codecInfos.firstOrNull {
+                    it.name.equals(decoderName, ignoreCase = true)
+                }
+            }.getOrNull()
+            if (codecInfo?.isSoftwareOnly == true) return "software"
+            if (codecInfo?.isHardwareAccelerated == true) return "hardware"
+        }
+        return "unknown"
+    }
     private var offsetRenderersFactory: OffsetRenderersFactory? = null
 
     // Subtitle auto-sync: taps the decoded PCM (created with the player, in
@@ -1439,6 +1497,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         player = playerBuilder.build()
 
         player?.addListener(playbackListener)
+        player?.addAnalyticsListener(decoderAnalyticsListener)
         playerView.player = player
 
         // Hide internal subtitle view, use custom one
@@ -14718,6 +14777,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     companion object {
         const val PAYLOAD_KEY = "payload"
+        private const val DECODER_LOG_TAG = "DEBRIFY_PLAYER_DECODER"
         /**
          * When true, the dock buttons (Audio, Subs, Fill, Speed, Night, Shuffle) open the
          * unified Miller-columns menu instead of the individual dialogs/panels. Additive —

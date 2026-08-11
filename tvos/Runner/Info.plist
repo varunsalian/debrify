@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>vlc</string>
+		<string>infuse</string>
+	</array>
+	<key>CFBundleDisplayName</key>
+	<string>Debrify</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>debrify</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- The marker every iOS-FAMILY bundle carries, tvOS included (Xcode's own
+	     tvOS template emits it; so does every shipping tvOS app we compared
+	     against). flutter-tvos's generated plist omits it, and sideloaders
+	     read it to decide whether an IPA is installable at all: without it
+	     Sideloadly rejects the bundle as "This does not look like valid iOS
+	     app!" during parsing, before it ever reaches signing. ios/Runner has
+	     carried it since the Flutter template — this is the tvOS gap. -->
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>FLTAssetsPath</key>
+	<string>flutter_assets</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+</dict>
+</plist>

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../widgets/tv_text_field.dart';
@@ -45,6 +46,14 @@ class _ChannelGuideState extends State<ChannelGuide>
   @override
   void initState() {
     super.initState();
+
+    // A television opens this over the player, whose root Focus already holds
+    // focus in this scope — so `autofocus: true` on the KeyboardListener never
+    // wins and the sheet renders its virtual focus while receiving no keys at
+    // all (the DPAD appears dead). Claim focus explicitly once mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _keyboardFocusNode.requestFocus();
+    });
     _filteredChannels = List.from(widget.channels);
 
     // Find current channel index
@@ -123,6 +132,7 @@ class _ChannelGuideState extends State<ChannelGuide>
     // Handle back/escape
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
+      TvOverlayBack.mark();
       widget.onClose();
       return;
     }
@@ -132,6 +142,10 @@ class _ChannelGuideState extends State<ChannelGuide>
       if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
         // Move focus away from search to enable list navigation
         _searchFocusNode.unfocus();
+      // Reclaim the sheet's key listener: unfocusing clears the scope's
+      // focused child, and without this the list paints a focused row but
+      // stops receiving DPAD keys entirely.
+      _keyboardFocusNode.requestFocus();
         setState(() {}); // Trigger rebuild to show focus highlight
       }
       return;

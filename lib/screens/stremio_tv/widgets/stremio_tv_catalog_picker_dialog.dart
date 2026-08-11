@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../utils/tv_keys.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../services/storage_service.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../../../widgets/tv_text_field.dart';
 
 class StremioTvCatalogPickerResult {
@@ -355,6 +356,7 @@ class _StremioTvCatalogPickerDialogState
   }
 
   Widget _buildSelectionView(ThemeData theme) {
+    final app = AppThemeScope.of(context);
     final filteredIndices = _filteredCatalogIndices;
 
     return Padding(
@@ -426,6 +428,13 @@ class _StremioTvCatalogPickerDialogState
                     focusNode: _searchFocusNode,
                     enabled: !_saving,
                     textInputAction: TextInputAction.search,
+                    // Same chrome the rest of Stremio TV's fields already
+                    // pass: the DPAD cursor role feeds TvTextField.accent, and
+                    // the keyboard panel keeps its own ground and ink.
+                    accent: app.youtube.focus,
+                    keyboardGround: app.youtube.keyboardPanel,
+                    keyboardInk: app.core.tx,
+                    keyboardInkOnAccent: app.inkOn(app.youtube.focus),
                     onUpArrow: () => _newChannelFocusNode.requestFocus(),
                     onDownArrow: () {
                       final filtered = _filteredCatalogIndices;
@@ -571,6 +580,7 @@ class _StremioTvCatalogPickerDialogState
   }
 
   Widget _buildCreateView(ThemeData theme) {
+    final app = AppThemeScope.of(context);
     return Padding(
       key: const ValueKey('create'),
       padding: const EdgeInsets.all(20),
@@ -604,6 +614,11 @@ class _StremioTvCatalogPickerDialogState
                 autofocus: true,
                 textInputAction: TextInputAction.done,
                 enabled: !_saving,
+                // Same chrome the rest of Stremio TV's fields already pass.
+                accent: app.youtube.focus,
+                keyboardGround: app.youtube.keyboardPanel,
+                keyboardInk: app.core.tx,
+                keyboardInkOnAccent: app.inkOn(app.youtube.focus),
                 onUpArrow: () => _createCancelFocusNode.requestFocus(),
                 onDownArrow: () => _createConfirmFocusNode.requestFocus(),
                 onSubmitted: (_) {

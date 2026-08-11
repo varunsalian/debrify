@@ -1,10 +1,12 @@
 import 'dart:async';
+import '../utils/media_kit_init.dart';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import '../utils/app_storage.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter/services.dart';
 import 'package:screen_brightness/screen_brightness.dart';
@@ -16,6 +18,7 @@ import '../services/skip_segment_service.dart';
 import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
 import '../services/audio_effect_session_service.dart';
+import '../services/tvos_decode_remedy.dart';
 import '../services/android_native_downloader.dart';
 import '../services/desktop_recording_service.dart';
 import '../services/live_recording_service.dart';
@@ -24,6 +27,7 @@ import '../services/debrid_service.dart';
 import '../services/premiumize_service.dart';
 import '../services/alldebrid_service.dart';
 import '../utils/platform_util.dart';
+import '../utils/player_audio_config.dart';
 import '../utils/time_formatters.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
@@ -41,6 +45,7 @@ import '../services/next_episode_service.dart';
 
 import '../widgets/series_browser.dart';
 import '../widgets/tv_text_field.dart';
+import '../widgets/video_output_lease.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import 'package:media_kit_video/media_kit_video.dart' as mkv;
 
@@ -61,13 +66,15 @@ import 'video_player/widgets/vertical_hud.dart';
 import 'video_player/widgets/aspect_ratio_hud.dart';
 import 'video_player/widgets/netflix_radio_tile.dart';
 import 'video_player/widgets/controls.dart';
-import 'video_player/widgets/channel_badge.dart';
-import 'video_player/widgets/title_badge.dart';
+import 'video_player/widgets/dock_style.dart';
+import 'video_player/widgets/tv_controls.dart';
+import 'video_player/widgets/tv_tappable.dart';
 import 'video_player/widgets/aspect_ratio_video.dart';
 import 'video_player/widgets/transition_overlay.dart';
 import 'video_player/widgets/pikpak_retry_overlay.dart';
 import 'video_player/widgets/buffering_indicator.dart';
 import 'video_player/widgets/tracks_sheet.dart';
+import 'video_player/widgets/player_menu_panel.dart';
 import 'video_player/widgets/playlist_sheet.dart';
 import 'video_player/widgets/channel_guide.dart';
 import 'video_player/widgets/iptv_channel_sheet.dart';
@@ -78,12 +85,19 @@ import 'video_player/widgets/source_sheet.dart';
 import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
 import 'video_player/services/subtitle_settings_service.dart';
+import 'video_player/services/playback_ui_clock.dart';
+import 'video_player/services/skip_segment_ui_controller.dart';
+import 'video_player/services/android_renderer_startup_fallback.dart';
 import 'video_player/widgets/subtitle_line_picker_overlay.dart';
 import 'video_player/widgets/skip_segment_button.dart';
 import 'video_player/widgets/sleep_timer_sheet.dart';
+import 'video_player/widgets/sync_stepper_overlay.dart';
+import 'video_player/widgets/spotlight_dialog.dart';
+import 'video_player/widgets/debrify_tv_banner.dart';
 import '../models/stremio_subtitle.dart';
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
+import '../models/android_video_renderer_mode.dart';
 import '../services/series_source_fetcher.dart';
 import '../services/stremio_service.dart';
 import '../services/stremio_subtitle_service.dart';
@@ -328,6 +342,13 @@ class VideoPlayerScreen extends StatefulWidget {
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     with TickerProviderStateMixin {
+  static const MethodChannel _tvReleaseLogChannel = MethodChannel(
+    'debrify/tvlog',
+  );
+  static const MethodChannel _androidPlayerDiagnosticChannel = MethodChannel(
+    'debrify/player_diagnostics',
+  );
+
   late mk.Player _player;
   // _player is assigned partway through the async _initializePlayer(); if the
   // user backs out before that (or init throws first), dispose() must not
@@ -339,6 +360,39 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// [_attachAudioEffectSession] / [_releaseAudioEffectSession].
   int? _audioEffectSessionId;
   late mkv.VideoController _videoController;
+  AndroidVideoRendererMode _androidVideoRendererMode =
+      AndroidVideoRendererMode.automatic;
+
+  /// Apple TV blue-screen ladder (PLAYER_TVOS_10BIT_PLAN.md): watches what
+  /// the decoder produced and re-routes high-bit VideoToolbox surfaces the
+  /// GLES interop cannot represent. Null everywhere but tvOS.
+  TvosDecodeRemedy? _tvosDecodeRemedy;
+
+  /// tvOS manual escape hatch — forces `hwdec=no` at controller creation.
+  /// Preloaded in [_loadPlayerDefaults]; [_createPlayerInstance] is
+  /// synchronous and cannot read prefs itself.
+  bool _tvosForceSoftwareDecode = false;
+
+  /// Audio-output settings (AUDIO_FIDELITY_PLAN.md), preloaded in
+  /// [_loadPlayerDefaults] and applied by [_configurePlayerAudio].
+  bool _audioPassthroughEnabled = false;
+  bool _systemAudioEffectsEnabled = false;
+  bool _appleMultichannelEnabled = false;
+  int _playerInstanceGeneration = 0;
+  bool _playerPresentationInitialized = false;
+
+  // Direct Surface is the efficient Android default, but a vendor codec or
+  // surface implementation may reject it. The startup guard is deliberately
+  // limited to the first successfully decoded item in this screen: once the
+  // output has attached, later network/media failures must not be blamed on the
+  // renderer. A confirmed renderer failure recreates the whole player once.
+  bool _directSurfaceValidatedForSession = false;
+  bool _rendererFallbackInProgress = false;
+  int _rendererStartupGuardToken = 0;
+  int _rendererStartupValidationGeneration = -1;
+  mk.Media? _activeOpenedMedia;
+  bool _activeMediaShouldPlay = false;
+  bool _activeMediaUserPaused = false;
   final math.Random _random = math.Random();
   SeriesPlaylist? _cachedSeriesPlaylist;
   List<PlaylistEntry>? _activePlaylist;
@@ -423,43 +477,62 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return _cachedSeriesPlaylist;
   }
 
-  String? get _channelBadgeText {
-    final String? nameSource = (_currentChannelName ?? widget.channelName)
-        ?.trim();
-    final int? numberSource = _currentChannelNumber;
-
-    final bool hasName = nameSource != null && nameSource.isNotEmpty;
-    if (!hasName && numberSource == null) {
-      return null;
-    }
-
-    String formattedNumber = '';
-    if (numberSource != null) {
-      final int safeNumber = numberSource < 0 ? 0 : numberSource;
-      formattedNumber = 'CH ${safeNumber.toString().padLeft(2, '0')}';
-    }
-    if (!hasName) {
-      return formattedNumber;
-    }
-
-    final upperName = nameSource!.toUpperCase();
-    if (formattedNumber.isEmpty) {
-      return upperName;
-    }
-    return '$formattedNumber • $upperName';
-  }
 
   Timer? _hideTimer;
+
+  // ---- Television transport bar -------------------------------------------
+  // The TV bar is a separate widget with real focus; these are the pieces the
+  // SCREEN has to own, because raising the bar, restoring focus and deciding
+  // whether auto-hide is allowed are all decisions that live with the keys.
+  final FocusScopeNode _tvBarScope = FocusScopeNode(debugLabel: 'tvBar');
+  final FocusNode _tvPlayPauseFocus = FocusNode(debugLabel: 'tvPlayPause');
+  final FocusNode _tvProgressFocus = FocusNode(debugLabel: 'tvProgress');
+
+  /// Focus parks here whenever the bar is down, an overlay closes or a scrub
+  /// is cancelled. Without an owned root node the remote goes dead the moment
+  /// the focused control is excluded from the tree.
+  final FocusNode _tvRootFocus = FocusNode(debugLabel: 'tvPlayerRoot');
+
+  /// True when there is genuinely nothing to seek: a live channel's
+  /// position/duration is just the HLS rolling window. Mirrors the signal the
+  /// bar itself uses, so the keys and the UI can never disagree.
+  bool get _tvNoTimeline =>
+      _iptvZapBannerOwnsIdentity ||
+      widget.hideSeekbar ||
+      _duration <= Duration.zero;
+
+  /// Cinema scrub, matching the native TV player: holding LEFT/RIGHT pauses
+  /// playback and previews a destination that OK confirms and BACK cancels.
+  /// [_tvScrubTarget] non-null means a scrub is in flight.
+  Duration? _tvScrubTarget;
+
+  /// When the last LEFT/RIGHT arrived, so a held key (fast repeats) can be
+  /// told from deliberate taps without needing key-up, which the tvOS fork
+  /// does not reliably deliver.
+  DateTime? _tvLastArrowAt;
+  bool _tvScrubWasPlaying = false;
+  int _tvScrubRepeats = 0;
+
+  /// Bumped on every transition and on dispose. A confirm carrying a stale
+  /// generation is dropped, so a scrub started before a source switch can
+  /// never seek the item that replaced it.
+  int _tvScrubGeneration = 0;
+
+  /// The generation in force when the current scrub began.
+  int _tvScrubStartedAtGeneration = 0;
+
+  // NOTE: do NOT drive mpv's `sub-visibility` here. media_kit renders
+  // subtitles as a Flutter widget and keeps mpv's own renderer switched off;
+  // turning it back on draws every subtitle twice. Lifting subtitles clear of
+  // the bar belongs in the subtitle view's padding instead.
   bool _isSeekingWithSlider = false;
   Duration? _lastSliderSeekPos;
 
   // Channel badge auto-hide
-  bool _showChannelBadge = true;
-  Timer? _channelBadgeTimer;
-
-  // Title badge auto-hide
-  bool _showTitleBadge = true;
-  Timer? _titleBadgeTimer;
+  // Debrify TV lower-third (replaces the two legacy corner badges).
+  bool _showDebrifyBanner = false;
+  bool _debrifyBannerFloatingMounted = false;
+  Timer? _debrifyBannerTimer;
 
   // IPTV zap banner (live channels) — the broadcast lower third.
   //
@@ -527,6 +600,130 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// The in-player IPTV guide look, read once at launch (see
   /// [PlayerGuideStyle]). Classic keeps every legacy paint path verbatim.
   PlayerGuideStyle _playerGuideStyle = PlayerGuideStyle.classic;
+
+  // Player dock prefs, read once at launch alongside the guide style.
+  PlayerDockStyle _dockStyle = PlayerDockStyle.classic;
+  PlayerDockPalette _dockPalette = PlayerDockPalette.ultraviolet;
+  PlayerDockSize _dockSize = PlayerDockSize.auto;
+
+  /// The styled dock's measured height. Six host behaviours below assume a
+  /// FIXED dock height (the skip button's 160/28, four 72lp gesture bands and
+  /// the PikPak overlay's 80); under `two_tier` the dock is variable, so they
+  /// read this instead. Seeded to the full viewport height so the very first
+  /// frame can only over-protect — under-protection is the actual bug.
+  /// `classic` never publishes and every consumer keeps its literal.
+  final ValueNotifier<double> _dockExtent = ValueNotifier<double>(0);
+
+  /// Measured height of the IPTV info panel, which the dock's vertical budget
+  /// must reserve. Starts at the conservative bound and is corrected by the
+  /// panel's own reporter on the next frame.
+  double _infoPanelHeight = DockLayoutInput.kInfoPanelBound;
+
+  /// 0..1, mirrored for the dock's volume control. mpv takes 0..100.
+  double _dockVolume = 1.0;
+
+  /// The panel's STRUCTURAL signature — which rows exist, not what they say.
+  /// Every row is bounded to one line, so content cannot change the height;
+  /// only presence can. Recomputed each build, and a change resets the cached
+  /// height so a taller panel can never be under-reserved.
+  ///
+  /// Deliberately excludes `_iptvZapClock`: that ticks every second and would
+  /// otherwise reset the cache continuously.
+  String get _infoPanelSignature {
+    final channel = _iptvZapChannel;
+    if (channel == null || !_iptvZapBannerOwnsIdentity) {
+      // Debrify TV's flush identity row: presence of plate/title is the
+      // whole structure (single bounded row).
+      if (_debrifyTvOwnsIdentity) {
+        final name = (_currentChannelName ?? widget.channelName)?.trim();
+        return [
+          'dtv',
+          (name?.isNotEmpty ?? false) || _currentChannelNumber != null
+              ? 'p'
+              : '',
+          widget.showVideoTitle ? 't' : '',
+        ].join('|');
+      }
+      return '-';
+    }
+    final epg = _iptvZapEpg;
+    return [
+      _playerGuideStyle.name,
+      channel.channelNumber != null ? 'n' : '',
+      (channel.group?.isNotEmpty ?? false) ? 'g' : '',
+      channel.logoUrl != null ? 'l' : '',
+      epg?.now != null ? 'w' : '',
+      epg?.next != null ? 'x' : '',
+      _iptvZapEpgLoading ? 'L' : '',
+      _recordingActiveNow ? 'r' : '',
+    ].join('|');
+  }
+
+  String _lastInfoPanelSignature = '';
+
+  /// Bumped on a panel STRUCTURE change. Separate from the dock generation:
+  /// resetting `_infoPanelHeight` alone was not enough — if the newly measured
+  /// height happened to equal the reporter's cached value it would suppress
+  /// the callback and the budget would stay stuck at the 200lp bound.
+  int _infoPanelGeneration = 0;
+
+  /// Bumped whenever the dock's geometry inputs change. A measurement
+  /// callback captures this and is discarded if it comes back stale, so a
+  /// post-frame report from the previous layout cannot overwrite a newer one.
+  int _dockGeometryGeneration = 0;
+
+  /// Everything that can change the dock's height without the dock itself
+  /// changing: the viewport, the safe-area insets, the text scaler, the
+  /// chosen style and size, and the two flags that add or remove whole rows.
+  String _dockGeometrySignature(MediaQueryData media) => [
+    media.size.width.round(),
+    media.size.height.round(),
+    media.padding.top.round(),
+    media.padding.bottom.round(),
+    media.textScaler.scale(100).round(),
+    _dockStyle.name,
+    _dockSize.name,
+    widget.hideOptions,
+    widget.hideSeekbar,
+  ].join('|');
+
+  String _lastDockGeometrySignature = '';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _refreshDockGeometry();
+  }
+
+  /// Drops the cached dock geometry whenever anything that can change the
+  /// dock's height changes.
+  void _refreshDockGeometry() {
+    // Rotation, window resize, split-screen, a safe-area change or a font-size
+    // change all land here. Any of them can make the cached extent wrong, and
+    // a stale extent means a tap near the bottom is judged against the wrong
+    // band — so drop back to the legacy constants until a fresh measurement
+    // arrives, rather than trusting the old number for a frame.
+    final signature = _dockGeometrySignature(MediaQuery.of(context));
+    if (signature == _lastDockGeometrySignature) return;
+    _lastDockGeometrySignature = signature;
+    _dockGeometryGeneration++;
+    _dockExtent.value = 0;
+    _infoPanelGeneration++;
+    _infoPanelHeight = DockLayoutInput.kInfoPanelBound;
+    _lastInfoPanelSignature = '';
+  }
+
+  /// Reserved panel height for this build. Resets to the bound (or 0 when no
+  /// panel is mounted) the moment the structure changes.
+  double get _reservedInfoPanelHeight {
+    final signature = _infoPanelSignature;
+    if (signature != _lastInfoPanelSignature) {
+      _lastInfoPanelSignature = signature;
+      _infoPanelGeneration++;
+      _infoPanelHeight = signature == '-' ? 0 : DockLayoutInput.kInfoPanelBound;
+    }
+    return _infoPanelHeight;
+  }
 
   /// Tokens for [_playerGuideStyle], derived once with it — null for classic.
   IptvStyleTokens? _playerGuideTokens;
@@ -694,6 +891,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // widget.stremioSources; the fetcher's flags track what was searched)
   List<Torrent>? _augmentedSources;
 
+  // Unified player menu (Spotlight panel) state. The subtitle-identity
+  // context is captured at open time, exactly like the old tracks sheet
+  // captured it in its `show` arguments.
+  bool _showPlayerMenu = false;
+  PlayerMenuSection _playerMenuInitialSection = PlayerMenuSection.subtitles;
+  final GlobalKey<PlayerMenuPanelState> _playerMenuKey =
+      GlobalKey<PlayerMenuPanelState>();
+  String? _menuImdbId;
+  String? _menuContentType;
+  int? _menuSeason;
+  int? _menuEpisode;
+  List<AddonSubtitleSlot>? _menuCachedSlots;
+  String? _menuCacheKey;
+
   // Stremio TV guide state
   bool _showStremioTvGuide = false;
   String? _currentStremioTvChannelId;
@@ -789,6 +1000,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _isPipActive = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  final PlaybackUiClockController _playbackUiClock =
+      PlaybackUiClockController();
+  final SkipSegmentUiController _activeSkipSegmentUi =
+      SkipSegmentUiController();
   bool _isTransitioning = false; // Show black screen during transitions
 
   /// One-shot guard set the moment we pop to hand the next episode back to the
@@ -806,6 +1021,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   StreamSubscription? _completedSub;
   StreamSubscription? _bufferingSub;
   StreamSubscription? _iptvErrorSub;
+  StreamSubscription? _rendererStartupErrorSub;
+
+  /// Runtime hardware-decoder probe. mpv's configured `hwdec=auto-safe` only
+  /// describes what it should try; `hwdec-current` is the decoder that actually
+  /// opened for this item. Generations are advanced by every app-owned open,
+  /// while property observers catch a decoder/output transition mid-stream.
+  int _decoderProbeGeneration = 0;
+  int _decoderProbeToken = 0;
+  mk.VideoParams? _decoderProbeParams;
+  Timer? _decoderProbeTimer;
+  String? _lastDecoderDiagnosticSignature;
 
   // Buffering indicator
   final ValueNotifier<bool> _showBufferingIndicator = ValueNotifier(false);
@@ -1046,7 +1272,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     SubtitleSettingsService.instance.resetSyncOffset();
     _loadSubtitleSettings();
     unawaited(_loadSkipSegmentSettings());
-    mk.MediaKit.ensureInitialized();
+    MediaKitInit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // The player opens landscape — a video wants the long edge — unless the
     // user asked it to open upright, in which case the Portrait/Landscape
@@ -1197,6 +1423,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _skipSegments = cached;
           _loadedSkipSegmentsKey = request.key;
         });
+        _syncActiveSkipSegmentUi();
       }
       return;
     }
@@ -1218,6 +1445,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             _skipSegments = segments;
             _loadedSkipSegmentsKey = request.key;
           });
+          _syncActiveSkipSegmentUi();
         })
         .catchError((Object error) {
           // Missing skip data must never affect playback. Cache the miss for
@@ -1233,6 +1461,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             _skipSegments = SkipSegments.empty;
             _loadedSkipSegmentsKey = request.key;
           });
+          _syncActiveSkipSegmentUi();
         })
         .whenComplete(() {
           if (_loadingSkipSegmentsKey == request.key) {
@@ -1253,12 +1482,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _loadedSkipSegmentsKey = null;
     _skipSegments = SkipSegments.empty;
     _skipSegmentsMediaReady = false;
+    _activeSkipSegmentUi.clear();
   }
 
   SkipSegment? get _activeSkipSegment {
     final request = _currentSkipSegmentRequest();
     if (request == null || request.key != _loadedSkipSegmentsKey) return null;
     return _skipSegments.segmentAt(_position);
+  }
+
+  void _syncActiveSkipSegmentUi() {
+    _activeSkipSegmentUi.update(_activeSkipSegment);
   }
 
   void _skipActiveSegment() {
@@ -1268,11 +1502,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? _duration
         : segment.end;
     _position = target;
+    _playbackUiClock.updatePosition(target, immediate: true);
+    _syncActiveSkipSegmentUi();
     unawaited(_player.seek(target));
     _traktScrobbleSeek(target);
     _simklScrobbleSeek(target);
     HapticFeedback.selectionClick();
-    if (mounted) setState(() {});
   }
 
   Future<void> _initTraktScrobble() async {
@@ -1758,8 +1993,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       final platform = _player.platform;
       if (platform is! mk.NativePlayer) return;
-      if (!await StorageService.getPlayerSystemAudioEffects()) return;
-      await platform.setProperty('ao', 'audiotrack,opensles');
+      // The CACHED field, deliberately: [_configurePlayerAudio] chose the
+      // audio output from it, and a fresh preference read here could
+      // diverge mid-session — announcing a session on an output that was
+      // never switched, or vice versa. "Restart playback to apply" is the
+      // settings contract for both halves.
+      if (!_systemAudioEffectsEnabled) return;
+      // `ao=audiotrack,...` itself is owned by [_configurePlayerAudio] now
+      // (the passthrough setting needs the same output, and two writers of
+      // `ao` is how the two settings would fight) — this method keeps only
+      // the session-id half.
       final sessionId = await AudioEffectSessionService.generateSessionId();
       // No id available: still worth keeping the effects-capable output, since
       // effect apps that detect sessions on their own can then attach.
@@ -1782,9 +2025,245 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     AudioEffectSessionService.close(sessionId);
   }
 
+  /// This player's claim on the process's one video output.
+  ///
+  /// HELD for the controller's lifetime rather than taken as a momentary
+  /// barrier. A barrier that released before construction left a gap: a trailer
+  /// parked on the lease would be granted it and build its own output while
+  /// this player was still constructing — the two-output case, which is a
+  /// SIGABRT on tvOS.
+  VideoOutputLeaseHandle? _outputLease;
+
+  /// Take the slot before building a controller.
+  ///
+  /// The ambient trailer surfaces tear down when playback launches, but the
+  /// native release is asynchronous — "teardown was requested" is not "the
+  /// output is gone".
+  ///
+  /// **Bounded, deliberately.** Review pushed back on this twice: a timeout
+  /// that proceeds can, in principle, recreate the two-output case. The
+  /// judgement here is that an unbounded wait turns a stuck native disposal
+  /// into "video never plays again this session", which is a worse and far more
+  /// likely outcome than the crash it guards against — and by the time three
+  /// seconds have passed, something is already wrong. It logs, and it still
+  /// takes the slot when it finally frees, so the player never ends up
+  /// untracked.
+  Future<void> _claimVideoOutput() async {
+    if (_outputLease != null) return; // renderer fallback reuses the claim
+    if (!VideoOutputLease.isHeld) {
+      final handle = await VideoOutputLease.acquire(debugLabel: 'player');
+      if (_screenDisposed) {
+        handle.release();
+        return;
+      }
+      _outputLease = handle;
+      return;
+    }
+    final pending = VideoOutputLease.acquire(debugLabel: 'player');
+    VideoOutputLeaseHandle? handle;
+    try {
+      handle = await pending.timeout(const Duration(seconds: 3));
+    } on TimeoutException {
+      debugPrint(
+        'VideoOutputLease: player proceeding without the slot — a previous '
+        'video output has not released after 3s.',
+      );
+      // The wait was abandoned, not cancelled. Take the slot whenever it does
+      // arrive rather than handing it back: this player IS alive and holding a
+      // video output, so releasing would leave it untracked and let a trailer
+      // build a second one beside it.
+      unawaited(pending.then((late) {
+        if (_screenDisposed || _outputLease != null) {
+          late.release();
+        } else {
+          _outputLease = late;
+        }
+      }));
+    }
+    if (_screenDisposed) {
+      handle?.release();
+      return;
+    }
+    _outputLease = handle;
+  }
+
+  void _releaseVideoOutput() {
+    _outputLease?.release();
+    _outputLease = null;
+  }
+
+  /// Set once `dispose()` has run, so a claim still in flight at that moment
+  /// gives the slot straight back instead of being stranded by the `!mounted`
+  /// return at its call site — which would block every future trailer engine
+  /// for the rest of the session.
+  bool _screenDisposed = false;
+
+  void _createPlayerInstance(AndroidVideoRendererMode rendererMode) {
+    final instanceGeneration = ++_playerInstanceGeneration;
+    _isReady = false;
+    final player = mk.Player(
+      configuration: mk.PlayerConfiguration(
+        logLevel: mk.MPVLogLevel.error,
+        ready: () => _onPlayerInstanceReady(instanceGeneration),
+      ),
+    );
+    _player = player;
+    _playerCreated = true;
+    _videoController = mkv.VideoController(
+      player,
+      configuration: mkv.VideoControllerConfiguration(
+        vo: rendererMode.videoOutput,
+        // The tvOS escape hatch outranks the renderer mode (which is an
+        // Android concept; its decoder string is null off-Android anyway).
+        hwdec: PlatformUtil.isTvOS && _tvosForceSoftwareDecode
+            ? 'no'
+            : rendererMode.hardwareDecoder,
+      ),
+    );
+    _installTvosDecodeRemedy(player);
+    _bindPlayerInstanceSubscriptions(instanceGeneration, player);
+    unawaited(_installDecoderObservers(instanceGeneration, player));
+  }
+
+  /// Serializes live passthrough flips: each runs WHOLE, in order. Without
+  /// this a rapid double-toggle could interleave two aid cycles and leave
+  /// the newer one reading `aid=no` mid-way through the older one's cycle —
+  /// stranding the player silent.
+  Future<void> _passthroughFlipChain = Future<void>.value();
+
+  /// The in-player passthrough flip — persists the same setting the
+  /// Playback Defaults row writes, applies the explicit property values
+  /// (including the OFF restores), then cycles the audio track so the
+  /// CURRENT file's audio chain re-initialises: `audio-spdif` is read at
+  /// decoder init, and `ao` reloads on the reconfig. Sub-second audio gap,
+  /// position untouched. Fails soft: playback outlives any of this (and
+  /// mpv gives no rejection signal to roll a switch back on — the toggle's
+  /// caption owns the "silence means off" contract).
+  Future<void> _setAudioPassthroughLive(bool enabled) {
+    final flip = _passthroughFlipChain.then(
+      (_) => _applyPassthroughFlip(enabled),
+    );
+    _passthroughFlipChain = flip.catchError((_) {});
+    return flip;
+  }
+
+  Future<void> _applyPassthroughFlip(bool enabled) async {
+    _audioPassthroughEnabled = enabled;
+    try {
+      await StorageService.setAudioPassthroughEnabled(enabled);
+      final platform = _player.platform;
+      if (platform is! mk.NativePlayer) return;
+      for (final (property, value)
+          in PlayerAudioConfig.androidLiveToggleProperties(
+        passthroughEnabled: enabled,
+        systemAudioEffects: _systemAudioEffectsEnabled,
+      )) {
+        await platform.setProperty(property, value);
+      }
+      final aid = await platform.getProperty('aid');
+      if (aid.isNotEmpty && aid != 'no') {
+        await platform.setProperty('aid', 'no');
+        await platform.setProperty('aid', aid);
+      }
+    } catch (e) {
+      debugPrint('VideoPlayer: live passthrough toggle failed: $e');
+    }
+  }
+
+  /// The single owner of the player's audio-output properties — ordered
+  /// list from [PlayerAudioConfig], awaited before the first open, run at
+  /// EVERY player-instance creation site (initial + the Android renderer
+  /// fallback recreate). Fails soft per property: audio configuration is a
+  /// nice-to-have, playback is not.
+  Future<void> _configurePlayerAudio(mk.Player player) async {
+    final platform = player.platform;
+    if (platform is! mk.NativePlayer) return;
+    final props = PlayerAudioConfig.audioProperties(
+      isAndroid: !kIsWeb && Platform.isAndroid,
+      isApple: PlatformUtil.isTvOS || PlatformUtil.isIosMobile,
+      passthroughEnabled: _audioPassthroughEnabled,
+      systemAudioEffects: _systemAudioEffectsEnabled,
+      multichannelEnabled: _appleMultichannelEnabled,
+    );
+    for (final (property, value) in props) {
+      try {
+        await platform.setProperty(property, value);
+      } catch (e) {
+        debugPrint('VideoPlayer: audio config $property=$value failed: $e');
+      }
+    }
+  }
+
+  /// tvOS only: the 10-bit remedy ladder, bound to THIS player instance's
+  /// property interface. Plain post-create property access — deliberately
+  /// not `mpv_observe_property` (see the SIGABRT note in
+  /// [_installDecoderObservers]); the ladder is driven by the existing
+  /// Dart-side videoParams stream instead.
+  void _installTvosDecodeRemedy(mk.Player player) {
+    if (!PlatformUtil.isTvOS) return;
+    final platform = player.platform;
+    if (platform is! mk.NativePlayer) return;
+    _tvosDecodeRemedy?.dispose();
+    _tvosDecodeRemedy = TvosDecodeRemedy(
+      getProperty: platform.getProperty,
+      setProperty: platform.setProperty,
+      // The standard 8-bit-surface pin, applied before every file's decoder
+      // exists: 8-bit content is NV12 already (no change), 10-bit decodes
+      // straight to NV12 with no blue flash and no mid-play cycle. The
+      // reactive ladder underneath only ever engages if VideoToolbox
+      // rejects the pin for some exotic stream.
+      pinNv12FromStart: true,
+      // A settle is a decode-path change the one-shot probe has already
+      // reported around — re-arm it so the diagnostic line carries the
+      // remedy journey.
+      onStateChanged: () {
+        if (mounted) _scheduleDecoderProbe();
+      },
+    );
+  }
+
+  void _onPlayerInstanceReady(int instanceGeneration) {
+    if (!mounted || instanceGeneration != _playerInstanceGeneration) return;
+    _isReady = true;
+    _armPipAutoEnter();
+    if (PlatformUtil.isTelevision && _controlsVisible.value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            instanceGeneration == _playerInstanceGeneration &&
+            _controlsVisible.value &&
+            !_tvBarScope.hasFocus) {
+          _tvPlayPauseFocus.requestFocus();
+        }
+      });
+    }
+    setState(() {});
+
+    // These are screen-presentation side effects, not player-instance setup.
+    // Re-running them during the compatibility restart would re-raise launch
+    // banners and reset guide context while preserving the same media item.
+    if (_playerPresentationInitialized) return;
+    _playerPresentationInitialized = true;
+    final iptvChannel = _currentIptvChannel;
+    if (iptvChannel != null && iptvChannel.isLive) {
+      _hideTimer?.cancel();
+      _controlsVisible.value = false;
+      _prepareIptvBannerData(iptvChannel);
+      _raiseIptvZapBanner();
+      _anchorIptvGuideCategory(iptvChannel);
+      _ensureIptvZapPagingArmed();
+    } else {
+      _raiseDebrifyBanner();
+    }
+  }
+
   Future<void> _initializePlayer() async {
     // Load default player settings
     await _loadPlayerDefaults();
+    unawaited(_loadDockPrefs());
+    if (Platform.isAndroid && !PlatformUtil.isAndroidTvCached) {
+      _androidVideoRendererMode =
+          await StorageService.getAndroidVideoRendererMode();
+    }
 
     // Determine the initial URL and index
     String initialUrl = widget.videoUrl;
@@ -1926,55 +2405,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _currentIndex = initialIndex;
     _dynamicTitle = widget.title;
-    _player = mk.Player(
-      configuration: mk.PlayerConfiguration(
-        logLevel: mk.MPVLogLevel.error, // Suppress verbose subtitle logging
-        ready: () {
-          _isReady = true;
-          // Now that there's a real video frame, arm PiP auto-enter (no-op
-          // unless this screen is the active, supported PiP owner).
-          _armPipAutoEnter();
-          if (mounted) {
-            setState(() {});
-            // First tune on a live channel: the zap banner doubles as the
-            // "here's what's on" card, and it owns the identity instead of
-            // the corner badges.
-            final iptvChannel = _currentIptvChannel;
-            if (iptvChannel != null && iptvChannel.isLive) {
-              // The dock opens visible and nothing on this path auto-hides
-              // it, so it would both cover the banner and leave a live
-              // channel presenting a seek bar it cannot use. The banner is
-              // this tune's presentation; one tap brings the dock back.
-              _hideTimer?.cancel();
-              _controlsVisible.value = false;
-              _prepareIptvBannerData(iptvChannel);
-              _raiseIptvZapBanner();
-              // Anchor the browsing context to what is playing, the way the
-              // native player bootstraps it. Both halves matter: the category
-              // alone would label the guide with a group the launch window
-              // does not match, and the list would then shrink to it the
-              // moment anything re-filtered.
-              _anchorIptvGuideCategory(iptvChannel);
-              // Arms the zap ladder for the launch channel. Routed through the
-              // shared helper so a zap arriving before this lands re-arms it
-              // instead of leaving the ladder inactive for the session.
-              _ensureIptvZapPagingArmed();
-            } else {
-              // Show channel badge when player is ready (if enabled)
-              if (widget.showChannelName && _channelBadgeText != null) {
-                _showChannelBadgeWithTimer();
-              }
-              // Show title badge when player is ready (if enabled and in Debrify TV)
-              if (widget.showVideoTitle && widget.showChannelName) {
-                _showTitleBadgeWithTimer();
-              }
-            }
-          }
-        },
-      ),
-    );
-    _playerCreated = true;
-    _videoController = mkv.VideoController(_player);
+    await _claimVideoOutput();
+    if (!mounted) return;
+    _createPlayerInstance(_androidVideoRendererMode);
+    await _configurePlayerAudio(_player);
     // libmpv exposes `stream-record`; the web backend does not. Gate the
     // record control on having a native player — and, on Android, on the
     // finished file being publishable at all. Below API 29 there is no
@@ -2057,10 +2491,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // of A/V drift.)
         final hasExternalAudio =
             widget.audioUrl != null && widget.audioUrl!.isNotEmpty;
-        _player
-            .open(
+        _openMedia(
               mk.Media(initialUrl, httpHeaders: widget.httpHeaders),
               play: !hasExternalAudio,
+              desiredPlay: true,
             )
             .then((_) async {
               // Wait for the video to load and duration to be available
@@ -2102,43 +2536,71 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _loadPlaylistIndex(_currentIndex, autoplay: false);
       }
     }
-    _posSub = _player.stream.position.listen((d) {
+    _autosaveTimer = Timer.periodic(
+      const Duration(seconds: 6),
+      (_) => _saveResume(debounced: true),
+    );
+
+    // Preload episode information if this is a series
+    _preloadEpisodeInfo();
+  }
+
+  void _bindPlayerInstanceSubscriptions(
+    int instanceGeneration,
+    mk.Player player,
+  ) {
+    bool isCurrent() =>
+        mounted && instanceGeneration == _playerInstanceGeneration;
+
+    // Subscribe before open() so fast local media and immediate renderer
+    // failures are visible to both diagnostics and the startup guard.
+    _paramsSub = player.stream.videoParams.listen((params) {
+      if (!isCurrent()) return;
+      _handleDecoderProbeParams(params);
+    });
+    _rendererStartupErrorSub = player.stream.error.listen((error) {
+      if (!isCurrent() ||
+          !AndroidRendererStartupFallback.isRendererFailure(error)) {
+        return;
+      }
+      unawaited(
+        _fallbackDirectSurfaceToAutomatic(
+          instanceGeneration: instanceGeneration,
+          mediaGeneration: _decoderProbeGeneration,
+          reason: 'renderer_error',
+        ),
+      );
+    });
+    _posSub = player.stream.position.listen((d) {
+      if (!isCurrent()) return;
       _position = d;
+      _playbackUiClock.updatePosition(d);
       _syncSkipSegmentsForCurrentContent();
-      // throttle UI updates
-      if (mounted) setState(() {});
-      // Check if episode should be marked as finished (for manual seeking)
+      _syncActiveSkipSegmentUi();
       _checkAndMarkEpisodeAsFinished();
     });
-    _durSub = _player.stream.duration.listen((d) {
+    _durSub = player.stream.duration.listen((d) {
+      if (!isCurrent()) return;
       _duration = d;
-      // A real duration means the incoming media has opened, so the clock the
-      // skip lookup reads is finally the new item's.
+      _playbackUiClock.updateDuration(d);
       if (d > Duration.zero) _skipSegmentsMediaReady = true;
       _syncSkipSegmentsForCurrentContent();
-      if (mounted) setState(() {});
+      _syncActiveSkipSegmentUi();
+      setState(() {});
     });
-    _playSub = _player.stream.playing.listen((p) {
-      // Backgrounded via the lifecycle pause, yet something started playing:
-      // an open(play: true) that was already in flight when Home was pressed
-      // (a zap, an episode load) landing after the pause. Re-pause instead of
-      // letting it decode invisibly — the exact drain the lifecycle pause
-      // exists to stop. Early return, before any scrobble/heartbeat side
-      // effects can arm off a playback that is being taken back down.
+    _playSub = player.stream.playing.listen((p) {
+      if (!isCurrent()) return;
       if (p && _pausedByLifecycle && !_isPipActive) {
-        unawaited(_player.pause());
+        unawaited(player.pause());
         return;
       }
       final wasPlaying = _isPlaying;
       _isPlaying = p;
       _syncWakelock(p);
       _pushPipState();
-      // Startup-channel memory — armed only by real playback, never by a tune.
       if (p) _noteLiveChannelPlaying();
-      // Trakt scrobble on play/pause
       if (p && _duration > Duration.zero) {
         _traktScrobble('start');
-        // Only start heartbeat if scrobble wasn't converted to stop (>80%)
         if (_traktLastScrobbleAction == 'start') {
           _startTraktHeartbeat();
         }
@@ -2149,14 +2611,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _traktScrobble('pause');
         _stopTraktHeartbeat();
       }
-      // Simkl scrobble on play/pause — parallel to the Trakt block above, but
-      // pause-centric: NO 'start' POST on play (it wipes the Simkl resume
-      // point; see _initSimklScrobble). We DO stamp the marker 'start' (no POST)
-      // so it reads "playing" — otherwise a leftover 'pause'/'stop' marker (from
-      // the heartbeat or an episode-switch stop) would dedup-suppress this
-      // episode's user-pause and exit-stop. Then run the pause-based heartbeat.
-      // Gated on _simklScrobbleEnabled (the old _simklScrobble('start') call did
-      // this implicitly) so a non-Simkl session doesn't leak an idle heartbeat.
       if (_simklScrobbleEnabled && p && _duration > Duration.zero) {
         _simklLastScrobbleAction = 'start';
         _startSimklHeartbeat();
@@ -2168,7 +2622,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _stopSimklHeartbeat();
       }
       if (p && _transitionRunning) {
-        // Total 3s: 1.5s static (phase 1) + 1.5s reveal (phase 2)
         _transitionStopTimer?.cancel();
         _transitionPhaseTimer?.cancel();
         _transitionPhase = 1;
@@ -2177,34 +2630,35 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           'Player: Playback started; overlay phase 1 (static) 1500ms.',
         );
         _transitionPhaseTimer = Timer(const Duration(milliseconds: 1500), () {
+          if (!isCurrent()) return;
           _transitionPhase = 2;
           _transitionPhase2Started = DateTime.now();
-          if (mounted) setState(() {});
+          setState(() {});
           debugPrint('Player: Overlay phase 2 (cinematic bars) 1500ms.');
         });
         _transitionStopTimer = Timer(const Duration(milliseconds: 3000), () {
+          if (!isCurrent()) return;
           _rainbowController.stop();
           _transitionRunning = false;
           _rainbowActive = false;
-          if (mounted) setState(() {});
+          setState(() {});
           debugPrint('Player: Transition overlay stopped (3s complete).');
         });
       }
-      if (mounted) setState(() {});
+      setState(() {});
     });
-    // No need to observe video params for sizing; we use a fixed logical surface
-    _completedSub = _player.stream.completed.listen((done) {
-      if (done) _onPlaybackEnded();
+    _completedSub = player.stream.completed.listen((done) {
+      if (done && isCurrent()) _onPlaybackEnded();
     });
-    _bufferingSub = _player.stream.buffering.listen((isBuffering) {
-      if (!_isReady || _isTransitioning) return;
+    _bufferingSub = player.stream.buffering.listen((isBuffering) {
+      if (!isCurrent() || !_isReady || _isTransitioning) return;
       if (isBuffering) {
         _bufferingDebounceTimer?.cancel();
         _bufferingDebounceTimer = Timer(
           VideoPlayerTimingConstants.bufferingDebounceDelay,
           () {
-            if (mounted &&
-                _player.state.buffering &&
+            if (isCurrent() &&
+                player.state.buffering &&
                 _isReady &&
                 !_isTransitioning &&
                 !_isPikPakRetrying) {
@@ -2217,27 +2671,581 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         _showBufferingIndicator.value = false;
       }
     });
-
-    // Plain IPTV channels had no error path at all: a refused or dead stream
-    // just left a black screen with a spinner, indistinguishable from "the app
-    // is broken". (The Stremio ladder reports for itself — see the probing
-    // guard in the handler.)
     if (_effectiveIptvChannels != null) {
-      _iptvErrorSub = _player.stream.error.listen(_onIptvStreamError);
+      _iptvErrorSub = player.stream.error.listen((error) {
+        if (isCurrent()) _onIptvStreamError(error);
+      });
+    }
+  }
+
+  Future<void> _cancelPlayerInstanceSubscriptions() async {
+    final subscriptions = <StreamSubscription?>[
+      _posSub,
+      _durSub,
+      _playSub,
+      _paramsSub,
+      _completedSub,
+      _bufferingSub,
+      _iptvErrorSub,
+      _rendererStartupErrorSub,
+    ];
+    _posSub = null;
+    _durSub = null;
+    _playSub = null;
+    _paramsSub = null;
+    _completedSub = null;
+    _bufferingSub = null;
+    _iptvErrorSub = null;
+    _rendererStartupErrorSub = null;
+    for (final subscription in subscriptions) {
+      if (subscription == null) continue;
+      try {
+        await subscription.cancel();
+      } catch (_) {
+        // A broken listener must not strand the old native player during the
+        // compatibility restart.
+      }
+    }
+  }
+
+  void _handleDecoderProbeParams(mk.VideoParams params) {
+    final width = params.dw ?? params.w ?? 0;
+    final height = params.dh ?? params.h ?? 0;
+    if (width <= 0 || height <= 0) {
+      // Player.open() normally resets VideoParams before loading the next item.
+      // Treat it as an extra invalidation signal, but do not require it: the
+      // app-owned generation started in _openMedia is the session boundary.
+      _decoderProbeToken++;
+      _decoderProbeTimer?.cancel();
+      _decoderProbeTimer = null;
+      _decoderProbeParams = null;
+      _rendererStartupGuardToken++;
+      _rendererStartupValidationGeneration = -1;
+      return;
+    }
+    _decoderProbeParams = params;
+    _scheduleDecoderProbe();
+    _scheduleDirectSurfaceStartupValidation();
+    final remedy = _tvosDecodeRemedy;
+    if (remedy != null) {
+      // Only ever STARTS the ladder (from idle, on a triggering format) —
+      // the ladder's own transitional events are ignored inside it.
+      unawaited(remedy.evaluate(params, _decoderProbeGeneration));
+    }
+  }
+
+  Future<void> _installDecoderObservers(
+    int instanceGeneration,
+    mk.Player player,
+  ) async {
+    final platform = player.platform;
+    if (platform is! mk.NativePlayer) return;
+
+    // ANDROID ONLY, deliberately.
+    //
+    // These observers exist to feed the Android direct-surface renderer
+    // fallback (`_scheduleDirectSurfaceStartupValidation`), which is itself
+    // gated on `Platform.isAndroid` — so everywhere else they were pure cost.
+    //
+    // They are also `mpv_observe_property` calls issued unawaited, at the same
+    // moment the video controller is building the native render context on its
+    // own worker — which is the window a tvOS SIGABRT was landing in.
+    //
+    // NOT confirmed as the cause: the crash stopped after this change AND a
+    // reinstall that wiped the device's preferences, and either could have
+    // done it. Kept regardless, because a probe that only feeds an
+    // Android-gated fallback has no business running anywhere else.
+    if (!Platform.isAndroid) return;
+
+    try {
+      await platform.observeProperty('hwdec-current', (value) async {
+        if (mounted && instanceGeneration == _playerInstanceGeneration) {
+          _scheduleDecoderProbe();
+        }
+      });
+    } catch (_) {
+      // The one-shot query below still works if this property is unavailable.
+    }
+    try {
+      await platform.observeProperty('current-vo', (value) async {
+        if (mounted && instanceGeneration == _playerInstanceGeneration) {
+          _scheduleDecoderProbe();
+        }
+      });
+    } catch (_) {
+      // Keep the independent hwdec observer when only current-vo is unavailable.
+    }
+  }
+
+  void _scheduleDirectSurfaceStartupValidation() {
+    if (!AndroidRendererStartupFallback.shouldArm(
+          isAndroid: Platform.isAndroid,
+          isAndroidTv: PlatformUtil.isAndroidTvCached,
+          mode: _androidVideoRendererMode,
+          alreadyValidated: _directSurfaceValidatedForSession,
+          fallbackInProgress: _rendererFallbackInProgress,
+        ) ||
+        _iptvErrorsMuted ||
+        _rendererStartupValidationGeneration == _decoderProbeGeneration) {
+      return;
+    }
+    _rendererStartupValidationGeneration = _decoderProbeGeneration;
+    final guardToken = ++_rendererStartupGuardToken;
+    final instanceGeneration = _playerInstanceGeneration;
+    final mediaGeneration = _decoderProbeGeneration;
+    final player = _player;
+    unawaited(
+      _validateDirectSurfaceStartup(
+        guardToken: guardToken,
+        instanceGeneration: instanceGeneration,
+        mediaGeneration: mediaGeneration,
+        player: player,
+      ),
+    );
+  }
+
+  Future<void> _validateDirectSurfaceStartup({
+    required int guardToken,
+    required int instanceGeneration,
+    required int mediaGeneration,
+    required mk.Player player,
+  }) async {
+    final platform = player.platform;
+    if (platform is! mk.NativePlayer) return;
+
+    // VideoParams is already positive at this point, so this is not a network
+    // startup timeout. Give Android's SurfaceProducer/codec bridge three seconds
+    // to attach the requested output and require two matching reads.
+    var previousOutput = '';
+    for (var attempt = 0; attempt < 12; attempt++) {
+      if (!mounted ||
+          guardToken != _rendererStartupGuardToken ||
+          instanceGeneration != _playerInstanceGeneration ||
+          mediaGeneration != _decoderProbeGeneration) {
+        return;
+      }
+      try {
+        final output = await platform.getProperty('current-vo');
+        if (AndroidRendererStartupFallback.isExpectedOutput(output) &&
+            output == previousOutput) {
+          _directSurfaceValidatedForSession = true;
+          _rendererStartupGuardToken++;
+          return;
+        }
+        previousOutput = output;
+      } catch (_) {
+        // A transient property-query failure gets the remainder of the window.
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
     }
 
-    _autosaveTimer = Timer.periodic(
-      const Duration(seconds: 6),
-      (_) => _saveResume(debounced: true),
+    await _fallbackDirectSurfaceToAutomatic(
+      instanceGeneration: instanceGeneration,
+      mediaGeneration: mediaGeneration,
+      reason: 'surface_output_not_ready',
+    );
+  }
+
+  Future<void> _fallbackDirectSurfaceToAutomatic({
+    required int instanceGeneration,
+    required int mediaGeneration,
+    required String reason,
+  }) async {
+    if (!AndroidRendererStartupFallback.shouldArm(
+          isAndroid: Platform.isAndroid,
+          isAndroidTv: PlatformUtil.isAndroidTvCached,
+          mode: _androidVideoRendererMode,
+          alreadyValidated: _directSurfaceValidatedForSession,
+          fallbackInProgress: _rendererFallbackInProgress,
+        ) ||
+        !mounted ||
+        instanceGeneration != _playerInstanceGeneration ||
+        mediaGeneration != _decoderProbeGeneration ||
+        _activeOpenedMedia == null ||
+        _isRecording ||
+        _iptvErrorsMuted ||
+        _isTransitioning) {
+      return;
+    }
+
+    _rendererFallbackInProgress = true;
+    _rendererStartupGuardToken++;
+    final media = _activeOpenedMedia!;
+    final oldPlayer = _player;
+    final oldState = oldPlayer.state;
+    final resumePosition = _position > Duration.zero
+        ? _position
+        : oldState.position;
+    final shouldResumePlayback =
+        _activeMediaShouldPlay && !_activeMediaUserPaused && !_sleepStopLatched;
+    final rate = oldState.rate;
+    final volume = oldState.volume;
+    final isLive = _currentIptvChannel?.isLive == true;
+    final externalAudio = widget.audioUrl;
+    final hasExternalAudio = externalAudio != null && externalAudio.isNotEmpty;
+
+    _releasePlayerDiagnostic(
+      'generation=$mediaGeneration phase=fallback '
+      'status=renderer_startup_failed platform=android backend=libmpv '
+      'requested_renderer=direct_surface fallback=automatic reason=$reason',
     );
 
-    // Preload episode information if this is a series
-    _preloadEpisodeInfo();
+    // Invalidate every old callback before the first await. Only one native
+    // player may own audio and the Android surface during the restart.
+    _playerInstanceGeneration++;
+    _playerCreated = false;
+    _isReady = false;
+    _isPlaying = false;
+    _showBufferingIndicator.value = false;
+    setState(() {});
+
+    try {
+      await _cancelPlayerInstanceSubscriptions();
+      _releaseAudioEffectSession();
+      try {
+        await oldPlayer.pause();
+      } catch (_) {}
+      try {
+        await oldPlayer.dispose();
+      } catch (_) {
+        // Disposal normally succeeds, but retain ownership if the native
+        // backend throws so route teardown can make one final cleanup attempt.
+        _playerCreated = true;
+        rethrow;
+      }
+      if (!mounted) return;
+
+      // Remember the compatibility result. The setting now visibly reads
+      // Automatic, and choosing Direct Surface again is the explicit retry.
+      _androidVideoRendererMode = AndroidVideoRendererMode.automatic;
+      try {
+        await StorageService.setAndroidVideoRendererMode(
+          AndroidVideoRendererMode.automatic,
+        );
+      } catch (_) {
+        // Playback can still recover for this session if preferences are full
+        // or unavailable.
+      }
+      if (!mounted) return;
+
+      _duration = Duration.zero;
+      _position = Duration.zero;
+      await _claimVideoOutput();
+      if (!mounted) return;
+      _createPlayerInstance(AndroidVideoRendererMode.automatic);
+      await _configurePlayerAudio(_player);
+      await _attachAudioEffectSession();
+      if (!mounted) return;
+      setState(() {});
+
+      final needsPreparation =
+          hasExternalAudio || (!isLive && resumePosition > Duration.zero);
+      final playOnOpen =
+          shouldResumePlayback && !_pausedByLifecycle && !needsPreparation;
+      await _openMedia(
+        media,
+        play: playOnOpen,
+        desiredPlay: shouldResumePlayback,
+      );
+      if (needsPreparation) await _waitForVideoReady();
+      if (!mounted) return;
+      await _player.setRate(rate);
+      await _player.setVolume(volume);
+      if (hasExternalAudio) {
+        await _setExternalAudioTrack(externalAudio);
+      }
+      if (!isLive && resumePosition > Duration.zero) {
+        await _player.seek(resumePosition);
+      }
+      unawaited(_restoreTrackPreferences());
+      if (shouldResumePlayback && !_pausedByLifecycle && !playOnOpen) {
+        await _player.play();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Direct Surface was unavailable. Using Automatic renderer.',
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (_) {
+      _releasePlayerDiagnostic(
+        'generation=$mediaGeneration phase=fallback '
+        'status=failed platform=android backend=libmpv '
+        'requested_renderer=direct_surface fallback=automatic',
+      );
+    } finally {
+      _rendererFallbackInProgress = false;
+    }
+  }
+
+  void _scheduleDecoderProbe() {
+    final params = _decoderProbeParams;
+    if (params == null) return;
+    _decoderProbeTimer?.cancel();
+    final generation = _decoderProbeGeneration;
+    final token = ++_decoderProbeToken;
+    _decoderProbeTimer = Timer(const Duration(milliseconds: 150), () {
+      unawaited(
+        _reportActiveVideoDecoder(
+          params: params,
+          generation: generation,
+          token: token,
+        ),
+      );
+    });
+  }
+
+  Future<void> _reportActiveVideoDecoder({
+    required mk.VideoParams params,
+    required int generation,
+    required int token,
+  }) async {
+    final platform = _player.platform;
+    if (platform is! mk.NativePlayer) {
+      _emitDecoderDiagnosticOnce(
+        generation: generation,
+        signature: 'web',
+        fields:
+            'phase=stable status=unavailable platform=web backend=web '
+            'reason=no_native_decoder',
+      );
+      return;
+    }
+
+    var decoder = '';
+    var codec = '';
+    var output = '';
+    var previousDecoder = '';
+    var previousOutput = '';
+    var stable = false;
+    // Audio, read on the DEVICE side (AUDIO_FIDELITY_PLAN.md): what the AO
+    // actually writes, not what the decoder produced — the gap between the
+    // two is the downgrade being diagnosed.
+    var aoName = '';
+    var audioChannels = '';
+    var previousAo = '';
+    var previousAudioChannels = '';
+    var audioCodec = '';
+    var decodedChannels = '';
+    var audioFormat = '';
+
+    try {
+      // VideoParams means a decoder has produced metadata, not necessarily
+      // that the output surface has finished attaching. Require two matching
+      // reads so an early `current-vo=null` is never presented as the verdict.
+      // Audio joins the match condition but not the readiness one: a
+      // video-only file has no AO to wait for, and empty-matches-empty.
+      for (var attempt = 0; attempt < 12; attempt++) {
+        if (!mounted ||
+            generation != _decoderProbeGeneration ||
+            token != _decoderProbeToken) {
+          return;
+        }
+        decoder = await platform.getProperty('hwdec-current');
+        output = await platform.getProperty('current-vo');
+        aoName = await platform.getProperty('current-ao');
+        audioChannels =
+            await platform.getProperty('audio-out-params/channel-count');
+        final outputReady = output.isNotEmpty && output != 'null';
+        final decoderReady = decoder.isNotEmpty;
+        if (decoderReady &&
+            outputReady &&
+            decoder == previousDecoder &&
+            output == previousOutput &&
+            aoName == previousAo &&
+            audioChannels == previousAudioChannels) {
+          stable = true;
+          break;
+        }
+        previousDecoder = decoder;
+        previousOutput = output;
+        previousAo = aoName;
+        previousAudioChannels = audioChannels;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+      if (!mounted ||
+          generation != _decoderProbeGeneration ||
+          token != _decoderProbeToken) {
+        return;
+      }
+      codec = await platform.getProperty('video-codec');
+      audioCodec = await platform.getProperty('audio-codec-name');
+      decodedChannels =
+          await platform.getProperty('audio-params/channel-count');
+      audioFormat = await platform.getProperty('audio-out-params/format');
+    } catch (_) {
+      if (!mounted || generation != _decoderProbeGeneration) return;
+      _emitDecoderDiagnosticOnce(
+        generation: generation,
+        signature: 'error',
+        fields:
+            'phase=error status=unavailable '
+            'platform=${Platform.operatingSystem} reason=property_query_failed',
+      );
+      return;
+    }
+
+    final width = params.dw ?? params.w ?? 0;
+    final height = params.dh ?? params.h ?? 0;
+    final status = decoder == 'no'
+        ? 'software'
+        : decoder.isEmpty
+        ? 'unavailable'
+        : 'hardware';
+    final normalizedOutput = output.isEmpty || output == 'null'
+        ? 'unknown'
+        : output;
+    final requestedRenderer = Platform.isAndroid
+        ? _androidVideoRendererMode.storageKey
+        : 'platform_default';
+    // The remedy journey (tvOS): what the decoder produced originally, what
+    // it produces now, and where the ladder settled. In the signature too —
+    // a settle re-arms this probe, and dedupe on the old signature would
+    // swallow exactly the report that proves the remedy ran.
+    final remedy = _tvosDecodeRemedy;
+    final remedyState = switch (remedy?.state) {
+      null || TvosRemedyState.none => 'none',
+      TvosRemedyState.nv12 => 'nv12',
+      TvosRemedyState.software => 'software',
+      TvosRemedyState.gaveUp => 'gave_up',
+    };
+    // confirmed/failed mean the remedy's own settling poll verified the
+    // format by DIRECT read — the stream-captured params above can lag
+    // behind a settle (no final event is guaranteed after reconfig).
+    final remedyOutcome = remedy == null
+        ? 'none'
+        : remedy.applying
+        ? 'pending'
+        : switch (remedy.state) {
+            TvosRemedyState.none => 'none',
+            TvosRemedyState.nv12 ||
+            TvosRemedyState.software =>
+              'confirmed',
+            TvosRemedyState.gaveUp => 'failed',
+          };
+    final remedyFields = remedy == null
+        ? ''
+        : 'pixelformat=${params.pixelformat ?? 'unknown'} '
+              'hw_pixelformat=${params.hwPixelformat ?? 'none'} '
+              'detected_hw_pixelformat=${remedy.detectedHwPixelformat ?? 'none'} '
+              'verified_hw_pixelformat=${remedy.verifiedHwPixelformat ?? 'none'} '
+              'gamma=${params.gamma ?? 'unknown'} '
+              'primaries=${params.primaries ?? 'unknown'} '
+              'remedy=$remedyState remedy_outcome=$remedyOutcome ';
+    final signature =
+        '$decoder|$normalizedOutput|$codec|${width}x$height|'
+        '$remedyState|$remedyOutcome';
+    _emitDecoderDiagnosticOnce(
+      generation: generation,
+      signature: signature,
+      fields:
+          'phase=${stable ? 'stable' : 'partial'} status=$status '
+          'platform=${Platform.operatingSystem} backend=libmpv '
+          'codec=${codec.isEmpty ? 'unknown' : codec} '
+          'decoder=${decoder.isEmpty ? 'unknown' : decoder} '
+          'output=$normalizedOutput '
+          '$remedyFields'
+          'audio_codec=${audioCodec.isEmpty ? 'none' : audioCodec} '
+          'decoded_channels=${decodedChannels.isEmpty ? 'none' : decodedChannels} '
+          'audio_channels=${audioChannels.isEmpty ? 'none' : audioChannels} '
+          'audio_format=${audioFormat.isEmpty ? 'none' : audioFormat} '
+          'ao=${aoName.isEmpty ? 'none' : aoName} '
+          'requested_renderer=$requestedRenderer '
+          'resolution=${width}x$height',
+    );
+  }
+
+  void _emitDecoderDiagnosticOnce({
+    required int generation,
+    required String signature,
+    required String fields,
+  }) {
+    if (generation != _decoderProbeGeneration) return;
+    final taggedSignature = '$generation|$signature';
+    if (_lastDecoderDiagnosticSignature == taggedSignature) return;
+    _lastDecoderDiagnosticSignature = taggedSignature;
+    _releasePlayerDiagnostic('generation=$generation $fields');
+  }
+
+  void _beginMediaGeneration() {
+    _decoderProbeGeneration++;
+    _decoderProbeToken++;
+    _rendererStartupGuardToken++;
+    _rendererStartupValidationGeneration = -1;
+    _decoderProbeTimer?.cancel();
+    _decoderProbeTimer = null;
+    _decoderProbeParams = null;
+    _lastDecoderDiagnosticSignature = null;
+    _playbackUiClock.beginMedia();
+    _activeSkipSegmentUi.clear();
+  }
+
+  Future<void> _openMedia(
+    mk.Media media, {
+    required bool play,
+    bool? desiredPlay,
+  }) async {
+    _activeOpenedMedia = media;
+    _activeMediaShouldPlay = desiredPlay ?? play;
+    _activeMediaUserPaused = false;
+    _beginMediaGeneration();
+    final remedy = _tvosDecodeRemedy;
+    if (remedy != null) {
+      // AWAITED before open: remedy properties are ordinary runtime options
+      // on a reused native player — this is the boundary that restores them
+      // (and pre-applies the session hint) so a previous file's ladder can
+      // never leak into this one.
+      final generation = _decoderProbeGeneration;
+      await remedy.onNewMedia(generation);
+      // A rapid zap can start a newer open while the restore ran; the newer
+      // call owns the player now.
+      if (_screenDisposed || generation != _decoderProbeGeneration) return;
+    }
+    return _player.open(media, play: play);
+  }
+
+  void _releasePlayerDiagnostic(String fields) {
+    final message = 'DEBRIFY_PLAYER_DECODER $fields';
+    if (Platform.isAndroid) {
+      // A dedicated native tag lets release captures select only this
+      // privacy-safe line. Capturing Flutter's general stdout exposed unrelated
+      // service logs and must not be required for decoder diagnostics.
+      unawaited(
+        _androidPlayerDiagnosticChannel
+            .invokeMethod<void>('logDecoder', {'message': fields})
+            .catchError((_) {}),
+      );
+      return;
+    }
+    if (PlatformUtil.isTvOS) {
+      // tvOS release builds deliberately do not bridge every debugPrint call,
+      // because unrelated logs can contain private playback data. This narrow,
+      // privacy-safe diagnostic still needs to reach the Xcode/device console.
+      unawaited(
+        _tvReleaseLogChannel
+            .invokeMethod<void>('log', message)
+            .catchError((_) {}),
+      );
+      return;
+    }
+
+    // Intentional: print reaches desktop process consoles in release builds.
+    // Keep this payload free of titles, URLs and account IDs.
+    // ignore: avoid_print
+    print(message);
   }
 
   @override
   void didUpdateWidget(covariant VideoPlayerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // `hideOptions` / `hideSeekbar` arrive through the widget, not through an
+    // inherited dependency, so didChangeDependencies never fires for them.
+    _refreshDockGeometry();
     if (widget.channelName != oldWidget.channelName) {
       final String? trimmed = widget.channelName?.trim();
       if ((trimmed == null || trimmed.isEmpty) && _currentChannelName != null) {
@@ -2345,6 +3353,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_sleepTimerMode == SleepTimerMode.endOfItem) {
       _cancelSleepTimer();
       _sleepStopLatched = true;
+      _activeMediaShouldPlay = false;
       _showSleepTimerToast('Sleep timer — stopping here');
       return;
     }
@@ -2659,6 +3668,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       return;
     }
 
+    if (kUnifiedPlayerMenuEnabled) {
+      _openPlayerMenuQuick(PlayerMenuSection.shuffle);
+      return;
+    }
+
     _hideTimer?.cancel();
     final choice = await showDialog<String>(
       context: context,
@@ -2706,24 +3720,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (choice == 'once') {
       await _playRandomOnce(disableContinuousShuffle: true);
     } else if (choice == 'continuous') {
-      if (_continuousShuffleEnabled) {
-        setState(() {
-          _continuousShuffleEnabled = false;
-          _shuffleBag.clear();
-        });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Continuous shuffle off')));
-      } else {
-        setState(() {
-          _continuousShuffleEnabled = true;
-          _shuffleBag.clear();
-        });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Continuous shuffle on')));
-        await _playRandomOnce(disableContinuousShuffle: false);
-      }
+      await _toggleContinuousShuffle();
+    }
+  }
+
+  Future<void> _toggleContinuousShuffle() async {
+    if (_continuousShuffleEnabled) {
+      setState(() {
+        _continuousShuffleEnabled = false;
+        _shuffleBag.clear();
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Continuous shuffle off')));
+    } else {
+      setState(() {
+        _continuousShuffleEnabled = true;
+        _shuffleBag.clear();
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Continuous shuffle on')));
+      await _playRandomOnce(disableContinuousShuffle: false);
     }
   }
 
@@ -2890,6 +3908,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
+      _tvScrubGeneration++;
+      _tvAbandonScrub();
     });
 
     // Only show transition overlay for Debrify TV content (when requestMagicNext is available)
@@ -2976,7 +3996,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           } else {
             // Cancel any ongoing PikPak retry when switching to non-PikPak video
             _pikPakRetryId++;
-            await _player.open(
+            await _openMedia(
               mk.Media(url, httpHeaders: widget.httpHeaders),
               play: true,
             );
@@ -3132,6 +4152,64 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   /// Load default player settings (aspect)
+  /// The vertical band at the bottom of the screen the dock occupies.
+  ///
+  /// `classic` keeps the literal each consumer has always used; only the
+  /// styled dock, whose height is variable, reports a measured value. The
+  /// branch at six call sites is deliberate — one uniform value is impossible,
+  /// since the consumers' legacy constants are 160/28, 72 and 80.
+  double _dockBand(double legacy) =>
+      _dockStyle.isStyled ? math.max(legacy, _dockExtent.value) : legacy;
+
+  /// Where the skip-segment button sits above the bottom edge.
+  ///
+  /// The legacy value is not simply "160": it is 160 only while controls are
+  /// visible AND (television OR options shown), else 28. Televisions build
+  /// `TvControls`, so the styled path never engages there.
+  double _skipButtonBottom(
+    BuildContext context,
+    bool controlsVisible,
+    double dockExtent,
+  ) {
+    if (!_dockStyle.isStyled) {
+      return controlsVisible &&
+              (PlatformUtil.isTelevision || !widget.hideOptions)
+          ? 160
+          : 28;
+    }
+    // `infoPanel` mounts OUTSIDE the hideOptions guard, so a live panel can be
+    // on screen while `!hideOptions` is false.
+    final dockVisible =
+        controlsVisible &&
+        (_buildIptvInfoPanel(flush: true) != null ||
+            _buildDebrifyTvInfoPanel(flush: true) != null ||
+            !widget.hideOptions);
+    if (!dockVisible) return 28;
+    final inset = MediaQuery.paddingOf(context).bottom;
+    return math.max(28.0, dockExtent + 8 - inset);
+  }
+
+  Future<void> _loadDockPrefs() async {
+    final style = await StorageService.getPlayerDockStyle();
+    final palette = await StorageService.getPlayerDockPalette();
+    final size = await StorageService.getPlayerDockSize();
+    if (!mounted) return;
+    setState(() {
+      _dockStyle = PlayerDockStyle.fromPref(style);
+      _dockPalette = PlayerDockPalette.fromPref(palette);
+      _dockSize = PlayerDockSize.fromPref(size);
+      // Style/size are part of the geometry signature but arrive here, not
+      // through an inherited dependency.
+      _lastDockGeometrySignature = '';
+      // Deliberately NOT seeded to the viewport height. Over-protecting the
+      // whole screen kills every gesture until the first measurement, and it
+      // also strands the fallback case: when DockMetrics.compute returns null
+      // the classic subtree renders and no reporter is ever mounted, so the
+      // seed would never be corrected. 0 means `_dockBand` yields the legacy
+      // constant, which is exactly right for both.
+    });
+  }
+
   Future<void> _loadPlayerDefaults() async {
     // Load default aspect index
     final aspectIndex = await StorageService.getPlayerDefaultAspectIndex();
@@ -3146,11 +4224,32 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
     _playerGuideTokens = PlayerGuideTokens.of(_playerGuideStyle);
 
+    if (PlatformUtil.isTvOS) {
+      _tvosForceSoftwareDecode =
+          await StorageService.getTvosForceSoftwareDecode();
+    }
+
+    // Audio-output settings, preloaded for [_configurePlayerAudio] — the
+    // single owner of ao / audio-spdif / audio-channels
+    // (AUDIO_FIDELITY_PLAN.md).
+    if (!kIsWeb && Platform.isAndroid) {
+      _audioPassthroughEnabled =
+          await StorageService.getAudioPassthroughEnabled();
+      _systemAudioEffectsEnabled =
+          await StorageService.getPlayerSystemAudioEffects();
+    } else if (PlatformUtil.isTvOS || PlatformUtil.isIosMobile) {
+      _appleMultichannelEnabled =
+          await StorageService.getAppleMultichannelAudio();
+    }
+
     debugPrint('VideoPlayer: Loaded defaults - aspect=$_aspectMode');
   }
 
   /// Update subtitle style settings
   void _onSubtitleStyleChanged(SubtitleSettingsData settings) {
+    // Style saves are awaited before this fires, so it can land after the
+    // whole player route is gone (close right after adjusting a style).
+    if (!mounted) return;
     final offsetChanged =
         _subtitleSettings?.syncOffsetMs != settings.syncOffsetMs;
     setState(() {
@@ -3180,7 +4279,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _applySubtitleSyncOffset(0);
   }
 
+  /// Overlays inside the player share its route scope, which already has a
+  /// focused child (the player root) — so their `autofocus` is silently
+  /// discarded and the first OK does nothing. Releasing the current focus as
+  /// the overlay appears lets its autofocus node claim it.
+  void _tvReleaseFocusForOverlay() {
+    if (!PlatformUtil.isTelevision) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   void _showSyncOverlayPanel() {
+    _tvReleaseFocusForOverlay();
     setState(() {
       _showSyncOverlay = true;
       _controlsVisible.value = false;
@@ -3215,210 +4324,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Widget _buildSliderSyncOverlay() {
-    final settings = _subtitleSettings;
-    final ms = settings?.syncOffsetMs ?? 0;
-    final accent = settings?.syncOffsetColor ?? const Color(0xFF4CAF50);
-    final label = settings?.syncOffsetLabel ?? '0';
-    const minMs = SubtitleSettingsService.syncOffsetMinMs;
-    const maxMs = SubtitleSettingsService.syncOffsetMaxMs;
-    const step = SubtitleSettingsService.syncOffsetStepMs;
-
-    void update(int newMs) async {
-      final clamped = newMs.clamp(minMs, maxMs);
-      await SubtitleSettingsService.instance.setSyncOffsetMs(clamped);
-      _applySubtitleSyncOffset(clamped);
-      if (mounted) {
-        setState(() {
-          _subtitleSettings = _subtitleSettings?.copyWith(
-            syncOffsetMs: clamped,
-          );
-        });
-      }
-    }
-
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      child: GestureDetector(
-        onTap: () {},
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(32, 16, 32, 28),
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.bottomCenter,
-              end: Alignment.topCenter,
-              colors: [Color(0xCC000000), Color(0x00000000)],
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    'SUBTITLE SYNC',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: accent,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => update(0),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'Reset',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: _hideSyncOverlay,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'Done',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => update(ms - step),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.remove_rounded,
-                        color: Colors.white70,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderThemeData(
-                        activeTrackColor: accent,
-                        inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
-                        thumbColor: Colors.white,
-                        overlayColor: accent.withValues(alpha: 0.2),
-                        trackHeight: 4,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 8,
-                        ),
-                      ),
-                      child: Slider(
-                        value: ms.toDouble(),
-                        min: minMs.toDouble(),
-                        max: maxMs.toDouble(),
-                        divisions: (maxMs - minMs) ~/ step,
-                        onChanged: (v) => update(v.round()),
-                      ),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => update(ms + step),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.add_rounded,
-                        color: Colors.white70,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: Text(
-                  'Line picker is only available for addon subtitles',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    fontSize: 10,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 40),
-                    child: Text(
-                      '-1hr',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.35),
-                        fontSize: 9,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '0',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      fontSize: 9,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 40),
-                    child: Text(
-                      '+1hr',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.35),
-                        fontSize: 9,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+    return SyncStepperOverlay(
+      offsetMs: _subtitleSettings?.syncOffsetMs ?? 0,
+      onOffsetChanged: (ms) async {
+        final clamped = ms.clamp(
+          SubtitleSettingsService.syncOffsetMinMs,
+          SubtitleSettingsService.syncOffsetMaxMs,
+        );
+        await SubtitleSettingsService.instance.setSyncOffsetMs(clamped);
+        _applySubtitleSyncOffset(clamped);
+        if (mounted) {
+          setState(() {
+            _subtitleSettings = _subtitleSettings?.copyWith(
+              syncOffsetMs: clamped,
+            );
+          });
+        }
+      },
+      onDismiss: _hideSyncOverlay,
     );
   }
 
@@ -4976,12 +5899,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     Directory dir;
     if (Platform.isAndroid) {
       dir =
-          (await getExternalStorageDirectory()) ??
-          await getApplicationDocumentsDirectory();
+          (await getExternalStorageDirectory()) ?? await AppStorage.documents();
     } else {
-      dir =
-          (await getDownloadsDirectory()) ??
-          await getApplicationDocumentsDirectory();
+      dir = (await getDownloadsDirectory()) ?? await AppStorage.documents();
     }
     final sep = Platform.pathSeparator;
     final prefix = '${dir.path}${sep}Debrify${sep}Recordings$sep${base}_$stamp';
@@ -5019,6 +5939,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
+      _tvScrubGeneration++;
+      _tvAbandonScrub();
       _currentIptvIndex = index;
       _currentChannelNumber = channel.channelNumber ?? (index + 1);
       // The corner badge is painted from this pair; without the name it kept
@@ -5125,7 +6047,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // reports from here is this channel's, including a fast failure that
         // lands while open() is still awaiting.
         _iptvErrorsMuted = false;
-        await _player.open(media, play: true);
+        await _openMedia(media, play: true);
       } catch (e) {
         debugPrint('Player: IPTV channel switch failed: $e');
       }
@@ -5203,7 +6125,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }),
     ];
     try {
-      await _player.open(mk.Media(url), play: true);
+      await _openMedia(mk.Media(url), play: true);
       openDone = true;
     } catch (e) {
       debugPrint('Player: stremio candidate failed to open: $e');
@@ -5277,6 +6199,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
+      _tvScrubGeneration++;
+      _tvAbandonScrub();
       _currentSourceIndex = index;
     });
     _startTransitionOverlay();
@@ -5329,6 +6253,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted) return;
     setState(() {
       _isTransitioning = true;
+      _tvScrubGeneration++;
+      _tvAbandonScrub();
       _currentSourceIndex = sourceIndex;
     });
     _startTransitionOverlay();
@@ -5419,6 +6345,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
+      _tvScrubGeneration++;
+      _tvAbandonScrub();
       _currentSourceIndex = index;
     });
     _startTransitionOverlay();
@@ -5448,7 +6376,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     try {
-      await _player.open(mk.Media(url), play: !hasExternalAudio);
+      await _openMedia(
+        mk.Media(url),
+        play: !hasExternalAudio,
+        desiredPlay: true,
+      );
       // Wait for the new media to load before seeking
       await _waitForVideoReady();
       if (!mounted) return;
@@ -5593,6 +6525,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
+      _tvScrubGeneration++;
+      _tvAbandonScrub();
       _currentStremioTvChannelId = channelId;
       _dynamicTitle = title;
       _currentStremioTvContentImdbId = contentImdbId;
@@ -5626,7 +6560,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     try {
       _pikPakRetryId++;
-      await _player.open(mk.Media(url), play: true);
+      await _openMedia(mk.Media(url), play: true);
       _currentStreamUrl = url;
       await _player.setSubtitleTrack(mk.SubtitleTrack.no());
       if (startAtPercent != null && startAtPercent > 0) {
@@ -5744,6 +6678,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
+      _tvScrubGeneration++;
+      _tvAbandonScrub();
       _currentChannelId = channel.id;
       _currentChannelName = channel.name;
       if (channel.number != null) {
@@ -5804,10 +6740,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     });
 
-    // Show channel badge
-    if (widget.showChannelName && _channelBadgeText != null) {
-      _showChannelBadgeWithTimer();
-    }
+    _raiseDebrifyBanner();
 
     if (nextUrl.isEmpty) {
       setState(() {
@@ -5832,7 +6765,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     try {
       _pikPakRetryId++;
-      await _player.open(
+      await _openMedia(
         mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
         play: true,
       );
@@ -5869,6 +6802,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
+      _tvScrubGeneration++;
+      _tvAbandonScrub();
     });
     _startTransitionOverlay();
 
@@ -5929,10 +6864,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           _currentChannelNumber = channelNumber;
         }
       });
-      // Show channel badge when switching channels
-      if (widget.showChannelName && _channelBadgeText != null) {
-        _showChannelBadgeWithTimer();
-      }
+      _raiseDebrifyBanner();
     }
 
     if (nextUrl.isEmpty) {
@@ -5959,7 +6891,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       // Cancel any ongoing PikPak retry when switching channels
       _pikPakRetryId++;
-      await _player.open(
+      await _openMedia(
         mk.Media(nextUrl, httpHeaders: widget.httpHeaders),
         play: true,
       );
@@ -6006,6 +6938,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _clearBufferingIndicator();
     setState(() {
       _isTransitioning = true;
+      _tvScrubGeneration++;
+      _tvAbandonScrub();
     });
 
     final previousIndex = _findPreviousEpisodeIndex();
@@ -6120,6 +7054,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // exactly (see _maybeRestoreResume).
     bool preferLocalResume = false,
   }) async {
+    // A new item is being loaded: any scrub in flight belongs to the outgoing
+    // one and must never land on this one.
+    _tvScrubGeneration++;
+    _tvAbandonScrub();
     if (_activePlaylist == null ||
         index < 0 ||
         index >= _activePlaylist!.length) {
@@ -6237,13 +7175,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       } else {
         // Still use retry but without autoplay
         await _playPikPakVideoWithRetry(videoUrl);
+        _activeMediaShouldPlay = false;
         await _player.pause(); // Pause after loading if not autoplaying
       }
     } else {
       // Non-PikPak videos play normally
       // Cancel any ongoing PikPak retry when switching to non-PikPak video
       _pikPakRetryId++;
-      await _player.open(
+      await _openMedia(
         mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
         play: autoplay,
       );
@@ -6579,7 +7518,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     if (!isPikPak) {
       // Not a PikPak video, play normally
-      await _player.open(
+      await _openMedia(
         mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
         play: true,
       );
@@ -6609,7 +7548,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // This prevents resetting the video to 0:00 if it loads during a retry delay
     print('PikPak: Initial playback attempt - opening media...');
     try {
-      await _player.open(
+      await _openMedia(
         mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
         play: true,
       );
@@ -6757,7 +7696,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Try reopening the player (might help reactivate cold storage file)
         try {
-          await _player.open(
+          await _openMedia(
             mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
             play: true,
           );
@@ -6858,7 +7797,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
         // Try reopening the player for next attempt
         try {
-          await _player.open(
+          await _openMedia(
             mk.Media(videoUrl, httpHeaders: widget.httpHeaders),
             play: true,
           );
@@ -7156,6 +8095,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// visible PiP activity stays at `inactive` (see [_lifecycle]).
   void _pauseForBackground() {
     if (!Platform.isAndroid && !Platform.isIOS) return;
+    // A renderer restart has intentionally invalidated the old player and may
+    // not have created the replacement yet. Preserve playback intent without
+    // requiring either instance to be live at this exact lifecycle callback.
+    if (_rendererFallbackInProgress) {
+      _pausedByLifecycle = true;
+      if (_playerCreated) unawaited(_player.pause());
+      return;
+    }
     // _isTransitioning too, not just _isPlaying: mid-switch (next episode, a
     // zap) `playing` is briefly false while an open(play: true) is in flight.
     // Backgrounding in that window must still arm the flag, or the open lands
@@ -7175,6 +8122,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // "playback restarted behind a backgrounded app" to the guard in the
     // playing listener.
     _pausedByLifecycle = false;
+    // The replacement player will read the cleared lifecycle flag immediately
+    // before open/play. Calling play on the disposing instance would race the
+    // one-player ownership guarantee.
+    if (_rendererFallbackInProgress) return;
     if (!_playerCreated || !mounted) return;
     // Coming back from the background is not a request to un-stop the night:
     // if the sleep timer fired while we were away, stay paused until someone
@@ -7291,28 +8242,51 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _hideTimer?.cancel();
     _autosaveTimer?.cancel();
     _manualSelectionResetTimer?.cancel();
-    _channelBadgeTimer?.cancel();
-    _titleBadgeTimer?.cancel();
+    _debrifyBannerTimer?.cancel();
     _iptvZapHideTimer?.cancel();
     _iptvZapTicker?.cancel();
+    _tvScrubGeneration++; // invalidate any scrub still in flight
+    _tvBarScope.dispose();
+    _dockExtent.dispose();
+    _tvPlayPauseFocus.dispose();
+    _tvProgressFocus.dispose();
+    _tvRootFocus.dispose();
     _controlsVisible.removeListener(_onControlsVisibilityChanged);
     _controlsVisible.dispose();
     _seekHud.dispose();
     _verticalHud.dispose();
     _speedHoldHud.dispose();
     _recordLogSub?.cancel();
+    _decoderProbeGeneration++;
+    _decoderProbeToken++;
+    _rendererStartupGuardToken++;
+    _playerInstanceGeneration++;
+    _decoderProbeTimer?.cancel();
+    _decoderProbeTimer = null;
     _posSub?.cancel();
     _durSub?.cancel();
+    _playbackUiClock.dispose();
+    _activeSkipSegmentUi.dispose();
     _playSub?.cancel();
     _lastLiveChannelTimer?.cancel();
     _paramsSub?.cancel();
+    _tvosDecodeRemedy?.dispose();
+    _tvosDecodeRemedy = null;
     _completedSub?.cancel();
     _bufferingSub?.cancel();
     _iptvErrorSub?.cancel();
+    _rendererStartupErrorSub?.cancel();
     _bufferingDebounceTimer?.cancel();
     _showBufferingIndicator.dispose();
     _releaseAudioEffectSession();
-    if (_playerCreated) _player.dispose();
+    _screenDisposed = true;
+    if (_playerCreated) {
+      // The slot frees only once the native output has actually gone, not when
+      // disposal is requested — the same rule the trailer engines follow.
+      _player.dispose().whenComplete(_releaseVideoOutput);
+    } else {
+      _releaseVideoOutput();
+    }
     _transitionStopTimer?.cancel();
     _rainbowController.dispose();
     // Restore system brightness when exiting the player
@@ -7841,52 +8815,484 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
+  /// True while the auto-hide poll is being held off by a scrub, a pause, a
+  /// route or an overlay — so the tick that finds the blocker gone can grant a
+  /// full interval instead of hiding on the spot.
+  bool _tvAutoHideBlocked = false;
+
   void _scheduleAutoHide() {
     _hideTimer?.cancel();
     _hideTimer = Timer(VideoPlayerTimingConstants.controlsAutoHideDuration, () {
-      if (mounted) {
-        _controlsVisible.value = false;
+      if (!mounted) return;
+      // Televisions dismiss the dock on INACTIVITY, the way an OTT transport
+      // bar does, and only while something is actually playing. A paused TV
+      // bar staying up is correct — BACK is how you dismiss that one.
+      if (PlatformUtil.isTelevision) {
+        // Nothing on screen to dismiss — let the timer lapse rather than
+        // re-arming one that would poll forever behind a hidden bar.
+        if (!_controlsVisible.value) return;
+        // BLOCKED, not finished. A tracks/episodes sheet is a ROUTE: it takes
+        // focus, and the bar would be excluded underneath it, leaving nothing
+        // sane to focus when the sheet closes. A scrub owns the bar outright,
+        // and a paused player is meant to keep it.
+        //
+        // Re-arm instead of returning: this is a one-shot Timer, so a bare
+        // return SPENT it — a scrub or a sheet lasting longer than the
+        // interval meant the dock never auto-hid again for the rest of the
+        // session. Re-arming makes the block a pause, not a cancellation.
+        final route = ModalRoute.of(context);
+        if (_tvScrubTarget != null ||
+            !_isPlaying ||
+            (route != null && !route.isCurrent) ||
+            _anyPlayerOverlayOpen) {
+          _tvAutoHideBlocked = true;
+          _scheduleAutoHide();
+          return;
+        }
+        if (_tvAutoHideBlocked) {
+          // The blocker cleared somewhere inside the last poll. Start the
+          // interval again from NOW: closing a sheet must not be met by a
+          // countdown that already ran out behind it.
+          _tvAutoHideBlocked = false;
+          _scheduleAutoHide();
+          return;
+        }
+        // Deliberately NOT gated on "focus is inside the bar". Raising the bar
+        // always focuses Play/Pause, so that test is true for the entire life
+        // of the bar and the timer could never fire — the dock sat over
+        // playing video until the user pressed BACK. Every key that reaches
+        // the player and every bar action reschedules this timer, so what
+        // actually elapses here is INACTIVITY, which is what an OTT dock
+        // dismisses on. Route through _tvHideBar so focus leaves the bar
+        // before it is excluded; setting the flag alone would strand the
+        // remote on a node that no longer exists.
+        _tvHideBar();
+        return;
       }
+      _controlsVisible.value = false;
     });
+  }
+
+  // ---- Television transport bar -------------------------------------------
+
+  /// Raise the bar and put focus on Play/Pause (not the first button — the
+  /// control you want 90% of the time should be under the thumb already).
+  void _tvShowBar() {
+    _controlsVisible.value = true;
+    // A fresh raise starts from a clean slate: a stale "was blocked" left over
+    // from the previous time the bar was up would silently buy this one an
+    // extra interval before it could hide.
+    _tvAutoHideBlocked = false;
+    _scheduleAutoHide();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controlsVisible.value) return;
+      if (!_tvBarScope.hasFocus) _tvPlayPauseFocus.requestFocus();
+    });
+  }
+
+  /// Lower the bar and take focus back to the player root. Without the second
+  /// half the focused control is excluded from the tree and the remote dies.
+  void _tvHideBar() {
+    _controlsVisible.value = false;
+    _tvRootFocus.requestFocus();
+  }
+
+  /// Cinema scrub: hold LEFT/RIGHT to pause and preview a destination, OK to
+  /// confirm, BACK/DOWN to cancel. One seek on confirm, so the trackers and
+  /// resume see a single jump instead of a burst.
+  void _tvScrubBegin(int direction) {
+    if (_tvNoTimeline) return;
+    _tvScrubStartedAtGeneration = _tvScrubGeneration;
+    _tvScrubWasPlaying = _isPlaying;
+    if (_isPlaying) _player.pause();
+    _tvScrubTarget = _position;
+    _tvShowBar();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _tvScrubTarget != null) _tvProgressFocus.requestFocus();
+    });
+    _tvScrubStep(direction);
+  }
+
+  void _tvScrubStep(int direction) {
+    final base = _tvScrubTarget;
+    if (base == null) return;
+    // Accelerate with the hold: fine control at first, then long strides so a
+    // two-hour remux is crossable without holding the key for a minute.
+    final step = _tvScrubRepeats < 8
+        ? 10
+        : _tvScrubRepeats < 16
+        ? 30
+        : 60;
+    _tvScrubRepeats++;
+    final next = base + Duration(seconds: step * direction);
+    setState(() {
+      _tvScrubTarget = next < Duration.zero
+          ? Duration.zero
+          : (next > _duration ? _duration : next);
+    });
+    _scheduleAutoHide();
+  }
+
+  void _tvScrubCommit() {
+    final target = _tvScrubTarget;
+    // Captured when the scrub STARTED. Reading it here would always match and
+    // the guard would never fire — a scrub begun before a source switch would
+    // happily seek whatever replaced it.
+    final generation = _tvScrubStartedAtGeneration;
+    if (target == null) return;
+    setState(() => _tvScrubTarget = null);
+    _tvScrubRepeats = 0;
+    // A source switch or dispose bumps the generation; a confirm that lands
+    // afterwards must not seek whatever replaced the item being scrubbed.
+    if (generation != _tvScrubGeneration || !mounted) return;
+    _player.seek(target);
+    _traktScrobbleSeek(target);
+    _simklScrobbleSeek(target);
+    if (_tvScrubWasPlaying) _player.play();
+    _tvPlayPauseFocus.requestFocus();
+    // Fresh interval: the countdown that was running belonged to the scrub,
+    // and inheriting its remainder could drop the bar the instant OK lands.
+    _scheduleAutoHide();
+  }
+
+  /// Drop a scrub without seeking and without touching playback — the item it
+  /// belonged to is going away. Restoring "was playing" here would fight the
+  /// transition, which drives play/pause itself.
+  void _tvAbandonScrub() {
+    if (_tvScrubTarget == null) return;
+    _tvScrubTarget = null;
+    _tvScrubRepeats = 0;
+  }
+
+  void _tvScrubCancel() {
+    if (_tvScrubTarget == null) return;
+    setState(() => _tvScrubTarget = null);
+    _tvScrubRepeats = 0;
+    if (_tvScrubWasPlaying) _player.play();
+    _tvPlayPauseFocus.requestFocus();
+    _scheduleAutoHide();
+  }
+
+  /// The television bar. Reuses every flag the touch call site already
+  /// computes, so the two stay in step: live comes from the same
+  /// zap-banner signal, sources/guide/record from the same capability checks.
+  Widget _buildTvControls() {
+    // Live means a live CHANNEL — it decides which button set the dock shows.
+    // `hideSeekbar` is a different thing entirely: Magic/Debrify TV sets it on
+    // ordinary seekable VOD to hide the scrub bar, and treating it as live
+    // stripped episodes, sources and speed from those sessions.
+    final isLive = _iptvZapBannerOwnsIdentity;
+    final hasSources =
+        _effectiveSources != null &&
+        _effectiveSources!.isNotEmpty &&
+        (_effectiveResolver != null || widget.resolveSourceToPlaylist != null);
+    final hasGuide =
+        (_channelEntries.isNotEmpty && widget.requestChannelById != null) ||
+        _hasStremioTvGuide;
+
+    // BACK precedence, mounted with the bar so `canPop` is always current:
+    // cancel a scrub, else close an overlay, else lower the bar, else leave the
+    // player. Menu on tvOS arrives here rather than as a key event (measured),
+    // so this — not the key handler — is what makes BACK behave.
+    return PopScope(
+      canPop:
+          _tvScrubTarget == null &&
+          !_controlsVisible.value &&
+          !_anyPlayerOverlayOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !mounted) return;
+        if (_tvScrubTarget != null) {
+          _tvScrubCancel();
+          return;
+        }
+        if (_anyPlayerOverlayOpen) {
+          _closeTopPlayerOverlay();
+          return;
+        }
+        if (_controlsVisible.value) _tvHideBar();
+      },
+      child: TvControlsScope(
+        seek: (target) {
+          _player.seek(target);
+          _traktScrobbleSeek(target);
+          _simklScrobbleSeek(target);
+          _scheduleAutoHide();
+        },
+        child: TvControls(
+          title: widget.showVideoTitle && !widget.showChannelName
+              ? _getCurrentEpisodeTitle()
+              : '',
+          subtitle: widget.showVideoTitle && !widget.showChannelName
+              ? _getCurrentEpisodeSubtitle()
+              : null,
+          infoPanel:
+              _buildIptvInfoPanel(flush: true) ??
+              _buildDebrifyTvInfoPanel(flush: true),
+          clock: _playbackUiClock,
+          isPlaying: _isPlaying,
+          isLive: isLive,
+          isTransitioning: _isTransitioning,
+          scopeNode: _tvBarScope,
+          playPauseFocusNode: _tvPlayPauseFocus,
+          progressFocusNode: _tvProgressFocus,
+          // Dead controls are never focusable: a live stream or an unknown
+          // duration has nothing to scrub, so traversal skips the row entirely
+          // rather than parking the remote on it.
+          progressFocusable: !_tvNoTimeline,
+          // OK is claimed by the dock's own buttons, so those presses never
+          // reach _handleTvKey and never restarted the countdown.
+          onInteract: _scheduleAutoHide,
+          scrubPreview: _tvScrubTarget,
+          onPlayPause: _togglePlay,
+          onShowTracks: () => _showTracksSheet(context),
+          onSpeed: _onSpeedButton,
+          onAspect: _onAspectButton,
+          onSleepTimer: _showSleepTimerSheet,
+          sleepTimerLabel: _sleepTimerButtonLabel,
+          speed: _playbackSpeed,
+          aspectMode: _aspectMode,
+          hideOptions: widget.hideOptions,
+          onNext: _hasIptvNext
+              ? () => _switchToIptvChannel(_currentIptvIndex + 1)
+              : _canZapIptvChannel
+              ? () => _zapIptvChannel(1)
+              : (_hasAnyNext ? _goToNextEpisode : null),
+          onPrevious: _hasIptvPrevious
+              ? () => _switchToIptvChannel(_currentIptvIndex - 1)
+              : _canZapIptvChannel
+              ? () => _zapIptvChannel(-1)
+              : (_hasPreviousEpisode() ? _goToPreviousEpisode : null),
+          onNextChannel: widget.requestNextChannel != null
+              ? _goToNextChannel
+              : null,
+          onShowPlaylist: _activePlaylist != null && _activePlaylist!.isNotEmpty
+              ? () => _showPlaylistSheet(context)
+              : null,
+          onShowSources: hasSources ? _showSourceSheetOverlay : null,
+          onShowGuide: hasGuide
+              ? (_channelEntries.isNotEmpty && widget.requestChannelById != null
+                    ? _showChannelGuideOverlay
+                    : _showStremioTvGuideOverlay)
+              : null,
+          onShowIptvChannels: _effectiveIptvChannels?.isNotEmpty == true
+              ? _showIptvChannelSheetOverlay
+              : null,
+          hasRecord: _canRecord,
+          isRecording: _recordingActiveNow,
+          onRecord: _canRecord ? _toggleRecording : null,
+        ),
+      ),
+    );
+  }
+
+  /// Any of the player's in-route overlays. They are not routes, so BACK has to
+  /// close them explicitly or it would pop the whole player instead.
+
+  /// Lets BACK reach the IPTV guide's own contract: from the schedule pane it
+  /// returns to the channel pane, and closing restores the category an
+  /// unfinished all-category search interrupted. On tvOS the Menu press never
+  /// reaches the sheet as a key, so the host has to hand it over.
+  final GlobalKey<IptvChannelSheetState> _iptvSheetKey =
+      GlobalKey<IptvChannelSheetState>();
+
+  /// True once, for the tail of the very BACK press that closed an overlay.
+  ///
+  /// Driven by an explicit signal from the overlay rather than a clock: a close
+  /// by OK, tap or selection must not swallow the user's next deliberate BACK,
+  /// which a pure time window did.
+  bool get _overlayJustClosed => TvOverlayBack.consume();
+
+  bool get _anyPlayerOverlayOpen =>
+      _showSyncOverlay ||
+      _showChannelGuide ||
+      _showIptvChannelSheet ||
+      _showSourceSheet ||
+      _showStremioTvGuide ||
+      _showPlayerMenu;
+
+  /// Closes the topmost overlay and returns focus to the player root, which the
+  /// individual hide methods do not do on their own.
+  void _closeTopPlayerOverlay() {
+    if (_showPlayerMenu) {
+      // Delegate: BACK inside the menu walks values -> rail before closing
+      // (tvOS Menu arrives here via PopScope, never as a key).
+      if (_playerMenuKey.currentState?.handleHostBack() != true) {
+        _hidePlayerMenu();
+      }
+      // Still open means the press was spent on a pane change.
+      if (_showPlayerMenu) return;
+    } else if (_showSyncOverlay) {
+      _hideSyncOverlay();
+    } else if (_showChannelGuide) {
+      _hideChannelGuideOverlay();
+    } else if (_showIptvChannelSheet) {
+      // Delegate: the guide's own back walks schedule -> channels first, and
+      // its close restores a search-interrupted category.
+      if (_iptvSheetKey.currentState?.handleHostBack() != true) {
+        _hideIptvChannelSheet();
+      }
+      // It may still be open (pane change rather than close). Taking focus to
+      // the player root would leave its DPAD dead.
+      if (_showIptvChannelSheet) return;
+    } else if (_showSourceSheet) {
+      _hideSourceSheet();
+    } else if (_showStremioTvGuide) {
+      _hideStremioTvGuide();
+    } else {
+      return;
+    }
+    if (PlatformUtil.isTelevision) _tvRootFocus.requestFocus();
+  }
+
+  /// Opens whichever guide this session actually has, in the order the dock
+  /// offers them. Returns false when there is none, so the caller can fall back
+  /// to raising the transport bar.
+  bool _openTvGuide() {
+    if (_channelEntries.isNotEmpty && widget.requestChannelById != null) {
+      _showChannelGuideOverlay();
+      return true;
+    }
+    if (_hasStremioTvGuide) {
+      _showStremioTvGuideOverlay();
+      return true;
+    }
+    if (_effectiveIptvChannels?.isNotEmpty == true) {
+      _showIptvChannelSheetOverlay();
+      return true;
+    }
+    return false;
+  }
+
+  /// Returns null to let the desktop mapping below handle the key.
+  KeyEventResult? _handleTvKey(LogicalKeyboardKey key) {
+    // Not const: LogicalKeyboardKey overrides ==, which a const set forbids.
+    // The Siri Remote's click pad arrives as `enter` (measured on device);
+    // `select`/`gameButtonA` cover Android TV remotes and game controllers.
+    final activate = <LogicalKeyboardKey>{
+      LogicalKeyboardKey.enter,
+      LogicalKeyboardKey.numpadEnter,
+      LogicalKeyboardKey.select,
+      LogicalKeyboardKey.gameButtonA,
+    };
+    final isLeft = key == LogicalKeyboardKey.arrowLeft;
+    final isRight = key == LogicalKeyboardKey.arrowRight;
+    final isBack =
+        key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack;
+
+    // A scrub in flight owns the remote completely.
+    if (_tvScrubTarget != null) {
+      if (isLeft || isRight) {
+        _tvScrubStep(isRight ? 1 : -1);
+      } else if (activate.contains(key)) {
+        _tvScrubCommit();
+      } else if (isBack || key == LogicalKeyboardKey.arrowDown) {
+        _tvScrubCancel();
+      }
+      return KeyEventResult.handled;
+    }
+
+    // Nothing is actionable until the first frame, and acting during a
+    // transition would drive the OUTGOING item.
+    // Nothing is actionable before the first frame, and during a switch most
+    // actions would drive the OUTGOING item. Two exceptions, both deliberate:
+    // BACK must always get you out (a tune can hang on the network), and
+    // LEFT/RIGHT must still zap, because a newer switch is allowed to
+    // supersede a slow one (_iptvSwitchTicket).
+    if (!_isReady || _isTransitioning) {
+      if (isBack) return null;
+      // Zap directly rather than falling through: the mapping below only zaps
+      // when the bar is hidden, so with it up the press would reach the seek
+      // branch and seek the OUTGOING item.
+      if ((isLeft || isRight) && _canZapIptvChannel) {
+        _zapIptvChannel(isRight ? 1 : -1);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (!_controlsVisible.value) {
+      if (activate.contains(key)) {
+        // While a skip is offered it owns OK: the button is on screen naming
+        // the action, and it lives outside the bar's focus scope so the remote
+        // has no other way to reach it.
+        if (_activeSkipSegment != null) {
+          _skipActiveSegment();
+          return KeyEventResult.handled;
+        }
+        // Native TV player: OK both toggles playback and raises the bar.
+        _togglePlay();
+        _tvShowBar();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.arrowDown) {
+        _tvShowBar();
+        return KeyEventResult.handled;
+      }
+      // UP opens the guide, matching the native TV player. The desktop mapping
+      // below only knows the Debrify-TV and Stremio guides, so on an IPTV
+      // session it fell through to volume and UP appeared dead.
+      if (key == LogicalKeyboardKey.arrowUp) {
+        if (_openTvGuide()) return KeyEventResult.handled;
+        _tvShowBar();
+        return KeyEventResult.handled;
+      }
+      if ((isLeft || isRight) && _tvNoTimeline) {
+        // No timeline to move along. Hand the key down ONLY when the mapping
+        // below has something real to do with it — zapping to the next
+        // channel. Falling through unconditionally reached the generic 10s
+        // seek, which on a live stream is a blind jump on a rolling window and
+        // on a `hideSeekbar` session is exactly the seek that session turned
+        // off. And never enter a scrub whose progress row is hidden.
+        return _canZapIptvChannel ? null : KeyEventResult.handled;
+      }
+      if ((isLeft || isRight) && !_canZapIptvChannel) {
+        // Repeats arriving in quick succession mean the key is held; the third
+        // one enters scrub. Slower taps stay 10s nudges, so a single press
+        // still does the obvious thing.
+        final now = DateTime.now();
+        final last = _tvLastArrowAt;
+        _tvScrubRepeats =
+            (last != null && now.difference(last).inMilliseconds < 400)
+            ? _tvScrubRepeats + 1
+            : 0;
+        _tvLastArrowAt = now;
+        if (_tvScrubRepeats >= 2 && _duration > Duration.zero) {
+          _tvScrubRepeats = 0;
+          _tvScrubBegin(isRight ? 1 : -1);
+          return KeyEventResult.handled;
+        }
+      }
+      // UP keeps its existing precedence (channel guide, Stremio guide) and
+      // LEFT/RIGHT fall through to zap-or-seek, both already below.
+      return null;
+    }
+
+    // Bar up: it owns the DPAD and OK.
+    if (isBack) {
+      _tvHideBar();
+      return KeyEventResult.handled;
+    }
+    if ((isLeft || isRight) && _tvProgressFocus.hasFocus) {
+      if (!_tvNoTimeline) {
+        _tvScrubBegin(isRight ? 1 : -1);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.handled; // nothing to scrub; don't fall through
+    }
+    _scheduleAutoHide();
+    // Traversal and activation belong to the bar's own focus tree.
+    return KeyEventResult.ignored;
   }
 
   void _toggleControls() {
     _controlsVisible.value = !_controlsVisible.value;
     if (_controlsVisible.value) {
       _scheduleAutoHide();
-      // Live IPTV keeps its identity in the banner — already dismissed by the
-      // visibility listener above — so the corner badges stay down.
-      if (_iptvZapBannerOwnsIdentity) return;
-      // Show channel badge when controls appear (if enabled)
-      if (widget.showChannelName && _channelBadgeText != null) {
-        _showChannelBadgeWithTimer();
-      }
-      // Show title badge when controls appear (if enabled and in Debrify TV)
-      if (widget.showVideoTitle && widget.showChannelName) {
-        _showTitleBadgeWithTimer();
-      }
+      // Identity rides IN the bar (IPTV zap panel / Debrify TV banner both
+      // embed as the dock's info panel), so nothing floats when it rises.
     }
   }
 
-  void _showChannelBadgeWithTimer() {
-    // Cancel any existing timer
-    _channelBadgeTimer?.cancel();
-    // Show the badge
-    setState(() {
-      _showChannelBadge = true;
-    });
-    // Hide after 4 seconds (matching Android TV behavior)
-    _channelBadgeTimer = Timer(
-      VideoPlayerTimingConstants.badgeDisplayDuration,
-      () {
-        if (mounted) {
-          setState(() {
-            _showChannelBadge = false;
-          });
-        }
-      },
-    );
-  }
 
   /// Adopt [channel] as the banner's subject and start its guide lookup.
   ///
@@ -7936,15 +9342,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   void _onControlsVisibilityChanged() {
+    _syncPlaybackClockVisibility();
     // The dock carries its own copy of the panel, so the floating one goes the
     // instant the dock opens. Fading it would cross-dissolve two copies of the
     // same panel at two different heights.
     if (_controlsVisible.value) {
       _hideIptvZapBanner(immediate: true);
+      _hideDebrifyBanner(immediate: true);
       // The Record button is about to be looked at — make sure it reflects
       // engine captures stopped from the notification (which this screen
       // otherwise never hears about).
       if (_engineFlagOn) unawaited(_refreshEngineRecordingState());
+    }
+    // Return focus to the player root whenever the bar goes down, so the
+    // remote is never left pointing at a control that has just been excluded
+    // from the tree.
+    if (PlatformUtil.isTelevision) {
+      // Not while an overlay is up: the source / guide / channel sheets
+      // autofocus their own KeyboardListener and drive a virtual focus index,
+      // so taking focus back here would leave them unable to see any keys.
+      if (!_controlsVisible.value &&
+          _tvBarScope.hasFocus &&
+          !_anyPlayerOverlayOpen) {
+        _tvRootFocus.requestFocus();
+      }
     }
     _syncIptvBannerTicker();
   }
@@ -8018,25 +9439,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
-  void _showTitleBadgeWithTimer() {
-    // Cancel any existing timer
-    _titleBadgeTimer?.cancel();
-    // Show the badge
-    setState(() {
-      _showTitleBadge = true;
-    });
-    // Hide after 4 seconds (matching Android TV behavior)
-    _titleBadgeTimer = Timer(
-      VideoPlayerTimingConstants.badgeDisplayDuration,
-      () {
-        if (mounted) {
-          setState(() {
-            _showTitleBadge = false;
-          });
-        }
-      },
-    );
-  }
 
   Future<void> _handleDoubleTap(TapDownDetails details) async {
     final box = context.findRenderObject() as RenderBox?;
@@ -8049,7 +9451,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // If controls visible, ignore double-taps near top/bottom bars to not clash with buttons/slider
     if (_controlsVisible.value) {
       const topBar = 72.0;
-      const bottomBar = 72.0;
+      final bottomBar = _dockBand(72.0);
       if (localPos.dy < topBar || localPos.dy > size.height - bottomBar) return;
     }
 
@@ -8083,7 +9485,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (box != null) {
         final size = box.size;
         const topBar = 72.0;
-        const bottomBar = 72.0;
+        final bottomBar = _dockBand(72.0);
         final dy = details.localPosition.dy;
         if (dy < topBar || dy > size.height - bottomBar) {
           _panIgnore = true;
@@ -8183,10 +9585,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _togglePlay() {
     if (!_isReady) return;
     if (_isPlaying) {
+      _activeMediaUserPaused = true;
+      _activeMediaShouldPlay = false;
       _player.pause();
     } else {
       // An explicit press is the one thing that clears a sleep stop.
       _sleepStopLatched = false;
+      _activeMediaUserPaused = false;
+      _activeMediaShouldPlay = true;
       _player.play();
     }
     _scheduleAutoHide();
@@ -8306,6 +9712,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   };
 
   Future<void> _showSleepTimerSheet() async {
+    if (kUnifiedPlayerMenuEnabled) {
+      _openPlayerMenuQuick(PlayerMenuSection.sleep);
+      return;
+    }
     _hideTimer?.cancel();
     final picked = await SleepTimerSheet.show(
       context,
@@ -8319,7 +9729,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (!mounted) return;
     _scheduleAutoHide();
     if (picked == null) return;
+    _applySleepTimerSelection(picked);
+  }
 
+  void _applySleepTimerSelection(SleepTimerSelection picked) {
     switch (picked.mode) {
       case SleepTimerMode.off:
         _cancelSleepTimer();
@@ -8367,6 +9780,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<void> _fireSleepTimer() async {
     _cancelSleepTimer();
     _sleepStopLatched = true;
+    _activeMediaShouldPlay = false;
     if (!_playerCreated) return;
     await _saveResume();
     await _player.pause();
@@ -8394,6 +9808,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _saveResume();
   }
 
+  /// Speed button: the menu's Speed pane when the unified menu is on, the
+  /// old blind cycle otherwise. Keyboard/long-press cycling is untouched.
+  void _onSpeedButton() {
+    if (kUnifiedPlayerMenuEnabled) {
+      _openPlayerMenuQuick(PlayerMenuSection.speed);
+      return;
+    }
+    _changeSpeed();
+  }
+
+  void _onAspectButton() {
+    if (kUnifiedPlayerMenuEnabled) {
+      _openPlayerMenuQuick(PlayerMenuSection.aspect);
+      return;
+    }
+    _cycleAspectMode();
+  }
+
+  void _setPlaybackSpeed(double v) {
+    _player.setRate(v);
+    setState(() => _playbackSpeed = v);
+    _saveResume();
+  }
+
+  void _setAspectModeDirect(AspectMode m) {
+    if (m == _aspectMode) return;
+    setState(() => _aspectMode = m);
+    _saveResume();
+  }
+
   void _onLongPressStart(LongPressStartDetails details) {
     // Respect the same lock used by the single-tap path
     if (widget.hideBackButton && widget.hideOptions) return;
@@ -8411,7 +9855,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // When controls are visible, skip top/bottom bar regions so buttons/slider win
       if (_controlsVisible.value) {
         const topBar = 72.0;
-        const bottomBar = 72.0;
+        final bottomBar = _dockBand(72.0);
         if (localPos.dy < topBar || localPos.dy > size.height - bottomBar) {
           return;
         }
@@ -8455,6 +9899,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   BoxFit _currentFit() => AspectModeUtils.getBoxFitForMode(_aspectMode);
 
   // Build subtitle view configuration from settings
+  // NOTE: the television bar deliberately does NOT move subtitles.
+  //
+  // Two attempts made things worse: driving mpv's `sub-visibility` drew every
+  // line twice (media_kit renders subtitles itself and keeps mpv's own
+  // renderer off), and padding them upward fought the user's own subtitle
+  // elevation setting and threw them into the middle of the screen. The bar is
+  // transient and the elevation setting already exists for exactly this
+  // preference, so subtitles stay where the user put them.
   mkv.SubtitleViewConfiguration _buildSubtitleViewConfig() {
     final settings = _subtitleSettings;
     if (settings == null) {
@@ -8533,10 +9985,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-  Widget _buildChannelBadge(String badgeText) =>
-      ChannelBadge(badgeText: badgeText);
-
-  Widget _buildTitleBadge(String title) => TitleBadge(title: title);
 
   /// One truth for "is this playback being recorded right now", shared by
   /// the dock's Record button and the styled zap banner's REC tag — the
@@ -8549,6 +9997,93 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// The live-IPTV panel, or null when this playback has no channel identity
   /// to present. [flush] embeds it in the controls dock; otherwise it floats.
+  /// Debrify TV owns the session identity when the launch asked for the
+  /// channel chrome and no live IPTV banner does.
+  bool get _debrifyTvOwnsIdentity =>
+      widget.showChannelName && !_iptvZapBannerOwnsIdentity;
+
+  Widget? _buildDebrifyTvInfoPanel({required bool flush}) {
+    if (!_debrifyTvOwnsIdentity) return null;
+    final name = (_currentChannelName ?? widget.channelName)?.trim();
+    final title = widget.showVideoTitle ? _getCurrentEpisodeTitle() : null;
+    if ((name == null || name.isEmpty) &&
+        _currentChannelNumber == null &&
+        (title == null || title.isEmpty)) {
+      return null;
+    }
+    return DebrifyTvBanner(
+      channelNumber: _currentChannelNumber,
+      channelName: name,
+      title: title,
+      clock: _playbackUiClock,
+      // hideSeekbar keeps runtimes a surprise — the banner must not leak
+      // what the dock hides.
+      showProgress: !widget.hideSeekbar,
+      flush: flush,
+    );
+  }
+
+  /// The clock is an optimization gate — it only publishes while something
+  /// on screen reads it. That used to mean "the bar"; the floating Debrify
+  /// banner's progress row reads it too (only when the session shows
+  /// progress at all).
+  void _syncPlaybackClockVisibility() {
+    _playbackUiClock.setVisible(
+      _controlsVisible.value ||
+          (_showDebrifyBanner && _debrifyTvOwnsIdentity &&
+              !widget.hideSeekbar),
+    );
+  }
+
+  /// Raises the floating lower-third (tune, zap, launch). The hide timer
+  /// re-arms while a channel switch is still resolving — the old corner
+  /// badges timed out DURING the resolve, which is why tvOS never saw them.
+  void _raiseDebrifyBanner() {
+    if (!_debrifyTvOwnsIdentity) return;
+    if (_anyPlayerOverlayOpen || _controlsVisible.value) return;
+    _debrifyBannerTimer?.cancel();
+    setState(() {
+      _showDebrifyBanner = true;
+      _debrifyBannerFloatingMounted = true;
+    });
+    _syncPlaybackClockVisibility();
+    _armDebrifyBannerTimer();
+  }
+
+  void _armDebrifyBannerTimer() {
+    // While resolving, poll fast — so the FULL display window is granted
+    // from (roughly) the moment the new stream lands, not from zap start.
+    final resolving = _isTransitioning;
+    _debrifyBannerTimer = Timer(
+      resolving
+          ? const Duration(milliseconds: 400)
+          : VideoPlayerTimingConstants.badgeDisplayDuration,
+      () {
+        if (!mounted) return;
+        if (resolving || _isTransitioning) {
+          // Either this was a resolve-poll, or a new switch began
+          // mid-window: keep the identity up and re-evaluate.
+          _armDebrifyBannerTimer();
+          return;
+        }
+        setState(() => _showDebrifyBanner = false);
+        _syncPlaybackClockVisibility();
+      },
+    );
+  }
+
+  void _hideDebrifyBanner({bool immediate = false}) {
+    _debrifyBannerTimer?.cancel();
+    if (!_showDebrifyBanner && !(immediate && _debrifyBannerFloatingMounted)) {
+      return;
+    }
+    setState(() {
+      _showDebrifyBanner = false;
+      if (immediate) _debrifyBannerFloatingMounted = false;
+    });
+    _syncPlaybackClockVisibility();
+  }
+
   Widget? _buildIptvInfoPanel({required bool flush}) {
     final channel = _iptvZapChannel;
     if (channel == null || !_iptvZapBannerOwnsIdentity) return null;
@@ -8587,10 +10122,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   Widget build(BuildContext context) {
     final isReady = _isReady;
-    final duration = _duration;
-    final pos = _position;
-    final activeSkipSegment = _activeSkipSegment;
-    final String? channelBadgeText = _channelBadgeText;
     // In the PiP window, hide every interactive/decorative layer so only the
     // video texture (and the buffering spinner) shows. Restores on exit.
     final inPip = _isPipActive;
@@ -8603,10 +10134,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         right: false,
         bottom: false,
         child: Focus(
+          focusNode: _tvRootFocus,
           autofocus: true,
           onKey: (node, event) {
             if (event is! RawKeyDownEvent) return KeyEventResult.ignored;
             final key = event.logicalKey;
+
+            // Unified menu is open. Like the IPTV sheet, it owns every key
+            // including BACK (values -> rail -> close, with TvOverlayBack
+            // marking the closing press); its KeyboardListener holds focus.
+            if (_showPlayerMenu) {
+              return KeyEventResult.ignored;
+            }
 
             // Sync overlay is open - handle its keys first
             if (_showSyncOverlay) {
@@ -8629,14 +10168,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               return KeyEventResult.ignored;
             }
 
-            // IPTV channel sheet is open - handle its keys first
+            // IPTV channel sheet is open. It owns BACK itself — from the
+            // schedule pane it returns to channels rather than closing, and
+            // closing restores a search-interrupted category. Handling BACK
+            // here as well fired both: the sheet changed pane and this closed
+            // it. Its KeyboardListener holds focus (it claims it on mount), so
+            // every key including BACK reaches it first.
             if (_showIptvChannelSheet) {
-              if (key == LogicalKeyboardKey.escape ||
-                  key == LogicalKeyboardKey.goBack) {
-                _hideIptvChannelSheet();
-                return KeyEventResult.handled;
-              }
-              // Let IPTV channel sheet handle other keys
               return KeyEventResult.ignored;
             }
 
@@ -8660,6 +10198,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               }
               // Let guide sheet handle other keys
               return KeyEventResult.ignored;
+            }
+
+            // ---- Television remote ------------------------------------
+            // Everything below was written for a desktop keyboard: letters,
+            // volume on UP/DOWN, arrows that always seek. A remote has no
+            // letters, its OK arrives as `enter`, and while the bar is up the
+            // DPAD belongs to the bar. Mirrors the native Android TV player so
+            // both players behave the same. Touch and desktop never enter here.
+            if (PlatformUtil.isTelevision) {
+              final tvResult = _handleTvKey(key);
+              if (tvResult != null) return tvResult;
             }
 
             // A -> Aspect ratio
@@ -8854,6 +10403,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 if (!mounted) return;
                 windowManager.setFullScreen(!isFullScreen);
               });
+              return KeyEventResult.handled;
+            }
+
+            // An overlay closed itself on this very BACK press (see
+            // [TvOverlayBack]): the press is already spent, so it must not
+            // also quit the player.
+            if ((key == LogicalKeyboardKey.escape ||
+                    key == LogicalKeyboardKey.goBack) &&
+                _overlayJustClosed) {
               return KeyEventResult.handled;
             }
 
@@ -9095,6 +10653,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         pos,
                         size,
                         controlsVisible: _controlsVisible.value,
+                        bottomBar: _dockBand(72.0),
                       )) {
                         _toggleControls();
                       }
@@ -9116,147 +10675,225 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         duration: const Duration(milliseconds: 150),
                         child: IgnorePointer(
                           ignoring: !visible,
-                          child: Controls(
-                            // Live IPTV leaves the top bar empty on purpose:
-                            // its identity is in the info panel below, and
-                            // repeating the channel in both corners is the
-                            // duplication this redesign set out to remove.
-                            title:
-                                widget.showVideoTitle && !widget.showChannelName
-                                ? _getCurrentEpisodeTitle()
-                                : '',
-                            subtitle:
-                                widget.showVideoTitle && !widget.showChannelName
-                                ? _getCurrentEpisodeSubtitle()
-                                : null,
-                            // Merged into the dock: the channel panel rides on
-                            // top of the transport bar as one surface.
-                            infoPanel: _buildIptvInfoPanel(flush: true),
-                            enhancedMetadata: _getEnhancedMetadata(),
-                            duration: duration,
-                            position: pos,
-                            isPlaying: _isPlaying,
-                            isReady: isReady,
-                            onPlayPause: _togglePlay,
-                            onBack: () => Navigator.of(context).pop(),
-                            onAspect: _cycleAspectMode,
-                            onSpeed: _changeSpeed,
-                            onSleepTimer: _showSleepTimerSheet,
-                            sleepTimerLabel: _sleepTimerButtonLabel,
-                            speed: _playbackSpeed,
-                            aspectMode: _aspectMode,
-                            isLandscape: _landscapeLocked,
-                            onRotate: _toggleOrientation,
-                            hasPlaylist:
-                                _activePlaylist != null &&
-                                _activePlaylist!.isNotEmpty,
-                            onShowPlaylist: () => _showPlaylistSheet(context),
-                            onShowTracks: () => _showTracksSheet(context),
-                            onSeekBarChangedStart: () {
-                              _isSeekingWithSlider = true;
-                            },
-                            onSeekBarChanged: (v) {
-                              final newPos = duration * v;
-                              _player.seek(newPos);
-                              _lastSliderSeekPos = newPos;
-                            },
-                            onSeekBarChangeEnd: () {
-                              _isSeekingWithSlider = false;
-                              _scheduleAutoHide();
-                              if (_lastSliderSeekPos != null) {
-                                _traktScrobbleSeek(_lastSliderSeekPos!);
-                                _simklScrobbleSeek(_lastSliderSeekPos!);
-                                _lastSliderSeekPos = null;
-                              }
-                            },
-                            // IPTV episode list (series/VOD) gets Next/Previous
-                            // that walk the season; a live channel gets the
-                            // same pair as previous/next channel, which is the
-                            // only way to zap without a CH +/- key. Falls back
-                            // to the Debrify-TV episode/playlist flow.
-                            onNext: _hasIptvNext
-                                ? () => _switchToIptvChannel(
-                                    _currentIptvIndex + 1,
-                                  )
-                                : _canZapIptvChannel
-                                ? () => _zapIptvChannel(1)
-                                : (_hasAnyNext ? _goToNextEpisode : null),
-                            onNextChannel: widget.requestNextChannel != null
-                                ? _goToNextChannel
-                                : null,
-                            onPrevious: _hasIptvPrevious
-                                ? () => _switchToIptvChannel(
-                                    _currentIptvIndex - 1,
-                                  )
-                                : _canZapIptvChannel
-                                ? () => _zapIptvChannel(-1)
-                                : (_hasPreviousEpisode()
-                                      ? _goToPreviousEpisode
-                                      : null),
-                            hasNext:
-                                _hasAnyNext ||
-                                _hasIptvNext ||
-                                _canZapIptvChannel,
-                            hasNextChannel: widget.requestNextChannel != null,
-                            hasGuide:
-                                (_channelEntries.isNotEmpty &&
-                                    widget.requestChannelById != null) ||
-                                _hasStremioTvGuide,
-                            onShowGuide:
-                                _channelEntries.isNotEmpty &&
-                                    widget.requestChannelById != null
-                                ? _showChannelGuideOverlay
-                                : _hasStremioTvGuide
-                                ? _showStremioTvGuideOverlay
-                                : null,
-                            hasPrevious:
-                                _hasPreviousEpisode() ||
-                                _hasIptvPrevious ||
-                                _canZapIptvChannel,
-                            // A live channel has no timeline to scrub: the
-                            // position/duration mpv reports is just the HLS
-                            // rolling window, so the bar counts something
-                            // meaningless and sits under the programme rule,
-                            // which is the progress that actually means
-                            // something here. Derived, not a launch arg, so
-                            // zapping to on-demand brings it straight back.
-                            hideSeekbar:
-                                widget.hideSeekbar ||
-                                _iptvZapBannerOwnsIdentity,
-                            // Same call the native dock makes for live.
-                            hideSpeed: _iptvZapBannerOwnsIdentity,
-                            // Shuffle picks from _activePlaylist, which an
-                            // IPTV session never has — the button could only
-                            // ever open a menu that does nothing.
-                            hideRandom: _effectiveIptvChannels != null,
-                            hideOptions: widget.hideOptions,
-                            hideBackButton: widget.hideBackButton,
-                            onRandom: () =>
-                                unawaited(_showRandomPlaybackMenu()),
-                            hasIptvChannels:
-                                _effectiveIptvChannels?.isNotEmpty == true,
-                            onShowIptvChannels:
-                                _effectiveIptvChannels?.isNotEmpty == true
-                                ? _showIptvChannelSheetOverlay
-                                : null,
-                            hasStremioSources:
-                                _effectiveSources != null &&
-                                _effectiveSources!.isNotEmpty &&
-                                (_effectiveResolver != null ||
-                                    widget.resolveSourceToPlaylist != null),
-                            onShowStremioSources:
-                                _effectiveSources != null &&
-                                    _effectiveSources!.isNotEmpty &&
-                                    (_effectiveResolver != null ||
-                                        widget.resolveSourceToPlaylist != null)
-                                ? _showSourceSheetOverlay
-                                : null,
-                            showPipButton: PipService.isOwner(this),
-                            onPip: PipService.isOwner(this) ? _enterPip : null,
-                            hasRecord: _canRecord,
-                            isRecording: _recordingActiveNow,
-                            onRecord: _canRecord ? _toggleRecording : null,
-                          ),
+                          // Televisions get their own bar: the touch Controls
+                          // has no focus nodes at all, so a remote cannot
+                          // reach anything in it. ExcludeFocus keeps a hidden
+                          // bar out of traversal — IgnorePointer stops taps
+                          // but NOT focus, which would strand the DPAD on
+                          // invisible buttons.
+                          child: PlatformUtil.isTelevision
+                              ? ExcludeFocus(
+                                  excluding: !visible,
+                                  child: _buildTvControls(),
+                                )
+                              : Controls(
+                                  // Live IPTV leaves the top bar empty on purpose:
+                                  // its identity is in the info panel below, and
+                                  // repeating the channel in both corners is the
+                                  // duplication this redesign set out to remove.
+                                  title:
+                                      widget.showVideoTitle &&
+                                          !widget.showChannelName
+                                      ? _getCurrentEpisodeTitle()
+                                      : '',
+                                  subtitle:
+                                      widget.showVideoTitle &&
+                                          !widget.showChannelName
+                                      ? _getCurrentEpisodeSubtitle()
+                                      : null,
+                                  // Merged into the dock: the channel panel rides on
+                                  // top of the transport bar as one surface.
+                                  infoPanel:
+                                      _buildIptvInfoPanel(flush: true) ??
+                                      _buildDebrifyTvInfoPanel(flush: true),
+                                  infoPanelHeight: _reservedInfoPanelHeight,
+                                  geometryGeneration: _dockGeometryGeneration,
+                                  infoPanelGeneration: _infoPanelGeneration,
+                                  onInfoPanelExtent: (h, generation) {
+                                    // A report from a previous layout is
+                                    // stale by definition — drop it.
+                                    if (generation != _infoPanelGeneration) {
+                                      return;
+                                    }
+                                    // Publish increases exactly; only ignore
+                                    // sub-pixel shrinkage.
+                                    if (h > _infoPanelHeight ||
+                                        (_infoPanelHeight - h) >= 1.0) {
+                                      setState(() => _infoPanelHeight = h);
+                                    }
+                                  },
+                                  volume: _dockVolume,
+                                  onVolumeChanged: (v) {
+                                    setState(() => _dockVolume = v);
+                                    _player.setVolume(
+                                      (v * 100).clamp(0.0, 100.0),
+                                    );
+                                  },
+                                  // windowManager drives fullscreen only on
+                                  // Windows/Linux; macOS and mobile leave it
+                                  // to the OS, so the button would be a lie.
+                                  showFullscreen:
+                                      Platform.isWindows || Platform.isLinux,
+                                  onFullscreen: () async {
+                                    final isFull = await windowManager
+                                        .isFullScreen();
+                                    if (!mounted) return;
+                                    await windowManager.setFullScreen(!isFull);
+                                  },
+                                  dockStyle: _dockStyle,
+                                  dockPalette: _dockPalette,
+                                  dockSize: _dockSize,
+                                  // Rotation only means something in the hand.
+                                  showRotate: PlatformUtil.isPhone,
+                                  onDockExtent: (h, generation) {
+                                    if (generation != _dockGeometryGeneration) {
+                                      return;
+                                    }
+                                    // Publish every increase exactly; only
+                                    // suppress sub-pixel shrinkage.
+                                    final prev = _dockExtent.value;
+                                    if (h > prev || (prev - h) >= 1.0) {
+                                      _dockExtent.value = h;
+                                    }
+                                  },
+                                  enhancedMetadata: _getEnhancedMetadata(),
+                                  clock: _playbackUiClock,
+                                  isPlaying: _isPlaying,
+                                  isReady: isReady,
+                                  onPlayPause: _togglePlay,
+                                  onBack: () => Navigator.of(context).pop(),
+                                  onAspect: _onAspectButton,
+                                  onSpeed: _onSpeedButton,
+                                  onSleepTimer: _showSleepTimerSheet,
+                                  sleepTimerLabel: _sleepTimerButtonLabel,
+                                  speed: _playbackSpeed,
+                                  aspectMode: _aspectMode,
+                                  isLandscape: _landscapeLocked,
+                                  onRotate: _toggleOrientation,
+                                  hasPlaylist:
+                                      _activePlaylist != null &&
+                                      _activePlaylist!.isNotEmpty,
+                                  onShowPlaylist: () =>
+                                      _showPlaylistSheet(context),
+                                  onShowTracks: () => _showTracksSheet(context),
+                                  onSeekBarChangedStart: () {
+                                    _isSeekingWithSlider = true;
+                                  },
+                                  onSeekBarChanged: (v) {
+                                    final newPos = _duration * v;
+                                    _playbackUiClock.updatePosition(
+                                      newPos,
+                                      immediate: true,
+                                    );
+                                    _player.seek(newPos);
+                                    _lastSliderSeekPos = newPos;
+                                  },
+                                  onSeekBarChangeEnd: () {
+                                    _isSeekingWithSlider = false;
+                                    _scheduleAutoHide();
+                                    if (_lastSliderSeekPos != null) {
+                                      _traktScrobbleSeek(_lastSliderSeekPos!);
+                                      _simklScrobbleSeek(_lastSliderSeekPos!);
+                                      _lastSliderSeekPos = null;
+                                    }
+                                  },
+                                  // IPTV episode list (series/VOD) gets Next/Previous
+                                  // that walk the season; a live channel gets the
+                                  // same pair as previous/next channel, which is the
+                                  // only way to zap without a CH +/- key. Falls back
+                                  // to the Debrify-TV episode/playlist flow.
+                                  onNext: _hasIptvNext
+                                      ? () => _switchToIptvChannel(
+                                          _currentIptvIndex + 1,
+                                        )
+                                      : _canZapIptvChannel
+                                      ? () => _zapIptvChannel(1)
+                                      : (_hasAnyNext ? _goToNextEpisode : null),
+                                  onNextChannel:
+                                      widget.requestNextChannel != null
+                                      ? _goToNextChannel
+                                      : null,
+                                  onPrevious: _hasIptvPrevious
+                                      ? () => _switchToIptvChannel(
+                                          _currentIptvIndex - 1,
+                                        )
+                                      : _canZapIptvChannel
+                                      ? () => _zapIptvChannel(-1)
+                                      : (_hasPreviousEpisode()
+                                            ? _goToPreviousEpisode
+                                            : null),
+                                  hasNext:
+                                      _hasAnyNext ||
+                                      _hasIptvNext ||
+                                      _canZapIptvChannel,
+                                  hasNextChannel:
+                                      widget.requestNextChannel != null,
+                                  hasGuide:
+                                      (_channelEntries.isNotEmpty &&
+                                          widget.requestChannelById != null) ||
+                                      _hasStremioTvGuide,
+                                  onShowGuide:
+                                      _channelEntries.isNotEmpty &&
+                                          widget.requestChannelById != null
+                                      ? _showChannelGuideOverlay
+                                      : _hasStremioTvGuide
+                                      ? _showStremioTvGuideOverlay
+                                      : null,
+                                  hasPrevious:
+                                      _hasPreviousEpisode() ||
+                                      _hasIptvPrevious ||
+                                      _canZapIptvChannel,
+                                  // A live channel has no timeline to scrub: the
+                                  // position/duration mpv reports is just the HLS
+                                  // rolling window, so the bar counts something
+                                  // meaningless and sits under the programme rule,
+                                  // which is the progress that actually means
+                                  // something here. Derived, not a launch arg, so
+                                  // zapping to on-demand brings it straight back.
+                                  hideSeekbar:
+                                      widget.hideSeekbar ||
+                                      _iptvZapBannerOwnsIdentity,
+                                  // Same call the native dock makes for live.
+                                  hideSpeed: _iptvZapBannerOwnsIdentity,
+                                  // Shuffle picks from _activePlaylist, which an
+                                  // IPTV session never has — the button could only
+                                  // ever open a menu that does nothing.
+                                  hideRandom: _effectiveIptvChannels != null,
+                                  hideOptions: widget.hideOptions,
+                                  hideBackButton: widget.hideBackButton,
+                                  onRandom: () =>
+                                      unawaited(_showRandomPlaybackMenu()),
+                                  hasIptvChannels:
+                                      _effectiveIptvChannels?.isNotEmpty ==
+                                      true,
+                                  onShowIptvChannels:
+                                      _effectiveIptvChannels?.isNotEmpty == true
+                                      ? _showIptvChannelSheetOverlay
+                                      : null,
+                                  hasStremioSources:
+                                      _effectiveSources != null &&
+                                      _effectiveSources!.isNotEmpty &&
+                                      (_effectiveResolver != null ||
+                                          widget.resolveSourceToPlaylist !=
+                                              null),
+                                  onShowStremioSources:
+                                      _effectiveSources != null &&
+                                          _effectiveSources!.isNotEmpty &&
+                                          (_effectiveResolver != null ||
+                                              widget.resolveSourceToPlaylist !=
+                                                  null)
+                                      ? _showSourceSheetOverlay
+                                      : null,
+                                  showPipButton: PipService.isOwner(this),
+                                  onPip: PipService.isOwner(this)
+                                      ? _enterPip
+                                      : null,
+                                  hasRecord: _canRecord,
+                                  isRecording: _recordingActiveNow,
+                                  onRecord: _canRecord
+                                      ? _toggleRecording
+                                      : null,
+                                ),
                         ),
                       );
                     },
@@ -9264,65 +10901,81 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 // Manual OTT-style skip action. It stays available even when
                 // the main controls are hidden, and lifts above the dock when
                 // they are visible so neither control intercepts the other.
-                if (activeSkipSegment != null && !inPip)
-                  ValueListenableBuilder<bool>(
-                    valueListenable: _controlsVisible,
-                    builder: (context, controlsVisible, _) {
-                      return AnimatedPositioned(
-                        duration: const Duration(milliseconds: 150),
-                        curve: Curves.easeOut,
-                        right: 24,
-                        bottom: controlsVisible && !widget.hideOptions
-                            ? 160
-                            : 28,
-                        child: SafeArea(
-                          top: false,
-                          left: false,
-                          child: SkipSegmentButton(
-                            key: ValueKey(activeSkipSegment.type),
-                            type: activeSkipSegment.type,
-                            onPressed: _skipActiveSegment,
-                          ),
-                        ),
+                if (!inPip)
+                  ValueListenableBuilder<SkipSegment?>(
+                    valueListenable: _activeSkipSegmentUi,
+                    builder: (context, activeSkipSegment, _) {
+                      if (activeSkipSegment == null) {
+                        return const SizedBox.shrink();
+                      }
+                      return ValueListenableBuilder<bool>(
+                        valueListenable: _controlsVisible,
+                        builder: (context, controlsVisible, _) {
+                          // Rebuilds when the styled dock's height changes;
+                          // otherwise the button would keep a stale position
+                          // until some unrelated rebuild happened to occur.
+                          return ValueListenableBuilder<double>(
+                            valueListenable: _dockExtent,
+                            builder: (context, dockExtent, _) {
+                              return AnimatedPositioned(
+                                duration: const Duration(milliseconds: 150),
+                                curve: Curves.easeOut,
+                                right: 24,
+                                // Classic keeps the exact legacy ternary. The
+                                // styled dock is variable-height, so it uses the
+                                // measured band and subtracts this button's OWN
+                                // bottom SafeArea inset, which the child re-adds.
+                                bottom: _skipButtonBottom(
+                                  context,
+                                  controlsVisible,
+                                  dockExtent,
+                                ),
+                                child: SafeArea(
+                                  top: false,
+                                  left: false,
+                                  child: SkipSegmentButton(
+                                    key: ValueKey(activeSkipSegment.type),
+                                    type: activeSkipSegment.type,
+                                    onPressed: _skipActiveSegment,
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
                       );
                     },
                   ),
-                // Title Badge with Glassy Blur Effect (top-left, Debrify TV only)
-                // Placed after controls to appear on top
-                if (widget.showVideoTitle &&
-                    widget.showChannelName &&
-                    !_iptvZapBannerOwnsIdentity &&
+                // Debrify TV lower-third — channel plate + playing title —
+                // floating over bare video (the dock embeds its own copy).
+                // Replaces the two legacy corner badges.
+                if (_debrifyBannerFloatingMounted &&
+                    _debrifyTvOwnsIdentity &&
                     !inPip)
                   Positioned(
-                    top: 20,
-                    left: 20,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
                     child: IgnorePointer(
                       ignoring: true,
                       child: AnimatedOpacity(
-                        opacity: _showTitleBadge ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 400),
+                        opacity: _showDebrifyBanner ? 1.0 : 0.0,
+                        duration: Duration(
+                          milliseconds: _showDebrifyBanner ? 200 : 350,
+                        ),
                         curve: Curves.easeInOut,
-                        child: _buildTitleBadge(_getCurrentEpisodeTitle()),
-                      ),
-                    ),
-                  ),
-                // Channel Badge with Glassy Blur Effect (top-right)
-                // Placed after controls to appear on top
-                if (widget.showChannelName &&
-                    channelBadgeText != null &&
-                    channelBadgeText.isNotEmpty &&
-                    !_iptvZapBannerOwnsIdentity &&
-                    !inPip)
-                  Positioned(
-                    top: 20,
-                    right: 20,
-                    child: IgnorePointer(
-                      ignoring: true,
-                      child: AnimatedOpacity(
-                        opacity: _showChannelBadge ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeInOut,
-                        child: _buildChannelBadge(channelBadgeText),
+                        // Unmount once faded: this screen rebuilds every
+                        // position tick, and a transparent banner would keep
+                        // re-laying out for the rest of the session.
+                        onEnd: () {
+                          if (!mounted || _showDebrifyBanner) return;
+                          setState(
+                            () => _debrifyBannerFloatingMounted = false,
+                          );
+                        },
+                        child:
+                            _buildDebrifyTvInfoPanel(flush: false) ??
+                            const SizedBox.shrink(),
                       ),
                     ),
                   ),
@@ -9357,7 +11010,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                   ),
                 // PikPak retry overlay - non-blocking, positioned at bottom right
                 if (_isPikPakRetrying && _pikPakRetryMessage != null && !inPip)
-                  PikPakRetryOverlay(message: _pikPakRetryMessage!),
+                  ValueListenableBuilder<double>(
+                    valueListenable: _dockExtent,
+                    builder: (context, dockExtent, _) =>
+                        ValueListenableBuilder<bool>(
+                          valueListenable: _controlsVisible,
+                          builder: (context, controlsVisible, _) {
+                            // Only lifts while the dock is actually on screen:
+                            // Controls stays mounted under AnimatedOpacity when
+                            // hidden, so the extent alone is not enough.
+                            final dockVisible =
+                                _dockStyle.isStyled &&
+                                controlsVisible &&
+                                (_buildIptvInfoPanel(flush: true) != null ||
+                                    _buildDebrifyTvInfoPanel(flush: true) !=
+                                        null ||
+                                    !widget.hideOptions);
+                            return PikPakRetryOverlay(
+                              message: _pikPakRetryMessage!,
+                              bottom: dockVisible
+                                  ? math.max(80.0, dockExtent + 12)
+                                  : 80.0,
+                            );
+                          },
+                        ),
+                  ),
                 // Channel guide overlay
                 if (_showChannelGuide && _channelEntries.isNotEmpty && !inPip)
                   Positioned.fill(
@@ -9375,6 +11052,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     !inPip)
                   Positioned.fill(
                     child: IptvChannelSheet(
+                      key: _iptvSheetKey,
                       channels: _effectiveIptvChannels!,
                       currentIndex: _currentIptvIndex,
                       onChannelSelected: _switchToIptvGuideChannel,
@@ -9451,6 +11129,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                       onClose: _hideStremioTvGuide,
                     ),
                   ),
+                // Unified player menu (Spotlight panel)
+                if (_showPlayerMenu && !inPip)
+                  Positioned.fill(child: _buildPlayerMenuPanel()),
                 // Subtitle sync overlay
                 if (_showSyncOverlay && !inPip) _buildSyncOverlay(),
               ],
@@ -9482,7 +11163,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _showChannelGuide ||
       _showIptvChannelSheet ||
       _showSourceSheet ||
-      _showStremioTvGuide;
+      _showStremioTvGuide ||
+      _showPlayerMenu;
 
   /// Called on mouse movement: reveal controls (and the cursor) if hidden and
   /// (re)start the auto-hide countdown so continuous movement keeps them alive.
@@ -9735,13 +11417,32 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
     }
 
+    // Right-side glass panel (the player menu's grammar) rather than the old
+    // Material bottom sheet — the picture stays visible on the left.
     final selected =
-        await showModalBottomSheet<StremioMeta>(
+        await showGeneralDialog<StremioMeta>(
           context: context,
-          isScrollControlled: true,
-          useSafeArea: true,
-          backgroundColor: Colors.transparent,
-          builder: (sheetContext) {
+          barrierDismissible: true,
+          barrierLabel: 'dismiss',
+          barrierColor: Colors.black.withValues(alpha: 0.45),
+          transitionDuration: const Duration(milliseconds: 280),
+          transitionBuilder: (context, anim, _, child) {
+            final curved = CurvedAnimation(
+              parent: anim,
+              curve: Curves.easeOutCubic,
+            );
+            return FadeTransition(
+              opacity: curved,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0.12, 0),
+                  end: Offset.zero,
+                ).animate(curved),
+                child: child,
+              ),
+            );
+          },
+          pageBuilder: (sheetContext, _, __) {
             var initialSearchStarted = false;
             return StatefulBuilder(
               builder: (sheetContext, setSheetState) {
@@ -9751,138 +11452,155 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 }
 
                 final screenSize = MediaQuery.of(sheetContext).size;
-                final sheetHeight = screenSize.height * 0.82;
+                final compact = screenSize.width < 720;
+                final panelWidth = compact
+                    ? screenSize.width
+                    : (screenSize.width * 0.46).clamp(430.0, 560.0);
 
-                return Container(
-                  height: sheetHeight,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF141414),
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(20),
+                final panel = Container(
+                  width: panelWidth,
+                  height: double.infinity,
+                  decoration: BoxDecoration(
+                    color: PlatformUtil.isAndroidTvCached
+                        ? const Color(0xF5101012)
+                        : const Color(0xFF101012).withValues(alpha: 0.86),
+                    border: Border(
+                      left: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        width: 0.75,
+                      ),
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.only(top: 12),
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.search_rounded,
-                              color: VideoPlayerColors.netflixRed,
-                              size: 22,
-                            ),
-                            const SizedBox(width: 10),
-                            const Expanded(
-                              child: Text(
-                                'Search Subtitle',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
+                  child: SafeArea(
+                    left: false,
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 24, 14, 0),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'FIX THE TITLE',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.42),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 1.8,
+                                  ),
                                 ),
                               ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close_rounded),
-                              color: Colors.white70,
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                            ),
-                          ],
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded),
+                                color: Colors.white70,
+                                onPressed: () =>
+                                    Navigator.of(sheetContext).pop(),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                        child: TvTextField(
-                          controller: controller,
-                          autofocus: initialQuery.trim().isEmpty,
-                          onSubmitted: (value) =>
-                              runSearch(value, setSheetState),
-                          style: const TextStyle(color: Colors.white),
-                          textInputAction: TextInputAction.search,
-                          decoration: InputDecoration(
-                            hintText: 'Search movie or show',
-                            hintStyle: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.42),
-                            ),
-                            prefixIcon: Icon(
-                              Icons.search_rounded,
-                              color: Colors.white.withValues(alpha: 0.5),
-                            ),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.arrow_forward_rounded),
-                              color: VideoPlayerColors.netflixRed,
-                              onPressed: () =>
-                                  runSearch(controller.text, setSheetState),
-                            ),
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.08),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                          child: TvTextField(
+                            controller: controller,
+                            autofocus: initialQuery.trim().isEmpty,
+                            onSubmitted: (value) =>
+                                runSearch(value, setSheetState),
+                            style: const TextStyle(color: Colors.white),
+                            textInputAction: TextInputAction.search,
+                            decoration: InputDecoration(
+                              hintText: 'Search movie or show',
+                              hintStyle: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.42),
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search_rounded,
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                              suffixIcon: IconButton(
+                                icon: const Icon(Icons.arrow_forward_rounded),
+                                color: Colors.white70,
+                                onPressed: () =>
+                                    runSearch(controller.text, setSheetState),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white.withValues(alpha: 0.08),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: Builder(
-                          builder: (_) {
-                            if (isSearching) {
-                              return const Center(
-                                child: CircularProgressIndicator(
-                                  color: VideoPlayerColors.netflixRed,
-                                ),
-                              );
-                            }
-
-                            if (errorMessage != null) {
-                              return Center(
-                                child: Text(
-                                  errorMessage!,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.65),
-                                    fontSize: 14,
+                        Expanded(
+                          child: Builder(
+                            builder: (_) {
+                              if (isSearching) {
+                                return Center(
+                                  child: SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              );
-                            }
+                                );
+                              }
 
-                            if (hasSearched && results.isEmpty) {
-                              return Center(
-                                child: Text(
-                                  'No IMDb-backed results found',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.65),
-                                    fontSize: 14,
+                              if (errorMessage != null) {
+                                return Center(
+                                  child: Text(
+                                    errorMessage!,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.65,
+                                      ),
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                ),
-                              );
-                            }
+                                );
+                              }
 
-                            return ListView.separated(
-                              padding: const EdgeInsets.only(bottom: 20),
-                              itemCount: results.length,
-                              separatorBuilder: (_, __) => Divider(
-                                height: 1,
-                                color: Colors.white.withValues(alpha: 0.06),
-                              ),
-                              itemBuilder: (_, index) =>
-                                  _buildIdentifyTitleResultTile(results[index]),
-                            );
-                          },
+                              if (hasSearched && results.isEmpty) {
+                                return Center(
+                                  child: Text(
+                                    'No IMDb-backed results found',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.65,
+                                      ),
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              return ListView.separated(
+                                padding: const EdgeInsets.only(bottom: 20),
+                                itemCount: results.length,
+                                separatorBuilder: (_, __) => Divider(
+                                  height: 1,
+                                  color: Colors.white.withValues(alpha: 0.06),
+                                ),
+                                itemBuilder: (_, index) =>
+                                    _buildIdentifyTitleResultTile(
+                                      results[index],
+                                    ),
+                              );
+                            },
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                );
+
+                return Align(
+                  alignment: Alignment.centerRight,
+                  child: Material(color: Colors.transparent, child: panel),
                 );
               },
             );
@@ -9933,30 +11651,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final episodeController = TextEditingController();
     String? errorText;
 
-    final result = await showDialog<_SeasonEpisodeSelection>(
-      context: context,
+    final result = await showSpotlightDialog<_SeasonEpisodeSelection>(
+      context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF1C1C1E),
-              title: const Text(
-                'Episode',
-                style: TextStyle(color: Colors.white),
-              ),
-              content: Column(
+            return SpotlightDialogCard(
+              title: 'Which episode?',
+              bodyText: title,
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   Row(
                     children: [
                       Expanded(
@@ -9993,7 +11698,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                     Text(
                       errorText!,
                       style: const TextStyle(
-                        color: VideoPlayerColors.netflixRed,
+                        color: SpotlightDialogCard.statusRed,
                         fontSize: 12,
                       ),
                     ),
@@ -10001,29 +11706,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ],
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
+                SpotlightDialogAction(
+                  'Cancel',
+                  () => Navigator.of(dialogContext).pop(),
                 ),
-                TextButton(
-                  onPressed: () {
-                    final season = int.tryParse(seasonController.text.trim());
-                    final episode = int.tryParse(episodeController.text.trim());
-                    if (season == null ||
-                        season <= 0 ||
-                        episode == null ||
-                        episode <= 0) {
-                      setDialogState(() {
-                        errorText = 'Enter a valid season and episode.';
-                      });
-                      return;
-                    }
-                    Navigator.of(dialogContext).pop(
-                      _SeasonEpisodeSelection(season: season, episode: episode),
-                    );
-                  },
-                  child: const Text('Apply'),
-                ),
+                // solid: the recommended action, and on TV the autofocus
+                // anchor — without it the dialog opens with nothing focused
+                // and the first OK press dies.
+                SpotlightDialogAction('Apply', solid: true, () {
+                  final season = int.tryParse(seasonController.text.trim());
+                  final episode = int.tryParse(episodeController.text.trim());
+                  if (season == null ||
+                      season <= 0 ||
+                      episode == null ||
+                      episode <= 0) {
+                    setDialogState(() {
+                      errorText = 'Enter a valid season and episode.';
+                    });
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop(
+                    _SeasonEpisodeSelection(season: season, episode: episode),
+                  );
+                }),
               ],
             );
           },
@@ -10253,6 +11958,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     if (!context.mounted) return;
+
+    if (kUnifiedPlayerMenuEnabled) {
+      _openPlayerMenuAt(
+        PlayerMenuSection.subtitles,
+        imdbId: effectiveImdbId,
+        contentType: effectiveContentType,
+        season: subtitleSeason,
+        episode: subtitleEpisode,
+        cachedSlots: cachedSlots,
+        cacheKey: cacheKey,
+      );
+      return;
+    }
+
     await TracksSheet.show(
       context,
       _player,
@@ -10269,6 +11988,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Fires only on a genuine subtitle switch (not audio, not re-select, not a
       // failed load): the sync offset was calibrated for the previous subtitle.
       onSubtitleTrackChanged: _resetSubtitleSyncOffset,
+      // Android bitstream passthrough, applied LIVE (same stored setting as
+      // the Playback Defaults row).
+      audioPassthrough: !kIsWeb && Platform.isAndroid
+          ? _audioPassthroughEnabled
+          : null,
+      onAudioPassthroughChanged: !kIsWeb && Platform.isAndroid
+          ? _setAudioPassthroughLive
+          : null,
       onSubtitleStyleChanged: _onSubtitleStyleChanged,
       onSyncOverlayRequested: _showSyncOverlayPanel,
       contentImdbId: effectiveImdbId,
@@ -10301,6 +12028,250 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
+  // ── Unified player menu (Spotlight panel) ─────────────────────────────
+
+  /// Opens the menu with the subtitle-identity context already resolved
+  /// (the tracks-button path, which may await a metadata fetch first).
+  void _openPlayerMenuAt(
+    PlayerMenuSection section, {
+    String? imdbId,
+    String? contentType,
+    int? season,
+    int? episode,
+    List<AddonSubtitleSlot>? cachedSlots,
+    String? cacheKey,
+  }) {
+    _hideIptvZapBanner();
+    _hideTimer?.cancel();
+    _tvReleaseFocusForOverlay();
+    setState(() {
+      _playerMenuInitialSection = section;
+      _menuImdbId = imdbId;
+      _menuContentType = contentType;
+      _menuSeason = season;
+      _menuEpisode = episode;
+      _menuCachedSlots = cachedSlots;
+      _menuCacheKey = cacheKey;
+      _showPlayerMenu = true;
+      _controlsVisible.value = false;
+    });
+  }
+
+  /// Opens the menu from a non-subtitle entry (speed, sleep, aspect,
+  /// shuffle) without awaiting anything: identity comes from caches only.
+  /// If the IMDb id was never fetched, the Subtitles pane still offers the
+  /// "Fix the title" recovery, so nothing is lost — just not pre-fetched.
+  void _openPlayerMenuQuick(PlayerMenuSection section) {
+    final currentTitle = _currentPlaybackTitleForIdentity();
+    final seriesInfo = SeriesParser.parseFilename(currentTitle);
+    final season =
+        seriesInfo.season ?? _manualContentSeason ?? _effectiveContentSeason;
+    final episode =
+        seriesInfo.episode ?? _manualContentEpisode ?? _effectiveContentEpisode;
+
+    String? imdbId;
+    final seriesPlaylist = _seriesPlaylist;
+    if (_manualContentImdbId != null && _manualContentImdbId!.isNotEmpty) {
+      imdbId = _manualContentImdbId;
+    } else if (seriesPlaylist != null) {
+      imdbId = seriesPlaylist.isSeries
+          ? (seriesPlaylist.imdbId ?? _effectiveContentImdbId)
+          : (seriesPlaylist.getImdbIdForIndex(_currentIndex) ??
+                _effectiveContentImdbId);
+    } else {
+      imdbId = _singleFileImdbId ?? _effectiveContentImdbId;
+    }
+
+    String? contentType = _manualContentType ?? _effectiveContentType;
+    if (contentType == null) {
+      if (seriesPlaylist?.isSeries == true) {
+        contentType = 'series';
+      } else if (imdbId != null) {
+        contentType = 'movie';
+      }
+    }
+
+    final subtitleSeason = contentType == 'series' ? season : null;
+    final subtitleEpisode = contentType == 'series' ? episode : null;
+    final String? cacheKey = imdbId != null
+        ? (subtitleSeason != null && subtitleEpisode != null
+              ? '$imdbId:$subtitleSeason:$subtitleEpisode'
+              : imdbId)
+        : null;
+    final baseSlots = (cacheKey != null && _cachedSubtitleKey == cacheKey)
+        ? _cachedAddonSlots
+        : null;
+    final cachedSlots = _injectedSubtitleSlots != null
+        ? [...?baseSlots, ..._injectedSubtitleSlots!]
+        : baseSlots;
+
+    _openPlayerMenuAt(
+      section,
+      imdbId: imdbId,
+      contentType: contentType,
+      season: subtitleSeason,
+      episode: subtitleEpisode,
+      cachedSlots: cachedSlots,
+      cacheKey: cacheKey,
+    );
+  }
+
+  void _hidePlayerMenu() {
+    if (!_showPlayerMenu) return;
+    setState(() => _showPlayerMenu = false);
+    if (PlatformUtil.isTelevision) _tvRootFocus.requestFocus();
+  }
+
+  /// The old tracks-sheet `onTrackChanged` closure, verbatim: shared tail of
+  /// every track selection made from the menu.
+  Future<void> _menuApplyTrackChange(String audioId, String subtitleId) async {
+    _userManuallySelectedSubtitle = true;
+    if (!subtitleId.startsWith('stremio:')) {
+      _activeExternalSubtitlePath = null;
+    }
+    _captureIptvAudioLanguage(audioId);
+    await _persistTrackChoice(audioId, subtitleId);
+  }
+
+  Future<void> _menuSelectAudio(String audioId, String currentSubId) async {
+    final track = _player.state.tracks.audio
+        .where((a) => a.id == audioId)
+        .firstOrNull;
+    if (track == null) return;
+    await _player.setAudioTrack(track);
+    await _menuApplyTrackChange(audioId, currentSubId);
+  }
+
+  Future<void> _menuSubtitlesOff(String audioId) async {
+    _selectedStremioSubtitleId = null;
+    await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+    await _menuApplyTrackChange(audioId, 'no');
+  }
+
+  Future<void> _menuSelectEmbeddedSubtitle(String subId, String audioId) async {
+    final track = _player.state.tracks.subtitle
+        .where((s) => s.id == subId)
+        .firstOrNull;
+    if (track == null) return;
+    _selectedStremioSubtitleId = null;
+    await _player.setSubtitleTrack(track);
+    await _menuApplyTrackChange(audioId, subId);
+  }
+
+  /// Returns false when the download/apply failed — the panel keeps the
+  /// previous selection (and its sync offset) in that case.
+  Future<bool> _menuSelectAddonSubtitle(
+    StremioSubtitle sub,
+    String audioId,
+  ) async {
+    // Playback continues behind the menu: if the content switches while the
+    // download is in flight (auto-advance, zap), applying the stale subtitle
+    // would attach it — and persist its ids — against the NEW item.
+    final token = _addonSubtitleFetchToken;
+    try {
+      final filePath = await _downloadStremioSubtitleToTempFile(sub);
+      if (filePath == null || token != _addonSubtitleFetchToken || !mounted) {
+        return false;
+      }
+      final track = mk.SubtitleTrack.uri(
+        filePath,
+        title: sub.displayName,
+        language: sub.lang,
+      );
+      await _player.setSubtitleTrack(mk.SubtitleTrack.no());
+      // Each await is a window for the content to switch under us; persisting
+      // the stale id would also suppress the new item's subtitle auto-select.
+      if (token != _addonSubtitleFetchToken || !mounted) return false;
+      await _player.setSubtitleTrack(track);
+      if (token != _addonSubtitleFetchToken || !mounted) return false;
+      _selectedStremioSubtitleId = sub.id;
+      await _menuApplyTrackChange(audioId, 'stremio:${sub.id}');
+      return true;
+    } catch (e) {
+      debugPrint('PlayerMenu: subtitle apply failed - $e');
+      return false;
+    }
+  }
+
+  Widget _buildPlayerMenuPanel() {
+    final audios = _player.state.tracks.audio
+        .where((a) => a.id.toLowerCase() != 'no')
+        .toList(growable: false);
+    final embedded = _player.state.tracks.subtitle
+        .where(
+          (s) => s.id.toLowerCase() != 'auto' && s.id.toLowerCase() != 'no',
+        )
+        .toList(growable: false);
+    final selectedSub = _selectedStremioSubtitleId != null
+        ? 'stremio:$_selectedStremioSubtitleId'
+        : _player.state.track.subtitle.id;
+    // Captured, not read live: cache write-back must be keyed to the identity
+    // the menu opened with (an identity fix re-keys through its own path).
+    final cacheKey = _menuCacheKey;
+
+    return PlayerMenuPanel(
+      key: _playerMenuKey,
+      initialSection: _playerMenuInitialSection,
+      onClose: _hidePlayerMenu,
+      audioTracks: [
+        for (final (i, a) in audios.indexed)
+          PlayerMenuTrackOption(a.id, LanguageMapper.labelForTrack(a, i)),
+      ],
+      selectedAudioId: _player.state.track.audio.id,
+      onAudioSelected: _menuSelectAudio,
+      audioPassthrough: !kIsWeb && Platform.isAndroid
+          ? _audioPassthroughEnabled
+          : null,
+      onAudioPassthroughChanged: !kIsWeb && Platform.isAndroid
+          ? _setAudioPassthroughLive
+          : null,
+      embeddedSubtitles: [
+        for (final (i, s) in embedded.indexed)
+          PlayerMenuTrackOption(s.id, LanguageMapper.labelForTrack(s, i)),
+      ],
+      selectedSubtitleId: selectedSub,
+      onSubtitlesOff: _menuSubtitlesOff,
+      onEmbeddedSubtitleSelected: _menuSelectEmbeddedSubtitle,
+      onAddonSubtitleSelected: _menuSelectAddonSubtitle,
+      onSubtitleTrackChanged: _resetSubtitleSyncOffset,
+      contentImdbId: _menuImdbId,
+      contentType: _menuContentType,
+      contentSeason: _menuSeason,
+      contentEpisode: _menuEpisode,
+      cachedAddonSlots: _menuCachedSlots,
+      onAddonSlotsFetched: (slots) {
+        if (cacheKey == null) return;
+        if (_cachedSubtitleKey != null && _cachedSubtitleKey != cacheKey) {
+          return;
+        }
+        _cachedAddonSlots = slots;
+        _cachedStremioSubtitles = AddonSubtitleSlot.flatten(slots);
+        _cachedSubtitleKey = cacheKey;
+      },
+      onIdentifyTitle: _identifyTitleAndFetchSubtitles,
+      subtitleIdentityLabel: _subtitleIdentityLabelForSheet(),
+      onSubtitleStyleChanged: _onSubtitleStyleChanged,
+      onSyncRequested: _showSyncOverlayPanel,
+      showSpeed: !_iptvZapBannerOwnsIdentity,
+      speed: _playbackSpeed,
+      onSpeedSelected: _setPlaybackSpeed,
+      aspectMode: _aspectMode,
+      onAspectSelected: _setAspectModeDirect,
+      sleepMode: _sleepTimerMode,
+      sleepArmedMinutes: _sleepTimerArmedMinutes,
+      sleepMinutesLeft: _sleepTimerMinutesLeft,
+      allowEndOfItem: _currentIptvChannel?.isLive != true,
+      onSleepSelected: _applySleepTimerSelection,
+      hasPlaylist: _activePlaylist != null && _activePlaylist!.isNotEmpty,
+      continuousShuffle: _continuousShuffleEnabled,
+      onShuffleOnce: () {
+        _hidePlayerMenu();
+        unawaited(_playRandomOnce(disableContinuousShuffle: true));
+      },
+      onShuffleContinuousToggle: () => unawaited(_toggleContinuousShuffle()),
+    );
+  }
+
   /// Reset subtitle-related state when switching content.
   void _resetSubtitleState() {
     _cachedStremioSubtitles = null;
@@ -10319,6 +12290,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _cleanupTempSubtitleFilesSync();
     _activeExternalSubtitlePath = null;
     _showSyncOverlay = false;
+    // The menu's subtitle pane is keyed to the outgoing item's identity.
+    _showPlayerMenu = false;
     // Content changed: the previous item's sync offset no longer applies.
     _resetSubtitleSyncOffset();
   }

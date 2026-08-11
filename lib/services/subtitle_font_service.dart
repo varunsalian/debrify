@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import '../utils/app_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Represents a subtitle font option (built-in or custom)
@@ -173,7 +174,7 @@ class SubtitleFontService {
       await _ensurePrefs();
 
       // Get app documents directory
-      final appDir = await getApplicationDocumentsDirectory();
+      final appDir = await AppStorage.documents();
       final fontDir = Directory('${appDir.path}/$_customFontDir');
 
       // Create font directory if it doesn't exist

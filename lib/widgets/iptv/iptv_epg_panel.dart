@@ -6,7 +6,8 @@ import 'package:flutter/services.dart';
 import '../../models/iptv_playlist.dart';
 import '../../services/iptv_epg_service.dart';
 import 'styles/iptv_style.dart';
-import '../home/home_theme.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 
 /// Formats a time as the device's clock format ("8:00 PM" / "20:00").
@@ -176,9 +177,40 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
     });
   }
 
+  /// This card's ink at a given emphasis.
+  ///
+  /// The `command` look has no style tokens and reads the app palette, exactly
+  /// as it did before — passing `null` tokens returns the same
+  /// `core.tx`-at-alpha literal every site used. Edition and Console DO own a
+  /// foreground ramp (`fg` / `fgMid` / `fgDim` / `fgFaint`, the mocks'
+  /// 100/80/55/35 steps), and the agreed rule is that palette follows the app
+  /// theme while a style's own ramp and layout stay the style's. Reading
+  /// `core.tx` unconditionally broke that half of it — this is the same
+  /// `t == null ? … : t.fgN` shape `_EpgScheduleListState` already uses, just
+  /// expressed once instead of eleven times.
+  ///
+  /// The alpha is the SELECTOR, not the value: each site keeps the alpha it
+  /// always passed, and the bands map it onto the ramp step of the same
+  /// MEANING. Deliberately semantic bands, not nearest-value ones — Console's
+  /// ramp is 100/70/45/28, so a nearest-value rule would put the 0.58 body
+  /// text on `fgMid` (a title tone) and the 0.40 metadata on `fgDim` (a body
+  /// tone), flattening the hierarchy the alphas were chosen to express.
+  /// primary ≥ 0.90 · secondary ≥ 0.65 · body ≥ 0.42 · metadata below.
+  Color _ink(AppTheme app, double alpha) {
+    final t = widget.tokens;
+    if (t == null) return app.core.tx.withValues(alpha: alpha);
+    if (alpha >= 0.90) return t.fg;
+    if (alpha >= 0.65) return t.fgMid;
+    if (alpha >= 0.42) return t.fgDim;
+    return t.fgFaint;
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const _EpgSkeleton();
+    // The skeleton is a styled-card surface too — `surfaceTint` where the
+    // style declares one, the app-ink veil otherwise.
+    if (_loading) return _EpgSkeleton(tint: widget.tokens?.selectedTint);
+    final app = AppThemeScope.of(context);
     final data = _data;
     if (data == null || data.isEmpty) return const SizedBox.shrink();
 
@@ -191,7 +223,14 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
         if (next == null) return const SizedBox.shrink();
         return Row(
           children: [
-            _EpgTag('NEXT', dim: true, accent: widget.tokens?.accent),
+            _EpgTag(
+              'NEXT',
+              dim: true,
+              accent: widget.tokens?.accent,
+              // The dim tone is part of the style's ramp too — passing only
+              // the accent left REPLAY/NEXT on app ink under a styled panel.
+              dimColor: widget.tokens?.fgFaint,
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -199,7 +238,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.78),
+                  color: _ink(app, 0.78),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -209,7 +248,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
             Text(
               _clock(context, next.start),
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.48),
+                color: _ink(app, 0.48),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 fontFeatures: const [FontFeature.tabularFigures()],
@@ -229,7 +268,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
               Text(
                 '${_clock(context, now.start)} – ${_clock(context, now.stop)}',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.52),
+                  color: _ink(app, 0.52),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -243,7 +282,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
             maxLines: widget.dense ? 1 : 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white,
+              color: _ink(app, 1),
               fontSize: widget.dense ? 14 : 16,
               fontWeight: FontWeight.w700,
               height: 1.2,
@@ -255,7 +294,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
               _OverflowMarqueeText(
                 text: now.description,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.58),
+                  color: _ink(app, 0.58),
                   fontSize: 10.5,
                   height: 1.2,
                 ),
@@ -266,7 +305,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.58),
+                  color: _ink(app, 0.58),
                   fontSize: 11.5,
                   height: 1.35,
                 ),
@@ -276,6 +315,9 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
           _EpgProgressBar(
             progress: now.progressAt(at),
             accent: widget.tokens?.accent,
+            // `_EpgScheduleList` already passes this; the rail card did not,
+            // so a styled panel drew the style's fill on an app-ink track.
+            track: widget.tokens?.hairline2,
           ),
         ],
       );
@@ -296,7 +338,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: _ink(app, 0.5),
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                     fontFeatures: const [FontFeature.tabularFigures()],
@@ -310,8 +352,8 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
             now.title,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: _ink(app, 1),
               fontSize: 15,
               fontWeight: FontWeight.w700,
               height: 1.2,
@@ -321,12 +363,15 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
           _EpgProgressBar(
             progress: now.progressAt(at),
             accent: widget.tokens?.accent,
+            // `_EpgScheduleList` already passes this; the rail card did not,
+            // so a styled panel drew the style's fill on an app-ink track.
+            track: widget.tokens?.hairline2,
           ),
           const SizedBox(height: 4),
           Text(
             _remainingLabel(now, at),
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.4),
+              color: _ink(app, 0.4),
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
             ),
@@ -339,7 +384,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.55),
+                  color: _ink(app, 0.55),
                   fontSize: 12,
                   height: 1.35,
                 ),
@@ -351,12 +396,19 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
           if (now != null) const SizedBox(height: 10),
           Row(
             children: [
-              _EpgTag('NEXT', dim: true, accent: widget.tokens?.accent),
+              _EpgTag(
+              'NEXT',
+              dim: true,
+              accent: widget.tokens?.accent,
+              // The dim tone is part of the style's ramp too — passing only
+              // the accent left REPLAY/NEXT on app ink under a styled panel.
+              dimColor: widget.tokens?.fgFaint,
+            ),
               const SizedBox(width: 8),
               Text(
                 _clock(context, next.start),
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.45),
+                  color: _ink(app, 0.45),
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
                   fontFeatures: const [FontFeature.tabularFigures()],
@@ -369,7 +421,7 @@ class _IptvRailEpgCardState extends State<IptvRailEpgCard> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.72),
+                    color: _ink(app, 0.72),
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -505,15 +557,20 @@ class _OverflowMarqueeTextState extends State<_OverflowMarqueeText> {
 /// Static two-bar placeholder — no shimmer on purpose (TV perf playbook:
 /// nothing animates unless it must).
 class _EpgSkeleton extends StatelessWidget {
-  const _EpgSkeleton();
+  /// The styled looks' own surface tint. Null keeps the app-ink veil, which is
+  /// what `command` and every unstyled caller have always drawn.
+  final Color? tint;
+
+  const _EpgSkeleton({this.tint});
 
   @override
   Widget build(BuildContext context) {
+    final veil = tint ?? AppThemeScope.of(context).core.tx.withValues(alpha: 0.07);
     Widget bar(double w) => Container(
       width: w,
       height: 10,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.07),
+        color: veil,
         borderRadius: BorderRadius.circular(5),
       ),
     );
@@ -536,18 +593,31 @@ class _EpgRecordChip extends StatelessWidget {
   /// Styled-look emphasized-label color (the style's fg) — no literal white
   /// in styled paint.
   final Color? fgOn;
-  const _EpgRecordChip({required this.emphasized, this.rec, this.fgOn});
+
+  /// Spotlight's white focus pill: translucent crimson washes out there, so
+  /// the chip goes SOLID crimson with white ink.
+  final bool solid;
+  const _EpgRecordChip({
+    required this.emphasized,
+    this.rec,
+    this.fgOn,
+    this.solid = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final base = rec ?? const Color(0xFFF43F5E);
+    final base = rec ?? AppThemeScope.of(context).iptv.recordAccent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
-        color: base.withValues(alpha: emphasized ? 0.30 : 0.12),
+        color: solid
+            ? base
+            : base.withValues(alpha: emphasized ? 0.30 : 0.12),
         border: Border.all(
-          color: base.withValues(alpha: emphasized ? 0.9 : 0.45),
+          color: solid
+              ? base
+              : base.withValues(alpha: emphasized ? 0.9 : 0.45),
         ),
       ),
       child: Row(
@@ -556,13 +626,18 @@ class _EpgRecordChip extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: base),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: solid ? Colors.white : base,
+            ),
           ),
           const SizedBox(width: 5),
           Text(
             'Record',
             style: TextStyle(
-              color: rec == null
+              color: solid
+                  ? Colors.white
+                  : rec == null
                   ? (emphasized
                         ? const Color(0xFFFFD9E0)
                         : const Color(0xFFFF8CA3))
@@ -590,13 +665,14 @@ class _EpgTag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final color = dim
-        ? (dimColor ?? Colors.white.withValues(alpha: 0.35))
-        : (accent ?? HomeTheme.focusGold);
+        ? (dimColor ?? app.iptv.inkFaint)
+        : (accent ?? app.home.focus);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: app.shape.br(4),
         border: Border.all(color: color.withValues(alpha: 0.55), width: 1),
       ),
       child: Text(
@@ -623,20 +699,21 @@ class _EpgProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(2),
+      borderRadius: app.shape.br(2),
       child: SizedBox(
         height: 3.5,
         child: Row(
           children: [
             Expanded(
               flex: (progress * 1000).round().clamp(0, 1000),
-              child: ColoredBox(color: accent ?? HomeTheme.focusGold),
+              child: ColoredBox(color: accent ?? app.home.focus),
             ),
             Expanded(
               flex: 1000 - (progress * 1000).round().clamp(0, 1000),
               child: ColoredBox(
-                color: track ?? Colors.white.withValues(alpha: 0.12),
+                color: track ?? app.core.tx.withValues(alpha: 0.12),
               ),
             ),
           ],
@@ -674,6 +751,7 @@ class IptvSchedulePane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -706,15 +784,15 @@ class IptvSchedulePane extends StatelessWidget {
                         tooltip: 'Back to channels',
                         onPressed: onClose,
                         visualDensity: VisualDensity.compact,
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.arrow_back_rounded,
-                          color: Colors.white70,
+                          color: app.core.tx.withAlpha(0xB3),
                         ),
                       ),
                     Text(
                       'TV GUIDE',
                       style: TextStyle(
-                        color: HomeTheme.focusGold.withValues(alpha: 0.9),
+                        color: app.home.focus.withValues(alpha: 0.9),
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.2,
@@ -726,8 +804,8 @@ class IptvSchedulePane extends StatelessWidget {
                         channel.numberedName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: app.core.tx,
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
                         ),
@@ -738,7 +816,7 @@ class IptvSchedulePane extends StatelessWidget {
                       Text(
                         'BACK to close',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.35),
+                          color: app.iptv.inkFaint,
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
                         ),
@@ -776,10 +854,13 @@ Future<void> showIptvScheduleSheet(
   void Function(EpgProgramme programme)? onRecordProgramme,
   bool isTelevision = false,
 }) {
+  // Read from the surface that opens the sheet, the way downloads_screen does:
+  // a modal captures this subtree's inherited themes, freeze included.
+  final app = AppThemeScope.of(context);
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: const Color(0xFF14141D),
+    backgroundColor: app.iptv.modalBg,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
     ),
@@ -796,8 +877,8 @@ Future<void> showIptvScheduleSheet(
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(2),
+                  color: app.core.tx.withValues(alpha: 0.2),
+                  borderRadius: app.shape.br(2),
                 ),
               ),
             ),
@@ -808,7 +889,7 @@ Future<void> showIptvScheduleSheet(
                   Icon(
                     Icons.calendar_view_day_rounded,
                     size: 18,
-                    color: HomeTheme.focusGold.withValues(alpha: 0.9),
+                    color: app.home.focus.withValues(alpha: 0.9),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -816,8 +897,8 @@ Future<void> showIptvScheduleSheet(
                       channel.numberedName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: app.core.tx,
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
                       ),
@@ -973,6 +1054,7 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final t = widget.tokens;
     if (_loading) {
       return _focusAnchor(
@@ -999,7 +1081,7 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
                 Icons.tv_off_rounded,
                 size: 42,
                 color: t == null
-                    ? Colors.white.withValues(alpha: 0.25)
+                    ? app.core.tx.withValues(alpha: 0.25)
                     : t.fgFaint,
               ),
               const SizedBox(height: 12),
@@ -1007,7 +1089,7 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
                 'No guide data for this channel',
                 style: TextStyle(
                   color: t == null
-                      ? Colors.white.withValues(alpha: 0.55)
+                      ? app.iptv.inkDim
                       : t.fgDim,
                   fontSize: 13.5,
                   fontWeight: FontWeight.w600,
@@ -1042,7 +1124,7 @@ class _EpgScheduleListState extends State<EpgScheduleList> {
                     item.label.toUpperCase(),
                     style: TextStyle(
                       color: t == null
-                          ? Colors.white.withValues(alpha: 0.4)
+                          ? app.core.tx.withValues(alpha: 0.4)
                           : t.fgDim,
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
@@ -1120,6 +1202,7 @@ class _ScheduleRowState extends State<_ScheduleRow> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final p = widget.programme;
     final replayable = widget.onPlay != null;
     // Replayable past programmes stay readable — they're actionable, not
@@ -1129,24 +1212,37 @@ class _ScheduleRowState extends State<_ScheduleRow> {
         : (widget.isNow ? 1.0 : 0.85);
 
     final t = widget.tokens;
+    // Spotlight inverse focus: solid white pill, dark ink (focusFill/focusInk
+    // come as an asserted pair).
+    final inverse = _focused && t?.focusFill != null;
+    final ink = inverse ? t!.focusInk! : null;
     final row = Container(
       height: _EpgScheduleListState._rowExtent,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: _focused
-            ? (t == null ? const Color(0xFF141824) : t.focusTint)
+            ? (t == null ? app.iptv.rowFocusFill : (t.focusFill ?? t.focusTint))
             : (widget.isNow
                   ? (t == null
-                        ? Colors.white.withValues(alpha: 0.04)
+                        ? app.iptv.surfaceTint
                         : t.selectedTint)
                   : Colors.transparent),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: app.shape.br(10),
         border: Border.all(
-          color: _focused
-              ? (t == null ? HomeTheme.focusGold : t.accent)
+          color: _focused && !inverse
+              ? (t == null ? app.home.focus : t.accent)
               : Colors.transparent,
           width: 2,
         ),
+        boxShadow: inverse
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
       child: Row(
         children: [
@@ -1155,13 +1251,14 @@ class _ScheduleRowState extends State<_ScheduleRow> {
             child: Text(
               _clock(context, p.start),
               style: TextStyle(
-                color: widget.isNow
-                    ? (t == null ? HomeTheme.focusGold : t.accent)
-                    : (t == null
-                          ? Colors.white.withValues(
-                              alpha: widget.isPast ? 0.3 : 0.5,
-                            )
-                          : (widget.isPast ? t.fgFaint : t.fgDim)),
+                color: ink?.withValues(alpha: widget.isPast ? 0.45 : 0.6) ??
+                    (widget.isNow
+                        ? (t == null ? app.home.focus : t.accent)
+                        : (t == null
+                              ? app.core.tx.withValues(
+                                  alpha: widget.isPast ? 0.3 : 0.5,
+                                )
+                              : (widget.isPast ? t.fgFaint : t.fgDim))),
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 fontFamily: t != null && t.monoFamily.isNotEmpty
@@ -1181,9 +1278,10 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: t == null
-                        ? Colors.white.withValues(alpha: titleAlpha)
-                        : t.fg.withValues(alpha: titleAlpha),
+                    color: ink?.withValues(alpha: titleAlpha) ??
+                        (t == null
+                            ? app.core.tx.withValues(alpha: titleAlpha)
+                            : t.fg.withValues(alpha: titleAlpha)),
                     fontSize: 13.5,
                     fontWeight: widget.isNow
                         ? FontWeight.w700
@@ -1194,8 +1292,10 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                   const SizedBox(height: 5),
                   _EpgProgressBar(
                     progress: p.progressAt(DateTime.now()),
-                    accent: t?.accent,
-                    track: t?.hairline2,
+                    accent: ink ?? t?.accent,
+                    track: inverse
+                        ? ink!.withValues(alpha: 0.18)
+                        : t?.hairline2,
                   ),
                 ],
               ],
@@ -1204,12 +1304,18 @@ class _ScheduleRowState extends State<_ScheduleRow> {
           if (widget.isNow)
             Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: _EpgTag('NOW', accent: t?.accent),
+              child: _EpgTag('NOW', accent: ink ?? t?.accent),
             ),
           if (replayable)
             Padding(
               padding: const EdgeInsets.only(left: 8),
-              child: _EpgTag('REPLAY', dim: true, dimColor: t?.rec),
+              child: _EpgTag(
+                'REPLAY',
+                dim: true,
+                // Crimson at 9px sits just under contrast on the white
+                // pill — deepen it there.
+                dimColor: inverse ? const Color(0xFFB8202F) : t?.rec,
+              ),
             ),
           // A chip that reads as the button it is (the dim "REC" text looked
           // like metadata). Sits beside NOW on the airing row: "record the
@@ -1221,6 +1327,7 @@ class _ScheduleRowState extends State<_ScheduleRow> {
                 emphasized: _focused,
                 rec: t?.rec,
                 fgOn: t?.fg,
+                solid: inverse,
               ),
             ),
         ],

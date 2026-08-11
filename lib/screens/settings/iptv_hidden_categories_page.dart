@@ -8,6 +8,7 @@ import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// Manager for the categories a source no longer shows.
 ///
@@ -56,7 +57,7 @@ class _CategoryRow {
 }
 
 class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
-  late final bool _isTv = PlatformUtil.isAndroidTvCached;
+  late final bool _isTv = PlatformUtil.isTelevision;
 
   List<_CatalogTab> _tabs = const [];
   int _selectedTab = 0;
@@ -288,6 +289,7 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
   }
 
   Widget _buildHeader(List<_CategoryRow> rows) {
+    final t = AppThemeScope.of(context).settings;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -322,7 +324,7 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ),
@@ -358,7 +360,7 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
                   _query.isEmpty
                       ? 'This catalog has no categories.'
                       : 'No category matches "$_query".',
-                  style: TextStyle(fontSize: 13, color: kSettingsDim),
+                  style: TextStyle(fontSize: 13, color: t.dim),
                 ),
               ),
             ),
@@ -424,6 +426,8 @@ class _CategoryTileState extends State<_CategoryTile> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final row = widget.row;
     final shown = !row.hidden;
     return Focus(
@@ -452,14 +456,14 @@ class _CategoryTileState extends State<_CategoryTile> {
       child: Container(
         decoration: BoxDecoration(
           color: _focused
-              ? kSettingsAccent.withValues(alpha: 0.16)
+              ? t.accent.withValues(alpha: 0.16)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: app.shape.br(10),
         ),
         child: ListTile(
           leading: Icon(
             shown ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-            color: shown ? kSettingsAccent : kSettingsDim2,
+            color: shown ? t.accent : t.dim2,
           ),
           title: Text(
             row.name,
@@ -468,14 +472,14 @@ class _CategoryTileState extends State<_CategoryTile> {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: shown ? Colors.white : kSettingsDim,
+              color: shown ? app.core.tx : t.dim,
             ),
           ),
           subtitle: Text(
             row.stale
                 ? 'Not in this list any more — turn on to clear the rule'
                 : '${row.count} channel${row.count == 1 ? '' : 's'}',
-            style: TextStyle(fontSize: 12, color: kSettingsDim2),
+            style: TextStyle(fontSize: 12, color: t.dim2),
           ),
           trailing: Switch(
             value: shown,
@@ -511,6 +515,8 @@ class _CatalogTabChipState extends State<_CatalogTabChip> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final active = widget.selected;
     return Focus(
       focusNode: widget.focusNode,
@@ -530,14 +536,14 @@ class _CatalogTabChipState extends State<_CatalogTabChip> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: active
-                ? kSettingsAccent.withValues(alpha: 0.22)
-                : kSettingsPanel2,
-            borderRadius: BorderRadius.circular(10),
+                ? t.accent.withValues(alpha: 0.22)
+                : t.panel2,
+            borderRadius: app.shape.br(10),
             border: Border.all(
               color: _focused
-                  ? kSettingsAccent
+                  ? t.accent
                   : (active
-                        ? kSettingsAccent.withValues(alpha: 0.5)
+                        ? t.accent.withValues(alpha: 0.5)
                         : Colors.transparent),
               width: _focused ? 2 : 1,
             ),
@@ -547,7 +553,7 @@ class _CatalogTabChipState extends State<_CatalogTabChip> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: active ? Colors.white : kSettingsDim,
+              color: active ? app.core.tx : t.dim,
             ),
           ),
         ),
@@ -577,6 +583,7 @@ class _FocusableTextButtonState extends State<_FocusableTextButton> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (f) => setState(() => _focused = f),
@@ -595,20 +602,20 @@ class _FocusableTextButtonState extends State<_FocusableTextButton> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
             color: _focused
-                ? kSettingsAccent.withValues(alpha: 0.24)
+                ? t.accent.withValues(alpha: 0.24)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: _focused ? kSettingsAccent : kSettingsAccent2,
+              color: _focused ? t.accent : t.accent2,
               width: _focused ? 2 : 1,
             ),
           ),
           child: Text(
             widget.label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w700,
-              color: kSettingsAccent2,
+              color: t.accent2,
             ),
           ),
         ),

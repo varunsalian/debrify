@@ -1,8 +1,11 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../utils/platform_util.dart';
+import '../theme/app_surface.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_theme_scope.dart';
+import '../theme/widgets/glass_surface.dart';
+import '../theme/widgets/themed_artwork.dart';
 import '../utils/tv_keys.dart';
 
 /// Portrait playlist card optimized for grid layouts on desktop/tablet/mobile.
@@ -14,16 +17,6 @@ import '../utils/tv_keys.dart';
 /// - Progress indicator for in-progress items
 /// - Hover effects on desktop
 /// - DPAD navigation support with proper focus handling
-/// TV: skip the glass blur (see the action-sheet panel below — it swaps to an
-/// opaque fill there, so no BackdropFilter saveLayer on weak TV GPUs).
-Widget _maybeBlur(Widget child) {
-  if (PlatformUtil.isAndroidTvCached) return child;
-  return BackdropFilter(
-    filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-    child: child,
-  );
-}
-
 class PlaylistGridCard extends StatefulWidget {
   final Map<String, dynamic> item;
   final Map<String, dynamic>? progressData;
@@ -151,6 +144,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final title = widget.item['title'] as String? ?? 'Untitled';
     final posterUrl = widget.item['posterUrl'] as String?;
     final provider = widget.item['provider'] as String?;
@@ -223,7 +217,7 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: app.shape.br(16),
                 boxShadow: isActive
                     ? [
                         BoxShadow(
@@ -240,13 +234,23 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                         ),
                       ],
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Stack(
+              // The framing is the artwork's, so [ThemedArtwork] owns it
+              // outright — the wash, the badges, the title, the progress bar
+              // and the focus border all sit inside that one clip rather than
+              // under a second one of our own. The card's shadow stays on the
+              // container above, where it was.
+              child: ThemedArtwork(
+                role: ArtRole.poster,
+                radius: 16,
+                inList: true,
+                builder: (context, blend) =>
+                    _buildPoster(posterUrl, app, blend),
+                // Everything from the caption scrim down is chrome ON the
+                // poster, not poster: the frame treats the IMAGE, so a `faded`
+                // look must not dissolve the title and a `matted` one must not
+                // inset the badges into the mount.
+                overlay: Stack(
                   children: [
-                    // Poster background
-                    _buildPoster(posterUrl),
-
                     // Cinematic gradient overlay (4-stop, matching home screen)
                     Positioned.fill(
                       child: DecoratedBox(
@@ -296,12 +300,14 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: app.shape.br(6),
                           ),
                           child: Text(
                             _prettifyProvider(provider),
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              // Ink chosen against the brand swatch, not the
+                              // page: the badge stays Netflix red everywhere.
+                              color: app.inkOn(const Color(0xFFE50914)),
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.5,
@@ -319,11 +325,11 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: app.shape.br(6),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.star_rounded,
-                            color: Color(0xFFFFD700),
+                            color: app.playlist.favoriteAccent,
                             size: 16,
                           ),
                         ),
@@ -364,13 +370,15 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                           child: Stack(
                             children: [
                               Container(
-                                color: Colors.white.withValues(alpha: 0.1),
+                                color: app.playlist.hairline,
                               ),
                               FractionallySizedBox(
                                 alignment: Alignment.centerLeft,
                                 widthFactor: progress,
                                 child: Container(
                                   decoration: BoxDecoration(
+                                    // Left literal: no token carries this red
+                                    // pair — playlist.progressPlayed is blue.
                                     gradient: const LinearGradient(
                                       colors: [Color(0xFFED1C24), Color(0xFFFF4D4D)],
                                     ),
@@ -400,16 +408,18 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                             width: 52,
                             height: 52,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
+                              color: app.playlist.controlFill,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.4),
+                                color: app.fade(app.core.tx, 0.4),
                                 width: 1.5,
                               ),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.play_arrow_rounded,
-                              color: Colors.white,
+                              // Sits on the poster, so it asks what reads over
+                              // artwork rather than following page ink.
+                              color: app.onGlass,
                               size: 28,
                             ),
                           ),
@@ -423,11 +433,11 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
                         duration: const Duration(milliseconds: 200),
                         curve: Curves.easeOutCubic,
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: app.shape.br(16),
                           border: Border.all(
                             color: isActive
-                                ? Colors.white.withValues(alpha: 0.25)
-                                : Colors.white.withValues(alpha: 0.08),
+                                ? app.fade(app.core.tx, 0.25)
+                                : app.fade(app.core.tx, 0.08),
                             width: isActive ? 1.5 : 0.5,
                           ),
                         ),
@@ -443,7 +453,29 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
     );
   }
 
-  Widget _buildPoster(String? posterUrl) {
+  Widget _buildPoster(
+    String? posterUrl,
+    AppTheme app,
+    (Color, BlendMode)? blend,
+  ) {
+    // `Colors.white24` spelled off the page ink at its exact alpha (0x3D/255),
+    // so it stays byte-identical under legacy and inverts on a light ground.
+    final placeholderInk = app.core.tx.withValues(alpha: 0x3D / 255);
+    // The artwork fill falls from `playlist.posterPlaceholder` to the page's
+    // own ground, which is the relationship legacy already paints (#1A1A2E
+    // down to a near-ground black). Legacy keeps its shipped deep stop
+    // EXACTLY — no token carries #06080F, and `core.ground` is #0B0B0E, a
+    // near-miss — but every other theme has to fall to its own ground: a fixed
+    // dark slab under `placeholderInk`, which is page ink, is the spinner and
+    // the glyph disappearing on any light theme.
+    final loadingGradient = LinearGradient(
+      colors: [
+        app.playlist.posterPlaceholder,
+        app.playlist.posterFallbackDeep,
+      ],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
     return SizedBox(
       width: double.infinity,
       height: double.infinity,
@@ -452,48 +484,54 @@ class _PlaylistGridCardState extends State<PlaylistGridCard> {
               imageUrl: posterUrl,
               memCacheWidth: 600,
               fit: BoxFit.cover,
+              // Only the artwork takes the grade — the placeholder and the
+              // error tile below are chrome painted from tokens, and grading
+              // them would fight the palette they already resolved against.
+              color: blend?.$1,
+              colorBlendMode: blend?.$2,
               placeholder: (context, url) => Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF1A1A2E), Color(0xFF06080F)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: const Center(
+                decoration: BoxDecoration(gradient: loadingGradient),
+                child: Center(
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation(Colors.white24),
+                    valueColor: AlwaysStoppedAnimation(placeholderInk),
                   ),
                 ),
               ),
               errorWidget: (context, url, error) => Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF1A1A2E), Color(0xFF06080F)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: const Icon(
+                decoration: BoxDecoration(gradient: loadingGradient),
+                child: Icon(
                   Icons.video_library,
                   size: 64,
-                  color: Colors.white24,
+                  color: placeholderInk,
                 ),
               ),
             )
           : Container(
-              decoration: const BoxDecoration(
+              // The no-poster case is the same ROLE as the loading one, so it
+              // derives the same way: the placeholder falling to the ground.
+              //
+              // Legacy's two stops stay literal in the legacy branch on
+              // purpose. Neither has a token at its exact value — they are
+              // value-equal to cloud.dialogSurface / home.sheetBg, but those
+              // are a MODAL ground and a dialog ground, not a poster fill, and
+              // `playlist.posterPlaceholder` is #1A1A2E, a near-miss. Pinning
+              // the pair here keeps today's pixels while the themed branch
+              // stops painting a dark slab under page ink.
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                  colors: [
+                    app.playlist.noPosterBg,
+                    app.playlist.noPosterDeep,
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.video_library,
                 size: 64,
-                color: Colors.white24,
+                color: placeholderInk,
               ),
             ),
     );
@@ -594,6 +632,10 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
 
   @override
   Widget build(BuildContext context) {
+    // The sheet is a modal route, but `AppThemeScope` is an `InheritedTheme`
+    // and `showModalBottomSheet` captures those — so this still resolves to
+    // the freeze the card was rendered under.
+    final app = AppThemeScope.of(context);
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -614,34 +656,33 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
                         opacity: _fadeAnimation.value,
                         child: Container(
                           margin: const EdgeInsets.all(12),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            // TV: solid panel instead of glass — the blur
-                            // re-rasterises during the sheet's slide/fade-in,
-                            // a full-screen saveLayer per frame on weak GPUs.
-                            child: _maybeBlur(
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: PlatformUtil.isAndroidTvCached
-                                      ? const Color(0xF5181820)
-                                      : Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.15),
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: FocusScope(
-                                  node: _focusScopeNode,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _buildHeader(),
-                                      _buildDivider(),
-                                      _buildActions(),
-                                    ],
-                                  ),
-                                ),
+                          child: GlassSurface(
+                            family: SurfaceFamily.sheet,
+                            borderRadius: app.shape.br(20),
+                            sigma: 30,
+                            // The shipped hairline is half a pixel; the
+                            // widget's default 1 would double it.
+                            borderWidth: 0.5,
+                            // The panel's own ink, so a theme that resolves
+                            // `sheet` to `fill` — every theme shipped today —
+                            // paints the solid panel TV already got. The line
+                            // is passed for the same reason: it must not
+                            // borrow playlist.controlFill's 0.15.
+                            tint: app.playlist.sheetPanel,
+                            // The phone/desktop paint of the same role: a veil
+                            // over a real blur, so it steps off the ink rather
+                            // than off sheetPanel.
+                            blurTint: app.fade(app.core.tx, 0.08),
+                            border: app.fade(app.core.tx, 0.15),
+                            child: FocusScope(
+                              node: _focusScopeNode,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildHeader(),
+                                  _buildDivider(),
+                                  _buildActions(),
+                                ],
                               ),
                             ),
                           ),
@@ -662,11 +703,12 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       height: 0.5,
-      color: Colors.white.withValues(alpha: 0.1),
+      color: AppThemeScope.of(context).playlist.hairline,
     );
   }
 
   Widget _buildHeader() {
+    final app = AppThemeScope.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
@@ -676,7 +718,7 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
             width: 56,
             height: 84,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: app.shape.br(8),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.3),
@@ -685,13 +727,19 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
                 ),
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: widget.posterUrl != null && widget.posterUrl!.isNotEmpty
+            // One poster in a modal header, not a lazily-built cell, so this
+            // is outside the D5 kill switch's scope.
+            child: ThemedArtwork(
+              role: ArtRole.poster,
+              radius: 8,
+              builder: (context, blend) =>
+                  widget.posterUrl != null && widget.posterUrl!.isNotEmpty
                   ? CachedNetworkImage(
                       imageUrl: widget.posterUrl!,
                       memCacheWidth: 120,
                       fit: BoxFit.cover,
+                      color: blend?.$1,
+                      colorBlendMode: blend?.$2,
                       placeholder: (context, url) => _buildPosterPlaceholder(),
                       errorWidget: (context, url, error) => _buildPosterPlaceholder(),
                     )
@@ -709,13 +757,13 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
                     margin: const EdgeInsets.only(bottom: 6),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
+                      color: app.playlist.controlFill,
+                      borderRadius: app.shape.br(4),
                     ),
                     child: Text(
                       widget.provider!,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.7),
+                        color: app.core.tx.withValues(alpha: 0.7),
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.5,
@@ -741,17 +789,21 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
   }
 
   Widget _buildPosterPlaceholder() {
+    final app = AppThemeScope.of(context);
     return Container(
-      color: Colors.white.withValues(alpha: 0.1),
+      // A veil, not playlist.posterPlaceholder (that role is the opaque
+      // #1A1A2E the card uses) and not hairline (that is a line).
+      color: app.fade(app.core.tx, 0.1),
       child: Icon(
         Icons.movie_outlined,
-        color: Colors.white.withValues(alpha: 0.3),
+        color: app.core.tx.withValues(alpha: 0.3),
         size: 24,
       ),
     );
   }
 
   Widget _buildActions() {
+    final app = AppThemeScope.of(context);
     int index = 0;
 
     return Padding(
@@ -778,7 +830,7 @@ class _PlaylistActionSheetState extends State<_PlaylistActionSheet>
             _GlassButton(
               icon: widget.isFavorited ? Icons.star_rounded : Icons.star_outline_rounded,
               label: widget.isFavorited ? 'Remove from Favorites' : 'Add to Favorites',
-              iconColor: widget.isFavorited ? const Color(0xFFFFD700) : null,
+              iconColor: widget.isFavorited ? app.playlist.favoriteAccent : null,
               focusNode: _focusNodes[index++],
               onTap: widget.onToggleFavorite!,
             ),
@@ -834,14 +886,15 @@ class _GlassButtonState extends State<_GlassButton> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final isHighlighted = _isPressed || _isFocused;
     final textColor = widget.isDanger
-        ? const Color(0xFFFF6B6B)
-        : Colors.white.withValues(alpha: _isFocused ? 1.0 : 0.9);
+        ? app.playlist.destructive
+        : app.core.tx.withValues(alpha: _isFocused ? 1.0 : 0.9);
     final iconColor = widget.iconColor ??
         (widget.isDanger
-            ? const Color(0xFFFF6B6B)
-            : Colors.white.withValues(alpha: _isFocused ? 1.0 : 0.7));
+            ? app.playlist.destructive
+            : app.core.tx.withValues(alpha: _isFocused ? 1.0 : 0.7));
 
     return Focus(
       focusNode: widget.focusNode,
@@ -867,12 +920,12 @@ class _GlassButtonState extends State<_GlassButton> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: isHighlighted
-                ? Colors.white.withValues(alpha: 0.15)
+                ? app.playlist.controlFill
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(
               color: _isFocused
-                  ? Colors.white.withValues(alpha: 0.3)
+                  ? app.playlist.focusRing
                   : Colors.transparent,
               width: 1.5,
             ),
@@ -893,7 +946,7 @@ class _GlassButtonState extends State<_GlassButton> {
               ),
               Icon(
                 Icons.chevron_right_rounded,
-                color: Colors.white.withValues(alpha: _isFocused ? 0.5 : 0.3),
+                color: app.core.tx.withValues(alpha: _isFocused ? 0.5 : 0.3),
                 size: 20,
               ),
             ],

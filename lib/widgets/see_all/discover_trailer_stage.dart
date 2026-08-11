@@ -7,9 +7,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/youtube_service.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/app_theme_scope.dart';
 import '../hero_trailer_backdrop.dart';
-import '../home/home_theme.dart';
-import 'see_all_theme.dart';
 
 /// The full-screen ambient-trailer layer for the TV Discover two-pane. It sits
 /// ABOVE the two-pane and renders the trailer the rail resolved, positioned so
@@ -246,6 +246,10 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
       onPlayingChanged: _onPlaying,
     );
 
+    // Captured once at build: the AnimatedBuilder below runs per frame during
+    // the promote tween, and a token lookup there would be per-tick work.
+    final app = AppThemeScope.of(context);
+
     return IgnorePointer(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -309,12 +313,9 @@ class _DiscoverTrailerStageState extends State<DiscoverTrailerStage>
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
-                                  const Color(0xFF0D0B1A)
-                                      .withValues(alpha: 0.30 * t),
-                                  const Color(0xFF0D0B1A)
-                                      .withValues(alpha: 0.06 * t),
-                                  const Color(0xFF0D0B1A)
-                                      .withValues(alpha: 0.42 * t),
+                                  app.fade(app.seeAll.bg, 0.30 * t),
+                                  app.fade(app.seeAll.bg, 0.06 * t),
+                                  app.fade(app.seeAll.bg, 0.42 * t),
                                 ],
                                 stops: const [0.0, 0.5, 1.0],
                               ),
@@ -374,30 +375,31 @@ class _TakeoverInfo extends StatelessWidget {
     // Everything below is built ONCE per title — the per-frame AnimatedBuilder
     // at the end only wraps these in cheap Opacity/Transform, never rebuilds the
     // text or a full-screen save layer (the Home board's rule for weak TV GPUs).
+    final app = AppThemeScope.of(context);
     final rating = item.imdbRating;
     final runtime = item.runtimeDisplay;
     final genres = item.genres;
 
     final meta = <Widget>[];
     void sep() {
-      if (meta.isNotEmpty) meta.add(_metaDot());
+      if (meta.isNotEmpty) meta.add(_metaDot(app));
     }
 
     if (item.year != null && item.year!.isNotEmpty) {
-      meta.add(_metaText(item.year!));
+      meta.add(_metaText(app, item.year!));
     }
     if (runtime != null && runtime.isNotEmpty) {
       sep();
-      meta.add(_metaText(runtime));
+      meta.add(_metaText(app, runtime));
     }
     if (rating != null) {
       sep();
       meta.add(Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.star_rounded, size: 17, color: HomeTheme.focusGold),
+          Icon(Icons.star_rounded, size: 17, color: app.home.focus),
           const SizedBox(width: 4),
-          _metaText(rating.toStringAsFixed(1)),
+          _metaText(app, rating.toStringAsFixed(1)),
         ],
       ));
     }
@@ -421,7 +423,7 @@ class _TakeoverInfo extends StatelessWidget {
         fontWeight: FontWeight.w800,
         height: 0.98,
         letterSpacing: -0.5,
-        color: Colors.white,
+        color: app.core.tx,
         shadows: const [
           Shadow(color: Colors.black87, blurRadius: 18, offset: Offset(0, 3)),
         ],
@@ -437,7 +439,7 @@ class _TakeoverInfo extends StatelessWidget {
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
               letterSpacing: 3,
-              color: Colors.white.withValues(alpha: 0.6),
+              color: app.fade(app.core.tx, 0.6),
               shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
             ),
           );
@@ -487,11 +489,11 @@ class _TakeoverInfo extends StatelessWidget {
                       child: Container(
                         width: 5,
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(4),
-                          gradient: const LinearGradient(
+                          borderRadius: app.shape.br(4),
+                          gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [HomeTheme.chromeAccent, _accentLight],
+                            colors: [app.home.chromeAccent, _accentLight],
                           ),
                         ),
                       ),
@@ -534,23 +536,23 @@ class _TakeoverInfo extends StatelessWidget {
     );
   }
 
-  Widget _metaText(String s) => Text(
+  Widget _metaText(AppTheme app, String s) => Text(
         s,
         style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: Colors.white.withValues(alpha: 0.9),
+          color: app.fade(app.core.tx, 0.9),
           shadows: const [Shadow(color: Colors.black87, blurRadius: 8)],
         ),
       );
 
-  Widget _metaDot() => Padding(
+  Widget _metaDot(AppTheme app) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Container(
           width: 4,
           height: 4,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.45),
+            color: app.fade(app.core.tx, 0.45),
             shape: BoxShape.circle,
           ),
         ),
@@ -566,6 +568,7 @@ class _TrailerLoadingPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return AnimatedSlide(
       offset: visible ? Offset.zero : const Offset(0, -0.25),
       duration: const Duration(milliseconds: 260),
@@ -579,9 +582,10 @@ class _TrailerLoadingPill extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.fromLTRB(9, 5, 11, 5),
             decoration: BoxDecoration(
-              color: const Color(0xCC0D0B1A),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: kSeeAllAccentBorder),
+              // Glassy page ink — fade 0.8 pins the legacy 0xCC alpha.
+              color: app.fade(app.seeAll.bg, 0.8),
+              borderRadius: app.shape.brPill,
+              border: Border.all(color: app.seeAll.accentBorder),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.4),
@@ -589,7 +593,7 @@ class _TrailerLoadingPill extends StatelessWidget {
                   offset: const Offset(0, 3),
                 ),
                 BoxShadow(
-                  color: kSeeAllAccent.withValues(alpha: 0.18),
+                  color: app.fade(app.seeAll.accent, 0.18),
                   blurRadius: 18,
                   spreadRadius: -4,
                 ),
@@ -598,12 +602,13 @@ class _TrailerLoadingPill extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 10,
                   height: 10,
                   child: CircularProgressIndicator(
                     strokeWidth: 1.8,
-                    valueColor: AlwaysStoppedAnimation<Color>(kSeeAllAccent2),
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(app.seeAll.accent2),
                   ),
                 ),
                 const SizedBox(width: 7),
@@ -613,7 +618,7 @@ class _TrailerLoadingPill extends StatelessWidget {
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
-                    color: Colors.white.withValues(alpha: 0.85),
+                    color: app.fade(app.core.tx, 0.85),
                   ),
                 ),
               ],

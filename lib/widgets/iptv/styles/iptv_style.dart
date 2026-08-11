@@ -66,6 +66,13 @@ class IptvStyleTokens {
   final String nameFamily; // console: SpaceGrotesk
   final String monoFamily; // console: JetBrainsMono
 
+  /// tvOS-style inverse focus (Spotlight): when set, a DPAD-focused row
+  /// paints [focusFill] as a SOLID pill and flips its ink to [focusInk],
+  /// instead of the translucent [focusTint] wash. Null on every other
+  /// style, which keeps them pixel-identical.
+  final Color? focusFill;
+  final Color? focusInk;
+
   const IptvStyleTokens({
     required this.bg,
     required this.panel,
@@ -84,7 +91,13 @@ class IptvStyleTokens {
     this.captionFamily = '',
     this.nameFamily = '',
     this.monoFamily = '',
-  });
+    this.focusFill,
+    this.focusInk,
+  }) : assert(
+         (focusFill == null) == (focusInk == null),
+         'focusFill and focusInk come as a pair — renderers unwrap focusInk '
+         'whenever focusFill is set',
+       );
 
   /// First Edition — warm ink + paper, serif headline, hairline ledger.
   static const IptvStyleTokens edition = IptvStyleTokens(

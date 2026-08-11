@@ -53,6 +53,23 @@ extension iOSExternalPlayerExtension on iOSExternalPlayer {
     }
   }
 
+  /// Whether the player ships an Apple TV app that registers this same
+  /// scheme. The others are iPhone/iPad-only — offering them on tvOS would
+  /// be a row that can never launch anything.
+  bool get availableOnTvos {
+    switch (this) {
+      case iOSExternalPlayer.vlc:
+      case iOSExternalPlayer.infuse:
+      case iOSExternalPlayer.customScheme:
+        return true;
+      case iOSExternalPlayer.outplayer:
+      case iOSExternalPlayer.nplayer:
+      case iOSExternalPlayer.playerXtreme:
+      case iOSExternalPlayer.vimu:
+        return false;
+    }
+  }
+
   /// URL scheme for checking if app is installed (for canOpenURL)
   /// This is the base scheme without parameters
   String get urlScheme {

@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import '../services/app_route_observer.dart';
 import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
+import '../services/debrify_image_cache.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import 'trailer_engine.dart';
@@ -72,6 +73,21 @@ class HeroTrailerBackdrop extends StatefulWidget {
   /// Blur applied to the static image (the app's "one lit surface" wash).
   final double imageBlurSigma;
 
+  /// Render the still SHARP: no gaussian, and a real decode instead of the
+  /// deliberate 96px upscale.
+  ///
+  /// Separate from [imageBlurSigma] because that field conflates two things —
+  /// sigma 0 does not mean "unblurred", it means "blur by decoding tiny and
+  /// upscaling", which is why every TV surface has been showing 96px artwork.
+  /// A caller that wants the key art to actually read as key art has no way to
+  /// ask for it otherwise.
+  ///
+  /// Capped rather than uncapped: a 4K backdrop decoded at source resolution is
+  /// a memory spike on an A15, so this decodes at [_sharpStillWidth] — the same
+  /// budget the Home hero already spends — and goes through the shared cache so
+  /// the same artwork is not held twice.
+  final bool sharpStill;
+
   /// Blur applied to the *ambient* trailer. Kept light so it reads as motion
   /// while the page's dark tint keeps overlaid text legible. Animates to 0 in
   /// the foreground.
@@ -118,6 +134,7 @@ class HeroTrailerBackdrop extends StatefulWidget {
     this.onPlaybackFailed,
     this.firstFrameTimeout,
     this.imageBlurSigma = 42,
+    this.sharpStill = false,
     this.videoBlurSigma = 8,
     this.startDelay = const Duration(milliseconds: 1400),
     this.ambientVolume = _defaultAmbientVolume,
@@ -129,6 +146,10 @@ class HeroTrailerBackdrop extends StatefulWidget {
   /// See [ambientVolume]. 70% — audible but under the UI, matching the Home
   /// hero trailer's default volume so both ambient surfaces sit at one level.
   static const double _defaultAmbientVolume = 70;
+
+  /// Decode width for [sharpStill]. Matches the Home hero's own backdrop, which
+  /// is the largest still this app already draws.
+  static const int _sharpStillWidth = 1400;
 
   @override
   State<HeroTrailerBackdrop> createState() => HeroTrailerBackdropState();
@@ -146,9 +167,9 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
 
   /// Cap the ExoPlayer render texture (TV only) — the backdrop never needs full
   /// res, and trimming the per-frame GPU upload is what kills the TV stutter.
-  /// Matches the ambient 720p decode (see [YoutubeService.ambientTrailerMaxHeight])
+  /// Matches the ambient decode cap (see [YoutubeService.ambientTrailerMaxHeight])
   /// so the texture never exceeds what the resolve delivers.
-  static const int _tvTrailerMaxHeight = 720;
+  static const int _tvTrailerMaxHeight = 1080;
 
   TrailerEngine? _engine;
   StreamSubscription<bool>? _playingSub;
@@ -174,6 +195,10 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
 
   /// A route is covering us (player pushed on top) — hold playback.
   bool _covered = false;
+
+  /// Bumped by every teardown. An engine creation that is parked on the video
+  /// output lease compares against it when the wait ends.
+  int _engineGen = 0;
 
   /// The app is backgrounded — don't start (or resume) playback until resume.
   bool _appPaused = false;
@@ -247,15 +272,19 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   /// what stuttered. Underlay needs the blur-free config (a Flutter gaussian
   /// can't touch pixels that aren't in the Flutter surface); every TV call
   /// site passes sigma 0. Everything else keeps the proven media_kit path.
-  TrailerEngine _createEngine() {
+  /// Asynchronous because the media_kit engine must wait for the single video
+  /// output slot before it can be built (see [VideoOutputLease]). The Exo path
+  /// takes no lease — different decoder, different failure mode — and so
+  /// completes without ever yielding.
+  Future<TrailerEngine> _createEngine() {
     final useExo =
         !kIsWeb && Platform.isAndroid && PlatformUtil.isAndroidTvCached;
     return useExo
-        ? ExoTrailerEngine(
+        ? Future.value(ExoTrailerEngine(
             maxHeight: _tvTrailerMaxHeight,
             underlay: _underlayPref && widget.videoBlurSigma <= 0,
-          )
-        : MediaKitTrailerEngine();
+          ))
+        : MediaKitTrailerEngine.create();
   }
 
   @override
@@ -375,7 +404,22 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     final url = widget.videoUrl;
     if (url == null || url.isEmpty) return;
 
-    final engine = _createEngine();
+    // Creation can now WAIT (for the video-output slot), so everything that
+    // made this method safe when creation was synchronous has to be re-checked
+    // on the far side of it. `_teardownPlayer` bumps the generation, which is
+    // what tells an in-flight creation that its reason has gone.
+    final gen = ++_engineGen;
+    final engine = await _createEngine();
+    if (!mounted ||
+        gen != _engineGen ||
+        _engine != null ||
+        _covered ||
+        widget.videoUrl != url) {
+      // Nothing else knows this engine exists, so nothing else will dispose it
+      // — and its lease would be stranded.
+      unawaited(engine.dispose());
+      return;
+    }
     _engine = engine;
 
     // Stall watchdog: no rendered frame within the window = a dead-but-silent
@@ -494,6 +538,10 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   }
 
   void _teardownPlayer() {
+    // Bumped unconditionally, BEFORE the `_engine == null` early return below:
+    // an engine still waiting on the video-output lease is not yet in
+    // `_engine`, and this is the only thing that will tell it to stand down.
+    _engineGen++;
     _startTimer?.cancel();
     _startTimer = null;
     _firstFrameTimer?.cancel();
@@ -705,8 +753,16 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
   /// the real video. So when the trailer is hidden (a route covers us, or the
   /// app backgrounds as the native player takes over), fully release it and
   /// re-create on return. Off-TV (media_kit) keeps the cheaper pause/resume.
+  /// tvOS releases too, for a different reason: a paused media_kit engine keeps
+  /// its `VideoOutput`, and this process may only ever hold one — a second is a
+  /// SIGABRT, not a degraded picture. So a covered trailer must let go, or the
+  /// page that covered it can never start one (and the content player would
+  /// abort). Pausing is only safe where the output is cheap to hold: phones and
+  /// desktop, which never have two of these surfaces at once.
   bool get _releaseDecoderWhenHidden =>
-      !kIsWeb && Platform.isAndroid && PlatformUtil.isAndroidTvCached;
+      !kIsWeb &&
+      ((Platform.isAndroid && PlatformUtil.isAndroidTvCached) ||
+          PlatformUtil.isTvOS);
 
   @override
   void didPushNext() {
@@ -784,19 +840,23 @@ class HeroTrailerBackdropState extends State<HeroTrailerBackdrop>
     super.dispose();
   }
 
-  /// The static image layer. Small decode always (see build); the gaussian
+  /// The static image layer. Small decode by default (see build); the gaussian
   /// only exists on the sigma > 0 (non-TV) path.
   Widget _buildStaticBackdrop() {
     final image = CachedNetworkImage(
       imageUrl: widget.imageUrl!,
       fit: BoxFit.cover,
+      cacheManager: DebrifyImageCache.manager,
       // 96px on the filterless TV path (the upscale IS the blur); 480px under
-      // a real gaussian, where the filter hides the upscale.
-      memCacheWidth: widget.imageBlurSigma <= 0 ? 96 : 480,
+      // a real gaussian, where the filter hides the upscale; a real decode when
+      // the caller has asked for key art rather than a wash.
+      memCacheWidth: widget.sharpStill
+          ? HeroTrailerBackdrop._sharpStillWidth
+          : (widget.imageBlurSigma <= 0 ? 96 : 480),
       filterQuality: FilterQuality.medium,
       errorWidget: (_, __, ___) => const SizedBox.shrink(),
     );
-    if (widget.imageBlurSigma <= 0) return image;
+    if (widget.sharpStill || widget.imageBlurSigma <= 0) return image;
     return ImageFiltered(
       imageFilter: ImageFilter.blur(
         sigmaX: widget.imageBlurSigma,

@@ -1,9 +1,10 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../utils/platform_util.dart';
+import '../theme/app_surface.dart';
+import '../theme/widgets/glass_surface.dart';
+import '../theme/widgets/themed_artwork.dart';
 import '../utils/tv_keys.dart';
 
 /// Landscape playlist card optimized for Android TV horizontal scrolling.
@@ -14,16 +15,6 @@ import '../utils/tv_keys.dart';
 /// - Metadata chips (provider, size, file count)
 /// - Progress bar for in-progress items (5-95%)
 /// - Focus effects: border animation, metadata overlay, gradient
-/// TV: skip the glass blur (see the action-sheet panel below — it swaps to an
-/// opaque fill there, so no BackdropFilter saveLayer on weak TV GPUs).
-Widget _maybeBlur(Widget child) {
-  if (PlatformUtil.isAndroidTvCached) return child;
-  return BackdropFilter(
-    filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-    child: child,
-  );
-}
-
 class PlaylistLandscapeCard extends StatefulWidget {
   final Map<String, dynamic> item;
   final Map<String, dynamic>? progressData;
@@ -265,8 +256,24 @@ class _PlaylistLandscapeCardState extends State<PlaylistLandscapeCard> {
                 borderRadius: BorderRadius.circular(12),
                 child: Row(
                   children: [
-                    // Poster section (40% of width)
-                    _buildPoster(posterUrl, width * 0.4),
+                    // Poster section (40% of width).
+                    //
+                    // Only this half goes through [ThemedArtwork] — the info
+                    // panel beside it is chrome, and the card's own
+                    // `ClipRRect(12)` above stays where it is because that
+                    // radius is the CARD's shape, not the art's.
+                    //
+                    // Radius 0 because the poster carries none of its own
+                    // today: it butts straight against the info panel and the
+                    // card clip rounds its outer corners. A frame that mats or
+                    // fades still lands on the right region.
+                    ThemedArtwork(
+                      role: ArtRole.poster,
+                      radius: 0,
+                      inList: true,
+                      builder: (context, blend) =>
+                          _buildPoster(posterUrl, width * 0.4, blend),
+                    ),
 
                     // Info section (60% of width)
                     Expanded(
@@ -281,7 +288,11 @@ class _PlaylistLandscapeCardState extends State<PlaylistLandscapeCard> {
     );
   }
 
-  Widget _buildPoster(String? posterUrl, double posterWidth) {
+  Widget _buildPoster(
+    String? posterUrl,
+    double posterWidth,
+    (Color, BlendMode)? blend,
+  ) {
     return SizedBox(
       width: posterWidth,
       height: widget.height,
@@ -290,6 +301,10 @@ class _PlaylistLandscapeCardState extends State<PlaylistLandscapeCard> {
               imageUrl: posterUrl,
               memCacheWidth: 200,
               fit: BoxFit.cover,
+              // The grade is the artwork's alone; the placeholder and error
+              // tiles below are chrome and stay untouched.
+              color: blend?.$1,
+              colorBlendMode: blend?.$2,
               placeholder: (context, url) => Container(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
@@ -582,34 +597,28 @@ class _LandscapeActionSheetState extends State<_LandscapeActionSheet>
                         opacity: _fadeAnimation.value,
                         child: Container(
                           margin: const EdgeInsets.all(12),
-                          child: ClipRRect(
+                          child: GlassSurface(
+                            family: SurfaceFamily.sheet,
                             borderRadius: BorderRadius.circular(20),
-                            // TV: solid panel instead of glass — the blur
-                            // re-rasterises during the sheet's slide/fade-in,
-                            // a full-screen saveLayer per frame on weak GPUs.
-                            child: _maybeBlur(
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: PlatformUtil.isAndroidTvCached
-                                      ? const Color(0xF5181820)
-                                      : Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.15),
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: FocusScope(
-                                  node: _focusScopeNode,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _buildHeader(),
-                                      _buildDivider(),
-                                      _buildActions(),
-                                    ],
-                                  ),
-                                ),
+                            sigma: 30,
+                            // The shipped hairline is half a pixel; the
+                            // widget's default 1 would double it.
+                            borderWidth: 0.5,
+                            // The panel's own ink and line, so a theme that
+                            // resolves `sheet` to `fill` — every theme shipped
+                            // today — paints the solid panel TV already got.
+                            tint: const Color(0xF5181820),
+                            blurTint: Colors.white.withValues(alpha: 0.08),
+                            border: Colors.white.withValues(alpha: 0.15),
+                            child: FocusScope(
+                              node: _focusScopeNode,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildHeader(),
+                                  _buildDivider(),
+                                  _buildActions(),
+                                ],
                               ),
                             ),
                           ),
@@ -653,13 +662,19 @@ class _LandscapeActionSheetState extends State<_LandscapeActionSheet>
                 ),
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: widget.posterUrl != null && widget.posterUrl!.isNotEmpty
+            // One poster in a modal header, not a lazily-built cell, so this
+            // is outside the D5 kill switch's scope.
+            child: ThemedArtwork(
+              role: ArtRole.poster,
+              radius: 8,
+              builder: (context, blend) =>
+                  widget.posterUrl != null && widget.posterUrl!.isNotEmpty
                   ? CachedNetworkImage(
                       imageUrl: widget.posterUrl!,
                       memCacheWidth: 120,
                       fit: BoxFit.cover,
+                      color: blend?.$1,
+                      colorBlendMode: blend?.$2,
                       placeholder: (context, url) => _buildPosterPlaceholder(),
                       errorWidget: (context, url, error) => _buildPosterPlaceholder(),
                     )

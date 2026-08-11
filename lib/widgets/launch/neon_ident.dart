@@ -50,13 +50,17 @@ class NeonIdent extends LaunchIdent {
   CustomPainter createPainter(
     Animation<double> animation, {
     required bool Function() isTelevision,
+    IdentPalette? palette,
   }) =>
-      _NeonPainter(animation, isTelevision: isTelevision);
+      _NeonPainter(animation, isTelevision: isTelevision, palette: palette);
 }
 
 class _NeonPainter extends CustomPainter {
   final Animation<double> animation;
   final bool Function() isTelevision;
+
+  /// Null keeps Neon's own violets — the default, and every existing caller.
+  final IdentPalette? palette;
 
   Size? _size;
   bool? _lw;
@@ -72,11 +76,17 @@ class _NeonPainter extends CustomPainter {
   late List<TextPainter> _reflGlow; // reflection, alpha baked
   late List<TextPainter> _reflCore;
 
-  _NeonPainter(this.animation, {required this.isTelevision})
+  _NeonPainter(this.animation, {required this.isTelevision, this.palette})
       : super(repaint: animation);
 
-  static const _violet = Color(0xFFB18CFF);
-  static const _markViolet = Color(0xFFD06CFF);
+  /// Neon's own two violets — the tube and the mark. A themed palette
+  /// substitutes them; everything else about the ident (the glow radii, the
+  /// timing, the composition) is the art direction and does not move.
+  static const _ownTube = Color(0xFFB18CFF);
+  static const _ownMark = Color(0xFFD06CFF);
+
+  Color get _violet => palette?.ink ?? _ownTube;
+  Color get _markViolet => palette?.accent ?? _ownMark;
 
   void _layout(Size size, bool lightweight) {
     if (_word != null && _size == size && _lw == lightweight) return;

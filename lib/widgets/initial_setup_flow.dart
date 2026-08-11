@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/account_service.dart';
 import '../services/analytics_service.dart';
+import '../theme/legacy_theme_boundary.dart';
 import '../services/main_page_bridge.dart';
 import '../services/engine/remote_engine_manager.dart';
 import '../services/engine/local_engine_storage.dart';
@@ -46,7 +47,11 @@ class InitialSetupFlow extends StatefulWidget {
         barrierDismissible: false,
         barrierColor: Colors.black.withValues(alpha: 0.85),
         useSafeArea: false,
-        builder: (dialogContext) => const InitialSetupFlow(),
+        // Onboarding is an EXCLUDED surface, and this dialog builds under the
+        // root Navigator's overlay — no boundary wrapping AppInitializer can
+        // reach it, so the freeze lives in the builder itself.
+        builder: (dialogContext) =>
+            const LegacyThemeBoundary(child: InitialSetupFlow()),
       );
       return result ?? false;
     } finally {
@@ -981,7 +986,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
     try {
       var name = await StorageService.getRemoteTvDeviceName();
       name ??= await PlatformUtil.getDeviceName();
-      name ??= PlatformUtil.isAndroidTvCached ? 'Debrify TV' : 'This device';
+      name ??= PlatformUtil.isTelevision ? 'Debrify TV' : 'This device';
       if (!mounted || _setupMode != _SetupMode.fromPhone) return;
       setState(() => _advertisedName = name!);
       final state = RemoteControlState();
@@ -1005,7 +1010,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
       final enabled = await StorageService.getRemoteControlEnabled();
       if (!enabled) {
         await state.stop();
-      } else if (!PlatformUtil.isAndroidTvCached) {
+      } else if (!PlatformUtil.isTelevision) {
         await state.switchToSenderMode();
       }
     } catch (_) {
@@ -1154,7 +1159,7 @@ class _InitialSetupFlowState extends State<InitialSetupFlow>
   ) {
     final spacing1 = screenHeight < 800 ? 8.0 : 12.0;
     final spacing2 = screenHeight < 800 ? 16.0 : 24.0;
-    final bool isTv = _isAndroidTv || PlatformUtil.isAndroidTvCached;
+    final bool isTv = _isAndroidTv || PlatformUtil.isTelevision;
 
     return Column(
       key: const ValueKey<String>('setup-mode'),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 
@@ -30,6 +31,7 @@ class _SwitchRowState extends State<SwitchRow> {
 
   @override
   Widget build(BuildContext context) {
+    final tv = AppThemeScope.of(context).debrifyTv;
     return Focus(
       onFocusChange: (focused) {
         setState(() {
@@ -48,20 +50,20 @@ class _SwitchRowState extends State<SwitchRow> {
       },
       child: AnimatedContainer(
         // TV: snap — see TvFocusableCard.
-        duration: PlatformUtil.isAndroidTvCached
+        duration: PlatformUtil.isTelevision
             ? Duration.zero
             : const Duration(milliseconds: 150),
         decoration: BoxDecoration(
-          color: _isFocused ? const Color(0xFF2A2A2A) : const Color(0xFF1A1A1A),
+          color: _isFocused ? tv.cardFocusBg : tv.cardBg,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: _isFocused ? Colors.white : Colors.white12,
+            color: _isFocused ? tv.focusRing : tv.hairline,
             width: _isFocused ? 2 : 1,
           ),
           boxShadow: _isFocused
               ? [
                   BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.15),
+                    color: tv.fillStrong,
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -74,11 +76,11 @@ class _SwitchRowState extends State<SwitchRow> {
           ),
           subtitle: Text(
             widget.subtitle,
-            style: const TextStyle(color: Colors.white70),
+            style: TextStyle(color: tv.textDim),
           ),
           value: widget.value,
           onChanged: widget.onChanged,
-          activeColor: const Color(0xFFE50914),
+          activeColor: tv.accent,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 12,
             vertical: 0,

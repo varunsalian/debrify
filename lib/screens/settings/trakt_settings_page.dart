@@ -10,6 +10,7 @@ import '../../services/storage_service.dart';
 import '../../services/trakt/trakt_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 class TraktSettingsPage extends StatefulWidget {
   const TraktSettingsPage({super.key});
@@ -57,7 +58,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   }
 
   void _focusOnTv(FocusNode node) {
-    if (!PlatformUtil.isAndroidTvCached) return;
+    if (!PlatformUtil.isTelevision) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && node.context != null) node.requestFocus();
     });
@@ -80,7 +81,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
     // the user already focused something (e.g. the AppBar back button)
     // while the async load ran. Reseeds elsewhere skip this guard on
     // purpose: there the focused node just unmounted.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         final primary = FocusManager.instance.primaryFocus;
@@ -243,11 +244,12 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   }
 
   void _showSnackBar(String message, {bool isError = true}) {
+    final t = AppThemeScope.of(context).settings;
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? kSettingsRed : kSettingsGreen,
+        backgroundColor: isError ? t.danger : t.success,
       ),
     );
   }
@@ -263,6 +265,8 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Trakt Settings',
@@ -303,8 +307,8 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                                     ? Icons.check_circle
                                     : Icons.circle_outlined,
                                 color: _isConnected
-                                    ? kSettingsGreen
-                                    : kSettingsDim2,
+                                    ? t.success
+                                    : t.dim2,
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -315,10 +319,10 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                                       _isConnected
                                           ? 'Connected'
                                           : 'Not connected',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.w700,
                                         fontSize: 16,
-                                        color: Colors.white,
+                                        color: app.core.tx,
                                       ),
                                     ),
                                     if (_username != null)
@@ -326,7 +330,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                                         _username!,
                                         style: TextStyle(
                                           fontSize: 13,
-                                          color: kSettingsDim,
+                                          color: t.dim,
                                         ),
                                       ),
                                   ],
@@ -347,9 +351,9 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                                   icon: const Icon(Icons.logout),
                                   label: const Text('Logout'),
                                   style: OutlinedButton.styleFrom(
-                                    foregroundColor: kSettingsRed,
+                                    foregroundColor: t.danger,
                                     side: BorderSide(
-                                      color: kSettingsRed.withValues(
+                                      color: t.danger.withValues(
                                         alpha: 0.4,
                                       ),
                                     ),
@@ -373,7 +377,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                           title: const Text('Sync Catalog Items'),
                           subtitle: Text(
                             'Scrobble playback to Trakt for all content played from addons, not just Trakt items',
-                            style: TextStyle(fontSize: 12, color: kSettingsDim),
+                            style: TextStyle(fontSize: 12, color: t.dim),
                           ),
                           value: _syncCatalogItems,
                           onChanged: (value) {
@@ -403,6 +407,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   }
 
   Widget _buildLoginSection() {
+    final app = AppThemeScope.of(context);
     // Show device code UI when connecting
     if (_isConnecting && _userCode != null) {
       return _buildDeviceCodeCard();
@@ -418,12 +423,12 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
           // DPAD focus, which would strand TV users mid-login.
           onPressed: _isConnecting ? () {} : _login,
           icon: _isConnecting
-              ? const SizedBox(
+              ? SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: app.core.tx,
                   ),
                 )
               : const Icon(Icons.login),
@@ -434,6 +439,8 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   }
 
   Widget _buildDeviceCodeCard() {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     return Column(
       children: [
         // User code display
@@ -441,15 +448,15 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
-            color: kSettingsPanel2,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: kSettingsLine),
+            color: t.panel2,
+            borderRadius: app.shape.br(12),
+            border: Border.all(color: t.line),
           ),
           child: Column(
             children: [
               Text(
                 'Enter this code:',
-                style: TextStyle(fontSize: 14, color: kSettingsDim),
+                style: TextStyle(fontSize: 14, color: t.dim),
               ),
               const SizedBox(height: 8),
               // InkWell (not GestureDetector) so the copy action is DPAD
@@ -457,7 +464,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
               // traverse instead of moving a text cursor.
               _FocusRing(
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: app.shape.br(8),
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: _userCode!));
                     _showSnackBar('Code copied to clipboard', isError: false);
@@ -472,16 +479,16 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                       children: [
                         Text(
                           _userCode!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 36,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 4,
                             fontFamily: 'monospace',
-                            color: Colors.white,
+                            color: app.core.tx,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Icon(Icons.copy, size: 20, color: kSettingsDim),
+                        Icon(Icons.copy, size: 20, color: t.dim),
                       ],
                     ),
                   ),
@@ -495,7 +502,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         // Verification URL (focusable link)
         _FocusRing(
           child: InkWell(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: app.shape.br(8),
             onTap: () {
               final url = _verificationUrl ?? 'https://trakt.tv/activate';
               launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
@@ -504,12 +511,12 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               child: Text(
                 'Go to ${_verificationUrl ?? 'https://trakt.tv/activate'}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
-                  color: kSettingsAccent2,
+                  color: t.accent2,
                   decoration: TextDecoration.underline,
-                  decorationColor: kSettingsAccent2,
+                  decorationColor: t.accent2,
                 ),
               ),
             ),
@@ -518,14 +525,14 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
         const SizedBox(height: 4),
         Text(
           'on your phone or computer',
-          style: TextStyle(fontSize: 13, color: kSettingsDim),
+          style: TextStyle(fontSize: 13, color: t.dim),
         ),
         const SizedBox(height: 12),
 
         // Countdown
         Text(
           'Code expires in ${_formatCountdown()}',
-          style: TextStyle(fontSize: 13, color: kSettingsDim),
+          style: TextStyle(fontSize: 13, color: t.dim),
         ),
         const SizedBox(height: 16),
 
@@ -561,6 +568,7 @@ class _FocusRingState extends State<_FocusRing> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       skipTraversal: true,
       canRequestFocus: false,
@@ -570,7 +578,7 @@ class _FocusRingState extends State<_FocusRing> {
       child: Container(
         decoration: BoxDecoration(
           border: Border.all(
-            color: _focused ? kSettingsAccent : Colors.transparent,
+            color: _focused ? t.accent : Colors.transparent,
             width: 2,
           ),
           borderRadius: BorderRadius.circular(14),

@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_surface.dart';
+import '../theme/app_theme_scope.dart';
+
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
 import '../utils/tv_keys.dart';
@@ -209,6 +212,16 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
   Widget build(BuildContext context) {
     final isSelected = widget.isSelectionMode && widget.isSelected;
 
+    // The `shelfRow` family. The caps let it take all four models precisely
+    // because the border-inset split above moved this row's decoration out of
+    // the layout path — a look may now drop the fill without reflowing a
+    // single pixel of the content.
+    final model = AppThemeScope.of(context).surface.modelFor(
+      SurfaceFamily.shelfRow,
+    );
+    final unfilled = model == SeparationModel.space ||
+        model == SeparationModel.rule;
+
     Color bgColor;
     if (isSelected) {
       bgColor = _selectedBg;
@@ -216,6 +229,13 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
       bgColor = _cardBgHover;
     } else {
       bgColor = _cardBg;
+    }
+    // A `space` row is separated by rhythm alone; a `rule` row keeps a resting
+    // hairline instead of a fill. Selection and focus still paint their tint
+    // in both — those are STATES, and a state a look cannot show is a look
+    // that has broken the row rather than restyled it.
+    if (unfilled && !isSelected && !_isFocused) {
+      bgColor = Colors.transparent;
     }
 
     Color borderColor;
@@ -227,15 +247,34 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
       borderColor = _qualityColor;
       borderWidth = 2;
     } else {
-      borderColor = Colors.transparent;
+      // A `rule` look lives on its hairline, so the resting border is the one
+      // thing it must not give up.
+      borderColor =
+          model == SeparationModel.rule ? _textSecondary.withValues(alpha: 0.22)
+              : Colors.transparent;
       borderWidth = 1;
     }
 
+    // The border is painted as an OVERLAY, and the container keeps a
+    // TRANSPARENT border of the same width.
+    //
+    // This is the §12 precondition for `shelfRow` being allowed to take
+    // `SeparationModel.space`. `Container` insets its child by the border it
+    // draws, and this row's width varies with state (1 / 1.5 / 2), so the
+    // border sat in the LAYOUT path — a theme that dropped it would have
+    // reflowed the row, which is exactly what the surface caps promise cannot
+    // happen on a shelf row.
+    //
+    // Splitting them keeps both properties: the transparent border holds the
+    // inset (so every state lays out exactly as it does today, focus wobble
+    // included), and the visible ring is a `Positioned.fill` sibling that can
+    // be removed without moving a pixel of content. `Border.all` strokes
+    // inward from the same rounded rect, so what is painted is unchanged.
     final containerDecoration = BoxDecoration(
       color: bgColor,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(
-        color: borderColor,
+        color: Colors.transparent,
         width: borderWidth,
       ),
       boxShadow: widget.isTelevision || !_isFocused
@@ -249,22 +288,65 @@ class _TorrentResultRowState extends State<TorrentResultRow> {
             ],
     );
 
+    final ringDecoration = BoxDecoration(
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: borderColor, width: borderWidth),
+    );
+
+    const rowMargin = EdgeInsets.symmetric(horizontal: 12, vertical: 4);
+
     final Widget animatedContainer;
     if (widget.isTelevision) {
-      animatedContainer = Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        clipBehavior: Clip.hardEdge,
-        decoration: containerDecoration,
-        child: _buildMainRow(),
+      animatedContainer = Padding(
+        padding: rowMargin,
+        child: Stack(
+          children: [
+            // `Container`, not `DecoratedBox` — the whole point of keeping a
+            // transparent border here is the INSET it applies, and only
+            // Container reports `BoxDecoration.padding` as padding. A
+            // DecoratedBox would drop the 1/1.5/2px inset and move the row's
+            // content across focus and selection states.
+            //
+            // The clip stays OUTSIDE the decoration, where `Clip.hardEdge` on
+            // the old Container put it — inside the border inset it would
+            // round the content on a slightly different curve than the ring.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                decoration: containerDecoration,
+                child: _buildMainRow(),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(child: DecoratedBox(decoration: ringDecoration)),
+            ),
+          ],
+        ),
       );
     } else {
-      animatedContainer = AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: containerDecoration,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(11),
-          child: _buildMainRow(),
+      animatedContainer = Padding(
+        padding: rowMargin,
+        child: Stack(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              decoration: containerDecoration,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(11),
+                child: _buildMainRow(),
+              ),
+            ),
+            // Tweened on the same curve and duration as the container it sits
+            // on, so the two halves of one border still move together.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  decoration: ringDecoration,
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }

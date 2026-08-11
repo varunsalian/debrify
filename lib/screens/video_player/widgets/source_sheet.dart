@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
@@ -90,9 +91,9 @@ class _SourceSheetState extends State<SourceSheet>
   String? _loadingMode;
 
   // Design tokens (Netflix-dark, matching the TV unified menu)
-  static const _accent = Color(0xFFE50914);
-  static const _accentSoft = Color(0xFFFF4D57);
-  static const _surfaceDark = Color(0xFF141414);
+  static const _accent = Color(0xFFFFFFFF);
+  static const _accentSoft = Color(0xFFE9E9EE);
+  static const _surfaceDark = Color(0xFF101012);
 
   bool get _seriesTabs =>
       widget.seriesFetcher != null && !widget.seriesFetcher!.isMovie;
@@ -100,6 +101,14 @@ class _SourceSheetState extends State<SourceSheet>
   @override
   void initState() {
     super.initState();
+
+    // A television opens this over the player, whose root Focus already holds
+    // focus in this scope — so `autofocus: true` on the KeyboardListener never
+    // wins and the sheet renders its virtual focus while receiving no keys at
+    // all (the DPAD appears dead). Claim focus explicitly once mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _keyboardFocusNode.requestFocus();
+    });
 
     _rebuildTabs();
     _autoSelectTab();
@@ -420,6 +429,7 @@ class _SourceSheetState extends State<SourceSheet>
 
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
+      TvOverlayBack.mark();
       widget.onClose();
       return;
     }
@@ -463,9 +473,17 @@ class _SourceSheetState extends State<SourceSheet>
   void _handleSearchKeys(KeyEvent event) {
     if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       _searchFocusNode.unfocus();
+      // Reclaim the sheet's key listener: unfocusing clears the scope's
+      // focused child, and without this the list paints a focused row but
+      // stops receiving DPAD keys entirely.
+      _keyboardFocusNode.requestFocus();
       setState(() => _focusZone = _FocusZone.tabs);
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _searchFocusNode.unfocus();
+      // Reclaim the sheet's key listener: unfocusing clears the scope's
+      // focused child, and without this the list paints a focused row but
+      // stops receiving DPAD keys entirely.
+      _keyboardFocusNode.requestFocus();
       setState(() => _focusZone = _FocusZone.sources);
     }
   }
@@ -502,7 +520,7 @@ class _SourceSheetState extends State<SourceSheet>
   Widget _frost(Widget child) {
     if (PlatformUtil.isAndroidTvCached) return child;
     return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+      filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
       child: child,
     );
   }
@@ -537,21 +555,16 @@ class _SourceSheetState extends State<SourceSheet>
             child: SlideTransition(
               position: _slideAnim,
               child: ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(28),
-                  bottomLeft: Radius.circular(28),
-                ),
+                borderRadius: BorderRadius.zero,
                 child: _frost(
                   Container(
                     decoration: BoxDecoration(
-                      color: _surfaceDark.withOpacity(0.97),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(28),
-                        bottomLeft: Radius.circular(28),
-                      ),
+                      color: _surfaceDark.withOpacity(
+                          PlatformUtil.isAndroidTvCached ? 0.96 : 0.80),
                       border: Border(
                         left: BorderSide(
-                            color: Colors.white.withOpacity(0.06), width: 0.5),
+                            color: Colors.white.withOpacity(0.14),
+                            width: 0.75),
                       ),
                     ),
                     child: Column(
@@ -630,13 +643,13 @@ class _SourceSheetState extends State<SourceSheet>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                    color: _accent.withOpacity(0.25),
+                    color: Colors.black.withOpacity(0.35),
                     blurRadius: 16,
                     spreadRadius: 2),
               ],
             ),
             child: const Icon(Icons.swap_horiz_rounded,
-                color: Colors.white, size: 22),
+                color: Colors.black, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -775,10 +788,12 @@ class _SourceSheetState extends State<SourceSheet>
                   tab.label,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: (isEmpty && !canLoadMore)
-                        ? Colors.white.withOpacity(0.2)
-                        : isActive
-                            ? Colors.white
+                    color: isActive
+                        ? ((isEmpty && !canLoadMore)
+                            ? Colors.black.withOpacity(0.45)
+                            : Colors.black)
+                        : (isEmpty && !canLoadMore)
+                            ? Colors.white.withOpacity(0.2)
                             : Colors.white.withOpacity(0.5),
                     fontSize: 12,
                     fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
@@ -792,7 +807,7 @@ class _SourceSheetState extends State<SourceSheet>
                     const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
                   color: isActive
-                      ? Colors.white.withOpacity(0.2)
+                      ? Colors.black.withOpacity(0.12)
                       : isEmpty
                           ? Colors.white.withOpacity(0.04)
                           : Colors.white.withOpacity(0.08),
@@ -801,10 +816,12 @@ class _SourceSheetState extends State<SourceSheet>
                 child: Text(
                   '$count',
                   style: TextStyle(
-                    color: isEmpty
-                        ? Colors.white.withOpacity(0.15)
-                        : isActive
-                            ? Colors.white
+                    color: isActive
+                        ? (isEmpty
+                            ? Colors.black.withOpacity(0.4)
+                            : Colors.black)
+                        : isEmpty
+                            ? Colors.white.withOpacity(0.15)
                             : Colors.white.withOpacity(0.4),
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
@@ -1068,13 +1085,13 @@ class _SourceSheetState extends State<SourceSheet>
                     )
                   else
                     const Icon(Icons.add_rounded,
-                        color: Colors.white, size: 17),
+                        color: Colors.black, size: 17),
                   const SizedBox(width: 8),
                   Text(
                     isLoading ? 'Searching for sources…' : 'Load more sources',
                     style: TextStyle(
                       color:
-                          isLoading ? Colors.white.withOpacity(0.6) : Colors.white,
+                          isLoading ? Colors.white.withOpacity(0.6) : Colors.black,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1098,7 +1115,7 @@ class _LoadMoreRow extends StatelessWidget {
   final bool isFocused;
   final VoidCallback onTap;
 
-  static const _accentSoft = Color(0xFFFF4D57);
+  static const _accentSoft = Color(0xFFE9E9EE);
 
   const _LoadMoreRow({
     required this.isLoading,
@@ -1174,8 +1191,8 @@ class _SourceTile extends StatelessWidget {
   final Animation<double> pulseAnim;
   final VoidCallback onTap;
 
-  static const _accent = Color(0xFFE50914);
-  static const _accentSoft = Color(0xFFFF4D57);
+  static const _accent = Color(0xFFFFFFFF);
+  static const _accentSoft = Color(0xFFE9E9EE);
 
   const _SourceTile({
     required this.source,
@@ -1200,11 +1217,11 @@ class _SourceTile extends StatelessWidget {
   static Color _qualityColor(String quality) {
     switch (quality) {
       case '4K':
-        return const Color(0xFFFFB300);
+        return Colors.white;
       case '1080p':
-        return const Color(0xFF42A5F5);
+        return Colors.white.withOpacity(0.85);
       case '720p':
-        return const Color(0xFF66BB6A);
+        return Colors.white.withOpacity(0.65);
       default:
         return Colors.white.withOpacity(0.4);
     }
@@ -1321,11 +1338,9 @@ class _SourceTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: isCurrent
-                          ? _accentSoft
-                          : isFocused
-                              ? Colors.white
-                              : Colors.white.withOpacity(0.85),
+                      color: isCurrent || isFocused
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.85),
                       fontSize: 13,
                       fontWeight:
                           isFocused || isCurrent ? FontWeight.w600 : FontWeight.w400,
@@ -1373,21 +1388,24 @@ class _SourceTile extends StatelessWidget {
     );
   }
 
+  // Spotlight chips: hairline-outlined monochrome; the color parameter is
+  // kept for call-site stability but no longer paints (one accent max).
   Widget _buildChip(String text, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.white.withOpacity(0.30), width: 0.75),
+        borderRadius: BorderRadius.circular(3.5),
       ),
       child: Text(
         text,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
-          color: color.withOpacity(0.8),
+          color: Colors.white.withOpacity(0.70),
           fontSize: 9,
           fontWeight: FontWeight.w600,
+          letterSpacing: 0.4,
         ),
       ),
     );
@@ -1416,7 +1434,7 @@ class _SourceTile extends StatelessWidget {
           child: const Text(
             'PLAYING',
             style: TextStyle(
-              color: Colors.white,
+              color: Colors.black,
               fontSize: 8,
               fontWeight: FontWeight.w800,
               letterSpacing: 1,

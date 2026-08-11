@@ -4,12 +4,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../utils/dominant_color.dart';
 import '../utils/platform_util.dart';
 import '../models/stremio_addon.dart';
 import '../models/advanced_search_selection.dart';
 import '../models/playlist_view_mode.dart';
 import '../services/analytics_service.dart';
+import '../services/series_source_service.dart';
 import '../services/app_route_observer.dart';
 import '../services/debrify_image_cache.dart';
 import '../services/imdb_enrichment_service.dart';
@@ -18,8 +18,21 @@ import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
 import '../services/video_player_launcher.dart';
 import '../services/youtube_service.dart';
+import '../widgets/detail/detail_layout_console.dart';
+import '../widgets/detail/detail_layout_dossier.dart';
+import '../widgets/detail/detail_layout_marquee.dart';
+import '../widgets/detail/detail_layout_premium.dart';
+import '../widgets/detail/detail_layout_showcase.dart';
+import '../widgets/detail/detail_layout_stage.dart';
+import '../widgets/detail/detail_style.dart';
+import '../widgets/detail/detail_model.dart';
+import '../theme/app_theme_scope.dart';
+import '../theme/artwork_accent.dart';
+import '../widgets/detail/theme/detail_theme.dart';
+import '../widgets/detail/theme/detail_themes.dart';
 import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/episodes_panel.dart';
+import '../widgets/horizontal_mouse_wheel.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../services/trakt/trakt_episode_model.dart';
@@ -29,6 +42,11 @@ import '../services/simkl/simkl_service.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import '../widgets/tracker_brand_marks.dart';
 import 'episodes_screen.dart' show kCatalogDetailRouteName;
+import 'settings/detail_page_style_page.dart' show effectiveDetailPageStyle;
+import '../theme/app_theme_controller.dart';
+import '../theme/theme_core_resolver.dart';
+import '../theme/theme_overrides.dart';
+import '../theme/shipped_themes.dart' show effectiveDetailTheme;
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
 /// episode drill-down fused into one Stremio-styled screen. Reached only from
@@ -224,6 +242,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// title/meta/summary above it), and focusing a lower section brings it fully
   /// into view — fixing the "can't scroll back up to the details" DPAD bug.
   final ScrollController _infoScroll = ScrollController();
+  final ScrollController _castRailScroll = ScrollController();
+  final ScrollController _recommendationRailScroll = ScrollController();
 
   /// The stable LEFT-crossing target for episodes: the info column's primary
   /// action (Play/Resume, or the source pill when Play is hidden). Pressing LEFT
@@ -258,6 +278,71 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// or stacked) builds the panel at a time.
   final GlobalKey<EpisodesPanelState> _episodesPanelKey =
       GlobalKey<EpisodesPanelState>();
+
+  /// Which body to draw. Read SYNCHRONOUSLY from the warmed cache so the first
+  /// build already has it — an async read would paint Classic for a frame and
+  /// then re-lay-out the whole page.
+  ///
+  /// Direct-source mode (Xtream IPTV series) always gets Classic: that path has
+  /// its own contract (URL-backed episodes, a different progress loader,
+  /// playback on top of this page) and a single caller, so supporting six
+  /// arrangements there would risk a shipped feature for nothing.
+  late final String _style = widget.seasonsLoader != null
+      ? 'classic'
+      : effectiveDetailPageStyle(StorageService.detailPageStyleCached);
+
+  /// The look the alternate layouts are drawn in. Read synchronously from the
+  /// warmed cache for the same reason as [_style] — the page resolves both in
+  /// its first build, and an async read would repaint the whole thing.
+  ///
+  /// A GETTER, not a `late final`: selecting an app theme write-through
+  /// mirrors into `detail_theme`, and a State-lifetime capture would leave an
+  /// already-open details route on the stale look until reopened. Resolving
+  /// per read keeps it a 20-entry const lookup — free — and an open route now
+  /// restyles on its next rebuild. (Foundation item 2 of the theme rollout;
+  /// the full `(app_theme, detail_theme, style)` resolution is step 5.)
+  ///
+  /// Classic is deliberately unthemed, so this is only consulted by the
+  /// alternate bodies.
+  ///
+  /// Through [ThemeCoreResolver], not the registry directly: the user's token
+  /// overrides are applied there, and a page that fetched its own core would be
+  /// the one surface in the app still showing the unedited theme.
+  DetailTheme get _theme => ThemeCoreResolver.resolve(
+    effectiveDetailTheme(StorageService.detailThemeCached),
+    // Classic is deliberately unthemed, and the controller's own fast path says
+    // so. Applying overrides here anyway would make this the one surface that
+    // disagreed with it.
+    AppThemeController.instance.isLegacy
+        ? ThemeOverrides.none
+        : AppThemeController.instance.overrides,
+  );
+
+  /// Filmstrip pushes the focused episode's still here. Painted by the shell as
+  /// an ambient layer — never as [HeroTrailerBackdrop.imageUrl], which stays
+  /// the title art the route Hero flies back into on pop.
+  String? _focusedStillUrl;
+
+  /// The Showcase body has descended past its hero.
+  ///
+  /// Showcase wants the reference's two grounds: sharp key art while the
+  /// identity owns the screen, a blurred field once you walk down into the
+  /// bands. Both have to be painted HERE, because this backdrop is the only
+  /// layer outside the overscan `SafeArea` — art painted inside the body would
+  /// stop short of the screen edges and the two states would not line up.
+  bool _bodyDeep = false;
+
+  /// Whether this page should show sharp key art at rest at all. Showcase is
+  /// the tvOS idiom and the only layout designed around real artwork; every
+  /// other layout was drawn against the blurred wash and would lose its text
+  /// legibility over a sharp one.
+  bool get _wantsSharpStill => _style == 'showcase' && !_bodyDeep;
+
+  /// The two focus anchors the shell owns, handed to whichever body draws.
+  late final DetailFocusCoordinator _focusCoordinator = DetailFocusCoordinator(
+    backNode: _backButtonFocusNode,
+    primaryEntry: _leftEntryFocusNode,
+  );
 
   StremioMeta get _item => _enriched ?? widget.item;
 
@@ -326,6 +411,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _loadBoundSources();
       _loadEnrichedMeta();
       _loadImdbEnrichment();
       _loadParentsGuide();
@@ -375,6 +461,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // top of this screen (like Resume), so the list is still alive when the
     // player returns and must reflect the session that just ended.
     _episodesPanelKey.currentState?.refreshWatchProgress();
+    // Sources can be bound from inside the player's own source picker and from
+    // the app-action menu, so returning here is the only place that catches
+    // both. Cheap — a prefs read, not a network call.
+    unawaited(_loadBoundSources());
   }
 
   /// Resolve the user's Trakt relationship to this title so the menu shows
@@ -456,11 +546,19 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// brand-saturated than backdrops). One tiny 32px decode; silent on failure,
   /// leaving the gold fallback. Extracted from the initial artwork only — a
   /// later enrichment swap isn't worth a second pass.
+  ///
+  /// Through [DominantColorCache] rather than the extractor directly, so
+  /// reopening a title costs nothing and two screens asking at once share one
+  /// decode. The cache also remembers a NULL answer, which is the common case
+  /// for black-and-white artwork and used to be re-decoded on every visit.
   Future<void> _loadAccent() async {
     final url = widget.item.poster ?? widget.item.background;
     if (url == null || url.isEmpty) return;
     try {
-      final c = await extractDominantColor(CachedNetworkImageProvider(url));
+      final c = await DominantColorCache.of(
+        url,
+        CachedNetworkImageProvider(url),
+      );
       if (c != null && mounted) setState(() => _accent = c);
     } catch (_) {}
   }
@@ -470,6 +568,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     appRouteObserver.unsubscribe(this);
     MainPageBridge.removePlaybackReturnListener(_onPlaybackReturned);
     _infoScroll.dispose();
+    _castRailScroll.dispose();
+    _recommendationRailScroll.dispose();
     _leftEntryFocusNode.dispose();
     _infoPaneScope.dispose();
     _episodesPaneScope.dispose();
@@ -549,8 +649,12 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // platform), so off-TV it governs this backdrop. Read unconditionally so
     // all three land in the one setState below — [autoplay] is false on TV
     // anyway, and these are two prefs reads.
-    final soundOn = await StorageService.getAmbientTrailerAudioEnabled();
-    final volume = await StorageService.getAmbientTrailerVolume();
+    final soundOn = await StorageService.getAmbientTrailerAudioEnabled(
+      AmbientTrailerSurface.detail,
+    );
+    final volume = await StorageService.getAmbientTrailerVolume(
+      AmbientTrailerSurface.detail,
+    );
     if (!mounted) return;
     // The backdrop refuses to autoplay under OS reduced-motion — skip the whole
     // pipeline (no resolve, no spinner) rather than spin forever waiting for a
@@ -601,7 +705,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         // The left-entry node only has a holder when Play or the source pill is
         // present; if neither is (edge config), fall back to traversal so the
         // remote isn't stranded rather than no-op on an unattached node.
-        if (_leftEntryFocusNode.context != null) {
+        if (detailNodeMounted(_leftEntryFocusNode)) {
           _leftEntryFocusNode.requestFocus();
         } else {
           FocusScope.of(context).nextFocus();
@@ -721,8 +825,24 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   bool get _isMovie => _item.type == 'movie';
 
+  /// The reference plays its detail-page preview CRYSTAL CLEAR — no wash, no
+  /// glow, no blur. True while the Showcase ambient trailer is actually
+  /// rolling off-TV with the page at its hero; every shell-level veil over
+  /// the video gates on this. TV is untouched (its washes were tuned on the
+  /// panel and nobody has complained at ten feet).
+  bool get _trailerClearView =>
+      _style == 'showcase' &&
+      !widget.isTelevision &&
+      _trailerAmbientPlaying &&
+      !_bodyDeep;
+
   @override
   Widget build(BuildContext context) {
+    // Establishes the dependency that makes an ALREADY OPEN detail route
+    // re-theme when a token is edited. `_theme` reads the controller directly,
+    // which is a plain field read and notifies nobody — without this line the
+    // page you edited from would be the last one to change.
+    AppThemeScope.of(context);
     final backdropUrl = _item.background ?? _item.poster;
     return PopScope(
       // While the trailer is fullscreen, Back closes it instead of leaving the
@@ -750,13 +870,35 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 // dark tint, zero per-frame filter cost), and drops the
                 // per-frame blur pass over the ambient trailer video.
                 imageBlurSigma: widget.isTelevision ? 0 : 42,
-                videoBlurSigma: widget.isTelevision ? 0 : 8,
-                videoUrl: _trailerAutoplayEnabled
+                // Showcase at rest is the reference's full-bleed key art; the
+                // moment the body goes deep this reverts to the wash, which is
+                // the field the bands' white text was tuned against.
+                sharpStill: _wantsSharpStill,
+                // Sigma 8 was tuned for the classic layout, where the video
+                // is an AMBIENT backdrop behind opaque panes. Showcase is the
+                // reference's shape — the trailer IS the picture, playing in
+                // the key-art frame — and blurring it is why it read as dim
+                // mush next to the Apple app. Sharp for Showcase everywhere;
+                // the other layouts keep their ambient blur.
+                videoBlurSigma:
+                    widget.isTelevision || _style == 'showcase' ? 0 : 8,
+                // Dropped the moment the body walks past its hero: the
+                // reference's trailer belongs to the key-art frame, and playing
+                // one under a blurred field is a decoder held for nothing. It
+                // also frees the process's single video output for whatever the
+                // user opens next.
+                videoUrl: _trailerAutoplayEnabled && !_bodyDeep
                     ? _trailerStreams?.playUrl
                     : null,
-                audioUrl: _trailerAutoplayEnabled
+                audioUrl: _trailerAutoplayEnabled && !_bodyDeep
                     ? _trailerStreams?.audioUrl
                     : null,
+                // The still is meant to be SEEN first — that is the shape of
+                // the reference, poster then motion. Off-TV keeps the shorter
+                // default it has always had.
+                startDelay: widget.isTelevision
+                    ? const Duration(milliseconds: 3200)
+                    : const Duration(milliseconds: 1400),
                 enabled: _trailerAutoplayEnabled,
                 ambientVolume: _trailerAmbientVolume,
                 foreground: _trailerForeground,
@@ -788,31 +930,79 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        // Darker tint so even a bright poster reads as a dark surface.
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                _bg.withValues(alpha: 0.60),
-                                _bg.withValues(alpha: 0.88),
-                              ],
+                        // Ambient still (Filmstrip): the focused episode's frame,
+                        // painted over the backdrop art but under everything
+                        // else. Inside this AnimatedOpacity so it fades away
+                        // with the rest of the content when the trailer is
+                        // promoted, and suppressed outright while it is —
+                        // otherwise it would cover the fullscreen video.
+                        if (_focusedStillUrl != null &&
+                            !_trailerForeground &&
+                            !_trailerAmbientPlaying)
+                          Positioned.fill(
+                            child: _AmbientStill(
+                              url: _focusedStillUrl!,
+                              isTelevision: widget.isTelevision,
                             ),
                           ),
-                        ),
+                        // Darker tint so even a bright poster reads as a dark
+                        // surface. Skipped for layouts that paint their own
+                        // scrim — two stacked washes take the artwork to
+                        // near-black, and a full-bleed layout is ABOUT the
+                        // artwork. Those layouts keep a much lighter floor so
+                        // a blown-out image still can't wash out the chrome.
+                        // `shellTint: false` paints NOTHING here — not a
+                        // lighter wash, none at all. A layout whose scrim is a
+                        // specific angle cannot reach its spec while the shell
+                        // is also laying a diagonal over the same artwork.
+                        // Lifted entirely while the Showcase ambient trailer
+                        // rolls off-TV: the reference plays its preview
+                        // crystal clear in the key-art frame, and even this
+                        // light floor reads as a haze over motion. The
+                        // layout's own scrim (thinned the same way) keeps the
+                        // identity text legible. Snapped, not tweened — same
+                        // rule as the home hero's rolling scrims.
+                        if (_bodySpec.shellTint && !_trailerClearView)
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: _bodySpec.ownScrim
+                                    ? [
+                                        _bg.withValues(alpha: 0.10),
+                                        _bg.withValues(alpha: 0.24),
+                                      ]
+                                    : [
+                                        _bg.withValues(alpha: 0.60),
+                                        _bg.withValues(alpha: 0.88),
+                                      ],
+                              ),
+                            ),
+                          ),
+                        // Flat editorial ground (Broadsheet). Painted here so
+                        // it covers the artwork without ever becoming an
+                        // ancestor of the trailer backdrop, and so it fades
+                        // out with the content on promotion.
+                        if (_bodySpec.inkGround)
+                          Positioned.fill(
+                            child: ColoredBox(color: _groundColor),
+                          ),
                         // Ambient per-title color grade: a soft glow of the
                         // extracted accent in the upper-left, under the content,
                         // so the whole surface is subtly lit by the title's own
                         // color. Animates in when the accent resolves (no pop).
                         // A radial gradient fill is a single cheap paint — no
                         // blur, no layer — so it's safe on the weak TV GPU.
+                        if (_bodySpec.shellTint && !_trailerClearView)
                         Positioned.fill(
                           child: IgnorePointer(
                             child: TweenAnimationBuilder<Color?>(
                               duration: const Duration(milliseconds: 500),
                               tween: ColorTween(
-                                end: _accent.withValues(alpha: 0.16),
+                                end: _accent.withValues(
+                                  alpha: _themedBody ? _theme.washOpacity : 0.16,
+                                ),
                               ),
                               builder: (_, color, __) => DecoratedBox(
                                 decoration: BoxDecoration(
@@ -830,27 +1020,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                             ),
                           ),
                         ),
-                        SafeArea(
-                          child: _isMovie
-                              // A movie has no episode list — one centered,
-                              // scrollable Stremio detail column.
-                              ? Center(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 720,
-                                    ),
-                                    child: _buildInfoPane(),
-                                  ),
-                                )
-                              : (_wide
-                                    ? _buildTwoPane(backdropUrl)
-                                    : Column(
-                                        children: [
-                                          _buildHero(),
-                                          Expanded(child: _buildStackedBody()),
-                                        ],
-                                      )),
-                        ),
+                        SafeArea(child: _buildBody(backdropUrl)),
                         // Back button.
                         Positioned(
                           top: 0,
@@ -865,6 +1035,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                                 () => Navigator.of(context).maybePop(),
                                 tooltip: 'Back',
                                 focusNode: _backButtonFocusNode,
+                                // Square themes (Noir, Concrete, Phosphor,
+                                // Blueprint) cannot be forced into a circle.
+                                theme: _themedBody ? _theme : null,
                               ),
                             ),
                           ),
@@ -885,13 +1058,282 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 child: SafeArea(
                   child: Padding(
                     padding: EdgeInsets.all(widget.isTelevision ? 20 : 12),
-                    child: _TrailerPlayingChip(onTap: _playTrailer),
+                    child: _TrailerPlayingChip(
+                onTap: _playTrailer,
+                theme: _themedBody ? _theme : null,
+              ),
                   ),
                 ),
               ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Everything the alternate layouts render, rebuilt with the screen so every
+  /// load, refresh and tracker round-trip reaches them unchanged.
+  ///
+  /// Layouts are stateless with respect to data — they own only focus, scroll
+  /// The bound sources behind Showcase's Sources band.
+  ///
+  /// A SharedPreferences read plus a JSON decode — no network — which is what
+  /// lets the band paint on open. Reloaded after the source manager closes and
+  /// on playback return, or it goes stale the moment anyone binds anything.
+  List<SeriesSource> _boundSources = const [];
+
+  /// Called from every path that can change a binding — the source manager,
+  /// the app-action menu, and playback return. A band that only refreshes on
+  /// one of the three is stale the first time someone uses another.
+  Future<void> _loadBoundSources() async {
+    final imdb = _item.imdbId;
+    if (imdb == null || imdb.isEmpty) return;
+    final list = await SeriesSourceService.getSources(imdb);
+    if (!mounted) return;
+    setState(() => _boundSources = list);
+  }
+
+  /// and tab state.
+  DetailModel _buildDetailModel() {
+    return DetailModel(
+      item: _item,
+      isMovie: _isMovie,
+      isTelevision: widget.isTelevision,
+      // Signal keeps the poster-extracted accent, which is what ships today.
+      // A fixed-palette theme (Noir's white, Phosphor's amber) would be
+      // contaminated by it, so it uses its own.
+      accent: _theme.useArtworkAccent ? _accent : _theme.accent,
+      imdbExtra: _imdbExtra,
+      parentsGuide: _parentsGuide,
+      recommendations: _recommendations ?? const [],
+      primaryLabel: _primaryLabel,
+      sourceCount: widget.boundSourceCount?.call(_item) ?? 0,
+      boundSources: _boundSources,
+      hasTrailer: _trailerYtId != null,
+      trailerBusy: _trailerResolving || _trailerLoading,
+      trailerPlaying: _trailerAmbientPlaying,
+      hasTrakt: _traktOnlyMenuOptions.isNotEmpty,
+      traktTracked: _traktTracked,
+      traktLabel: _traktPillLabel,
+      traktRating: _traktStatus?.rating,
+      hasSimkl: _menuOptionsSimkl.isNotEmpty,
+      simklTracked: _simklTracked,
+      simklLabel: _simklPillLabel,
+      simklRating: _simklStatus?.rating,
+      showPrimary: widget.showQuickPlay,
+      onPrimary: widget.onResume,
+      onBrowse: _isMovie ? widget.onBrowse : null,
+      onTrailer: _playTrailer,
+      onSelectSource: widget.onSelectSource == null
+          ? null
+          : () async {
+              await widget.onSelectSource!(_item);
+              if (mounted) setState(() {});
+            },
+      onAppMenu: (_appMenuOptions.isNotEmpty && widget.onTraktAction != null)
+          ? _showAppActionsMenu
+          : null,
+      onTraktMenu: widget.onTraktAction != null ? _showQuickActionsMenu : null,
+      onSimklMenu: widget.onSimklAction != null
+          ? _showSimklQuickActionsMenu
+          : null,
+      // Both trackers behind one affordance, for a layout whose action row has
+      // no room for two branded pills. Whichever single service is configured
+      // opens directly; with both, the app menu is the chooser that already
+      // lists them.
+      // Null when neither service is configured, or the layout mounts a `+`
+      // that focuses and does nothing. There is no combined sheet to open —
+      // `_showAppActionsMenu` is the APP-action list, not a tracker chooser —
+      // so with both configured this opens Trakt's, and Simkl stays reachable
+      // through the More button beside it.
+      // Gated on whether a tracker is actually CONNECTED, not on whether the
+      // host passed a callback — the home screen always passes the Trakt one,
+      // so a callback test mounts a `+` that focuses and does nothing for
+      // anyone who has not connected Trakt.
+      //
+      // With both connected this opens Trakt's sheet and Simkl stays reachable
+      // from the More button beside it; there is no combined sheet to open,
+      // and `_showAppActionsMenu` is the APP-action list, not a chooser.
+      onTrackers: (_traktOnlyMenuOptions.isNotEmpty &&
+              widget.onTraktAction != null)
+          ? _showQuickActionsMenu
+          : (_menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null
+              ? _showSimklQuickActionsMenu
+              : null),
+      // Only when Trakt already took the first slot; otherwise Simkl IS the
+      // first slot above and this would mount the same sheet twice.
+      onTrackersSecondary: (_traktOnlyMenuOptions.isNotEmpty &&
+              widget.onTraktAction != null &&
+              _menuOptionsSimkl.isNotEmpty &&
+              widget.onSimklAction != null)
+          ? _showSimklQuickActionsMenu
+          : null,
+      // There is no per-source host API, so a card in the Sources band and the
+      // "Find sources" tile both land on the title-level manager — and the
+      // band reloads afterwards, since binding is exactly what changes it.
+      onManageSources: widget.onSelectSource == null
+          ? null
+          : () async {
+              await widget.onSelectSource!(_item);
+              if (!mounted) return;
+              setState(() {});
+              await _loadBoundSources();
+            },
+      onRecommendationTap: widget.onRecommendationTap,
+      onAmbientStill: (url) {
+        if (!mounted || _focusedStillUrl == url) return;
+        setState(() => _focusedStillUrl = url);
+      },
+      onDepth: (deep) {
+        if (!mounted || _bodyDeep == deep) return;
+        setState(() => _bodyDeep = deep);
+      },
+      focus: _focusCoordinator,
+    );
+  }
+
+  /// Hands an alternate layout the hosted engine. Null for movies, which have
+  /// no episode list at all.
+  Widget Function(Widget Function(BuildContext, EpisodesPanelView))?
+  get _episodesHost => _isMovie
+      ? null
+      : (builder) => _buildEpisodesPanel(contentBuilder: builder);
+
+  /// What the active body wants painted behind it.
+  DetailBodySpec get _bodySpec => switch (_style) {
+    // Marquee and Stage are showcase layouts — the artwork is the point, and
+    // each already paints the gradient its own identity block sits on.
+    'marquee' || 'stage' || 'vista' || 'halo' => const DetailBodySpec(ownScrim: true),
+    // Showcase paints a SPECIFIC angled scrim (100° from the left) and its own
+    // ambient field. `ownScrim` alone only swaps the shell's diagonal for a
+    // lighter one; compounded with Showcase's own gradient neither reaches the
+    // spec. `shellTint: false` is the only mode that leaves the artwork alone.
+    'showcase' => const DetailBodySpec(ownScrim: true, shellTint: false),
+    // A light theme cannot sit on the artwork at all: its own ground has to
+    // cover it, or black-on-paper text lands on a photograph.
+    _ => DetailBodySpec(inkGround: _themedBody && _theme.lightGround),
+  };
+
+  /// Whether the active layout is one the theme applies to.
+  bool get _themedBody => _style != 'classic';
+
+  /// The ground the shell paints when the body asks for a flat one.
+  Color get _groundColor => _themedBody ? _theme.ground : const Color(0xFF0A0A0C);
+
+  /// The one thing that switches on the chosen layout. Everything around it —
+  /// PopScope, the trailer backdrop and its promote/dismiss, the tint, the back
+  /// button, the trailer chip — is shell, written once.
+  Widget _buildBody(String? backdropUrl) {
+    // Every alternate body is wrapped; Classic never is, so it cannot be
+    // affected by a theme even accidentally.
+    // Grid and grain are whole-page textures, so they are applied once here
+    // rather than by each layout — and Classic, which is never wrapped, cannot
+    // pick them up by accident.
+    Widget themed(Widget body) => DetailThemeScope(
+      theme: _theme,
+      child: DetailAtmosphere(child: body),
+    );
+
+    switch (_style) {
+      case 'marquee':
+        return themed(
+          DetailMarquee(
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'dossier':
+        return themed(
+          DetailDossier(
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'stage':
+        return themed(
+          DetailStage(model: _buildDetailModel(), episodesHost: _episodesHost),
+        );
+      case 'console':
+        return themed(
+          DetailConsole(
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'vista':
+        return themed(
+          DetailPremium(
+            kind: PremiumDetailKind.vista,
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'monolith':
+        return themed(
+          DetailPremium(
+            kind: PremiumDetailKind.monolith,
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'mosaic':
+        return themed(
+          DetailPremium(
+            kind: PremiumDetailKind.mosaic,
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'halo':
+        return themed(
+          DetailPremium(
+            kind: PremiumDetailKind.halo,
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'premiere':
+        return themed(
+          DetailPremium(
+            kind: PremiumDetailKind.premiere,
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+          ),
+        );
+      case 'showcase':
+        return themed(
+          DetailShowcase(
+            model: _buildDetailModel(),
+            episodesHost: _episodesHost,
+            // The INPUT axis: unlocks the touch drivers (scroll dissolve,
+            // kebab, compact presentation under 600 wide) off-TV. Width is
+            // deliberately not the test — a narrow TV must stay a TV.
+            dpad: PlatformUtil.isTelevision,
+          ),
+        );
+      // Only 'classic' reaches here: every shipped alternate has a case above,
+      // and anything not yet drawable was already narrowed to the DEFAULT by
+      // effectiveDetailPageStyle — which is no longer Classic, so this arm is
+      // now the explicit choice rather than the fallback.
+      default:
+        return _buildClassicBody(backdropUrl);
+    }
+  }
+
+  /// Today's screen, unchanged: movie column, two-pane, or stacked.
+  Widget _buildClassicBody(String? backdropUrl) {
+    if (_isMovie) {
+      // A movie has no episode list — one centered, scrollable detail column.
+      return Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: _buildInfoPane(),
+        ),
+      );
+    }
+    if (_wide) return _buildTwoPane(backdropUrl);
+    return Column(
+      children: [_buildHero(), Expanded(child: _buildStackedBody())],
     );
   }
 
@@ -1013,7 +1455,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     }
     if (key == LogicalKeyboardKey.arrowLeft) {
       if (!primary.focusInDirection(TraversalDirection.left) &&
-          _leftEntryFocusNode.context != null) {
+          detailNodeMounted(_leftEntryFocusNode)) {
         _leftEntryFocusNode.requestFocus();
       }
       return KeyEventResult.handled;
@@ -1129,7 +1571,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             const SizedBox(height: 8),
             Text(
               summary,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white70,
                 fontSize: 13,
                 height: 1.5,
@@ -1383,7 +1825,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   Widget _metaText(String s) => Text(
     s,
-    style: const TextStyle(
+    style: TextStyle(
       color: Colors.white70,
       fontSize: 14,
       fontWeight: FontWeight.w600,
@@ -1631,7 +2073,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     showModalBottomSheet<void>(
       context: context,
       // Same standard sheet chrome as the per-episode ⋮ menu.
-      backgroundColor: const Color(0xFF141019),
+      backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetCtx) => _QuickActionsMenu(
@@ -1659,7 +2101,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     if (_traktOnlyMenuOptions.isEmpty || widget.onTraktAction == null) return;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF141019),
+      backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetCtx) => _TraktSheet(
@@ -1697,7 +2139,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     if (_menuOptionsSimkl.isEmpty || widget.onSimklAction == null) return;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF141019),
+      backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
       isScrollControlled: true,
       builder: (sheetCtx) => _SimklSheet(
@@ -1725,9 +2167,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   // ── Bodies ────────────────────────────────────────────────────────────────
 
-  Widget _buildEpisodesPanel() {
+  /// [contentBuilder] non-null hands the arrangement to an alternate layout;
+  /// the engine (loading, watch merge, enrichment, playback, options) is
+  /// identical either way.
+  Widget _buildEpisodesPanel({
+    Widget Function(BuildContext, EpisodesPanelView)? contentBuilder,
+  }) {
     return EpisodesPanel(
       key: _episodesPanelKey,
+      contentBuilder: contentBuilder,
       show: widget.item,
       addon: widget.addon,
       initialSeason: widget.initialSeason,
@@ -1792,7 +2240,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             padding: const EdgeInsets.fromLTRB(10, 4, 16, 4),
             child: TextButton.icon(
               onPressed: _openDetailsSheet,
-              icon: const Icon(Icons.info_outline_rounded, size: 18),
+              icon: Icon(Icons.info_outline_rounded, size: 18),
               label: const Text('Cast, ratings & more'),
               style: TextButton.styleFrom(foregroundColor: Colors.white70),
             ),
@@ -1853,7 +2301,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
         ..add(
           Text(
             summary,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white70,
               fontSize: 13.5,
               height: 1.55,
@@ -1957,6 +2405,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             child: SizedBox(
               height: 92,
               child: _focusRail(
+                controller: _castRailScroll,
                 gap: 14,
                 cards: [for (final m in cast) _castTile(m)],
               ),
@@ -1980,6 +2429,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             child: SizedBox(
               height: 168,
               child: _focusRail(
+                controller: _recommendationRailScroll,
                 gap: 11,
                 cards: [for (final r in recs) _recCard(r)],
               ),
@@ -1999,6 +2449,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             guide: guide,
             tv: widget.isTelevision,
             dense: true,
+            accent: _accent,
           ),
         );
     }
@@ -2015,22 +2466,30 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// RIGHT crosses deterministically into the episodes pane in the series
   /// two-pane layout (dead stop otherwise) — RIGHT is the sanctioned pane
   /// crossing, so it should work from a rail end too.
-  Widget _focusRail({required List<Widget> cards, required double gap}) {
+  Widget _focusRail({
+    required ScrollController controller,
+    required List<Widget> cards,
+    required double gap,
+  }) {
     final crossRight = (!_isMovie && _wide) ? _focusEpisodesPane : null;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            if (i > 0) SizedBox(width: gap),
-            _RailEdgeTrap(
-              trapLeft: i == 0,
-              trapRight: i == cards.length - 1,
-              onTrapRight: crossRight,
-              child: cards[i],
-            ),
+    return HorizontalMouseWheel(
+      controller: controller,
+      child: SingleChildScrollView(
+        controller: controller,
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (var i = 0; i < cards.length; i++) ...[
+              if (i > 0) SizedBox(width: gap),
+              _RailEdgeTrap(
+                trapLeft: i == 0,
+                trapRight: i == cards.length - 1,
+                onTrapRight: crossRight,
+                child: cards[i],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -2045,7 +2504,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
 
   Widget _sectionLabel(String s) => Text(
     s.toUpperCase(),
-    style: const TextStyle(
+    style: TextStyle(
       color: Colors.white38,
       fontSize: 11,
       fontWeight: FontWeight.w700,
@@ -2098,13 +2557,17 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     VoidCallback onTap, {
     String? tooltip,
     FocusNode? focusNode,
+    DetailTheme? theme,
   }) {
     return _RoundIconButton(
       icon: icon,
       onTap: onTap,
       tooltip: tooltip,
       focusNode: focusNode,
-      background: Colors.black.withValues(alpha: 0.35),
+      background: theme == null
+          ? Colors.black.withValues(alpha: 0.35)
+          : theme.ground.withValues(alpha: 0.55),
+      theme: theme,
     );
   }
 }
@@ -2199,21 +2662,29 @@ class _FocusHalo extends StatelessWidget {
   final BorderRadius? radius; // null → circle
   final Widget child;
 
-  const _FocusHalo({required this.focused, required this.child, this.radius});
+  /// Null keeps Classic's gold.
+  final Color? ringColor;
+
+  const _FocusHalo({
+    required this.focused,
+    required this.child,
+    this.radius,
+    this.ringColor,
+  });
 
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
       // Snap on TV (house focus idiom): a 140ms ring fade per DPAD move makes
       // held-key surfing repaint every element in flight on the weak GPU.
-      duration: PlatformUtil.isAndroidTvCached
+      duration: PlatformUtil.isTelevision
           ? Duration.zero
           : const Duration(milliseconds: 140),
       foregroundDecoration: BoxDecoration(
         shape: radius == null ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: radius,
         border: focused
-            ? Border.all(color: HomeTheme.focusGold, width: 2.5)
+            ? Border.all(color: ringColor ?? HomeTheme.focusGold, width: 2.5)
             : null,
       ),
       child: child,
@@ -2316,7 +2787,7 @@ class _CastTileState extends State<_CastTile> {
                         )
                       : Container(
                           color: widget.fallback,
-                          child: const Icon(
+                          child: Icon(
                             Icons.person,
                             color: Colors.white38,
                           ),
@@ -2431,7 +2902,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
     return AnimatedScale(
       // Snap on TV: every frame of the scale pop re-rasters the pill AND its
       // blur-18 glow shadow; instant scale keeps the glow a one-time paint.
-      duration: PlatformUtil.isAndroidTvCached
+      duration: PlatformUtil.isTelevision
           ? Duration.zero
           : const Duration(milliseconds: 140),
       scale: _focused ? 1.05 : 1.0,
@@ -2503,22 +2974,31 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
 /// strand the remote when it appears/disappears as the trailer plays/pauses.
 class _TrailerPlayingChip extends StatelessWidget {
   final VoidCallback onTap;
-  const _TrailerPlayingChip({required this.onTap});
+
+  /// Null for Classic.
+  final DetailTheme? theme;
+
+  const _TrailerPlayingChip({required this.onTap, this.theme});
 
   @override
   Widget build(BuildContext context) {
+    final t = theme;
+    final radius = t?.brBtn ?? BorderRadius.circular(999);
     return Material(
-      color: Colors.black.withValues(alpha: 0.42),
-      borderRadius: BorderRadius.circular(999),
+      color: t?.ground.withValues(alpha: 0.6) ??
+          Colors.black.withValues(alpha: 0.42),
+      borderRadius: radius,
       child: InkWell(
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: radius,
         canRequestFocus: false,
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+            borderRadius: radius,
+            border: Border.all(
+              color: t?.hair ?? Colors.white.withValues(alpha: 0.14),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -2526,13 +3006,13 @@ class _TrailerPlayingChip extends StatelessWidget {
               Icon(
                 Icons.graphic_eq_rounded,
                 size: 14,
-                color: Colors.white.withValues(alpha: 0.85),
+                color: t?.tx ?? Colors.white.withValues(alpha: 0.85),
               ),
               const SizedBox(width: 7),
               Text(
                 'Trailer playing',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.85),
+                  color: t?.tx ?? Colors.white.withValues(alpha: 0.85),
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.2,
@@ -2603,7 +3083,7 @@ class _GhostButtonState extends State<_GhostButton> {
                 const SizedBox(width: 7),
                 Text(
                   widget.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -2896,12 +3376,17 @@ class _RoundIconButton extends StatefulWidget {
   final String? tooltip;
   final Color? background;
   final FocusNode? focusNode;
+
+  /// Null for Classic, which keeps its circle and its gold ring exactly.
+  final DetailTheme? theme;
+
   const _RoundIconButton({
     required this.icon,
     required this.onTap,
     this.tooltip,
     this.background,
     this.focusNode,
+    this.theme,
   });
 
   @override
@@ -2913,22 +3398,30 @@ class _RoundIconButtonState extends State<_RoundIconButton> {
 
   @override
   Widget build(BuildContext context) {
+    final t = widget.theme;
+    final circular = t == null || t.radiusBtn >= 999;
+    final side = BorderSide(
+      color: t?.ghostBorder ?? Colors.white.withValues(alpha: 0.16),
+    );
+    final shape = circular
+        ? CircleBorder(side: side)
+        : RoundedRectangleBorder(borderRadius: t.brBtn, side: side);
     final btn = _FocusHalo(
       focused: _focused,
+      radius: circular ? null : t.brBtn,
+      ringColor: t?.focus,
       child: Material(
         color: widget.background ?? Colors.white.withValues(alpha: 0.08),
-        shape: CircleBorder(
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
-        ),
+        shape: shape,
         child: InkWell(
-          customBorder: const CircleBorder(),
+          customBorder: shape,
           focusNode: widget.focusNode,
           onTap: widget.onTap,
           onFocusChange: (f) => setState(() => _focused = f),
           child: SizedBox(
             width: 46,
             height: 46,
-            child: Icon(widget.icon, color: Colors.white, size: 22),
+            child: Icon(widget.icon, color: t?.tx ?? Colors.white, size: 22),
           ),
         ),
       ),
@@ -3037,7 +3530,7 @@ class _QuickActionsMenu extends StatelessWidget {
                   children: [
                     Text(
                       o.label,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -3107,7 +3600,7 @@ class _TrackerSheetHeader extends StatelessWidget {
                   children: [
                     Text(
                       brand,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16.5,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.3,
@@ -3211,7 +3704,7 @@ class _SheetSwitchRow extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                       ),
@@ -3250,7 +3743,7 @@ class _SheetSwitchRow extends StatelessWidget {
                     margin: const EdgeInsets.symmetric(horizontal: 3),
                     width: 18,
                     height: 18,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
                     ),
@@ -4043,6 +4536,43 @@ class _SimklStatusRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The focused episode's frame, painted over the title artwork.
+///
+/// Switches instantly on TV: a fullscreen animated opacity per DPAD move is
+/// exactly what the TV cost budget forbids. Off-TV it cross-fades.
+class _AmbientStill extends StatelessWidget {
+  final String url;
+  final bool isTelevision;
+
+  const _AmbientStill({required this.url, required this.isTelevision});
+
+  @override
+  Widget build(BuildContext context) {
+    final image = CachedNetworkImage(
+      key: ValueKey(url),
+      imageUrl: url,
+      fit: BoxFit.cover,
+      cacheManager: DebrifyImageCache.manager,
+      memCacheWidth: 1280,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      placeholder: (_, __) => const SizedBox.shrink(),
+      errorWidget: (_, __, ___) => const SizedBox.shrink(),
+    );
+    if (isTelevision) return image;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 260),
+      // The default layout centres children under LOOSE constraints, so a
+      // BoxFit.cover image would size itself to its own aspect and letterbox.
+      layoutBuilder: (current, previous) => Stack(
+        fit: StackFit.expand,
+        children: [...previous, if (current != null) current],
+      ),
+      child: image,
     );
   }
 }

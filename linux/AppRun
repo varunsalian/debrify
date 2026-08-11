@@ -1,0 +1,70 @@
+#!/bin/bash
+#
+# Launcher for the Debrify AppImage.
+#
+# Lives here rather than in a heredoc inside .github/workflows/build.yml so the
+# x64 and arm64 jobs cannot drift apart, and so the driver-path logic below is
+# reviewable on its own.
+
+SELF=$(readlink -f "$0")
+HERE=${SELF%/*}
+APPLIB="${HERE}/usr/bin/lib"
+
+export PATH="${HERE}/usr/bin:${PATH}"
+
+# The :+ guard keeps an unset LD_LIBRARY_PATH from leaving a trailing colon,
+# which the loader reads as "also search the current directory".
+export LD_LIBRARY_PATH="${APPLIB}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+
+# media_kit dlopen()s libmpv by bare soname; naming the bundled copy outright
+# stops it from picking up a stray host libmpv instead. A wrong path here is
+# harmless — media_kit falls back to the soname search (native_library.dart).
+for _soname in libmpv.so.2 libmpv.so.1; do
+  if [ -e "${APPLIB}/${_soname}" ]; then
+    export LIBMPV_LIBRARY_PATH="${APPLIB}/${_soname}"
+    break
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Hardware decode: bundled dispatch loaders, host drivers.
+#
+# libmpv links libva and libvdpau as hard DT_NEEDED dependencies, so we have to
+# bundle them — leaving them out means libmpv fails to load at all on a host
+# that lacks them. But both are *dispatch loaders*: they dlopen the actual
+# driver from a directory baked in at compile time, and ours are compiled with
+# Ubuntu's multiarch path. On Arch, SteamOS or Fedora that path doesn't exist,
+# so hardware decode would silently degrade to software — 4K on a Steam Deck
+# being exactly the case where that hurts. Point each loader at the host's real
+# driver directory instead. Neither variable is touched if the user set it.
+#
+# Vulkan needs no equivalent: the bundled loader finds host ICD manifests
+# through the standard /usr/share/vulkan/icd.d and XDG_DATA_DIRS search.
+# ---------------------------------------------------------------------------
+
+if [ -z "${LIBVA_DRIVERS_PATH:-}" ]; then
+  # libva accepts a colon-separated list, so hand it every plausible host dir.
+  _va=""
+  for _d in /usr/lib/x86_64-linux-gnu/dri \
+            /usr/lib/aarch64-linux-gnu/dri \
+            /usr/lib64/dri \
+            /usr/lib/dri; do
+    [ -d "$_d" ] && _va="${_va:+${_va}:}${_d}"
+  done
+  [ -n "$_va" ] && export LIBVA_DRIVERS_PATH="$_va"
+fi
+
+if [ -z "${VDPAU_DRIVER_PATH:-}" ]; then
+  # libvdpau takes a single directory, so first match wins.
+  for _d in /usr/lib/x86_64-linux-gnu/vdpau \
+            /usr/lib/aarch64-linux-gnu/vdpau \
+            /usr/lib64/vdpau \
+            /usr/lib/vdpau; do
+    if [ -d "$_d" ]; then
+      export VDPAU_DRIVER_PATH="$_d"
+      break
+    fi
+  done
+fi
+
+exec "${HERE}/usr/bin/debrify" "$@"

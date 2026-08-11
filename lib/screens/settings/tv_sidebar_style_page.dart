@@ -1,3 +1,4 @@
+import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
@@ -5,6 +6,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// One selectable TV sidebar style.
 class TvSidebarStyleChoice {
@@ -39,6 +41,11 @@ const List<TvSidebarStyleChoice> kTvSidebarStyleChoices = [
     'badge',
     'Badge',
     'Labelled icons; the active tab wears a white badge',
+  ),
+  TvSidebarStyleChoice(
+    'pill',
+    'Pill',
+    'No rail at all — just the current tab, and content fills the screen',
   ),
 ];
 
@@ -108,6 +115,9 @@ class _TvSidebarStylePageState extends State<TvSidebarStylePage> {
   Future<void> _select(String value) async {
     if (value == _style) return;
     setState(() => _style = value);
+    // Tell an in-flight Look apply that a human just chose this key, so it
+    // does not stamp over the choice. See theme/app_looks.dart.
+    LookApplier.noteExternalWrite('tv_sidebar_style');
     await StorageService.setTvSidebarStyle(value);
     // Live-apply: the app shell re-reads the pref and reskins the rail.
     MainPageBridge.tvSidebarStyleChanged?.call();
@@ -115,6 +125,7 @@ class _TvSidebarStylePageState extends State<TvSidebarStylePage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Sidebar Style',
@@ -157,7 +168,7 @@ class _TvSidebarStylePageState extends State<TvSidebarStylePage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ],
@@ -172,6 +183,7 @@ class _TvSidebarStylePageState extends State<TvSidebarStylePage> {
   /// check on the active one, rather than a dropdown whose overlay would have
   /// to be focus-managed on a remote.
   Widget _optionRow(TvSidebarStyleChoice choice) {
+    final t = AppThemeScope.of(context).settings;
     final bool active = _style == choice.value;
     return SettingsTile(
       icon: active
@@ -180,7 +192,7 @@ class _TvSidebarStylePageState extends State<TvSidebarStylePage> {
       title: choice.label,
       subtitle: choice.subtitle,
       trailing: active
-          ? const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2)
+          ? Icon(Icons.check_rounded, size: 20, color: t.accent2)
           : const SizedBox.shrink(),
       onTap: () => _select(choice.value),
     );

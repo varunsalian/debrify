@@ -8,6 +8,7 @@ import 'torbox_service.dart';
 import 'pikpak_api_service.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:path_provider/path_provider.dart';
+import '../utils/app_storage.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'storage_service.dart';
 import 'android_native_downloader.dart';
@@ -366,7 +367,7 @@ class DownloadService {
   }
 
   Future<String> _recordsFilePath() async {
-    final dir = await getApplicationSupportDirectory();
+    final dir = await AppStorage.support();
     final file = File(path.join(dir.path, _recordsFile));
     if (!await file.exists()) {
       await file.create(recursive: true);
@@ -2019,7 +2020,7 @@ class DownloadService {
   Future<Directory> getDownloadsRoot() async {
     if (Platform.isAndroid) {
       // Public Downloads is not directly accessible; keep using app docs for any local-only ops
-      return Directory((await getApplicationDocumentsDirectory()).path);
+      return Directory((await AppStorage.documents()).path);
     }
     if (Platform.isWindows || Platform.isMacOS) {
       // On macOS, use the user's actual Downloads folder
@@ -2041,7 +2042,7 @@ class DownloadService {
         // Fallback to app documents if Downloads directory is not accessible
       }
     }
-    return Directory((await getApplicationDocumentsDirectory()).path);
+    return Directory((await AppStorage.documents()).path);
   }
 
   Future<String> _appDownloadsSubdir() async {
@@ -2086,7 +2087,7 @@ class DownloadService {
     }
 
     // Fallback: Use a stable, app-specific downloads directory under Documents
-    final Directory docs = await getApplicationDocumentsDirectory();
+    final Directory docs = await AppStorage.documents();
     final Directory dlDir = Directory(path.join(docs.path, 'downloads'));
     if (!await dlDir.exists()) {
       await dlDir.create(recursive: true);

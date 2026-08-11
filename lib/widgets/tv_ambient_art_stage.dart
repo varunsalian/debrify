@@ -2,8 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../services/main_page_bridge.dart';
-
-const Color _bg = Color(0xFF0D0B1A); // kStremioBg — the app's page ink
+import '../theme/app_theme_scope.dart';
 
 /// The TV shell's GLASS STAGE: the Home board's focused title art, blurred,
 /// filling the WHOLE screen — behind the tab content AND the sidebar rail
@@ -25,6 +24,10 @@ class TvAmbientArtStage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Hoisted: the page ink is read ONCE here and captured by the two
+    // ValueListenableBuilders below, never looked up inside them.
+    final app = AppThemeScope.of(context);
+    final bg = app.shell.ink;
     return IgnorePointer(
       child: RepaintBoundary(
         child: ValueListenableBuilder<String?>(
@@ -32,7 +35,7 @@ class TvAmbientArtStage extends StatelessWidget {
           builder: (context, art, _) => ValueListenableBuilder<Color?>(
             valueListenable: MainPageBridge.tvHeroTint,
             builder: (context, tint, __) {
-              final t = tint ?? _bg;
+              final t = tint ?? bg;
               return AnimatedSwitcher(
                 duration: const Duration(milliseconds: 220),
                 child: Stack(
@@ -47,7 +50,7 @@ class TvAmbientArtStage extends StatelessWidget {
                     // showed the app-shell gradient (a DIFFERENT navy) before
                     // the art popped in. Fading art→ink→art all in the same
                     // hue reads intentional.
-                    const ColoredBox(color: _bg),
+                    ColoredBox(color: bg),
                     if (art != null && art.isNotEmpty)
                       CachedNetworkImage(
                         imageUrl: art,
@@ -56,10 +59,8 @@ class TvAmbientArtStage extends StatelessWidget {
                         memCacheWidth: 96,
                         fadeInDuration: Duration.zero,
                         fadeOutDuration: Duration.zero,
-                        placeholder: (_, __) =>
-                            const ColoredBox(color: _bg),
-                        errorWidget: (_, __, ___) =>
-                            const ColoredBox(color: _bg),
+                        placeholder: (_, __) => ColoredBox(color: bg),
+                        errorWidget: (_, __, ___) => ColoredBox(color: bg),
                       ),
                     // Tint wash: the film's colour laid diagonally over its
                     // own art, calm toward the lower right.
@@ -69,9 +70,9 @@ class TvAmbientArtStage extends StatelessWidget {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [
-                            Color.lerp(_bg, t, 0.45)!.withValues(alpha: 0.38),
-                            Color.lerp(_bg, t, 0.25)!.withValues(alpha: 0.26),
-                            _bg.withValues(alpha: 0.22),
+                            Color.lerp(bg, t, 0.45)!.withValues(alpha: 0.38),
+                            Color.lerp(bg, t, 0.25)!.withValues(alpha: 0.26),
+                            app.fade(bg, 0.220),
                           ],
                           stops: const [0.0, 0.5, 1.0],
                         ),
@@ -79,17 +80,22 @@ class TvAmbientArtStage extends StatelessWidget {
                     ),
                     // Legibility floor: art breathes up top, rows and labels
                     // sit on deep glass below.
-                    const DecoratedBox(
+                    DecoratedBox(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Color(0x330D0B1A),
-                            Color(0x730D0B1A),
-                            Color(0xC90D0B1A),
+                            // Exact eighth-bit fractions, not rounded
+                            // decimals: gradients interpolate on the DOUBLE,
+                            // so 0.451 vs 0x73/0xFF can differ by a hair at
+                            // blend boundaries even though both endpoints
+                            // quantize to the same byte.
+                            app.fade(bg, 0x33 / 0xFF), // was 0x330D0B1A
+                            app.fade(bg, 0x73 / 0xFF), // was 0x730D0B1A
+                            app.fade(bg, 0xC9 / 0xFF), // was 0xC90D0B1A
                           ],
-                          stops: [0.0, 0.5, 1.0],
+                          stops: const [0.0, 0.5, 1.0],
                         ),
                       ),
                     ),

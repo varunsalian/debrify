@@ -1,0 +1,242 @@
+{
+ "episodes": [
+  {
+   "n": 1,
+   "name": "Live Free or Die",
+   "date": "2012-07-15",
+   "rating": 7.7,
+   "runtime": 60,
+   "summary": "In the series 5 premiere, Walt deals with the aftermath of the explosion, while Hank wraps up his investigation of Gus and his criminal empire."
+  },
+  {
+   "n": 2,
+   "name": "Madrigal",
+   "date": "2012-07-22",
+   "rating": 7.8,
+   "runtime": 60,
+   "summary": "Walt and Jesse seek out an unlikely partner for a new business venture. The DEA follows up new leads in its investigation."
+  },
+  {
+   "n": 3,
+   "name": "Hazard Pay",
+   "date": "2012-07-29",
+   "rating": 7.6,
+   "runtime": 60,
+   "summary": "Walt and Jesse put a business plan into action. Walt confesses a secret to Marie."
+  },
+  {
+   "n": 4,
+   "name": "Fifty-One",
+   "date": "2012-08-05",
+   "rating": 7.4,
+   "runtime": 60,
+   "summary": "Walt celebrates another birthday. Skyler considers her options. An associate complicates Walt and Jesse's plan."
+  },
+  {
+   "n": 5,
+   "name": "Dead Freight",
+   "date": "2012-08-12",
+   "rating": 8.3,
+   "runtime": 60,
+   "summary": "Walt's team must get creative to obtain the materials they need to continue their operation."
+  },
+  {
+   "n": 6,
+   "name": "Buyout",
+   "date": "2012-08-19",
+   "rating": 7.8,
+   "runtime": 60,
+   "summary": "Walt, Jesse, and Mike struggle over the future of their business, as occupational hazards weigh on Jesse."
+  },
+  {
+   "n": 7,
+   "name": "Say My Name",
+   "date": "2012-08-26",
+   "rating": 8.3,
+   "runtime": 60,
+   "summary": "Walt takes control of business matters as Mike grapples with the consequences of his actions."
+  },
+  {
+   "n": 8,
+   "name": "Gliding Over All",
+   "date": "2012-09-02",
+   "rating": 8.9,
+   "runtime": 60,
+   "summary": "Walt ties up loose ends. Seeing the evidence of his success, he makes a startling and dangerous decision."
+  },
+  {
+   "n": 9,
+   "name": "Blood Money",
+   "date": "2013-08-11",
+   "rating": 8.3,
+   "runtime": 60,
+   "summary": "As Walt and Jesse adjust to life out of the business, Hank grapples with a troubling lead."
+  },
+  {
+   "n": 10,
+   "name": "Buried",
+   "date": "2013-08-18",
+   "rating": 7.9,
+   "runtime": 60,
+   "summary": "While Skyler's past catches up with her, Walt covers his tracks. Jesse continues to struggle with his guilt."
+  },
+  {
+   "n": 11,
+   "name": "Confessions",
+   "date": "2013-08-25",
+   "rating": 8.1,
+   "runtime": 60,
+   "summary": "<p>Jesse decides to make a change, while Walt and Skyler try to deal with an unexpected demand.</p>"
+  },
+  {
+   "n": 12,
+   "name": "Rabid Dog",
+   "date": "2013-09-01",
+   "rating": 7.3,
+   "runtime": 60,
+   "summary": "<p>An unusual strategy starts to bear fruit, while plans are set in motion that could change everything.</p>"
+  },
+  {
+   "n": 13,
+   "name": "To'hajiilee",
+   "date": "2013-09-08",
+   "rating": 8.3,
+   "runtime": 60,
+   "summary": "<p>Things heat up for Walt in unexpected ways.</p>"
+  },
+  {
+   "n": 14,
+   "name": "Ozymandias",
+   "date": "2013-09-15",
+   "rating": 9.1,
+   "runtime": 60,
+   "summary": "<p>Everyone copes with radically changed circumstances.</p>"
+  },
+  {
+   "n": 15,
+   "name": "Granite State",
+   "date": "2013-09-22",
+   "rating": 8.2,
+   "runtime": 60,
+   "summary": "<p>Events set in motion long ago move toward a conclusion.</p>"
+  },
+  {
+   "n": 16,
+   "name": "Felina",
+   "date": "2013-09-29",
+   "rating": 8,
+   "runtime": 60,
+   "summary": "<p>The acclaimed crime drama comes to a close in the series finale.</p>"
+  }
+ ],
+ "cast": [
+  {
+   "actor": "Bryan Cranston",
+   "role": "Walter White",
+   "i": 1
+  },
+  {
+   "actor": "Aaron Paul",
+   "role": "Jesse Pinkman",
+   "i": 2
+  },
+  {
+   "actor": "Anna Gunn",
+   "role": "Skyler White",
+   "i": 3
+  },
+  {
+   "actor": "RJ Mitte",
+   "role": "Walter White Jr.",
+   "i": 4
+  },
+  {
+   "actor": "Dean Norris",
+   "role": "Hank Schrader",
+   "i": 5
+  },
+  {
+   "actor": "Betsy Brandt",
+   "role": "Marie Schrader",
+   "i": 6
+  },
+  {
+   "actor": "Bob Odenkirk",
+   "role": "Saul Goodman",
+   "i": 7
+  },
+  {
+   "actor": "Jonathan Banks",
+   "role": "Michael 'Mike' Ehrmantraut",
+   "i": 8
+  },
+  {
+   "actor": "Giancarlo Esposito",
+   "role": "Gustavo 'Gus' Fring",
+   "i": 9
+  },
+  {
+   "actor": "Jesse Plemons",
+   "role": "Todd Alquist",
+   "i": 10
+  }
+ ],
+ "mcast": [
+  {
+   "actor": "Matthew McConaughey",
+   "role": "Cooper",
+   "i": 1
+  },
+  {
+   "actor": "Anne Hathaway",
+   "role": "Brand",
+   "i": 2
+  },
+  {
+   "actor": "Jessica Chastain",
+   "role": "Murph",
+   "i": 3
+  },
+  {
+   "actor": "Michael Caine",
+   "role": "Professor Brand",
+   "i": 4
+  },
+  {
+   "actor": "Casey Affleck",
+   "role": "Tom",
+   "i": 5
+  },
+  {
+   "actor": "Ellen Burstyn",
+   "role": "Murph (older)",
+   "i": 6
+  }
+ ],
+ "mrecs": [
+  {
+   "i": 1,
+   "title": "Blade Runner 2049"
+  },
+  {
+   "i": 2,
+   "title": "Dune: Part Two"
+  },
+  {
+   "i": 3,
+   "title": "The Batman"
+  },
+  {
+   "i": 4,
+   "title": "Everything Everywhere"
+  },
+  {
+   "i": 5,
+   "title": "Arrival"
+  },
+  {
+   "i": 6,
+   "title": "Inception"
+  }
+ ]
+}

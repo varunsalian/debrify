@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../screens/settings/recordings_page.dart';
 import '../services/live_recording_service.dart';
 import '../services/recording_capacity.dart';
+import '../theme/app_theme_scope.dart';
 
 /// The two dialogs of the simultaneous-recordings limit, shared by settings
 /// and by every record/schedule entry point:
@@ -12,8 +13,6 @@ import '../services/recording_capacity.dart';
 ///  - [ensureRecordingCapacity]: the pre-flight gate — detects a conflict,
 ///    names what's in the way, and offers the two real resolutions (raise
 ///    the limit / manage recordings) before retrying the check.
-
-const _kRec = Color(0xFFF43F5E);
 
 /// Limit picker (1..[LiveRecordingService.maxConcurrentCeiling]). Returns
 /// the newly-saved value, or null when dismissed. Persists on selection.
@@ -149,47 +148,71 @@ Future<_ConflictChoice> _showConflictDialog(
   final more = conflict.busyLabels.length - 4;
   final choice = await showDialog<_ConflictChoice>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      backgroundColor: const Color(0xFF14141D),
-      title: const Row(
-        children: [
-          Icon(Icons.fiber_manual_record_rounded, color: _kRec, size: 16),
-          SizedBox(width: 8),
-          Text(
-            'Recording conflict',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
-      content: Text(
-        '${isSchedule ? 'This would need more simultaneous recordings than '
-                'the limit allows' : 'The recording limit is already in '
-                'use'} (${conflict.limit} at a time).\n\n'
-        'In the way: $names${more > 0 ? ' and $more more' : ''}.\n\n'
-        'Raise the limit only if your provider allows that many '
-        'connections — or free a slot by stopping/cancelling one.',
-        style: const TextStyle(color: Colors.white70, height: 1.45),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () =>
-              Navigator.of(dialogContext).pop(_ConflictChoice.cancel),
-          child: const Text('Cancel'),
+    builder: (dialogContext) {
+      // Read from the DIALOG's context, not the caller's: `showDialog`
+      // captures InheritedThemes, so a frozen caller (the player, the player's
+      // IPTV channel sheet) resolves this to the legacy profile through its
+      // LegacyThemeBoundary and keeps today's paint, while the themed IPTV
+      // callers get the active palette. That is why this takes no
+      // caller-supplied tokens — every entry point already carries the right
+      // scope.
+      final app = AppThemeScope.of(dialogContext);
+      return AlertDialog(
+        // Was a fixed #14141D under a title that already followed the theme's
+        // ink; `iptv.modalBg` IS that literal under legacy.
+        backgroundColor: app.iptv.modalBg,
+        title: Row(
+          children: [
+            Icon(
+              Icons.fiber_manual_record_rounded,
+              // The broadcast REC signal (legacy #F43F5E), deepened on paper.
+              color: app.iptv.recordAccent,
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'Recording conflict',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
         ),
-        if (offerManage)
+        content: Text(
+          '${isSchedule ? 'This would need more simultaneous recordings than '
+                  'the limit allows' : 'The recording limit is already in '
+                  'use'} (${conflict.limit} at a time).\n\n'
+          'In the way: $names${more > 0 ? ' and $more more' : ''}.\n\n'
+          'Raise the limit only if your provider allows that many '
+          'connections — or free a slot by stopping/cancelling one.',
+          // Body ink on the dialog fill. `iptv.inkMid` is white@70% under
+          // legacy — the same shade as `Colors.white70`, but composed as a
+          // double alpha rather than a hex pin, so the literal is kept for
+          // legacy to guarantee the byte-identical pixel.
+          style: TextStyle(
+            color: app.isLegacy ? Colors.white70 : app.iptv.inkMid,
+            height: 1.45,
+          ),
+        ),
+        actions: [
           TextButton(
             onPressed: () =>
-                Navigator.of(dialogContext).pop(_ConflictChoice.manage),
-            child: const Text('Manage recordings'),
+                Navigator.of(dialogContext).pop(_ConflictChoice.cancel),
+            child: const Text('Cancel'),
           ),
-        TextButton(
-          autofocus: true,
-          onPressed: () =>
-              Navigator.of(dialogContext).pop(_ConflictChoice.raiseLimit),
-          child: const Text('Raise limit'),
-        ),
-      ],
-    ),
+          if (offerManage)
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(_ConflictChoice.manage),
+              child: const Text('Manage recordings'),
+            ),
+          TextButton(
+            autofocus: true,
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(_ConflictChoice.raiseLimit),
+            child: const Text('Raise limit'),
+          ),
+        ],
+      );
+    },
   );
   return choice ?? _ConflictChoice.cancel;
 }

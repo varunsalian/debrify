@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../widgets/gradient_spinner.dart';
 
 /// A loading dialog shown during channel cache operations.
@@ -39,6 +40,7 @@ class _CachedLoadingDialogState extends State<CachedLoadingDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final tv = AppThemeScope.of(context).debrifyTv;
     // Wrap in PopScope to block back button dismissal
     return PopScope(
       canPop: false,
@@ -51,13 +53,21 @@ class _CachedLoadingDialogState extends State<CachedLoadingDialog> {
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1B1B1F), Color(0xFF101014)],
+              gradient: LinearGradient(
+                // 0xFF101014 is the gradient's deep stop and no role holds it
+                // — left literal rather than mapped to a near-miss. (Nearest
+                // are `controlBg` 0xFF141414 and `dialogBg` 0xFF0F0F0F, both
+                // different colours.) The card is therefore HALF themed: the
+                // top stop follows the theme, the bottom is pinned dark. The
+                // ink below is deliberately NOT scored against a stop — on a
+                // paper theme no single ink reads over both halves, so
+                // scoring would only move the unreadable half rather than fix
+                // it. This needs a deep-stop role in DebrifyTvTokens first.
+                colors: [tv.noticeBg, tv.dialogDeep],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              border:
-                  Border.all(color: Colors.white.withOpacity(0.1), width: 1.4),
+              border: Border.all(color: tv.fillWeak, width: 1.4),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.45),
@@ -75,11 +85,11 @@ class _CachedLoadingDialogState extends State<CachedLoadingDialog> {
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 260),
                   child: _showHint
-                      ? const Text(
+                      ? Text(
                           'Rare keywords can take a little longer.',
-                          key: ValueKey('hint'),
+                          key: const ValueKey('hint'),
                           style: TextStyle(
-                            color: Colors.white70,
+                            color: tv.textDim,
                             fontSize: 13,
                             height: 1.35,
                           ),
@@ -98,8 +108,8 @@ class _CachedLoadingDialogState extends State<CachedLoadingDialog> {
                         widget.onCancel!();
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white.withOpacity(0.1),
-                        foregroundColor: Colors.white70,
+                        backgroundColor: tv.fillWeak,
+                        foregroundColor: tv.textDim,
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(6),

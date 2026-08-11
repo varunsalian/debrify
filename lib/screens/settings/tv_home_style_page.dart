@@ -1,3 +1,4 @@
+import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
@@ -5,6 +6,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// One selectable TV Home layout.
 class TvHomeStyleChoice {
@@ -16,6 +18,11 @@ class TvHomeStyleChoice {
 
 const List<TvHomeStyleChoice> kTvHomeStyleChoices = [
   TvHomeStyleChoice(
+    'spotlight',
+    'Spotlight',
+    'Full-bleed hero you can page through, shelves on a flat ground',
+  ),
+  TvHomeStyleChoice(
     'canvas',
     'Canvas',
     'Full-screen art and trailers, one bottom shelf — the default',
@@ -24,6 +31,31 @@ const List<TvHomeStyleChoice> kTvHomeStyleChoices = [
     'classic',
     'Classic',
     'Hero spotlight with scrolling rows',
+  ),
+  TvHomeStyleChoice(
+    'atrium',
+    'Atrium',
+    'Split screen — details on the left, art and two rows of posters right',
+  ),
+  TvHomeStyleChoice(
+    'mosaic',
+    'Mosaic',
+    'A wall of posters, no hero — the lightest layout',
+  ),
+  TvHomeStyleChoice(
+    'promenade',
+    'Promenade',
+    'Centred art with a wide strip that slides through the middle',
+  ),
+  TvHomeStyleChoice(
+    'deck',
+    'Deck',
+    'The trailer plays in a card, with the next titles stacked behind it',
+  ),
+  TvHomeStyleChoice(
+    'tonight',
+    'Tonight',
+    'Resume first — a big Continue card, an Up Next queue, one row below',
   ),
 ];
 
@@ -34,6 +66,23 @@ String tvHomeStyleLabel(String style) {
   }
   return 'Canvas';
 }
+
+/// The stored style narrowed to what an off-TV Home can render.
+///
+/// Phones, tablets and desktop draw exactly two layouts — Classic and
+/// Spotlight; the other six are DPAD stage layouts whose focus topology has
+/// no touch equivalent. The stored pref is shared with TV and is **never
+/// rewritten** here: a fresh install carries the TV default `'canvas'`, which
+/// this maps to Classic for display, selection and dispatch alike — while a
+/// TV signing into the same account keeps its Canvas.
+String effectiveOffTvHomeStyle(String raw) =>
+    raw == 'spotlight' ? 'spotlight' : 'classic';
+
+/// The choices an off-TV picker offers — see [effectiveOffTvHomeStyle].
+List<TvHomeStyleChoice> get kOffTvHomeStyleChoices => [
+      for (final c in kTvHomeStyleChoices)
+        if (c.value == 'spotlight' || c.value == 'classic') c,
+    ];
 
 /// Android TV "Home Layout" picker.
 ///
@@ -80,7 +129,9 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
       _style = style;
       _loading = false;
     });
-    if (PlatformUtil.isAndroidTvCached) {
+    // isTelevision, not isAndroidTvCached: Apple TV needs the same entry-focus
+    // seed or the page opens with nothing actionable focused.
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         // Don't yank focus if it already landed on a real node (only the
@@ -92,9 +143,16 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
     }
   }
 
-  Future<void> _select(String value) async {
-    if (value == _style) return;
+  Future<void> _select(String value, String activeValue) async {
+    // Compared against the RESOLVED active value, not the raw pref: off-TV a
+    // stored 'canvas' displays as Classic selected, and re-tapping that row
+    // must be a no-op — writing 'classic' over 'canvas' would silently change
+    // what a TV renders for no visible reason here.
+    if (value == activeValue) return;
     setState(() => _style = value);
+    // Tell an in-flight Look apply that a human just chose this key, so it
+    // does not stamp over the choice. See theme/app_looks.dart.
+    LookApplier.noteExternalWrite('tv_home_style');
     await StorageService.setTvHomeStyle(value);
     // Live-apply: the Home board re-reads the pref and rebuilds.
     MainPageBridge.tvHomeStyleChanged?.call();
@@ -102,12 +160,20 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Home Layout',
         body: Center(child: CircularProgressIndicator()),
       );
     }
+
+    // Off-TV the page offers the two layouts the platform can draw, and the
+    // active radio reflects the RESOLVED style — a stored 'canvas' (the TV
+    // default) selects Classic here rather than leaving no row selected.
+    final tv = PlatformUtil.isTelevision;
+    final choices = tv ? kTvHomeStyleChoices : kOffTvHomeStyleChoices;
+    final active = tv ? _style : effectiveOffTvHomeStyle(_style);
 
     return SettingsPageScaffold(
       title: 'Home Layout',
@@ -119,10 +185,12 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SettingsPageHeader(
+                SettingsPageHeader(
                   icon: Icons.view_quilt_rounded,
                   title: 'Home Layout',
-                  subtitle: 'How the Home screen is arranged on this TV',
+                  subtitle: tv
+                      ? 'How the Home screen is arranged on this TV'
+                      : 'How the Home tab is arranged on this device',
                 ),
                 const SizedBox(height: 24),
                 Focus(
@@ -132,19 +200,22 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
                   child: SettingsSection(
                     title: '',
                     children: [
-                      for (final choice in kTvHomeStyleChoices)
-                        _optionRow(choice),
+                      for (final choice in choices) _optionRow(choice, active),
                     ],
                   ),
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  'Applies immediately — press Back and switch to the Home '
-                  'tab to see it. The Search tab keeps the classic layout.',
+                  tv
+                      ? 'Applies immediately — press Back and switch to the '
+                          'Home tab to see it. The Search tab keeps the '
+                          'classic layout.'
+                      : 'Applies immediately — switch to the Home tab to '
+                          'see it.',
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ],
@@ -158,8 +229,9 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
   /// Radio-style row — a plain [SettingsTile] (the DPAD-proven row) with a
   /// check on the active one, rather than a dropdown whose overlay would have
   /// to be focus-managed on a remote.
-  Widget _optionRow(TvHomeStyleChoice choice) {
-    final bool active = _style == choice.value;
+  Widget _optionRow(TvHomeStyleChoice choice, String activeValue) {
+    final t = AppThemeScope.of(context).settings;
+    final bool active = activeValue == choice.value;
     return SettingsTile(
       icon: active
           ? Icons.radio_button_checked_rounded
@@ -167,9 +239,9 @@ class _TvHomeStylePageState extends State<TvHomeStylePage> {
       title: choice.label,
       subtitle: choice.subtitle,
       trailing: active
-          ? const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2)
+          ? Icon(Icons.check_rounded, size: 20, color: t.accent2)
           : const SizedBox.shrink(),
-      onTap: () => _select(choice.value),
+      onTap: () => _select(choice.value, activeValue),
     );
   }
 }

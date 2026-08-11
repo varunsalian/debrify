@@ -8,6 +8,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../theme/app_theme.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../../../widgets/home/home_theme.dart';
 import '../../../models/stremio_addon.dart';
 import '../../../utils/tv_keys.dart';
@@ -327,19 +329,12 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
 
   // --- Channel ident ------------------------------------------------------
 
-  static const List<Color> _idents = [
-    Color(0xFF6C5CE7), // indigo
-    Color(0xFFE84393), // magenta
-    Color(0xFF00B894), // emerald
-    Color(0xFFE17055), // coral
-    Color(0xFF0984E3), // azure
-    Color(0xFFFDCB6E), // amber
-    Color(0xFF00CEC9), // teal
-    Color(0xFFA29BFE), // lavender
-  ];
-
-  Color _identFor(StremioTvChannel c) =>
-      _idents[c.id.hashCode.abs() % _idents.length];
+  Color _identFor(StremioTvChannel c) {
+    // The ramp's LENGTH is part of the contract: the id hashes modulo it, so a
+    // theme with a shorter ramp still yields a stable per-channel tone.
+    final idents = AppThemeScope.of(context).stremioTv.channelIdent;
+    return idents[c.id.hashCode.abs() % idents.length];
+  }
 
   StremioTvNowPlaying? _nowPlaying(StremioTvChannel c) => widget.service
       .getNowPlaying(c, rotationMinutes: widget.rotationFor(c), salt: widget.mixSalt);
@@ -557,10 +552,13 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
 
   Future<void> _openActions(StremioTvChannel channel) async {
     final ident = _identFor(channel);
+    // Read from THIS context, not the sheet's: the sheet route sits above the
+    // surface's theme boundary, so a captured value is what keeps it in step.
+    final app = AppThemeScope.of(context);
     HapticFeedback.mediumImpact();
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF101015),
+      backgroundColor: app.stremioTv.sheetBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -569,10 +567,10 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
         Widget tile(IconData icon, String label, VoidCallback onTap,
             {Color? tint}) {
           return ListTile(
-            leading: Icon(icon, color: tint ?? Colors.white70),
+            leading: Icon(icon, color: tint ?? app.core.tx.withAlpha(0xB3)),
             title: Text(label,
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w600)),
+                style: TextStyle(
+                    color: app.core.tx, fontWeight: FontWeight.w600)),
             onTap: () {
               Navigator.of(ctx).pop();
               onTap();
@@ -589,8 +587,8 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                 width: 38,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2),
+                  color: app.core.tx.withAlpha(0x3D),
+                  borderRadius: app.shape.br(2),
                 ),
               ),
               Padding(
@@ -599,15 +597,15 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                   Container(width: 4, height: 26,
                     decoration: BoxDecoration(
                         color: ident,
-                        borderRadius: BorderRadius.circular(2)),
+                        borderRadius: app.shape.br(2)),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(channel.displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white,
+                        style: TextStyle(
+                            color: app.core.tx,
                             fontSize: 16,
                             fontWeight: FontWeight.w700)),
                   ),
@@ -625,7 +623,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                 channel.isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
                 channel.isFavorite ? 'Remove from favorites' : 'Add to favorites',
                 () => widget.onToggleFavorite(channel),
-                tint: channel.isFavorite ? Colors.amber : null,
+                tint: channel.isFavorite ? app.stremioTv.starAccent : null,
               ),
               if (channel.isLocal && widget.onEditLocal != null)
                 tile(Icons.edit_rounded, 'Edit local catalog',
@@ -645,9 +643,10 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
 
   void _openChannelList() {
     Timer? sheetTick;
+    final app = AppThemeScope.of(context);
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF101015),
+      backgroundColor: app.stremioTv.sheetBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -669,17 +668,17 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                   width: 38,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
+                    color: app.core.tx.withAlpha(0x3D),
+                    borderRadius: app.shape.br(2),
                   ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 2, 20, 12),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 2, 20, 12),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text('All channels',
                         style: TextStyle(
-                            color: Colors.white,
+                            color: app.core.tx,
                             fontSize: 18,
                             fontWeight: FontWeight.w800)),
                   ),
@@ -702,6 +701,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
 
   Widget _channelListRow(StremioTvChannel channel, BuildContext ctx) {
     widget.ensureLoaded(channel);
+    final app = AppThemeScope.of(context);
     final ident = _identFor(channel);
     final np = widget.hideNowPlaying ? null : _nowPlaying(channel);
     final poster = np?.item.poster;
@@ -728,13 +728,13 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                     const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 decoration: BoxDecoration(
                   color: ident,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: app.shape.br(6),
                 ),
                 child: Text(
                   'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: app.core.tx,
                     fontSize: 10,
                     fontWeight: FontWeight.w900,
                   ),
@@ -742,7 +742,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
               ),
               const SizedBox(width: 12),
               ClipRRect(
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: app.shape.brImg(6),
                 child: SizedBox(
                   width: 40,
                   height: 60,
@@ -767,8 +767,8 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                       channel.displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: app.core.tx,
                         fontSize: 13.5,
                         fontWeight: FontWeight.w700,
                       ),
@@ -784,20 +784,20 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.62),
+                        color: app.core.tx.withValues(alpha: 0.62),
                         fontSize: 12,
                       ),
                     ),
                     if (np != null) ...[
                       const SizedBox(height: 6),
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: app.shape.br(2),
                         child: LinearProgressIndicator(
                           value: widget.displayProgress(channel, np.progress)
                               .clamp(0.0, 1.0),
                           minHeight: 3,
                           backgroundColor:
-                              Colors.white.withValues(alpha: 0.14),
+                              app.core.tx.withValues(alpha: 0.14),
                           valueColor: AlwaysStoppedAnimation(ident),
                         ),
                       ),
@@ -806,10 +806,10 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
                 ),
               ),
               if (channel.isFavorite)
-                const Padding(
-                  padding: EdgeInsets.only(left: 10),
+                Padding(
+                  padding: const EdgeInsets.only(left: 10),
                   child: Icon(Icons.star_rounded,
-                      size: 16, color: Color(0xFFFFC107)),
+                      size: 16, color: app.stremioTv.starAccent),
                 ),
             ],
           ),
@@ -819,12 +819,13 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   }
 
   Widget _listThumbFallback(Color ident, StremioTvChannel channel) {
+    final app = AppThemeScope.of(context);
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [ident.withValues(alpha: 0.35), const Color(0xFF111118)],
+          colors: [ident.withValues(alpha: 0.35), app.home.posterPlaceholder],
         ),
       ),
       child: Icon(
@@ -832,7 +833,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
             ? Icons.live_tv_rounded
             : Icons.movie_rounded,
         size: 18,
-        color: Colors.white.withValues(alpha: 0.3),
+        color: app.core.tx.withValues(alpha: 0.3),
       ),
     );
   }
@@ -855,6 +856,7 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
   // --- Wide: Stage + Dial -------------------------------------------------
 
   Widget _buildWide() {
+    final app = AppThemeScope.of(context);
     final dial = widget.channels.where((c) => _nodeFor(c) != null).toList();
     assert(
       dial.length == widget.channels.length,
@@ -912,13 +914,13 @@ class _StremioTvTunerState extends State<StremioTvTuner> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                HomeTheme.bg.withValues(alpha: 0.0),
-                HomeTheme.bg.withValues(alpha: 0.72),
+                app.home.bg.withValues(alpha: 0.0),
+                app.home.bg.withValues(alpha: 0.72),
               ],
             ),
             border: Border(
               top: BorderSide(
-                color: Colors.white.withValues(alpha: 0.06),
+                color: app.stremioTv.hairline,
                 width: 0.5,
               ),
             ),
@@ -1178,6 +1180,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final item = widget.nowPlaying?.item;
     final bg = item?.background ?? item?.poster;
     final blurArt = widget.hideNowPlaying;
@@ -1191,7 +1194,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
       // Base matches the Home page background (was a colder near-black), so a
       // channel with no backdrop and the Stage's lower fade both land on the
       // same indigo the rest of the app uses.
-      decoration: const BoxDecoration(color: HomeTheme.bg),
+      decoration: BoxDecoration(color: app.home.bg),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -1303,39 +1306,42 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
                 begin: Alignment.bottomLeft,
                 end: Alignment.topRight,
                 colors: [
-                  HomeTheme.bg.withValues(alpha: 0.97),
-                  HomeTheme.bg.withValues(alpha: 0.50),
+                  app.home.bg.withValues(alpha: 0.97),
+                  app.home.bg.withValues(alpha: 0.50),
                   widget.ident.withValues(alpha: 0.06),
                 ],
                 stops: const [0.0, 0.55, 1.0],
               ),
             ),
           ),
-          // Legibility scrims share the page hue (0x0D0B1A = HomeTheme.bg) so
-          // the darkened corners meet the indigo base without a colour seam.
-          const DecoratedBox(
+          // Legibility scrims share the page hue (home.bg) so the darkened
+          // corners meet the base without a colour seam.
+          DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.bottomCenter,
                 end: Alignment.center,
-                colors: [Color(0xDD0D0B1A), Color(0x000D0B1A)],
+                colors: [
+                  app.home.bg.withAlpha(0xDD),
+                  app.home.bg.withAlpha(0x00),
+                ],
               ),
             ),
           ),
           // Side vignette for widescreen depth.
           if (!isNarrow)
-            const DecoratedBox(
+            DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                   colors: [
-                    Color(0x660D0B1A),
-                    Color(0x000D0B1A),
-                    Color(0x000D0B1A),
-                    Color(0x330D0B1A),
+                    app.home.bg.withAlpha(0x66),
+                    app.home.bg.withAlpha(0x00),
+                    app.home.bg.withAlpha(0x00),
+                    app.home.bg.withAlpha(0x33),
                   ],
-                  stops: [0.0, 0.15, 0.85, 1.0],
+                  stops: const [0.0, 0.15, 0.85, 1.0],
                 ),
               ),
             ),
@@ -1391,6 +1397,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
   }
 
   Widget _buildContent(StremioMeta? item, bool isNarrow) {
+    final app = AppThemeScope.of(context);
     // Staggered cascade offsets mirror the Home hero: tag first, then title,
     // meta, plot, and the live bar/up-next trailing — a channel surf reads as
     // one composed entrance instead of a hard text swap.
@@ -1413,7 +1420,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
               maxLines: isNarrow ? 1 : 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Colors.white,
+                color: app.core.tx,
                 fontSize: isNarrow ? 28 : 44,
                 height: 1.05,
                 fontWeight: FontWeight.w800,
@@ -1454,22 +1461,23 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
   }
 
   Widget _glassPill({required IconData icon, required String label}) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.50),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: app.shape.br(24),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.15),
+          color: app.onGlass.withValues(alpha: 0.15),
           width: 0.5,
         ),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 15, color: Colors.white.withValues(alpha: 0.85)),
+        Icon(icon, size: 15, color: app.onGlass.withValues(alpha: 0.85)),
         const SizedBox(width: 7),
         Text(label,
             style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.85),
+                color: app.onGlass.withValues(alpha: 0.85),
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.3)),
@@ -1478,6 +1486,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
   }
 
   Widget _channelTag() {
+    final app = AppThemeScope.of(context);
     final channel = widget.channel;
     final catalogLabel = channel.genre != null
         ? '${channel.catalog.name} — ${channel.genre}'
@@ -1494,12 +1503,12 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(
                 color: widget.ident,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: app.shape.br(10),
               ),
               child: Text(
                 'CH ${channel.channelNumber.toString().padLeft(2, '0')}',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: app.core.tx,
                   fontSize: 13,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 1.2,
@@ -1510,17 +1519,17 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
+                color: app.core.tx.withValues(alpha: 0.08),
+                borderRadius: app.shape.br(8),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: app.core.tx.withValues(alpha: 0.08),
                   width: 0.5,
                 ),
               ),
               child: Text(
                 channel.addon.name.toUpperCase(),
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.50),
+                  color: app.core.tx.withValues(alpha: 0.50),
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 1.4,
@@ -1534,7 +1543,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
         _Marquee(
           text: catalogLabel.toUpperCase(),
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.72),
+            color: app.core.tx.withValues(alpha: 0.72),
             fontSize: 13,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.8,
@@ -1546,6 +1555,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
   }
 
   Widget _metaRow(StremioMeta item) {
+    final app = AppThemeScope.of(context);
     final bits = <Widget>[];
     void add(Widget w) {
       if (bits.isNotEmpty) bits.add(_dot());
@@ -1557,7 +1567,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
     }
     if (item.imdbRating != null) {
       add(Row(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.star_rounded, size: 16, color: Color(0xFFFFC107)),
+        Icon(Icons.star_rounded, size: 16, color: app.stremioTv.starAccent),
         const SizedBox(width: 4),
         Text(item.imdbRating!.toStringAsFixed(1), style: _metaStyle),
       ]));
@@ -1577,12 +1587,12 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
     return Row(children: bits);
   }
 
-  static const _metaStyle = TextStyle(
-    color: Colors.white,
-    fontSize: 15,
-    fontWeight: FontWeight.w600,
-    shadows: [Shadow(blurRadius: 12, color: Colors.black)],
-  );
+  TextStyle get _metaStyle => TextStyle(
+        color: AppThemeScope.of(context).core.tx,
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        shadows: const [Shadow(blurRadius: 12, color: Colors.black)],
+      );
 
   Widget _dot() => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1590,13 +1600,14 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
           width: 4,
           height: 4,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.40),
+            color: AppThemeScope.of(context).core.tx.withValues(alpha: 0.40),
             shape: BoxShape.circle,
           ),
         ),
       );
 
   Widget _liveBar() {
+    final app = AppThemeScope.of(context);
     final np = widget.nowPlaying;
     final progress = widget.displayProgress;
     return Row(
@@ -1604,11 +1615,11 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
         // "Live" indicator uses Home's reserved amber highlight; the progress
         // fill below is white like every Home progress bar (was the channel's
         // blue identity colour for both).
-        _LivePip(color: HomeTheme.highlight),
+        _LivePip(color: app.home.highlight),
         const SizedBox(width: 9),
         Text('LIVE',
             style: TextStyle(
-              color: HomeTheme.highlight,
+              color: app.home.highlight,
               fontSize: 12,
               fontWeight: FontWeight.w900,
               letterSpacing: 2.5,
@@ -1616,23 +1627,23 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
         const SizedBox(width: 16),
         Expanded(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: app.shape.br(4),
             child: SizedBox(
               height: 5,
               child: Stack(
                 children: [
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
+                      color: app.stremioTv.progressTrack,
+                      borderRadius: app.shape.br(4),
                     ),
                   ),
                   FractionallySizedBox(
                     widthFactor: progress.clamp(0.0, 1.0),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.95),
-                        borderRadius: BorderRadius.circular(4),
+                        color: app.stremioTv.progressFill,
+                        borderRadius: app.shape.br(4),
                       ),
                     ),
                   ),
@@ -1648,7 +1659,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
           overflow: TextOverflow.ellipsis,
           softWrap: false,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.65),
+            color: app.core.tx.withValues(alpha: 0.65),
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
@@ -1658,14 +1669,15 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
   }
 
   Widget _upNext() {
+    final app = AppThemeScope.of(context);
     final n = widget.nextPlaying!;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(12),
+        color: app.stremioTv.surfaceFill,
+        borderRadius: app.shape.br(12),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: app.stremioTv.hairline,
           width: 0.5,
         ),
       ),
@@ -1688,7 +1700,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.78),
+                color: app.core.tx.withValues(alpha: 0.78),
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
@@ -1700,6 +1712,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
   }
 
   Widget _tuningState() {
+    final app = AppThemeScope.of(context);
     return Row(
       children: [
         SizedBox(
@@ -1714,7 +1727,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
         Text(
           widget.loading ? 'Tuning in…' : 'No broadcast on this channel',
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.7),
+            color: app.core.tx.withValues(alpha: 0.7),
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
@@ -1724,10 +1737,11 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
   }
 
   Widget _hiddenState() {
+    final app = AppThemeScope.of(context);
     return Row(
       children: [
         Icon(Icons.visibility_off_rounded,
-            size: 28, color: Colors.white.withValues(alpha: 0.5)),
+            size: 28, color: app.core.tx.withValues(alpha: 0.5)),
         const SizedBox(width: 14),
         Expanded(
           child: Text(
@@ -1735,7 +1749,7 @@ class _StageState extends State<_Stage> with TickerProviderStateMixin {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.78),
+              color: app.core.tx.withValues(alpha: 0.78),
               fontSize: 24,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.2,
@@ -1761,27 +1775,29 @@ class _StageDescription extends StatelessWidget {
     required this.interactive,
   });
 
-  static const _style = TextStyle(
-    color: Color(0xC8FFFFFF),
-    fontSize: 17,
-    height: 1.5,
-    shadows: [Shadow(blurRadius: 8, color: Colors.black)],
-  );
+  TextStyle _styleOf(AppTheme app) => TextStyle(
+        color: app.core.tx.withAlpha(0xC8),
+        fontSize: 17,
+        height: 1.5,
+        shadows: const [Shadow(blurRadius: 8, color: Colors.black)],
+      );
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final style = _styleOf(app);
     if (!interactive) {
       return Text(
         text,
         maxLines: 3,
         overflow: TextOverflow.ellipsis,
-        style: _style,
+        style: style,
       );
     }
     return LayoutBuilder(
       builder: (context, c) {
         final tp = TextPainter(
-          text: TextSpan(text: text, style: _style),
+          text: TextSpan(text: text, style: style),
           maxLines: 3,
           textDirection: Directionality.of(context),
         )..layout(maxWidth: c.maxWidth);
@@ -1794,7 +1810,7 @@ class _StageDescription extends StatelessWidget {
               text,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: _style,
+              style: style,
             ),
             if (overflows) ...[
               const SizedBox(height: 6),
@@ -1807,7 +1823,7 @@ class _StageDescription extends StatelessWidget {
                     Text(
                       'Read more',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.95),
+                        color: app.core.tx.withValues(alpha: 0.95),
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 0.3,
@@ -1816,7 +1832,7 @@ class _StageDescription extends StatelessWidget {
                     const SizedBox(width: 3),
                     Icon(Icons.expand_more_rounded,
                         size: 18,
-                        color: Colors.white.withValues(alpha: 0.95)),
+                        color: app.core.tx.withValues(alpha: 0.95)),
                   ],
                 ),
               ),
@@ -1828,9 +1844,12 @@ class _StageDescription extends StatelessWidget {
   }
 
   void _showFull(BuildContext context) {
+    // Captured from the calling context — the sheet route is not under this
+    // surface's theme boundary.
+    final app = AppThemeScope.of(context);
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF101015),
+      backgroundColor: app.stremioTv.sheetBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -1847,8 +1866,8 @@ class _StageDescription extends StatelessWidget {
               width: 38,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
+                color: app.core.tx.withAlpha(0x3D),
+                borderRadius: app.shape.br(2),
               ),
             ),
             Padding(
@@ -1859,7 +1878,7 @@ class _StageDescription extends StatelessWidget {
                   height: 26,
                   decoration: BoxDecoration(
                     color: ident,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: app.shape.br(2),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1868,8 +1887,8 @@ class _StageDescription extends StatelessWidget {
                     title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: app.core.tx,
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1884,7 +1903,7 @@ class _StageDescription extends StatelessWidget {
                 child: Text(
                   text,
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.82),
+                    color: app.core.tx.withValues(alpha: 0.82),
                     fontSize: 15,
                     height: 1.45,
                   ),
@@ -2078,6 +2097,7 @@ class _DialCardState extends State<_DialCard> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final item = widget.nowPlaying?.item;
     final poster = item?.poster ?? item?.background;
     final ident = widget.ident;
@@ -2118,14 +2138,12 @@ class _DialCardState extends State<_DialCard> {
             width: 138,
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: app.shape.brImg(16),
               // Gold focus rim + bloom, matching the Home board's poster tiles
               // (was the per-channel identity colour). Consistent focus colour
               // is what makes the two screens feel like one.
               border: Border.all(
-                color: active
-                    ? HomeTheme.focusGold
-                    : Colors.white.withValues(alpha: 0.06),
+                color: active ? app.home.focus : app.stremioTv.hairline,
                 width: active ? 2.5 : 0.5,
               ),
               // The AnimatedScale pop re-rasterizes any blur shadow every frame
@@ -2136,7 +2154,7 @@ class _DialCardState extends State<_DialCard> {
               boxShadow: (active && !widget.isTelevision)
                   ? [
                       BoxShadow(
-                        color: HomeTheme.focusGoldDeep.withValues(alpha: 0.45),
+                        color: app.home.focusDeep.withValues(alpha: 0.45),
                         blurRadius: 16,
                       ),
                     ]
@@ -2210,7 +2228,7 @@ class _DialCardState extends State<_DialCard> {
                           begin: Alignment.topCenter,
                           end: Alignment.center,
                           colors: [
-                            HomeTheme.focusGold.withValues(alpha: 0.16),
+                            app.home.focus.withValues(alpha: 0.16),
                             Colors.transparent,
                           ],
                         ),
@@ -2225,12 +2243,12 @@ class _DialCardState extends State<_DialCard> {
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: ident,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: app.shape.br(8),
                       ),
                       child: Text(
                         channelNumberLabel,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: app.core.tx,
                           fontSize: 10,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.8,
@@ -2248,8 +2266,8 @@ class _DialCardState extends State<_DialCard> {
                           color: Colors.black.withValues(alpha: 0.4),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.star_rounded,
-                            size: 14, color: Color(0xFFFFC107)),
+                        child: Icon(Icons.star_rounded,
+                            size: 14, color: app.stremioTv.starAccent),
                       ),
                     ),
                   // "How to open options" affordance — TV on the focused card
@@ -2286,10 +2304,10 @@ class _DialCardState extends State<_DialCard> {
                         borderRadius: const BorderRadius.vertical(
                           bottom: Radius.circular(15),
                         ),
-                        color: Colors.black.withValues(alpha: 0.55),
+                        color: app.stremioTv.glass,
                         border: Border(
                           top: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.08),
+                            color: app.onGlass.withValues(alpha: 0.08),
                             width: 0.5,
                           ),
                         ),
@@ -2305,8 +2323,8 @@ class _DialCardState extends State<_DialCard> {
                                     widget.channel.catalog.name),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: app.onGlass,
                               fontSize: 12,
                               height: 1.2,
                               fontWeight: FontWeight.w700,
@@ -2314,13 +2332,13 @@ class _DialCardState extends State<_DialCard> {
                           ),
                           const SizedBox(height: 8),
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(3),
+                            borderRadius: app.shape.br(3),
                             child: SizedBox(
                               height: 4,
                               child: Stack(
                                 children: [
                                   Container(
-                                    color: Colors.white
+                                    color: app.onGlass
                                         .withValues(alpha: 0.15),
                                   ),
                                   FractionallySizedBox(
@@ -2330,10 +2348,10 @@ class _DialCardState extends State<_DialCard> {
                                       // White progress fill to match Home (the
                                       // CH badge keeps the per-channel colour).
                                       decoration: BoxDecoration(
-                                        color: Colors.white
+                                        color: app.onGlass
                                             .withValues(alpha: 0.9),
                                         borderRadius:
-                                            BorderRadius.circular(3),
+                                            app.shape.br(3),
                                       ),
                                     ),
                                   ),
@@ -2389,6 +2407,7 @@ class _DialCardState extends State<_DialCard> {
       'CH ${widget.channel.channelNumber.toString().padLeft(2, '0')}';
 
   Widget _placeholder(Color ident) {
+    final app = AppThemeScope.of(context);
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -2407,7 +2426,7 @@ class _DialCardState extends State<_DialCard> {
           widget.channel.type == 'series'
               ? Icons.live_tv_rounded
               : Icons.movie_rounded,
-          color: Colors.white.withValues(alpha: 0.18),
+          color: app.core.tx.withValues(alpha: 0.18),
           size: 32,
         ),
       ),
@@ -2425,25 +2444,26 @@ class _DialHintChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.62),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: app.shape.br(6),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.16),
+          color: app.onGlass.withValues(alpha: 0.16),
           width: 0.5,
         ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: Colors.white.withValues(alpha: 0.85)),
+          Icon(icon, size: 11, color: app.onGlass.withValues(alpha: 0.85)),
           const SizedBox(width: 3),
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.85),
+              color: app.onGlass.withValues(alpha: 0.85),
               fontSize: 8,
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,

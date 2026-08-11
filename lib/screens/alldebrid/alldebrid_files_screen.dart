@@ -9,6 +9,7 @@ import '../../services/download_service.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/series_source_service.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../models/alldebrid_magnet.dart';
 import '../../models/alldebrid_file.dart';
 import '../../models/alldebrid_link.dart';
@@ -1226,6 +1227,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
 
   Widget _buildToolbar() {
     final theme = Theme.of(context);
+    final app = AppThemeScope.of(context);
     final isWeb = _selectedView == _AdView.webDownloads;
     final hasItems = isWeb ? _links.isNotEmpty : _magnets.isNotEmpty;
     return LayoutBuilder(
@@ -1243,9 +1245,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           padding: EdgeInsets.symmetric(
               horizontal: isCompact ? 8 : 16, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            color: app.fade(app.core.tx, 0.05),
+            borderRadius: app.shape.br(12),
+            border: Border.all(color: app.fade(app.core.tx, 0.08)),
           ),
           child: Row(
             children: [
@@ -1455,28 +1457,30 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   /// Shared search-field decoration matching the cloud-screen styling.
-  InputDecoration _searchDecoration(String hint) => InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
-        prefixIcon: Icon(Icons.search_rounded,
-            color: Colors.white.withValues(alpha: 0.4), size: 20),
-        filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.06),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: CloudTheme.accent),
-        ),
-      );
+  InputDecoration _searchDecoration(String hint) {
+    final app = AppThemeScope.of(context);
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: app.fade(app.core.tx, 0.3)),
+      prefixIcon: Icon(Icons.search_rounded,
+          color: app.fade(app.core.tx, 0.4), size: 20),
+      filled: true,
+      fillColor: app.fade(app.core.tx, 0.06),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: app.shape.br(12),
+        borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: app.shape.br(12),
+        borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: app.shape.br(12),
+        borderSide: BorderSide(color: app.cloud.accent),
+      ),
+    );
+  }
 
   /// D-pad escape target for a search field (used by the TvTextField arrow
   /// callbacks below).
@@ -1491,6 +1495,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Widget _buildSearchBar() {
+    final app = AppThemeScope.of(context);
     final hasText = _searchController.text.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -1543,10 +1548,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                     final isFocused = Focus.of(context).hasFocus;
                     return Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(8),
+                        color: app.fade(app.core.tx, 0.06),
+                        borderRadius: app.shape.br(8),
                         border: isFocused
-                            ? Border.all(color: Colors.white, width: 2)
+                            ? Border.all(color: app.core.tx, width: 2)
                             : null,
                       ),
                       child: IconButton(
@@ -1556,7 +1561,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                           _searchFocusNode.requestFocus();
                         },
                         icon: Icon(Icons.clear_rounded,
-                            color: Colors.white.withValues(alpha: 0.4),
+                            color: app.fade(app.core.tx, 0.4),
                             size: 18),
                       ),
                     );
@@ -1591,6 +1596,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Widget _buildBody() {
+    final app = AppThemeScope.of(context);
     if (_selectedView == _AdView.webDownloads) {
       return _buildLinksView();
     }
@@ -1604,7 +1610,8 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.cloud_off, size: 48, color: Colors.white38),
+              Icon(Icons.cloud_off,
+                  size: 48, color: app.fade(app.core.tx, 0x62 / 0xFF)),
               const SizedBox(height: 16),
               Text(_error!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -1621,6 +1628,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Widget _buildMagnetsView() {
+    final app = AppThemeScope.of(context);
     final magnets = _visibleMagnets;
     if (magnets.isEmpty) {
       return RefreshIndicator(
@@ -1633,7 +1641,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 _searchQuery.isNotEmpty
                     ? 'No magnets match your search.'
                     : 'Your AllDebrid library is empty.',
-                style: const TextStyle(color: Colors.white54),
+                style: TextStyle(color: app.fade(app.core.tx, 0x8A / 0xFF)),
               ),
             ),
           ],
@@ -1746,6 +1754,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Widget _buildLinksView() {
+    final app = AppThemeScope.of(context);
     if (_loadingLinks) {
       return const CloudRowSkeletonList();
     }
@@ -1756,7 +1765,8 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.cloud_off, size: 48, color: Colors.white38),
+              Icon(Icons.cloud_off,
+                  size: 48, color: app.fade(app.core.tx, 0x62 / 0xFF)),
               const SizedBox(height: 16),
               Text(_linksError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -1779,7 +1789,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 _searchQuery.isNotEmpty
                     ? 'No links match your search.'
                     : 'No saved links yet.',
-                style: const TextStyle(color: Colors.white54),
+                style: TextStyle(color: app.fade(app.core.tx, 0x8A / 0xFF)),
               ),
             ),
           ],
@@ -1847,6 +1857,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
   }
 
   Widget _buildFilesView() {
+    final app = AppThemeScope.of(context);
     if (_loadingFiles) {
       return const CloudRowSkeletonList();
     }
@@ -1857,7 +1868,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           _fileSearchQuery.isNotEmpty
               ? 'No files match your search.'
               : 'No files in this magnet.',
-          style: const TextStyle(color: Colors.white54),
+          style: TextStyle(color: app.fade(app.core.tx, 0x8A / 0xFF)),
         ),
       );
     }

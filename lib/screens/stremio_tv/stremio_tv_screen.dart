@@ -4,7 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../widgets/home/home_theme.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../widgets/pipeline_loading_overlay.dart';
 import '../../models/stremio_addon.dart';
 import '../../models/stremio_tv/stremio_tv_channel.dart';
@@ -883,6 +883,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     // it also covers the random-episode resolve; the subtitle is omitted since
     // the episode isn't known yet for series.
     if (!mounted) return;
+    final app = AppThemeScope.of(context);
     final pInfo = _tvProviderInfo();
     final overlay = PipelineLoadingOverlay.show(
       context,
@@ -892,6 +893,15 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       providerCode: pInfo.code,
       providerColor: pInfo.color,
       hasCacheCheck: pInfo.cacheCheck,
+      // The loader is a dark cinematic plate on every theme (black Material,
+      // black-at-alpha scrims), so its ink is `onGlass`, never page ink.
+      // `inkOnFill` is already contrast-scored against the accent it sits on.
+      loaderGround: app.stremioTv.loaderGround,
+      loaderAccent: app.stremioTv.loaderAccent,
+      loaderAccent2: app.stremioTv.loaderAccent2,
+      railFar: app.stremioTv.loaderRailFar,
+      ink: app.onGlass,
+      inkOnFill: app.stremioTv.inkOnFill,
       onCancel: () {
         // The overlay dismisses itself; just abort the in-flight play. Every
         // await below bails on the _playGeneration mismatch.
@@ -2666,6 +2676,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final app = AppThemeScope.of(context);
 
     return Scaffold(
       // Match the Home board: sit the whole screen on the same cinematic
@@ -2673,7 +2684,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
       // part of the same app rather than a separate dark surface.
       backgroundColor: Colors.transparent,
       body: Container(
-        decoration: HomeTheme.pageBackground,
+        decoration: BoxDecoration(gradient: app.home.wash),
         child: _loading
           ? _buildLoadingSkeleton()
           : Column(
@@ -2686,8 +2697,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        HomeTheme.bg,
-                        HomeTheme.bg.withValues(alpha: 0.0),
+                        app.home.bg,
+                        app.home.bg.withValues(alpha: 0.0),
                       ],
                     ),
                   ),
@@ -2709,7 +2720,12 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                   child: TvTextField(
                                   controller: _searchController,
                                   focusNode: _searchFocusNode,
-                                  style: const TextStyle(color: Colors.white),
+                                  style: TextStyle(color: app.core.tx),
+                                  accent: app.youtube.focus,
+                                  keyboardGround: app.youtube.keyboardPanel,
+                                  keyboardInk: app.core.tx,
+                                  keyboardInkOnAccent:
+                                      app.inkOn(app.youtube.focus),
                                   onDownArrow: () =>
                                       _searchBtnFocusNode.requestFocus(),
                                   onUpArrow: () {
@@ -2723,13 +2739,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                   decoration: InputDecoration(
                                     hintText: 'Search channels...',
                                     hintStyle: TextStyle(
-                                      color: Colors.white.withValues(
+                                      color: app.core.tx.withValues(
                                         alpha: 0.3,
                                       ),
                                     ),
                                     prefixIcon: Icon(
                                       Icons.search_rounded,
-                                      color: Colors.white.withValues(
+                                      color: app.core.tx.withValues(
                                         alpha: 0.35,
                                       ),
                                     ),
@@ -2737,7 +2753,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                         ? IconButton(
                                             icon: Icon(
                                               Icons.close_rounded,
-                                              color: Colors.white.withValues(
+                                              color: app.core.tx.withValues(
                                                 alpha: 0.5,
                                               ),
                                             ),
@@ -2750,24 +2766,24 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                           )
                                         : null,
                                     border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
+                                      borderRadius: app.shape.br(14),
                                       borderSide: BorderSide.none,
                                     ),
                                     enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
+                                      borderRadius: app.shape.br(14),
                                       borderSide: BorderSide.none,
                                     ),
                                     focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
+                                      borderRadius: app.shape.br(14),
                                       borderSide: BorderSide(
-                                        color: Colors.white.withValues(
+                                        color: app.core.tx.withValues(
                                           alpha: 0.15,
                                         ),
                                         width: 1,
                                       ),
                                     ),
                                     filled: true,
-                                    fillColor: Colors.white.withValues(
+                                    fillColor: app.core.tx.withValues(
                                       alpha: 0.07,
                                     ),
                                     contentPadding: const EdgeInsets.symmetric(
@@ -2852,8 +2868,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                     color: (_searchBtnFocusNode.hasFocus ||
                                             _showSearchField ||
                                             _searchQuery.isNotEmpty)
-                                        ? Colors.white
-                                        : Colors.white.withValues(alpha: 0.5),
+                                        ? app.core.tx
+                                        : app.core.tx.withValues(alpha: 0.5),
                                   ),
                                 ),
                               ),
@@ -3006,8 +3022,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                         Icons.more_vert_rounded,
                                         size: 20,
                                         color: _menuFocusNode.hasFocus
-                                            ? Colors.white
-                                            : Colors.white.withValues(
+                                            ? app.core.tx
+                                            : app.core.tx.withValues(
                                                 alpha: 0.5,
                                               ),
                                       ),
@@ -3119,8 +3135,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                                             ),
                                             style: TextStyle(
                                               color: _providerFocusNode.hasFocus
-                                                  ? Colors.white
-                                                  : Colors.white.withValues(
+                                                  ? app.core.tx
+                                                  : app.core.tx.withValues(
                                                       alpha: 0.68,
                                                     ),
                                               fontSize: 13,
@@ -3228,6 +3244,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
     bool wide = false,
     VoidCallback? onTap,
   }) {
+    final app = AppThemeScope.of(context);
     final btn = Container(
       height: 40,
       constraints: wide ? const BoxConstraints(minWidth: 48) : null,
@@ -3240,13 +3257,13 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
         // that shows even on the active one, since DPAD focus lands there first
         // and the fill alone wouldn't signal the remote moved.
         color: active
-            ? HomeTheme.chromeAccent
-            : Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(12),
+            ? app.home.chromeAccent
+            : app.stremioTv.surfaceFill,
+        borderRadius: app.shape.br(12),
         border: Border.all(
           color: focused
-              ? Colors.white.withValues(alpha: 0.9)
-              : Colors.white.withValues(alpha: 0.06),
+              ? app.stremioTv.focusRing
+              : app.stremioTv.hairline,
           width: focused ? 2 : 0.5,
         ),
       ),
@@ -3257,6 +3274,7 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
   }
 
   Widget _buildLoadingSkeleton() {
+    final app = AppThemeScope.of(context);
     return Column(
       children: [
         const SizedBox(height: 52),
@@ -3265,8 +3283,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 32),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(20),
+              color: app.core.tx.withValues(alpha: 0.03),
+              borderRadius: app.shape.br(20),
             ),
             child: Stack(
               children: [
@@ -3280,8 +3298,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                         width: 80,
                         height: 28,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(10),
+                          color: app.core.tx.withValues(alpha: 0.06),
+                          borderRadius: app.shape.br(10),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -3289,8 +3307,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                         width: 320,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(8),
+                          color: app.stremioTv.surfaceFill,
+                          borderRadius: app.shape.br(8),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -3298,8 +3316,8 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                         width: 200,
                         height: 16,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.03),
-                          borderRadius: BorderRadius.circular(6),
+                          color: app.core.tx.withValues(alpha: 0.03),
+                          borderRadius: app.shape.br(6),
                         ),
                       ),
                     ],
@@ -3323,10 +3341,10 @@ class _StremioTvScreenState extends State<StremioTvScreen> {
                 width: 138,
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.04),
-                  borderRadius: BorderRadius.circular(16),
+                  color: app.stremioTv.surfaceFill,
+                  borderRadius: app.shape.br(16),
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.04),
+                    color: app.core.tx.withValues(alpha: 0.04),
                     width: 0.5,
                   ),
                 ),
@@ -3414,17 +3432,20 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
   }
 
   Color _qualityColor(String quality) {
+    // Ordered most-capable-first, indexed by tier — the list's ORDER is the
+    // contract, so this switch maps position, not hue.
+    final tiers = AppThemeScope.of(context).stremioTv.qualityTier;
     switch (quality) {
       case '4K':
-        return const Color(0xFFFFD600);
+        return tiers[0];
       case '1080p':
-        return const Color(0xFF536DFE);
+        return tiers[1];
       case '720p':
-        return const Color(0xFF00BFA5);
+        return tiers[2];
       case '480p':
-        return const Color(0xFF78909C);
+        return tiers[3];
       default:
-        return const Color(0xFF90A4AE);
+        return tiers[4];
     }
   }
 
@@ -3494,6 +3515,7 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final filtered = _filteredSources;
 
     return Container(
@@ -3513,8 +3535,8 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
+              color: app.core.tx.withAlpha(0x3D),
+              borderRadius: app.shape.br(2),
             ),
           ),
           // Header
@@ -3528,11 +3550,11 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
                   size: 22,
                 ),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Auto-play failed — select a source',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: app.core.tx,
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                     ),
@@ -3562,16 +3584,17 @@ class _ManualSourcePickerSheetState extends State<_ManualSourcePickerSheet> {
               ],
             ),
           ),
-          const Divider(color: Colors.white12, height: 1),
+          Divider(color: app.core.tx.withAlpha(0x1F), height: 1),
           // Source list
           Flexible(
             child: filtered.isEmpty
-                ? const Center(
+                ? Center(
                     child: Padding(
-                      padding: EdgeInsets.all(32),
+                      padding: const EdgeInsets.all(32),
                       child: Text(
                         'No sources in this category',
-                        style: TextStyle(color: Colors.white38, fontSize: 14),
+                        style: TextStyle(
+                            color: app.core.tx.withAlpha(0x62), fontSize: 14),
                       ),
                     ),
                   )
@@ -3659,6 +3682,7 @@ class _SourcePickerTabState extends State<_SourcePickerTab> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (f) => setState(() => _focused = f),
@@ -3671,22 +3695,24 @@ class _SourcePickerTabState extends State<_SourcePickerTab> {
             // Active = purple fill, focus = white ring (Home mode-toggle
             // pattern); the ring shows even on the active pill.
             color: widget.isActive
-                ? HomeTheme.chromeAccent
+                ? app.home.chromeAccent
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: app.shape.br(20),
             border: Border.all(
               color: _focused
-                  ? Colors.white.withValues(alpha: 0.9)
+                  ? app.stremioTv.focusRing
                   : widget.isActive
                       ? Colors.transparent
-                      : Colors.white12,
+                      : app.core.tx.withAlpha(0x1F),
               width: _focused ? 2 : 1,
             ),
           ),
           child: Text(
             widget.label,
             style: TextStyle(
-              color: widget.isActive ? Colors.white : Colors.white54,
+              color: widget.isActive
+                  ? app.inkOn(app.home.chromeAccent)
+                  : app.core.tx.withAlpha(0x8A),
               fontSize: 13,
               fontWeight: widget.isActive ? FontWeight.w600 : FontWeight.normal,
             ),
@@ -3763,6 +3789,7 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final qColor = widget.qualityColor;
     return Focus(
       focusNode: _focusNode,
@@ -3775,15 +3802,13 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: _focused
-                ? HomeTheme.chromeAccent.withValues(alpha: 0.15)
+                ? app.home.chromeAccent.withValues(alpha: 0.15)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             border: Border.all(
-              // White focus ring (width 2), matching the reskinned toggles /
+              // Chrome focus ring (width 2), matching the reskinned toggles /
               // header buttons so every DPAD-focusable control reads the same.
-              color: _focused
-                  ? Colors.white.withValues(alpha: 0.9)
-                  : Colors.transparent,
+              color: _focused ? app.stremioTv.focusRing : Colors.transparent,
               width: 2,
             ),
           ),
@@ -3794,7 +3819,7 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: qColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: app.shape.br(6),
                   border: Border.all(color: qColor.withValues(alpha: 0.4)),
                 ),
                 child: Text(
@@ -3817,15 +3842,17 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: _focused ? Colors.white : Colors.white70,
+                        color: _focused
+                            ? app.core.tx
+                            : app.core.tx.withAlpha(0xB3),
                         fontSize: 14,
                       ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       widget.meta,
-                      style: const TextStyle(
-                        color: Colors.white38,
+                      style: TextStyle(
+                        color: app.core.tx.withAlpha(0x62),
                         fontSize: 12,
                       ),
                     ),
@@ -3834,12 +3861,12 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
               ),
               // Loading, failed, or play icon
               if (widget.isResolving)
-                const SizedBox(
+                SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: HomeTheme.chromeAccent,
+                    color: app.home.chromeAccent,
                   ),
                 )
               else if (widget.isFailed)
@@ -3851,7 +3878,9 @@ class _SourcePickerItemState extends State<_SourcePickerItem> {
               else
                 Icon(
                   Icons.play_circle_outline,
-                  color: _focused ? Colors.white54 : Colors.white24,
+                  color: _focused
+                      ? app.core.tx.withAlpha(0x8A)
+                      : app.core.tx.withAlpha(0x3D),
                   size: 22,
                 ),
             ],

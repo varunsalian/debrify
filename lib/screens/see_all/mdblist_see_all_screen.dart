@@ -10,13 +10,13 @@ import '../../services/main_page_bridge.dart';
 import '../../services/mdblist/mdblist_list_source.dart';
 import '../../services/mdblist/mdblist_service.dart';
 import '../../services/storage_service.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../widgets/see_all/mdblist_save_button.dart';
 import '../../widgets/see_all/see_all_filter_bar.dart';
 import '../../widgets/see_all/see_all_filter_focus.dart';
 import '../../widgets/see_all/see_all_header.dart';
 import '../../widgets/see_all/see_all_poster_grid.dart';
 import '../../widgets/see_all/see_all_random_button.dart';
-import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
 import '../../widgets/skeleton_poster.dart';
 
@@ -495,7 +495,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     }
     final n = _visible.length;
     return Scaffold(
-      backgroundColor: kSeeAllBg,
+      backgroundColor: AppThemeScope.of(context).seeAll.bg,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -639,6 +639,7 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
       return SkeletonPosterGrid(isTelevision: widget.isTelevision);
     }
     if (_visible.isEmpty) {
+      final app = AppThemeScope.of(context);
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(40),
@@ -652,14 +653,14 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
                           ? Icons.link_off_rounded
                           : Icons.inbox_rounded),
                 size: 44,
-                color: Colors.white.withValues(alpha: 0.25),
+                color: app.fade(app.core.tx, 0.25),
               ),
               const SizedBox(height: 14),
               Text(
                 _emptyMessage(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
+                  color: app.fade(app.core.tx, 0.7),
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                 ),

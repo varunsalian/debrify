@@ -8,12 +8,14 @@ import '../../services/android_native_downloader.dart';
 import '../../services/subtitle_font_service.dart';
 import '../../services/analytics_service.dart';
 import '../../services/skip_segment_service.dart';
+import '../../models/android_video_renderer_mode.dart';
 import '../../utils/deovr_utils.dart' as deovr;
 import '../video_player/services/subtitle_settings_service.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 class ExternalPlayerSettingsPage extends StatefulWidget {
   const ExternalPlayerSettingsPage({super.key});
@@ -81,6 +83,11 @@ class _ExternalPlayerSettingsPageState
   int _defaultAspectIndex = 2; // Fit Width (mobile) / Fill (TV)
   int _nightModeIndex = 0; // Off
   bool _systemAudioEffects = false; // Android only, opt-in
+  bool _tvosForceSoftwareDecode = false; // Apple TV only, opt-in
+  bool _audioPassthrough = false; // Android only, opt-in
+  bool _appleMultichannel = false; // tvOS/iOS only, opt-in
+  AndroidVideoRendererMode _androidVideoRendererMode =
+      AndroidVideoRendererMode.automatic;
   bool _startPortrait = false; // Phone only, opt-in
   bool _subtitleAutoSync = true; // Android TV only, ON by default (opt-out)
   bool _skipSegmentsEnabled = true;
@@ -107,6 +114,10 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _defaultAudioLangFocusNode = FocusNode();
   final FocusNode _defaultSubtitleLangFocusNode = FocusNode();
   final FocusNode _systemAudioEffectsFocusNode = FocusNode();
+  final FocusNode _tvosForceSwDecodeFocusNode = FocusNode();
+  final FocusNode _audioPassthroughFocusNode = FocusNode();
+  final FocusNode _appleMultichannelFocusNode = FocusNode();
+  final FocusNode _androidVideoRendererFocusNode = FocusNode();
   final FocusNode _startPortraitFocusNode = FocusNode();
   final FocusNode _subtitleAutoSyncFocusNode = FocusNode();
   final FocusNode _skipSegmentsEnabledFocusNode = FocusNode();
@@ -121,6 +132,10 @@ class _ExternalPlayerSettingsPageState
   bool _defaultAudioLangFocused = false;
   bool _defaultSubtitleLangFocused = false;
   bool _systemAudioEffectsFocused = false;
+  bool _tvosForceSwDecodeFocused = false;
+  bool _audioPassthroughFocused = false;
+  bool _appleMultichannelFocused = false;
+  bool _androidVideoRendererFocused = false;
   bool _startPortraitFocused = false;
   bool _subtitleAutoSyncFocused = false;
   bool _skipSegmentsEnabledFocused = false;
@@ -220,6 +235,30 @@ class _ExternalPlayerSettingsPageState
         _systemAudioEffectsFocused = _systemAudioEffectsFocusNode.hasFocus;
       });
     });
+    _tvosForceSwDecodeFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _tvosForceSwDecodeFocused = _tvosForceSwDecodeFocusNode.hasFocus;
+      });
+    });
+    _audioPassthroughFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _audioPassthroughFocused = _audioPassthroughFocusNode.hasFocus;
+      });
+    });
+    _appleMultichannelFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _appleMultichannelFocused = _appleMultichannelFocusNode.hasFocus;
+      });
+    });
+    _androidVideoRendererFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _androidVideoRendererFocused = _androidVideoRendererFocusNode.hasFocus;
+      });
+    });
     _startPortraitFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -302,6 +341,10 @@ class _ExternalPlayerSettingsPageState
     _defaultAudioLangFocusNode.dispose();
     _defaultSubtitleLangFocusNode.dispose();
     _systemAudioEffectsFocusNode.dispose();
+    _tvosForceSwDecodeFocusNode.dispose();
+    _audioPassthroughFocusNode.dispose();
+    _appleMultichannelFocusNode.dispose();
+    _androidVideoRendererFocusNode.dispose();
     _startPortraitFocusNode.dispose();
     _subtitleAutoSyncFocusNode.dispose();
     _skipSegmentsEnabledFocusNode.dispose();
@@ -345,7 +388,7 @@ class _ExternalPlayerSettingsPageState
       String iosPreferredKey = 'vlc';
       String? iosCustomScheme;
 
-      if (Platform.isIOS) {
+      if (PlatformUtil.isIosMobile || PlatformUtil.isTvOS) {
         installedIOS = await ExternalPlayerService.detectInstalledIOSPlayers();
         iosPreferredKey = await StorageService.getPreferredIOSExternalPlayer();
         iosCustomScheme = await StorageService.getIOSCustomSchemeTemplate();
@@ -410,8 +453,21 @@ class _ExternalPlayerSettingsPageState
       final nightModeIndex = await StorageService.getPlayerNightModeIndex();
       final systemAudioEffects =
           await StorageService.getPlayerSystemAudioEffects();
+      final tvosForceSoftwareDecode = PlatformUtil.isTvOS
+          ? await StorageService.getTvosForceSoftwareDecode()
+          : false;
+      final audioPassthrough = Platform.isAndroid
+          ? await StorageService.getAudioPassthroughEnabled()
+          : false;
+      final appleMultichannel =
+          (PlatformUtil.isTvOS || PlatformUtil.isIosMobile)
+          ? await StorageService.getAppleMultichannelAudio()
+          : false;
+      final androidVideoRendererMode =
+          await StorageService.getAndroidVideoRendererMode();
       final startPortrait = await StorageService.getPlayerStartPortrait();
-      final subtitleAutoSync = await StorageService.getSubtitleAutoSyncEnabled();
+      final subtitleAutoSync =
+          await StorageService.getSubtitleAutoSyncEnabled();
       final skipSegmentsEnabled = await StorageService.getSkipSegmentsEnabled();
       final storedSkipSegmentProvider =
           await StorageService.getSkipSegmentProvider();
@@ -461,6 +517,10 @@ class _ExternalPlayerSettingsPageState
         _defaultAspectIndex = defaultAspectIndex;
         _nightModeIndex = nightModeIndex;
         _systemAudioEffects = systemAudioEffects;
+        _tvosForceSoftwareDecode = tvosForceSoftwareDecode;
+        _audioPassthrough = audioPassthrough;
+        _appleMultichannel = appleMultichannel;
+        _androidVideoRendererMode = androidVideoRendererMode;
         _startPortrait = startPortrait;
         _subtitleAutoSync = subtitleAutoSync;
         _skipSegmentsEnabled = skipSegmentsEnabled;
@@ -478,7 +538,7 @@ class _ExternalPlayerSettingsPageState
       // Load fonts (built-in + custom) separately (async)
       _loadFonts();
       // Entry focus on TV: land DPAD on the first row once content builds.
-      if (PlatformUtil.isAndroidTvCached) {
+      if (PlatformUtil.isTelevision) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           // Only seed focus if nothing concrete is focused yet — a bare
@@ -920,6 +980,27 @@ class _ExternalPlayerSettingsPageState
     await StorageService.setPlayerSystemAudioEffects(enabled);
   }
 
+  Future<void> _setTvosForceSoftwareDecode(bool enabled) async {
+    setState(() => _tvosForceSoftwareDecode = enabled);
+    await StorageService.setTvosForceSoftwareDecode(enabled);
+  }
+
+  Future<void> _setAudioPassthrough(bool enabled) async {
+    setState(() => _audioPassthrough = enabled);
+    await StorageService.setAudioPassthroughEnabled(enabled);
+  }
+
+  Future<void> _setAppleMultichannel(bool enabled) async {
+    setState(() => _appleMultichannel = enabled);
+    await StorageService.setAppleMultichannelAudio(enabled);
+  }
+
+  Future<void> _setAndroidVideoRendererMode(String storageKey) async {
+    final mode = AndroidVideoRendererMode.fromStorage(storageKey);
+    setState(() => _androidVideoRendererMode = mode);
+    await StorageService.setAndroidVideoRendererMode(mode);
+  }
+
   Future<void> _setStartPortrait(bool enabled) async {
     setState(() => _startPortrait = enabled);
     await StorageService.setPlayerStartPortrait(enabled);
@@ -1015,7 +1096,9 @@ class _ExternalPlayerSettingsPageState
           !lowerName.endsWith('.otf')) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please select a .ttf or .otf font file')),
+            const SnackBar(
+              content: Text('Please select a .ttf or .otf font file'),
+            ),
           );
         }
         return;
@@ -1190,6 +1273,8 @@ class _ExternalPlayerSettingsPageState
   }
 
   Widget _buildPlayerTile(ExternalPlayer player) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final isInstalled = _installedPlayers[player] ?? false;
     final isCustomApp = player == ExternalPlayer.customApp;
     final isCustomCommand = player == ExternalPlayer.customCommand;
@@ -1216,7 +1301,7 @@ class _ExternalPlayerSettingsPageState
         subtitle = _customAppName ?? _customAppPath!;
       } else {
         subtitle = 'No application selected';
-        subtitleColor = kSettingsDim;
+        subtitleColor = t.dim;
       }
     } else if (isCustomCommand) {
       if (_customCommand != null && _customCommand!.isNotEmpty) {
@@ -1226,14 +1311,14 @@ class _ExternalPlayerSettingsPageState
         subtitle = displayCmd;
       } else {
         subtitle = 'No command configured';
-        subtitleColor = kSettingsDim;
+        subtitleColor = t.dim;
       }
     } else if (isInstalled) {
       subtitle = 'Installed';
-      subtitleColor = kSettingsGreen;
+      subtitleColor = t.success;
     } else {
       subtitle = 'Not found';
-      subtitleColor = kSettingsRed;
+      subtitleColor = t.danger;
     }
 
     return RadioListTile<ExternalPlayer>(
@@ -1249,24 +1334,21 @@ class _ExternalPlayerSettingsPageState
       secondary: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: kSettingsAccent.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(10),
+          color: t.accent.withValues(alpha: 0.14),
+          borderRadius: app.shape.br(10),
         ),
-        child: Icon(
-          player.icon,
-          color: canSelect ? kSettingsAccent : kSettingsDim2,
-        ),
+        child: Icon(player.icon, color: canSelect ? t.accent : t.dim2),
       ),
       title: Text(
         player.displayName,
         style: TextStyle(
           fontWeight: FontWeight.w500,
-          color: canSelect ? Colors.white : kSettingsDim2,
+          color: canSelect ? app.core.tx : t.dim2,
         ),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(fontSize: 12, color: subtitleColor ?? kSettingsDim),
+        style: TextStyle(fontSize: 12, color: subtitleColor ?? t.dim),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1274,6 +1356,8 @@ class _ExternalPlayerSettingsPageState
   }
 
   Widget _buildIOSPlayerTile(iOSExternalPlayer player) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final isInstalled = _installedIOSPlayers[player] ?? false;
     final isCustom = player == iOSExternalPlayer.customScheme;
 
@@ -1288,12 +1372,12 @@ class _ExternalPlayerSettingsPageState
         subtitle = displayScheme;
       } else {
         subtitle = 'No URL scheme configured';
-        subtitleColor = kSettingsDim;
+        subtitleColor = t.dim;
       }
     } else {
       subtitle = player.description;
       if (isInstalled) {
-        subtitleColor = kSettingsGreen;
+        subtitleColor = t.success;
         subtitle = 'Likely installed • ${player.description}';
       }
     }
@@ -1309,18 +1393,18 @@ class _ExternalPlayerSettingsPageState
       secondary: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: kSettingsAccent.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(10),
+          color: t.accent.withValues(alpha: 0.14),
+          borderRadius: app.shape.br(10),
         ),
-        child: Icon(player.icon, color: kSettingsAccent),
+        child: Icon(player.icon, color: t.accent),
       ),
       title: Text(
         player.displayName,
-        style: TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
+        style: TextStyle(fontWeight: FontWeight.w500, color: app.core.tx),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(fontSize: 12, color: subtitleColor ?? kSettingsDim),
+        style: TextStyle(fontSize: 12, color: subtitleColor ?? t.dim),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1328,6 +1412,8 @@ class _ExternalPlayerSettingsPageState
   }
 
   Widget _buildLinuxPlayerTile(LinuxExternalPlayer player) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final isInstalled = _installedLinuxPlayers[player] ?? false;
     final isCustom = player == LinuxExternalPlayer.customCommand;
 
@@ -1342,12 +1428,12 @@ class _ExternalPlayerSettingsPageState
         subtitle = displayCommand;
       } else {
         subtitle = 'No command configured';
-        subtitleColor = kSettingsDim;
+        subtitleColor = t.dim;
       }
     } else {
       subtitle = player.description;
       if (isInstalled) {
-        subtitleColor = kSettingsGreen;
+        subtitleColor = t.success;
         subtitle = 'Installed • ${player.description}';
       }
     }
@@ -1363,18 +1449,18 @@ class _ExternalPlayerSettingsPageState
       secondary: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: kSettingsAccent.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(10),
+          color: t.accent.withValues(alpha: 0.14),
+          borderRadius: app.shape.br(10),
         ),
-        child: Icon(player.icon, color: kSettingsAccent),
+        child: Icon(player.icon, color: t.accent),
       ),
       title: Text(
         player.displayName,
-        style: TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
+        style: TextStyle(fontWeight: FontWeight.w500, color: app.core.tx),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(fontSize: 12, color: subtitleColor ?? kSettingsDim),
+        style: TextStyle(fontSize: 12, color: subtitleColor ?? t.dim),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1382,6 +1468,8 @@ class _ExternalPlayerSettingsPageState
   }
 
   Widget _buildWindowsPlayerTile(WindowsExternalPlayer player) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
     final isInstalled = _installedWindowsPlayers[player] ?? false;
     final isCustom = player == WindowsExternalPlayer.customCommand;
 
@@ -1396,12 +1484,12 @@ class _ExternalPlayerSettingsPageState
         subtitle = displayCommand;
       } else {
         subtitle = 'No command configured';
-        subtitleColor = kSettingsDim;
+        subtitleColor = t.dim;
       }
     } else {
       subtitle = player.description;
       if (isInstalled) {
-        subtitleColor = kSettingsGreen;
+        subtitleColor = t.success;
         subtitle = 'Installed • ${player.description}';
       }
     }
@@ -1417,18 +1505,18 @@ class _ExternalPlayerSettingsPageState
       secondary: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: kSettingsAccent.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(10),
+          color: t.accent.withValues(alpha: 0.14),
+          borderRadius: app.shape.br(10),
         ),
-        child: Icon(player.icon, color: kSettingsAccent),
+        child: Icon(player.icon, color: t.accent),
       ),
       title: Text(
         player.displayName,
-        style: TextStyle(fontWeight: FontWeight.w500, color: Colors.white),
+        style: TextStyle(fontWeight: FontWeight.w500, color: app.core.tx),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(fontSize: 12, color: subtitleColor ?? kSettingsDim),
+        style: TextStyle(fontSize: 12, color: subtitleColor ?? t.dim),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
@@ -1445,6 +1533,7 @@ class _ExternalPlayerSettingsPageState
     bool disabled = false,
     FocusNode? focusNode,
   }) {
+    final t = AppThemeScope.of(context).settings;
     final theme = Theme.of(context);
     final isSelected = _defaultPlayerMode == value;
 
@@ -1471,19 +1560,17 @@ class _ExternalPlayerSettingsPageState
                 ),
                 decoration: BoxDecoration(
                   color: isSelected || isFocused
-                      ? kSettingsPanel2
+                      ? t.panel2
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: isFocused || isSelected
-                        ? kSettingsAccent
-                        : kSettingsLine,
+                    color: isFocused || isSelected ? t.accent : t.line,
                     width: isFocused || isSelected ? 2 : 1,
                   ),
                   boxShadow: isFocused
                       ? [
                           BoxShadow(
-                            color: kSettingsAccent.withValues(alpha: 0.25),
+                            color: t.accent.withValues(alpha: 0.25),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -1510,10 +1597,10 @@ class _ExternalPlayerSettingsPageState
                       icon,
                       size: 20,
                       color: isSelected
-                          ? kSettingsAccent
+                          ? t.accent
                           : disabled
-                          ? kSettingsDim2
-                          : kSettingsDim,
+                          ? t.dim2
+                          : t.dim,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -1528,7 +1615,7 @@ class _ExternalPlayerSettingsPageState
                                   fontWeight: isSelected
                                       ? FontWeight.w600
                                       : FontWeight.normal,
-                                  color: disabled ? kSettingsDim2 : null,
+                                  color: disabled ? t.dim2 : null,
                                 ),
                               ),
                               if (recommended) ...[
@@ -1539,15 +1626,13 @@ class _ExternalPlayerSettingsPageState
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: kSettingsAccent.withValues(
-                                      alpha: 0.16,
-                                    ),
+                                    color: t.accent.withValues(alpha: 0.16),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Text(
                                     'Default',
                                     style: theme.textTheme.labelSmall?.copyWith(
-                                      color: kSettingsAccent,
+                                      color: t.accent,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -1558,7 +1643,7 @@ class _ExternalPlayerSettingsPageState
                           Text(
                             subtitle,
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: disabled ? kSettingsDim2 : kSettingsDim,
+                              color: disabled ? t.dim2 : t.dim,
                             ),
                           ),
                         ],
@@ -1584,6 +1669,7 @@ class _ExternalPlayerSettingsPageState
     bool isFocused = false,
     bool enabled = true,
   }) {
+    final t = AppThemeScope.of(context).settings;
     final theme = Theme.of(context);
 
     return Shortcuts(
@@ -1615,7 +1701,7 @@ class _ExternalPlayerSettingsPageState
               child: Text(
                 label,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: enabled ? null : kSettingsDim2,
+                  color: enabled ? null : t.dim2,
                 ),
               ),
             ),
@@ -1625,18 +1711,16 @@ class _ExternalPlayerSettingsPageState
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: kSettingsPanel2,
+                  color: t.panel2,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: enabled && isFocused
-                        ? kSettingsAccent
-                        : kSettingsLine,
+                    color: enabled && isFocused ? t.accent : t.line,
                     width: enabled && isFocused ? 2 : 1,
                   ),
                   boxShadow: enabled && isFocused
                       ? [
                           BoxShadow(
-                            color: kSettingsAccent.withValues(alpha: 0.25),
+                            color: t.accent.withValues(alpha: 0.25),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -1650,7 +1734,7 @@ class _ExternalPlayerSettingsPageState
                     isExpanded: true,
                     icon: Icon(
                       Icons.keyboard_arrow_down,
-                      color: enabled ? kSettingsDim : kSettingsDim2,
+                      color: enabled ? t.dim : t.dim2,
                     ),
                     items: items.entries
                         .map(
@@ -1687,6 +1771,7 @@ class _ExternalPlayerSettingsPageState
     FocusNode? focusNode,
     bool isFocused = false,
   }) {
+    final t = AppThemeScope.of(context).settings;
     final theme = Theme.of(context);
 
     return Shortcuts(
@@ -1715,14 +1800,12 @@ class _ExternalPlayerSettingsPageState
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            color: isFocused ? kSettingsPanel2 : null,
-            border: isFocused
-                ? Border.all(color: kSettingsAccent, width: 2)
-                : null,
+            color: isFocused ? t.panel2 : null,
+            border: isFocused ? Border.all(color: t.accent, width: 2) : null,
             boxShadow: isFocused
                 ? [
                     BoxShadow(
-                      color: kSettingsAccent.withValues(alpha: 0.25),
+                      color: t.accent.withValues(alpha: 0.25),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -1761,7 +1844,7 @@ class _ExternalPlayerSettingsPageState
                         Text(
                           subtitle,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: kSettingsDim,
+                            color: t.dim,
                           ),
                         ),
                       ],
@@ -1785,6 +1868,7 @@ class _ExternalPlayerSettingsPageState
     FocusNode? focusNode,
     bool isFocused = false,
   }) {
+    final t = AppThemeScope.of(context).settings;
     final theme = Theme.of(context);
 
     return Shortcuts(
@@ -1821,16 +1905,16 @@ class _ExternalPlayerSettingsPageState
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: kSettingsPanel2,
+                  color: t.panel2,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isFocused ? kSettingsAccent : kSettingsLine,
+                    color: isFocused ? t.accent : t.line,
                     width: isFocused ? 2 : 1,
                   ),
                   boxShadow: isFocused
                       ? [
                           BoxShadow(
-                            color: kSettingsAccent.withValues(alpha: 0.25),
+                            color: t.accent.withValues(alpha: 0.25),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
@@ -1842,7 +1926,7 @@ class _ExternalPlayerSettingsPageState
                     value: value.clamp(0, items.length - 1),
                     focusNode: focusNode,
                     isExpanded: true,
-                    icon: Icon(Icons.keyboard_arrow_down, color: kSettingsDim),
+                    icon: Icon(Icons.keyboard_arrow_down, color: t.dim),
                     items: List.generate(items.length, (index) {
                       return DropdownMenuItem<int>(
                         value: index,
@@ -1864,10 +1948,16 @@ class _ExternalPlayerSettingsPageState
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
+    // tvOS joined with the audio toggles and external-player support — the
+    // old gate predates both and was quietly serving Apple TV the
+    // "not available" stub while the page's own tvOS rows sat unreachable
+    // behind it.
     final isSupportedPlatform =
         Platform.isMacOS ||
         Platform.isAndroid ||
-        Platform.isIOS ||
+        PlatformUtil.isIosMobile ||
+        PlatformUtil.isTvOS ||
         Platform.isLinux ||
         Platform.isWindows;
 
@@ -1880,14 +1970,14 @@ class _ExternalPlayerSettingsPageState
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.block_rounded, size: 64, color: kSettingsDim),
+                Icon(Icons.block_rounded, size: 64, color: t.dim),
                 const SizedBox(height: 16),
                 Text(
                   'Player settings are not available on this platform',
                   textAlign: TextAlign.center,
                   style: Theme.of(
                     context,
-                  ).textTheme.bodyLarge?.copyWith(color: kSettingsDim),
+                  ).textTheme.bodyLarge?.copyWith(color: t.dim),
                 ),
               ],
             ),
@@ -1941,7 +2031,7 @@ class _ExternalPlayerSettingsPageState
                         Text(
                           'Choose which player to use when playing videos',
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: kSettingsDim,
+                            color: t.dim,
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -1997,7 +2087,7 @@ class _ExternalPlayerSettingsPageState
                           Text(
                             'Default settings when video playback starts',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -2085,6 +2175,62 @@ class _ExternalPlayerSettingsPageState
                             ),
                           ],
 
+                          // Android phone/tablet only. Android TV already uses
+                          // native Media3 + SurfaceView; Apple and desktop
+                          // platforms have different decoder APIs entirely.
+                          if (Platform.isAndroid && !_isAndroidTv) ...[
+                            const SizedBox(height: 12),
+                            _buildDropdownSetting(
+                              context,
+                              label: 'Video renderer',
+                              value: _androidVideoRendererMode.storageKey,
+                              items: {
+                                for (final mode
+                                    in AndroidVideoRendererMode.values)
+                                  mode.storageKey: mode.label,
+                              },
+                              onChanged: _setAndroidVideoRendererMode,
+                              focusNode: _androidVideoRendererFocusNode,
+                              isFocused: _androidVideoRendererFocused,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '${_androidVideoRendererMode.description} '
+                              'Restart playback to apply. Use Automatic if a '
+                              'video is black, has incorrect colors, or loses '
+                              'a feature.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color:
+                                    _androidVideoRendererMode ==
+                                        AndroidVideoRendererMode.automatic
+                                    ? t.dim
+                                    : t.warning,
+                              ),
+                            ),
+                          ],
+
+                          // Apple TV only. The automatic 10-bit remedy
+                          // (PLAYER_TVOS_10BIT_PLAN.md) handles what it can
+                          // detect; this forces software decoding for
+                          // anything it cannot — wrong colors on a
+                          // clean-reading format, most likely.
+                          if (PlatformUtil.isTvOS) ...[
+                            const SizedBox(height: 4),
+                            _buildCheckboxTile(
+                              context,
+                              title: 'Force software video decoding',
+                              subtitle:
+                                  'Compatibility option if a video plays with '
+                                  'wrong colors or a blank picture. Slower — '
+                                  '4K may stutter. Applies from the next '
+                                  'playback.',
+                              value: _tvosForceSoftwareDecode,
+                              onChanged: _setTvosForceSoftwareDecode,
+                              focusNode: _tvosForceSwDecodeFocusNode,
+                              isFocused: _tvosForceSwDecodeFocused,
+                            ),
+                          ],
+
                           // System audio effects (Android only). Off by
                           // default because enabling it switches the audio
                           // output backend — see _attachAudioEffectSession in
@@ -2101,6 +2247,42 @@ class _ExternalPlayerSettingsPageState
                               onChanged: _setSystemAudioEffects,
                               focusNode: _systemAudioEffectsFocusNode,
                               isFocused: _systemAudioEffectsFocused,
+                            ),
+                            // Bitstream passthrough (AUDIO_FIDELITY_PLAN.md).
+                            // Opt-in: a route that misreports support plays
+                            // silence, and only the user knows their chain.
+                            const SizedBox(height: 4),
+                            _buildCheckboxTile(
+                              context,
+                              title: 'Audio passthrough (AC3 · EAC3 · DTS core)',
+                              subtitle:
+                                  'Send the original bitstream to your receiver '
+                                  'instead of decoding. Requires an HDMI chain '
+                                  'that supports it — if you hear silence, turn '
+                                  'this off. Restart playback to apply.',
+                              value: _audioPassthrough,
+                              onChanged: _setAudioPassthrough,
+                              focusNode: _audioPassthroughFocusNode,
+                              isFocused: _audioPassthroughFocused,
+                            ),
+                          ],
+
+                          // Apple multichannel LPCM (AUDIO_FIDELITY_PLAN.md).
+                          // Opt-in until AirPlay/spatial routes are proven.
+                          if (PlatformUtil.isTvOS ||
+                              PlatformUtil.isIosMobile) ...[
+                            const SizedBox(height: 4),
+                            _buildCheckboxTile(
+                              context,
+                              title: 'Multichannel audio (LPCM over HDMI)',
+                              subtitle:
+                                  'Output surround tracks as 5.1/7.1 PCM when '
+                                  'the connected receiver supports it, instead '
+                                  'of stereo. Restart playback to apply.',
+                              value: _appleMultichannel,
+                              onChanged: _setAppleMultichannel,
+                              focusNode: _appleMultichannelFocusNode,
+                              isFocused: _appleMultichannelFocused,
                             ),
                           ],
                         ],
@@ -2129,7 +2311,7 @@ class _ExternalPlayerSettingsPageState
                           Text(
                             'Show manual skip buttons when community timestamps are available',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -2160,7 +2342,7 @@ class _ExternalPlayerSettingsPageState
                                 ? 'Checks every available source and prefers SkipDB, then TheIntroDB, then IntroDB.'
                                 : 'Coverage varies by series, episode, and video release.',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: kSettingsDim2,
+                              color: t.dim2,
                             ),
                           ),
                         ],
@@ -2187,7 +2369,7 @@ class _ExternalPlayerSettingsPageState
                           Text(
                             'Customize how subtitles look',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -2291,15 +2473,12 @@ class _ExternalPlayerSettingsPageState
                                 backgroundColor:
                                     WidgetStateProperty.resolveWith(
                                       (s) => s.contains(WidgetState.focused)
-                                          ? kSettingsPanel2
+                                          ? t.panel2
                                           : null,
                                     ),
                                 side: WidgetStateProperty.resolveWith(
                                   (s) => s.contains(WidgetState.focused)
-                                      ? const BorderSide(
-                                          color: kSettingsAccent,
-                                          width: 2,
-                                        )
+                                      ? BorderSide(color: t.accent, width: 2)
                                       : null,
                                 ),
                               ),
@@ -2312,7 +2491,7 @@ class _ExternalPlayerSettingsPageState
                             Text(
                               'Custom Fonts',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: kSettingsDim,
+                                color: t.dim,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -2329,7 +2508,7 @@ class _ExternalPlayerSettingsPageState
                                         Icon(
                                           Icons.text_fields,
                                           size: 16,
-                                          color: kSettingsDim,
+                                          color: t.dim,
                                         ),
                                         const SizedBox(width: 8),
                                         Expanded(
@@ -2341,8 +2520,8 @@ class _ExternalPlayerSettingsPageState
                                                       _allFonts[_subtitleFontIndex]
                                                               .id ==
                                                           font.id
-                                                      ? kSettingsAccent
-                                                      : kSettingsDim,
+                                                      ? t.accent
+                                                      : t.dim,
                                                   fontWeight:
                                                       _allFonts[_subtitleFontIndex]
                                                               .id ==
@@ -2359,7 +2538,7 @@ class _ExternalPlayerSettingsPageState
                                             Icons.delete_outline,
                                             size: 18,
                                           ),
-                                          color: kSettingsRed,
+                                          color: t.danger,
                                           padding: EdgeInsets.zero,
                                           constraints: const BoxConstraints(
                                             minWidth: 32,
@@ -2374,7 +2553,7 @@ class _ExternalPlayerSettingsPageState
                                                       s.contains(
                                                         WidgetState.focused,
                                                       )
-                                                      ? kSettingsPanel2
+                                                      ? t.panel2
                                                       : null,
                                                 ),
                                             side:
@@ -2383,9 +2562,8 @@ class _ExternalPlayerSettingsPageState
                                                       s.contains(
                                                         WidgetState.focused,
                                                       )
-                                                      ? const BorderSide(
-                                                          color:
-                                                              kSettingsAccent,
+                                                      ? BorderSide(
+                                                          color: t.accent,
                                                           width: 2,
                                                         )
                                                       : null,
@@ -2411,7 +2589,8 @@ class _ExternalPlayerSettingsPageState
                             child: Center(
                               child: Builder(
                                 builder: (context) {
-                                  final previewSize = SubtitleSize
+                                  final previewSize =
+                                      SubtitleSize
                                           .options[_subtitleSizeIndex]
                                           .sizePx *
                                       0.4;
@@ -2460,7 +2639,7 @@ class _ExternalPlayerSettingsPageState
                               children: [
                                 Icon(
                                   Icons.nightlight_round,
-                                  color: kSettingsAccent,
+                                  color: t.accent,
                                   size: 24,
                                 ),
                                 const SizedBox(width: 8),
@@ -2476,7 +2655,7 @@ class _ExternalPlayerSettingsPageState
                             Text(
                               'Boosts quiet sounds for late-night viewing without disturbing others',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: kSettingsDim,
+                                color: t.dim,
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -2515,17 +2694,17 @@ class _ExternalPlayerSettingsPageState
                                           ),
                                           decoration: BoxDecoration(
                                             color: isSelected
-                                                ? kSettingsPanel2
+                                                ? t.panel2
                                                 : Colors.transparent,
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
                                             border: Border.all(
                                               color: isFocused
-                                                  ? kSettingsAccent
+                                                  ? t.accent
                                                   : isSelected
-                                                  ? kSettingsAccent
-                                                  : kSettingsLine,
+                                                  ? t.accent
+                                                  : t.line,
                                               width: isFocused || isSelected
                                                   ? 2
                                                   : 1,
@@ -2533,7 +2712,7 @@ class _ExternalPlayerSettingsPageState
                                             boxShadow: isFocused
                                                 ? [
                                                     BoxShadow(
-                                                      color: kSettingsAccent
+                                                      color: t.accent
                                                           .withValues(
                                                             alpha: 0.25,
                                                           ),
@@ -2587,10 +2766,9 @@ class _ExternalPlayerSettingsPageState
                                                         vertical: 2,
                                                       ),
                                                   decoration: BoxDecoration(
-                                                    color: kSettingsAccent
-                                                        .withValues(
-                                                          alpha: 0.16,
-                                                        ),
+                                                    color: t.accent.withValues(
+                                                      alpha: 0.16,
+                                                    ),
                                                     borderRadius:
                                                         BorderRadius.circular(
                                                           4,
@@ -2602,8 +2780,7 @@ class _ExternalPlayerSettingsPageState
                                                         .textTheme
                                                         .labelSmall
                                                         ?.copyWith(
-                                                          color:
-                                                              kSettingsAccent,
+                                                          color: t.accent,
                                                           fontWeight:
                                                               FontWeight.w600,
                                                         ),
@@ -2635,8 +2812,10 @@ class _ExternalPlayerSettingsPageState
                   ),
                 ],
 
-                // iOS-specific player selection
-                if (Platform.isIOS && _defaultPlayerMode == 'external') ...[
+                // iOS + Apple TV player selection (same catalog; tvOS shows
+                // only the players that ship an Apple TV app)
+                if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
+                    _defaultPlayerMode == 'external') ...[
                   const SizedBox(height: 16),
                   Card(
                     child: Column(
@@ -2656,24 +2835,24 @@ class _ExternalPlayerSettingsPageState
                           child: Text(
                             'Select the app to open videos with. Make sure the app is installed from the App Store.',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                         ),
                         const SizedBox(height: 8),
-                        _buildIOSPlayerTile(iOSExternalPlayer.vlc),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.infuse),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.outplayer),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.nplayer),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.playerXtreme),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.vimu),
-                        const Divider(height: 1),
-                        _buildIOSPlayerTile(iOSExternalPlayer.customScheme),
+                        // tvOS lists only players with a real Apple TV app —
+                        // a row that can never launch is worse than no row.
+                        ...[
+                          for (final (i, player) in iOSExternalPlayer.values
+                              .where(
+                                (p) =>
+                                    !PlatformUtil.isTvOS || p.availableOnTvos,
+                              )
+                              .indexed) ...[
+                            if (i > 0) const Divider(height: 1),
+                            _buildIOSPlayerTile(player),
+                          ],
+                        ],
                         const SizedBox(height: 8),
                       ],
                     ),
@@ -2681,7 +2860,7 @@ class _ExternalPlayerSettingsPageState
                 ],
 
                 // iOS Custom URL Scheme configuration
-                if (Platform.isIOS &&
+                if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
                     _defaultPlayerMode == 'external' &&
                     _selectedIOSPlayer == iOSExternalPlayer.customScheme) ...[
                   const SizedBox(height: 16),
@@ -2693,7 +2872,7 @@ class _ExternalPlayerSettingsPageState
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.code_rounded, color: kSettingsAccent),
+                              Icon(Icons.code_rounded, color: t.accent),
                               const SizedBox(width: 8),
                               Text(
                                 'Custom URL Scheme',
@@ -2707,7 +2886,7 @@ class _ExternalPlayerSettingsPageState
                           Text(
                             'Define a custom URL scheme to launch videos',
                             style: theme.textTheme.bodyMedium?.copyWith(
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -2717,9 +2896,7 @@ class _ExternalPlayerSettingsPageState
                               boxShadow: _iosSchemeFocused
                                   ? [
                                       BoxShadow(
-                                        color: kSettingsAccent.withValues(
-                                          alpha: 0.25,
-                                        ),
+                                        color: t.accent.withValues(alpha: 0.25),
                                         blurRadius: 18,
                                         offset: const Offset(0, 8),
                                       ),
@@ -2773,7 +2950,7 @@ class _ExternalPlayerSettingsPageState
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: kSettingsPanel2,
+                              color: t.panel2,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Column(
@@ -2790,7 +2967,7 @@ class _ExternalPlayerSettingsPageState
                                   'vlc://{url}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -2798,7 +2975,7 @@ class _ExternalPlayerSettingsPageState
                                   'infuse://x-callback-url/play?url={url}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -2806,7 +2983,7 @@ class _ExternalPlayerSettingsPageState
                                   'customapp://stream?video={url}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                               ],
@@ -2819,7 +2996,8 @@ class _ExternalPlayerSettingsPageState
                 ],
 
                 // iOS external player info
-                if (Platform.isIOS && _defaultPlayerMode == 'external') ...[
+                if ((PlatformUtil.isIosMobile || PlatformUtil.isTvOS) &&
+                    _defaultPlayerMode == 'external') ...[
                   const SizedBox(height: 16),
                   SettingsInfoBanner(
                     text:
@@ -2848,7 +3026,7 @@ class _ExternalPlayerSettingsPageState
                           child: Text(
                             'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                         ),
@@ -2888,10 +3066,7 @@ class _ExternalPlayerSettingsPageState
                         children: [
                           Row(
                             children: [
-                              Icon(
-                                Icons.terminal_rounded,
-                                color: kSettingsAccent,
-                              ),
+                              Icon(Icons.terminal_rounded, color: t.accent),
                               const SizedBox(width: 8),
                               Text(
                                 'Custom Command',
@@ -2905,7 +3080,7 @@ class _ExternalPlayerSettingsPageState
                           Text(
                             'Define a custom command to launch videos',
                             style: theme.textTheme.bodyMedium?.copyWith(
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -2915,9 +3090,7 @@ class _ExternalPlayerSettingsPageState
                               boxShadow: _linuxCommandFocused
                                   ? [
                                       BoxShadow(
-                                        color: kSettingsAccent.withValues(
-                                          alpha: 0.25,
-                                        ),
+                                        color: t.accent.withValues(alpha: 0.25),
                                         blurRadius: 18,
                                         offset: const Offset(0, 8),
                                       ),
@@ -2972,7 +3145,7 @@ class _ExternalPlayerSettingsPageState
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: kSettingsPanel2,
+                              color: t.panel2,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Column(
@@ -2989,7 +3162,7 @@ class _ExternalPlayerSettingsPageState
                                   'vlc --fullscreen {url}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -2997,7 +3170,7 @@ class _ExternalPlayerSettingsPageState
                                   'mpv --title="{title}" {url}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -3005,7 +3178,7 @@ class _ExternalPlayerSettingsPageState
                                   'celluloid {url}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                               ],
@@ -3047,7 +3220,7 @@ class _ExternalPlayerSettingsPageState
                           child: Text(
                             'Select the player to open videos with. Players marked as "Installed" were detected on your system.',
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                         ),
@@ -3089,10 +3262,7 @@ class _ExternalPlayerSettingsPageState
                         children: [
                           Row(
                             children: [
-                              Icon(
-                                Icons.terminal_rounded,
-                                color: kSettingsAccent,
-                              ),
+                              Icon(Icons.terminal_rounded, color: t.accent),
                               const SizedBox(width: 8),
                               Text(
                                 'Custom Command',
@@ -3106,7 +3276,7 @@ class _ExternalPlayerSettingsPageState
                           Text(
                             'Define a custom command to launch videos',
                             style: theme.textTheme.bodyMedium?.copyWith(
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -3116,9 +3286,7 @@ class _ExternalPlayerSettingsPageState
                               boxShadow: _windowsCommandFocused
                                   ? [
                                       BoxShadow(
-                                        color: kSettingsAccent.withValues(
-                                          alpha: 0.25,
-                                        ),
+                                        color: t.accent.withValues(alpha: 0.25),
                                         blurRadius: 18,
                                         offset: const Offset(0, 8),
                                       ),
@@ -3173,7 +3341,7 @@ class _ExternalPlayerSettingsPageState
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: kSettingsPanel2,
+                              color: t.panel2,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Column(
@@ -3190,7 +3358,7 @@ class _ExternalPlayerSettingsPageState
                                   'vlc --fullscreen {url}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -3198,7 +3366,7 @@ class _ExternalPlayerSettingsPageState
                                   'mpv --title="{title}" {url}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -3206,7 +3374,7 @@ class _ExternalPlayerSettingsPageState
                                   '"C:\\Program Files\\MPC-HC\\mpc-hc64.exe" {url} /play',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                               ],
@@ -3277,10 +3445,7 @@ class _ExternalPlayerSettingsPageState
                         children: [
                           Row(
                             children: [
-                              Icon(
-                                Icons.folder_open_rounded,
-                                color: kSettingsAccent,
-                              ),
+                              Icon(Icons.folder_open_rounded, color: t.accent),
                               const SizedBox(width: 8),
                               Text(
                                 'Custom App',
@@ -3294,7 +3459,7 @@ class _ExternalPlayerSettingsPageState
                           Text(
                             'Select a .app to use as your video player',
                             style: theme.textTheme.bodyMedium?.copyWith(
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -3302,15 +3467,12 @@ class _ExternalPlayerSettingsPageState
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: kSettingsPanel2,
+                                color: t.panel2,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
                                 children: [
-                                  Icon(
-                                    Icons.apps_rounded,
-                                    color: kSettingsAccent,
-                                  ),
+                                  Icon(Icons.apps_rounded, color: t.accent),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
@@ -3327,7 +3489,7 @@ class _ExternalPlayerSettingsPageState
                                         Text(
                                           _customAppPath!,
                                           style: theme.textTheme.bodySmall
-                                              ?.copyWith(color: kSettingsDim),
+                                              ?.copyWith(color: t.dim),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -3380,7 +3542,7 @@ class _ExternalPlayerSettingsPageState
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.code_rounded, color: kSettingsAccent),
+                              Icon(Icons.code_rounded, color: t.accent),
                               const SizedBox(width: 8),
                               Text(
                                 'Custom Command',
@@ -3394,7 +3556,7 @@ class _ExternalPlayerSettingsPageState
                           Text(
                             'Define a custom shell command to launch videos',
                             style: theme.textTheme.bodyMedium?.copyWith(
-                              color: kSettingsDim,
+                              color: t.dim,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -3402,17 +3564,12 @@ class _ExternalPlayerSettingsPageState
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
                               border: _commandFocused
-                                  ? Border.all(
-                                      color: kSettingsAccent,
-                                      width: 1.8,
-                                    )
+                                  ? Border.all(color: t.accent, width: 1.8)
                                   : null,
                               boxShadow: _commandFocused
                                   ? [
                                       BoxShadow(
-                                        color: kSettingsAccent.withValues(
-                                          alpha: 0.25,
-                                        ),
+                                        color: t.accent.withValues(alpha: 0.25),
                                         blurRadius: 18,
                                         offset: const Offset(0, 8),
                                       ),
@@ -3440,9 +3597,7 @@ class _ExternalPlayerSettingsPageState
                                     'Use {url} for video URL, {title} for title',
                                 helperMaxLines: 2,
                                 errorText: _commandError,
-                                prefixIcon: const Icon(
-                                  Icons.terminal_rounded,
-                                ),
+                                prefixIcon: const Icon(Icons.terminal_rounded),
                               ),
                               onChanged: (_) {
                                 if (_commandError != null) {
@@ -3477,7 +3632,7 @@ class _ExternalPlayerSettingsPageState
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: kSettingsPanel2,
+                              color: t.panel2,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Column(
@@ -3494,7 +3649,7 @@ class _ExternalPlayerSettingsPageState
                                   'vlc --fullscreen {url}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -3502,7 +3657,7 @@ class _ExternalPlayerSettingsPageState
                                   'mpv --fs --title="{title}" {url}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -3510,7 +3665,7 @@ class _ExternalPlayerSettingsPageState
                                   '/opt/homebrew/bin/mpv {url}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     fontFamily: 'monospace',
-                                    color: kSettingsDim,
+                                    color: t.dim,
                                   ),
                                 ),
                               ],
@@ -3542,11 +3697,7 @@ class _ExternalPlayerSettingsPageState
                           padding: const EdgeInsets.all(16),
                           child: Row(
                             children: [
-                              Icon(
-                                Icons.vrpano,
-                                color: kSettingsAccent,
-                                size: 24,
-                              ),
+                              Icon(Icons.vrpano, color: t.accent, size: 24),
                               const SizedBox(width: 12),
                               Text(
                                 'DeoVR Settings',
@@ -3575,7 +3726,7 @@ class _ExternalPlayerSettingsPageState
                               Text(
                                 'Used when format cannot be detected from filename',
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: kSettingsDim,
+                                  color: t.dim,
                                 ),
                               ),
                               const SizedBox(height: 16),

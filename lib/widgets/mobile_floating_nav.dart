@@ -1,6 +1,13 @@
-import 'dart:ui';
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import '../theme/app_motion.dart';
+import '../theme/app_surface.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_theme_scope.dart';
+import '../theme/widgets/glass_surface.dart';
 
 /// A premium glassmorphic floating action button menu for mobile navigation
 /// Features frosted glass effect, smooth animations, and elegant reveals
@@ -34,6 +41,12 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
   late Animation<double> _menuFadeAnimation;
   late Animation<double> _pulseAnimation;
 
+  // Held so didChangeDependencies can retarget their curve when the theme (or
+  // the reduced-motion setting) changes; only the two that shipped the token
+  // curve are kept — the rest stay as authored.
+  late CurvedAnimation _scaleCurve;
+  late CurvedAnimation _menuSlideCurve;
+
   // Icon colors for each menu item
   static const List<List<Color>> _itemGradients = [
     [Color(0xFF6366F1), Color(0xFF8B5CF6)], // Torrent Search - Indigo/Purple
@@ -61,22 +74,32 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
       vsync: this,
     );
 
+    // Deliberately NOT tokenised: this one repeats forever, and a repeating
+    // controller cannot take the zero duration reduced motion resolves to.
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 2000),
       vsync: this,
     )..repeat(reverse: true);
 
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(
-      CurvedAnimation(parent: _mainController, curve: Curves.easeOutCubic),
+    _scaleCurve = CurvedAnimation(
+      parent: _mainController,
+      curve: Curves.easeOutCubic,
     );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(_scaleCurve);
 
     _backdropAnimation = Tween<double>(begin: 0, end: 1).animate(
+      // Plain easeOut, which is neither token curve — left as shipped.
       CurvedAnimation(parent: _mainController, curve: Curves.easeOut),
     );
 
-    _menuSlideAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _menuController, curve: Curves.easeOutCubic),
+    _menuSlideCurve = CurvedAnimation(
+      parent: _menuController,
+      curve: Curves.easeOutCubic,
     );
+    _menuSlideAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(_menuSlideCurve);
 
     _menuFadeAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(
@@ -88,6 +111,19 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
     _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The hook that may depend on inherited widgets AND re-runs when they
+    // change, so a theme or accessibility switch retargets both live
+    // controllers. Legacy resolves back to exactly what initState built.
+    final motion = AppMotion.of(context);
+    _mainController.duration = motion.scaled(const Duration(milliseconds: 250));
+    _menuController.duration = motion.scaled(const Duration(milliseconds: 350));
+    _scaleCurve.curve = motion.standard;
+    _menuSlideCurve.curve = motion.standard;
   }
 
   @override
@@ -127,6 +163,11 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
 
   @override
   Widget build(BuildContext context) {
+    // Read ONCE: the FAB's AnimatedBuilder rides a repeating pulse controller,
+    // so anything read inside it would be a per-frame scope walk.
+    final app = AppThemeScope.of(context);
+    // Hoisted with the theme read, above every builder callback below.
+    final motion = AppMotion.of(context);
     final bottomPadding = MediaQuery.of(context).padding.bottom;
     final topPadding = MediaQuery.of(context).padding.top;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -143,6 +184,12 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
               onTap: _toggle,
               child: AnimatedBuilder(
                 animation: _backdropAnimation,
+                // NOT a `GlassSurface`. Two reasons, and both are rules rather
+                // than preferences. It is a SCRIM — a full-screen dim, which
+                // is `LightTokens`' territory, not a pane. And its sigma is
+                // animated, so wrapping it would put an inherited-theme lookup
+                // inside an `AnimatedBuilder` callback, which the house rule
+                // forbids: this builder runs on every frame of the reveal.
                 builder: (context, child) {
                   return BackdropFilter(
                     filter: ImageFilter.blur(
@@ -188,41 +235,53 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
             },
             child: IgnorePointer(
               ignoring: !_isExpanded,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                  child: Container(
-                    width: 220,
-                    constraints: BoxConstraints(maxHeight: maxMenuHeight),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.12),
-                        width: 1,
+              child: GlassSurface(
+                family: SurfaceFamily.dialog,
+                borderRadius: app.shape.br(20),
+                // STATED, not inherited. The theme's `glassSigma` only applies
+                // under a look that asked for glass; Debrify Classic states no
+                // surface opinion at all, and a site that omits its own sigma
+                // gets none — which silently deleted this panel's shipped 24px
+                // blur on every phone.
+                sigma: 24,
+                // The panel's veil is painted OVER its own drop shadow, and
+                // that shadow falls inside the clip where the veil's 0.08 alpha
+                // lets it darken the panel. Moving the fill up into
+                // GlassSurface would put the shadow on top of it and change
+                // what the panel weighs, so the whole stack stays in the child
+                // and the widget is asked for the filter alone.
+                tint: Colors.transparent,
+                border: Colors.transparent,
+                child: Container(
+                  width: 220,
+                  constraints: BoxConstraints(maxHeight: maxMenuHeight),
+                  decoration: BoxDecoration(
+                    color: app.fade(app.core.tx, 0.08),
+                    borderRadius: app.shape.br(20),
+                    border: Border.all(
+                      color: app.fade(app.core.tx, 0.12),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
+                        spreadRadius: -5,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 30,
-                          offset: const Offset(0, 10),
-                          spreadRadius: -5,
-                        ),
-                      ],
-                    ),
-                    child: _ScrollableMenuContent(
-                      items: widget.items,
-                      currentIndex: widget.currentIndex,
-                      getGradientForIndex: _getGradientForIndex,
-                      onSelectItem: _selectItem,
-                      onRemoteControlTap: widget.onRemoteControlTap != null
-                          ? () {
-                              _toggle();
-                              widget.onRemoteControlTap!();
-                            }
-                          : null,
-                    ),
+                    ],
+                  ),
+                  child: _ScrollableMenuContent(
+                    items: widget.items,
+                    currentIndex: widget.currentIndex,
+                    getGradientForIndex: _getGradientForIndex,
+                    onSelectItem: _selectItem,
+                    onRemoteControlTap: widget.onRemoteControlTap != null
+                        ? () {
+                            _toggle();
+                            widget.onRemoteControlTap!();
+                          }
+                        : null,
                   ),
                 ),
               ),
@@ -244,7 +303,7 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                   scale: _scaleAnimation.value,
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(22),
+                      borderRadius: app.shape.br(22),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.4),
@@ -254,45 +313,55 @@ class _MobileFloatingNavState extends State<MobileFloatingNav>
                         ),
                       ],
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 250),
-                          height: 44,
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: BoxDecoration(
-                            color: _isExpanded
-                                ? Colors.white.withValues(alpha: 0.12)
-                                : Colors.white.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: _isExpanded ? 0.25 : 0.15),
-                              width: 1,
+                    child: GlassSurface(
+                      // A control rather than a pane, so it follows the family
+                      // whose decoration it actually carries.
+                      family: SurfaceFamily.card,
+                      borderRadius: app.shape.br(20),
+                      sigma: 16,
+                      // The pill's fill and hairline TWEEN between the open and
+                      // closed states (250ms at the shipped tempo); a tint
+                      // handed to GlassSurface would swap instantly. The
+                      // AnimatedContainer keeps them.
+                      tint: Colors.transparent,
+                      border: Colors.transparent,
+                      child: AnimatedContainer(
+                        duration: motion.scaled(
+                          const Duration(milliseconds: 250),
+                        ),
+                        height: 44,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: BoxDecoration(
+                          color: _isExpanded
+                              ? app.fade(app.core.tx, 0.12)
+                              : app.fade(app.core.tx, 0.1),
+                          borderRadius: app.shape.br(22),
+                          border: Border.all(
+                            color: app.fade(app.core.tx, _isExpanded ? 0.25 : 0.15),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Simple animated icon
+                            _SimpleAnimatedIcon(
+                              isExpanded: _isExpanded,
+                              pulseValue: pulseValue,
+                              app: app,
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Simple animated icon
-                              _SimpleAnimatedIcon(
-                                isExpanded: _isExpanded,
-                                pulseValue: pulseValue,
+                            const SizedBox(width: 8),
+                            // Text label
+                            Text(
+                              _isExpanded ? 'Close' : 'Menu',
+                              style: TextStyle(
+                                color: app.fade(app.core.tx, 0.8),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.3,
                               ),
-                              const SizedBox(width: 8),
-                              // Text label
-                              Text(
-                                _isExpanded ? 'Close' : 'Menu',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.8),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0.3,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -363,8 +432,9 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: app.shape.br(20),
       child: Stack(
         children: [
           SingleChildScrollView(
@@ -400,7 +470,7 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
                       child: Divider(
                         height: 1,
                         thickness: 0.5,
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: app.fade(app.core.tx, 0.08),
                       ),
                     ),
                 ],
@@ -411,7 +481,7 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
                     child: Divider(
                       height: 1,
                       thickness: 0.5,
-                      color: Colors.white.withValues(alpha: 0.1),
+                      color: app.fade(app.core.tx, 0.1),
                     ),
                   ),
                   _RemoteControlMenuItem(
@@ -447,7 +517,7 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
                   child: Center(
                     child: Icon(
                       Icons.keyboard_arrow_up_rounded,
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: app.fade(app.core.tx, 0.6),
                       size: 18,
                     ),
                   ),
@@ -480,7 +550,7 @@ class _ScrollableMenuContentState extends State<_ScrollableMenuContent> {
                   child: Center(
                     child: Icon(
                       Icons.keyboard_arrow_down_rounded,
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: app.fade(app.core.tx, 0.6),
                       size: 18,
                     ),
                   ),
@@ -502,12 +572,13 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(14, first ? 6 : 16, 12, 6),
       child: Text(
         text.toUpperCase(),
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.38),
+          color: app.fade(app.core.tx, 0.38),
           fontSize: 11,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.1,
@@ -540,14 +611,16 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final motion = AppMotion.of(context);
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
       onTapUp: (_) => setState(() => _isPressed = false),
       onTapCancel: () => setState(() => _isPressed = false),
       onTap: widget.onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOutCubic,
+        duration: motion.scaled(const Duration(milliseconds: 150)),
+        curve: motion.standard,
         transform: Matrix4.identity()..scale(_isPressed ? 0.97 : 1.0),
         transformAlignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -562,7 +635,7 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                   ],
                 )
               : null,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: app.shape.br(12),
           border: widget.isSelected
               ? Border.all(
                   color: widget.gradient[0].withValues(alpha: 0.4),
@@ -574,7 +647,7 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
           children: [
             // Icon container with gradient
             AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+              duration: motion.scaled(const Duration(milliseconds: 200)),
               width: 36,
               height: 36,
               decoration: BoxDecoration(
@@ -588,7 +661,7 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                           widget.gradient[1].withValues(alpha: 0.1),
                         ],
                 ),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: app.shape.br(10),
                 boxShadow: widget.isSelected
                     ? [
                         BoxShadow(
@@ -604,7 +677,7 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                 widget.item.icon,
                 size: 18,
                 color: widget.isSelected
-                    ? Colors.white
+                    ? app.core.tx
                     : widget.gradient[0].withValues(alpha: 0.9),
               ),
             ),
@@ -619,8 +692,8 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                       widget.item.label,
                       style: TextStyle(
                         color: widget.isSelected
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.85),
+                            ? app.core.tx
+                            : app.fade(app.core.tx, 0.85),
                         fontSize: 14,
                         fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w500,
                         letterSpacing: 0.2,
@@ -633,7 +706,7 @@ class _GlassMenuItemState extends State<_GlassMenuItem> {
                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: Colors.amber.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: app.shape.br(4),
                         border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 0.5),
                       ),
                       child: Text(
@@ -680,17 +753,23 @@ class _SimpleAnimatedIcon extends StatelessWidget {
   final bool isExpanded;
   final double pulseValue;
 
+  /// Passed down rather than read here: this widget rebuilds on every frame of
+  /// the FAB's repeating pulse, so a scope lookup in its build would be one
+  /// per frame. The host reads it once.
+  final AppTheme app;
+
   const _SimpleAnimatedIcon({
     required this.isExpanded,
     required this.pulseValue,
+    required this.app,
   });
 
   @override
   Widget build(BuildContext context) {
     if (isExpanded) {
-      return const Icon(
+      return Icon(
         Icons.close_rounded,
-        color: Colors.white,
+        color: app.core.tx,
         size: 18,
       );
     }
@@ -705,15 +784,15 @@ class _SimpleAnimatedIcon extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _Dot(opacity: 0.9 + 0.1 * pulseValue),
-              _Dot(opacity: 0.7 + 0.3 * (1 - pulseValue)),
+              _Dot(opacity: 0.9 + 0.1 * pulseValue, app: app),
+              _Dot(opacity: 0.7 + 0.3 * (1 - pulseValue), app: app),
             ],
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _Dot(opacity: 0.7 + 0.3 * (1 - pulseValue)),
-              _Dot(opacity: 0.9 + 0.1 * pulseValue),
+              _Dot(opacity: 0.7 + 0.3 * (1 - pulseValue), app: app),
+              _Dot(opacity: 0.9 + 0.1 * pulseValue, app: app),
             ],
           ),
         ],
@@ -725,7 +804,10 @@ class _SimpleAnimatedIcon extends StatelessWidget {
 class _Dot extends StatelessWidget {
   final double opacity;
 
-  const _Dot({required this.opacity});
+  /// See [_SimpleAnimatedIcon.app] — per-frame widget, token passed in.
+  final AppTheme app;
+
+  const _Dot({required this.opacity, required this.app});
 
   @override
   Widget build(BuildContext context) {
@@ -733,8 +815,8 @@ class _Dot extends StatelessWidget {
       width: 5,
       height: 5,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: opacity),
-        borderRadius: BorderRadius.circular(1.5),
+        color: app.fade(app.core.tx, opacity),
+        borderRadius: app.shape.br(1.5),
       ),
     );
   }
@@ -757,20 +839,22 @@ class _RemoteControlMenuItemState extends State<_RemoteControlMenuItem> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final motion = AppMotion.of(context);
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
       onTapUp: (_) => setState(() => _isPressed = false),
       onTapCancel: () => setState(() => _isPressed = false),
       onTap: widget.onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOutCubic,
+        duration: motion.scaled(const Duration(milliseconds: 150)),
+        curve: motion.standard,
         transform: Matrix4.identity()..scale(_isPressed ? 0.98 : 1.0),
         transformAlignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: _isPressed ? _accentColor.withValues(alpha: 0.08) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: app.shape.br(8),
           border: Border(
             left: BorderSide(
               color: _accentColor.withValues(alpha: _isPressed ? 1.0 : 0.6),
@@ -794,7 +878,7 @@ class _RemoteControlMenuItemState extends State<_RemoteControlMenuItem> {
                   Text(
                     'Remote',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: _isPressed ? 1.0 : 0.7),
+                      color: app.fade(app.core.tx, _isPressed ? 1.0 : 0.7),
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -802,7 +886,7 @@ class _RemoteControlMenuItemState extends State<_RemoteControlMenuItem> {
                   Text(
                     'Control your TV',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
+                      color: app.fade(app.core.tx, 0.4),
                       fontSize: 10,
                     ),
                   ),

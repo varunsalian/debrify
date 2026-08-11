@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../utils/platform_util.dart';
 import 'package:flutter/services.dart';
 
 import '../utils/tv_keys.dart';
@@ -96,7 +98,12 @@ final List<List<TvKey>> _symbolPage = [
 /// act on the whole field, unlike everything to their left.
 List<TvKey> _actionRow(int page, String submitLabel, bool voice) => [
   TvKey.action(TvKeyAction.page, label: page == 0 ? '?123' : 'ABC', flex: 3),
-  TvKey.action(TvKeyAction.systemIme, icon: Icons.smartphone_rounded, flex: 3),
+  // Hidden on tvOS: handing the session to Apple's keyboard is a one-way trip
+  // there, because that keyboard never returns its submit action to Dart —
+  // which is the very reason this in-app keyboard is enabled on the platform.
+  // The key would strand the user in a field they cannot complete.
+  if (!PlatformUtil.isTvOS)
+    TvKey.action(TvKeyAction.systemIme, icon: Icons.smartphone_rounded, flex: 3),
   if (voice)
     TvKey.action(TvKeyAction.voice, icon: Icons.mic_rounded, flex: 3),
   TvKey.action(TvKeyAction.space, icon: Icons.space_bar_rounded, flex: voice ? 4 : 5),
@@ -333,25 +340,56 @@ class TvKeyboardController extends ChangeNotifier {
 /// The rendered keyboard panel. Purely presentational: highlight and layout
 /// come from [controller]; pointer taps route back through it so hybrid
 /// touch devices keep working.
+///
+/// The colours are CALLER-SUPPLIED, and every one of them defaults to the
+/// literal it replaces. This panel is opened from themed surfaces, from
+/// surfaces still scheduled for conversion, and from the video player — which
+/// stays legacy permanently — so it can neither read the app theme nor hold a
+/// fixed palette. A caller that passes nothing renders exactly what shipped.
 class TvKeyboardPanel extends StatelessWidget {
-  const TvKeyboardPanel({super.key, required this.controller});
+  const TvKeyboardPanel({
+    super.key,
+    required this.controller,
+    this.accent = _accent,
+    this.ground = _bg,
+    this.ink = Colors.white,
+    this.inkOnAccent = Colors.white,
+  });
 
   final TvKeyboardController controller;
+
+  /// Every filled accent on the panel: the highlighted keycap, the latched
+  /// shift, the mic disc and its halo, the notice bar.
+  final Color? accent;
+
+  /// The panel's own ground.
+  final Color? ground;
+
+  /// All panel foreground; today's alphas ride on top of it.
+  final Color? ink;
+
+  /// Foreground ON a filled [accent] — separate from [ink] because a light
+  /// accent turns white text invisible.
+  final Color? inkOnAccent;
 
   static const _bg = Color(0xF01A1630); // settings-panel purple, near-opaque
   static const _accent = Color(0xFF7B5CFF);
 
   @override
   Widget build(BuildContext context) {
+    final accent = this.accent ?? _accent;
+    final ground = this.ground ?? _bg;
+    final ink = this.ink ?? Colors.white;
+    final inkOnAccent = this.inkOnAccent ?? Colors.white;
     return Material(
       color: Colors.transparent,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 620),
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: _bg,
+          color: ground,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          border: Border.all(color: ink.withValues(alpha: 0.10)),
         ),
         child: ListenableBuilder(
           listenable: controller,
@@ -359,7 +397,12 @@ class TvKeyboardPanel extends StatelessWidget {
             // Dictation takes over the panel's own body — no second surface,
             // no system text box, same box in the same place.
             if (controller.listening) {
-              return _ListeningView(controller: controller);
+              return _ListeningView(
+                controller: controller,
+                accent: accent,
+                ink: ink,
+                inkOnAccent: inkOnAccent,
+              );
             }
             final grid = controller.rows;
             return Column(
@@ -369,6 +412,8 @@ class TvKeyboardPanel extends StatelessWidget {
                   _NoticeBar(
                     text: controller.notice!,
                     icon: controller.noticeIcon,
+                    accent: accent,
+                    ink: ink,
                   ),
                 for (var r = 0; r < grid.length; r++)
                   Row(
@@ -383,6 +428,9 @@ class TvKeyboardPanel extends StatelessWidget {
                             lit:
                                 grid[r][c].action == TvKeyAction.shift &&
                                 controller.shift,
+                            accent: accent,
+                            ink: ink,
+                            inkOnAccent: inkOnAccent,
                             onTap: () => controller.activate(grid[r][c]),
                           ),
                         ),
@@ -400,9 +448,17 @@ class TvKeyboardPanel extends StatelessWidget {
 /// The panel while the microphone is open. Sized to the key grid it replaces
 /// (5 rows of 44) so the panel doesn't jump when dictation starts or ends.
 class _ListeningView extends StatelessWidget {
-  const _ListeningView({required this.controller});
+  const _ListeningView({
+    required this.controller,
+    required this.accent,
+    required this.ink,
+    required this.inkOnAccent,
+  });
 
   final TvKeyboardController controller;
+  final Color accent;
+  final Color ink;
+  final Color inkOnAccent;
 
   @override
   Widget build(BuildContext context) {
@@ -424,21 +480,21 @@ class _ListeningView extends StatelessWidget {
                 height: 56 + 44 * controller.level,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: TvKeyboardPanel._accent.withValues(alpha: 0.22),
+                  color: accent.withValues(alpha: 0.22),
                 ),
               ),
               Container(
                 width: 56,
                 height: 56,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: TvKeyboardPanel._accent,
+                  color: accent,
                 ),
                 alignment: Alignment.center,
-                child: const Icon(
+                child: Icon(
                   Icons.mic_rounded,
                   size: 28,
-                  color: Colors.white,
+                  color: inkOnAccent,
                 ),
               ),
             ],
@@ -460,8 +516,8 @@ class _ListeningView extends StatelessWidget {
                     fontSize: heard.isEmpty ? 16 : 20,
                     fontWeight: heard.isEmpty ? FontWeight.w500 : FontWeight.w600,
                     color: heard.isEmpty
-                        ? Colors.white.withValues(alpha: 0.55)
-                        : Colors.white,
+                        ? ink.withValues(alpha: 0.55)
+                        : ink,
                   ),
                 ),
               ),
@@ -472,7 +528,7 @@ class _ListeningView extends StatelessWidget {
             controller.status,
             style: TextStyle(
               fontSize: 12,
-              color: Colors.white.withValues(alpha: 0.55),
+              color: ink.withValues(alpha: 0.55),
             ),
           ),
           const SizedBox(height: 12),
@@ -481,7 +537,7 @@ class _ListeningView extends StatelessWidget {
             style: TextStyle(
               fontSize: 11,
               letterSpacing: 0.4,
-              color: Colors.white.withValues(alpha: 0.38),
+              color: ink.withValues(alpha: 0.38),
             ),
           ),
         ],
@@ -494,10 +550,17 @@ class _ListeningView extends StatelessWidget {
 /// dictation with no permission or no recognizer, a paste with an empty
 /// clipboard. The field clears it on a timer.
 class _NoticeBar extends StatelessWidget {
-  const _NoticeBar({required this.text, required this.icon});
+  const _NoticeBar({
+    required this.text,
+    required this.icon,
+    required this.accent,
+    required this.ink,
+  });
 
   final String text;
   final IconData icon;
+  final Color accent;
+  final Color ink;
 
   @override
   Widget build(BuildContext context) {
@@ -506,12 +569,12 @@ class _NoticeBar extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 6, left: 2, right: 2),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: TvKeyboardPanel._accent.withValues(alpha: 0.18),
+        color: accent.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 15, color: Colors.white.withValues(alpha: 0.75)),
+          Icon(icon, size: 15, color: ink.withValues(alpha: 0.75)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -520,7 +583,7 @@ class _NoticeBar extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.white.withValues(alpha: 0.85),
+                color: ink.withValues(alpha: 0.85),
               ),
             ),
           ),
@@ -535,6 +598,9 @@ class _KeyCap extends StatelessWidget {
     required this.keyDef,
     required this.highlighted,
     required this.lit,
+    required this.accent,
+    required this.ink,
+    required this.inkOnAccent,
     required this.onTap,
   });
 
@@ -543,6 +609,9 @@ class _KeyCap extends StatelessWidget {
 
   /// Latched state (shift while active) when not highlighted.
   final bool lit;
+  final Color accent;
+  final Color ink;
+  final Color inkOnAccent;
   final VoidCallback onTap;
 
   @override
@@ -555,10 +624,10 @@ class _KeyCap extends StatelessWidget {
         margin: const EdgeInsets.all(2),
         decoration: BoxDecoration(
           color: highlighted
-              ? TvKeyboardPanel._accent
+              ? accent
               : lit
-              ? TvKeyboardPanel._accent.withValues(alpha: 0.35)
-              : Colors.white.withValues(alpha: 0.06),
+              ? accent.withValues(alpha: 0.35)
+              : ink.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(8),
         ),
         alignment: Alignment.center,
@@ -567,8 +636,8 @@ class _KeyCap extends StatelessWidget {
                 keyDef.icon,
                 size: 18,
                 color: highlighted
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.8),
+                    ? inkOnAccent
+                    : ink.withValues(alpha: 0.8),
               )
             : FittedBox(
                 // Keycaps are fixed 40px boxes: at large TV font-scale
@@ -579,8 +648,8 @@ class _KeyCap extends StatelessWidget {
                   maxLines: 1,
                   style: TextStyle(
                     color: highlighted
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.85),
+                        ? inkOnAccent
+                        : ink.withValues(alpha: 0.85),
                     fontSize: 15,
                     fontWeight: highlighted ? FontWeight.w700 : FontWeight.w500,
                   ),

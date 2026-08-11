@@ -19,6 +19,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_marketplace_service.dart';
 import '../../services/stremio_service.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/see_all/see_all_theme.dart';
 import '../../widgets/see_all/stremio_dropdown.dart';
@@ -259,12 +260,13 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Future<void> _deleteEngine(ImportedEngineMetadata engine) async {
+    final app = AppThemeScope.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => _HubDialog(
         title: 'Delete engine',
         content: Text('Delete "${engine.displayName}"?',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.75))),
+            style: TextStyle(color: app.fade(app.core.tx, 0.75))),
         actions: [
           _HubDialogButton(
               label: 'Cancel', onTap: () => Navigator.of(ctx).pop(false)),
@@ -294,6 +296,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
   Future<void> _importEngineFromFile() async {
     final messenger = ScaffoldMessenger.of(context);
+    // Captured with the messenger, before any await: the replace-confirmation
+    // dialog below opens after the file picker returns.
+    final app = AppThemeScope.of(context);
     try {
       final result = await FilePicker.platform
           .pickFiles(type: FileType.any, allowMultiple: false, withData: true);
@@ -329,7 +334,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
           builder: (ctx) => _HubDialog(
             title: 'Engine already exists',
             content: Text('Replace the existing "$engineId"?',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.75))),
+                style: TextStyle(color: app.fade(app.core.tx, 0.75))),
             actions: [
               _HubDialogButton(
                   label: 'Cancel', onTap: () => Navigator.of(ctx).pop(false)),
@@ -369,26 +374,27 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
   bool _blockingProgressUp = false;
   void _showBlockingProgress(String message) {
+    final app = AppThemeScope.of(context);
     _blockingProgressUp = true;
     showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => Dialog(
-        backgroundColor: kSeeAllPanel,
+        backgroundColor: app.seeAll.panel,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: kSeeAllLine),
+          borderRadius: app.shape.br(16),
+          side: BorderSide(color: app.seeAll.line),
         ),
         child: Padding(
           padding: const EdgeInsets.all(22),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(
+              SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: kSeeAllAccent)),
+                      strokeWidth: 2, color: app.seeAll.accent)),
               const SizedBox(width: 16),
               Flexible(child: Text(message)),
             ],
@@ -527,6 +533,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Future<void> _addByUrl() async {
+    final app = AppThemeScope.of(context);
     final controller = TextEditingController();
     final url = await showDialog<String>(
       context: context,
@@ -535,17 +542,17 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
         content: TvTextField(
           controller: controller,
           autofocus: true,
-          cursorColor: kSeeAllAccent,
+          cursorColor: app.seeAll.accent,
           decoration: InputDecoration(
             hintText: 'https://…/manifest.json',
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.35)),
+            hintStyle: TextStyle(color: app.fade(app.core.tx, 0.35)),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(11),
-              borderSide: BorderSide(color: kSeeAllLine),
+              borderRadius: app.shape.br(11),
+              borderSide: BorderSide(color: app.seeAll.line),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(11),
-              borderSide: const BorderSide(color: kSeeAllAccent, width: 2),
+              borderRadius: app.shape.br(11),
+              borderSide: BorderSide(color: app.seeAll.accent, width: 2),
             ),
           ),
           onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
@@ -644,19 +651,21 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     );
   }
 
-  Widget _importRow(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
-            Text(value,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w700)),
-          ],
-        ),
-      );
+  Widget _importRow(String label, String value) {
+    final app = AppThemeScope.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: app.fade(app.core.tx, 0.7))),
+          Text(value,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
 
   Future<void> _updateAll() async {
     final messenger = ScaffoldMessenger.of(context);
@@ -683,13 +692,14 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   Future<void> _deleteAll() async {
     final count = _installed.length;
     if (count == 0) return;
+    final app = AppThemeScope.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => _HubDialog(
         title: 'Delete all addons?',
         content: Text(
           'This removes all $count installed Stremio addon${count == 1 ? '' : 's'} from Debrify.',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.75)),
+          style: TextStyle(color: app.fade(app.core.tx, 0.75)),
         ),
         actions: [
           _HubDialogButton(
@@ -740,12 +750,13 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   Future<void> _removeAddon(StremioAddon a) async {
+    final app = AppThemeScope.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => _HubDialog(
         title: 'Remove addon',
         content: Text('Remove "${a.name}" from your addons?',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.75))),
+            style: TextStyle(color: app.fade(app.core.tx, 0.75))),
         actions: [
           _HubDialogButton(
               label: 'Cancel', onTap: () => Navigator.of(ctx).pop(false)),
@@ -773,9 +784,10 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   // ── Sheets / menus ───────────────────────────────────────────────────────
 
   void _showOptions(StremioAddon a) {
+    final app = AppThemeScope.of(context);
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: kSeeAllPanel,
+      backgroundColor: app.seeAll.panel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -802,6 +814,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   }
 
   void _showDetails(StremioAddon a) {
+    final app = AppThemeScope.of(context);
     showDialog<void>(
       context: context,
       builder: (ctx) => _HubDialog(
@@ -813,7 +826,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
             children: [
               if (a.description != null) ...[
                 Text(a.description!,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.8))),
+                    style: TextStyle(color: app.fade(app.core.tx, 0.8))),
                 const SizedBox(height: 14),
               ],
               _detailRow('ID', a.id),
@@ -825,7 +838,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
               SelectableText(
                 a.manifestUrl,
                 style: TextStyle(
-                    color: kSeeAllAccent2,
+                    color: app.seeAll.accent2,
                     fontSize: 12,
                     fontWeight: FontWeight.w600),
               ),
@@ -851,24 +864,28 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     );
   }
 
-  Widget _detailRow(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label.toUpperCase(),
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6)),
-            const SizedBox(height: 2),
-            Text(value),
-          ],
-        ),
-      );
+  Widget _detailRow(String label, String value) {
+    final app = AppThemeScope.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label.toUpperCase(),
+              style: TextStyle(
+                  color: app.fade(app.core.tx, 0.4),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.6)),
+          const SizedBox(height: 2),
+          Text(value),
+        ],
+      ),
+    );
+  }
 
   Future<void> _showActionsMenu() async {
+    final app = AppThemeScope.of(context);
     final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
     final btn = _moreFocus.context?.findRenderObject() as RenderBox?;
@@ -883,11 +900,11 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     final choice = await showMenu<String>(
       context: context,
       position: pos,
-      color: kSeeAllPanel2,
+      color: app.seeAll.panel2,
       elevation: 12,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: kSeeAllLine),
+        borderRadius: app.shape.br(14),
+        side: BorderSide(color: app.seeAll.line),
       ),
       items: [
         _menuItem('import', Icons.file_upload_outlined, 'Import from JSON'),
@@ -911,7 +928,8 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
   PopupMenuItem<String> _menuItem(String value, IconData icon, String label,
       {bool danger = false}) {
-    final color = danger ? const Color(0xFFEF4444) : Colors.white;
+    final app = AppThemeScope.of(context);
+    final color = danger ? const Color(0xFFEF4444) : app.core.tx;
     return PopupMenuItem<String>(
       value: value,
       height: 44,
@@ -980,8 +998,9 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Scaffold(
-      backgroundColor: kSeeAllBg,
+      backgroundColor: app.seeAll.bg,
       body: Container(
         decoration: const BoxDecoration(
           gradient: RadialGradient(
@@ -1209,30 +1228,30 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   Widget _buildSearchField() {
     // DPAD exits are routed by TvTextField itself: down to the first list row,
     // up to the search button.
+    final app = AppThemeScope.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: kSeeAllPanel,
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: kSeeAllLine),
+        color: app.seeAll.panel,
+        borderRadius: app.shape.br(11),
+        border: Border.all(color: app.seeAll.line),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
           Icon(Icons.search_rounded,
-              size: 18, color: Colors.white.withValues(alpha: 0.5)),
+              size: 18, color: app.fade(app.core.tx, 0.5)),
           const SizedBox(width: 8),
           Expanded(
             child: TvTextField(
               controller: _searchController,
               focusNode: _searchFocus,
               style: const TextStyle(fontSize: 13),
-              cursorColor: kSeeAllAccent,
+              cursorColor: app.seeAll.accent,
               decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
                 hintText: 'Search addons',
-                hintStyle:
-                    TextStyle(color: Colors.white.withValues(alpha: 0.35)),
+                hintStyle: TextStyle(color: app.fade(app.core.tx, 0.35)),
               ),
               onDownArrow: _focusFirstRow,
               onUpArrow: () => _searchBtnFocus.requestFocus(),
@@ -1244,7 +1263,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
               _searchOpen = false;
             }),
             child: Icon(Icons.close_rounded,
-                size: 16, color: Colors.white.withValues(alpha: 0.5)),
+                size: 16, color: app.fade(app.core.tx, 0.5)),
           ),
         ],
       ),
@@ -1601,7 +1620,7 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
             Icon(icon, size: 44, color: Colors.white.withValues(alpha: 0.25)),
             const SizedBox(height: 14),
             Text(title,
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
@@ -1837,7 +1856,7 @@ class _AddonTitleLine extends StatelessWidget {
     final nameText = Text(name,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
+        style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.2));
@@ -2124,15 +2143,21 @@ class _MarketButtonState extends State<_MarketButton> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final Color fill;
     final Color borderColor;
+    // The label/ring sit ON the accent fill when primary; the quiet variant sits
+    // on the (untokenised) card, so its whites stay literal.
+    final Color ink;
     if (widget.primary) {
-      fill = _focused ? kSeeAllAccent2 : kSeeAllAccent;
-      borderColor = _focused ? Colors.white : Colors.transparent;
+      fill = _focused ? app.seeAll.accent2 : app.seeAll.accent;
+      ink = app.inkOn(app.seeAll.accent);
+      borderColor = _focused ? ink : Colors.transparent;
     } else {
       fill = _focused ? Colors.white.withValues(alpha: 0.08) : Colors.transparent;
       borderColor =
           _focused ? Colors.white : Colors.white.withValues(alpha: 0.22);
+      ink = Colors.white;
     }
     return Focus(
       focusNode: widget.focusNode,
@@ -2173,12 +2198,12 @@ class _MarketButtonState extends State<_MarketButton> {
             padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
             decoration: BoxDecoration(
               color: fill,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: app.shape.br(24),
               border: Border.all(width: 2, color: borderColor),
             ),
             child: Text(widget.label,
-                style: const TextStyle(
-                    color: Colors.white,
+                style: TextStyle(
+                    color: ink,
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700)),
           ),
@@ -2234,7 +2259,7 @@ class _EngineRow extends StatelessWidget {
                   Text(title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           letterSpacing: -0.2)),
@@ -2272,6 +2297,7 @@ class _EngineActionPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     final Color fill;
     final Color border;
     final Color text;
@@ -2280,9 +2306,9 @@ class _EngineActionPill extends StatelessWidget {
       border = const Color(0xFFEF4444).withValues(alpha: 0.5);
       text = const Color(0xFFEF4444);
     } else if (primary) {
-      fill = kSeeAllAccent;
+      fill = app.seeAll.accent;
       border = Colors.transparent;
-      text = Colors.white;
+      text = app.inkOn(app.seeAll.accent);
     } else {
       fill = Colors.transparent;
       border = Colors.white.withValues(alpha: 0.22);
@@ -2292,7 +2318,7 @@ class _EngineActionPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
       decoration: BoxDecoration(
         color: fill,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: app.shape.br(24),
         border: Border.all(width: 2, color: border),
       ),
       child: Text(label,
@@ -2363,6 +2389,7 @@ class _AddonOptionsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -2375,8 +2402,8 @@ class _AddonOptionsSheet extends StatelessWidget {
               height: 4,
               margin: const EdgeInsets.only(bottom: 14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(2),
+                color: app.fade(app.core.tx, 0.2),
+                borderRadius: app.shape.br(2),
               ),
             ),
             Padding(
@@ -2438,7 +2465,8 @@ class _OptionTileState extends State<_OptionTile> {
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.danger ? const Color(0xFFEF4444) : Colors.white;
+    final app = AppThemeScope.of(context);
+    final color = widget.danger ? const Color(0xFFEF4444) : app.core.tx;
     return Focus(
       autofocus: widget.autofocus,
       onFocusChange: (f) => setState(() => _focused = f),
@@ -2457,11 +2485,11 @@ class _OptionTileState extends State<_OptionTile> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           decoration: BoxDecoration(
             color: _focused
-                ? kSeeAllAccent.withValues(alpha: 0.14)
+                ? app.fade(app.seeAll.accent, 0.14)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: app.shape.br(11),
             border: Border.all(
-              color: _focused ? kSeeAllAccent : Colors.transparent,
+              color: _focused ? app.seeAll.accent : Colors.transparent,
               width: _focused ? 1.5 : 1,
             ),
           ),
@@ -2518,14 +2546,20 @@ class _HubActionButtonState extends State<_HubActionButton> {
     // Primary = solid accent (like Stremio's filled "Add addon"); others sit on
     // the quiet panel fill. Border is a constant 2px — width changes feed into
     // Container's layout and shake the whole filter row on focus moves.
+    final app = AppThemeScope.of(context);
     final Color fill;
     final Color borderColor;
+    // Primary's label/ring sit ON the accent fill; the quiet variant's sit on
+    // the panel fill, which is page ink's ground.
+    final Color ink;
     if (widget.primary) {
-      fill = _focused ? kSeeAllAccent2 : kSeeAllAccent;
-      borderColor = _focused ? Colors.white : Colors.transparent;
+      fill = _focused ? app.seeAll.accent2 : app.seeAll.accent;
+      ink = app.inkOn(app.seeAll.accent);
+      borderColor = _focused ? ink : Colors.transparent;
     } else {
-      fill = kSeeAllPanel;
-      borderColor = _focused ? kSeeAllAccent : kSeeAllLine;
+      fill = app.seeAll.panel;
+      borderColor = _focused ? app.seeAll.accent : app.seeAll.line;
+      ink = app.core.tx;
     }
     return Focus(
       focusNode: widget.focusNode,
@@ -2547,7 +2581,7 @@ class _HubActionButtonState extends State<_HubActionButton> {
                 horizontal: widget.label == null ? 10 : 16, vertical: 9),
             decoration: BoxDecoration(
               color: fill,
-              borderRadius: BorderRadius.circular(11),
+              borderRadius: app.shape.br(11),
               border: Border.all(width: 2, color: borderColor),
             ),
             child: Row(
@@ -2555,12 +2589,12 @@ class _HubActionButtonState extends State<_HubActionButton> {
                   widget.expand ? MainAxisSize.max : MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(widget.icon, size: 17, color: Colors.white),
+                Icon(widget.icon, size: 17, color: ink),
                 if (widget.label != null) ...[
                   const SizedBox(width: 7),
                   Text(widget.label!,
-                      style: const TextStyle(
-                          color: Colors.white,
+                      style: TextStyle(
+                          color: ink,
                           fontSize: 13,
                           fontWeight: FontWeight.w700)),
                 ],
@@ -2587,11 +2621,12 @@ class _HubDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Dialog(
-      backgroundColor: kSeeAllPanel,
+      backgroundColor: app.seeAll.panel,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: kSeeAllLine),
+        borderRadius: app.shape.br(18),
+        side: BorderSide(color: app.seeAll.line),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -2643,21 +2678,24 @@ class _HubDialogButtonState extends State<_HubDialogButton> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     Color fill;
     Color textColor;
     if (widget.danger) {
       fill = const Color(0xFFEF4444).withValues(alpha: 0.16);
       textColor = const Color(0xFFEF4444);
     } else if (widget.primary) {
-      fill = kSeeAllAccent.withValues(alpha: 0.20);
-      textColor = Colors.white;
+      fill = app.fade(app.seeAll.accent, 0.20);
+      textColor = app.core.tx;
     } else {
       fill = Colors.transparent;
-      textColor = Colors.white.withValues(alpha: 0.75);
+      textColor = app.fade(app.core.tx, 0.75);
     }
     final borderColor = _focused
-        ? kSeeAllAccent
-        : (widget.primary || widget.danger ? kSeeAllAccentBorder : kSeeAllLine);
+        ? app.seeAll.accent
+        : (widget.primary || widget.danger
+            ? app.seeAll.accentBorder
+            : app.seeAll.line);
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
@@ -2674,7 +2712,7 @@ class _HubDialogButtonState extends State<_HubDialogButton> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           decoration: BoxDecoration(
             color: fill,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: app.shape.br(10),
             // Constant width — see _HubActionButton (focus resize = shake).
             border: Border.all(
                 width: 2,

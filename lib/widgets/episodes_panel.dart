@@ -13,6 +13,9 @@ import '../services/storage_service.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../theme/app_theme_scope.dart';
+import 'detail/detail_style.dart';
+import 'detail/theme/detail_theme.dart';
 import 'episode_tile.dart';
 import 'trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_service.dart';
@@ -29,6 +32,93 @@ import 'home/home_theme.dart';
 /// [AdvancedSearchSelection] and, just before dispatching it, call
 /// [onBeforeTerminalDispatch] so the host can tear its route stack down to
 /// wherever the result should land. The back affordance calls [onBack].
+/// What a custom arrangement should move focus to when the view generation
+/// changes. Mirrors what Classic does implicitly.
+enum EpisodeFocusIntent {
+  /// Nothing should move (a rebuild that isn't a data change).
+  none,
+
+  /// A fresh load or deep link resolved — reveal and focus [EpisodesPanelView.landing].
+  landing,
+
+  /// The user stepped the season; their attention is on the stepper, so the
+  /// layout re-focuses its own season control. Classic does the same thing by
+  /// re-requesting `_episodeSeasonDropdownFocusNode`.
+  seasonControl,
+}
+
+/// Everything a custom episode arrangement needs, so alternate layouts can be
+/// drawn without forking the engine (season loading, the Trakt/Simkl watch
+/// merge, enrichment, playback dispatch and the options sheet all stay here).
+///
+/// Handed to [EpisodesPanel.contentBuilder]. Layouts own their own FocusNodes —
+/// they must NOT reach for the engine's, which are disposed and rebuilt on
+/// every season change.
+class EpisodesPanelView {
+  final List<TraktSeason> seasons;
+  final int selectedSeasonNumber;
+
+  /// Episodes of the selected season. Empty while loading or on failure.
+  final List<TraktEpisode> episodes;
+  final bool loading;
+  final bool unavailable;
+
+  /// Poster fallback for episodes with no still of their own.
+  final String? showImageUrl;
+
+  /// Bumped when resolved episodes are PUBLISHED and on every season swap.
+  ///
+  /// Deliberately not the engine's internal load generation, which bumps when a
+  /// load *starts* (and guards enrichment) — a layout first built during
+  /// loading would then never see it change when the data actually landed.
+  final int generation;
+
+  /// The episode the engine resolved to land on — an explicit deep link, else
+  /// Trakt next-up, else local last-played, else the season's first. Validated
+  /// as a pair: a stored episode number is only honoured when its season is the
+  /// season that was actually selected. Null while loading / when empty.
+  final TraktEpisode? landing;
+
+  final EpisodeFocusIntent focusIntent;
+
+  /// 0..100, or null when the episode has no progress.
+  final double? Function(TraktEpisode) progressOf;
+  final bool Function(TraktEpisode) isNext;
+  final void Function(TraktEpisode) play;
+  final void Function(TraktEpisode) options;
+  final void Function(int delta) stepSeason;
+  final void Function(int seasonNumber) selectSeason;
+
+  /// Host's stable LEFT-crossing target, when it supplied one.
+  final VoidCallback? onLeftEdge;
+
+  /// Failure terminals. [onSearchForSources] is null when the host gave no
+  /// `onItemSelected` — direct-source shows have no torrent-search fallback.
+  final VoidCallback onRetry;
+  final VoidCallback? onSearchForSources;
+
+  const EpisodesPanelView({
+    required this.seasons,
+    required this.selectedSeasonNumber,
+    required this.episodes,
+    required this.loading,
+    required this.unavailable,
+    required this.showImageUrl,
+    required this.generation,
+    required this.landing,
+    required this.focusIntent,
+    required this.progressOf,
+    required this.isNext,
+    required this.play,
+    required this.options,
+    required this.stepSeason,
+    required this.selectSeason,
+    required this.onLeftEdge,
+    required this.onRetry,
+    required this.onSearchForSources,
+  });
+}
+
 class EpisodesPanel extends StatefulWidget {
   /// The series to browse.
   final StremioMeta show;
@@ -116,6 +206,12 @@ class EpisodesPanel extends StatefulWidget {
   /// watch-progress map, replacing the IMDb-keyed local/Trakt/Simkl merge.
   final Future<Map<String, double>> Function()? watchProgressLoader;
 
+  /// Alternate arrangement. Null (the default) keeps today's rendering exactly;
+  /// when set, the panel renders ONLY what this returns — no chrome of its own —
+  /// and suppresses its internal scroll/focus side effects, which target widgets
+  /// that a custom tree does not contain.
+  final Widget Function(BuildContext, EpisodesPanelView)? contentBuilder;
+
   const EpisodesPanel({
     super.key,
     required this.show,
@@ -137,6 +233,7 @@ class EpisodesPanel extends StatefulWidget {
     this.seasonsLoader,
     this.onPlayEpisode,
     this.watchProgressLoader,
+    this.contentBuilder,
   });
 
   @override
@@ -165,6 +262,17 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// sources" action that preserves the catalog pack-search path on demand.
   bool _episodesUnavailable = false;
   Map<String, double> _episodeWatchProgress = {};
+
+  /// Bumped when resolved episodes are PUBLISHED and on every season swap —
+  /// see [EpisodesPanelView.generation] for why this is not the load
+  /// generation. Only read by custom arrangements.
+  int _viewGeneration = 0;
+  TraktEpisode? _landing;
+  EpisodeFocusIntent _focusIntent = EpisodeFocusIntent.none;
+
+  /// True when a custom arrangement is driving. Gates every engine side effect
+  /// that targets a widget only the classic tree contains.
+  bool get _custom => widget.contentBuilder != null;
 
   /// The next episode to watch for the current show (from Trakt), used only to
   /// highlight the corresponding tile. Landing still prefers the last-played
@@ -773,10 +881,25 @@ class EpisodesPanelState extends State<EpisodesPanel> {
         _episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
       }
 
+      // The stored/next-up episode number is only meaningful inside the season
+      // it came from. When the resolved season fell back to `seasons.first`
+      // (because the remembered one no longer exists), carrying the episode
+      // number across would land on an unrelated episode of season 1.
+      final landedInTargetSeason =
+          effectiveSeason == null || effectiveSeason == targetSeason.number;
+      final landingEpisode = (landedInTargetSeason && effectiveEpisode != null)
+          ? targetSeason.episodes
+                .where((e) => e.number == effectiveEpisode)
+                .firstOrNull
+          : null;
+
       setState(() {
         _episodeSeasons = seasons;
         _selectedSeasonNumber = targetSeason.number;
         _isLoadingEpisodes = false;
+        _landing = landingEpisode ?? targetSeason.episodes.firstOrNull;
+        _focusIntent = EpisodeFocusIntent.landing;
+        _viewGeneration++;
       });
 
       // Fill in per-episode thumbnails from TVMaze for any episode that didn't
@@ -800,14 +923,21 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       // Scroll to (and focus) the target episode once its tile is built.
       // Robust against variable EpisodeTile height + lazy ListView building
       // (the old fixed focusIndex*128 estimate is wrong for the new tile).
-      final targetEpIndex = effectiveEpisode != null
-          ? targetSeason.episodes.indexWhere((e) => e.number == effectiveEpisode)
-          : -1;
-      _scrollFocusEpisode(
-        targetEpIndex < 0 ? 0 : targetEpIndex,
-        targetSeason.episodes.length,
-        generation,
-      );
+      // A custom arrangement owns its own scrollable and FocusNodes, so the
+      // engine's reveal would target widgets that do not exist there. The
+      // layout reveals `view.landing` itself, driven by `focusIntent`.
+      if (!_custom) {
+        final targetEpIndex = effectiveEpisode != null
+            ? targetSeason.episodes.indexWhere(
+                (e) => e.number == effectiveEpisode,
+              )
+            : -1;
+        _scrollFocusEpisode(
+          targetEpIndex < 0 ? 0 : targetEpIndex,
+          targetSeason.episodes.length,
+          generation,
+        );
+      }
     } catch (e) {
       if (!mounted || generation != _episodeModeGeneration) return;
       debugPrint('EpisodesPanel: Episode fetch failed: $e');
@@ -986,7 +1116,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       if (!mounted || generation != _episodeModeGeneration) return;
       if (epIndex < 0 || epIndex >= _episodeFocusNodes.length) return;
       final node = _episodeFocusNodes[epIndex];
-      if (node.context != null) {
+      // Once a tile has been built and scrolled back out, the node keeps a
+      // stale context; treating that as "present" would stop converging and
+      // focus/scroll a defunct element.
+      if (detailNodeMounted(node)) {
         if (widget.isTelevision) {
           node.requestFocus();
         } else {
@@ -1035,11 +1168,18 @@ class EpisodesPanelState extends State<EpisodesPanel> {
       _episodeFocusNodes.add(FocusNode(debugLabel: 'catalog-ep-$i'));
     }
 
-    if (_episodeScrollController.hasClients) {
+    if (!_custom && _episodeScrollController.hasClients) {
       _episodeScrollController.jumpTo(0);
     }
 
-    setState(() => _selectedSeasonNumber = seasonNumber);
+    setState(() {
+      _selectedSeasonNumber = seasonNumber;
+      _landing = season.episodes.firstOrNull;
+      // The user is on the stepper — keep them there, as Classic does by
+      // re-requesting the season dropdown.
+      _focusIntent = EpisodeFocusIntent.seasonControl;
+      _viewGeneration++;
+    });
   }
 
   void _onEpisodeTap(TraktEpisode episode) {
@@ -1108,6 +1248,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   Widget _buildEpisodeFiltersBar() {
+    final t = DetailThemeScope.maybeOf(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Container(
@@ -1167,7 +1308,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                       : Colors.white.withValues(alpha: 0.06),
                   border: Border.all(
                     color: _episodeBackButtonFocusNode.hasFocus
-                        ? HomeTheme.focusGold
+                        ? t.focus
                         : Colors.white.withValues(alpha: 0.14),
                     width: _episodeBackButtonFocusNode.hasFocus ? 2 : 1,
                   ),
@@ -1267,6 +1408,10 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   }
 
   Widget _buildEpisodeSeasonDropdown() {
+    // Resolved OUTSIDE the ListenableBuilder: the callback re-runs on every
+    // focus change, and an inherited-widget lookup there would re-subscribe
+    // per DPAD move on the weak TV GPU.
+    final t = DetailThemeScope.maybeOf(context);
     return ListenableBuilder(
       listenable: _episodeSeasonDropdownFocusNode,
       builder: (context, _) {
@@ -1282,14 +1427,14 @@ class EpisodesPanelState extends State<EpisodesPanel> {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: hasFocus
-                  ? HomeTheme.focusGold
+                  ? t.focus
                   : Colors.white.withValues(alpha: 0.10),
               width: hasFocus ? 2.0 : 1.0,
             ),
             boxShadow: (hasFocus && !widget.isTelevision)
                 ? [
                     BoxShadow(
-                      color: HomeTheme.focusGold.withValues(alpha: 0.32),
+                      color: t.fade(t.focus, 0.32),
                       blurRadius: 14,
                       spreadRadius: 0,
                     ),
@@ -1340,6 +1485,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
   /// sources" action (the old auto-fallback, now opt-in).
   Widget _buildEpisodesUnavailable() {
     final show = _selectedShow ?? widget.show;
+    // Hoisted: the WidgetStateProperty resolvers below are closures the button
+    // re-evaluates on every state change, not build-time code.
+    final t = DetailThemeScope.maybeOf(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -1379,8 +1527,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                   style: ButtonStyle(
                     side: WidgetStateProperty.resolveWith(
                       (states) => states.contains(WidgetState.focused)
-                          ? const BorderSide(
-                              color: HomeTheme.focusGold, width: 2)
+                          ? BorderSide(color: t.focus, width: 2)
                           : null,
                     ),
                   ),
@@ -1399,8 +1546,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
                     style: ButtonStyle(
                       side: WidgetStateProperty.resolveWith(
                         (states) => states.contains(WidgetState.focused)
-                            ? const BorderSide(
-                                color: HomeTheme.focusGold, width: 2)
+                            ? BorderSide(color: t.focus, width: 2)
                             : const BorderSide(color: Colors.white24),
                       ),
                     ),
@@ -1482,6 +1628,8 @@ class EpisodesPanelState extends State<EpisodesPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final custom = widget.contentBuilder;
+    if (custom != null) return custom(context, _buildView());
     if (widget.compact) {
       return Column(
         children: [
@@ -1504,6 +1652,55 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     );
   }
 
+  /// Snapshot handed to a custom arrangement. Cheap — it closes over state
+  /// rather than copying it, and is rebuilt with the panel.
+  EpisodesPanelView _buildView() {
+    final season = _episodeSeasons
+        .where((s) => s.number == _selectedSeasonNumber)
+        .firstOrNull;
+    final episodes =
+        season?.episodes ?? _episodeSeasons.firstOrNull?.episodes ?? const [];
+    final show = _selectedShow ?? widget.show;
+    return EpisodesPanelView(
+      seasons: _episodeSeasons,
+      selectedSeasonNumber: _selectedSeasonNumber,
+      episodes: episodes,
+      loading: _isLoadingEpisodes,
+      unavailable: _episodesUnavailable,
+      showImageUrl: show.poster,
+      generation: _viewGeneration,
+      landing: _landing,
+      focusIntent: _focusIntent,
+      progressOf: (e) => _episodeWatchProgress['${e.season}-${e.number}'],
+      isNext: (e) =>
+          _nextEpisode != null &&
+          _nextEpisode!.season == e.season &&
+          _nextEpisode!.episode == e.number,
+      play: _onEpisodeQuickPlay,
+      options: _showEpisodeOptions,
+      stepSeason: _stepSeason,
+      selectSeason: (n) => _onSeasonChanged(n),
+      onLeftEdge: widget.onFocusLeftEdge,
+      onRetry: () => _enterEpisodeMode(
+        show,
+        initialSeason: widget.initialSeason,
+        initialEpisode: widget.initialEpisode,
+      ),
+      // Mirrors the classic failure UI: no torrent-search fallback exists for
+      // direct-source shows, so the offer is withheld rather than dead.
+      onSearchForSources: widget.onItemSelected != null
+          ? () => _fallbackToDirectSearch(show)
+          : null,
+    );
+  }
+
+  /// Layouts call this after acting on [EpisodeFocusIntent], so a rebuild that
+  /// isn't a data change doesn't yank the cursor a second time.
+  void consumeFocusIntent() {
+    if (_focusIntent == EpisodeFocusIntent.none) return;
+    _focusIntent = EpisodeFocusIntent.none;
+  }
+
   // ── Compact (Stremio) rendering ──────────────────────────────────────────
 
   int get _currentSeasonIndex =>
@@ -1518,6 +1715,9 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // Stepping into the first/last season disables the chevron we're on, which
     // would drop primary focus into the void. Park focus on the always-present
     // season dropdown so the remote stays live.
+    // Classic parks focus on its always-present dropdown; a custom arrangement
+    // has no such node, and its own season control keeps focus already.
+    if (_custom) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _episodeSeasonDropdownFocusNode.requestFocus();
     });
@@ -1639,7 +1839,7 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     final watched = (_episodeWatchProgress[key] ?? 0) >= 100;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF141019),
+      backgroundColor: AppThemeScope.of(context).sheetSurface,
       showDragHandle: true,
       // With both Trakt and Simkl connected the menu is 7 tiles — taller than
       // the default sheet cap (9/16 of screen height) on portrait phones, and
@@ -1783,6 +1983,7 @@ class _CatalogSelectSourceButtonState
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.maybeOf(context);
     return Focus(
       focusNode: _focusNode,
       onFocusChange: (focused) => setState(() => _isFocused = focused),
@@ -1817,27 +2018,27 @@ class _CatalogSelectSourceButtonState
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: PlatformUtil.isAndroidTvCached
+          duration: PlatformUtil.isTelevision
               ? Duration.zero
               : const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
             color: widget.hasBoundSource
-                ? HomeTheme.focusGold.withValues(alpha: 0.14)
+                ? t.fade(t.focus, 0.14)
                 : Colors.white.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: _isFocused
-                  ? HomeTheme.focusGold
+                  ? t.focus
                   : widget.hasBoundSource
-                  ? HomeTheme.focusGold.withValues(alpha: 0.45)
+                  ? t.fade(t.focus, 0.45)
                   : Colors.white.withValues(alpha: 0.14),
               width: _isFocused ? 2 : 1,
             ),
-            boxShadow: (_isFocused && !PlatformUtil.isAndroidTvCached)
+            boxShadow: (_isFocused && !PlatformUtil.isTelevision)
                 ? [
                     BoxShadow(
-                      color: HomeTheme.focusGold.withValues(alpha: 0.32),
+                      color: t.fade(t.focus, 0.32),
                       blurRadius: 12,
                     ),
                   ]
@@ -1852,7 +2053,7 @@ class _CatalogSelectSourceButtonState
                     : Icons.link_off_rounded,
                 size: 16,
                 color: widget.hasBoundSource
-                    ? HomeTheme.focusGold
+                    ? t.focus
                     : Colors.white.withValues(alpha: 0.85),
               ),
               const SizedBox(width: 6),
@@ -1864,7 +2065,7 @@ class _CatalogSelectSourceButtonState
                     : 'Select Source',
                 style: TextStyle(
                   color: widget.hasBoundSource
-                      ? HomeTheme.focusGold
+                      ? t.focus
                       : Colors.white.withValues(alpha: 0.85),
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -1896,12 +2097,14 @@ class _SeasonStepButton extends StatelessWidget {
     // IconButton (not a bare InkWell) so the disabled state at the first/last
     // season keeps its button semantics for screen readers; the state-resolved
     // style adds the gold DPAD focus ring the default overlay lacks.
+    // Hoisted out of the resolver closure, which is not build-time code.
+    final t = DetailThemeScope.maybeOf(context);
     return IconButton(
       visualDensity: VisualDensity.compact,
       style: ButtonStyle(
         side: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.focused)
-              ? const BorderSide(color: HomeTheme.focusGold, width: 2)
+              ? BorderSide(color: t.focus, width: 2)
               : null,
         ),
         backgroundColor: WidgetStateProperty.resolveWith(
@@ -1970,6 +2173,7 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
     // don't render a meaningless ★ 0.0 on every episode.
     final rating = (e.rating != null && e.rating! > 0) ? e.rating : null;
     final hasMeta = (airDate != null && airDate.isNotEmpty) || rating != null;
+    final t = DetailThemeScope.maybeOf(context);
 
     final row = Focus(
       focusNode: widget.focusNode,
@@ -2026,7 +2230,7 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: _focused
-                    ? HomeTheme.focusGold
+                    ? t.focus
                     : Colors.white.withValues(alpha: 0.06),
                 width: _focused ? 2 : 1,
               ),
@@ -2072,9 +2276,9 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                           Container(
                             color: Colors.black.withValues(alpha: 0.45),
                             alignment: Alignment.center,
-                            child: const Icon(
+                            child: Icon(
                               Icons.check_circle_rounded,
-                              color: HomeTheme.focusGold,
+                              color: t.focus,
                               size: 24,
                             ),
                           ),
@@ -2086,7 +2290,7 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: HomeTheme.focusGold,
+                                color: t.focus,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Text(
@@ -2111,7 +2315,7 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                               child: FractionallySizedBox(
                                 widthFactor: progress / 100,
                                 alignment: Alignment.centerLeft,
-                                child: Container(color: HomeTheme.focusGold),
+                                child: Container(color: t.focus),
                               ),
                             ),
                           ),
@@ -2204,13 +2408,13 @@ class _CompactEpisodeRowState extends State<_CompactEpisodeRow> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (watched)
-                      const Icon(Icons.check_circle_rounded,
-                          color: HomeTheme.focusGold, size: 18)
+                      Icon(Icons.check_circle_rounded,
+                          color: t.focus, size: 18)
                     else if (partial)
                       Text(
                         '${progress.round()}%',
-                        style: const TextStyle(
-                          color: HomeTheme.focusGold,
+                        style: TextStyle(
+                          color: t.focus,
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),

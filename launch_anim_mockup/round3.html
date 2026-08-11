@@ -1,0 +1,1156 @@
+<!-- Debrify launch-ident pitch reel, ROUND 3 — ten new directions.
+     Same law as round 2: an ident owns its TYPE + MATERIAL + LIGHT, not just
+     an intro. Nothing here reuses another ident's lockup.
+     New this round: every layout is derived from one unit U = min(w/16, h/9),
+     so the same ident composes on a 720p TV box, a portrait phone and a
+     21:9 monitor. Use the ratio switcher to check before you pick. -->
+<title>Debrify — Launch Idents · Round 3</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --ink:#05060D; --stage:#020617; --panel:#0B1020; --panel2:#0E1426;
+    --line:rgba(233,237,255,.09); --text:#E9EDFF; --dim:#8B93B8; --faint:#6E7699;
+    --accent:#7B5CFF; --accent2:#818CF8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{color-scheme:dark}
+  body{background:var(--ink);color:var(--text);
+    font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 72px}
+  header{display:flex;align-items:baseline;gap:14px;margin-bottom:6px;flex-wrap:wrap}
+  header h1{font-size:22px;font-weight:800;letter-spacing:-.02em}
+  header .mono{margin-left:auto}
+  .mono{font:600 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  .sub{color:var(--dim);max-width:70ch;margin-bottom:20px}
+  .sub b{color:var(--text);font-weight:600}
+
+  .stage-shell{position:relative;border-radius:14px;padding:10px;
+    background:linear-gradient(180deg,#10162B,#080B18);
+    border:1px solid var(--line);
+    box-shadow:0 30px 80px -30px rgba(93,76,255,.28)}
+  .frame{width:min(100%,calc(58vh * var(--arn,1.7778)));aspect-ratio:var(--ar,16/9);
+    margin-inline:auto;position:relative}
+  .frame canvas{display:block;width:100%;height:100%;border-radius:8px;
+    background:var(--stage);cursor:pointer}
+  .stage-bar{display:flex;align-items:center;gap:12px;padding:12px 6px 2px;flex-wrap:wrap}
+  .stage-bar .name{font-weight:800;font-size:16px;letter-spacing:-.01em}
+  .stage-bar .type{color:var(--dim);font-size:12.5px}
+  .stage-bar .hint{margin-left:auto}
+  .swatch{width:11px;height:11px;border-radius:3px;box-shadow:0 0 0 1px rgba(255,255,255,.14)}
+
+  .ratios{display:flex;gap:6px;align-items:center;padding:10px 6px 0;flex-wrap:wrap}
+  .ratios .mono{margin-right:4px}
+  .ratios button{font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.06em;
+    color:var(--dim);background:transparent;border:1px solid var(--line);
+    border-radius:7px;padding:6px 9px;cursor:pointer}
+  .ratios button:hover{color:var(--text)}
+  .ratios button[aria-pressed="true"]{color:#fff;border-color:transparent;
+    background:linear-gradient(90deg,#4F74FF,#8A5CFF)}
+  .ratios button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+
+  .tier{font:700 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;
+    text-transform:uppercase;padding:5px 9px;border-radius:999px;
+    border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+  .tier.pick{color:#fff;border:none;background:linear-gradient(90deg,#4F74FF,#8A5CFF)}
+
+  .rail{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:20px}
+  @media (max-width:620px){.rail{grid-template-columns:1fr}}
+  .card{text-align:left;border-radius:12px;background:var(--panel);
+    border:1px solid var(--line);padding:0;overflow:hidden;cursor:pointer;
+    color:inherit;font:inherit;transition:border-color .15s,transform .15s}
+  .card:hover{transform:translateY(-2px)}
+  .card:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+  .card[aria-pressed="true"]{border-color:var(--accent)}
+  .card canvas{display:block;width:100%;aspect-ratio:16/9;background:var(--stage)}
+  .card .meta{padding:12px 14px 14px;border-top:1px solid var(--line);
+    display:flex;flex-direction:column;gap:6px}
+  .card .row{display:flex;align-items:center;gap:8px}
+  .card .row .name{font-weight:700;font-size:14.5px;letter-spacing:-.01em}
+  .card .row .tier{margin-left:auto}
+  .card .kind{color:var(--accent2);font:600 11px/1.4 ui-monospace,Menlo,monospace;
+    letter-spacing:.05em}
+  .card p{color:var(--dim);font-size:12.5px;line-height:1.5}
+  .card .spec{font:500 10.5px/1.55 ui-monospace,Menlo,monospace;
+    color:var(--faint);letter-spacing:.02em}
+  .card .spec b{color:#9AA3C8;font-weight:700}
+
+  footer{margin-top:28px;color:var(--faint);font-size:12.5px;max-width:80ch;line-height:1.65}
+  footer h2{color:var(--dim);font:700 11px/1 ui-monospace,Menlo,monospace;
+    letter-spacing:.14em;text-transform:uppercase;margin:18px 0 8px}
+  footer b{color:#9AA3C8}
+  footer ul{padding-left:16px}
+  footer li{margin-bottom:4px}
+  @media (prefers-reduced-motion: reduce){.card:hover{transform:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Debrify · Launch Idents</h1>
+    <span class="mono">round 3 — ten new directions</span>
+  </header>
+  <p class="sub">Ten more, none of them a remix of the seven that shipped. Each
+  owns its <b>typography, material and light</b>, each lands on a
+  <b>static final frame</b> so the hold-for-home sweep drops in unchanged, and
+  every layout is derived from a single unit <b>U = min(w⁄16, h⁄9)</b> — so the
+  composition holds on a 720p TV box, a portrait phone and a 21:9 monitor.
+  Switch the ratio to check. Click a card to stage it; click the stage to replay.</p>
+
+  <div class="stage-shell">
+    <div class="frame" id="frame"><canvas id="stage" aria-label="Ident stage — click to replay"></canvas></div>
+    <div class="ratios" id="ratios"><span class="mono">screen</span></div>
+    <div class="stage-bar">
+      <span class="swatch" id="stageSwatch"></span>
+      <span class="name" id="stageName"></span>
+      <span class="tier" id="stageTier"></span>
+      <span class="type" id="stageType"></span>
+      <span class="hint mono" id="stageHint">click to replay</span>
+    </div>
+  </div>
+
+  <div class="rail" id="rail"></div>
+
+  <footer>
+    <h2>How these behave on the box</h2>
+    <p>Every ident here obeys the invariants the shipped seven proved out on
+    the Mi Box: the static full-screen ground lives in <b>ident.backdrop</b>
+    (rastered once, outside the painter's RepaintBoundary), the painter draws
+    only what moves, and at progress 1.0 the frame is <b>completely
+    motionless</b> — noise is progress-derived, wobble and sparks damp to zero
+    — because the settled splash is held while Home prepaints behind it.</p>
+    <h2>Per-ident cost notes</h2>
+    <ul>
+      <li><b>Aperture, Swiss, Origami, Blueprint</b> — flat fills, hairlines and
+      clip-band reveals only. Cheapest of the round; no masks at all.</li>
+      <li><b>Ripple</b> — the reflection is one cached Picture drawn through N
+      sliced transforms; slice offset damps to 0, so the settled frame is a
+      plain second draw.</li>
+      <li><b>Ember, Anamorphic</b> — colour-changing text uses pre-baked
+      quantized sets (the IdentAlphaSets idiom widened to colour), never a
+      per-frame style mutation.</li>
+      <li><b>Silk</b> — 30 flat vertical bands per frame plus a dashed stitch
+      stroke via PathMetrics; the fold phase eases to a constant, so at rest it
+      is a static band field.</li>
+      <li><b>Rack Focus</b> — bokeh is drawn as ring + fill circles, halved on
+      TV; no blur filter anywhere, the defocus reads from radius and rim alone.</li>
+      <li><b>Constellation</b> — stars batch through drawRawPoints over a reused
+      Float32List, twinkle amplitude damps to zero at rest.</li>
+    </ul>
+    <p style="margin-top:10px">Loading sweep adopts each ident's accent (the
+    swatch on every card). The ~300 ms native window before Flutter's first
+    frame stays a flat colour for all ten.</p>
+  </footer>
+</div>
+
+<script>
+'use strict';
+const WORD='DEBRIFY';
+const REDUCED=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const lerp=(a,b,t)=>a+(b-a)*t;
+const outBack=(t,s=1.7)=>1+(s+1)*Math.pow(t-1,3)+s*Math.pow(t-1,2);
+const outCubic=t=>1-Math.pow(1-t,3);
+const inCubic=t=>t*t*t;
+const outQuint=t=>1-Math.pow(1-t,5);
+const ioSine=t=>-(Math.cos(Math.PI*t)-1)/2;
+const ioCubic=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const fract=x=>x-Math.floor(x);
+const n1=x=>fract(Math.sin(x*127.1)*43758.5453);      /* deterministic noise */
+const n2=(x,y)=>fract(Math.sin(x*127.1+y*311.7)*43758.5453);
+function outBounce(t){const n=7.5625,d=2.75;
+  if(t<1/d)return n*t*t;
+  if(t<2/d){t-=1.5/d;return n*t*t+.75}
+  if(t<2.5/d){t-=2.25/d;return n*t*t+.9375}
+  t-=2.625/d;return n*t*t+.984375}
+
+/* one unit = 1/16 of the width on 16:9, and drops to the height on anything
+   wider — the whole reason these compose on every panel */
+const unit=(w,h)=>Math.min(w/16,h/9);
+
+const HX=c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];
+function mix(a,b,t){const A=HX(a),B=HX(b);
+  return `rgb(${Math.round(lerp(A[0],B[0],t))},${Math.round(lerp(A[1],B[1],t))},${Math.round(lerp(A[2],B[2],t))})`}
+function rgba(c,a){const A=HX(c);return `rgba(${A[0]},${A[1]},${A[2]},${a})`}
+
+/* rounded play triangle centred at origin, inscribed in ±s/2 */
+const PLAY_PTS=[[-.30,-.40],[-.30,.40],[.43,0]], PLAY_R=.14;
+function playPath(ctx,s){
+  const pts=PLAY_PTS.map(p=>[p[0]*s,p[1]*s]),r=PLAY_R*s;
+  ctx.beginPath();
+  for(let i=0;i<3;i++){
+    const a=pts[i],b=pts[(i+1)%3],c=pts[(i+2)%3];
+    const v1=[a[0]-b[0],a[1]-b[1]],v2=[c[0]-b[0],c[1]-b[1]];
+    const l1=Math.hypot(v1[0],v1[1])||1,l2=Math.hypot(v2[0],v2[1])||1;
+    const t1=[b[0]+v1[0]*r/l1,b[1]+v1[1]*r/l1],t2=[b[0]+v2[0]*r/l2,b[1]+v2[1]*r/l2];
+    if(i===0)ctx.moveTo(t1[0],t1[1]);else ctx.lineTo(t1[0],t1[1]);
+    ctx.quadraticCurveTo(b[0],b[1],t2[0],t2[1]);
+  }
+  ctx.closePath();
+}
+const playLen=s=>2.46*s;                       /* perimeter, for dash reveals */
+
+/* the same outline as a polyline — stitches, node lists, progressive walks.
+   (Flutter gets this from PathMetrics; canvas has no sampler.) */
+function playPoly(s,per=9){
+  const pts=PLAY_PTS.map(p=>[p[0]*s,p[1]*s]),r=PLAY_R*s,out=[];
+  for(let i=0;i<3;i++){
+    const a=pts[i],b=pts[(i+1)%3],c=pts[(i+2)%3];
+    const v1=[a[0]-b[0],a[1]-b[1]],v2=[c[0]-b[0],c[1]-b[1]];
+    const l1=Math.hypot(v1[0],v1[1])||1,l2=Math.hypot(v2[0],v2[1])||1;
+    const t1=[b[0]+v1[0]*r/l1,b[1]+v1[1]*r/l1],t2=[b[0]+v2[0]*r/l2,b[1]+v2[1]*r/l2];
+    if(i===0)out.push(t1);
+    for(let k=1;k<=per;k++){const u=k/per,iu=1-u;
+      out.push([iu*iu*t1[0]+2*iu*u*b[0]+u*u*t2[0], iu*iu*t1[1]+2*iu*u*b[1]+u*u*t2[1]]);}
+    const nxt=pts[(i+2)%3],v3=[nxt[0]-t2[0],nxt[1]-t2[1]];
+    const l3=Math.hypot(v3[0],v3[1])||1,e=[t2[0]+v3[0]*(l3-r)/l3,t2[1]+v3[1]*(l3-r)/l3];
+    for(let k=1;k<=6;k++){const u=k/6;out.push([lerp(t2[0],e[0],u),lerp(t2[1],e[1],u)]);}
+  }
+  return out;
+}
+
+/* ── word machinery: any font, tracking, x-scale ── */
+const meas=document.createElement('canvas').getContext('2d');
+function wordLayout(font,size,tracking,scaleX=1){
+  meas.font=font(size);
+  const widths=WORD.split('').map(ch=>meas.measureText(ch).width*scaleX);
+  const total=widths.reduce((a,b)=>a+b,0)+tracking*(WORD.length-1);
+  return {font,size,tracking,scaleX,widths,total};
+}
+function fitWord(font,size,trackF,scaleX,maxW){
+  let W=wordLayout(font,size,size*trackF,scaleX);
+  if(W.total>maxW){const s=maxW/W.total;W=wordLayout(font,size*s,size*s*trackF,scaleX)}
+  return W;
+}
+function letterX(W,i,startX){let x=startX;for(let k=0;k<i;k++)x+=W.widths[k]+W.tracking;return x}
+/* global alpha multiplier — drawLetter sets globalAlpha outright, so anything
+   drawing a whole lockup at reduced opacity (Ripple's reflection) sets this */
+let AMUL=1;
+function drawLetter(ctx,W,i,x,y,o={}){
+  const {alpha=1,dx=0,dy=0,scale=1,scaleY=null,fill='#E9EDFF',stroke=0,
+         strokeColor='#fff',blur=0,blurColor}=o;
+  if(alpha*AMUL<=0)return;
+  ctx.save();ctx.globalAlpha=alpha*AMUL;
+  ctx.font=W.font(W.size);ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  ctx.translate(x+W.widths[i]/2+dx,y+dy);
+  ctx.scale(W.scaleX*scale,scaleY==null?scale:scaleY);
+  if(blur){ctx.shadowColor=blurColor||fill||strokeColor;ctx.shadowBlur=blur}
+  if(fill){ctx.fillStyle=fill;ctx.fillText(WORD[i],0,0)}
+  if(stroke){ctx.strokeStyle=strokeColor;ctx.lineWidth=stroke/scale;ctx.strokeText(WORD[i],0,0)}
+  ctx.restore();
+}
+function label(ctx,text,x,y,size,color,track=.18,align='left',weight=600){
+  ctx.save();ctx.fillStyle=color;ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  ctx.font=`${weight} ${size}px ui-monospace,SFMono-Regular,Menlo,monospace`;
+  const chars=text.split(''),tr=size*track;
+  let total=0;for(const c of chars)total+=ctx.measureText(c).width+tr;
+  total-=tr;
+  let cx=align==='center'?x-total/2:align==='right'?x-total:x;
+  for(const c of chars){ctx.fillText(c,cx,y);cx+=ctx.measureText(c).width+tr}
+  ctx.restore();
+}
+
+/* ═════════════════════════ THE TEN ═════════════════════════ */
+const IDENTS=[
+
+/* ── 1 · APERTURE — machined iris, cold white ─────────────────────────── */
+{
+  id:'aperture',name:'Aperture',pick:true,dur:2200,accent:'#CFE0FF',
+  kind:'Machined · steel & cold key light',
+  type:'Grotesque 600, wide tracking · brushed steel',
+  blurb:'Six blades unwind off the centre like a lens iris. What they uncover is the mark, lit by one cold key — then the name resolves out of the opening.',
+  spec:'Ground: <b>#05070B</b> · blades = 6 rotated half-planes, flat fills. No mask layers.',
+  init(w,h){const U=unit(w,h);
+    const font=s=>`600 ${s}px "Helvetica Neue",Inter,system-ui,sans-serif`;
+    const W=fitWord(font,U*1.05,.40,1,Math.min(w*.80,U*12.4));
+    return {U,W,startX:w/2-W.total/2,cx:w/2,cy:h/2-U*.75,
+            baseY:h/2+U*2.80,g:U*2.9,R:Math.hypot(w,h)};
+  },
+  draw(ctx,w,h,t,st){
+    const {U,cx,cy,g,R}=st;
+    ctx.fillStyle='#05070B';ctx.fillRect(0,0,w,h);
+    let rg=ctx.createRadialGradient(cx,cy,0,cx,cy,R*.55);
+    rg.addColorStop(0,'rgba(28,38,58,.85)');rg.addColorStop(1,'rgba(5,7,11,0)');
+    ctx.fillStyle=rg;ctx.fillRect(0,0,w,h);
+
+    /* the opening: hexagon inradius d, blades cover everything outside */
+    const op=outQuint(clamp((t-.05)/.62,0,1));
+    const d=lerp(U*.08,R*.62,op);
+    /* key light blooming through the opening — dies by t=1 */
+    const bloom=Math.sin(clamp((t-.05)/.55,0,1)*Math.PI)*.55;
+    if(bloom>.002){
+      rg=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(d*1.8,U*2));
+      rg.addColorStop(0,`rgba(214,231,255,${bloom*.55})`);
+      rg.addColorStop(1,'rgba(214,231,255,0)');
+      ctx.fillStyle=rg;ctx.fillRect(0,0,w,h);
+    }
+
+    /* mark + ring, revealed under the blades */
+    const mk=outCubic(clamp((t-.26)/.34,0,1));
+    if(mk>0){
+      ctx.save();ctx.translate(cx,cy);ctx.globalAlpha=mk;
+      const s=g*lerp(.86,1,mk);
+      const gr=ctx.createLinearGradient(-s/2,-s/2,s/2,s/2);
+      gr.addColorStop(0,'#FFFFFF');gr.addColorStop(.42,'#DCE5F5');
+      gr.addColorStop(1,'#8C99B4');
+      playPath(ctx,s);ctx.fillStyle=gr;ctx.fill();
+      /* machined bevel */
+      playPath(ctx,s*.55);ctx.fillStyle='rgba(6,9,15,.24)';ctx.fill();
+      ctx.restore();
+    }
+    const ring=clamp((t-.34)/.40,0,1);
+    if(ring>0){
+      ctx.save();ctx.translate(cx,cy);
+      ctx.strokeStyle=`rgba(196,214,246,${.42*mk})`;ctx.lineWidth=Math.max(1,U*.035);
+      const L=2*Math.PI*g*.86;
+      ctx.setLineDash([L,L]);ctx.lineDashOffset=L*(1-outCubic(ring));
+      ctx.beginPath();ctx.arc(0,0,g*.86,-Math.PI/2,Math.PI*1.5);ctx.stroke();
+      ctx.setLineDash([]);ctx.restore();
+    }
+
+    /* the name, uncovered centre-outward */
+    const wr=outCubic(clamp((t-.50)/.42,0,1));
+    if(wr>0){
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(cx-(st.W.total/2+U*.4)*wr,st.baseY-U*2,(st.W.total+U*.8)*wr,U*3);
+      ctx.clip();
+      for(let i=0;i<WORD.length;i++)
+        drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,{fill:'#C3CFE6'});
+      ctx.restore();
+    }
+
+    /* blades last — they occlude everything */
+    const spin=lerp(-.30,0,outQuint(clamp((t-.05)/.70,0,1)));
+    for(let i=0;i<6;i++){
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(spin+i*Math.PI/3);
+      const gr=ctx.createLinearGradient(0,d,0,d+R*.55);
+      gr.addColorStop(0,'#171D2A');gr.addColorStop(.35,'#0C111B');gr.addColorStop(1,'#05070B');
+      ctx.fillStyle=gr;ctx.fillRect(-R,d,R*2,R);
+      ctx.fillStyle=`rgba(178,199,235,${.55*(1-op*.9)})`;
+      ctx.fillRect(-R,d,R*2,Math.max(1,U*.02));
+      ctx.restore();
+    }
+  }
+},
+
+/* ── 2 · BLUEPRINT — the mark drafts itself ───────────────────────────── */
+{
+  id:'blueprint',name:'Blueprint',dur:2500,accent:'#5EE1FF',
+  kind:'Technical · cyan hairline on graphite',
+  type:'Monospace caps · drafting cyan, then inked',
+  blurb:'Construction geometry, then the outline strokes itself along the guides, then it inks solid and the guides evaporate. A player drawn the way it was engineered.',
+  spec:'Ground: <b>#080B11</b> + static grid in backdrop · dash-offset stroke, one clip wipe.',
+  init(w,h){const U=unit(w,h);
+    const font=s=>`600 ${s}px ui-monospace,SFMono-Regular,Menlo,monospace`;
+    const W=fitWord(font,U*.92,.30,1,Math.min(w*.80,U*11));
+    return {U,W,startX:w/2-W.total/2,cx:w/2,cy:h/2-U*1.20,baseY:h/2+U*1.95,
+            g:U*2.8,cr:U*2.02};
+  },
+  draw(ctx,w,h,t,st){
+    const {U,cx,cy,g}=st;
+    ctx.fillStyle='#080B11';ctx.fillRect(0,0,w,h);
+    /* the paper: static grid (backdrop in Flutter) */
+    ctx.strokeStyle='rgba(94,225,255,.055)';ctx.lineWidth=1;
+    const step=U*.62;ctx.beginPath();
+    for(let x=cx%step;x<w;x+=step){ctx.moveTo(x,0);ctx.lineTo(x,h)}
+    for(let y=cy%step;y<h;y+=step){ctx.moveTo(0,y);ctx.lineTo(w,y)}
+    ctx.stroke();
+    ctx.strokeStyle='rgba(94,225,255,.13)';ctx.beginPath();
+    for(let x=cx%(step*5);x<w;x+=step*5){ctx.moveTo(x,0);ctx.lineTo(x,h)}
+    ctx.stroke();
+
+    const guides=1-outCubic(clamp((t-.62)/.30,0,1));   /* construction fades */
+    if(guides>.01){
+      ctx.save();ctx.globalAlpha=guides;
+      ctx.strokeStyle='rgba(94,225,255,.55)';ctx.lineWidth=Math.max(1,U*.014);
+      const c=clamp(t/.26,0,1);
+      ctx.beginPath();ctx.arc(cx,cy,st.cr,-Math.PI/2,-Math.PI/2+Math.PI*2*outCubic(c));
+      ctx.stroke();
+      const cross=clamp((t-.10)/.20,0,1)*st.cr*1.35;
+      ctx.beginPath();
+      ctx.moveTo(cx-cross,cy);ctx.lineTo(cx+cross,cy);
+      ctx.moveTo(cx,cy-cross);ctx.lineTo(cx,cy+cross);ctx.stroke();
+      /* tick marks on the construction circle */
+      for(let i=0;i<12;i++){
+        const a=i*Math.PI/6,r0=st.cr,r1=st.cr+U*.14*clamp((t-.14)/.2,0,1);
+        ctx.beginPath();
+        ctx.moveTo(cx+Math.cos(a)*r0,cy+Math.sin(a)*r0);
+        ctx.lineTo(cx+Math.cos(a)*r1,cy+Math.sin(a)*r1);ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    /* the outline draws, then inks */
+    const dr=clamp((t-.22)/.34,0,1);
+    if(dr>0){
+      ctx.save();ctx.translate(cx,cy);
+      ctx.strokeStyle='#7FEBFF';ctx.lineWidth=Math.max(1.2,U*.03);
+      ctx.lineJoin='round';
+      const L=playLen(g);
+      ctx.setLineDash([L,L]);ctx.lineDashOffset=L*(1-outCubic(dr));
+      playPath(ctx,g);ctx.stroke();ctx.setLineDash([]);
+      ctx.restore();
+    }
+    const ink=clamp((t-.50)/.28,0,1);
+    if(ink>0){
+      ctx.save();ctx.translate(cx,cy);
+      ctx.beginPath();ctx.rect(-g,g*.5-g*outCubic(ink),g*2,g*1.2);ctx.clip();
+      const gr=ctx.createLinearGradient(0,g*.5,0,-g*.5);
+      gr.addColorStop(0,'#2FA9D6');gr.addColorStop(1,'#C9F6FF');
+      playPath(ctx,g);ctx.fillStyle=gr;ctx.fill();
+      ctx.restore();
+    }
+
+    /* name, typed left→right, hard cuts */
+    const cut=Math.floor(clamp((t-.58)/.30,0,1)*(WORD.length+.001));
+    for(let i=0;i<cut;i++)
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,{fill:'#DFF6FF'});
+    if(cut<WORD.length&&t>.58){                       /* the drafting cursor */
+      const x=letterX(st.W,cut,st.startX);
+      ctx.fillStyle='rgba(94,225,255,.75)';
+      ctx.fillRect(x,st.baseY-st.W.size*.72,Math.max(1.5,U*.03),st.W.size*.86);
+    }
+    /* dimension rule under the name */
+    const dim=clamp((t-.80)/.20,0,1);
+    if(dim>0){
+      ctx.save();ctx.globalAlpha=dim*.6;
+      ctx.strokeStyle='#5EE1FF';ctx.lineWidth=1;
+      const y=st.baseY+U*.62,x0=st.startX,x1=st.startX+st.W.total;
+      ctx.beginPath();
+      ctx.moveTo(x0,y);ctx.lineTo(x1,y);
+      ctx.moveTo(x0,y-U*.13);ctx.lineTo(x0,y+U*.13);
+      ctx.moveTo(x1,y-U*.13);ctx.lineTo(x1,y+U*.13);ctx.stroke();
+      label(ctx,'PLAY · ANYTHING',cx,y+U*.58,U*.30,'rgba(94,225,255,.75)',.24,'center');
+      ctx.restore();
+    }
+  }
+},
+
+/* ── 3 · RIPPLE — a drop on still water ──────────────────────────────── */
+{
+  id:'ripple',name:'Ripple',dur:2700,accent:'#6E8CFF',
+  kind:'Liquid · indigo water & reflection',
+  type:'Light sans, generous tracking · water-mirrored',
+  blurb:'One drop breaks a still indigo surface. The lockup rises out of the water with its own reflection, and the reflection stops wobbling exactly as the rings die.',
+  spec:'Reflection = one cached picture, N sliced transforms · slice offset → 0.',
+  init(w,h){const U=unit(w,h);
+    const font=s=>`300 ${s}px "Helvetica Neue",Inter,system-ui,sans-serif`;
+    const W=fitWord(font,U*1.15,.30,1,Math.min(w*.80,U*11.5));
+    const yW=h*.60, g=U*2.4;
+    /* stack bottom-up off the waterline: baseline, cap height, gap, mark half */
+    const baseY=yW-U*.55;
+    const cy=baseY-W.size*.75-U*.85-g*.40;
+    return {U,W,startX:w/2-W.total/2,cx:w/2,yW,g,baseY,cy};
+  },
+  draw(ctx,w,h,t,st){
+    const {U,cx,yW,g}=st;
+    let gr=ctx.createLinearGradient(0,0,0,yW);
+    gr.addColorStop(0,'#070B1B');gr.addColorStop(1,'#0E1740');
+    ctx.fillStyle=gr;ctx.fillRect(0,0,w,yW);
+    gr=ctx.createLinearGradient(0,yW,0,h);
+    gr.addColorStop(0,'#0B1234');gr.addColorStop(1,'#04060F');
+    ctx.fillStyle=gr;ctx.fillRect(0,yW,w,h-yW);
+    ctx.fillStyle='rgba(150,175,255,.16)';ctx.fillRect(0,yW,w,Math.max(1,U*.02));
+
+    /* the drop */
+    if(t<.30){
+      const f=clamp(t/.26,0,1),y=lerp(-U,yW,inCubic(f)*.6+f*.4);
+      ctx.fillStyle='rgba(200,216,255,.9)';
+      ctx.beginPath();ctx.ellipse(cx,y,U*.07,U*.16*(1+f),0,0,7);ctx.fill();
+    }
+    /* rings — all dead by t=1 */
+    for(let k=0;k<5;k++){
+      const age=(t-.26-k*.055)/.62;
+      if(age<=0||age>=1)continue;
+      const r=U*11*outCubic(age),a=(1-age)*(1-age)*.45;
+      ctx.strokeStyle=`rgba(160,186,255,${a})`;
+      ctx.lineWidth=Math.max(1,U*.035*(1-age));
+      ctx.beginPath();ctx.ellipse(cx,yW,r,r*.17,0,0,7);ctx.stroke();
+    }
+
+    /* lockup content, drawn twice: upright + sliced reflection */
+    const rise=outCubic(clamp((t-.30)/.46,0,1));
+    if(rise<=0)return;
+    const {cy,baseY}=st;
+    const paint=(c,flip)=>{
+      c.save();
+      if(flip){c.translate(0,yW*2);c.scale(1,-1)}
+      c.save();c.translate(cx,cy);
+      const s=g*lerp(.9,1,rise);
+      const lg=c.createLinearGradient(-s/2,0,s/2,0);
+      lg.addColorStop(0,'#5B7BFF');lg.addColorStop(1,'#9C7BFF');
+      playPath(c,s);c.fillStyle=lg;c.fill();
+      playPath(c,s*.52);c.fillStyle='rgba(226,233,255,.20)';c.fill();
+      c.restore();
+      for(let i=0;i<WORD.length;i++){
+        const lt=clamp((t-(.42+i*.026))/.34,0,1);if(lt<=0)continue;
+        drawLetter(c,st.W,i,letterX(st.W,i,st.startX),baseY,
+          {alpha:outCubic(lt),fill:'#DCE4FF'});
+      }
+      c.restore();
+    };
+    ctx.save();
+    ctx.beginPath();ctx.rect(0,0,w,yW);ctx.clip();
+    ctx.save();ctx.translate(0,lerp(U*1.3,0,rise));
+    ctx.globalAlpha=rise;paint(ctx,false);ctx.restore();
+    ctx.restore();
+
+    /* the reflection: horizontal slices, wobble damping to zero */
+    const damp=(1-outCubic(clamp((t-.30)/.68,0,1)));
+    const SL=16, hgt=h-yW;
+    ctx.save();
+    ctx.beginPath();ctx.rect(0,yW,w,hgt);ctx.clip();
+    ctx.globalAlpha=.26*rise;
+    for(let i=0;i<SL;i++){
+      const y0=yW+i/SL*hgt, y1=yW+(i+1)/SL*hgt;
+      const dx=Math.sin(i*.9+t*7.5)*U*.28*damp*(1-i/SL*.4);
+      ctx.save();
+      ctx.beginPath();ctx.rect(0,y0,w,y1-y0+1);ctx.clip();
+      ctx.translate(dx,0);
+      AMUL=ctx.globalAlpha=.30*rise*(1-i/SL*.88);
+      paint(ctx,true);
+      ctx.restore();
+    }
+    AMUL=1;
+    ctx.restore();
+  }
+},
+
+/* ── 4 · EMBER — poured hot, cooled to steel ─────────────────────────── */
+{
+  id:'ember',name:'Ember',pick:true,dur:2600,accent:'#FF7A2F',
+  kind:'Forge · molten pour cooling to steel',
+  type:'Condensed 900 caps · heat gradient → cold steel',
+  blurb:'The letters start as cold iron voids. Heat floods up through them, the mark strikes like a die, and everything cools out to hard steel — with one ember still glowing at the base.',
+  spec:'Colour ramp = <b>5 pre-baked sets</b>, never a per-frame style mutation.',
+  init(w,h){const U=unit(w,h);
+    const font=s=>`900 ${s}px "Helvetica Neue",Impact,Inter,system-ui,sans-serif`;
+    const W=fitWord(font,U*2.0,.02,.86,Math.min(w*.84,U*13));
+    return {U,W,startX:w/2-W.total/2,cx:w/2,baseY:h/2+U*1.05,g:U*1.5,
+            markY:h/2-U*2.25};
+  },
+  draw(ctx,w,h,t,st){
+    const {U,cx,baseY,g}=st;
+    ctx.fillStyle='#070605';ctx.fillRect(0,0,w,h);
+    const heat=clamp((t-.10)/.44,0,1), cool=outCubic(clamp((t-.58)/.40,0,1));
+    /* forge floor glow, dying as it cools */
+    const fg=(.55*heat)*(1-cool*.72);
+    let rg=ctx.createRadialGradient(cx,baseY+U*.4,0,cx,baseY+U*.4,U*7.5);
+    rg.addColorStop(0,`rgba(255,122,47,${fg*.5})`);
+    rg.addColorStop(.5,`rgba(180,48,10,${fg*.18})`);
+    rg.addColorStop(1,'rgba(7,6,5,0)');
+    ctx.fillStyle=rg;ctx.fillRect(0,0,w,h);
+
+    /* cold iron letters, always there */
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-i*.018)/.18,0,1);if(lt<=0)continue;
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),baseY,
+        {fill:'#191512',alpha:lt,scale:lerp(1.04,1,outCubic(lt))});
+    }
+    /* the pour: a rising clip band of molten fill, cooling to steel */
+    if(heat>0){
+      const top=baseY-st.W.size*.78, bandY=lerp(baseY+U*.1,top-U*.1,outCubic(heat));
+      ctx.save();
+      ctx.beginPath();ctx.rect(0,bandY,w,baseY-bandY+U*.5);ctx.clip();
+      for(let i=0;i<WORD.length;i++){
+        const c0=mix('#FFD98A','#E8EEF9',cool), c1=mix('#FF6A18','#9DA8BC',cool);
+        const gr=ctx.createLinearGradient(0,top,0,baseY);
+        gr.addColorStop(0,c0);gr.addColorStop(1,c1);
+        drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),baseY,{fill:gr});
+      }
+      ctx.restore();
+      /* the molten meniscus */
+      if(heat<1){
+        ctx.fillStyle=`rgba(255,214,140,${.5*(1-cool)})`;
+        ctx.fillRect(st.startX-U*.1,bandY-U*.02,st.W.total+U*.2,Math.max(1,U*.04));
+      }
+    }
+    /* sparks — progress-derived, gone by t=.94 */
+    const sp=clamp((t-.14)/.80,0,1);
+    if(sp>0&&sp<1){
+      for(let i=0;i<26;i++){
+        const seed=n1(i*3.7), off=n1(i*7.1)*.55;
+        const age=clamp((sp-off)/.45,0,1);if(age<=0||age>=1)continue;
+        const x=st.startX+seed*st.W.total+Math.sin(age*4+i)*U*.22;
+        const y=baseY+U*.2-age*U*3.4*(0.6+n1(i*11.3)*.8);
+        const a=(1-age)*(1-age)*(1-cool*.6);
+        ctx.fillStyle=`rgba(255,${Math.round(lerp(150,220,seed))},90,${a})`;
+        ctx.fillRect(x,y,Math.max(1,U*.035),Math.max(1,U*.035));
+      }
+    }
+    /* the die strikes */
+    const st0=clamp((t-.34)/.16,0,1);
+    if(st0>0){
+      const drop=1-outCubic(st0);
+      ctx.save();ctx.translate(cx,st.markY-drop*U*2.2);
+      const s=g*lerp(1.25,1,outCubic(st0));
+      const gr=ctx.createLinearGradient(-s/2,-s/2,s/2,s/2);
+      gr.addColorStop(0,mix('#FFC46A','#F1F5FF',cool));
+      gr.addColorStop(1,mix('#D9410B','#7C879C',cool));
+      playPath(ctx,s);ctx.fillStyle=gr;ctx.fill();
+      ctx.restore();
+      const shock=clamp((t-.46)/.26,0,1);
+      if(shock>0&&shock<1){
+        ctx.strokeStyle=`rgba(255,180,90,${(1-shock)*.5})`;
+        ctx.lineWidth=Math.max(1,U*.05*(1-shock));
+        ctx.beginPath();ctx.arc(cx,st.markY,g*(.7+shock*2.6),0,7);ctx.stroke();
+      }
+    }
+  }
+},
+
+/* ── 5 · SWISS — International Typographic ───────────────────────────── */
+{
+  id:'swiss',name:'Swiss',pick:true,dur:1800,accent:'#FF3B23',
+  kind:'Editorial · black, bone, one vermilion rule',
+  type:'Grotesk 800, tight · hard cuts, strict grid',
+  blurb:'No glow, no gradient, no bloom. A vermilion rule cuts across, the letters slide up from behind it onto an absolute baseline, and the composition locks. Confidence as an animation.',
+  spec:'Zero effects — flat fills and clip rects only. Cheapest ident possible.',
+  init(w,h){const U=unit(w,h);
+    const font=s=>`800 ${s}px "Helvetica Neue",Inter,system-ui,sans-serif`;
+    const m=U*1.15;
+    const W=fitWord(font,U*2.05,-.02,1,Math.min(w-m*2-U*2.2,U*11.5));
+    const lock=U*1.7+U*.7+W.total;
+    return {U,W,m,startX:w/2-lock/2+U*1.7+U*.7,sq:U*1.7,
+            sqX:w/2-lock/2,ruleY:h/2+U*.95,baseY:h/2+U*.72};
+  },
+  draw(ctx,w,h,t,st){
+    const {U,m,ruleY,baseY}=st;
+    ctx.fillStyle='#000000';ctx.fillRect(0,0,w,h);
+    /* margin ticks — the grid, stated */
+    ctx.strokeStyle='rgba(255,255,255,.14)';ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(m,m*.55);ctx.lineTo(m,m*.55+U*.5);
+    ctx.moveTo(w-m,m*.55);ctx.lineTo(w-m,m*.55+U*.5);
+    ctx.moveTo(m,h-m*.55);ctx.lineTo(m,h-m*.55-U*.5);
+    ctx.moveTo(w-m,h-m*.55);ctx.lineTo(w-m,h-m*.55-U*.5);ctx.stroke();
+
+    /* the rule */
+    const sw=outQuint(clamp(t/.34,0,1));
+    ctx.fillStyle='#FF3B23';
+    ctx.fillRect(m,ruleY,(w-m*2)*sw,Math.max(2,U*.11));
+
+    /* letters rise from behind the rule */
+    ctx.save();
+    ctx.beginPath();ctx.rect(0,0,w,ruleY);ctx.clip();
+    for(let i=0;i<WORD.length;i++){
+      const lt=outQuint(clamp((t-(.24+i*.035))/.34,0,1));if(lt<=0)continue;
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),baseY,
+        {dy:lerp(st.W.size*.95,0,lt),fill:'#F2F4F8'});
+    }
+    /* the red block with the mark knocked out */
+    const bl=outQuint(clamp((t-.18)/.32,0,1));
+    if(bl>0){
+      ctx.save();
+      ctx.beginPath();ctx.rect(st.sqX,baseY-st.sq,st.sq,st.sq*bl);ctx.clip();
+      ctx.fillStyle='#FF3B23';ctx.fillRect(st.sqX,baseY-st.sq,st.sq,st.sq);
+      ctx.save();ctx.translate(st.sqX+st.sq/2,baseY-st.sq/2);
+      playPath(ctx,st.sq*.56);ctx.fillStyle='#000000';ctx.fill();
+      ctx.restore();ctx.restore();
+    }
+    ctx.restore();
+
+    /* set copy, bottom rail */
+    const meta=clamp((t-.62)/.26,0,1);
+    if(meta>0){
+      ctx.save();ctx.globalAlpha=meta;
+      label(ctx,'LAUNCH',m+U*.45,m*.55+U*.30,U*.32,'rgba(242,244,248,.72)',.22,'left');
+      label(ctx,'DEBRID · TORRENT · IPTV',w-m-U*.45,h-m*.55-U*.22,U*.30,
+        'rgba(242,244,248,.42)',.22,'right');
+      ctx.restore();
+    }
+  }
+},
+
+/* ── 6 · ORIGAMI — folded from one sheet ─────────────────────────────── */
+{
+  id:'origami',name:'Origami',dur:2400,accent:'#F2ECE0',
+  kind:'Paper · matte ivory facets, raking light',
+  type:'Humanist caps · creased sheet, flat shading',
+  blurb:'The mark folds itself out of a flat sheet, facet by facet, each one catching the light differently. Then the sheet opens along a crease and the name is already printed on it.',
+  spec:'Facets = 4 flat fills folding about hinges · one hairline crease. No blur.',
+  init(w,h){const U=unit(w,h);
+    const font=s=>`500 ${s}px "Avenir Next","Gill Sans",Optima,system-ui,sans-serif`;
+    const W=fitWord(font,U*1.0,.34,1,Math.min(w*.78,U*11));
+    return {U,W,startX:w/2-W.total/2,cx:w/2,cy:h/2-U*.85,baseY:h/2+U*2.5,g:U*3.0};
+  },
+  draw(ctx,w,h,t,st){
+    const {U,cx,cy,g}=st;
+    ctx.fillStyle='#0C0A09';ctx.fillRect(0,0,w,h);
+    let rg=ctx.createRadialGradient(w*.3,h*.18,0,w*.3,h*.18,Math.hypot(w,h)*.75);
+    rg.addColorStop(0,'rgba(74,62,50,.55)');rg.addColorStop(1,'rgba(12,10,9,0)');
+    ctx.fillStyle=rg;ctx.fillRect(0,0,w,h);
+
+    /* four facets of the play mark, hinged on the vertical axis */
+    const P=PLAY_PTS.map(p=>[p[0]*g,p[1]*g]);
+    const mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+    const m01=mid(P[0],P[1]),m12=mid(P[1],P[2]),m20=mid(P[2],P[0]);
+    const facets=[
+      {pts:[P[0],m01,m20],tone:'#F4EFE4',hinge:m20[0]},
+      {pts:[m01,P[1],m12],tone:'#CFC5B2',hinge:m12[0]},
+      {pts:[m20,m12,P[2]],tone:'#8F8674',hinge:m20[0]},
+      {pts:[m01,m12,m20],tone:'#E3DAC8',hinge:m01[0]},
+    ];
+    ctx.save();ctx.translate(cx,cy);
+    facets.forEach((f,i)=>{
+      const ft=outCubic(clamp((t-(.06+i*.10))/.32,0,1));if(ft<=0)return;
+      ctx.save();
+      ctx.translate(f.hinge,0);ctx.scale(Math.max(.001,ft),1);ctx.translate(-f.hinge,0);
+      ctx.beginPath();ctx.moveTo(f.pts[0][0],f.pts[0][1]);
+      ctx.lineTo(f.pts[1][0],f.pts[1][1]);ctx.lineTo(f.pts[2][0],f.pts[2][1]);
+      ctx.closePath();
+      /* edge-on facets flash brighter, as paper does */
+      ctx.fillStyle=mix('#FFFFFF',f.tone,Math.min(1,ft*1.15));
+      ctx.fill();
+      ctx.restore();
+    });
+    /* the crease shadow under the fold */
+    const set=clamp((t-.40)/.3,0,1);
+    if(set>0){
+      ctx.strokeStyle=`rgba(28,22,16,${.35*set})`;ctx.lineWidth=Math.max(1,U*.02);
+      ctx.beginPath();ctx.moveTo(m01[0],m01[1]);ctx.lineTo(m12[0],m12[1]);
+      ctx.moveTo(m20[0],m20[1]);ctx.lineTo(m12[0],m12[1]);ctx.stroke();
+    }
+    ctx.restore();
+
+    /* the sheet opens along a crease — name revealed outward from it */
+    const op=outCubic(clamp((t-.50)/.42,0,1));
+    if(op>0){
+      const cy2=st.baseY-st.W.size*.36, hh=st.W.size*.9*op;
+      ctx.save();
+      ctx.beginPath();ctx.rect(0,cy2-hh,w,hh*2);ctx.clip();
+      for(let i=0;i<WORD.length;i++)
+        drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,{fill:'#F2ECE0'});
+      ctx.restore();
+      const cr=1-clamp((t-.62)/.30,0,1);
+      if(cr>0){
+        ctx.fillStyle=`rgba(255,250,240,${cr*.5})`;
+        ctx.fillRect(st.startX-U*.3,cy2-Math.max(.5,U*.012),
+          st.W.total+U*.6,Math.max(1,U*.024));
+      }
+    }
+  }
+},
+
+/* ── 7 · ANAMORPHIC — one lens flare, then focus ─────────────────────── */
+{
+  id:'anamorphic',name:'Anamorphic',dur:2400,accent:'#5FD0FF',
+  kind:'Cinema · letterboxed, cyan flare',
+  type:'Extended caps · chromatic split resolving',
+  blurb:'A cyan anamorphic streak rakes across the letterbox and detonates at centre. The lockup arrives with a chromatic fringe that pulls itself back into register.',
+  spec:'Fringe = 2 offset colour sets, offset → 0 · bars are static backdrop.',
+  init(w,h){const U=unit(w,h);
+    const font=s=>`600 ${s}px "Helvetica Neue",Inter,system-ui,sans-serif`;
+    const W=fitWord(font,U*1.25,.26,1.12,Math.min(w*.78,U*11.5));
+    return {U,W,startX:w/2-W.total/2,cx:w/2,cy:h/2-U*1.0,baseY:h/2+U*2.35,
+            g:U*2.2,bar:h*.085};
+  },
+  draw(ctx,w,h,t,st){
+    const {U,cx,cy,g,bar}=st;
+    ctx.fillStyle='#020304';ctx.fillRect(0,0,w,h);
+
+    const land=clamp(t/.42,0,1);
+    const fx=lerp(-w*.15,cx,ioCubic(land));
+    const flen=lerp(w*1.05,w*.52,outCubic(land));
+    const hot=Math.sin(clamp((t-.28)/.36,0,1)*Math.PI);
+    /* the streak: a long horizontal gradient + hot core */
+    const draws=[[flen,U*.55,.16],[flen*.7,U*.16,.34],[flen*.45,U*.045,.85]];
+    for(const [L,th,a] of draws){
+      const gr=ctx.createLinearGradient(fx-L/2,0,fx+L/2,0);
+      gr.addColorStop(0,'rgba(95,208,255,0)');
+      gr.addColorStop(.5,`rgba(150,225,255,${a*(t<.92?1:.55)})`);
+      gr.addColorStop(1,'rgba(95,208,255,0)');
+      ctx.fillStyle=gr;ctx.fillRect(fx-L/2,cy-th/2,L,th);
+    }
+    if(hot>.01){
+      const rg=ctx.createRadialGradient(fx,cy,0,fx,cy,U*3.2*hot);
+      rg.addColorStop(0,`rgba(214,242,255,${.55*hot})`);
+      rg.addColorStop(1,'rgba(95,208,255,0)');
+      ctx.fillStyle=rg;ctx.fillRect(fx-U*4,cy-U*4,U*8,U*8);
+      /* the vertical bloom spike */
+      const gr=ctx.createLinearGradient(0,cy-U*3.2,0,cy+U*3.2);
+      gr.addColorStop(0,'rgba(150,225,255,0)');
+      gr.addColorStop(.5,`rgba(190,235,255,${.30*hot})`);
+      gr.addColorStop(1,'rgba(150,225,255,0)');
+      ctx.fillStyle=gr;ctx.fillRect(fx-U*.05,cy-U*3.2,Math.max(1,U*.10),U*6.4);
+    }
+
+    /* mark blooms at the focus */
+    const mk=outCubic(clamp((t-.34)/.30,0,1));
+    if(mk>0){
+      ctx.save();ctx.translate(cx,cy);ctx.globalAlpha=mk;
+      const s=g*lerp(1.18,1,mk);
+      const gr=ctx.createLinearGradient(-s/2,0,s/2,0);
+      gr.addColorStop(0,'#EAF7FF');gr.addColorStop(1,'#7FC7EE');
+      playPath(ctx,s);ctx.fillStyle=gr;ctx.fill();
+      ctx.restore();
+    }
+    /* the name, chromatic fringe converging */
+    const wr=clamp((t-.48)/.40,0,1);
+    if(wr>0){
+      const o=U*.55*(1-outCubic(wr));
+      for(let i=0;i<WORD.length;i++){
+        const x=letterX(st.W,i,st.startX);
+        if(o>.4){
+          drawLetter(ctx,st.W,i,x,st.baseY,{dx:-o,fill:'#FF4D62',alpha:.5*(o/(U*.55))});
+          drawLetter(ctx,st.W,i,x,st.baseY,{dx:o,fill:'#4DD8FF',alpha:.5*(o/(U*.55))});
+        }
+        drawLetter(ctx,st.W,i,x,st.baseY,{fill:'#E8F4FF',alpha:outCubic(wr)});
+      }
+    }
+    /* letterbox bars, always on top */
+    ctx.fillStyle='#000';ctx.fillRect(0,0,w,bar);ctx.fillRect(0,h-bar,w,bar);
+    ctx.fillStyle='rgba(120,190,235,.12)';
+    ctx.fillRect(0,bar,w,1);ctx.fillRect(0,h-bar-1,w,1);
+  }
+},
+
+/* ── 8 · CONSTELLATION — plotted, not animated ───────────────────────── */
+{
+  id:'constellation',name:'Constellation',dur:2800,accent:'#EFE7D6',
+  kind:'Celestial chart · ivory on midnight',
+  type:'Fine tracked caps · observatory plate',
+  blurb:'Not a starfield — a star chart. Nodes are plotted, ringed and labelled, then the lines between them close into the mark. Reads like an antique plate, not a screensaver.',
+  spec:'Stars batch via drawRawPoints · twinkle amplitude damps to 0 at rest.',
+  init(w,h){const U=unit(w,h);
+    const font=s=>`400 ${s}px "Optima","Avenir Next",Iowan Old Style,serif`;
+    const W=fitWord(font,U*.92,.46,1,Math.min(w*.76,U*10.5));
+    const g=U*2.6;
+    return {U,W,startX:w/2-W.total/2,cx:w/2,cy:h/2-U*.9,baseY:h/2+U*2.7,g,
+            nodes:playPoly(g,3).filter((_,i)=>i%4===0)};
+  },
+  draw(ctx,w,h,t,st){
+    const {U,cx,cy,g,nodes}=st;
+    ctx.fillStyle='#050A16';ctx.fillRect(0,0,w,h);
+    const rg=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.hypot(w,h)*.6);
+    rg.addColorStop(0,'rgba(24,34,62,.7)');rg.addColorStop(1,'rgba(5,10,22,0)');
+    ctx.fillStyle=rg;ctx.fillRect(0,0,w,h);
+    /* chart arcs — static plate furniture */
+    ctx.strokeStyle='rgba(190,205,245,.07)';ctx.lineWidth=1;
+    for(const r of [g*1.5,g*2.2,g*3.0]){
+      ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.stroke();
+    }
+
+    /* the field */
+    const sf=clamp(t/.30,0,1), tw=1-outCubic(clamp((t-.20)/.62,0,1));
+    for(let i=0;i<64;i++){
+      const x=n2(i,1.7)*w, y=n2(i,4.3)*h;
+      const base=.12+n1(i*5.1)*.45;
+      const a=base*sf*(1+Math.sin(i*2.1+t*9)*.55*tw);
+      const s=Math.max(1,U*.035*(0.5+n1(i*2.3)));
+      ctx.fillStyle=`rgba(226,232,248,${clamp(a,0,1)})`;
+      ctx.fillRect(x,y,s,s);
+    }
+
+    /* plotted nodes */
+    const np=clamp((t-.18)/.30,0,1);
+    ctx.save();ctx.translate(cx,cy);
+    nodes.forEach((p,i)=>{
+      const a=clamp((np-i/nodes.length*.6)/.4,0,1);if(a<=0)return;
+      ctx.fillStyle=`rgba(239,231,214,${a})`;
+      ctx.beginPath();ctx.arc(p[0],p[1],Math.max(1,U*.055),0,7);ctx.fill();
+      ctx.strokeStyle=`rgba(239,231,214,${a*.35})`;ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(p[0],p[1],U*.20,0,7);ctx.stroke();
+    });
+    /* lines close the figure */
+    const lp=clamp((t-.34)/.38,0,1);
+    if(lp>0){
+      const n=nodes.length, upto=outCubic(lp)*n;
+      ctx.strokeStyle='rgba(239,231,214,.62)';ctx.lineWidth=Math.max(1,U*.018);
+      ctx.beginPath();ctx.moveTo(nodes[0][0],nodes[0][1]);
+      for(let i=1;i<=Math.floor(upto);i++){
+        const p=nodes[i%n];ctx.lineTo(p[0],p[1]);
+      }
+      const f=upto-Math.floor(upto), a=nodes[Math.floor(upto)%n],
+            b=nodes[(Math.floor(upto)+1)%n];
+      ctx.lineTo(lerp(a[0],b[0],f),lerp(a[1],b[1],f));
+      ctx.stroke();
+    }
+    /* the figure fills, faintly */
+    const fl=clamp((t-.62)/.28,0,1);
+    if(fl>0){
+      playPath(ctx,g);ctx.fillStyle=`rgba(214,224,255,${fl*.10})`;ctx.fill();
+    }
+    ctx.restore();
+
+    /* plate caption */
+    const wp=clamp((t-.60)/.34,0,1);
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((wp-i*.05)/.5,0,1);if(lt<=0)continue;
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:lt,fill:'#EFE7D6'});
+    }
+    if(wp>.4){
+      const a=(wp-.4)/.6;
+      ctx.strokeStyle=`rgba(239,231,214,${a*.28})`;ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.moveTo(st.startX,st.baseY-st.W.size*1.25);
+      ctx.lineTo(st.startX+st.W.total,st.baseY-st.W.size*1.25);ctx.stroke();
+      label(ctx,'PLATE VII',st.startX,st.baseY+U*.72,U*.28,`rgba(239,231,214,${a*.5})`,.22,'left');
+      label(ctx,'18ʰ42ᵐ +38°',st.startX+st.W.total,st.baseY+U*.72,U*.28,
+        `rgba(239,231,214,${a*.5})`,.22,'right');
+    }
+  }
+},
+
+/* ── 9 · SILK — satin, and a stitched mark ───────────────────────────── */
+{
+  id:'silk',name:'Silk',dur:2900,accent:'#E3C79A',
+  kind:'Textile · violet satin, champagne thread',
+  type:'Pearl caps woven in · stitched emblem',
+  blurb:'A violet satin sheet still moving from being laid down. The name surfaces where the light rolls over the folds, and the mark is stitched in champagne thread, one stitch at a time.',
+  spec:'30 flat bands/frame · fold phase eases to a constant → static field at rest.',
+  init(w,h){const U=unit(w,h);
+    const font=s=>`500 ${s}px "Didot","Bodoni 72",Optima,Georgia,serif`;
+    const W=fitWord(font,U*1.25,.24,1,Math.min(w*.76,U*11));
+    return {U,W,startX:w/2-W.total/2,cx:w/2,cy:h/2-U*1.15,baseY:h/2+U*2.4,
+            g:U*2.0,poly:playPoly(U*2.0,7)};
+  },
+  draw(ctx,w,h,t,st){
+    const {U,cx,cy,g}=st;
+    /* the satin: N flat bands, fold phase easing to a stop */
+    const ease=ioSine(clamp(t/.92,0,1));
+    const phase=ease*Math.PI*1.35, amp=1-ease*.55;
+    const N=30;
+    for(let i=0;i<N;i++){
+      const u=(i+.5)/N;
+      const b=.5+.5*Math.sin(u*Math.PI*5.2+phase+Math.sin(u*7.3+phase*.6)*.75*amp);
+      const tone=mix('#160A26',mix('#4B2A74','#C6A6F2',Math.pow(b,4)),Math.pow(b,.9));
+      ctx.fillStyle=tone;
+      ctx.fillRect(Math.floor(i/N*w),0,Math.ceil(w/N)+1,h);
+    }
+    /* top-to-bottom fall-off, so it reads as cloth not stripes */
+    let gr=ctx.createLinearGradient(0,0,0,h);
+    gr.addColorStop(0,'rgba(6,3,12,.55)');gr.addColorStop(.45,'rgba(6,3,12,0)');
+    gr.addColorStop(1,'rgba(4,2,8,.72)');
+    ctx.fillStyle=gr;ctx.fillRect(0,0,w,h);
+
+    /* stitched mark: dashes revealed along the outline */
+    const sp=clamp((t-.14)/.46,0,1);
+    if(sp>0){
+      ctx.save();ctx.translate(cx,cy);
+      const P=st.poly,n=P.length,upto=Math.floor(outCubic(sp)*n);
+      ctx.lineCap='round';ctx.lineWidth=Math.max(1.4,U*.055);
+      for(let i=0;i<upto;i+=2){
+        const a=P[i],b=P[(i+1)%n];
+        ctx.strokeStyle=i%4===0?'#F3E2BE':'#D8B77E';
+        ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();
+      }
+      /* the sheen inside the emblem once it closes */
+      const fill=clamp((t-.52)/.30,0,1);
+      if(fill>0){
+        playPath(ctx,g*.98);
+        ctx.fillStyle=`rgba(243,226,190,${fill*.13})`;ctx.fill();
+      }
+      ctx.restore();
+    }
+    /* the name surfaces where the light rolls */
+    const wr=clamp((t-.44)/.44,0,1);
+    for(let i=0;i<WORD.length;i++){
+      const x=letterX(st.W,i,st.startX);
+      const lt=clamp((wr-i*.045)/.5,0,1);if(lt<=0)continue;
+      const u=(x+st.W.widths[i]/2)/w;
+      const b=.5+.5*Math.sin(u*Math.PI*5.2+phase+Math.sin(u*7.3+phase*.6)*.75*amp);
+      const c=mix('#B79AD8','#FFF8FF',Math.pow(b,2)*.85+lt*.15);
+      drawLetter(ctx,st.W,i,x,st.baseY,{alpha:lt,fill:c});
+    }
+  }
+},
+
+/* ── 10 · RACK FOCUS — the lens finds it ─────────────────────────────── */
+{
+  id:'rackfocus',name:'Rack Focus',pick:true,dur:2600,accent:'#FFD9A0',
+  kind:'Cinematic · champagne bokeh pulling sharp',
+  type:'Light wide caps · defocus resolving to sharp',
+  blurb:'Opens on a field of out-of-focus champagne lights with nothing to read. The lens racks: every circle collapses to a point on a letter, and the lockup arrives already sharp.',
+  spec:'Bokeh = ring + fill circles, halved on TV · no blur filter anywhere.',
+  init(w,h){const U=unit(w,h);
+    const font=s=>`300 ${s}px "Helvetica Neue",Inter,system-ui,sans-serif`;
+    const W=fitWord(font,U*1.30,.34,1,Math.min(w*.80,U*11.5));
+    const startX=w/2-W.total/2, baseY=h/2+U*2.3;
+    const N=22, dots=[];
+    for(let i=0;i<N;i++){
+      const li=i%WORD.length;
+      dots.push({
+        x0:n2(i,2.1)*w, y0:n2(i,6.7)*h,
+        r0:U*(1.0+n1(i*3.3)*1.7),
+        x1:letterX(W,li,startX)+W.widths[li]/2+(n1(i*9.1)-.5)*U*.5,
+        y1:baseY-W.size*.34+(n1(i*4.7)-.5)*U*.5,
+        d:n1(i*1.9)*.22,
+      });
+    }
+    return {U,W,startX,baseY,cx:w/2,cy:h/2-U*1.25,g:U*2.15,dots};
+  },
+  draw(ctx,w,h,t,st){
+    const {U,cx,cy,g}=st;
+    ctx.fillStyle='#06070A';ctx.fillRect(0,0,w,h);
+    let rg=ctx.createRadialGradient(cx,h*.5,0,cx,h*.5,Math.hypot(w,h)*.6);
+    rg.addColorStop(0,'rgba(38,30,20,.6)');rg.addColorStop(1,'rgba(6,7,10,0)');
+    ctx.fillStyle=rg;ctx.fillRect(0,0,w,h);
+
+    const rack=outCubic(clamp((t-.30)/.50,0,1));
+    for(const d of st.dots){
+      const app=clamp((t-d.d)/.26,0,1);if(app<=0)continue;
+      const k=clamp((rack-d.d*.3)/.7,0,1);
+      const x=lerp(d.x0,d.x1,ioCubic(k)), y=lerp(d.y0,d.y1,ioCubic(k));
+      const r=lerp(d.r0,Math.max(1,U*.045),outCubic(k));
+      const soft=1-k;
+      ctx.fillStyle=`rgba(255,217,160,${app*(.055+.5*Math.pow(k,3))})`;
+      ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
+      if(soft>.05){                       /* the bokeh rim — what sells defocus */
+        ctx.strokeStyle=`rgba(255,232,196,${app*.16*soft})`;
+        ctx.lineWidth=Math.max(1,r*.10);
+        ctx.beginPath();ctx.arc(x,y,r*.94,0,7);ctx.stroke();
+      }
+    }
+
+    /* the mark snaps in at focus */
+    const mk=clamp((t-.44)/.26,0,1);
+    if(mk>0){
+      const e=outBack(mk,1.1);
+      ctx.save();ctx.translate(cx,cy);ctx.globalAlpha=clamp(mk*1.6,0,1);
+      const s=g*lerp(1.10,1,clamp(e,0,1));
+      const gr=ctx.createLinearGradient(-s/2,-s/2,s/2,s/2);
+      gr.addColorStop(0,'#FFF1D8');gr.addColorStop(1,'#E0A85B');
+      playPath(ctx,s);ctx.fillStyle=gr;ctx.fill();
+      ctx.restore();
+      const bl=Math.sin(clamp((t-.44)/.34,0,1)*Math.PI);
+      if(bl>.01){
+        rg=ctx.createRadialGradient(cx,cy,0,cx,cy,g*2.6);
+        rg.addColorStop(0,`rgba(255,225,175,${bl*.28})`);
+        rg.addColorStop(1,'rgba(255,225,175,0)');
+        ctx.fillStyle=rg;ctx.fillRect(cx-g*3,cy-g*3,g*6,g*6);
+      }
+    }
+    /* the name, arriving already sharp */
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-(.58+i*.022))/.24,0,1);if(lt<=0)continue;
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:lt,fill:'#F6EBDA',scale:lerp(1.05,1,outCubic(lt))});
+    }
+  }
+},
+];
+
+/* ═════════════════════════ runner ═════════════════════════ */
+const RATIOS=[['16:9','16/9',16/9],['4:3','4/3',4/3],['21:9','21/9',21/9],
+              ['9:16','9/16',9/16],['1:1','1/1',1]];
+const frame=document.getElementById('frame');
+const stage=document.getElementById('stage');
+const sctx=stage.getContext('2d');
+let active=IDENTS[0], runStart=0, runState=null, raf=0;
+
+function fit(canvas,forceRatio){
+  const dpr=Math.min(devicePixelRatio||1,2);
+  const r=canvas.getBoundingClientRect();
+  if(!r.width)return null;
+  const W=Math.round(r.width*dpr);
+  const H=Math.round((forceRatio?r.width/forceRatio:r.height)*dpr);
+  if(!H)return null;
+  if(canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H}
+  return {w:W,h:H};
+}
+function play(ident){
+  active=ident;
+  document.getElementById('stageName').textContent=ident.name;
+  document.getElementById('stageType').textContent=ident.type;
+  document.getElementById('stageSwatch').style.background=ident.accent;
+  const tierEl=document.getElementById('stageTier');
+  tierEl.textContent=ident.pick?'Studio pick':'New';
+  tierEl.className='tier'+(ident.pick?' pick':'');
+  for(const b of document.querySelectorAll('.card'))
+    b.setAttribute('aria-pressed',b.dataset.id===ident.id?'true':'false');
+  restart();
+}
+function restart(){
+  cancelAnimationFrame(raf);
+  const size=fit(stage);if(!size)return;
+  runState=active.init(size.w,size.h);
+  runStart=performance.now();
+  if(REDUCED){
+    active.draw(sctx,size.w,size.h,1,runState);
+    document.getElementById('stageHint').textContent='reduced motion — end state';
+    return;
+  }
+  const HOLD=1500;
+  const tick=now=>{
+    const el=now-runStart;
+    sctx.clearRect(0,0,size.w,size.h);
+    active.draw(sctx,size.w,size.h,clamp(el/active.dur,0,1),runState);
+    if(el>=active.dur+HOLD){runStart=performance.now();runState=active.init(size.w,size.h)}
+    raf=requestAnimationFrame(tick);
+  };
+  raf=requestAnimationFrame(tick);
+}
+stage.addEventListener('click',restart);
+addEventListener('resize',()=>{restart();sizeCards()});
+
+const ratios=document.getElementById('ratios');
+RATIOS.forEach(([lbl,css,num],i)=>{
+  const b=document.createElement('button');
+  b.textContent=lbl;b.setAttribute('aria-pressed',i===0?'true':'false');
+  b.addEventListener('click',()=>{
+    frame.style.setProperty('--ar',css);
+    frame.style.setProperty('--arn',num);
+    for(const o of ratios.querySelectorAll('button'))
+      o.setAttribute('aria-pressed',o===b?'true':'false');
+    requestAnimationFrame(restart);
+  });
+  ratios.appendChild(b);
+});
+
+/* cards: all ten animating, staggered, only while on screen */
+const rail=document.getElementById('rail');
+const cards=[];
+for(const c of IDENTS){
+  const btn=document.createElement('button');
+  btn.className='card';btn.dataset.id=c.id;
+  btn.setAttribute('aria-pressed',c===active?'true':'false');
+  btn.innerHTML=`<canvas></canvas><div class="meta">
+    <div class="row"><span class="name">${c.name}</span>
+      <span class="tier${c.pick?' pick':''}">${c.pick?'Studio pick':'New'}</span></div>
+    <div class="kind">${c.kind}</div>
+    <p>${c.blurb}</p><div class="spec">${c.spec}</div></div>`;
+  btn.addEventListener('click',()=>play(c));
+  rail.appendChild(btn);
+  const cv=btn.querySelector('canvas');
+  cards.push({c,cv,ctx:cv.getContext('2d'),size:null,st:null,
+              start:performance.now()-c.dur*(0.14*cards.length),vis:true});
+}
+function sizeCards(){
+  for(const k of cards){
+    const s=fit(k.cv,16/9);
+    if(s){k.size=s;k.st=k.c.init(s.w,s.h)}
+  }
+}
+requestAnimationFrame(()=>{
+  sizeCards();
+  if(REDUCED){
+    for(const k of cards) if(k.size) k.c.draw(k.ctx,k.size.w,k.size.h,1,k.st);
+  }else{
+    const HOLD=1600;
+    const loop=now=>{
+      for(const k of cards){
+        if(!k.size||!k.vis)continue;
+        const el=now-k.start;
+        k.ctx.clearRect(0,0,k.size.w,k.size.h);
+        k.c.draw(k.ctx,k.size.w,k.size.h,clamp(el/k.c.dur,0,1),k.st);
+        if(el>=k.c.dur+HOLD){k.start=now;k.st=k.c.init(k.size.w,k.size.h)}
+      }
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+    if('IntersectionObserver' in window){
+      const io=new IntersectionObserver(es=>{
+        for(const e of es){
+          const k=cards.find(x=>x.cv===e.target);
+          if(k)k.vis=e.isIntersecting;
+        }
+      },{rootMargin:'120px'});
+      for(const k of cards)io.observe(k.cv);
+    }
+  }
+});
+play(active);
+</script>

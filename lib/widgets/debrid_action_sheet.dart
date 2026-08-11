@@ -1,9 +1,8 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../utils/platform_util.dart';
+import '../theme/app_surface.dart';
+import '../theme/widgets/glass_surface.dart';
 import '../utils/tv_keys.dart';
 
 /// One action row in [showDebridActionSheet].
@@ -87,16 +86,6 @@ Future<void> showDebridActionSheet(
   );
 }
 
-/// Glass blur behind the sheet on phone/desktop; a no-op on TV where the
-/// backdrop blur's per-frame cost makes DPAD focus animations stutter.
-Widget _maybeBlur({required bool isTv, required Widget child}) {
-  if (isTv) return child;
-  return BackdropFilter(
-    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-    child: child,
-  );
-}
-
 class _NeonActionSheet extends StatelessWidget {
   final String providerLabel;
   final String torrentName;
@@ -118,12 +107,6 @@ class _NeonActionSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // TV: skip the glass BackdropFilter. A live 18px backdrop blur is
-    // re-evaluated every frame anything above it animates — and every DPAD
-    // move runs a ~120ms focus animation, so item-to-item navigation dragged
-    // the blur along and felt sluggish on weak TV GPUs. The panel colour is
-    // 95% opaque anyway, so an opaque panel reads near-identically.
-    final isTv = PlatformUtil.isAndroidTvCached;
     // First three actions are the primaries (Play / Download / Playlist —
     // the order _showChooser builds); everything else goes to the quiet list.
     final pillCount = actions.length >= 4 ? 3 : actions.length;
@@ -144,8 +127,8 @@ class _NeonActionSheet extends StatelessWidget {
 
     return FocusTraversalGroup(
       policy: ReadingOrderTraversalPolicy(),
-      // The drop shadow sits OUTSIDE the ClipRRect — inside it the clip would
-      // swallow it and the sheet would sit flat on the scrim.
+      // The drop shadow sits OUTSIDE the clip GlassSurface applies — inside it
+      // the clip would swallow it and the sheet would sit flat on the scrim.
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: radius,
@@ -159,159 +142,161 @@ class _NeonActionSheet extends StatelessWidget {
             ),
           ],
         ),
-        child: ClipRRect(
+        child: GlassSurface(
+          // The same component is a bottom sheet in thumb reach on phones and
+          // a floating card on desktop and TV, and it should follow whichever
+          // family the theme is describing. Both are capped to fill-or-glass,
+          // so this names the surface rather than changing it.
+          family: asBottomSheet ? SurfaceFamily.sheet : SurfaceFamily.dialog,
           borderRadius: radius,
-          child: _maybeBlur(
-            isTv: isTv,
-            child: Container(
-              decoration: BoxDecoration(
-                // Fully opaque on TV (no backdrop to see through); 95% glass
-                // over the blur elsewhere.
-                color: isTv ? const Color(0xFF12141D) : const Color(0xF212141D),
-                borderRadius: radius,
-                border:
-                    Border.all(color: Colors.white.withValues(alpha: 0.10)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (asBottomSheet)
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        margin: const EdgeInsets.only(top: 10, bottom: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.22),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                    ),
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      18,
-                      asBottomSheet ? 8 : 18,
-                      asBottomSheet ? 18 : 12,
-                      14,
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: gradient,
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            providerIcon,
-                            color: Colors.white,
-                            size: 21,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                providerLabel.toUpperCase(),
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.55),
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 1.6,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                torrentName,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 13.5,
-                                  height: 1.3,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                subtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.5),
-                                  fontSize: 11.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // The sheet dismisses by swipe/back; the floating card
-                        // needs an explicit close affordance.
-                        if (!asBottomSheet) _NeonCloseButton(onTap: close),
-                      ],
+          sigma: 18,
+          // The panel's own ink and hairline, so a theme that resolves this
+          // family to `fill` — every theme shipped today — paints the opaque
+          // plate TV already got rather than the theme's raised surface.
+          // Opaque where there is no blur (TV, and any look that chose a
+          // plain fill); 95% glass over a real blur elsewhere. Both halves of
+          // the ternary this site shipped, kept as both.
+          tint: const Color(0xFF12141D),
+          blurTint: const Color(0xF212141D),
+          border: Colors.white.withValues(alpha: 0.10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (asBottomSheet)
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(top: 10, bottom: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(999),
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                    child: Row(
-                      children: [
-                        for (var i = 0; i < pills.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 10),
-                          Expanded(
-                            child: _NeonPill(
-                              item: pills[i],
-                              hero: i == 0,
-                              autofocus: i == firstEnabledPill,
-                              onActivate: () {
-                                close();
-                                pills[i].onTap();
-                              },
+                ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  18,
+                  asBottomSheet ? 8 : 18,
+                  asBottomSheet ? 18 : 12,
+                  14,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: gradient,
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        providerIcon,
+                        color: Colors.white,
+                        size: 21,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            providerLabel.toUpperCase(),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.55),
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.6,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            torrentName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              height: 1.3,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.5),
+                              fontSize: 11.5,
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                    // The sheet dismisses by swipe/back; the floating card
+                    // needs an explicit close affordance.
+                    if (!asBottomSheet) _NeonCloseButton(onTap: close),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Row(
+                  children: [
+                    for (var i = 0; i < pills.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 10),
+                      Expanded(
+                        child: _NeonPill(
+                          item: pills[i],
+                          hero: i == 0,
+                          autofocus: i == firstEnabledPill,
+                          onActivate: () {
+                            close();
+                            pills[i].onTap();
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (rest.isNotEmpty)
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < rest.length; i++)
+                          _NeonListRow(
+                            item: rest[i],
+                            autofocus: i == firstEnabledRest,
+                            onActivate: () {
+                              close();
+                              rest[i].onTap();
+                            },
+                          ),
                       ],
                     ),
                   ),
-                  if (rest.isNotEmpty)
-                    Flexible(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (var i = 0; i < rest.length; i++)
-                              _NeonListRow(
-                                item: rest[i],
-                                autofocus: i == firstEnabledRest,
-                                onActivate: () {
-                                  close();
-                                  rest[i].onTap();
-                                },
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  // Bottom safe-area: showModalBottomSheet's useSafeArea only
-                  // covers the top/sides, so pad past gesture-nav bars here.
-                  SizedBox(
-                    height: asBottomSheet
-                        ? 14 + MediaQuery.paddingOf(context).bottom
-                        : 12,
-                  ),
-                ],
+                ),
+              // Bottom safe-area: showModalBottomSheet's useSafeArea only
+              // covers the top/sides, so pad past gesture-nav bars here.
+              SizedBox(
+                height: asBottomSheet
+                    ? 14 + MediaQuery.paddingOf(context).bottom
+                    : 12,
               ),
-            ),
+            ],
           ),
         ),
       ),

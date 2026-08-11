@@ -49,6 +49,7 @@ class MainActivity : FlutterActivity() {
 	// listening state is drawn inside our own keyboard panel.
 	private val VOICE_CHANNEL = "debrify/tv_voice"
 	private val VOICE_EVENTS = "debrify/tv_voice_events"
+	private val PLAYER_DIAGNOSTICS_CHANNEL = "debrify/player_diagnostics"
 	private val recordAudioPermissionRequestCode = 7404
 	private var pendingVoicePermissionResult: MethodChannel.Result? = null
 	private var speechRecognizer: android.speech.SpeechRecognizer? = null
@@ -742,6 +743,19 @@ class MainActivity : FlutterActivity() {
             displayFeaturesBounds: IntArray,
             displayFeaturesType: IntArray,
             displayFeaturesState: IntArray,
+            // Added by the engine in Flutter 3.44. Same physical-pixel space
+            // as the width/height/insets above, so they scale with them —
+            // leaving them raw would hand the engine constraints and corner
+            // radii from the unscaled surface. Their defaults are 0 (not an
+            // unbounded sentinel), so scaling is safe arithmetic.
+            minWidth: Int,
+            maxWidth: Int,
+            minHeight: Int,
+            maxHeight: Int,
+            physicalDisplayCornerRadiusTopLeft: Int,
+            physicalDisplayCornerRadiusTopRight: Int,
+            physicalDisplayCornerRadiusBottomRight: Int,
+            physicalDisplayCornerRadiusBottomLeft: Int,
         ) {
             super.setViewportMetrics(
                 devicePixelRatio * dprScale,
@@ -763,6 +777,14 @@ class MainActivity : FlutterActivity() {
                 IntArray(displayFeaturesBounds.size) { i -> s(displayFeaturesBounds[i]) },
                 displayFeaturesType,
                 displayFeaturesState,
+                s(minWidth),
+                s(maxWidth),
+                s(minHeight),
+                s(maxHeight),
+                s(physicalDisplayCornerRadiusTopLeft),
+                s(physicalDisplayCornerRadiusTopRight),
+                s(physicalDisplayCornerRadiusBottomRight),
+                s(physicalDisplayCornerRadiusBottomLeft),
             )
         }
     }
@@ -1117,6 +1139,25 @@ class MainActivity : FlutterActivity() {
 
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
 		super.configureFlutterEngine(flutterEngine)
+		MethodChannel(
+			flutterEngine.dartExecutor.binaryMessenger,
+			PLAYER_DIAGNOSTICS_CHANNEL,
+		).setMethodCallHandler { call, result ->
+			if (call.method != "logDecoder") {
+				result.notImplemented()
+				return@setMethodCallHandler
+			}
+			val message = call.argument<String>("message")
+				?.replace('\n', ' ')
+				?.replace('\r', ' ')
+				?.take(2_048)
+			if (message.isNullOrBlank()) {
+				result.error("bad_args", "message is required", null)
+				return@setMethodCallHandler
+			}
+			android.util.Log.i("DEBRIFY_PLAYER_DECODER", message)
+			result.success(null)
+		}
 		// Lets system audio-effect apps (Wavelet, OEM equalizers) attach to the
 		// phone player's audio session — see AudioEffectSession.
 		com.debrify.app.audio.AudioEffectSession.register(flutterEngine, this)

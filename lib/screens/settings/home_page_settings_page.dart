@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import '../../models/stremio_addon.dart';
+import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
+import '../../services/trakt/trakt_list_source.dart';
+import '../../services/trakt/trakt_service.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
 import 'home_sections_filter_page.dart';
+import 'spotlight_hero_source_page.dart';
 import 'tv_home_style_page.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -31,14 +35,38 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   int _ambientTrailerVolume = 70;
   bool _tvTrailerUnderlayEnabled = true;
   String _tvHomeStyle = 'canvas';
+  HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.random, ids: []);
   List<StremioAddon> _addons = [];
+
+  /// Whether the RESOLVED home layout is Spotlight — the only layout with the
+  /// hero reel the Hero Source row configures. Same resolution as the Home
+  /// Layout tile's caption: off-TV a stored stage style renders as Classic.
+  bool get _spotlightLayoutActive =>
+      (PlatformUtil.isTelevision
+          ? _tvHomeStyle
+          : effectiveOffTvHomeStyle(_tvHomeStyle)) ==
+      'spotlight';
+
+  /// Open the Spotlight hero-source picker, then re-read so the row caption
+  /// matches what was chosen (the picker itself live-applies each change).
+  Future<void> _openSpotlightHeroSource() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SpotlightHeroSourcePage(addons: _addons),
+      ),
+    );
+    if (!mounted) return;
+    final heroSource = await StorageService.getHomeHeroSource();
+    if (!mounted) return;
+    setState(() => _heroSource = heroSource);
+  }
 
   /// TV home layout row (this page owns it now): open the picker, then
   /// re-read so the row caption matches what was chosen.
   Future<void> _openTvHomeStyle() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const TvHomeStylePage()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const TvHomeStylePage()));
     if (!mounted) return;
     final style = await StorageService.getTvHomeStyle();
     if (!mounted) return;
@@ -51,9 +79,47 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   /// an OR — a stale stored `true` for the wrong platform can't leak through.
   /// The cached TV read is safe here: build() is gated on [_loading], and
   /// clearing it awaits getters that themselves await the TV probe.
-  bool get _ambientTrailerEnabled => PlatformUtil.isAndroidTvCached
-      ? _heroTrailerEnabled
-      : _trailerAutoplayEnabled;
+  bool get _ambientTrailerEnabled =>
+      _heroTrailerEnabled || _trailerAutoplayEnabled;
+
+  /// The surface these controls READ from. Every platform has both surfaces
+  /// now (the Spotlight home hero runs off-TV too) and one pair of controls
+  /// governs both — writes go to both keys ([_setAmbientAudio]). READS stay
+  /// per-platform for continuity: a phone's stored values live under the
+  /// detail keys (the only surface it had), a TV's under homeHero. The pairs
+  /// converge on the first write.
+  static AmbientTrailerSurface get _ambientSurface =>
+      PlatformUtil.isTelevision
+          ? AmbientTrailerSurface.homeHero
+          : AmbientTrailerSurface.detail;
+
+  /// Writes the sound preference to every ambient surface this platform has.
+  ///
+  /// The keys stay per-surface — a phone's stored value must never govern a TV
+  /// box's hero — but on a television one control deliberately governs both,
+  /// rather than the detail page silently inheriting the hero's preference,
+  /// which is what a platform-keyed lookup would have done.
+  Future<void> _setAmbientAudio(bool value) async {
+    await StorageService.setAmbientTrailerAudioEnabled(
+      AmbientTrailerSurface.detail,
+      value,
+    );
+    await StorageService.setAmbientTrailerAudioEnabled(
+      AmbientTrailerSurface.homeHero,
+      value,
+    );
+  }
+
+  Future<void> _setAmbientVolume(int value) async {
+    await StorageService.setAmbientTrailerVolume(
+      AmbientTrailerSurface.detail,
+      value,
+    );
+    await StorageService.setAmbientTrailerVolume(
+      AmbientTrailerSurface.homeHero,
+      value,
+    );
+  }
 
   @override
   void initState() {
@@ -81,13 +147,24 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
           await StorageService.getDetailTrailerAutoplayEnabled();
       final heroTrailerEnabled =
           await StorageService.getHomeHeroTrailerEnabled();
+      // One pair of controls governs every ambient surface this platform has,
+      // so the two stored values must not be allowed to diverge — a TV that had
+      // sound off for its hero would otherwise show "off" while the newly
+      // enabled detail trailer played at its own default of on. Read the shown
+      // surface, then write it through to the other.
       final ambientTrailerAudioEnabled =
-          await StorageService.getAmbientTrailerAudioEnabled();
-      final ambientTrailerVolume =
-          await StorageService.getAmbientTrailerVolume();
+          await StorageService.getAmbientTrailerAudioEnabled(_ambientSurface);
+      final ambientTrailerVolume = await StorageService.getAmbientTrailerVolume(
+        _ambientSurface,
+      );
+      if (PlatformUtil.isTelevision) {
+        await _setAmbientAudio(ambientTrailerAudioEnabled);
+        await _setAmbientVolume(ambientTrailerVolume);
+      }
       final tvTrailerUnderlayEnabled =
           await StorageService.getTvTrailerUnderlayEnabled();
       final tvHomeStyle = await StorageService.getTvHomeStyle();
+      final heroSource = await StorageService.getHomeHeroSource();
 
       // Only the two views that the current Home screen can render are valid.
       // Migrate the former All, Addon, Trakt, and other retired choices to
@@ -117,10 +194,11 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _ambientTrailerVolume = ambientTrailerVolume;
         _tvTrailerUnderlayEnabled = tvTrailerUnderlayEnabled;
         _tvHomeStyle = tvHomeStyle;
+        _heroSource = heroSource;
         _loading = false;
       });
       // TV: land DPAD focus on the first row so users aren't stranded.
-      if (PlatformUtil.isAndroidTvCached) {
+      if (PlatformUtil.isTelevision) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           // Don't yank focus if it already landed on a real node (only the
@@ -174,26 +252,60 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
     }
   }
 
+  /// True while the Home Rows manager's inputs are being gathered (the Trakt
+  /// user-lists fetch can take a few seconds) — renders a busy subtitle on
+  /// the tile and drops re-taps.
+  bool _gatheringHomeRows = false;
+
   /// Open the two-pane Home Rows manager (which rows/catalogs appear on the
-  /// Home board). Feeds it the same browsable catalog tree the board uses;
-  /// notifies the board to rebuild if anything changed.
+  /// Home board). Feeds it the same browsable catalog tree the board uses,
+  /// plus the opt-in extras and their dynamic leaf data — the user's Trakt
+  /// custom/liked lists (authenticated only, bounded, tolerated to fail:
+  /// enabled entries then show as unavailable leaves) and the IPTV lists.
+  /// Notifies the board to rebuild if anything changed.
   Future<void> _openHomeRowsManager() async {
-    final tree = [
-      for (final a in _addons)
-        (addon: a, catalogs: a.catalogs.where((c) => c.isBrowsable).toList()),
-    ].where((e) => e.catalogs.isNotEmpty).toList();
-    final disabled = await StorageService.getHomeDisabledSections();
-    if (!mounted) return;
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => HomeSectionsFilterPage(
-          catalogTree: tree,
-          disabled: Set.of(disabled),
-          isTelevision: PlatformUtil.isAndroidTvCached,
+    if (_gatheringHomeRows) return;
+    setState(() => _gatheringHomeRows = true);
+    try {
+      final tree = [
+        for (final a in _addons)
+          (addon: a, catalogs: a.catalogs.where((c) => c.isBrowsable).toList()),
+      ].where((e) => e.catalogs.isNotEmpty).toList();
+      final disabled = await StorageService.getHomeDisabledSections();
+      final extras = await StorageService.getHomeExtraRows();
+      var iptvLists = const <IptvListMeta>[];
+      try {
+        iptvLists = await StorageService.getIptvLists();
+      } catch (_) {
+        // Enabled iptvlist: entries surface as unavailable leaves.
+      }
+      var traktUserLists = const <TraktListChoice>[];
+      try {
+        if (await TraktService.instance.isAuthenticated()) {
+          traktUserLists = await TraktListSource.instance
+              .loadUserLists()
+              .timeout(const Duration(seconds: 5), onTimeout: () => const []);
+        }
+      } catch (_) {
+        // Same: enabled custom/liked entries become unavailable leaves.
+      }
+      if (!mounted) return;
+      final changed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => HomeSectionsFilterPage(
+            catalogTree: tree,
+            disabled: Set.of(disabled),
+            extraRows: extras,
+            traktUserLists: traktUserLists,
+            iptvLists: iptvLists,
+            isTelevision: PlatformUtil.isTelevision,
+          ),
         ),
-      ),
-    );
-    if (changed == true) MainPageBridge.notifyHomeSettingsChanged();
+      );
+      if (changed == true) MainPageBridge.notifyHomeSettingsChanged();
+    } finally {
+      if (mounted) setState(() => _gatheringHomeRows = false);
+    }
   }
 
   @override
@@ -227,27 +339,55 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 SettingsSection(
                   title: '',
                   children: [
-                    if (PlatformUtil.isAndroidTvCached)
-                      SettingsTile.spec(
-                        SettingsRows.tvHomeStyle,
-                        subtitle: tvHomeStyleLabel(_tvHomeStyle),
-                        onTap: _openTvHomeStyle,
-                        focusNode: _firstTileFocusNode,
+                    // Unconditional now: phones and desktop choose between
+                    // Classic and Spotlight (the picker narrows its own list
+                    // off-TV), and gating on isAndroidTvCached silently hid
+                    // the row on Apple TV. Off-TV the caption shows the
+                    // RESOLVED style — a stored 'canvas' reads as Classic.
+                    SettingsTile.spec(
+                      SettingsRows.tvHomeStyle,
+                      subtitle: tvHomeStyleLabel(
+                        PlatformUtil.isTelevision
+                            ? _tvHomeStyle
+                            : effectiveOffTvHomeStyle(_tvHomeStyle),
                       ),
+                      onTap: _openTvHomeStyle,
+                      // Home Layout is now always the first tile, so it owns
+                      // the entry focus node on every platform — the old
+                      // conditional handoff to Home Rows is gone with the
+                      // condition.
+                      focusNode: _firstTileFocusNode,
+                    ),
                     // Home Rows manager entry — hide/show individual rows.
                     // SettingsTile (not bare ListTile) so DPAD focus shows.
                     SettingsTile(
                       icon: Icons.dashboard_customize_rounded,
                       title: 'Home Rows',
-                      subtitle: 'Choose which rows appear on Home',
+                      subtitle: _gatheringHomeRows
+                          ? 'Loading your lists…'
+                          : 'Choose which rows appear on Home',
                       onTap: _openHomeRowsManager,
-                      focusNode: PlatformUtil.isAndroidTvCached
-                          ? null
-                          : _firstTileFocusNode,
+                    ),
+                    // Which catalog feeds the Spotlight layout's hero reel.
+                    // Always shown, but greyed out under any other layout —
+                    // hiding it would make the pref undiscoverable, while a
+                    // live row would invite configuring something invisible.
+                    // The Home Layout tile above re-reads the style on
+                    // return, so switching to Spotlight lights this row up
+                    // in place.
+                    SettingsTile(
+                      icon: Icons.slideshow_rounded,
+                      title: 'Hero Source',
+                      subtitle: _spotlightLayoutActive
+                          ? spotlightHeroSourceLabel(_heroSource)
+                          : 'Only used by the Spotlight home layout',
+                      tag: 'SPOTLIGHT',
+                      enabled: _spotlightLayoutActive,
+                      onTap: _openSpotlightHeroSource,
                     ),
                   ],
                 ),
-                if (!PlatformUtil.isAndroidTvCached) ...[
+                if (!PlatformUtil.isTelevision) ...[
                   const SizedBox(height: 16),
 
                   // TV has separate Home and Search tabs, so a Home default
@@ -332,69 +472,79 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Ambient trailers: exactly ONE living surface per platform —
-                // the Home hero spotlight on TV, the detail-page backdrop
-                // everywhere else — so only that platform's toggle is offered
-                // (the other is hard-off in StorageService, not merely hidden).
-                // The sound switch + volume below govern whichever one it is.
+                // Ambient trailers. A television now has BOTH surfaces — the
+                // Home hero spotlight and the Showcase detail page — so both
+                // toggles are offered there; off-TV there is no hero, so only
+                // the detail one appears. What used to make "one per platform"
+                // necessary was the process's single video output, and that is
+                // now enforced directly (VideoOutputLease) rather than by
+                // arranging for only one surface to exist.
+                //
+                // The sound switch + volume below govern every surface this
+                // platform has — one control, written to both keys.
                 SettingsSection(
                   title: '',
                   children: [
-                    if (PlatformUtil.isAndroidTvCached)
-                      SettingsToggleTile(
-                        icon: Icons.smart_display_rounded,
-                        title: 'Trailer on Home Spotlight',
-                        subtitle:
-                            'When you rest on a title, its trailer plays in '
-                            'the hero at the top of Home and in Discover.',
-                        subtitleMaxLines: 2,
-                        value: _heroTrailerEnabled,
-                        onChanged: (value) async {
-                          try {
-                            await StorageService.setHomeHeroTrailerEnabled(
-                              value,
+                    // Every platform now: the Spotlight home layout renders
+                    // its hero off-TV too. Desktop defaults on, phones and
+                    // tablets opt in here (battery, cellular).
+                    SettingsToggleTile(
+                      icon: Icons.smart_display_rounded,
+                      title: 'Trailer on Home Spotlight',
+                      subtitle: PlatformUtil.isTelevision
+                          ? 'When you rest on a title, its trailer plays in '
+                                'the hero at the top of Home and in Discover.'
+                          : 'The hero at the top of Home plays the current '
+                                'title\'s trailer (Spotlight layout).',
+                      subtitleMaxLines: 2,
+                      value: _heroTrailerEnabled,
+                      onChanged: (value) async {
+                        try {
+                          await StorageService.setHomeHeroTrailerEnabled(value);
+                          if (!mounted) return;
+                          setState(() => _heroTrailerEnabled = value);
+                          // Off-TV Home survives under this pushed route —
+                          // tell it, or the toggle does nothing until the
+                          // tab is recreated.
+                          MainPageBridge.notifyHomeSettingsChanged();
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to save setting: $e'),
+                              ),
                             );
-                            if (!mounted) return;
-                            setState(() => _heroTrailerEnabled = value);
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Failed to save setting: $e'),
-                                ),
-                              );
-                            }
                           }
-                        },
-                      )
-                    else
-                      SettingsToggleTile(
-                        icon: Icons.movie_filter_rounded,
-                        title: 'Trailer on Detail Page',
-                        subtitle:
-                            'Play a trailer behind the movie/series detail '
-                            'page. Falls back to the poster when off or '
-                            'unavailable.',
-                        subtitleMaxLines: 2,
-                        value: _trailerAutoplayEnabled,
-                        onChanged: (value) async {
-                          try {
-                            await StorageService.setDetailTrailerAutoplayEnabled(
-                              value,
+                        }
+                      },
+                    ),
+                    SettingsToggleTile(
+                      icon: Icons.movie_filter_rounded,
+                      title: 'Trailer on Detail Page',
+                      subtitle:
+                          'Play a trailer behind the movie/series detail '
+                          'page. Falls back to the poster when off or '
+                          'unavailable.',
+                      subtitleMaxLines: 2,
+                      value: _trailerAutoplayEnabled,
+                      onChanged: (value) async {
+                        try {
+                          await StorageService.setDetailTrailerAutoplayEnabled(
+                            value,
+                          );
+                          if (!mounted) return;
+                          setState(() => _trailerAutoplayEnabled = value);
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to save setting: $e'),
+                              ),
                             );
-                            if (!mounted) return;
-                            setState(() => _trailerAutoplayEnabled = value);
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Failed to save setting: $e'),
-                                ),
-                              );
-                            }
                           }
-                        },
-                      ),
+                        }
+                      },
+                    ),
                     if (_ambientTrailerEnabled) ...[
                       SettingsToggleTile(
                         icon: Icons.volume_up_rounded,
@@ -402,17 +552,16 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                         // Name the surface rather than say "the trailer" — the
                         // IPTV guide's live channel preview is a feed, not a
                         // trailer, and deliberately ignores this.
-                        subtitle: PlatformUtil.isAndroidTvCached
+                        subtitle: PlatformUtil.isTelevision
                             ? 'Off plays the spotlight trailer silently.'
                             : 'Off plays the detail-page trailer silently.',
                         value: _ambientTrailerAudioEnabled,
                         onChanged: (value) async {
                           try {
-                            await StorageService.setAmbientTrailerAudioEnabled(
-                              value,
-                            );
+                            await _setAmbientAudio(value);
                             if (!mounted) return;
                             setState(() => _ambientTrailerAudioEnabled = value);
+                            MainPageBridge.notifyHomeSettingsChanged();
                           } catch (e) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -443,11 +592,10 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                             onChanged: (value) async {
                               if (value == null) return;
                               try {
-                                await StorageService.setAmbientTrailerVolume(
-                                  value,
-                                );
+                                await _setAmbientVolume(value);
                                 if (!mounted) return;
                                 setState(() => _ambientTrailerVolume = value);
+                                MainPageBridge.notifyHomeSettingsChanged();
                               } catch (e) {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -467,7 +615,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                     // Underlay (default) = native hardware plane behind a
                     // translucent Flutter surface, the smooth path; off =
                     // legacy Flutter-Texture compositing, the escape hatch.
-                    if (PlatformUtil.isAndroidTvCached)
+                    if (PlatformUtil.isTelevision)
                       SettingsToggleTile(
                         icon: Icons.layers_rounded,
                         title: 'Native Trailer Surface',
@@ -497,7 +645,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                       ),
                   ],
                 ),
-                if (!PlatformUtil.isAndroidTvCached) ...[
+                if (!PlatformUtil.isTelevision) ...[
                   const SizedBox(height: 16),
                   SettingsInfoBanner(
                     text: _infoTextForSourceType(_selectedSourceType),

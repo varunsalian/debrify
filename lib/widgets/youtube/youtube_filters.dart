@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_theme_scope.dart';
 import '../see_all/stremio_dropdown.dart';
 
 /// Selectable max playback resolutions for YouTube (pixel height). 1440p/2160p
@@ -35,6 +36,7 @@ class YoutubeFiltersBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Align(
@@ -65,13 +67,15 @@ class YoutubeFiltersBar extends StatelessWidget {
                   Icon(
                     Icons.info_outline,
                     size: 13,
-                    color: Colors.white.withValues(alpha: 0.4),
+                    // Off-rung: the faint rung struck up to its shipped 0.4.
+                    color: app.fade(app.youtube.textFaint, 0.4 / 0.35),
                   ),
                   const SizedBox(width: 4),
                   Text(
                     "Plays the next best if a video doesn't have this quality",
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.45),
+                      // Off-rung: the dim rung struck down to its shipped 0.45.
+                      color: app.fade(app.youtube.textDim, 0.9),
                       fontSize: 11.5,
                       fontWeight: FontWeight.w500,
                     ),
@@ -84,7 +88,7 @@ class YoutubeFiltersBar extends StatelessWidget {
                   '$resultCount video${resultCount != 1 ? 's' : ''}'
                   '${isTelevision ? ' • hold OK to download' : ' • long press to download'}',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: app.youtube.textDim,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w500,
                   ),

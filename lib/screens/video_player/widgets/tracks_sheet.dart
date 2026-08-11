@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'tv_tappable.dart';
 import 'package:media_kit/media_kit.dart' as mk;
 import '../../../models/stremio_subtitle.dart';
 import '../../../services/stremio_subtitle_service.dart';
@@ -64,6 +66,12 @@ class TracksSheet {
     // change, not a re-selection of the current subtitle, not a failed load).
     // Used to reset the per-subtitle sync offset.
     VoidCallback? onSubtitleTrackChanged,
+    // Android bitstream passthrough (AUDIO_FIDELITY_PLAN.md): null hides
+    // the toggle entirely (non-Android platforms); non-null renders it at
+    // the top of the Audio tab and the callback applies it LIVE (the
+    // caller owns properties + audio-chain reinit + persistence).
+    bool? audioPassthrough,
+    Future<void> Function(bool enabled)? onAudioPassthroughChanged,
   }) async {
     final tracks = player.state.tracks;
     final audios = tracks.audio
@@ -78,6 +86,7 @@ class TracksSheet {
     String selectedSub = selectedStremioSubtitleId != null
         ? 'stremio:$selectedStremioSubtitleId'
         : player.state.track.subtitle.id;
+    bool? passthroughState = audioPassthrough;
 
     SubtitleSettingsData subtitleStyle = await SubtitleSettingsService.instance
         .loadAll();
@@ -346,6 +355,16 @@ class TracksSheet {
                         setModalState: setModalState,
                         onAudioChanged: (v) =>
                             setModalState(() => selectedAudio = v),
+                        audioPassthrough: passthroughState,
+                        onAudioPassthroughChanged:
+                            onAudioPassthroughChanged == null
+                            ? null
+                            : (enabled) async {
+                                setModalState(
+                                  () => passthroughState = enabled,
+                                );
+                                await onAudioPassthroughChanged(enabled);
+                              },
                         embeddedSubs: embeddedSubs,
                         addonSlots: addonSlots,
                         slotsPending: slotsFetchStarted && addonSlots == null,
@@ -476,7 +495,11 @@ class TracksSheet {
     required VoidCallback onTap,
   }) {
     return Expanded(
-      child: GestureDetector(
+      child: TvTappable(
+        // Exactly one autofocus target, and it is the tab you are already on:
+        // a modal route otherwise opens with only its scope focused, so the
+        // first OK does nothing until the user presses a direction.
+        autofocus: isSelected,
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -544,6 +567,8 @@ class TracksSheet {
     required Future<void> Function(String, String) onTrackChanged,
     required StateSetter setModalState,
     required void Function(String) onAudioChanged,
+    bool? audioPassthrough,
+    Future<void> Function(bool)? onAudioPassthroughChanged,
     required List<mk.SubtitleTrack> embeddedSubs,
     required List<AddonSubtitleSlot>? addonSlots,
     required bool slotsPending,
@@ -573,6 +598,8 @@ class TracksSheet {
           selectedSub: selectedSub,
           onTrackChanged: onTrackChanged,
           onAudioChanged: onAudioChanged,
+          passthrough: audioPassthrough,
+          onPassthroughChanged: onAudioPassthroughChanged,
         );
       case 1:
         return _SubtitlesTab(
@@ -622,6 +649,10 @@ class _AudioTab extends StatelessWidget {
   final Future<void> Function(String, String) onTrackChanged;
   final void Function(String) onAudioChanged;
 
+  /// Android bitstream passthrough — null hides the row (other platforms).
+  final bool? passthrough;
+  final Future<void> Function(bool)? onPassthroughChanged;
+
   const _AudioTab({
     super.key,
     required this.audios,
@@ -630,41 +661,65 @@ class _AudioTab extends StatelessWidget {
     required this.selectedSub,
     required this.onTrackChanged,
     required this.onAudioChanged,
+    this.passthrough,
+    this.onPassthroughChanged,
   });
 
   @override
   Widget build(BuildContext context) {
+    final toggle = passthrough == null || onPassthroughChanged == null
+        ? null
+        : _PassthroughToggle(
+            value: passthrough!,
+            onChanged: onPassthroughChanged!,
+          );
+
     if (audios.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.audiotrack_outlined,
-              size: 48,
-              color: Colors.white.withValues(alpha: 0.2),
+      return Column(
+        children: [
+          if (toggle != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: toggle,
             ),
-            const SizedBox(height: 12),
-            Text(
-              'No audio tracks available',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 14,
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.audiotrack_outlined,
+                    size: 48,
+                    color: Colors.white.withValues(alpha: 0.2),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No audio tracks available',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
+    // The toggle rides the same scroll as the tracks (itemCount + 1) so a
+    // long track list doesn't pin it and shrink the list's viewport.
+    final extra = toggle != null ? 1 : 0;
     return ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: audios.length,
+      itemCount: audios.length + extra,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
-        final audio = audios[index];
+        if (toggle != null && index == 0) return toggle;
+        final audio = audios[index - extra];
         final isSelected = audio.id == selectedAudio;
-        final label = LanguageMapper.labelForTrack(audio, index);
+        final label = LanguageMapper.labelForTrack(audio, index - extra);
 
         return _TrackTile(
           title: label,
@@ -676,6 +731,59 @@ class _AudioTab extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+/// The in-player face of the "Audio passthrough" setting — same stored
+/// value, applied live. Styled after [_TrackTile]'s plate.
+class _PassthroughToggle extends StatelessWidget {
+  final bool value;
+  final Future<void> Function(bool) onChanged;
+
+  const _PassthroughToggle({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Passthrough (AC3 · EAC3 · DTS)',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Bitstream to your receiver. If you hear silence, '
+                  'turn this off.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 11.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: (v) => onChanged(v),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1291,7 +1399,7 @@ class _StyleTab extends StatelessWidget {
             },
           ),
 
-          GestureDetector(
+          TvTappable(
             onTap: onSyncOverlayRequested,
             child: Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -1407,7 +1515,7 @@ class _IdentityStrip extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          GestureDetector(
+          TvTappable(
             onTap: isSearching ? null : onSearch,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1499,7 +1607,7 @@ class _ProviderChip extends StatelessWidget {
       );
     }
 
-    return GestureDetector(
+    return TvTappable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
@@ -1569,7 +1677,7 @@ class _ProviderTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return TvTappable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
@@ -1754,7 +1862,7 @@ class _RetryCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 14),
-          GestureDetector(
+          TvTappable(
             onTap: onRetry,
             child: Container(
               padding:
@@ -1805,7 +1913,7 @@ class _TrackTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return TvTappable(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
@@ -1947,7 +2055,7 @@ class _StyleOption extends StatelessWidget {
             ),
           ),
           // Decrease
-          GestureDetector(
+          TvTappable(
             onTap: onDecrease,
             child: Container(
               width: 36,
@@ -1999,7 +2107,7 @@ class _StyleOption extends StatelessWidget {
             ),
           ),
           // Increase
-          GestureDetector(
+          TvTappable(
             onTap: onIncrease,
             child: Container(
               width: 36,

@@ -1,9 +1,20 @@
 import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
+import 'tv_tappable.dart';
+import '../../../utils/platform_util.dart';
 import '../services/subtitle_cue_parser.dart';
 import '../services/subtitle_settings_service.dart';
-import '../constants/color_constants.dart';
 
+/// Sync line picker for addon/external subtitles — pause on a line you can
+/// hear, pick the matching cue, and the offset is computed from it.
+///
+/// Spotlight grammar: a right-side glass panel (same shape as the player
+/// menu) instead of a full-screen sheet, so the picture — the thing being
+/// synced against — stays visible. The playing cue carries a white marker
+/// bar; TvTappable rows keep the DPAD traversal that already worked here.
 class SubtitleLinePickerOverlay extends StatefulWidget {
   final String subtitleFilePath;
   final int Function() getCurrentPositionMs;
@@ -26,13 +37,16 @@ class SubtitleLinePickerOverlay extends StatefulWidget {
 }
 
 class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
+  static const _ink = Colors.white;
+  static const _glass = Color(0xFF101012);
+
   List<SubtitleCue>? _cues;
   bool _loading = true;
   int _highlightedIndex = -1;
   final ScrollController _scrollController = ScrollController();
   Timer? _positionTimer;
   late int _appliedOffsetMs;
-  bool _showManualSlider = false;
+  bool _showManualStepper = false;
 
   static const _itemHeight = 62.0;
 
@@ -115,8 +129,8 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
     widget.onOffsetChanged(clamped);
   }
 
-  void _onSliderChanged(int ms) {
-    final clamped = ms.clamp(
+  void _stepOffset(int deltaMs) {
+    final clamped = (_appliedOffsetMs + deltaMs).clamp(
       SubtitleSettingsService.syncOffsetMinMs,
       SubtitleSettingsService.syncOffsetMaxMs,
     );
@@ -133,114 +147,161 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
     final h = ms ~/ 3600000;
     final m = (ms % 3600000) ~/ 60000;
     final s = (ms % 60000) ~/ 1000;
-    if (h > 0) return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    if (h > 0) {
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
   String _formatOffset(int ms) {
-    final sign = ms >= 0 ? '+' : '';
-    final seconds = ms / 1000.0;
-    return '$sign${seconds.toStringAsFixed(1)}s';
-  }
-
-  Color _offsetColor(int ms) {
-    final abs = ms.abs();
-    if (abs == 0) return const Color(0xFF4CAF50);
-    if (abs <= 500) return const Color(0xFFCDDC39);
-    if (abs <= 2000) return const Color(0xFFFF9800);
-    return const Color(0xFFF44336);
+    if (ms == 0) return 'In sync';
+    final sign = ms > 0 ? '+' : '−';
+    return '$sign${(ms.abs() / 1000.0).toStringAsFixed(1)}s';
   }
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final compact = size.width < 720;
+    final panelWidth = compact
+        ? size.width
+        : (size.width * 0.46).clamp(430.0, 560.0);
+
     return Positioned.fill(
-      child: GestureDetector(
-        onTap: () {},
-        child: Container(
-          color: const Color(0xE6000000),
-          child: SafeArea(
-            child: Column(
-              children: [
-                _buildHeader(),
-                if (_loading)
-                  const Expanded(
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: VideoPlayerColors.netflixRed,
-                      ),
-                    ),
-                  )
-                else if (_cues == null || _cues!.isEmpty)
-                  Expanded(child: _buildEmptyState())
-                else
-                  Expanded(child: _buildCueList()),
-                if (_showManualSlider) _buildSlider(),
-                _buildFooter(),
-              ],
+      child: Stack(
+        children: [
+          // Scrim: the picture dims but stays visible. Tap keeps & closes.
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onDismiss,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.20),
+                      Colors.black.withValues(alpha: 0.55),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: SizedBox(
+              width: panelWidth,
+              height: double.infinity,
+              child: _buildGlass(
+                child: SafeArea(
+                  left: false,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(),
+                      if (_loading)
+                        Expanded(
+                          child: Center(
+                            child: SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: _ink.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (_cues == null || _cues!.isEmpty)
+                        Expanded(child: _buildEmptyState())
+                      else
+                        Expanded(child: _buildCueList()),
+                      if (_showManualStepper) _buildStepperRow(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGlass({required Widget child}) {
+    final content = Container(
+      decoration: BoxDecoration(
+        color: PlatformUtil.isAndroidTvCached
+            ? const Color(0xF5101012)
+            : _glass.withValues(alpha: 0.72),
+        border: Border(
+          left: BorderSide(color: _ink.withValues(alpha: 0.14), width: 0.75),
         ),
+      ),
+      child: child,
+    );
+    if (PlatformUtil.isAndroidTvCached) return content;
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+        child: content,
       ),
     );
   }
 
   Widget _buildHeader() {
-    final accent = _offsetColor(_appliedOffsetMs);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-      ),
-      child: Row(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 26, 18, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.subtitles_rounded, color: Colors.white54, size: 20),
-          const SizedBox(width: 10),
-          Text(
-            'SUBTITLE SYNC',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 1.0,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: accent.withValues(alpha: 0.3)),
-            ),
-            child: Text(
-              _formatOffset(_appliedOffsetMs),
-              style: TextStyle(
-                color: accent,
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
+          Row(
+            children: [
+              Text(
+                'WHICH LINE IS BEING SPOKEN?',
+                style: TextStyle(
+                  color: _ink.withValues(alpha: 0.42),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.8,
+                ),
               ),
-            ),
+              const Spacer(),
+              Text(
+                _formatOffset(_appliedOffsetMs),
+                style: TextStyle(
+                  color: _appliedOffsetMs == 0
+                      ? _ink.withValues(alpha: 0.45)
+                      : _ink,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ),
-          const Spacer(),
-          _headerButton(
-            icon: Icons.tune_rounded,
-            label: _showManualSlider ? 'Hide Slider' : 'Slider',
-            onTap: () => setState(() => _showManualSlider = !_showManualSlider),
-          ),
-          const SizedBox(width: 6),
-          _headerButton(
-            icon: Icons.restart_alt_rounded,
-            label: 'Reset',
-            onTap: _resetOffset,
-          ),
-          const SizedBox(width: 6),
-          _headerButton(
-            icon: Icons.close_rounded,
-            label: 'Done',
-            onTap: widget.onDismiss,
-            accent: true,
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _headerButton(
+                autofocus: true,
+                label: _showManualStepper ? 'Hide stepper' : 'Stepper',
+                onTap: () =>
+                    setState(() => _showManualStepper = !_showManualStepper),
+              ),
+              const SizedBox(width: 6),
+              _headerButton(label: 'Reset', onTap: _resetOffset),
+              const SizedBox(width: 6),
+              if (_highlightedIndex >= 0)
+                _headerButton(
+                  label: 'Now',
+                  onTap: () => _scrollToIndex(_highlightedIndex),
+                ),
+              const Spacer(),
+              _headerButton(label: 'Done', onTap: widget.onDismiss, solid: true),
+            ],
           ),
         ],
       ),
@@ -248,35 +309,31 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
   }
 
   Widget _headerButton({
-    required IconData icon,
     required String label,
     required VoidCallback onTap,
-    bool accent = false,
+    bool solid = false,
+    bool autofocus = false,
   }) {
-    return GestureDetector(
+    return TvTappable(
+      autofocus: autofocus,
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: accent
-              ? VideoPlayerColors.netflixRed.withValues(alpha: 0.2)
-              : Colors.white.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(8),
+          color: solid ? _ink : Colors.transparent,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: _ink.withValues(alpha: solid ? 1 : 0.30),
+            width: 0.75,
+          ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: accent ? VideoPlayerColors.netflixRed : Colors.white60),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: accent ? VideoPlayerColors.netflixRed : Colors.white60,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+        child: Text(
+          label,
+          style: TextStyle(
+            color: solid ? Colors.black : _ink.withValues(alpha: 0.80),
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -287,22 +344,25 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.subtitles_off_rounded,
-              size: 48, color: Colors.white.withValues(alpha: 0.2)),
+          Icon(
+            Icons.subtitles_off_rounded,
+            size: 40,
+            color: _ink.withValues(alpha: 0.20),
+          ),
           const SizedBox(height: 12),
           Text(
             'Could not parse subtitle lines',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.4),
-              fontSize: 14,
+              color: _ink.withValues(alpha: 0.45),
+              fontSize: 13,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
-            'Use the slider to adjust manually',
+            'Use the stepper to adjust manually',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.3),
-              fontSize: 12,
+              color: _ink.withValues(alpha: 0.30),
+              fontSize: 11.5,
             ),
           ),
         ],
@@ -316,50 +376,21 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+          padding: const EdgeInsets.fromLTRB(24, 2, 24, 6),
           child: Row(
             children: [
               Text(
-                'Tap the line you just heard',
+                'Pick the line you just heard',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.45),
+                  color: _ink.withValues(alpha: 0.45),
                   fontSize: 12,
-                  fontWeight: FontWeight.w500,
                 ),
               ),
               const Spacer(),
-              if (_highlightedIndex >= 0)
-                GestureDetector(
-                  onTap: () => _scrollToIndex(_highlightedIndex),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: VideoPlayerColors.netflixRed.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.my_location_rounded,
-                            size: 12, color: VideoPlayerColors.netflixRed),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Now',
-                          style: TextStyle(
-                            color: VideoPlayerColors.netflixRed,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 8),
               Text(
                 '${cues.length} lines',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: _ink.withValues(alpha: 0.30),
                   fontSize: 11,
                 ),
               ),
@@ -369,7 +400,7 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
         Expanded(
           child: ListView.builder(
             controller: _scrollController,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             itemCount: cues.length,
             itemExtent: _itemHeight,
             itemBuilder: (context, index) {
@@ -377,63 +408,75 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
               final isCurrent = index == _highlightedIndex;
               final isPast = index < _highlightedIndex;
 
-              return GestureDetector(
+              return TvTappable(
                 onTap: () => _onCueTapped(index),
                 child: Container(
-                  margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  margin:
+                      const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
                   decoration: BoxDecoration(
                     color: isCurrent
-                        ? VideoPlayerColors.netflixRed.withValues(alpha: 0.15)
-                        : Colors.white.withValues(alpha: 0.03),
+                        ? _ink.withValues(alpha: 0.10)
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
-                    border: isCurrent
-                        ? Border.all(
-                            color: VideoPlayerColors.netflixRed.withValues(alpha: 0.4),
-                          )
-                        : null,
                   ),
                   child: Row(
                     children: [
-                      SizedBox(
-                        width: 58,
-                        child: Text(
-                          _formatTime(cue.startMs),
-                          style: TextStyle(
-                            color: isCurrent
-                                ? VideoPlayerColors.netflixRed
-                                : Colors.white.withValues(alpha: isPast ? 0.35 : 0.5),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            fontFamily: 'monospace',
-                          ),
+                      // Playing-position marker: a white bar, not a color.
+                      Container(
+                        width: 2.5,
+                        height: 30,
+                        margin: const EdgeInsets.only(right: 11),
+                        decoration: BoxDecoration(
+                          color: isCurrent ? _ink : Colors.transparent,
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                      if (isCurrent) ...[
-                        Container(
-                          width: 3,
-                          height: 28,
-                          margin: const EdgeInsets.only(right: 10),
-                          decoration: BoxDecoration(
-                            color: VideoPlayerColors.netflixRed,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ] else
-                        const SizedBox(width: 13),
                       Expanded(
-                        child: Text(
-                          cue.text,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: isCurrent
-                                ? Colors.white
-                                : Colors.white.withValues(alpha: isPast ? 0.35 : 0.7),
-                            fontSize: 13,
-                            fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
-                            height: 1.3,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              _formatTime(cue.startMs),
+                              style: TextStyle(
+                                color: _ink.withValues(
+                                  alpha: isCurrent
+                                      ? 0.55
+                                      : isPast
+                                      ? 0.28
+                                      : 0.40,
+                                ),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.6,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              cue.text,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: _ink.withValues(
+                                  alpha: isCurrent
+                                      ? 1
+                                      : isPast
+                                      ? 0.35
+                                      : 0.72,
+                                ),
+                                fontSize: 13,
+                                fontWeight: isCurrent
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                height: 1.25,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -447,86 +490,53 @@ class _SubtitleLinePickerOverlayState extends State<SubtitleLinePickerOverlay> {
     );
   }
 
-  Widget _buildSlider() {
-    final accent = _offsetColor(_appliedOffsetMs);
-    const minMs = SubtitleSettingsService.syncOffsetMinMs;
-    const maxMs = SubtitleSettingsService.syncOffsetMaxMs;
+  /// Manual fallback for when no line matches (or nothing parses): the same
+  /// stepper grammar as the embedded-subtitle overlay, no Material slider.
+  Widget _buildStepperRow() {
     const step = SubtitleSettingsService.syncOffsetStepMs;
-
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      padding: const EdgeInsets.fromLTRB(24, 10, 24, 14),
       decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          top: BorderSide(color: _ink.withValues(alpha: 0.09), width: 0.75),
         ),
       ),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: () => _onSliderChanged(_appliedOffsetMs - step),
-            child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(Icons.remove_rounded, color: Colors.white60, size: 18),
-            ),
-          ),
+          _stepButton(Icons.remove_rounded, () => _stepOffset(-step * 5)),
+          const SizedBox(width: 6),
+          _stepButton(Icons.chevron_left_rounded, () => _stepOffset(-step)),
           Expanded(
-            child: SliderTheme(
-              data: SliderThemeData(
-                activeTrackColor: accent,
-                inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
-                thumbColor: Colors.white,
-                overlayColor: accent.withValues(alpha: 0.2),
-                trackHeight: 3,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-              ),
-              child: Slider(
-                value: _appliedOffsetMs.toDouble(),
-                min: minMs.toDouble(),
-                max: maxMs.toDouble(),
-                divisions: (maxMs - minMs) ~/ step,
-                onChanged: (v) => _onSliderChanged(v.round()),
+            child: Text(
+              _formatOffset(_appliedOffsetMs),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: _ink,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
           ),
-          GestureDetector(
-            onTap: () => _onSliderChanged(_appliedOffsetMs + step),
-            child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(Icons.add_rounded, color: Colors.white60, size: 18),
-            ),
-          ),
+          _stepButton(Icons.chevron_right_rounded, () => _stepOffset(step)),
+          const SizedBox(width: 6),
+          _stepButton(Icons.add_rounded, () => _stepOffset(step * 5)),
         ],
       ),
     );
   }
 
-  Widget _buildFooter() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 6, 20, 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.touch_app_rounded,
-              size: 13, color: Colors.white.withValues(alpha: 0.25)),
-          const SizedBox(width: 6),
-          Text(
-            'Tap a line to sync subtitles to that point',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.25),
-              fontSize: 11,
-            ),
-          ),
-        ],
+  Widget _stepButton(IconData icon, VoidCallback onTap) {
+    return TvTappable(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: _ink.withValues(alpha: 0.30), width: 0.75),
+        ),
+        child: Icon(icon, color: _ink.withValues(alpha: 0.85), size: 17),
       ),
     );
   }

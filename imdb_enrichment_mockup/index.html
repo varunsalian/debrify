@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Showcase · IMDb enrichment (honors · Did You Know · Universe)</title>
+<style>
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{ background:#08080a; color:#fff;
+    font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  button{ font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+  :root{ --accent:#E9707B; }
+
+  .page{ max-width:1280px; margin:0 auto; padding:34px 26px 80px; }
+  h1{ font-size:22px; font-weight:700; letter-spacing:-.3px; }
+  .sub{ color:rgba(255,255,255,.55); font-size:13.5px; margin:6px 0 34px; line-height:1.55; max-width:860px; }
+  .sub b{ color:rgba(255,255,255,.8); font-weight:600; }
+  .panelh{ font-size:11.5px; font-weight:700; letter-spacing:.14em; color:rgba(255,255,255,.42);
+           text-transform:uppercase; margin:44px 0 14px; }
+  .panelh span{ color:rgba(255,255,255,.28); font-weight:600; letter-spacing:0; text-transform:none; margin-left:10px; }
+
+  /* ════ TV / WIDE panel ════ */
+  .tv{ position:relative; border-radius:18px; overflow:hidden; background:#000;
+       border:1px solid rgba(255,255,255,.1); padding:40px 0; }
+  .tv .idzone{ padding:0 46px 8px; background:linear-gradient(to bottom, #17130e 0%, #0b0a08 70%, #000 100%); margin-top:-40px; padding-top:44px; }
+  .idlogo{ font-size:44px; font-weight:800; letter-spacing:.02em; line-height:1;
+    font-stretch:condensed; text-transform:uppercase; }
+  .idmeta{ display:flex; align-items:center; gap:10px; margin-top:12px; font-size:14px; color:rgba(255,255,255,.82); }
+  .idmeta .dot{ color:rgba(255,255,255,.35); }
+  .star{ display:inline-flex; align-items:center; gap:5px; border:1px solid rgba(255,255,255,.28);
+         border-radius:999px; padding:2.5px 9px; font-size:12px; font-weight:600; }
+  .star em{ font-style:normal; color:#F5C518; }
+
+  /* honors row — the new chips (2 & 3) */
+  .honors{ display:flex; align-items:center; gap:9px; margin-top:13px; padding-bottom:26px; }
+  .honor{ display:inline-flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,.22);
+    border-radius:6px; padding:4.5px 10px; font-size:10.5px; font-weight:700; letter-spacing:.1em;
+    text-transform:uppercase; color:rgba(255,255,255,.78); }
+  .honor .no{ color:#fff; }
+  .honor .delta{ font-weight:700; color:rgba(255,255,255,.45); letter-spacing:0; }
+  .honor .lrl{ color:rgba(255,255,255,.4); font-size:11px; }
+
+  .rh{ font-size:19px; font-weight:700; letter-spacing:-.2px; padding:0 46px 13px; }
+  .rh .cnt{ font-size:12px; font-weight:600; color:rgba(255,255,255,.35); margin-left:9px; letter-spacing:0; }
+  .rail{ display:flex; gap:16px; overflow-x:auto; padding:4px 46px 6px; scrollbar-width:none; }
+  .rail::-webkit-scrollbar{ display:none; }
+  .bandgap{ height:34px; }
+  .ghostlabel{ padding:26px 46px 0; font-size:12px; color:rgba(255,255,255,.3); }
+  .ghostlabel b{ color:rgba(255,255,255,.5); font-weight:600; }
+
+  /* Did You Know cards (5) */
+  .dyk{ flex:none; width:340px; border-radius:14px; background:rgba(255,255,255,.07);
+    padding:16px 18px 15px; text-align:left; outline:2.5px solid transparent; outline-offset:2px;
+    transition:transform .18s ease, background .18s; }
+  .dyk:hover{ background:rgba(255,255,255,.1); }
+  .dyk.focus{ outline-color:#fff; transform:translateY(-3px); background:rgba(255,255,255,.12); }
+  .dyk .eyebrow{ font-size:10px; font-weight:700; letter-spacing:.13em; text-transform:uppercase;
+    color:rgba(255,255,255,.42); margin-bottom:8px; }
+  .dyk .tx{ font-size:13px; line-height:1.55; color:rgba(255,255,255,.82);
+    display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; overflow:hidden; }
+  .dyk .qmark{ font-size:26px; line-height:.6; color:rgba(255,255,255,.25); font-weight:800; display:block; margin-bottom:6px; }
+  .dyk.more{ display:flex; flex-direction:column; align-items:center; justify-content:center; width:150px; }
+  .dyk.more .n{ font-size:22px; font-weight:800; }
+  .dyk.more .l{ font-size:11px; font-weight:700; letter-spacing:.1em; color:rgba(255,255,255,.45);
+    text-transform:uppercase; margin-top:4px; }
+
+  /* Universe cards (6) */
+  .uni{ flex:none; width:150px; text-align:left; outline:2.5px solid transparent; outline-offset:3px;
+    border-radius:11px; transition:transform .18s ease; }
+  .uni.focus{ outline-color:#fff; transform:translateY(-3px); }
+  .uni .art{ width:150px; height:225px; border-radius:11px; display:flex; align-items:center; justify-content:center;
+    font-size:30px; font-weight:800; color:rgba(255,255,255,.4); letter-spacing:.04em; }
+  .uni .rel{ font-size:9.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+    color:rgba(255,255,255,.42); margin:9px 2px 2px; }
+  .uni .nm{ font-size:13px; font-weight:600; margin:0 2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .uni .yr{ font-size:11.5px; color:rgba(255,255,255,.45); margin:2px 2px 0; }
+
+  /* ════ PHONE panel ════ */
+  .phones{ display:flex; gap:40px; flex-wrap:wrap; align-items:flex-start; }
+  .phone{ width:390px; border-radius:28px; overflow:hidden; background:#000;
+    border:1px solid rgba(255,255,255,.13); padding:0 0 34px; }
+  .phone .idzone{ text-align:center; padding:40px 19px 4px;
+    background:linear-gradient(to bottom, #17130e 0%, #0b0a08 75%, #000 100%); }
+  .phone .idlogo{ font-size:27px; }
+  .phone .idmeta{ justify-content:center; font-size:12px; gap:7px; margin-top:9px; }
+  .phone .honors{ justify-content:center; gap:7px; padding-bottom:20px; margin-top:11px; }
+  .phone .honor{ padding:3.5px 8px; font-size:9px; }
+  .phone .rh{ font-size:19px; padding:0 19px 11px; }
+  .phone .rail{ padding:2px 19px 6px; gap:13px; }
+  .phone .dyk{ width:272px; padding:14px 15px 13px; }
+  .phone .dyk .tx{ font-size:12.5px; -webkit-line-clamp:5; }
+  .phone .dyk.more{ width:110px; }
+  .phone .uni{ width:104px; }
+  .phone .uni .art{ width:104px; height:156px; font-size:21px; border-radius:10px; }
+  .phone .uni .nm{ font-size:12px; }
+  .phone .bandgap{ height:22px; }
+  .phone .ghostlabel{ padding:20px 19px 0; }
+
+  .note{ width:390px; font-size:13px; line-height:1.65; color:rgba(255,255,255,.55); }
+  .note b{ color:rgba(255,255,255,.85); font-weight:600; }
+  .note p{ margin-bottom:14px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>IMDb enrichment — honors chips, Did You Know, Universe</h1>
+  <div class="sub">Three additions in the Showcase language. <b>Honors</b> (Top&nbsp;250 + Trending) join the identity zone as hairline small-caps chips, same family as the 4K/DV capability badges — monochrome, no laurels, no gold. <b>Did You Know</b> and <b>Universe</b> are new bands in the deep region: Universe right after More&nbsp;Like&nbsp;This (it's navigation), Did You Know last — the page's footnote. Every piece renders only when IMDb has the data.</div>
+
+  <div class="panelh">TV &amp; Desktop · wide tier <span>click cards to move focus</span></div>
+  <div class="tv">
+    <div class="idzone">
+      <div class="idlogo">Breaking Bad</div>
+      <div class="idmeta">2008–2013 <span class="dot">·</span> Crime · Drama · Thriller <span class="dot">·</span> TV-MA
+        <span class="star">★ <em>9.5</em> · 2.3M</span></div>
+      <div class="honors">
+        <span class="honor"><span class="lrl">❦</span> IMDb Top 250 <span class="no">№ 1</span></span>
+        <span class="honor">Trending <span class="no">№ 21</span> <span class="delta">▾ 1</span></span>
+      </div>
+    </div>
+
+    <div class="ghostlabel">… Episodes · Cast &amp; Crew · Parents Guide · Sources · More Like This continue above …</div>
+    <div class="bandgap"></div>
+
+    <div class="rh">Universe</div>
+    <div class="rail" id="tvUni"></div>
+    <div class="bandgap"></div>
+
+    <div class="rh">Did You Know <span class="cnt">142 trivia · 9 goofs · 26 quotes</span></div>
+    <div class="rail" id="tvDyk"></div>
+  </div>
+
+  <div class="panelh">Phone · compact tier</div>
+  <div class="phones">
+    <div class="phone">
+      <div class="idzone">
+        <div class="idlogo">Breaking Bad</div>
+        <div class="idmeta">2008–2013 · Crime · TV-MA <span class="star">★ <em>9.5</em></span></div>
+        <div class="honors">
+          <span class="honor"><span class="lrl">❦</span> Top 250 <span class="no">№ 1</span></span>
+          <span class="honor">Trending <span class="no">№ 21</span> <span class="delta">▾ 1</span></span>
+        </div>
+      </div>
+      <div class="ghostlabel">… Episodes · Cast · Guide · Sources · More Like This …</div>
+      <div class="bandgap"></div>
+      <div class="rh">Universe</div>
+      <div class="rail" id="phUni"></div>
+      <div class="bandgap"></div>
+      <div class="rh">Did You Know</div>
+      <div class="rail" id="phDyk"></div>
+    </div>
+    <div class="note">
+      <p><b>Honors chips (2 &amp; 3)</b> — one row under the meta line, hairline border, small caps. Trending shows rank + drift (▾ 1). Both come from fields already reachable in the single enrichment query, so no extra request. Chip absent → row absent → zero layout cost.</p>
+      <p><b>Universe band (6)</b> — relation eyebrow (FOLLOWED BY / SPIN-OFF) over a normal poster card; SELECT opens that title's detail page via its IMDb id, exactly like a More Like This card. Placed right after More Like This so the two navigation bands sit together.</p>
+      <p><b>Did You Know band (5)</b> — reading cards: eyebrow marks the kind (TRIVIA / GOOF / QUOTE), six-line clamp, and a terminal "+139" card. On TV the card is focusable but SELECT does nothing in v1 — it's ambient reading, like the synopsis. Mixed kinds keep the rail from feeling like a wall of the same card.</p>
+      <p><b>DPAD topology</b> — one node per card in both bands, terminal card included; counts mirror rendering exactly, same contract as every other band.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const DYK = [
+  ['TRIVIA','Jesse Pinkman was originally slated to be written out by the ninth episode. During the hiatus caused by the writers’ strike, Vince Gilligan — impressed by Aaron Paul’s portrayal — decided to reinstate the character.'],
+  ['TRIVIA','After binge-watching the entire show in two weeks, Sir Anthony Hopkins wrote a glowing fan letter to Bryan Cranston, comparing the series to a “great Shakespearian or Greek tragedy.”'],
+  ['GOOF','The amount of money shown in the storage unit changes size noticeably between shots in the same scene.'],
+  ['QUOTE','I am not in danger, Skyler. I am the danger. A guy opens his door and gets shot, and you think that of me? No. I am the one who knocks.'],
+  ['TRIVIA','Bryan Cranston and Aaron Paul both kept props from the set: Cranston took Walt’s Heisenberg hat, Paul took Jesse’s helmet.'],
+];
+const UNI = [
+  ['FOLLOWED BY','Better Call Saul','2015–2022','BCS','#2a3440,#141a20'],
+  ['FOLLOWED BY','El Camino','2019','EC','#3d3226,#1a1510'],
+  ['SPIN-OFF','Original Minisodes','2009','BB','#33272e,#171114'],
+];
+const uniCard = ([rel,nm,yr,ini,g],i,foc) => `
+  <button class="uni ${i===foc?'focus':''}" onclick="pick(this)">
+    <div class="art" style="background:linear-gradient(160deg,${g})">${ini}</div>
+    <div class="rel">${rel}</div><div class="nm">${nm}</div><div class="yr">${yr}</div>
+  </button>`;
+const dykCard = ([kind,tx],i,foc) => `
+  <button class="dyk ${i===foc?'focus':''}" onclick="pick(this)">
+    <div class="eyebrow">${kind}</div>
+    <div class="tx">${kind==='QUOTE' ? '<span class="qmark">“</span>' : ''}${tx}</div>
+  </button>`;
+const moreCard = n => `
+  <button class="dyk more" onclick="pick(this)"><span class="n">+${n}</span><span class="l">All entries</span></button>`;
+
+document.getElementById('tvUni').innerHTML = UNI.map((u,i)=>uniCard(u,i,0)).join('');
+document.getElementById('tvDyk').innerHTML = DYK.map((d,i)=>dykCard(d,i,-1)).join('') + moreCard(139);
+document.getElementById('phUni').innerHTML = UNI.map((u,i)=>uniCard(u,i,-1)).join('');
+document.getElementById('phDyk').innerHTML = DYK.slice(0,4).map((d,i)=>dykCard(d,i,-1)).join('') + moreCard(139);
+
+function pick(el){
+  el.closest('.rail').querySelectorAll('.focus').forEach(x=>x.classList.remove('focus'));
+  el.classList.add('focus');
+}
+</script>
+</body>
+</html>

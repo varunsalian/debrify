@@ -63,12 +63,12 @@ class _TvCompactButtonState extends State<TvCompactButton> {
         child: AnimatedScale(
           scale: _isFocused ? 1.05 : 1.0,
           // TV: snap — see TvFocusableCard.
-          duration: PlatformUtil.isAndroidTvCached
+          duration: PlatformUtil.isTelevision
               ? Duration.zero
               : const Duration(milliseconds: 150),
           curve: Curves.easeOut,
           child: AnimatedContainer(
-            duration: PlatformUtil.isAndroidTvCached
+            duration: PlatformUtil.isTelevision
                 ? Duration.zero
                 : const Duration(milliseconds: 150),
             height: 36,

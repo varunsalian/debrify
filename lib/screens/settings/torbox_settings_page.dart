@@ -7,6 +7,7 @@ import '../../services/main_page_bridge.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 class TorboxSettingsPage extends StatefulWidget {
   const TorboxSettingsPage({super.key});
@@ -66,7 +67,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   // was on. Re-seed focus once the new subtree is on screen. TV-only: touch
   // users don't rely on focus.
   void _refocusOnTv(FocusNode node) {
-    if (!PlatformUtil.isAndroidTvCached) return;
+    if (!PlatformUtil.isTelevision) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         node.requestFocus();
@@ -79,7 +80,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   // somewhere (e.g. the back button) while this page was loading — don't
   // steal focus from them.
   bool get _seedEntryFocus {
-    if (!PlatformUtil.isAndroidTvCached) return false;
+    if (!PlatformUtil.isTelevision) return false;
     final primary = FocusManager.instance.primaryFocus;
     return primary == null || primary is FocusScopeNode;
   }
@@ -95,10 +96,16 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   }
 
   void _snack(String message, {bool err = false}) {
+    // Callers reach this after storage/network awaits without their own
+    // mounted check, so both lookups below could run on a disposed State.
+    // The messenger lookup was always lifecycle-sensitive; reading the
+    // theme added a second one, so guard once here for both.
+    if (!mounted) return;
+    final t = AppThemeScope.of(context).settings;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: err ? kSettingsRed : null,
+        backgroundColor: err ? t.danger : null,
       ),
     );
   }
@@ -288,6 +295,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Torbox Settings',
@@ -370,7 +378,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                             ? Icons.visibility_off
                                             : Icons.visibility,
                                         color: _hiddenFromNav
-                                            ? kSettingsAmber
+                                            ? t.warning
                                             : null,
                                       ),
                                       contentPadding:
@@ -406,9 +414,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                   children: [
                                     Row(
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.key,
-                                          color: kSettingsAccent2,
+                                          color: t.accent2,
                                           size: 20,
                                         ),
                                         const SizedBox(width: 8),
@@ -429,29 +437,29 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                               vertical: 4,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: kSettingsGreen.withValues(
+                                              color: t.success.withValues(
                                                 alpha: 0.1,
                                               ),
                                               borderRadius:
                                                   BorderRadius.circular(8),
                                               border: Border.all(
-                                                color: kSettingsGreen
+                                                color: t.success
                                                     .withValues(alpha: 0.3),
                                               ),
                                             ),
-                                            child: const Row(
+                                            child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 Icon(
                                                   Icons.check_circle,
-                                                  color: kSettingsGreen,
+                                                  color: t.success,
                                                   size: 14,
                                                 ),
-                                                SizedBox(width: 4),
+                                                const SizedBox(width: 4),
                                                 Text(
                                                   'Connected',
                                                   style: TextStyle(
-                                                    color: kSettingsGreen,
+                                                    color: t.success,
                                                     fontSize: 12,
                                                   ),
                                                 ),
@@ -482,7 +490,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                           suffixIcon: IconButton(
                                             // Default focus highlight is
                                             // invisible on TV.
-                                            focusColor: kSettingsAccent
+                                            focusColor: t.accent
                                                 .withValues(alpha: 0.4),
                                             icon: Icon(
                                               _obscure
@@ -549,12 +557,12 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                         Container(
                                           padding: const EdgeInsets.all(12),
                                           decoration: BoxDecoration(
-                                            color: kSettingsPanel2,
+                                            color: t.panel2,
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
                                             border: Border.all(
-                                              color: kSettingsLine,
+                                              color: t.line,
                                             ),
                                           ),
                                           child: Row(
@@ -563,13 +571,13 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                                 child: Text(
                                                   '••••••••••••••••••••••••••••••••',
                                                   style: TextStyle(
-                                                    color: kSettingsDim,
+                                                    color: t.dim,
                                                   ),
                                                 ),
                                               ),
                                               Icon(
                                                 Icons.visibility_off,
-                                                color: kSettingsDim2,
+                                                color: t.dim2,
                                                 size: 16,
                                               ),
                                             ],
@@ -586,9 +594,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                               icon: const Icon(Icons.logout),
                                               label: const Text('Logout'),
                                               style: OutlinedButton.styleFrom(
-                                                foregroundColor: kSettingsRed,
+                                                foregroundColor: t.danger,
                                                 side: BorderSide(
-                                                  color: kSettingsRed
+                                                  color: t.danger
                                                       .withValues(alpha: 0.45),
                                                 ),
                                               ),
@@ -652,7 +660,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodySmall
-                                          ?.copyWith(color: kSettingsDim),
+                                          ?.copyWith(color: t.dim),
                                     ),
                                   ),
                                 ],
@@ -667,9 +675,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                   children: [
                                     Row(
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.play_circle_outline,
-                                          color: kSettingsAccent2,
+                                          color: t.accent2,
                                           size: 20,
                                         ),
                                         const SizedBox(width: 8),
@@ -690,7 +698,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodySmall
-                                          ?.copyWith(color: kSettingsDim),
+                                          ?.copyWith(color: t.dim),
                                     ),
                                     const SizedBox(height: 12),
                                     SettingsSelectDropdown(
@@ -749,9 +757,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                     children: [
                                       Row(
                                         children: [
-                                          const Icon(
+                                          Icon(
                                             Icons.account_circle,
-                                            color: kSettingsAccent2,
+                                            color: t.accent2,
                                             size: 20,
                                           ),
                                           const SizedBox(width: 8),
@@ -782,9 +790,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                   children: [
                                     Row(
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.help_outline,
-                                          color: kSettingsAccent2,
+                                          color: t.accent2,
                                           size: 20,
                                         ),
                                         const SizedBox(width: 8),
@@ -809,7 +817,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                           .textTheme
                                           .bodyMedium
                                           ?.copyWith(
-                                            color: kSettingsDim,
+                                            color: t.dim,
                                             height: 1.5,
                                           ),
                                     ),
@@ -852,6 +860,7 @@ class _FocusRingState extends State<_FocusRing> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     // hasFocus includes descendants, so this lights up when the wrapped
     // control (switch/button) receives DPAD focus.
     return Focus(
@@ -860,10 +869,10 @@ class _FocusRingState extends State<_FocusRing> {
       onFocusChange: (f) => setState(() => _focused = f),
       child: Container(
         decoration: BoxDecoration(
-          color: (_focused && widget.fill) ? kSettingsPanel2 : null,
+          color: (_focused && widget.fill) ? t.panel2 : null,
           borderRadius: BorderRadius.circular(widget.radius),
           border: Border.all(
-            color: _focused ? kSettingsAccent : Colors.transparent,
+            color: _focused ? t.accent : Colors.transparent,
             width: 1,
           ),
         ),

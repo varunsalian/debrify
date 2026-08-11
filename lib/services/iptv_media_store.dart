@@ -134,6 +134,18 @@ class IptvListMeta {
 class IptvMediaStore {
   IptvMediaStore._();
 
+  /// Bumped after every write to `iptv_lists` / `iptv_list_channels` —
+  /// create/rename/delete/reorder, membership toggles, provider-deletion
+  /// cleanup and URL reconciliation alike. This is the invalidation signal
+  /// for surfaces that mirror list contents OUTSIDE the IPTV page (the Home
+  /// board's IPTV list rows): every mutation path funnels through this
+  /// store, so signalling here — not in the callers — is what keeps a
+  /// renamed, emptied or reconciled list from going stale on a Home that
+  /// never remounts.
+  static final ValueNotifier<int> listsRevision = ValueNotifier<int>(0);
+
+  static void _bumpListsRevision() => listsRevision.value++;
+
   static const String _legacyFavoritesKey = 'iptv_favorite_channels_v1';
   static const String _legacyWatchHistoryKey = 'iptv_watch_history_v1';
   static const String _legacyVideoResumeKey = 'video_resume_v1';
@@ -331,6 +343,7 @@ class IptvMediaStore {
         'updated_at': now,
       });
     });
+    _bumpListsRevision();
     return id;
   }
 
@@ -348,6 +361,7 @@ class IptvMediaStore {
       where: 'id = ? AND is_builtin = 0',
       whereArgs: [listId],
     );
+    _bumpListsRevision();
   }
 
   /// Delete a custom list. Memberships go with it via ON DELETE CASCADE —
@@ -361,6 +375,7 @@ class IptvMediaStore {
       where: 'id = ? AND is_builtin = 0',
       whereArgs: [listId],
     );
+    _bumpListsRevision();
   }
 
   /// Reorder custom lists. Favorites is pinned at position 0 and ignored
@@ -380,6 +395,7 @@ class IptvMediaStore {
         position += 1;
       }
     });
+    _bumpListsRevision();
   }
 
   // ── Membership ────────────────────────────────────────────────────────────
@@ -504,6 +520,8 @@ class IptvMediaStore {
     Map<String, String> renames,
     Map<String, ChannelPresentation> meta,
   ) async {
+    // The empty short-circuit doubles as the revision guard: a reconcile
+    // that changed nothing must not trigger list-row reloads elsewhere.
     if (renames.isEmpty && meta.isEmpty) return;
     await DebrifyTvDatabase.instance.runTxn((txn) async {
       for (final entry in renames.entries) {
@@ -547,6 +565,7 @@ class IptvMediaStore {
         );
       }
     });
+    _bumpListsRevision();
   }
 
   /// Add or remove [channelUrl] in [listId].
@@ -610,6 +629,7 @@ class IptvMediaStore {
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
     });
+    _bumpListsRevision();
   }
 
   /// Which lists each stored channel belongs to, url → list ids.
@@ -675,6 +695,7 @@ class IptvMediaStore {
       where: 'playlist_id = ?',
       whereArgs: [playlistId],
     );
+    _bumpListsRevision();
   }
 
   /// One list's channels, url → metadata, in the same map shape the prefs

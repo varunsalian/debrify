@@ -1,4 +1,7 @@
+import 'dart:io' show Platform;
+
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
@@ -7,10 +10,92 @@ import 'iptv_media_store.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/webdav_item.dart';
+import '../models/android_video_renderer_mode.dart';
+import '../models/tv_hero_artwork_quality.dart';
 import '../utils/json_isolate.dart';
 import '../utils/platform_util.dart';
 
+/// Which ambient-trailer surface a sound/volume preference belongs to.
+///
+/// A television now has both: the Home board's hero and the Showcase detail
+/// page. They are separate preferences because they are separate experiences —
+/// a muted Home hero should not mute a detail page you opened deliberately.
+enum AmbientTrailerSurface { homeHero, detail }
+
+/// How the Android TV UI is rastered — see
+/// [StorageService.getTvRenderQuality]. Three states, not a switch: the
+/// automatic branch is the ABSENCE of the stored pref, because that absence is
+/// what lets MainActivity keep making the device-capability call.
+enum TvRenderQuality {
+  /// Let MainActivity decide (GLES2-class hardware gets the 720p buffer).
+  auto,
+
+  /// Always raster at the panel's own resolution.
+  sharp,
+
+  /// Always raster at ~720p and let the TV's scaler upscale.
+  fast,
+}
+
 class StorageService {
+  // ── Update-aware defaults ─────────────────────────────────────────────
+  //
+  // "Default" in this app has always meant "what an unset pref falls back
+  // to" — which never reaches users who installed before a redesign. The
+  // defaults GENERATION makes a flagship-look change reach them once:
+  // on the first launch at a new generation, every look pref the user
+  // NEVER wrote adopts the current bundle; every stored key — an explicit
+  // choice, since all these setters write unconditionally — is untouched.
+  // After migration the adopted values are stored too, so switching away
+  // later sticks forever.
+  //
+  // Generation 1 (2026-08): the Spotlight era — Spotlight theme, Showcase
+  // details, Spotlight TV home, pill rails on TV and desktop/tablet.
+  // (text_brightness is deliberately absent: its unset default is already
+  // the Look's value.)
+  //
+  // To roll out a future flagship look: bump the generation, append its
+  // bundle under a `gen < N` block below.
+  static const int _currentDefaultsGeneration = 1;
+  static const String _defaultsGenerationKey = 'defaults_generation';
+
+  /// MUST run before [TextBrightnessController.warm] / theme warms in
+  /// `main()`: the first frame has to already be the migrated look.
+  static Future<void> migrateDefaultsGeneration() async {
+    final prefs = await SharedPreferences.getInstance();
+    final gen = prefs.getInt(_defaultsGenerationKey) ?? 0;
+    if (gen >= _currentDefaultsGeneration) return;
+    if (gen < 1) {
+      // Dormant prefs are written too (desktop pill on a phone, TV home
+      // style off-TV): harmless where they don't apply, correct if the
+      // device class — or a window size — ever changes.
+      //
+      // The theme and its `detail_theme` mirror move as a PAIR, in the
+      // controller's write-through order (mirror first — old builds read
+      // only the mirror, and Showcase resolves its palette from it). The
+      // pairing also means an explicit legacy pick (app_theme stored, no
+      // mirror by design) keeps its details page untouched.
+      if (!prefs.containsKey(_appThemeKey)) {
+        if (!prefs.containsKey(_detailThemeKey)) {
+          await prefs.setString(_detailThemeKey, 'spotlight');
+        }
+        await prefs.setString(_appThemeKey, 'spotlight');
+      }
+      const bundle = <String, String>{
+        _detailPageStyleKey: 'showcase',
+        _tvHomeStyleKey: 'spotlight',
+        _tvSidebarStyleKey: 'pill',
+        _desktopSidebarStyleKey: 'pill',
+      };
+      for (final entry in bundle.entries) {
+        if (!prefs.containsKey(entry.key)) {
+          await prefs.setString(entry.key, entry.value);
+        }
+      }
+    }
+    await prefs.setInt(_defaultsGenerationKey, _currentDefaultsGeneration);
+  }
+
   static const String _apiKeyKey = 'real_debrid_api_key';
   static const String _rdEndpointKey = 'real_debrid_endpoint';
   static const String _fileSelectionKey = 'real_debrid_file_selection';
@@ -169,6 +254,15 @@ class StorageService {
   static const String _playerSystemAudioEffectsKey =
       'player_system_audio_effects';
   static const String _playerStartPortraitKey = 'player_start_portrait';
+  static const String _androidVideoRendererModeKey =
+      'android_video_renderer_mode';
+  static const String _tvosForceSoftwareDecodeKey =
+      'tvos_force_software_decode';
+  static const String _audioPassthroughKey = 'player_audio_passthrough';
+  static const String _appleMultichannelAudioKey =
+      'player_apple_multichannel_audio';
+  static const String _uiSoundsKey = 'ui_sounds';
+  static const String _uiHapticsKey = 'ui_haptics';
   static const String _subtitleAutoSyncKey = 'subtitle_auto_sync_enabled';
   static const String _playerDefaultSubtitleLanguageKey =
       'player_default_subtitle_language';
@@ -466,6 +560,80 @@ class StorageService {
     await prefs.setInt('tv_ui_scale_percent', percent);
   }
 
+  /// Android TV rendering mode — whether the Flutter UI is rastered at the
+  /// panel's own resolution or at a ~720p buffer the TV's scaler blows back
+  /// up for free.
+  ///
+  /// GLES2-class boxes are fill-rate bound: the same build at 720p feels near
+  /// native on hardware that judders at 1080p. MainActivity decides this in
+  /// `computeRenderScale` and has always been able to be overridden by
+  /// `flutter.tv_low_res_render` — there was simply no way to set it. This is
+  /// that way.
+  ///
+  /// TRI-STATE, and the absence of the key is load-bearing: native reads it as
+  /// `getBoolean(key, auto)` where `auto` IS the device decision, so
+  /// [TvRenderQuality.auto] must REMOVE the key rather than write `false`.
+  /// Writing `false` on a weak TV would strip the 720p subsidy off the very
+  /// devices that need it — a silent, permanent regression on the hardware
+  /// least able to absorb it.
+  ///
+  /// Read natively before the engine is built, so a change lands on the next
+  /// cold start. Android TV only; ignored everywhere else.
+  static const String _tvRenderQualityKey = 'tv_low_res_render';
+
+  static Future<TvRenderQuality> getTvRenderQuality() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getBool(_tvRenderQualityKey);
+    if (stored == null) return TvRenderQuality.auto;
+    return stored ? TvRenderQuality.fast : TvRenderQuality.sharp;
+  }
+
+  static Future<void> setTvRenderQuality(TvRenderQuality quality) async {
+    final prefs = await SharedPreferences.getInstance();
+    switch (quality) {
+      case TvRenderQuality.auto:
+        await prefs.remove(_tvRenderQualityKey);
+      case TvRenderQuality.sharp:
+        await prefs.setBool(_tvRenderQualityKey, false);
+      case TvRenderQuality.fast:
+        await prefs.setBool(_tvRenderQualityKey, true);
+    }
+  }
+
+  /// What MainActivity ACTUALLY decided for the engine currently running —
+  /// written natively on every launch (`renderScale < 0.999f`), so under
+  /// [TvRenderQuality.auto] it's the only way to see which branch this TV
+  /// landed on. Also the honest answer after a change that hasn't been cold-
+  /// started into yet: the pref says what will happen, this says what is.
+  ///
+  /// Written on every ANDROID launch, phones included (the `putBoolean` sits
+  /// outside any TV guard) — off TV `renderScale` stays 1.0, so a phone reads
+  /// `false`, not null. Null means MainActivity never ran at all: iOS, macOS,
+  /// desktop. Callers must treat null as "unknown", never as "full res".
+  static Future<bool?> getTvLowResRenderActive() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('tv_low_res_render_active');
+  }
+
+  static const String _tvHeroArtworkQualityKey = 'tv_hero_artwork_quality';
+
+  /// Maximum decode quality for Home hero/stage artwork on Android TV and
+  /// tvOS. Unknown values coerce to Automatic so a removed experimental mode
+  /// can never strand an installation on an unsupported policy.
+  static Future<TvHeroArtworkQuality> getTvHeroArtworkQuality() async {
+    final prefs = await SharedPreferences.getInstance();
+    return TvHeroArtworkQuality.fromStorage(
+      prefs.getString(_tvHeroArtworkQualityKey),
+    );
+  }
+
+  static Future<void> setTvHeroArtworkQuality(
+    TvHeroArtworkQuality quality,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tvHeroArtworkQualityKey, quality.storageValue);
+  }
+
   /// Show the new Stremio-styled Addons hub (single list + source/type filters,
   /// purple Discover theme, 1-click marketplace) instead of the classic two-tab
   /// Addons screen. On by default; can be turned off per-device via
@@ -480,18 +648,37 @@ class StorageService {
     await prefs.setBool('stremio_addon_hub_enabled', enabled);
   }
 
+  /// "Is this a television?" for the ambient-trailer split below.
+  ///
+  /// The split is by FORM FACTOR, not by OS — Apple TV renders the very same
+  /// Home hero and Discover stage that Android TV does. [PlatformUtil.isAndroidTV]
+  /// short-circuits to false whenever the platform isn't Android, so tvOS has to
+  /// be added explicitly; it stays awaited (rather than reading the cached flag)
+  /// so this keeps warming the probe exactly as it did before.
+  static Future<bool> _isTelevision() async =>
+      await PlatformUtil.isAndroidTV() || PlatformUtil.isTvOS;
+
   /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
   /// metadata addon provides one. Exactly ONE ambient-trailer surface exists
-  /// per platform, and this is the non-TV one: OFF on Android TV always (the
-  /// Home hero spotlight owns ambient there — [getHomeHeroTrailerEnabled]),
+  /// per platform, and this is the non-TV one: OFF on any television always
+  /// (the Home hero spotlight owns ambient there — [getHomeHeroTrailerEnabled]),
   /// default ON everywhere else. The TV case is hard-off rather than a
   /// default, so a value stored before this split — or by a phone install
   /// whose prefs were restored onto a TV box — can't switch the detail
   /// backdrop back on. Settings only offers the toggle off-TV to match.
+  ///
+  /// **No longer hard-off on TV.** The Showcase detail page is built around the
+  /// reference's behaviour, where the key art gives way to a trailer in place —
+  /// so a television now has two ambient surfaces, not one, and the "exactly
+  /// one per platform" rule above is retired. What made that rule necessary was
+  /// the process's single video output; that is now enforced directly by
+  /// [VideoOutputLease] plus a covered trailer releasing its decoder, which is
+  /// a guarantee rather than an assumption. Defaults OFF on TV so an existing
+  /// box does not start playing trailers on a page that never did.
   static Future<bool> getDetailTrailerAutoplayEnabled() async {
-    if (await PlatformUtil.isAndroidTV()) return false;
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('detail_trailer_autoplay_enabled') ?? true;
+    return prefs.getBool('detail_trailer_autoplay_enabled') ??
+        !(await _isTelevision());
   }
 
   static Future<void> setDetailTrailerAutoplayEnabled(bool enabled) async {
@@ -499,16 +686,23 @@ class StorageService {
     await prefs.setBool('detail_trailer_autoplay_enabled', enabled);
   }
 
-  /// Ambient trailer in the TV hero surfaces — the Home board's spotlight and
-  /// the Discover rail. Android TV only in both senses: those surfaces aren't
-  /// rendered elsewhere, so this is hard-off off-TV rather than merely
-  /// defaulted off (the platform's ambient surface is the detail page instead
-  /// — [getDetailTrailerAutoplayEnabled] is its counterpart). Exactly one of
-  /// the pair is live on any given device, and Settings shows only that one.
+  /// Ambient trailer in the hero surfaces — the Home board's spotlight and
+  /// the Discover rail.
+  ///
+  /// **No longer hard-off off-TV.** That rule dated from when no other
+  /// platform rendered a hero; the Spotlight home layout now runs on phones,
+  /// tablets and desktop, so the hard-off becomes a platform DEFAULT:
+  /// on for televisions (unchanged) and desktop (wall power, wifi), off for
+  /// phones and tablets — autoplaying video on a battery over cellular is an
+  /// opt-in, not a surprise. The stored value, once written, wins everywhere.
   static Future<bool> getHomeHeroTrailerEnabled() async {
-    if (!await PlatformUtil.isAndroidTV()) return false;
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('home_hero_trailer_enabled') ?? true;
+    final stored = prefs.getBool('home_hero_trailer_enabled');
+    if (stored != null) return stored;
+    if (await _isTelevision()) return true;
+    final desktop =
+        Platform.isMacOS || Platform.isWindows || Platform.isLinux;
+    return desktop;
   }
 
   static Future<void> setHomeHeroTrailerEnabled(bool enabled) async {
@@ -533,40 +727,61 @@ class StorageService {
   /// with one shared key that dead value would now silently mute their detail
   /// backdrop. Per-surface keys make such writes unreadable instead, so
   /// non-TV starts at the defaults its backdrop has always used.
-  static Future<String> _ambientTrailerKey(String suffix) async =>
-      await PlatformUtil.isAndroidTV()
-      ? 'home_hero_trailer_$suffix'
-      : 'detail_trailer_$suffix';
+  ///
+  /// Now selected by SURFACE rather than by platform. Picking by platform was
+  /// sound while a television could only ever have the Home hero; with the
+  /// Showcase detail page also playing trailers, a platform pick would have the
+  /// detail backdrop silently reading the Home hero's sound and volume.
+  static String _ambientTrailerKeyFor(
+    AmbientTrailerSurface surface,
+    String suffix,
+  ) => switch (surface) {
+    AmbientTrailerSurface.homeHero => 'home_hero_trailer_$suffix',
+    AmbientTrailerSurface.detail => 'detail_trailer_$suffix',
+  };
 
   /// Whether this platform's ambient trailer plays sound (false = video only).
   /// See [_ambientTrailerKey] for which surface that is. Note the IPTV live
   /// preview is a channel feed, not a trailer, and stays at full volume.
-  static Future<bool> getAmbientTrailerAudioEnabled() async {
-    final key = await _ambientTrailerKey('audio_enabled');
+  static Future<bool> getAmbientTrailerAudioEnabled(
+    AmbientTrailerSurface surface,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(key) ?? true;
+    return prefs.getBool(_ambientTrailerKeyFor(surface, 'audio_enabled')) ??
+        true;
   }
 
-  static Future<void> setAmbientTrailerAudioEnabled(bool enabled) async {
-    final key = await _ambientTrailerKey('audio_enabled');
+  static Future<void> setAmbientTrailerAudioEnabled(
+    AmbientTrailerSurface surface,
+    bool enabled,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, enabled);
+    await prefs.setBool(
+      _ambientTrailerKeyFor(surface, 'audio_enabled'),
+      enabled,
+    );
   }
 
   /// Ambient trailer volume, percent 10–100. Default 70 — audible but under
   /// the UI, and the level the detail backdrop has always run at. Same
   /// one-surface-per-platform scope as [getAmbientTrailerAudioEnabled].
-  static Future<int> getAmbientTrailerVolume() async {
-    final key = await _ambientTrailerKey('volume');
+  static Future<int> getAmbientTrailerVolume(
+    AmbientTrailerSurface surface,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
-    final v = prefs.getInt(key) ?? 70;
+    final v = prefs.getInt(_ambientTrailerKeyFor(surface, 'volume')) ?? 70;
     return v.clamp(10, 100);
   }
 
-  static Future<void> setAmbientTrailerVolume(int percent) async {
-    final key = await _ambientTrailerKey('volume');
+  static Future<void> setAmbientTrailerVolume(
+    AmbientTrailerSurface surface,
+    int percent,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(key, percent.clamp(10, 100));
+    await prefs.setInt(
+      _ambientTrailerKeyFor(surface, 'volume'),
+      percent.clamp(10, 100),
+    );
   }
 
   /// Android TV: render ambient trailers on a native SurfaceView *under* a
@@ -645,22 +860,263 @@ class StorageService {
 
   static const String _tvHomeStyleKey = 'tv_home_style';
 
-  /// TV Home layout: 'canvas' (full-bleed stage + one bottom shelf, the
-  /// default) or 'classic' (hero + scrolling rows). Phone/desktop and the
-  /// Search tab never read it. Unset — and any stale value like the removed
-  /// 'shelf' — coerces to 'canvas'; only an explicit 'classic' keeps classic.
+  /// Every shipping TV Home layout. 'canvas' is the product default;
+  /// 'classic' is the original hero + scrolling rows. The rest are the
+  /// alternate stages (see `_buildAtriumBoard` and friends in search_screen).
+  ///
+  /// Coercion is TOTAL and both ways: a value written by a newer build and
+  /// read by an older one — or the long-removed 'shelf' — lands on 'canvas'
+  /// rather than rendering nothing.
+  static const Set<String> kTvHomeStyles = {
+    'canvas',
+    'classic',
+    'atrium',
+    'mosaic',
+    'promenade',
+    'deck',
+    'tonight',
+    'spotlight',
+  };
+
+  /// TV Home layout. Phone/desktop and the Search tab never read it.
+  /// Synchronous mirror of `tvHomeStyle`, kept so a Look can read
+  /// the current value without an await. Additive: every existing caller
+  /// still goes through the async getter, which now also refreshes this.
+  static String tvHomeStyleCached = 'canvas';
+
   static Future<String> getTvHomeStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_tvHomeStyleKey);
-    return raw == 'classic' ? 'classic' : 'canvas';
+    return tvHomeStyleCached = kTvHomeStyles.contains(raw) ? raw! : 'canvas';
   }
 
   static Future<void> setTvHomeStyle(String style) async {
+    final normalized = kTvHomeStyles.contains(style) ? style : 'canvas';
+    // Mirror BEFORE the await, so anything reading synchronously on the next
+    // frame sees the choice. Existing async readers are unaffected.
+    tvHomeStyleCached = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _tvHomeStyleKey,
-      style == 'classic' ? 'classic' : 'canvas',
-    );
+    await prefs.setString(_tvHomeStyleKey, normalized);
+  }
+
+  static const String _detailPageStyleKey = 'detail_page_style';
+
+  /// Every value storage will persist for the merged details page look
+  /// (Appearance → Details Page). Every known layout is accepted — a
+  /// choice written by a newer build has to survive a downgrade rather than be
+  /// silently rewritten to the default the first time an older build reads it.
+  ///
+  /// What a given BUILD can actually draw is a narrower set —
+  /// `kDetailPageStylesShipped` in `screens/settings/detail_page_style_page.dart`
+  /// — and dispatch/labels/picker all go through `effectiveDetailPageStyle`.
+  static const Set<String> kDetailPageStyles = {
+    'classic',
+    'marquee',
+    'dossier',
+    'broadsheet',
+    'stage',
+    'filmstrip',
+    'console',
+    'vista',
+    'monolith',
+    'mosaic',
+    'halo',
+    'premiere',
+    'showcase',
+  };
+
+  /// The layout a fresh install — and anyone who has never opened the picker —
+  /// gets.
+  ///
+  /// **Console rather than Classic, and that is a deliberate change to what
+  /// the app looks like out of the box.** Classic is the one layout that is
+  /// deliberately unthemed: it paints its own literals and ignores the app
+  /// theme entirely. With Classic as the default, picking an App Theme
+  /// appeared to do nothing on the page most people judge the app by — the
+  /// setting looked broken when it was working. A themed layout as the default
+  /// is what makes it honest.
+  ///
+  /// This is the FALLBACK, so it moves everyone with no stored value — not
+  /// just new installs, but every user who never opened the picker. That
+  /// breadth is the point rather than a side effect; Classic is still one row
+  /// away for anyone who wants it back.
+  static const String kDetailPageStyleDefault = 'console';
+
+  /// Synchronous mirror, warmed in main() before runApp: `MergedDetailScreen`
+  /// picks its body in the first build, so an async-only read would paint the
+  /// default for a frame and then re-lay-out the whole page.
+  ///
+  /// Normalizes toward [kDetailPageStyleDefault] on BOTH sides — an
+  /// unrecognized value has to mean the default for the reader and the writer
+  /// alike.
+  static String detailPageStyleCached = kDetailPageStyleDefault;
+
+  static Future<String> getDetailPageStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_detailPageStyleKey);
+    detailPageStyleCached = kDetailPageStyles.contains(value)
+        ? value!
+        : kDetailPageStyleDefault;
+    return detailPageStyleCached;
+  }
+
+  static Future<void> setDetailPageStyle(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = kDetailPageStyles.contains(value)
+        ? value
+        : kDetailPageStyleDefault;
+    await prefs.setString(_detailPageStyleKey, normalized);
+    detailPageStyleCached = normalized;
+  }
+
+  static const String _detailThemeKey = 'detail_theme';
+
+  /// Every look the details page can wear (Appearance → Details Theme).
+  ///
+  /// Same contract as [kDetailPageStyles]: all values are accepted from day
+  /// one so a theme written by a newer build survives a downgrade, and what a
+  /// given BUILD can draw is the narrower `kDetailThemesShipped` in
+  /// `screens/settings/detail_theme_page.dart`.
+  ///
+  /// The layout and the theme are orthogonal — one says where things are, the
+  /// other what they look like.
+  static const Set<String> kDetailThemes = {
+    'signal',
+    'noir',
+    'broadsheet',
+    'phosphor',
+    'aurora',
+    'concrete',
+    'velvet',
+    'blueprint',
+    'broadcast',
+    'sepia',
+    'obsidian',
+    'halo',
+    'prestige',
+    'deep_field',
+    'graphite',
+    'vault',
+    'spectrum',
+    'verdant',
+    'frost',
+    'cinemascope',
+    // The five premium looks. Accepted here from the build that introduces
+    // them, for the same downgrade reason as everything above: a value a newer
+    // build wrote must survive being read by an older one, which normalizes it
+    // to 'signal' rather than losing the key.
+    'glass',
+    'field',
+    'hearth',
+    'console',
+    'reel',
+  
+    'spotlight',
+  };
+
+  /// Synchronous mirror, warmed in main() before runApp — the details page
+  /// picks its theme in the first build, so an async-only read would paint
+  /// Signal for a frame and then repaint the whole page.
+  static String detailThemeCached = 'signal';
+
+  static Future<String> getDetailTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_detailThemeKey);
+    detailThemeCached = kDetailThemes.contains(value) ? value! : 'signal';
+    return detailThemeCached;
+  }
+
+  static Future<void> setDetailTheme(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = kDetailThemes.contains(value) ? value : 'signal';
+    await prefs.setString(_detailThemeKey, normalized);
+    detailThemeCached = normalized;
+  }
+
+  static const String _appThemeKey = 'app_theme';
+  static const String _themeOverridesKey = 'theme_overrides';
+
+  /// The app-wide theme (Appearance → App Theme). `'legacy'` is the sentinel
+  /// meaning "render today's app exactly" and is the default; any other
+  /// accepted value is a [kDetailThemes] id applied app-wide.
+  ///
+  /// Unknown/removed ids normalize to `'legacy'` on BOTH sides — never to a
+  /// random theme — so a value written by a newer build downgrades safely.
+  ///
+  /// Write-through contract (owned by `AppThemeController.select`): choosing a
+  /// real app theme also mirrors the id into [_detailThemeKey], and the mirror
+  /// is written FIRST — a crash between the two writes must leave an
+  /// older-build-consistent view, and old builds only read `detail_theme`.
+  static String appThemeCached = 'legacy';
+
+  static Future<String> getAppTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_appThemeKey);
+    appThemeCached = (value == 'legacy' || kDetailThemes.contains(value))
+        ? value!
+        : 'legacy';
+    return appThemeCached;
+  }
+
+  static Future<void> setAppTheme(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = (value == 'legacy' || kDetailThemes.contains(value))
+        ? value
+        : 'legacy';
+    await prefs.setString(_appThemeKey, normalized);
+    appThemeCached = normalized;
+  }
+
+  /// The user's per-token edits, as the raw JSON `ThemeOverrides` encodes.
+  ///
+  /// Kept as a string here rather than a parsed object so this layer stays free
+  /// of the theme package — and because the only consumer that matters resolves
+  /// it once, on the controller, and memoizes the result.
+  ///
+  /// Empty string means "no overrides", which is both the default and the fast
+  /// path every theme resolution checks first.
+  static String themeOverridesCached = '';
+
+  static Future<String> getThemeOverrides() async {
+    final prefs = await SharedPreferences.getInstance();
+    themeOverridesCached = prefs.getString(_themeOverridesKey) ?? '';
+    return themeOverridesCached;
+  }
+
+  static Future<void> setThemeOverrides(String raw) async {
+    final prefs = await SharedPreferences.getInstance();
+    // Publish the mirror BEFORE the await, like every other live-applied
+    // preference here: the controller has already recomputed and notified off
+    // this value, and a rebuild that raced the write must not read the old one.
+    themeOverridesCached = raw;
+    if (raw.isEmpty) {
+      await prefs.remove(_themeOverridesKey);
+    } else {
+      await prefs.setString(_themeOverridesKey, raw);
+    }
+  }
+
+  static const String _parentsGuideStyleKey = 'parents_guide_style';
+  static const Set<String> kParentsGuideStyles = {'classic', 'compass'};
+
+  /// Synchronous mirror used by the Parents Guide widget. Compass is the new
+  /// default; Classic remains available as a zero-risk fallback in Appearance.
+  static String parentsGuideStyleCached = 'compass';
+
+  static Future<String> getParentsGuideStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_parentsGuideStyleKey);
+    parentsGuideStyleCached = kParentsGuideStyles.contains(value)
+        ? value!
+        : 'compass';
+    return parentsGuideStyleCached;
+  }
+
+  static Future<void> setParentsGuideStyle(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = kParentsGuideStyles.contains(value) ? value : 'compass';
+    await prefs.setString(_parentsGuideStyleKey, normalized);
+    parentsGuideStyleCached = normalized;
   }
 
   static const String _iptvStyleKey = 'iptv_style';
@@ -673,18 +1129,97 @@ class StorageService {
   /// unset coerces to 'command' on BOTH read and write, so an old build
   /// downgrading past a newer value can never pin a look the reader treats
   /// as the exception.
+  /// Synchronous mirror of `iptvStyle`, kept so a Look can read
+  /// the current value without an await. Additive: every existing caller
+  /// still goes through the async getter, which now also refreshes this.
+  static String iptvStyleCached = 'command';
+
   static Future<String> getIptvStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_iptvStyleKey);
-    return _iptvStyles.contains(raw) ? raw! : 'command';
+    return iptvStyleCached = _iptvStyles.contains(raw) ? raw! : 'command';
   }
 
   static Future<void> setIptvStyle(String style) async {
+    final normalized = _iptvStyles.contains(style) ? style : 'command';
+    iptvStyleCached = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _iptvStyleKey,
-      _iptvStyles.contains(style) ? style : 'command',
-    );
+    await prefs.setString(_iptvStyleKey, normalized);
+  }
+
+  // ── Player dock (touch/desktop transport controls) ──────────────────────
+  //
+  // Three independent prefs so any style works in any palette at any size;
+  // bundling them into one "look" would only remove combinations. Palette and
+  // size are inert under `classic`, whose values are still preserved so
+  // switching to a styled dock restores the user's choices.
+  //
+  // Read once at player launch. Televisions never consult these — they build
+  // `TvControls`, not `Controls`.
+  static const String _playerDockStyleKey = 'player_dock_style';
+  static const Set<String> _playerDockStyles = {
+    'classic',
+    'auto',
+    'compact',
+    'tiers',
+    'cinema',
+    // The value shipped before the arrangements became selectable. Still
+    // accepted on read so existing installs keep the dock they chose; it
+    // means the same thing 'auto' does.
+    'two_tier',
+  };
+
+  static Future<String> getPlayerDockStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_playerDockStyleKey);
+    return _playerDockStyles.contains(raw) ? raw! : 'classic';
+  }
+
+  static Future<void> setPlayerDockStyle(String style) async {
+    final normalized = _playerDockStyles.contains(style) ? style : 'classic';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playerDockStyleKey, normalized);
+  }
+
+  static const String _playerDockPaletteKey = 'player_dock_palette';
+  static const Set<String> _playerDockPalettes = {
+    'ultraviolet',
+    'crimson',
+    'aurum',
+    'ice',
+  };
+
+  static Future<String> getPlayerDockPalette() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_playerDockPaletteKey);
+    return _playerDockPalettes.contains(raw) ? raw! : 'ultraviolet';
+  }
+
+  static Future<void> setPlayerDockPalette(String palette) async {
+    final normalized =
+        _playerDockPalettes.contains(palette) ? palette : 'ultraviolet';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playerDockPaletteKey, normalized);
+  }
+
+  static const String _playerDockSizeKey = 'player_dock_size';
+  static const Set<String> _playerDockSizes = {
+    'auto',
+    'small',
+    'medium',
+    'large',
+  };
+
+  static Future<String> getPlayerDockSize() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_playerDockSizeKey);
+    return _playerDockSizes.contains(raw) ? raw! : 'auto';
+  }
+
+  static Future<void> setPlayerDockSize(String size) async {
+    final normalized = _playerDockSizes.contains(size) ? size : 'auto';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playerDockSizeKey, normalized);
   }
 
   static const String _iptvPlayerGuideStyleKey = 'iptv_player_guide_style';
@@ -693,6 +1228,7 @@ class StorageService {
     'glass',
     'edition',
     'console',
+    'spotlight',
   };
 
   /// In-player IPTV guide look (zap banner, channel sheet, native guide
@@ -706,7 +1242,10 @@ class StorageService {
   static Future<String> getIptvPlayerGuideStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_iptvPlayerGuideStyleKey);
-    return _iptvPlayerGuideStyles.contains(raw) ? raw! : 'classic';
+    if (_iptvPlayerGuideStyles.contains(raw)) return raw!;
+    // Never chosen: Apple TV gets its native idiom, everything else keeps
+    // the shipped look. An explicit pick (either way) is stored and wins.
+    return PlatformUtil.isTvOS ? 'spotlight' : 'classic';
   }
 
   static Future<void> setIptvPlayerGuideStyle(String style) async {
@@ -730,23 +1269,31 @@ class StorageService {
   /// Everything else that holds a pre-load placeholder for this pref must
   /// agree, or the UI paints one layout and then swaps: SearchScreen's
   /// `_discLayoutCached`, DiscoverLayoutPage, SettingsScreen.
+  /// Synchronous mirror of `discoverLayout`, kept so a Look can read
+  /// the current value without an await. Additive: every existing caller
+  /// still goes through the async getter, which now also refreshes this.
+  static String discoverLayoutCached = 'stage';
+
   static Future<String> getDiscoverLayout() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_discoverLayoutKey) == 'grid' ? 'grid' : 'stage';
+    return discoverLayoutCached = prefs.getString(_discoverLayoutKey) == 'grid'
+        ? 'grid'
+        : 'stage';
   }
 
   /// Normalizes toward 'stage' on the same terms [getDiscoverLayout] does —
   /// an unrecognized value has to mean the default on BOTH sides, or writing
   /// one would silently pin the layout the reader treats as the exception.
   static Future<void> setDiscoverLayout(String layout) async {
+    final normalized = layout == 'grid' ? 'grid' : 'stage';
+    discoverLayoutCached = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _discoverLayoutKey,
-      layout == 'grid' ? 'grid' : 'stage',
-    );
+    await prefs.setString(_discoverLayoutKey, normalized);
   }
 
   static const String _launchAnimationKey = 'launch_animation';
+  // MUST stay in step with kLaunchIdents — an id missing here is silently
+  // normalized back to 'horizon', so the picker would appear not to save.
   static const Set<String> _launchAnimationValues = {
     'drop',
     'marquee',
@@ -755,7 +1302,22 @@ class StorageService {
     'neon',
     'chrome',
     'monogram',
+    'aperture',
+    'blueprint',
+    'ripple',
+    'ember',
+    'swiss',
+    'origami',
+    'anamorphic',
+    'constellation',
+    'silk',
+    'rackfocus',
   };
+
+  /// Exposed so a test can assert this set and `kLaunchIdents` agree in BOTH
+  /// directions — drift either way silently strands the pref on the default.
+  @visibleForTesting
+  static Set<String> get launchAnimationValues => _launchAnimationValues;
 
   /// Which launch ident the splash plays (Appearance → Launch Animation).
   /// Values are the ids in `widgets/launch/launch_ident.dart`; 'horizon'
@@ -772,17 +1334,53 @@ class StorageService {
   static Future<String> getLaunchAnimation() async {
     final prefs = await SharedPreferences.getInstance();
     final value = prefs.getString(_launchAnimationKey);
-    launchAnimationCached =
-        _launchAnimationValues.contains(value) ? value! : 'horizon';
+    launchAnimationCached = _launchAnimationValues.contains(value)
+        ? value!
+        : 'horizon';
     return launchAnimationCached;
   }
 
   static Future<void> setLaunchAnimation(String value) async {
     final prefs = await SharedPreferences.getInstance();
-    final normalized =
-        _launchAnimationValues.contains(value) ? value : 'horizon';
+    final normalized = _launchAnimationValues.contains(value)
+        ? value
+        : 'horizon';
     await prefs.setString(_launchAnimationKey, normalized);
     launchAnimationCached = normalized;
+  }
+
+  static const String _launchIdentPaletteKey = 'launch_ident_palette';
+  static const Set<String> _launchIdentPalettes = {'ident', 'theme'};
+
+  /// Whether the launch ident wears its OWN colours or the app theme's
+  /// (Appearance → Launch Animation).
+  ///
+  /// Defaults to `'ident'`, so nobody's splash changes until they ask. The
+  /// ident's art direction — its geometry, its motion, its mark — is the same
+  /// either way; only the room's colours move, and only where they stay
+  /// legible (see `IdentPalette.fromTheme`).
+  ///
+  /// Mirrored synchronously for the same reason [launchAnimationCached] is:
+  /// AppInitializer builds the splash in `initState`, before any async read
+  /// could land.
+  static String launchIdentPaletteCached = 'ident';
+
+  static Future<String> getLaunchIdentPalette() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_launchIdentPaletteKey);
+    launchIdentPaletteCached = _launchIdentPalettes.contains(value)
+        ? value!
+        : 'ident';
+    return launchIdentPaletteCached;
+  }
+
+  static Future<void> setLaunchIdentPalette(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = _launchIdentPalettes.contains(value) ? value : 'ident';
+    // Mirror BEFORE the await: the picker rebuilds on the next frame and the
+    // splash reads the mirror synchronously.
+    launchIdentPaletteCached = normalized;
+    await prefs.setString(_launchIdentPaletteKey, normalized);
   }
 
   static const String _textBrightnessKey = 'text_brightness';
@@ -819,24 +1417,62 @@ class StorageService {
     'island',
     'marquee',
     'badge',
+    'pill',
   };
 
   /// TV sidebar chrome: 'ghost' (chromeless, the default), 'classic' (the
-  /// original liquid glass), 'island', 'marquee' or 'badge'. Visuals only —
-  /// the LEFT-only focus model is shared by every style. Phone/desktop never
-  /// read it.
+  /// original liquid glass), 'island', 'marquee', 'badge' or 'pill'.
+  ///
+  /// The LEFT-only focus model is shared by every style. Chrome-only for the
+  /// first five; **'pill' is the one that also changes LAYOUT** — it shows no
+  /// rail at rest, so content runs full-bleed and gains 64px. Read the inset
+  /// through `TvSidebarNav.contentInsetFor` rather than assuming the constant.
+  /// Phone/desktop never read any of it.
+  /// Synchronous mirror of `tvSidebarStyle`, kept so a Look can read
+  /// the current value without an await. Additive: every existing caller
+  /// still goes through the async getter, which now also refreshes this.
+  static String tvSidebarStyleCached = 'ghost';
+
   static Future<String> getTvSidebarStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_tvSidebarStyleKey);
-    return (raw != null && _tvSidebarStyles.contains(raw)) ? raw : 'ghost';
+    return tvSidebarStyleCached =
+        (raw != null && _tvSidebarStyles.contains(raw)) ? raw : 'ghost';
   }
 
   static Future<void> setTvSidebarStyle(String style) async {
+    final normalized = _tvSidebarStyles.contains(style) ? style : 'ghost';
+    tvSidebarStyleCached = normalized;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _tvSidebarStyleKey,
-      _tvSidebarStyles.contains(style) ? style : 'ghost',
-    );
+    await prefs.setString(_tvSidebarStyleKey, normalized);
+  }
+
+  static const String _desktopSidebarStyleKey = 'desktop_sidebar_style';
+  static const Set<String> _desktopSidebarStyles = {'rail', 'pill'};
+
+  /// Desktop/tablet sidebar chrome, read only at the wide (≥600) non-TV
+  /// layout: 'rail' (the fixed icon rail, the default) or 'pill' (no rail —
+  /// content runs full-bleed and a floating capsule shows the current tab;
+  /// clicking it opens the menu as an overlay). The TV rail has its own key
+  /// above and never reads this; phones never reach the wide layout.
+  /// Warmed in `main()` before the first frame — the shell's field
+  /// initializer reads it so a migrated/pill user never flashes the rail.
+  static String desktopSidebarStyleCached = 'rail';
+
+  static Future<String> getDesktopSidebarStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_desktopSidebarStyleKey);
+    return desktopSidebarStyleCached =
+        (raw != null && _desktopSidebarStyles.contains(raw)) ? raw : 'rail';
+  }
+
+  static Future<void> setDesktopSidebarStyle(String style) async {
+    desktopSidebarStyleCached = _desktopSidebarStyles.contains(style)
+        ? style
+        : 'rail';
+    final normalized = _desktopSidebarStyles.contains(style) ? style : 'rail';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_desktopSidebarStyleKey, normalized);
   }
 
   /// The classic bar's user-chosen middle slots, as REAL tab indices (Home
@@ -5596,6 +6232,64 @@ class StorageService {
     await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
   }
 
+  /// Android Dart player only: bitstream AC3/EAC3/DTS-core to the audio
+  /// device instead of decoding to PCM (AUDIO_FIDELITY_PLAN.md). Default
+  /// false — passthrough is fail-loud on routes that misreport support,
+  /// so only the user can turn it on.
+  static Future<bool> getAudioPassthroughEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_audioPassthroughKey) ?? false;
+  }
+
+  static Future<void> setAudioPassthroughEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_audioPassthroughKey, enabled);
+  }
+
+  /// Apple (tvOS/iOS) Dart player: request the track's real channel layout
+  /// (`audio-channels=auto`) so an HDMI/eARC AVR route gets full
+  /// multichannel LPCM. Default false until route-safety is field-proven
+  /// (AUDIO_FIDELITY_PLAN.md rev 2).
+  static Future<bool> getAppleMultichannelAudio() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_appleMultichannelAudioKey) ?? false;
+  }
+
+  static Future<void> setAppleMultichannelAudio(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_appleMultichannelAudioKey, enabled);
+  }
+
+  /// Apple TV only: force the media-kit player to software video decoding.
+  /// The escape hatch behind the automatic 10-bit remedy ladder (see
+  /// PLAYER_TVOS_10BIT_PLAN.md) — for files whose formats read clean but
+  /// render wrong. Default false: hardware decoding, today's behavior.
+  static Future<bool> getTvosForceSoftwareDecode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_tvosForceSoftwareDecodeKey) ?? false;
+  }
+
+  static Future<void> setTvosForceSoftwareDecode(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_tvosForceSoftwareDecodeKey, enabled);
+  }
+
+  /// Renderer used by the Flutter media-kit player on Android phones/tablets.
+  /// Android TV ignores this and keeps its native Media3 SurfaceView backend.
+  static Future<AndroidVideoRendererMode> getAndroidVideoRendererMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return AndroidVideoRendererMode.fromStorage(
+      prefs.getString(_androidVideoRendererModeKey),
+    );
+  }
+
+  static Future<void> setAndroidVideoRendererMode(
+    AndroidVideoRendererMode mode,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_androidVideoRendererModeKey, mode.storageKey);
+  }
+
   /// Whether the Debrify Player should request community timestamps and show
   /// manual skip buttons. Manual buttons are enabled by default; this setting
   /// never authorizes automatic seeking.
@@ -5652,6 +6346,47 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_playerStartPortraitKey, enabled);
     playerStartPortraitCached = enabled;
+  }
+
+  /// Whether interface sound and haptics are allowed at all.
+  ///
+  /// A VETO, not a switch: the theme decides whether there is anything to play
+  /// and these decide whether the user wants to hear or feel it. Both default
+  /// ON, because a theme that asks for silence — which is every look except
+  /// Console and Warm Room — already produces none, so the default cannot
+  /// surprise anybody who has not chosen a look that ticks.
+  ///
+  /// Synchronous mirrors because `UiFeedback` is consulted from a focus
+  /// listener and a key handler, neither of which can await. Warmed in main()
+  /// before runApp.
+  static bool uiSoundsCached = true;
+  static bool uiHapticsCached = true;
+
+  static Future<bool> getUiSounds() async {
+    final prefs = await SharedPreferences.getInstance();
+    uiSoundsCached = prefs.getBool(_uiSoundsKey) ?? true;
+    return uiSoundsCached;
+  }
+
+  static Future<void> setUiSounds(bool enabled) async {
+    // The mirror moves FIRST. `UiFeedback` reads it from a focus listener that
+    // cannot await, so publishing after the platform write leaves a window in
+    // which a user who has just switched sound off still hears the next tick.
+    uiSoundsCached = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_uiSoundsKey, enabled);
+  }
+
+  static Future<bool> getUiHaptics() async {
+    final prefs = await SharedPreferences.getInstance();
+    uiHapticsCached = prefs.getBool(_uiHapticsKey) ?? true;
+    return uiHapticsCached;
+  }
+
+  static Future<void> setUiHaptics(bool enabled) async {
+    uiHapticsCached = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_uiHapticsKey, enabled);
   }
 
   /// Whether the native TV player silently aligns addon subtitles to the
@@ -6525,7 +7260,117 @@ class StorageService {
       );
     }
   }
+
+  static const String _homeExtraRowsKey = 'home_extra_rows_v1';
+
+  /// The OPT-IN extra Home rows (default-off, so the disabled-set above can't
+  /// express them): Trakt/Simkl list rows and IPTV custom-list rows. IDs are
+  /// `traktlist:<apiValue>`, `traktlist:custom:<id>`, `traktlist:liked:<id>`,
+  /// `simkllist:<enumName>`, `iptvlist:<listId>`. [HomeExtraRow.title] is the
+  /// display name captured at opt-in time so dynamic rows (custom/liked
+  /// lists, IPTV lists) render a header instantly and stay representable in
+  /// the Home Rows manager through an API outage; built-in rows ignore it.
+  /// Order is NOT meaningful — the board renders extras in canonical order.
+  static Future<List<HomeExtraRow>> getHomeExtraRows() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_homeExtraRowsKey);
+    if (json == null) return const [];
+    try {
+      final list = jsonDecode(json) as List<dynamic>;
+      final seen = <String>{};
+      final out = <HomeExtraRow>[];
+      for (final e in list) {
+        if (e is! Map) continue;
+        final id = e['id'];
+        if (id is! String || id.isEmpty || !seen.add(id)) continue;
+        final title = e['title'];
+        out.add((id: id, title: title is String ? title : ''));
+      }
+      return out;
+    } catch (e) {
+      debugPrint('Error reading home extra rows: $e');
+      return const [];
+    }
+  }
+
+  /// Save the opted-in extra Home rows (empty = key removed).
+  static Future<void> setHomeExtraRows(List<HomeExtraRow> rows) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (rows.isEmpty) {
+      await prefs.remove(_homeExtraRowsKey);
+    } else {
+      await prefs.setString(
+        _homeExtraRowsKey,
+        jsonEncode([
+          for (final r in rows) {'id': r.id, 'title': r.title},
+        ]),
+      );
+    }
+  }
+
+  static const String _homeHeroSourceKey = 'home_hero_source_v1';
+
+  /// Where the Spotlight home layout's hero reel comes from.
+  ///
+  /// Modes: `random` (the DEFAULT — "Surprise me": any installed browsable
+  /// catalog, re-rolled each board load), `auto` (the first non-empty board
+  /// row) and `custom` (one of [HomeHeroSource.ids], catalog leaves in the
+  /// Home Rows grammar `addonId:type:catalogId`; more than one re-rolls among
+  /// them each load). Unknown modes and a custom mode with no ids read back
+  /// as `random` so a bad write can never wedge the hero. `auto` is an
+  /// explicit choice now, so it is STORED — only the default removes the key.
+  static Future<HomeHeroSource> getHomeHeroSource() async {
+    const fallback = (mode: HomeHeroSourceMode.random, ids: <String>[]);
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_homeHeroSourceKey);
+    if (json == null) return fallback;
+    try {
+      final map = jsonDecode(json) as Map<String, dynamic>;
+      final ids = <String>[];
+      final seen = <String>{};
+      final rawIds = map['ids'];
+      if (rawIds is List) {
+        for (final e in rawIds) {
+          if (e is String && e.isNotEmpty && seen.add(e)) ids.add(e);
+        }
+      }
+      final mode = switch (map['mode']) {
+        'auto' => HomeHeroSourceMode.auto,
+        'custom' when ids.isNotEmpty => HomeHeroSourceMode.custom,
+        _ => HomeHeroSourceMode.random,
+      };
+      return (mode: mode, ids: ids);
+    } catch (e) {
+      debugPrint('Error reading home hero source: $e');
+      return fallback;
+    }
+  }
+
+  /// Save the Spotlight hero source (the default `random` + no ids = key
+  /// removed; `auto` is stored, or it would read back as the default).
+  static Future<void> setHomeHeroSource(HomeHeroSource source) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (source.mode == HomeHeroSourceMode.random && source.ids.isEmpty) {
+      await prefs.remove(_homeHeroSourceKey);
+    } else {
+      await prefs.setString(
+        _homeHeroSourceKey,
+        jsonEncode({'mode': source.mode.name, 'ids': source.ids}),
+      );
+    }
+  }
 }
+
+/// See [StorageService.getHomeHeroSource].
+enum HomeHeroSourceMode { auto, random, custom }
+
+/// The Spotlight hero source pref — see [StorageService.getHomeHeroSource].
+/// [ids] are kept even in `auto`/`random` mode so a user flipping modes in
+/// Settings doesn't lose their custom picks.
+typedef HomeHeroSource = ({HomeHeroSourceMode mode, List<String> ids});
+
+/// One opted-in extra Home row — see [StorageService.getHomeExtraRows].
+typedef HomeExtraRow = ({String id, String title});
 
 class ApiKeyValidator {
   static bool isValidFormat(String apiKey) {

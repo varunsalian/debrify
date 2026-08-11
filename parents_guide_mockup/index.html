@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Showcase · Parents Guide band</title>
+<style>
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{ background:#08080a; color:#fff;
+    font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased; }
+  button{ font:inherit; color:inherit; background:none; border:none; cursor:pointer; }
+  :root{ --accent:#E9707B; }
+
+  .page{ max-width:1280px; margin:0 auto; padding:34px 26px 80px; }
+  h1{ font-size:22px; font-weight:700; letter-spacing:-.3px; }
+  .sub{ color:rgba(255,255,255,.55); font-size:13.5px; margin:6px 0 34px; line-height:1.55; }
+  .panelh{ font-size:11.5px; font-weight:700; letter-spacing:.14em; color:rgba(255,255,255,.42);
+           text-transform:uppercase; margin:44px 0 14px; }
+  .panelh span{ color:rgba(255,255,255,.28); font-weight:600; letter-spacing:0; text-transform:none; margin-left:10px; }
+
+  /* ════ TV / WIDE panel ════ */
+  .tv{ position:relative; border-radius:18px; overflow:hidden; background:#000;
+       border:1px solid rgba(255,255,255,.1); padding:30px 0 40px; }
+  .ghost{ opacity:.32; pointer-events:none; }
+  .rh{ font-size:19px; font-weight:700; letter-spacing:-.2px; padding:0 46px 13px; }
+  .rail{ display:flex; gap:16px; overflow-x:auto; padding:4px 46px 6px; scrollbar-width:none; }
+  .rail::-webkit-scrollbar{ display:none; }
+
+  /* ghosted cast context above */
+  .castcell{ flex:none; width:96px; text-align:center; }
+  .castcell .disc{ width:88px; height:88px; border-radius:50%; background:rgba(255,255,255,.1);
+    display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:600;
+    color:rgba(255,255,255,.55); margin:0 auto 8px; }
+  .castcell .cn{ font-size:12px; color:rgba(255,255,255,.75); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .castcell .cc{ font-size:11px; color:rgba(255,255,255,.4); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* severity — small caps + four-segment meter, monochrome */
+  .sev{ display:inline-flex; align-items:center; gap:8px; }
+  .sev .sw{ font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+            color:rgba(255,255,255,.6); }
+  .sev .meter{ display:inline-flex; gap:3px; }
+  .sev .meter i{ width:11px; height:3.5px; border-radius:2px; background:rgba(255,255,255,.16); font-style:normal; }
+  .sev .meter i.on{ background:rgba(255,255,255,.88); }
+
+  /* guide category cards */
+  .gcard{ flex:none; width:228px; border-radius:14px; background:rgba(255,255,255,.07);
+    padding:16px 16px 15px; text-align:left; transition:transform .18s ease, background .18s;
+    outline:2.5px solid transparent; outline-offset:2px; }
+  .gcard:hover{ background:rgba(255,255,255,.1); }
+  .gcard.focus{ outline-color:#fff; transform:translateY(-3px); background:rgba(255,255,255,.13); }
+  .gcard .gn{ font-size:14.5px; font-weight:600; line-height:1.25; min-height:36px; }
+  .gcard .grow2{ display:flex; align-items:center; justify-content:space-between; margin-top:11px; }
+  .gcard .cnt{ font-size:11.5px; color:rgba(255,255,255,.38); font-weight:600; }
+
+  /* expanded plate */
+  .gplate{ margin:18px 46px 0; border-radius:16px; background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.07); padding:20px 24px 18px; }
+  .gplate .ph{ display:flex; align-items:baseline; gap:14px; margin-bottom:4px; }
+  .gplate .pt{ font-size:16px; font-weight:700; }
+  .gplate .votes{ font-size:12px; color:rgba(255,255,255,.4); margin-left:auto; }
+  .gplate ul{ list-style:none; margin-top:10px; }
+  .gplate li{ position:relative; font-size:13.5px; line-height:1.55; color:rgba(255,255,255,.78);
+    padding:7px 0 7px 18px; border-top:1px solid rgba(255,255,255,.05); }
+  .gplate li:first-child{ border-top:none; }
+  .gplate li::before{ content:''; position:absolute; left:2px; top:15px; width:5px; height:5px;
+    border-radius:2.5px; background:rgba(255,255,255,.28); }
+  .gplate li.spoiler{ filter:blur(5px); user-select:none; }
+  .gplate li.spoiler.shown{ filter:none; }
+  .spoilrow{ display:flex; align-items:center; gap:10px; margin-top:12px; padding-top:12px;
+    border-top:1px solid rgba(255,255,255,.07); font-size:12.5px; color:rgba(255,255,255,.5); }
+  .spoilbtn{ border:1px solid rgba(255,255,255,.24); border-radius:999px; padding:5px 13px;
+    font-size:11.5px; font-weight:700; letter-spacing:.04em; color:var(--accent); transition:background .15s; }
+  .spoilbtn:hover{ background:rgba(255,255,255,.1); }
+  .hint{ padding:16px 46px 0; font-size:12px; color:rgba(255,255,255,.35); }
+  .hint b{ color:rgba(255,255,255,.6); font-weight:600; }
+
+  /* ════ PHONE panel ════ */
+  .phones{ display:flex; gap:40px; flex-wrap:wrap; align-items:flex-start; }
+  .phone{ width:390px; border-radius:28px; overflow:hidden; background:#000;
+    border:1px solid rgba(255,255,255,.13); padding:22px 0 34px; }
+  .phone .rh{ font-size:19px; padding:0 19px 11px; }
+  .phone .ghost .rail{ padding:0 19px; gap:14px; }
+  .phone .castcell{ width:74px; }
+  .phone .castcell .disc{ width:66px; height:66px; font-size:17px; }
+  .phone .sev .sw{ font-size:9.5px; }
+  .phone .sev .meter i{ width:9px; height:3px; }
+
+  .grow{ width:calc(100% - 38px); margin:0 19px 9px; border-radius:14px; background:rgba(255,255,255,.07);
+    text-align:left; overflow:hidden; }
+  .grow .head{ display:flex; align-items:center; gap:12px; width:100%; padding:14px 15px; }
+  .grow .gn{ font-size:14px; font-weight:600; flex:1; }
+  .grow .chev{ color:rgba(255,255,255,.4); font-size:13px; transition:transform .2s; }
+  .grow.open .chev{ transform:rotate(180deg); }
+  .grow .body{ display:none; padding:0 15px 14px; }
+  .grow.open .body{ display:block; }
+  .grow .body li{ position:relative; list-style:none; font-size:12.5px; line-height:1.5;
+    color:rgba(255,255,255,.75); padding:6px 0 6px 15px; border-top:1px solid rgba(255,255,255,.05); }
+  .grow .body li::before{ content:''; position:absolute; left:1px; top:12px; width:4px; height:4px;
+    border-radius:2px; background:rgba(255,255,255,.28); }
+  .grow .body li.spoiler{ filter:blur(4px); user-select:none; }
+  .grow .body li.spoiler.shown{ filter:none; }
+  .grow .spoilrow{ margin-top:9px; padding-top:10px; font-size:11.5px; }
+  .grow .spoilbtn{ padding:4px 11px; font-size:10.5px; }
+  .grow .votes{ font-size:11px; color:rgba(255,255,255,.38); padding:2px 0 6px 0; }
+
+  .note{ width:390px; font-size:13px; line-height:1.65; color:rgba(255,255,255,.55); }
+  .note b{ color:rgba(255,255,255,.85); font-weight:600; }
+  .note p{ margin-bottom:14px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Parents Guide — native Showcase band</h1>
+  <div class="sub">Sits between <b style="color:rgba(255,255,255,.8)">Cast&nbsp;&amp;&nbsp;Crew</b> and <b style="color:rgba(255,255,255,.8)">Sources</b> in the band ladder, only when IMDb has data. Monochrome glass like the rest of Showcase: severity is a small-caps label plus a four-segment meter in white — no traffic-light chips. The poster-extracted accent appears once, on the spoiler toggle.</div>
+
+  <div class="panelh">TV &amp; Desktop · wide tier <span>DPAD: LEFT/RIGHT walks categories, the plate follows focus · SELECT toggles spoilers. Click cards to try it.</span></div>
+  <div class="tv">
+    <div class="ghost">
+      <div class="rh">Cast &amp; Crew</div>
+      <div class="rail" id="tvCast"></div>
+    </div>
+    <div style="height:30px"></div>
+    <div class="rh">Parents Guide</div>
+    <div class="rail" id="tvCards"></div>
+    <div class="gplate" id="tvPlate"></div>
+    <div class="hint">Focused card drives the plate — same follow-focus pattern as the season rail. <b>Sources band continues below.</b></div>
+  </div>
+
+  <div class="panelh">Phone · compact tier <span>accordion rows in the integrated-card style of the compact episode cards</span></div>
+  <div class="phones">
+    <div class="phone">
+      <div class="ghost">
+        <div class="rh">Cast &amp; Crew</div>
+        <div class="rail" id="phCast"></div>
+      </div>
+      <div style="height:24px"></div>
+      <div class="rh">Parents Guide</div>
+      <div id="phRows"></div>
+    </div>
+    <div class="note">
+      <p><b>Severity, the Apple way</b> — a small-caps word (NONE / MILD / MODERATE / SEVERE) with a four-segment meter filled in white. Reads at ten feet, no color noise against the artwork.</p>
+      <p><b>Accent discipline</b> — the poster-extracted accent (rose here) is reserved for the spoiler SHOW/HIDE toggle, matching how Spotlight uses it for the season pill and progress bars. Focus stays the house white ring.</p>
+      <p><b>DPAD topology</b> — one focus node per category card (wide) or row (compact). The plate is never focusable; spoilers toggle with SELECT on the focused card, so node count never changes.</p>
+      <p><b>Hidden entirely</b> when IMDb returns nothing — same conditional as the recommendations band.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const LEVEL = { None:1, Mild:2, Moderate:3, Severe:4 };
+const CATS = [
+  { n:'Sex & Nudity', sev:'Mild', votes:[188,241],
+    items:['A couple kisses passionately in two scenes; nothing beyond kissing is shown.',
+           'A character is seen shirtless while working.',
+           'Some flirtatious dialogue and innuendo throughout.'],
+    spoilers:[] },
+  { n:'Violence & Gore', sev:'Moderate', votes:[204,262],
+    items:['Several fist fights; punches and impacts are audible but injuries are brief.',
+           'A character is shot off-screen — the aftermath shows blood on clothing.',
+           'A tense stand-off involving knives; no wounds are shown in detail.'],
+    spoilers:['A main character dies violently near the end of the season.',
+              'A body is discovered with visible but brief gore.'] },
+  { n:'Profanity', sev:'Severe', votes:[231,258],
+    items:['Frequent strong language throughout, including many uses of f**k.',
+           'Religious exclamations and milder terms are common.',
+           'One racial slur is used, immediately challenged by another character.'],
+    spoilers:[] },
+  { n:'Alcohol, Drugs & Smoking', sev:'Mild', votes:[162,214],
+    items:['Characters drink socially in a bar setting in several episodes.',
+           'A character smokes cigarettes as a defining habit.',
+           'Brief reference to past drug addiction; no use is shown.'],
+    spoilers:[] },
+  { n:'Frightening & Intense Scenes', sev:'Moderate', votes:[176,229],
+    items:['Sustained tension and claustrophobic sequences may unsettle younger viewers.',
+           'A sudden jump scare in episode four.',
+           'Themes of grief and loss are handled frankly.'],
+    spoilers:['The season finale includes an intense extended chase sequence.'] },
+];
+const CAST = [['RF','Rebecca Ferguson','Juliette'],['TR','Tim Robbins','Bernard'],['CO','Common','Sims'],
+              ['HW','Harriet Walter','Walk'],['CU','Chinaza Uche','Paul'],['RM','Remmie Milner','Shirley']];
+
+const sevChip = s => `<span class="sev"><span class="sw">${s}</span><span class="meter">${
+  [1,2,3,4].map(i => `<i class="${i <= LEVEL[s] ? 'on' : ''}"></i>`).join('')}</span></span>`;
+const castCell = ([ini,n,c]) =>
+  `<div class="castcell"><div class="disc">${ini}</div><div class="cn">${n}</div><div class="cc">${c}</div></div>`;
+document.getElementById('tvCast').innerHTML = CAST.map(castCell).join('');
+document.getElementById('phCast').innerHTML = CAST.slice(0,5).map(castCell).join('');
+
+/* ── TV tier ── */
+let tvSel = 1, tvSpoil = false;
+function tvRender(){
+  document.getElementById('tvCards').innerHTML = CATS.map((c,i) => `
+    <button class="gcard ${i===tvSel?'focus':''}" onclick="tvPick(${i})">
+      <div class="gn">${c.n}</div>
+      <div class="grow2">${sevChip(c.sev)}<span class="cnt">${c.items.length + c.spoilers.length} entries</span></div>
+    </button>`).join('');
+  const c = CATS[tvSel];
+  document.getElementById('tvPlate').innerHTML = `
+    <div class="ph"><span class="pt">${c.n}</span>${sevChip(c.sev)}
+      <span class="votes">${c.votes[0]} of ${c.votes[1]} rated ${c.sev.toLowerCase()}</span></div>
+    <ul>${c.items.map(t => `<li>${t}</li>`).join('')}
+        ${c.spoilers.map(t => `<li class="spoiler ${tvSpoil?'shown':''}">${t}</li>`).join('')}</ul>
+    ${c.spoilers.length ? `<div class="spoilrow">${c.spoilers.length} spoiler ${c.spoilers.length>1?'entries':'entry'} ${tvSpoil?'shown':'hidden'}
+      <button class="spoilbtn" onclick="tvSpoil=!tvSpoil; tvRender()">${tvSpoil?'HIDE':'SHOW'}</button></div>` : ''}`;
+}
+function tvPick(i){ if (i !== tvSel) tvSpoil = false; tvSel = i; tvRender(); }
+tvRender();
+
+/* ── phone tier ── */
+let phOpen = 1; const phSpoil = new Set();
+function phRender(){
+  document.getElementById('phRows').innerHTML = CATS.map((c,i) => `
+    <div class="grow ${i===phOpen?'open':''}">
+      <button class="head" onclick="phPick(${i})">
+        <span class="gn">${c.n}</span>${sevChip(c.sev)}<span class="chev">▼</span>
+      </button>
+      <div class="body">
+        <div class="votes">${c.votes[0]} of ${c.votes[1]} rated ${c.sev.toLowerCase()}</div>
+        <ul>${c.items.map(t => `<li>${t}</li>`).join('')}
+            ${c.spoilers.map(t => `<li class="spoiler ${phSpoil.has(i)?'shown':''}">${t}</li>`).join('')}</ul>
+        ${c.spoilers.length ? `<div class="spoilrow">${c.spoilers.length} spoiler ${c.spoilers.length>1?'entries':'entry'} ${phSpoil.has(i)?'shown':'hidden'}
+          <button class="spoilbtn" onclick="event.stopPropagation(); phSpoil.has(${i})?phSpoil.delete(${i}):phSpoil.add(${i}); phRender()">${phSpoil.has(i)?'HIDE':'SHOW'}</button></div>` : ''}
+      </div>
+    </div>`).join('');
+}
+function phPick(i){ phOpen = (phOpen === i ? -1 : i); phRender(); }
+phRender();
+</script>
+</body>
+</html>

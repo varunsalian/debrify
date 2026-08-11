@@ -11,6 +11,7 @@ import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// House DPAD idiom: focus the node, then scroll it into view — plain
 /// `requestFocus` from a key handler skips the traversal policy's
@@ -102,7 +103,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
     // TV: land DPAD focus somewhere when the page opens so users aren't
     // stranded. The Save button, not a TextField — autofocusing a field
     // would pop the soft keyboard.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         // Bail if something already holds real focus (a scope node just
@@ -115,10 +116,11 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   }
 
   void _snack(String message, {bool error = false}) {
+    final t = AppThemeScope.of(context).settings;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: error ? kSettingsRed : null,
+        backgroundColor: error ? t.danger : null,
       ),
     );
   }
@@ -181,7 +183,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
     _snack('WebDAV server removed');
     // Removing the last server unmounts the focused Disconnect button
     // (_enabled goes false) — reseed DPAD focus on something that remains.
-    if (PlatformUtil.isAndroidTvCached && servers.isEmpty) {
+    if (PlatformUtil.isTelevision && servers.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _focusAndReveal(_saveFocusNode);
       });
@@ -208,7 +210,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
     });
     // TV: don't focus the TextField directly (pops the soft keyboard) —
     // land on the Save button instead; it still reveals the cleared form.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isTelevision) {
       _focusAndReveal(_saveFocusNode);
     } else {
       _focusAndReveal(_nameFocusNode);
@@ -234,6 +236,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'WebDAV',
@@ -351,8 +354,8 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                                   ? Icons.radio_button_checked_rounded
                                   : Icons.radio_button_unchecked_rounded,
                               color: server.id == _editingId
-                                  ? kSettingsAccent2
-                                  : kSettingsDim,
+                                  ? t.accent2
+                                  : t.dim,
                             ),
                             title: Text(server.name),
                             subtitle: Text(server.baseUrl),
@@ -365,7 +368,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                                     WidgetStateProperty.resolveWith(
                                       (states) =>
                                           states.contains(WidgetState.focused)
-                                          ? kSettingsAccent.withValues(
+                                          ? t.accent.withValues(
                                               alpha: 0.35,
                                             )
                                           : null,
@@ -432,9 +435,9 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                       focusNode: _disconnectFocusNode,
                       onPressed: _disconnect,
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: kSettingsRed,
+                        foregroundColor: t.danger,
                         side: BorderSide(
-                          color: kSettingsRed.withValues(alpha: 0.5),
+                          color: t.danger.withValues(alpha: 0.5),
                         ),
                       ),
                       icon: const Icon(Icons.logout_rounded),
@@ -451,12 +454,13 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   }
 
   Widget _section({required List<Widget> children}) {
+    final t = AppThemeScope.of(context).settings;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kSettingsPanel,
+        color: t.panel,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: kSettingsLine),
+        border: Border.all(color: t.line),
       ),
       child: Column(children: children),
     );
@@ -481,6 +485,7 @@ class _FocusRingState extends State<_FocusRing> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       skipTraversal: true,
       canRequestFocus: false,
@@ -489,10 +494,10 @@ class _FocusRingState extends State<_FocusRing> {
       onFocusChange: (f) => setState(() => _focused = f),
       child: Container(
         decoration: BoxDecoration(
-          color: _focused ? kSettingsPanel2 : Colors.transparent,
+          color: _focused ? t.panel2 : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: _focused ? kSettingsAccent : Colors.transparent,
+            color: _focused ? t.accent : Colors.transparent,
           ),
         ),
         child: widget.child,
@@ -518,6 +523,7 @@ class _PasswordVisibilityButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     return Focus(
       focusNode: focusNode,
       onKeyEvent: (node, event) {
@@ -544,7 +550,7 @@ class _PasswordVisibilityButton extends StatelessWidget {
             onPressed: onToggle,
             style: IconButton.styleFrom(
               backgroundColor: focused
-                  ? kSettingsAccent.withValues(alpha: 0.16)
+                  ? t.accent.withValues(alpha: 0.16)
                   : null,
             ),
             icon: Icon(

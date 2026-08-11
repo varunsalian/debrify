@@ -22,6 +22,58 @@ class BrowseSearchHeader extends StatefulWidget {
   /// DPAD-down exit from the field (drops into the results/filters).
   final VoidCallback? onDownArrow;
 
+  /// The ink every alpha in this header is struck from: hint text (0.3), the
+  /// search glyph (0.35), the clear glyph (0.5), and — unless overridden below
+  /// — the focus ring (0.15) and the field fill (0.07).
+  ///
+  /// Set ONLY by a caller that has landed on the app palette. The default is
+  /// the [Colors.white] every literal here used before this widget took
+  /// parameters, so a caller that passes nothing renders byte-identically:
+  /// that is what lets YouTube and IPTV — both of which reach this header
+  /// through `BrowseScreen` — convert on their own schedules, and what keeps
+  /// the permanently-legacy player unmoved. The relative alphas are the
+  /// widget's own visual hierarchy, not the caller's, so one token carries the
+  /// whole set and a light palette gets the same hierarchy in black.
+  final Color ink;
+
+  /// Field fill. Null derives [ink] at the shipped 0.07, which is the right
+  /// answer for a monochrome palette; pass a colour only when the theme's
+  /// field surface is not a tint of its own ink.
+  final Color? fillColor;
+
+  /// Focus ring. Null derives [ink] at the shipped 0.15 — pass the theme's
+  /// accent to make focus read as focus rather than as a slightly brighter
+  /// edge.
+  final Color? focusedBorderColor;
+
+  // ───────────────────────────────────── the in-app TV keyboard this raises
+  //
+  // Pure pass-throughs to [TvTextField]: this header owns none of the
+  // keyboard's look, it only forwards the caller's tokens so the panel it
+  // raises is themed by the same surface that themes the field. Null on every
+  // one — [TvTextField] and [TvKeyboardPanel] then land on the literals that
+  // shipped, which is what keeps a caller that passes nothing (and the
+  // permanently-legacy player) byte-identical.
+
+  /// The keyboard's filled accent: highlighted keycap, latched shift, mic
+  /// disc.
+  ///
+  /// Distinct from [focusedBorderColor] even though `TvTextField.accent` can
+  /// also paint a shell ring: this header always supplies a `focusedBorder`,
+  /// so the ring comes from that and this value reaches the keyboard only.
+  final Color? accent;
+
+  /// The keyboard panel's ground.
+  final Color? keyboardGround;
+
+  /// The keyboard panel's foreground; its alphas ride on top.
+  final Color? keyboardInk;
+
+  /// Keycap label ON the filled [accent]. Must be contrast-scored against that
+  /// accent, not taken from page ink — light accents make a white label
+  /// invisible.
+  final Color? keyboardInkOnAccent;
+
   const BrowseSearchHeader({
     super.key,
     required this.controller,
@@ -31,6 +83,13 @@ class BrowseSearchHeader extends StatefulWidget {
     this.onChanged,
     this.onSubmitted,
     this.onDownArrow,
+    this.ink = Colors.white,
+    this.fillColor,
+    this.focusedBorderColor,
+    this.accent,
+    this.keyboardGround,
+    this.keyboardInk,
+    this.keyboardInkOnAccent,
   });
 
   @override
@@ -67,6 +126,7 @@ class _BrowseSearchHeaderState extends State<BrowseSearchHeader> {
   @override
   Widget build(BuildContext context) {
     final hasText = widget.controller.text.isNotEmpty;
+    final ink = widget.ink;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
       child: TvTextField(
@@ -76,18 +136,22 @@ class _BrowseSearchHeaderState extends State<BrowseSearchHeader> {
         onSubmitted: widget.onSubmitted,
         onDownArrow: widget.onDownArrow,
         textInputAction: TextInputAction.search,
+        accent: widget.accent,
+        keyboardGround: widget.keyboardGround,
+        keyboardInk: widget.keyboardInk,
+        keyboardInkOnAccent: widget.keyboardInkOnAccent,
         decoration: InputDecoration(
           hintText: widget.hintText,
-          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+          hintStyle: TextStyle(color: ink.withValues(alpha: 0.3)),
           prefixIcon: Icon(
             Icons.search_rounded,
-            color: Colors.white.withValues(alpha: 0.35),
+            color: ink.withValues(alpha: 0.35),
           ),
           suffixIcon: hasText
               ? IconButton(
                   icon: Icon(
                     Icons.close_rounded,
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: ink.withValues(alpha: 0.5),
                   ),
                   onPressed: widget.onClear,
                 )
@@ -103,12 +167,12 @@ class _BrowseSearchHeaderState extends State<BrowseSearchHeader> {
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(
-              color: Colors.white.withValues(alpha: 0.15),
+              color: widget.focusedBorderColor ?? ink.withValues(alpha: 0.15),
               width: 1,
             ),
           ),
           filled: true,
-          fillColor: Colors.white.withValues(alpha: 0.07),
+          fillColor: widget.fillColor ?? ink.withValues(alpha: 0.07),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 14,

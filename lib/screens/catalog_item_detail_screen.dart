@@ -2,6 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../theme/app_theme_scope.dart';
+import '../theme/artwork_accent.dart';
 import '../models/stremio_addon.dart';
 import '../services/analytics_service.dart';
 import '../services/app_route_observer.dart';
@@ -9,7 +11,7 @@ import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/series_source_service.dart';
-import '../widgets/home/home_theme.dart';
+import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
@@ -183,6 +185,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       }
       _loadRecommendations();
       _loadEnrichedMeta();
+      _loadArtworkAccent();
       _loadParentsGuide();
       _loadImdbEnrichment();
       _loadResumeInfo();
@@ -409,12 +412,51 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     super.dispose();
   }
 
+  /// This title's own colour, pulled from its poster.
+  ///
+  /// Same one-tiny-decode path `merged_series_detail_screen` has always had,
+  /// through the shared cache so a revisit is free. Published into
+  /// [ArtworkAccentScope] rather than applied here, so descendants — including
+  /// the sheets and dialogs this screen raises, which inherit it because the
+  /// scope is an `InheritedTheme` — can take it where they paint IDENTITY, and
+  /// only there.
+  Color? _artworkAccent;
+
+  Future<void> _loadArtworkAccent() async {
+    final url = _item.poster ?? _item.background;
+    if (url == null || url.isEmpty) return;
+    try {
+      final raw = await DominantColorCache.of(
+        url,
+        CachedNetworkImageProvider(url),
+      );
+      if (raw == null || !mounted) return;
+      // The extractor normalises for a DARK ui; on a paper theme that lands
+      // low-contrast, so it is re-targeted against the ground it will be seen
+      // on before anything paints with it.
+      final app = AppThemeScope.of(context);
+      setState(() => _artworkAccent = normaliseAccentFor(raw, app));
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isWide = _wide;
     final backdropUrl = _item.background ?? _item.poster;
 
+    return ArtworkAccentScope(
+      accent: _artworkAccent,
+      child: _buildBody(context, size, isWide, backdropUrl),
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    Size size,
+    bool isWide,
+    String? backdropUrl,
+  ) {
     return Scaffold(
       backgroundColor: const Color(0xFF050507),
       body: Stack(
@@ -714,7 +756,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     child: Text(
       widget.item.type == 'series' ? 'SERIES' : 'MOVIE',
       style: TextStyle(
-        color: HomeTheme.focusGold,
+        color: DetailThemeScope.maybeOf(context).focus,
         fontSize: 11,
         fontWeight: FontWeight.w800,
         letterSpacing: 2.4,
@@ -805,7 +847,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.star_rounded,
                     size: 16,
                     color: Color(0xFFFACC15),
@@ -1778,7 +1820,7 @@ class _MetacriticBadge extends StatelessWidget {
       ),
       child: Text(
         '$score',
-        style: const TextStyle(
+        style: TextStyle(
           color: Colors.white,
           fontSize: 11,
           fontWeight: FontWeight.w900,
@@ -1901,6 +1943,10 @@ class _RecCardState extends State<_RecCard> {
   @override
   Widget build(BuildContext context) {
     final poster = widget.item.poster;
+    // Signal — this screen is never wrapped in a DetailThemeScope today, so
+    // the fallback IS the shipped gold. Hoisted out of the tree below so the
+    // lookup happens once per build, never inside an animated builder.
+    final t = DetailThemeScope.maybeOf(context);
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
@@ -1940,7 +1986,7 @@ class _RecCardState extends State<_RecCard> {
                         color: Colors.white.withValues(alpha: 0.06),
                         border: Border.all(
                           color: _active
-                              ? HomeTheme.focusGold
+                              ? t.focus
                               : Colors.white.withValues(alpha: 0.10),
                           width: _active ? 2 : 0.5,
                         ),
@@ -2076,6 +2122,7 @@ class _ReadMoreToggleState extends State<_ReadMoreToggle> {
 
   @override
   Widget build(BuildContext context) {
+    final t = DetailThemeScope.maybeOf(context);
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
       onKeyEvent: (node, event) {
@@ -2107,13 +2154,13 @@ class _ReadMoreToggleState extends State<_ReadMoreToggle> {
               widget.label,
               style: TextStyle(
                 color: _active
-                    ? HomeTheme.focusGold
+                    ? t.focus
                     : Colors.white.withValues(alpha: 0.95),
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.3,
                 decoration: _active ? TextDecoration.underline : null,
-                decorationColor: HomeTheme.focusGold,
+                decorationColor: t.focus,
               ),
             ),
           ),
@@ -2178,6 +2225,17 @@ class _ActionRow extends StatelessWidget {
 
     if (!showQuickPlay) return browse;
 
+    // Play is the page's IDENTITY control, so it is where this title's own
+    // colour belongs — the one role `ArtworkAccentScope` exists to serve.
+    //
+    // Gated on `!isLegacy` deliberately. Signal declares `useArtworkAccent`,
+    // so `resolve` would hand the poster colour to legacy too, and legacy's
+    // Play button has always been this red. New behaviour goes to the themes
+    // a user opted into, not to the default look.
+    final app = AppThemeScope.of(context);
+    final playAccent = app.isLegacy
+        ? _kNetflixRed
+        : ArtworkAccentScope.resolve(context, app, fallback: _kNetflixRed);
     final play = _PrimaryButton(
       focusNode: playFocus,
       icon: Icons.play_arrow_rounded,
@@ -2185,7 +2243,11 @@ class _ActionRow extends StatelessWidget {
       filled: true,
       compact: compact,
       tv: tv,
-      accent: _kNetflixRed,
+      accent: playAccent,
+      // An arbitrary poster colour is an arbitrary fill, so the label is
+      // SCORED against it rather than assumed white — the whole reason
+      // `inkOn` exists. Legacy keeps its shipped white on the red.
+      accentInk: app.isLegacy ? null : app.inkOn(playAccent),
       onTap: onPlay,
       onArrowUp: onArrowUp,
     );
@@ -2329,6 +2391,7 @@ class _QuickActionState extends State<_QuickAction> {
   @override
   Widget build(BuildContext context) {
     final o = widget.option;
+    final t = DetailThemeScope.maybeOf(context);
 
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
@@ -2376,16 +2439,14 @@ class _QuickActionState extends State<_QuickAction> {
                           ),
                           border: Border.all(
                             color: _active
-                                ? HomeTheme.focusGold
+                                ? t.focus
                                 : Colors.white.withValues(alpha: 0.12),
                             width: _active ? 1.6 : 1,
                           ),
                           boxShadow: _active
                               ? [
                                   BoxShadow(
-                                    color: HomeTheme.focusGold.withValues(
-                                      alpha: 0.32,
-                                    ),
+                                    color: t.fade(t.focus, 0.32),
                                     blurRadius: 18,
                                     spreadRadius: 0.5,
                                   ),
@@ -2564,6 +2625,7 @@ class _SimklQuickActionState extends State<_SimklQuickAction> {
   @override
   Widget build(BuildContext context) {
     final o = widget.option;
+    final t = DetailThemeScope.maybeOf(context);
 
     return Focus(
       onFocusChange: (f) => setState(() => _focused = f),
@@ -2611,16 +2673,14 @@ class _SimklQuickActionState extends State<_SimklQuickAction> {
                           ),
                           border: Border.all(
                             color: _active
-                                ? HomeTheme.focusGold
+                                ? t.focus
                                 : Colors.white.withValues(alpha: 0.12),
                             width: _active ? 1.6 : 1,
                           ),
                           boxShadow: _active
                               ? [
                                   BoxShadow(
-                                    color: HomeTheme.focusGold.withValues(
-                                      alpha: 0.32,
-                                    ),
+                                    color: t.fade(t.focus, 0.32),
                                     blurRadius: 18,
                                     spreadRadius: 0.5,
                                   ),
@@ -2709,6 +2769,13 @@ class _PrimaryButton extends StatefulWidget {
 
   /// Optional brand accent for a filled button. Falls back to white.
   final Color? accent;
+
+  /// Ink for the label ON [accent], scored by the caller.
+  ///
+  /// Null keeps the shipped rule (`accent == null ? black : white`), which is
+  /// right for legacy's fixed red and wrong for an arbitrary poster colour —
+  /// white on a pale artwork accent is unreadable.
+  final Color? accentInk;
   final VoidCallback onTap;
 
   /// D-pad "up" handler (TV). Set on the top action row so "up" reveals the
@@ -2725,6 +2792,7 @@ class _PrimaryButton extends StatefulWidget {
     this.tv = false,
     this.tinted = false,
     this.accent,
+    this.accentInk,
     this.onArrowUp,
   });
 
@@ -2739,9 +2807,11 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
   Widget build(BuildContext context) {
     final filled = widget.filled;
     final accent = widget.accent;
+    final t = DetailThemeScope.maybeOf(context);
 
     final filledBg = accent ?? Colors.white;
-    final filledFg = accent == null ? Colors.black : Colors.white;
+    final filledFg =
+        widget.accentInk ?? (accent == null ? Colors.black : Colors.white);
 
     final bg = filled
         ? (_focused ? Color.lerp(filledBg, Colors.white, 0.12)! : filledBg)
@@ -2756,12 +2826,12 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
     // even on the red Play button.
     final Color borderColor;
     if (_focused) {
-      borderColor = HomeTheme.focusGold;
+      borderColor = t.focus;
     } else if (filled) {
       borderColor = Colors.transparent;
     } else if (widget.tinted) {
       // A bound source: hint with a soft gold resting border.
-      borderColor = HomeTheme.focusGold.withValues(alpha: 0.5);
+      borderColor = t.fade(t.focus, 0.5);
     } else {
       borderColor = Colors.white.withValues(alpha: 0.18);
     }
@@ -2808,7 +2878,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
               boxShadow: _focused
                   ? [
                       BoxShadow(
-                        color: HomeTheme.focusGold.withValues(alpha: 0.55),
+                        color: t.fade(t.focus, 0.55),
                         blurRadius: 30,
                         spreadRadius: 2,
                       ),

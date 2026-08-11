@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/app_motion.dart';
+import '../../theme/app_theme_scope.dart';
+import '../../theme/widgets/focus_expression.dart';
 import '../../utils/tv_keys.dart';
-import 'cloud_theme.dart';
 
 /// Which leading icon chip a [CloudFileRow] shows.
 enum CloudRowKind { folder, video, file, season, error }
@@ -231,15 +234,16 @@ class _CloudFileRowState extends State<CloudFileRow> {
       position = RelativeRect.fill;
     }
 
+    final app = AppThemeScope.of(context);
     final hadFocus = _rowNode.hasFocus;
     final chosen = await showMenu<CloudRowAction>(
       context: context,
       position: position,
-      color: CloudTheme.menuSurface,
+      color: app.cloud.menuSurface,
       elevation: 8,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        borderRadius: app.shape.br(12),
+        side: BorderSide(color: app.fade(app.core.tx, 0.08)),
       ),
       items: [
         for (final action in widget.actions)
@@ -253,10 +257,10 @@ class _CloudFileRowState extends State<CloudFileRow> {
                   action.icon,
                   size: 18,
                   color: !action.enabled
-                      ? Colors.white.withValues(alpha: 0.3)
+                      ? app.fade(app.core.tx, 0.3)
                       : action.destructive
-                          ? CloudTheme.red
-                          : Colors.white.withValues(alpha: 0.75),
+                          ? app.cloud.destructive
+                          : app.fade(app.core.tx, 0.75),
                 ),
                 const SizedBox(width: 12),
                 Text(
@@ -265,10 +269,10 @@ class _CloudFileRowState extends State<CloudFileRow> {
                     fontSize: 13.5,
                     fontWeight: FontWeight.w500,
                     color: !action.enabled
-                        ? Colors.white.withValues(alpha: 0.35)
+                        ? app.fade(app.core.tx, 0.35)
                         : action.destructive
-                            ? CloudTheme.red
-                            : Colors.white.withValues(alpha: 0.95),
+                            ? app.cloud.destructive
+                            : app.fade(app.core.tx, 0.95),
                   ),
                 ),
               ],
@@ -350,54 +354,72 @@ class _CloudFileRowState extends State<CloudFileRow> {
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
-  static const _iconChipStyles = <CloudRowKind, (IconData, Color)>{
-    CloudRowKind.folder: (Icons.folder_rounded, CloudTheme.amber),
-    CloudRowKind.video: (Icons.play_arrow_rounded, CloudTheme.blue),
-    CloudRowKind.file: (Icons.insert_drive_file_rounded, Colors.white),
-    CloudRowKind.season: (Icons.video_library_rounded, CloudTheme.purple),
-    CloudRowKind.error: (Icons.error_outline_rounded, CloudTheme.red),
-  };
+  /// Was a `static const` map; a token read needs the resolved theme, and a
+  /// static field cannot take one. Same table, same tuples — the kind→style
+  /// lookup is just parameterised on the theme now.
+  static (IconData, Color) _iconChipStyle(CloudRowKind kind, AppTheme app) =>
+      switch (kind) {
+        CloudRowKind.folder => (Icons.folder_rounded, app.cloud.categoryFolder),
+        CloudRowKind.video =>
+          (Icons.play_arrow_rounded, app.cloud.categoryVideo),
+        CloudRowKind.file => (Icons.insert_drive_file_rounded, app.core.tx),
+        CloudRowKind.season =>
+          (Icons.video_library_rounded, app.cloud.categorySeason),
+        CloudRowKind.error =>
+          (Icons.error_outline_rounded, app.cloud.statusError),
+      };
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    // Hoisted with the theme read, above every builder callback below.
+    final motion = AppMotion.of(context);
     final compact = MediaQuery.sizeOf(context).width < 600;
     final rowFocused = _rowNode.hasPrimaryFocus;
     final parked = !rowFocused && _stripNodes.any((n) => n.hasPrimaryFocus);
     final engaged = _hovered || rowFocused || parked;
 
+    // Legacy keeps the borders this row has always drawn — 1.5px on the row,
+    // 2px on a strip icon. `FocusTokens.legacy` is 2.5 and takes no width
+    // override, so routing legacy through the box would thicken both.
+    final ownCursor = app.isLegacy;
+
     Color borderColor;
     Color bgColor;
     if (rowFocused) {
-      borderColor = CloudTheme.accent;
-      bgColor = CloudTheme.accent.withValues(alpha: 0.10);
+      // The fill stays on both paths: it is the row answering the cursor, not
+      // the cursor itself, so an underline or a scale theme still lights the
+      // row it landed on.
+      borderColor = ownCursor ? app.cloud.accent : Colors.transparent;
+      bgColor = app.fade(app.cloud.accent, 0.10);
     } else if (parked) {
-      borderColor = CloudTheme.accent.withValues(alpha: 0.35);
-      bgColor = CloudTheme.accent.withValues(alpha: 0.06);
+      borderColor = app.fade(app.cloud.accent, 0.35);
+      bgColor = app.fade(app.cloud.accent, 0.06);
     } else if (widget.selectionMode && widget.selected) {
-      borderColor = CloudTheme.accent.withValues(alpha: 0.55);
-      bgColor = CloudTheme.accent.withValues(alpha: 0.08);
+      borderColor = app.fade(app.cloud.accent, 0.55);
+      bgColor = app.fade(app.cloud.accent, 0.08);
     } else if (_hovered) {
       borderColor = Colors.transparent;
-      bgColor = Colors.white.withValues(alpha: 0.045);
+      bgColor = app.fade(app.core.tx, 0.045);
     } else {
       borderColor = Colors.transparent;
       bgColor = Colors.transparent;
     }
 
-    final (chipIcon, chipColor) = _iconChipStyles[widget.kind]!;
+    final (chipIcon, chipColor) = _iconChipStyle(widget.kind, app);
     final iconChip = Container(
       width: 34,
       height: 34,
       decoration: BoxDecoration(
-        color: chipColor.withValues(
-            alpha: widget.kind == CloudRowKind.file ? 0.06 : 0.13),
-        borderRadius: BorderRadius.circular(9),
+        color: app.fade(
+            chipColor, widget.kind == CloudRowKind.file ? 0.06 : 0.13),
+        borderRadius: app.shape.br(9),
       ),
       child: Icon(
         chipIcon,
         size: 19,
         color: widget.kind == CloudRowKind.file
-            ? Colors.white.withValues(alpha: 0.55)
+            ? app.fade(app.core.tx, 0.55)
             : chipColor,
       ),
     );
@@ -410,7 +432,7 @@ class _CloudFileRowState extends State<CloudFileRow> {
         fontSize: 14,
         fontWeight: FontWeight.w500,
         height: 1.3,
-        color: Colors.white.withValues(alpha: 0.95),
+        color: app.fade(app.core.tx, 0.95),
       ),
     );
 
@@ -420,10 +442,10 @@ class _CloudFileRowState extends State<CloudFileRow> {
           widget.meta!,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.white.withValues(alpha: 0.5),
+            color: app.fade(app.core.tx, 0.5),
           ),
         ),
-      for (final badge in widget.badges) _badge(badge),
+      for (final badge in widget.badges) _badge(badge, app),
     ];
     final metaLine = metaChildren.isEmpty
         ? null
@@ -435,7 +457,8 @@ class _CloudFileRowState extends State<CloudFileRow> {
           );
 
     final showStrip = !widget.selectionMode && _stripNodes.isNotEmpty;
-    final strip = showStrip ? _buildStrip(engaged: engaged, compact: compact) : null;
+    final strip =
+        showStrip ? _buildStrip(engaged: engaged, compact: compact, app: app) : null;
 
     final leadingCheckbox = widget.selectionMode
         ? Padding(
@@ -446,10 +469,10 @@ class _CloudFileRowState extends State<CloudFileRow> {
                 onChanged: widget.selectable
                     ? (_) => widget.onToggleSelected?.call()
                     : null,
-                activeColor: CloudTheme.accent,
+                activeColor: app.cloud.accent,
                 visualDensity: VisualDensity.compact,
                 side: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.4),
+                  color: app.fade(app.core.tx, 0.4),
                   width: 1.5,
                 ),
               ),
@@ -503,7 +526,7 @@ class _CloudFileRowState extends State<CloudFileRow> {
             child: Icon(
               Icons.chevron_right_rounded,
               size: 18,
-              color: Colors.white.withValues(alpha: 0.3),
+              color: app.fade(app.core.tx, 0.3),
             ),
           ),
       ],
@@ -526,18 +549,30 @@ class _CloudFileRowState extends State<CloudFileRow> {
             onLongPressStart: widget.selectionMode
                 ? null
                 : (details) => _openMenu(globalPosition: details.globalPosition),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              margin: const EdgeInsets.only(bottom: 4),
+            // The row's gap moved out of the Container's `margin` and into a
+            // Padding above the cursor, because a margin is part of the box the
+            // cursor would wrap: left where it was, the theme's ring would draw
+            // 4px below the row it belongs to. Container implements `margin` as
+            // exactly this Padding, so nothing renders differently.
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: _cursor(
+              app: app,
+              focused: rowFocused,
+              radius: 10,
+              child: AnimatedContainer(
+              duration: motion.scaled(const Duration(milliseconds: 150)),
               padding: compact
                   ? const EdgeInsets.fromLTRB(12, 10, 8, 8)
                   : const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               decoration: BoxDecoration(
                 color: bgColor,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: app.shape.br(10),
                 border: Border.all(color: borderColor, width: 1.5),
               ),
               child: content,
+            ),
+            ),
             ),
           ),
         ),
@@ -545,7 +580,33 @@ class _CloudFileRowState extends State<CloudFileRow> {
     );
   }
 
-  Widget _buildStrip({required bool engaged, required bool compact}) {
+  /// The cursor, off legacy.
+  ///
+  /// Legacy is returned untouched, ring and all; every other theme gets the
+  /// expression it asked for, which may be a scale or a flood rather than a
+  /// border. `on:` is the page ground rather than the row's own fill — that
+  /// fill is a 10% accent tint, so the ground is what a ring actually lands on
+  /// and what a light theme's cursor would vanish into.
+  Widget _cursor({
+    required AppTheme app,
+    required bool focused,
+    required double radius,
+    required Widget child,
+  }) =>
+      app.isLegacy
+          ? child
+          : FocusExpressionBox(
+              focused: focused,
+              radius: radius,
+              on: app.core.ground,
+              child: child,
+            );
+
+  Widget _buildStrip({
+    required bool engaged,
+    required bool compact,
+    required AppTheme app,
+  }) {
     final strip = _stripActions;
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -558,6 +619,7 @@ class _CloudFileRowState extends State<CloudFileRow> {
             onTap: strip[i].onSelected,
             engaged: engaged,
             compact: compact,
+            app: app,
           ),
         if (_hasMenu)
           _stripIcon(
@@ -567,6 +629,7 @@ class _CloudFileRowState extends State<CloudFileRow> {
             onTap: () => _openMenu(),
             engaged: engaged,
             compact: compact,
+            app: app,
             anchorKey: _moreKey,
           ),
       ],
@@ -580,6 +643,7 @@ class _CloudFileRowState extends State<CloudFileRow> {
     required VoidCallback onTap,
     required bool engaged,
     required bool compact,
+    required AppTheme app,
     Key? anchorKey,
   }) {
     final node = _stripNodes[slot];
@@ -604,18 +668,26 @@ class _CloudFileRowState extends State<CloudFileRow> {
               horizontal: 4,
               vertical: (44 - size) / 2,
             ),
-            child: AnimatedContainer(
+            // The strip is the row's SECOND cursor — → parks focus here — so it
+            // follows the same rule as the row itself.
+            child: _cursor(
+              app: app,
+              focused: focused,
+              radius: 8,
+              child: AnimatedContainer(
               key: anchorKey,
               duration: const Duration(milliseconds: 150),
               width: size,
               height: size,
               decoration: BoxDecoration(
                 color: focused
-                    ? Colors.white.withValues(alpha: 0.08)
+                    ? app.fade(app.core.tx, 0.08)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: app.shape.br(8),
                 border: Border.all(
-                  color: focused ? CloudTheme.accent : Colors.transparent,
+                  color: focused && app.isLegacy
+                      ? app.cloud.accent
+                      : Colors.transparent,
                   width: 2,
                 ),
               ),
@@ -623,9 +695,10 @@ class _CloudFileRowState extends State<CloudFileRow> {
                 icon,
                 size: 18,
                 color: focused
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: engaged ? 0.9 : 0.45),
+                    ? app.core.tx
+                    : app.fade(app.core.tx, engaged ? 0.9 : 0.45),
               ),
+            ),
             ),
           ),
         ),
@@ -633,18 +706,18 @@ class _CloudFileRowState extends State<CloudFileRow> {
     );
   }
 
-  Widget _badge(CloudRowBadge badge) {
+  Widget _badge(CloudRowBadge badge, AppTheme app) {
     final (fg, bgAlpha) = switch (badge.kind) {
-      CloudBadgeKind.ok => (CloudTheme.green, 0.14),
-      CloudBadgeKind.warn => (CloudTheme.amber, 0.13),
-      CloudBadgeKind.error => (CloudTheme.red, 0.12),
-      CloudBadgeKind.neutral => (Colors.white.withValues(alpha: 0.6), 0.06),
+      CloudBadgeKind.ok => (app.cloud.statusSuccess, 0.14),
+      CloudBadgeKind.warn => (app.cloud.statusWarning, 0.13),
+      CloudBadgeKind.error => (app.cloud.statusError, 0.12),
+      CloudBadgeKind.neutral => (app.fade(app.core.tx, 0.6), 0.06),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
       decoration: BoxDecoration(
         color: fg.withValues(alpha: bgAlpha),
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: app.shape.br(5),
       ),
       child: Text(
         badge.text,

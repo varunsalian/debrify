@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/trakt/trakt_episode_model.dart';
+import '../theme/widgets/themed_artwork.dart';
 import '../utils/tv_keys.dart';
+import 'detail/theme/detail_theme.dart';
 import 'trakt/trakt_menu_helpers.dart';
 import 'home/home_theme.dart';
 
@@ -48,6 +50,20 @@ class _EpisodeTileState extends State<EpisodeTile> {
   bool _focused = false;
   bool _hovered = false;
   bool get _active => _focused || _hovered;
+
+  /// Resolved once per dependency change, never inside the LayoutBuilder below
+  /// — `_still` and `_actionRow` run inside that callback, and a long episode
+  /// list on a TV box cannot afford a lookup per row per layout pass.
+  ///
+  /// Signal today: no caller wraps this tile in a [DetailThemeScope], so the
+  /// fallback IS the shipped gold.
+  late DetailTheme _t;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _t = DetailThemeScope.maybeOf(context);
+  }
 
   /// D-pad selection within the action row while the card holds focus.
   int _sel = 0;
@@ -156,7 +172,7 @@ class _EpisodeTileState extends State<EpisodeTile> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: _active
-                      ? HomeTheme.focusGold
+                      ? _t.focus
                       : Colors.white.withValues(alpha: 0.06),
                   width: _active ? 2.5 : 1,
                 ),
@@ -168,7 +184,7 @@ class _EpisodeTileState extends State<EpisodeTile> {
                   ),
                   if (_active)
                     BoxShadow(
-                      color: HomeTheme.focusGold.withValues(alpha: 0.38),
+                      color: _t.fade(_t.focus, 0.38),
                       blurRadius: 32,
                       spreadRadius: 1,
                     ),
@@ -196,7 +212,20 @@ class _EpisodeTileState extends State<EpisodeTile> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          AspectRatio(aspectRatio: 16 / 9, child: _still()),
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: ThemedArtwork(
+              role: ArtRole.still,
+              // Zero, because zero is what this layout gives the still today:
+              // the card's own clip above rounds the two TOP corners and the
+              // info block covers the bottom two, so the image itself has
+              // never carried a radius of its own here.
+              radius: 0,
+              inList: true,
+              builder: (context, blend) => _still(blend),
+              overlay: _stillChrome(),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
             child: _info(synopsisLines: 2),
@@ -212,11 +241,19 @@ class _EpisodeTileState extends State<EpisodeTile> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              width: 300,
-              child: AspectRatio(aspectRatio: 16 / 9, child: _still()),
+          SizedBox(
+            width: 300,
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              // The still's own clip, handed to [ThemedArtwork] so the frame
+              // is the theme's rather than this file's.
+              child: ThemedArtwork(
+                role: ArtRole.still,
+                radius: 12,
+                inList: true,
+                builder: (context, blend) => _still(blend),
+                overlay: _stillChrome(),
+              ),
             ),
           ),
           const SizedBox(width: 18),
@@ -233,27 +270,40 @@ class _EpisodeTileState extends State<EpisodeTile> {
 
   // ── Pieces ────────────────────────────────────────────────────────────────
 
-  Widget _still() {
+  /// The still and everything drawn over it. [blend] is the theme's grade,
+  /// which has to reach the image constructor itself — a filter layer per row
+  /// is the cost this widget's whole build is written to avoid.
+  /// The still ITSELF — nothing painted on it.
+  ///
+  /// Split from [_stillChrome] because `ThemedArtwork`'s frame is a treatment
+  /// of the image: handing it the whole stack made a `faded` look dissolve the
+  /// progress bar along the bottom edge, which is where progress bars live.
+  Widget _still((Color, BlendMode)? blend) {
     final e = widget.episode;
     final img = (e.thumbnailUrl != null && e.thumbnailUrl!.isNotEmpty)
         ? e.thumbnailUrl!
         : (widget.showImageUrl ?? '');
+    if (img.isEmpty) return _imgFallback(e);
+    return CachedNetworkImage(
+      imageUrl: img,
+      fit: BoxFit.cover,
+      color: blend?.$1,
+      colorBlendMode: blend?.$2,
+      placeholder: (_, __) => _imgFallback(e),
+      errorWidget: (_, __, ___) => _imgFallback(e),
+    );
+  }
+
+  /// Everything painted ON the still: the legibility vignette, the play glyph,
+  /// the watched tick and the progress bar.
+  Widget _stillChrome() {
+    final e = widget.episode;
     final progress = (widget.watchProgress ?? 0).clamp(0.0, 100.0);
     final watched = progress >= 100;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (img.isNotEmpty)
-          CachedNetworkImage(
-            imageUrl: img,
-            fit: BoxFit.cover,
-            placeholder: (_, __) => _imgFallback(e),
-            errorWidget: (_, __, ___) => _imgFallback(e),
-          )
-        else
-          _imgFallback(e),
-
         // Light vignette so the play glyph + badge read on any still.
         const DecoratedBox(
           decoration: BoxDecoration(
@@ -274,7 +324,7 @@ class _EpisodeTileState extends State<EpisodeTile> {
               color: Colors.black.withValues(alpha: 0.42),
               border: Border.all(
                 color: _active
-                    ? HomeTheme.focusGold
+                    ? _t.focus
                     : Colors.white.withValues(alpha: 0.85),
                 width: 2,
               ),
@@ -353,6 +403,10 @@ class _EpisodeTileState extends State<EpisodeTile> {
           meta,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          // Deliberately NOT the theme's focus: this is gold INK, and the card
+          // it sits on is pinned to a dark literal (see `build`). A light
+          // theme's focus colour here would be dark-on-dark. Migrate the two
+          // together, or not at all.
           style: TextStyle(
             color: HomeTheme.focusGold.withValues(alpha: 0.95),
             fontSize: 11,
@@ -408,6 +462,7 @@ class _EpisodeTileState extends State<EpisodeTile> {
             action: acts[i],
             selected: _focused && i == sel,
             compact: compact,
+            theme: _t,
             onTap: acts[i].onTap,
           );
           children.add(acts[i].iconOnly ? chip : Flexible(child: chip));
@@ -526,18 +581,23 @@ class _ActionChip extends StatelessWidget {
   final _EpAction action;
   final bool selected;
   final bool compact;
+
+  /// Passed down rather than looked up: the parent already resolved it, and
+  /// this chip is rebuilt for every action of every visible episode row.
+  final DetailTheme theme;
   final VoidCallback onTap;
 
   const _ActionChip({
     required this.action,
     required this.selected,
+    required this.theme,
     required this.onTap,
     this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final gold = HomeTheme.focusGold;
+    final gold = theme.focus;
     final border = selected
         ? gold
         : (action.primary
@@ -546,7 +606,7 @@ class _ActionChip extends StatelessWidget {
     final glow = selected
         ? [
             BoxShadow(
-              color: gold.withValues(alpha: 0.4),
+              color: theme.fade(gold, 0.4),
               blurRadius: 16,
               spreadRadius: 1,
             ),

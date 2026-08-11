@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../services/storage_service.dart';
+import '../../../theme/app_theme_scope.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 
@@ -53,23 +54,27 @@ class _ExternalPlayerNoticeDialogState
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
     return FocusTraversalGroup(
       child: FocusScope(
         autofocus: true,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1B1B1F),
+          backgroundColor: tv.noticeBg,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+            borderRadius: app.shape.br(20),
+            // Not `hairline`: this is composed at 0.1 exactly, and the
+            // hairline is 31/255. Ink at alpha, so it follows the ink.
+            side: BorderSide(color: app.core.tx.withValues(alpha: 0.1)),
           ),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.open_in_new, color: Color(0xFFE50914)),
-              SizedBox(width: 10),
+              Icon(Icons.open_in_new, color: tv.accent),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   'Opening in your external player',
-                  style: TextStyle(color: Colors.white, fontSize: 20),
+                  style: TextStyle(color: app.core.tx, fontSize: 20),
                 ),
               ),
             ],
@@ -80,10 +85,10 @@ class _ExternalPlayerNoticeDialogState
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Your default player is set to an external app, so Debrify '
                   'TV will hand this one title over and stop there.',
-                  style: TextStyle(color: Colors.white70, height: 1.4),
+                  style: TextStyle(color: tv.textDim, height: 1.4),
                 ),
                 const SizedBox(height: 12),
                 const _NoticeLine("The channel won't roll on to the next title"),
@@ -96,7 +101,7 @@ class _ExternalPlayerNoticeDialogState
                   'Change this under Settings → External Player → Default '
                   'player.',
                   style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.45),
+                    color: app.core.tx.withValues(alpha: 0.45),
                     fontSize: 12,
                   ),
                 ),
@@ -135,19 +140,26 @@ class _NoticeLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 3, right: 8),
-            child: Icon(Icons.remove, size: 14, color: Colors.white38),
+          Padding(
+            padding: const EdgeInsets.only(top: 3, right: 8),
+            // `Colors.white38` = 98/255 — between `textFaint` (138) and the
+            // surface's fills, so it takes the ink at its own alpha.
+            child: Icon(
+              Icons.remove,
+              size: 14,
+              color: app.core.tx.withAlpha(98),
+            ),
           ),
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(color: Colors.white60, height: 1.35),
+              style: TextStyle(color: app.debrifyTv.textMeta, height: 1.35),
             ),
           ),
         ],
@@ -173,6 +185,15 @@ class _DontShowAgainRowState extends State<_DontShowAgainRow> {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
+    // LEFT LITERAL: the resting ground 0xFF141418 has no token — `controlBg`
+    // is 0xFF141414, four steps off, and a near-miss is exactly what must not
+    // be substituted. Needs its own role before this row can follow a light
+    // theme. Hoisted so the label below can be scored against whichever of the
+    // two grounds is actually painted.
+    final Color background =
+        _isFocused ? tv.cardFocusBg : tv.controlResting;
     return Focus(
       onFocusChange: (focused) => setState(() => _isFocused = focused),
       onKeyEvent: (node, event) {
@@ -187,17 +208,15 @@ class _DontShowAgainRowState extends State<_DontShowAgainRow> {
         onTap: () => widget.onChanged(!widget.value),
         child: AnimatedContainer(
           // TV: snap — see SwitchRow.
-          duration: PlatformUtil.isAndroidTvCached
+          duration: PlatformUtil.isTelevision
               ? Duration.zero
               : const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: _isFocused
-                ? const Color(0xFF2A2A2A)
-                : const Color(0xFF141418),
-            borderRadius: BorderRadius.circular(12),
+            color: background,
+            borderRadius: app.shape.br(12),
             border: Border.all(
-              color: _isFocused ? Colors.white : Colors.white12,
+              color: _isFocused ? tv.focusRing : tv.hairline,
               width: _isFocused ? 2 : 1,
             ),
           ),
@@ -207,15 +226,19 @@ class _DontShowAgainRowState extends State<_DontShowAgainRow> {
                 widget.value
                     ? Icons.check_box
                     : Icons.check_box_outline_blank,
-                color: widget.value
-                    ? const Color(0xFFE50914)
-                    : Colors.white54,
+                color: widget.value ? tv.accent : tv.textFaint,
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Text(
                   "Don't show this again",
-                  style: TextStyle(color: Colors.white),
+                  // Ink on a filled swatch, scored against that swatch — the
+                  // same rule `_DialogButton` runs. Page ink was wrong here:
+                  // the resting ground stays a pinned dark literal on every
+                  // theme, so a paper theme's near-black label vanished into
+                  // it. Both grounds clear white by a wide margin under
+                  // legacy (18.4:1 and 14.0:1), so today's pixel is unchanged.
+                  style: TextStyle(color: app.inkOn(background)),
                 ),
               ),
             ],
@@ -248,9 +271,11 @@ class _DialogButtonState extends State<_DialogButton> {
 
   @override
   Widget build(BuildContext context) {
-    final Color background = widget.primary
-        ? const Color(0xFFE50914)
-        : const Color(0xFF2A2A2E);
+    final app = AppThemeScope.of(context);
+    // LEFT LITERAL: the secondary ground 0xFF2A2A2E has no token —
+    // `cardFocusBg` is 0xFF2A2A2A, four steps off.
+    final Color background =
+        widget.primary ? app.debrifyTv.accent : const Color(0xFF2A2A2E);
 
     return Focus(
       autofocus: widget.autofocus,
@@ -266,22 +291,25 @@ class _DialogButtonState extends State<_DialogButton> {
       child: GestureDetector(
         onTap: widget.onPressed,
         child: AnimatedContainer(
-          duration: PlatformUtil.isAndroidTvCached
+          duration: PlatformUtil.isTelevision
               ? Duration.zero
               : const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
           decoration: BoxDecoration(
             color: background,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: app.shape.br(12),
             border: Border.all(
-              color: _isFocused ? Colors.white : Colors.transparent,
+              color: _isFocused
+                  ? app.debrifyTv.focusRing
+                  : Colors.transparent,
               width: 2,
             ),
           ),
           child: Text(
             widget.label,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              // Ink on a filled swatch, scored against that swatch.
+              color: app.inkOn(background),
               fontWeight: FontWeight.w600,
             ),
           ),

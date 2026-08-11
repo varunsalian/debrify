@@ -1,9 +1,11 @@
+import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// One selectable IPTV cockpit look.
 class IptvStyleChoice {
@@ -100,11 +102,15 @@ class _IptvStylePageState extends State<IptvStylePage> {
   Future<void> _select(String value) async {
     if (value == _style) return;
     setState(() => _style = value);
+    // Tell an in-flight Look apply that a human just chose this key, so it
+    // does not stamp over the choice. See theme/app_looks.dart.
+    LookApplier.noteExternalWrite('iptv_style');
     await StorageService.setIptvStyle(value);
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'IPTV Appearance',
@@ -147,7 +153,7 @@ class _IptvStylePageState extends State<IptvStylePage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ],
@@ -161,6 +167,7 @@ class _IptvStylePageState extends State<IptvStylePage> {
   /// Radio-style row — a plain [SettingsTile] (the DPAD-proven row) with a
   /// check on the active one.
   Widget _optionRow(IptvStyleChoice choice) {
+    final t = AppThemeScope.of(context).settings;
     final bool active = _style == choice.value;
     return SettingsTile(
       icon: active
@@ -169,7 +176,7 @@ class _IptvStylePageState extends State<IptvStylePage> {
       title: choice.label,
       subtitle: choice.subtitle,
       trailing: active
-          ? const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2)
+          ? Icon(Icons.check_rounded, size: 20, color: t.accent2)
           : const SizedBox.shrink(),
       onTap: () => _select(choice.value),
     );

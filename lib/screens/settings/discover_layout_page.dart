@@ -1,3 +1,4 @@
+import '../../theme/app_looks.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/analytics_service.dart';
@@ -5,6 +6,7 @@ import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'widgets/settings_widgets.dart';
+import '../../theme/app_theme_scope.dart';
 
 /// One selectable Discover layout.
 class DiscoverLayoutChoice {
@@ -98,6 +100,9 @@ class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
   Future<void> _select(String value) async {
     if (value == _layout) return;
     setState(() => _layout = value);
+    // Tell an in-flight Look apply that a human just chose this key, so it
+    // does not stamp over the choice. See theme/app_looks.dart.
+    LookApplier.noteExternalWrite('discover_layout');
     await StorageService.setDiscoverLayout(value);
     // Live-apply: the Discover tab re-reads the pref and rebuilds.
     MainPageBridge.discoverLayoutChanged?.call();
@@ -105,6 +110,7 @@ class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppThemeScope.of(context).settings;
     if (_loading) {
       return const SettingsPageScaffold(
         title: 'Discover Layout',
@@ -149,7 +155,7 @@ class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.45,
-                    color: kSettingsDim,
+                    color: t.dim,
                   ),
                 ),
               ],
@@ -164,6 +170,7 @@ class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
   /// check on the active one, rather than a dropdown whose overlay would have
   /// to be focus-managed on a remote.
   Widget _optionRow(DiscoverLayoutChoice choice) {
+    final t = AppThemeScope.of(context).settings;
     final bool active = _layout == choice.value;
     return SettingsTile(
       icon: active
@@ -172,7 +179,7 @@ class _DiscoverLayoutPageState extends State<DiscoverLayoutPage> {
       title: choice.label,
       subtitle: choice.subtitle,
       trailing: active
-          ? const Icon(Icons.check_rounded, size: 20, color: kSettingsAccent2)
+          ? Icon(Icons.check_rounded, size: 20, color: t.accent2)
           : const SizedBox.shrink(),
       onTap: () => _select(choice.value),
     );

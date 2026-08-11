@@ -88,8 +88,125 @@ class RemoteCommandRouter {
     _onRestartApp = callback;
   }
 
-  /// Show a snackbar message (TV feedback)
+  // ── import batching ──────────────────────────────────────────────────────
+  //
+  // A phone import arrives as one packet PER ITEM — every debrid service, both
+  // trackers, WebDAV, the indexers, the search engines, and one more for each
+  // addon. Each used to raise its own 3-second snackbar, and ScaffoldMessenger
+  // QUEUES snackbars rather than overlapping them: twenty items meant a full
+  // minute of them marching past, long after the transfer itself had finished.
+  // During onboarding it was pure noise — `complete` restarts the app moments
+  // later, so the play-by-play was never read.
+  //
+  // While packets are still arriving the messages are COLLECTED instead of
+  // shown, and one summary is raised when the burst ends: on the `complete`
+  // signal, or after [_batchIdleGap] of quiet for pushes that never send one.
+  // A burst of ONE keeps its own message verbatim, so a single ad-hoc push
+  // from the phone reads exactly as it always did.
+
+  /// Quiet time after the last packet before a burst is considered over.
+  /// Long enough to bridge the gap between packets of one transfer, short
+  /// enough that a lone push doesn't feel delayed.
+  static const Duration _batchIdleGap = Duration(milliseconds: 1200);
+
+  Timer? _batchIdleTimer;
+  bool _batching = false;
+  final List<String> _batchOk = [];
+  final List<String> _batchFailed = [];
+
+  /// Open the collecting window, or push its deadline out because another
+  /// packet just landed.
+  void _beginOrExtendBatch() {
+    _batching = true;
+    _scheduleBatchFlush();
+  }
+
+  void _scheduleBatchFlush() {
+    _batchIdleTimer?.cancel();
+    _batchIdleTimer = Timer(_batchIdleGap, () {
+      // Quiet on the wire is not the same as finished: a large IPTV list is
+      // hundreds of SQLite writes that outlive their packet, and its snackbar
+      // is raised when that work lands. Flushing here would close the window
+      // before those arrive and let them through one at a time — the exact
+      // parade this exists to prevent. Wait for the work, not the packets.
+      if (_inFlightConfigWork.isNotEmpty || _chunkBuffers.isNotEmpty) {
+        _scheduleBatchFlush();
+        return;
+      }
+      _flushBatch();
+    });
+  }
+
+  /// Raise the one summary and close the window.
+  ///
+  /// [prefix] is supplied by the `complete` signal, which knows what the batch
+  /// WAS ("Setup received"); an idle flush has no such context and says so in
+  /// its own words.
+  void _flushBatch({String? prefix}) {
+    _batchIdleTimer?.cancel();
+    _batchIdleTimer = null;
+    _batching = false;
+
+    final ok = List<String>.from(_batchOk);
+    final failed = List<String>.from(_batchFailed);
+    _batchOk.clear();
+    _batchFailed.clear();
+
+    if (ok.isEmpty && failed.isEmpty) {
+      // Nothing was imported — a bare `complete` still deserves its
+      // acknowledgement, an idle flush has nothing to say.
+      if (prefix != null) _showSnackBarNow(prefix, isError: false);
+      return;
+    }
+
+    // One item and no end-of-batch context: it is a lone push, so it keeps the
+    // specific wording its handler chose.
+    if (prefix == null && ok.length + failed.length == 1) {
+      final single = ok.isNotEmpty ? ok.first : failed.first;
+      _showSnackBarNow(single, isError: failed.isNotEmpty);
+      return;
+    }
+
+    final parts = <String>['${ok.length} imported'];
+    if (failed.isNotEmpty) {
+      // Only failures are NAMED — a list of everything that worked is the
+      // wall of text this change removes, but "2 failed" with no clue which
+      // is worse than useless.
+      final names = failed.map(_subjectOf).toSet().toList();
+      final shown = names.take(3).join(', ');
+      final rest = names.length > 3 ? ' +${names.length - 3} more' : '';
+      parts.add('${failed.length} failed ($shown$rest)');
+    }
+    _showSnackBarNow(
+      '${prefix ?? 'Import complete'} · ${parts.join(', ')}',
+      isError: failed.isNotEmpty,
+      duration: const Duration(seconds: 5),
+    );
+  }
+
+  /// The thing a message is ABOUT: handlers write "Real-Debrid: Invalid API
+  /// key", so the part before the colon is the service. Messages without one
+  /// ("Failed to install addon") are already their own subject.
+  static String _subjectOf(String message) {
+    final i = message.indexOf(':');
+    return i > 0 ? message.substring(0, i) : message;
+  }
+
+  /// Show a snackbar message (TV feedback), or bank it while a burst is in
+  /// flight — see the import-batching note above.
   void _showSnackBar(String message, {bool isError = false}) {
+    if (_batching) {
+      (isError ? _batchFailed : _batchOk).add(message);
+      return;
+    }
+    _showSnackBarNow(message, isError: isError);
+  }
+
+  void _showSnackBarNow(
+    String message, {
+    bool isError = false,
+    Duration duration = const Duration(seconds: 3),
+  }) {
     final messenger = _scaffoldMessengerKey?.currentState;
     if (messenger == null) return;
 
@@ -107,7 +224,7 @@ class RemoteCommandRouter {
         ),
         backgroundColor: isError ? Colors.red.shade700 : Colors.green.shade700,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        duration: duration,
       ),
     );
   }
@@ -169,6 +286,10 @@ class RemoteCommandRouter {
   /// Handle addon commands on TV
   Future<void> _handleAddonCommand(String command, String? data) async {
     if (command == AddonCommand.install && data != null) {
+      // Addons ride the SAME phone import as the config packets (one command
+      // per addon), so they join the same collecting window — otherwise a
+      // ten-addon setup still parades ten snackbars past.
+      _beginOrExtendBatch();
       debugPrint('RemoteCommandRouter: Installing addon from $data');
       try {
         final addon = await StremioService.instance.addAddon(data);
@@ -243,6 +364,9 @@ class RemoteCommandRouter {
       return;
     }
 
+    // Opened BEFORE the work starts, so the snackbar that work raises when it
+    // finishes is banked rather than shown.
+    _beginOrExtendBatch();
     await _trackConfigWork(_dispatchConfigCommand(command, data));
   }
 
@@ -554,7 +678,9 @@ class RemoteCommandRouter {
 
     if (!wasOnboarding) {
       debugPrint('RemoteCommandRouter: Config complete (already onboarded)');
-      _showSnackBar('Setup received');
+      // The end of the burst, and the only place that knows what it WAS: one
+      // summary for everything banked since the first packet.
+      _flushBatch(prefix: 'Setup received');
       return;
     }
 
@@ -563,7 +689,7 @@ class RemoteCommandRouter {
     );
 
     await StorageService.setInitialSetupComplete(true);
-    _showSnackBar('Setup received! Restarting...');
+    _flushBatch(prefix: 'Setup received — restarting');
 
     // Give snackbar time to show, then restart app
     await Future.delayed(const Duration(milliseconds: 1500));

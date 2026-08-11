@@ -14,7 +14,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.7.0-beta.1+27
+version: 0.8.0-alpha.1+28
 
 environment:
   sdk: ^3.8.1
@@ -83,10 +83,68 @@ dependencies:
   package_info_plus: ^8.0.0
 
   # Premium UI and animations
-  google_fonts: ^6.2.1
+  # 8.x required from Flutter 3.44: 6.x keys a `const` map by FontWeight,
+  # which stopped being a primitive-equality type and now fails constant
+  # evaluation at build time (analyzer is clean, the kernel snapshot is not).
+  google_fonts: ^8.2.1
+
+  # --- Apple TV (tvOS) federated implementations ---
+  # A tvOS build only loads plugins that declare a `tvos:` platform key, so
+  # each plugin with native Apple code needs its sibling here or the call
+  # throws MissingPluginException at runtime (it still COMPILES without them,
+  # which is the trap). Inert on Android/iOS/desktop — the endorsed
+  # implementation for those platforms is unchanged.
+  #
+  # NOTE: every one of these is 0.0.x — the tvOS plugin ecosystem is pre-alpha.
+  # Treat their behaviour as unverified until exercised on a real Apple TV.
+  # media_kit on Apple TV. Neither of these exists on pub.dev — media_kit has
+  # no tvOS support at all, so both are local packages under packages/.
+  #   libs  = libmpv + ffmpeg xcframeworks (the binaries are gitignored;
+  #           re-fetch with its fetch_frameworks.sh)
+  #   video = the texture renderer, scaffolded by `flutter-tvos plugin port`
+  # Without the libs package media_kit is silently dropped from the tvOS build
+  # and every playback call throws MissingPluginException at runtime.
+  media_kit_libs_tvos_video:
+    path: packages/media_kit_libs_tvos_video
+  media_kit_video_tvos:
+    path: packages/media_kit_video_tvos
+
+  connectivity_plus_tvos: ^0.0.2
+  # device_info_plus_tvos is ABSENT for the same reason as package_info: it
+  # wants device_info_plus_platform_interface ^8.1.0 while the plugin ships
+  # ^7.x. We never call device_info directly (it arrives via pug_flutter), so
+  # nothing of ours depends on it working.
+  #
+  # package_info_plus_tvos is deliberately ABSENT: it requires
+  # package_info_plus_platform_interface ^4.1.0, which NO published
+  # package_info_plus uses (10.2.1, the latest, still pins ^3.2.1) — so it
+  # cannot resolve against any real version of the plugin it implements.
+  # PackageInfo.fromPlatform() therefore throws on tvOS and its three call
+  # sites need guarding. Revisit when the package catches up.
+  path_provider_tvos: ^0.0.3
+  shared_preferences_tvos: ^0.0.2
+  sqflite_tvos: ^0.0.2
+  video_player_tvos: ^0.0.1
+  wakelock_plus_tvos: ^0.0.1
   animations: ^2.0.11
   provider: ^6.1.2
   youtube_explode_dart: ^3.1.0
+
+# media_kit is vendored under packages/media_kit_patched with ONE change: an
+# already-resolved guard in NativeLibrary.ensureInitialized. Without it, Apple
+# TV video can never start (see the comment at the patch site). Everything
+# else is stock media_kit 1.2.0 — diff it before upgrading.
+# path_provider_tvos is vendored under packages/path_provider_tvos_patched with
+# ONE change: getApplicationSupportDirectory returns a Caches subdirectory
+# instead of nil. Upstream is technically right (Application Support cannot be
+# created on tvOS) but nil breaks every dependency that asks for it and has no
+# tvOS fallback — flutter_cache_manager, google_fonts, background_downloader.
+# Everything else is stock 0.0.3 — diff it before upgrading.
+dependency_overrides:
+  media_kit:
+    path: packages/media_kit_patched
+  path_provider_tvos:
+    path: packages/path_provider_tvos_patched
 
 dev_dependencies:
   flutter_test:

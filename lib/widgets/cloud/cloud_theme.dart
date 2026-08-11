@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 
-/// Shared design tokens for the restyled cloud/debrid file screens.
+import '../../theme/app_theme_scope.dart';
+
+/// The legacy design constants for the cloud/debrid file screens.
+///
+/// **No longer read by the cloud surfaces** — they resolve
+/// `AppThemeScope.of(context).cloud.*` instead, so the pages follow the
+/// selected app theme. What survives here is the LEGACY PIN SOURCE:
+/// `AppThemes.legacy.cloud` is asserted equal to these values by
+/// `test/theme/legacy_pins_test.dart`, which is what guarantees the default
+/// theme still renders exactly what these constants rendered.
 ///
 /// Values intentionally mirror the Search screen board (`kStremioBg` /
 /// `kStremioAccent` and the radial bloom in `search_screen.dart`) so the six
@@ -39,8 +48,9 @@ class CloudPageBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
     return DecoratedBox(
-      decoration: const BoxDecoration(gradient: CloudTheme.pageGradient),
+      decoration: BoxDecoration(gradient: app.cloud.wash),
       child: child,
     );
   }

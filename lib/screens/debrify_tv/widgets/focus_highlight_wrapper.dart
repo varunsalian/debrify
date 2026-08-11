@@ -81,7 +81,7 @@ class _FocusHighlightWrapperState extends State<FocusHighlightWrapper> {
         // TV: snap and use the border alone as the focus cue — animating a
         // blur-26 shadow repaints the wrapped subtree every frame of every
         // focus move on hardware that can least afford it.
-        duration: PlatformUtil.isAndroidTvCached
+        duration: PlatformUtil.isTelevision
             ? Duration.zero
             : const Duration(milliseconds: 180),
         curve: Curves.easeOutCubic,
@@ -91,7 +91,7 @@ class _FocusHighlightWrapperState extends State<FocusHighlightWrapper> {
             color: _hasFocusedDescendant ? highlightColor : Colors.transparent,
             width: 2,
           ),
-          boxShadow: _hasFocusedDescendant && !PlatformUtil.isAndroidTvCached
+          boxShadow: _hasFocusedDescendant && !PlatformUtil.isTelevision
               ? [
                   BoxShadow(
                     color: highlightColor.withValues(alpha: 0.35),

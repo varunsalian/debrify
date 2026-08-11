@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+
 import 'package:flutter/services.dart';
 import '../../../models/torrent.dart';
 import '../../../utils/platform_util.dart';
@@ -77,13 +78,21 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
   final Set<String> _loadingIds = {};
 
   // Design tokens (matching IptvChannelSheet)
-  static const _accent = Color(0xFF00E5FF);
-  static const _accentAlt = Color(0xFF00B8D4);
-  static const _surfaceDark = Color(0xFF101016);
+  static const _accent = Color(0xFFFFFFFF);
+  static const _accentAlt = Color(0xFFE9E9EE);
+  static const _surfaceDark = Color(0xFF101012);
 
   @override
   void initState() {
     super.initState();
+
+    // A television opens this over the player, whose root Focus already holds
+    // focus in this scope — so `autofocus: true` on the KeyboardListener never
+    // wins and the sheet renders its virtual focus while receiving no keys at
+    // all (the DPAD appears dead). Claim focus explicitly once mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _keyboardFocusNode.requestFocus();
+    });
 
     _currentChannelId = widget.currentChannelId;
     _parseChannels();
@@ -353,6 +362,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
 
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
+      TvOverlayBack.mark();
       widget.onClose();
       return;
     }
@@ -370,6 +380,10 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
   void _handleSearchKeys(KeyEvent event) {
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _searchFocusNode.unfocus();
+      // Reclaim the sheet's key listener: unfocusing clears the scope's
+      // focused child, and without this the list paints a focused row but
+      // stops receiving DPAD keys entirely.
+      _keyboardFocusNode.requestFocus();
       setState(() => _focusZone = _FocusZone.channels);
     }
   }
@@ -403,7 +417,7 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
   /// so the blur is barely visible — but its saveLayer re-blurs the live video
   /// underneath on every frame, which weak TV GPUs can't afford.
   Widget _frost(Widget child) {
-    if (PlatformUtil.isAndroidTvCached) return child;
+    if (PlatformUtil.isTelevision) return child;
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
       child: child,
@@ -499,18 +513,13 @@ class _StremioTvGuideSheetState extends State<StremioTvGuideSheet>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: _accent.withOpacity(0.25),
+                  color: Colors.black.withOpacity(0.35),
                   blurRadius: 16,
                   spreadRadius: 2,
                 ),
-                BoxShadow(
-                  color: _accentAlt.withOpacity(0.15),
-                  blurRadius: 24,
-                  spreadRadius: 4,
-                ),
               ],
             ),
-            child: const Icon(Icons.tv_rounded, color: Colors.white, size: 22),
+            child: const Icon(Icons.tv_rounded, color: Colors.black, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -877,8 +886,8 @@ class _ChannelTile extends StatelessWidget {
   final Animation<double> pulseAnim;
   final VoidCallback onTap;
 
-  static const _accent = Color(0xFF00E5FF);
-  static const _accentAlt = Color(0xFF00BCD4);
+  static const _accent = Color(0xFFFFFFFF);
+  static const _accentAlt = Color(0xFFE9E9EE);
   static const _goldStar = Color(0xFFFFD700);
 
   static Color _avatarColor(String name) {
@@ -1317,7 +1326,7 @@ class _ChannelTile extends StatelessWidget {
           child: const Text(
             'NOW',
             style: TextStyle(
-              color: Colors.white,
+              color: Colors.black,
               fontSize: 8,
               fontWeight: FontWeight.w800,
               letterSpacing: 1,
