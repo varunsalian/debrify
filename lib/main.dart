@@ -181,6 +181,17 @@ Future<void> main() async {
   // Warms playerStartPortraitCached: the player picks its orientation while
   // building, and the IPTV startup channel can open one on the first frame.
   await StorageService.getPlayerStartPortrait();
+  // Update-aware defaults: one-time adoption of the current flagship look
+  // for every pref the user never wrote (see migrateDefaultsGeneration).
+  // MUST precede the brightness/theme warms below — they read migrated keys
+  // for the very first frame.
+  await StorageService.migrateDefaultsGeneration();
+  // Warm the layout prefs the shell reads through field initializers —
+  // without this the first frame paints canvas/ghost/rail and then snaps
+  // to the stored (possibly just-migrated) look.
+  await StorageService.getTvHomeStyle();
+  await StorageService.getTvSidebarStyle();
+  await StorageService.getDesktopSidebarStyle();
   // Warms the Appearance → Text Brightness preset: the root theme is built
   // synchronously in DebrifyApp.build, so the stored choice must be readable
   // before the first frame or text would flash bright and then dim.
@@ -776,12 +787,12 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// nav prefs; live-reloaded when the Settings picker fires the bridge.
   /// Ghost is the product default — matching it here avoids a one-frame
   /// classic flash before the pref read lands.
-  String _tvSidebarStyle = 'ghost';
+  String _tvSidebarStyle = StorageService.tvSidebarStyleCached;
 
   /// Desktop/tablet sidebar chrome: 'rail' (fixed, the default) or 'pill'
   /// (no rail — content full-bleed, a floating capsule opens the menu).
   /// Same load/reload path as the TV style above.
-  String _desktopSidebarStyle = 'rail';
+  String _desktopSidebarStyle = StorageService.desktopSidebarStyleCached;
 
   /// The classic bar's stored middle-slot picks (real indices; may contain
   /// currently-hidden tabs — validated against visibility at build). Null =

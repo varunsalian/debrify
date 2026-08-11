@@ -116,6 +116,13 @@ abstract final class LookKeys {
     notify: () => MainPageBridge.tvSidebarStyleChanged?.call(),
   );
 
+  static final desktopSidebarStyle = LookKey(
+    id: 'desktop_sidebar_style',
+    label: 'Desktop Sidebar',
+    read: () => StorageService.desktopSidebarStyleCached,
+    write: StorageService.setDesktopSidebarStyle,
+  );
+
   static final discoverLayout = LookKey(
     id: 'discover_layout',
     label: 'Discover Layout',
@@ -152,6 +159,7 @@ abstract final class LookKeys {
     phoneNavStyle,
     tvHomeStyle,
     tvSidebarStyle,
+    desktopSidebarStyle,
     discoverLayout,
     iptvStyle,
     textBrightness,
@@ -243,6 +251,13 @@ abstract final class AppLooks {
         'launch_animation': 'horizon',
         'launch_ident_palette': 'ident',
         'text_brightness': 'bright',
+        // Pinned explicitly (they equal the historical defaults): a Classic
+        // pick must read as a stored CHOICE, or the defaults-generation
+        // migration would treat the absent keys as never-chosen and restyle
+        // an app whose user explicitly asked for the classic look.
+        'tv_home_style': 'canvas',
+        'tv_sidebar_style': 'ghost',
+        'desktop_sidebar_style': 'rail',
       },
     ),
     AppLook(
@@ -255,6 +270,7 @@ abstract final class AppLooks {
         'detail_page_style': 'showcase',
         'tv_home_style': 'spotlight',
         'tv_sidebar_style': 'pill',
+        'desktop_sidebar_style': 'pill',
         'text_brightness': 'bright',
       },
     ),

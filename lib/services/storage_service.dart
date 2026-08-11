@@ -38,6 +38,64 @@ enum TvRenderQuality {
 }
 
 class StorageService {
+  // ── Update-aware defaults ─────────────────────────────────────────────
+  //
+  // "Default" in this app has always meant "what an unset pref falls back
+  // to" — which never reaches users who installed before a redesign. The
+  // defaults GENERATION makes a flagship-look change reach them once:
+  // on the first launch at a new generation, every look pref the user
+  // NEVER wrote adopts the current bundle; every stored key — an explicit
+  // choice, since all these setters write unconditionally — is untouched.
+  // After migration the adopted values are stored too, so switching away
+  // later sticks forever.
+  //
+  // Generation 1 (2026-08): the Spotlight era — Spotlight theme, Showcase
+  // details, Spotlight TV home, pill rails on TV and desktop/tablet.
+  // (text_brightness is deliberately absent: its unset default is already
+  // the Look's value.)
+  //
+  // To roll out a future flagship look: bump the generation, append its
+  // bundle under a `gen < N` block below.
+  static const int _currentDefaultsGeneration = 1;
+  static const String _defaultsGenerationKey = 'defaults_generation';
+
+  /// MUST run before [TextBrightnessController.warm] / theme warms in
+  /// `main()`: the first frame has to already be the migrated look.
+  static Future<void> migrateDefaultsGeneration() async {
+    final prefs = await SharedPreferences.getInstance();
+    final gen = prefs.getInt(_defaultsGenerationKey) ?? 0;
+    if (gen >= _currentDefaultsGeneration) return;
+    if (gen < 1) {
+      // Dormant prefs are written too (desktop pill on a phone, TV home
+      // style off-TV): harmless where they don't apply, correct if the
+      // device class — or a window size — ever changes.
+      //
+      // The theme and its `detail_theme` mirror move as a PAIR, in the
+      // controller's write-through order (mirror first — old builds read
+      // only the mirror, and Showcase resolves its palette from it). The
+      // pairing also means an explicit legacy pick (app_theme stored, no
+      // mirror by design) keeps its details page untouched.
+      if (!prefs.containsKey(_appThemeKey)) {
+        if (!prefs.containsKey(_detailThemeKey)) {
+          await prefs.setString(_detailThemeKey, 'spotlight');
+        }
+        await prefs.setString(_appThemeKey, 'spotlight');
+      }
+      const bundle = <String, String>{
+        _detailPageStyleKey: 'showcase',
+        _tvHomeStyleKey: 'spotlight',
+        _tvSidebarStyleKey: 'pill',
+        _desktopSidebarStyleKey: 'pill',
+      };
+      for (final entry in bundle.entries) {
+        if (!prefs.containsKey(entry.key)) {
+          await prefs.setString(entry.key, entry.value);
+        }
+      }
+    }
+    await prefs.setInt(_defaultsGenerationKey, _currentDefaultsGeneration);
+  }
+
   static const String _apiKeyKey = 'real_debrid_api_key';
   static const String _rdEndpointKey = 'real_debrid_endpoint';
   static const String _fileSelectionKey = 'real_debrid_file_selection';
@@ -1397,13 +1455,21 @@ class StorageService {
   /// content runs full-bleed and a floating capsule shows the current tab;
   /// clicking it opens the menu as an overlay). The TV rail has its own key
   /// above and never reads this; phones never reach the wide layout.
+  /// Warmed in `main()` before the first frame — the shell's field
+  /// initializer reads it so a migrated/pill user never flashes the rail.
+  static String desktopSidebarStyleCached = 'rail';
+
   static Future<String> getDesktopSidebarStyle() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_desktopSidebarStyleKey);
-    return (raw != null && _desktopSidebarStyles.contains(raw)) ? raw : 'rail';
+    return desktopSidebarStyleCached =
+        (raw != null && _desktopSidebarStyles.contains(raw)) ? raw : 'rail';
   }
 
   static Future<void> setDesktopSidebarStyle(String style) async {
+    desktopSidebarStyleCached = _desktopSidebarStyles.contains(style)
+        ? style
+        : 'rail';
     final normalized = _desktopSidebarStyles.contains(style) ? style : 'rail';
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_desktopSidebarStyleKey, normalized);

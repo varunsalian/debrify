@@ -4767,7 +4767,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// classic (via [_homeStyleEffective], regardless of this field). Canvas is
   /// the TV default; matching it here avoids a one-frame classic flash at
   /// boot there, and resolves to classic off-TV.
-  String _tvHomeStyle = 'canvas';
+  String _tvHomeStyle = StorageService.tvHomeStyleCached;
 
   bool get _homeBoardMode =>
       widget.isTelevision && !widget.searchMode && !widget.discoverMode;

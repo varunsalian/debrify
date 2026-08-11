@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../services/storage_service.dart';
 import '../services/text_brightness.dart';
+import 'dart:async';
+
 import '../widgets/detail/theme/detail_themes.dart';
 import 'app_theme.dart';
 import 'premium_looks.dart';
@@ -118,7 +120,14 @@ class AppThemeController extends ChangeNotifier {
     // this returns, and the mirror is never repaired. Compare BOTH.
     final mirrorOk = normalized == AppThemes.legacyId ||
         StorageService.detailThemeCached == normalized;
-    if (normalized == _id && mirrorOk) return;
+    if (normalized == _id && mirrorOk) {
+      // Nothing to recompute or publish — but re-picking the ACTIVE theme
+      // (e.g. applying the Classic Look on a legacy app) is still an
+      // explicit choice, and the defaults-generation migration reads an
+      // absent `app_theme` key as "never chosen". Persist it quietly.
+      unawaited(StorageService.setAppTheme(normalized).catchError((_) {}));
+      return;
+    }
     _id = normalized;
     if (normalized != AppThemes.legacyId) {
       // The synchronous mirror BEFORE publishing: an open details route
