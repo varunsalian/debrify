@@ -344,16 +344,24 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     final episodePeek = m.stillH * 0.18;
     final hasSeasons = view != null && view.seasons.length > 1;
     return hasSeasons
-        ? episodePeek + (m.compact ? _seasonPillBandHeight : _seasonsBandHeight)
+        ? episodePeek +
+            // Only the ROW k-scales — ShowcaseSeasons renders
+            // `SizedBox(height: 34 * k)` while the air around it stays fixed.
+            // Scaling the whole 50 over-reserved by 16·(k−1) on wide touch,
+            // showing a sliver more episode row than the 0.18 peek pins.
+            (m.compact
+                ? _seasonPillBandHeight
+                : _seasonsRowHeight * m.k + _seasonsBandAir)
         : episodePeek;
   }
 
-  /// The seasons row's own height plus the space around it.
-  ///
-  /// Was 96, guessed. `ShowcaseSeasons` is a bare `SizedBox(height: 34)` — the
-  /// guess over-reserved by around 60, and every one of those pixels went to
-  /// showing more of the episode row than was ever intended.
-  static const double _seasonsBandHeight = 50;
+  /// The seasons row's own height ([ShowcaseSeasons]' SizedBox — k-scaled
+  /// there, so k-scaled in the peek) and the fixed air around it. Their sum
+  /// was a single guessed 96 once; `ShowcaseSeasons` is a bare 34pt row, and
+  /// every over-reserved pixel went to showing more of the episode row than
+  /// was ever intended.
+  static const double _seasonsRowHeight = 34;
+  static const double _seasonsBandAir = 16;
 
   /// Compact renders the season control as a 34pt pill with more air around
   /// it (a finger needs what a remote never did).
@@ -665,6 +673,10 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         final metrics = ShowcaseMetrics(
           constraints.maxWidth,
           compact: !widget.dpad && constraints.maxWidth < 600,
+          // The input axis, so the metrics' [ShowcaseMetrics.k] scale can tell
+          // a wide tablet (960-canvas fixed values rendered small) from a TV
+          // (where they are exact and must stay so).
+          touch: !widget.dpad,
         );
         _m = metrics;
         // Bands AFTER metrics — their topology follows the tier (see _shell).
@@ -827,8 +839,9 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         // The still, plus the caption block below it, plus headroom for the
         // lift. Derived from the still's own measured height so it tracks the
         // viewport instead of assuming one. Compact swaps the caption block
-        // for the integrated card's plate.
-        height: m.compact ? m.stillH + m.epPlate : m.stillH + 108,
+        // for the integrated card's plate; wide k-scales the caption block in
+        // step with its type.
+        height: m.compact ? m.stillH + m.epPlate : m.stillH + 108 * m.k,
         child: ListView.separated(
           // The lift, its 7px rise and its 25px shadow all paint outside the
           // cell; a clipping viewport slices exactly the effect off.

@@ -11,6 +11,7 @@ import '../../services/trakt/trakt_episode_model.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
+import '../../utils/wide_touch_scale.dart';
 import '../episodes_panel.dart';
 import 'detail_model.dart';
 
@@ -31,7 +32,33 @@ class ShowcaseMetrics {
   /// spotlight_responsive_mockup/.
   final bool compact;
 
-  const ShowcaseMetrics(this.w, {this.compact = false});
+  /// The INPUT axis, carried so [k] can tell a wide tablet from a TV. False
+  /// everywhere the metrics come from the MediaQuery fallback, which keeps
+  /// every caller outside the Showcase page at the shipped TV numbers.
+  final bool touch;
+
+  const ShowcaseMetrics(this.w, {this.compact = false, this.touch = false});
+
+  /// The type-and-control scale for the wide TOUCH tier.
+  ///
+  /// The wide tier's fixed values — every `_t` literal, the pill heights, the
+  /// guide and DYK cards — are 960-canvas numbers, and a TV's logical width IS
+  /// ~960 (the scaled surface). A tablet hits the same tier at its real width:
+  /// an iPad Pro lands at 1366, where those fixed values render at ~70% of
+  /// their designed proportion — 10.5pt plot text and a 30pt primary pill on a
+  /// touch device. Scaling them by w/960 restores the mock's proportions
+  /// exactly, and because the proportional values (`w * x/1920`) already track
+  /// width, text and cards grow TOGETHER rather than drifting apart.
+  ///
+  /// Exactly 1.0 on TV (dpad keeps every shipped pixel) and on compact (its
+  /// absolutes are hand-measured off the Apple phone app, not derived).
+  /// The formula lives in [wideTouchScale], shared with the Home Spotlight
+  /// board so the two surfaces can never be retuned apart.
+  ///
+  /// Radii follow one rule: a radius k-scales exactly when its box does —
+  /// capsules (radius = height/2) and the k-sized cards/chips scale, while
+  /// boxes sized proportionally off `w` keep their shipped radii.
+  double get k => (compact || !touch) ? 1.0 : wideTouchScale(w);
 
   /// From the space actually GIVEN, not from the screen.
   ///
@@ -78,13 +105,13 @@ class ShowcaseMetrics {
 
   /// Parents Guide category card (wide rail only — compact renders accordion
   /// rows at full width instead). Fixed on the 960 canvas, like the source
-  /// cards.
-  double get guideW => 170.0;
-  double get guideH => 76.0;
+  /// cards — [k]-scaled so a tablet keeps the proportion.
+  double get guideW => 170.0 * k;
+  double get guideH => 76.0 * k;
 
   /// Did You Know reading card.
-  double get dykW => compact ? w * 0.72 : 250.0;
-  double get dykH => compact ? 168.0 : 136.0;
+  double get dykW => compact ? w * 0.72 : 250.0 * k;
+  double get dykH => compact ? 168.0 : 136.0 * k;
 }
 
 /// The page's metrics, computed once by [DetailShowcase] from its
@@ -101,7 +128,9 @@ class ShowcaseMetricsScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(ShowcaseMetricsScope old) =>
-      old.metrics.w != metrics.w || old.metrics.compact != metrics.compact;
+      old.metrics.w != metrics.w ||
+      old.metrics.compact != metrics.compact ||
+      old.metrics.touch != metrics.touch;
 }
 
 /// Kept for callers that only need the page margin.
@@ -384,34 +413,39 @@ class ShowcaseStickyLogo extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => IgnorePointer(
-        child: AnimatedOpacity(
+  Widget build(BuildContext context) {
+    final m = ShowcaseMetrics.of(context);
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 400),
+        opacity: visible ? 1 : 0,
+        child: AnimatedSlide(
           duration: const Duration(milliseconds: 400),
-          opacity: visible ? 1 : 0,
-          child: AnimatedSlide(
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOut,
-            offset: visible ? Offset.zero : const Offset(0, -0.25),
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 22),
-                child: (url == null || url!.isEmpty)
-                    ? Text(name, style: _t(17, w: FontWeight.w700))
-                    : CachedNetworkImage(
-                        imageUrl: url!,
-                        height: 37,
-                        fit: BoxFit.contain,
-                        cacheManager: DebrifyImageCache.manager,
-                        memCacheWidth: 420,
-                        errorWidget: (_, __, ___) =>
-                            Text(name, style: _t(17, w: FontWeight.w700)),
-                      ),
-              ),
+          curve: Curves.easeOut,
+          offset: visible ? Offset.zero : const Offset(0, -0.25),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 22),
+              child: (url == null || url!.isEmpty)
+                  ? Text(name, style: _t(17 * m.k, w: FontWeight.w700))
+                  : CachedNetworkImage(
+                      imageUrl: url!,
+                      height: 37 * m.k,
+                      fit: BoxFit.contain,
+                      cacheManager: DebrifyImageCache.manager,
+                      // Decode cap follows the k-scaled display size, or the
+                      // one scaled element of the header renders soft.
+                      memCacheWidth: (420 * m.k).round(),
+                      errorWidget: (_, __, ___) =>
+                          Text(name, style: _t(17 * m.k, w: FontWeight.w700)),
+                    ),
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 // ── identity ───────────────────────────────────────────────────────────────
@@ -581,9 +615,9 @@ class ShowcaseIdentity extends StatelessWidget {
     DetailModel m,
     List<Widget> actions,
   ) {
+    final metrics = ShowcaseMetrics.of(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(ShowcaseMetrics.of(context).gutter, 0,
-          ShowcaseMetrics.of(context).gutter, 26),
+      padding: EdgeInsets.fromLTRB(metrics.gutter, 0, metrics.gutter, 26),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         // Anchored to the FOOT of the screenful, as the reference is.
@@ -602,12 +636,12 @@ class ShowcaseIdentity extends StatelessWidget {
           ],
           if ((m.synopsis ?? '').isNotEmpty)
             SizedBox(
-              width: 410,
+              width: 410 * metrics.k,
               child: Text(
                 m.synopsis!,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: _t(10.5, a: 0.74).copyWith(height: 1.42),
+                style: _t(10.5 * metrics.k, a: 0.74).copyWith(height: 1.42),
               ),
             ),
           const SizedBox(height: 11),
@@ -647,6 +681,7 @@ class _LogoOrTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final m = ShowcaseMetrics.of(context);
     // Metahub ships some logos as BLACK wordmarks, invisible on ink — roughly
     // one title in four. The text fallback is not a degraded path, it is the
     // other half of the design.
@@ -656,7 +691,7 @@ class _LogoOrTitle extends StatelessWidget {
       textAlign: centered ? TextAlign.center : TextAlign.start,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        fontSize: centered ? 32 : 39,
+        fontSize: centered ? 32 : 39 * m.k,
         height: 1,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.8,
@@ -665,7 +700,7 @@ class _LogoOrTitle extends StatelessWidget {
     );
     if (url == null || url!.isEmpty) return text;
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 235, maxHeight: 60),
+      constraints: BoxConstraints(maxWidth: 235 * m.k, maxHeight: 60 * m.k),
       child: CachedNetworkImage(
         imageUrl: url!,
         fit: BoxFit.contain,
@@ -725,16 +760,20 @@ class _Chip extends StatelessWidget {
   const _Chip({required this.label});
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 7.5, vertical: 3.5),
-          child: Text(label, style: _t(9.5, w: FontWeight.w600)),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final m = ShowcaseMetrics.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(4 * m.k),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+            horizontal: 7.5 * m.k, vertical: 3.5 * m.k),
+        child: Text(label, style: _t(9.5 * m.k, w: FontWeight.w600)),
+      ),
+    );
+  }
 }
 
 /// The meta line — and where the trackers live.
@@ -751,6 +790,7 @@ class _MetaLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = model;
+    final scale = ShowcaseMetrics.of(context).k;
     final bits = <String>[
       if (m.isMovie) 'Film' else 'Series',
       ...m.genres.take(2),
@@ -758,7 +798,7 @@ class _MetaLine extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(bits.join(' · '), style: _t(10.5, a: 0.86)),
+        Text(bits.join(' · '), style: _t(10.5 * scale, a: 0.86)),
         if (m.rating != null) ...[
           const SizedBox(width: 7),
           _RatingBox(value: m.rating!),
@@ -784,26 +824,29 @@ class _TrackerMark extends StatelessWidget {
   const _TrackerMark({required this.letter, required this.on, required this.tint});
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: 15,
-        height: 15,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: on ? tint : null,
-          border: on
-              ? null
-              : Border.all(color: _ink.withValues(alpha: 0.34), width: 0.75),
+  Widget build(BuildContext context) {
+    final k = ShowcaseMetrics.of(context).k;
+    return Container(
+      width: 15 * k,
+      height: 15 * k,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: on ? tint : null,
+        border: on
+            ? null
+            : Border.all(color: _ink.withValues(alpha: 0.34), width: 0.75),
+      ),
+      child: Text(
+        letter,
+        style: TextStyle(
+          fontSize: 7 * k,
+          fontWeight: FontWeight.w800,
+          color: on ? _ink : _ink.withValues(alpha: 0.5),
         ),
-        child: Text(
-          letter,
-          style: TextStyle(
-            fontSize: 7,
-            fontWeight: FontWeight.w800,
-            color: on ? _ink : _ink.withValues(alpha: 0.5),
-          ),
-        ),
-      );
+      ),
+    );
+  }
 }
 
 class _RatingBox extends StatelessWidget {
@@ -812,14 +855,18 @@ class _RatingBox extends StatelessWidget {
   const _RatingBox({required this.value});
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
-        decoration: BoxDecoration(
-          border: Border.all(color: _ink.withValues(alpha: 0.45), width: 0.75),
-          borderRadius: BorderRadius.circular(2.5),
-        ),
-        child: Text('★ ${value.toStringAsFixed(1)}', style: _t(7.5, a: 0.9)),
-      );
+  Widget build(BuildContext context) {
+    final k = ShowcaseMetrics.of(context).k;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 3 * k, vertical: 0.5 * k),
+      decoration: BoxDecoration(
+        border: Border.all(color: _ink.withValues(alpha: 0.45), width: 0.75),
+        borderRadius: BorderRadius.circular(2.5 * k),
+      ),
+      child:
+          Text('★ ${value.toStringAsFixed(1)}', style: _t(7.5 * k, a: 0.9)),
+    );
+  }
 }
 
 bool _hasHonors(DetailModel m) =>
@@ -837,13 +884,14 @@ class _HonorsLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final x = model.imdbExtra;
     if (x == null) return const SizedBox.shrink();
-    final compact = ShowcaseMetrics.of(context).compact;
+    final m = ShowcaseMetrics.of(context);
+    final compact = m.compact;
     final chips = <Widget>[
       if (x.top250Rank != null)
-        _honorChip(compact, 'IMDb TOP 250', '№${x.top250Rank}'),
+        _honorChip(m, 'IMDb TOP 250', '№${x.top250Rank}'),
       if (x.meterRank != null)
         _honorChip(
-          compact,
+          m,
           'TRENDING',
           '№${x.meterRank}',
           drift: switch (x.meterDelta) {
@@ -862,12 +910,14 @@ class _HonorsLine extends StatelessWidget {
     );
   }
 
-  Widget _honorChip(bool compact, String label, String rank, {String? drift}) {
-    final size = compact ? 9.5 : 7.5;
+  Widget _honorChip(ShowcaseMetrics m, String label, String rank,
+      {String? drift}) {
+    final compact = m.compact;
+    final size = compact ? 9.5 : 7.5 * m.k;
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: compact ? 8 : 6,
-        vertical: compact ? 3.5 : 2.5,
+        horizontal: compact ? 8 : 6 * m.k,
+        vertical: compact ? 3.5 : 2.5 * m.k,
       ),
       decoration: BoxDecoration(
         border: Border.all(color: _ink.withValues(alpha: 0.30), width: 0.75),
@@ -912,7 +962,8 @@ class _TechLine extends StatelessWidget {
       if ((model.certificate ?? '').isNotEmpty) model.certificate!,
     ];
     if (bits.isEmpty) return const SizedBox.shrink();
-    return Text(bits.join('  ·  '), style: _t(9.5, a: 0.7));
+    return Text(bits.join('  ·  '),
+        style: _t(9.5 * ShowcaseMetrics.of(context).k, a: 0.7));
   }
 }
 
@@ -950,37 +1001,40 @@ class _PrimaryState extends State<_Primary> {
         child: GestureDetector(
           onTap: widget.onTap,
           child: Builder(builder: (context) {
-            // TV draws at the mock's 960-canvas numbers; a phone needs a real
+            // TV draws at the mock's 960-canvas numbers (k = 1); a wide touch
+            // surface scales them back to proportion, and a phone needs a real
             // finger target and the phone type ramp — the Apple reference
             // pill is 42pt with 15pt text, and SOLID white at rest (there is
             // no focus state to flip through on touch).
-            final compact = ShowcaseMetrics.of(context).compact;
+            final m = ShowcaseMetrics.of(context);
+            final compact = m.compact;
             final solid = _f || compact;
             return AnimatedContainer(
               duration: const Duration(milliseconds: 140),
-              height: compact ? 44 : 30,
-              padding: EdgeInsets.symmetric(horizontal: compact ? 24 : 17),
+              height: compact ? 44 : 30 * m.k,
+              padding:
+                  EdgeInsets.symmetric(horizontal: compact ? 24 : 17 * m.k),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 // The focus flip: ghost at rest, SOLID WHITE on black when
                 // focused. The reference's primary is the one thing that does
                 // not merely lift.
                 color: solid ? _ink : _ink.withValues(alpha: 0.22),
-                borderRadius: BorderRadius.circular(compact ? 22 : 15),
+                borderRadius: BorderRadius.circular(compact ? 22 : 15 * m.k),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
                     Icons.play_arrow_rounded,
-                    size: compact ? 20 : 14,
+                    size: compact ? 20 : 14 * m.k,
                     color: solid ? Colors.black : _ink,
                   ),
                   const SizedBox(width: 5),
                   Text(
                     widget.label,
                     style: TextStyle(
-                      fontSize: compact ? 15 : 10.5,
+                      fontSize: compact ? 15 : 10.5 * m.k,
                       fontWeight: FontWeight.w600,
                       color: solid ? Colors.black : _ink,
                     ),
@@ -1020,8 +1074,9 @@ class _CircleState extends State<_Circle> {
         child: GestureDetector(
           onTap: widget.onTap,
           child: Builder(builder: (context) {
-            final compact = ShowcaseMetrics.of(context).compact;
-            final d = compact ? 44.0 : 26.0;
+            final m = ShowcaseMetrics.of(context);
+            final compact = m.compact;
+            final d = compact ? 44.0 : 26.0 * m.k;
             return AnimatedContainer(
               duration: const Duration(milliseconds: 140),
               width: d,
@@ -1033,7 +1088,7 @@ class _CircleState extends State<_Circle> {
               ),
               child: Icon(
                 widget.icon,
-                size: compact ? 20 : 13,
+                size: compact ? 20 : 13 * m.k,
                 color: _f ? Colors.black : _ink,
               ),
             );
@@ -1066,13 +1121,13 @@ class ShowcaseSeasons extends StatelessWidget {
       );
     }
     return SizedBox(
-      height: 34,
+      height: 34 * m.k,
       child: ListView.separated(
         clipBehavior: Clip.none,
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.symmetric(horizontal: m.gutter),
         itemCount: view.seasons.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 7),
+        separatorBuilder: (_, __) => SizedBox(width: 7 * m.k),
         itemBuilder: (context, i) {
           final s = view.seasons[i];
           final active = s.number == view.selectedSeasonNumber;
@@ -1199,37 +1254,40 @@ class _SeasonPillState extends State<_SeasonPill> {
   bool _f = false;
 
   @override
-  Widget build(BuildContext context) => Focus(
-        focusNode: widget.node,
-        onFocusChange: (v) {
-          setState(() => _f = v);
-          if (v) _keepVisible(context);
-        },
-        // Selecting on FOCUS would reload the episode list on every step of a
-        // walk across the seasons. OK commits; the walk is free.
-        onKeyEvent: (_, e) => _activate(e, widget.onTap),
-        child: ParallaxFocus(
-          focused: _f,
-          shape: ParallaxShape.pill,
-          radius: BorderRadius.circular(12.5),
-          child: Container(
-            height: 25,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            decoration: BoxDecoration(
-              color: (_f || widget.active)
-                  ? _ink.withValues(alpha: _f ? 0.28 : 0.18)
-                  : null,
-              borderRadius: BorderRadius.circular(12.5),
-            ),
-            child: Text(
-              widget.label,
-              style: _t(12.5,
-                  w: FontWeight.w600, a: widget.active || _f ? 1 : 0.55),
-            ),
+  Widget build(BuildContext context) {
+    final k = ShowcaseMetrics.of(context).k;
+    return Focus(
+      focusNode: widget.node,
+      onFocusChange: (v) {
+        setState(() => _f = v);
+        if (v) _keepVisible(context);
+      },
+      // Selecting on FOCUS would reload the episode list on every step of a
+      // walk across the seasons. OK commits; the walk is free.
+      onKeyEvent: (_, e) => _activate(e, widget.onTap),
+      child: ParallaxFocus(
+        focused: _f,
+        shape: ParallaxShape.pill,
+        radius: BorderRadius.circular(12.5 * k),
+        child: Container(
+          height: 25 * k,
+          alignment: Alignment.center,
+          padding: EdgeInsets.symmetric(horizontal: 15 * k),
+          decoration: BoxDecoration(
+            color: (_f || widget.active)
+                ? _ink.withValues(alpha: _f ? 0.28 : 0.18)
+                : null,
+            borderRadius: BorderRadius.circular(12.5 * k),
+          ),
+          child: Text(
+            widget.label,
+            style: _t(12.5 * k,
+                w: FontWeight.w600, a: widget.active || _f ? 1 : 0.55),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 // ── episodes ───────────────────────────────────────────────────────────────
@@ -1370,27 +1428,28 @@ class ShowcaseEpisodeCell extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('EPISODE ${episode.number}',
-                    style: _t(9.5, a: 0.55).copyWith(letterSpacing: 0.4)),
+                    style:
+                        _t(9.5 * m.k, a: 0.55).copyWith(letterSpacing: 0.4)),
                 const SizedBox(height: 2),
                 Text(
                   episode.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: _t(12.5, w: FontWeight.w600),
+                  style: _t(12.5 * m.k, w: FontWeight.w600),
                 ),
                 const SizedBox(height: 3),
                 SizedBox(
-                  height: 29,
+                  height: 29 * m.k,
                   child: Text(
                     episode.overview ?? '',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: _t(10.5, a: 0.6).copyWith(height: 1.36),
+                    style: _t(10.5 * m.k, a: 0.6).copyWith(height: 1.36),
                   ),
                 ),
                 if ((episode.firstAired ?? '').isNotEmpty)
                   Text(episode.firstAired!.split('T').first,
-                      style: _t(9.5, a: 0.5)),
+                      style: _t(9.5 * m.k, a: 0.5)),
               ],
             ),
           ),
@@ -1553,14 +1612,18 @@ class _KebabButton extends StatelessWidget {
   const _KebabButton({required this.onTap});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: const Padding(
-          padding: EdgeInsets.all(6),
-          child: Icon(Icons.more_vert_rounded, size: 17, color: Colors.white70),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final k = ShowcaseMetrics.of(context).k;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: EdgeInsets.all(6 * k),
+        child:
+            Icon(Icons.more_vert_rounded, size: 17 * k, color: Colors.white70),
+      ),
+    );
+  }
 }
 
 class _Badge extends StatelessWidget {
@@ -1569,16 +1632,19 @@ class _Badge extends StatelessWidget {
   const _Badge({required this.label});
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.62),
-          borderRadius: BorderRadius.circular(3.5),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-          child: Text(label, style: _t(9.5)),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final k = ShowcaseMetrics.of(context).k;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(3.5 * k),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 5 * k, vertical: 2 * k),
+        child: Text(label, style: _t(9.5 * k)),
+      ),
+    );
+  }
 }
 
 // ── cast ───────────────────────────────────────────────────────────────────
@@ -1594,7 +1660,7 @@ class ShowcaseCast extends StatelessWidget {
     final m = ShowcaseMetrics.of(context);
     return _Band(
       title: 'Cast & Crew',
-      height: m.circle * 1.08 + 46,
+      height: m.circle * 1.08 + 46 * m.k,
       child: ListView.separated(
         clipBehavior: Clip.none,
         scrollDirection: Axis.horizontal,
@@ -1632,6 +1698,7 @@ class _CastTileState extends State<_CastTile> {
   @override
   Widget build(BuildContext context) {
     final url = widget.member.imageUrl;
+    final k = ShowcaseMetrics.of(context).k;
     return Focus(
       focusNode: widget.node,
       onFocusChange: (v) {
@@ -1676,7 +1743,7 @@ class _CastTileState extends State<_CastTile> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: _t(12.5),
+                style: _t(12.5 * k),
               ),
               if ((widget.member.character ?? '').isNotEmpty)
                 Text(
@@ -1684,7 +1751,7 @@ class _CastTileState extends State<_CastTile> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: _t(11.5, a: 0.55),
+                  style: _t(11.5 * k, a: 0.55),
                 ),
             ],
           ),
@@ -1723,7 +1790,7 @@ class ShowcaseSources extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _Band(
         title: 'Sources',
-        height: 96,
+        height: 96 * ShowcaseMetrics.of(context).k,
         child: ListView.separated(
           clipBehavior: Clip.none,
           scrollDirection: Axis.horizontal,
@@ -1785,6 +1852,7 @@ class _SourceCardState extends State<_SourceCard> {
   @override
   Widget build(BuildContext context) {
     final s = widget.source;
+    final mm = ShowcaseMetrics.of(context);
     return Focus(
       focusNode: widget.node,
       onFocusChange: (v) {
@@ -1802,30 +1870,31 @@ class _SourceCardState extends State<_SourceCard> {
             child: ParallaxFocus(
               focused: _f || hovered,
               shape: ParallaxShape.sourceCard,
-              radius: BorderRadius.circular(7),
+              radius: BorderRadius.circular(7 * mm.k),
               child: Container(
-                // Wide keeps the shipped 280/150 exactly; compact grows the
-                // bound card to 75% of the width (the mock's source card) and
-                // the add chip a touch for fingers.
+                // Wide keeps the shipped 280/150 (k-scaled off TV); compact
+                // grows the bound card to 75% of the width (the mock's
+                // source card) and the add chip a touch for fingers.
                 width: () {
-                  final mm = ShowcaseMetrics.of(context);
-                  if (!mm.compact) return widget.add ? 150.0 : 280.0;
+                  if (!mm.compact) {
+                    return (widget.add ? 150.0 : 280.0) * mm.k;
+                  }
                   return widget.add ? 160.0 : mm.srcW;
                 }(),
-                height: 66,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                height: 66 * mm.k,
+                padding: EdgeInsets.symmetric(
+                    horizontal: 10 * mm.k, vertical: 9 * mm.k),
                 decoration: BoxDecoration(
                   color: widget.add ? null : _ink.withValues(alpha: 0.07),
                   border: Border.all(
                     color: _ink.withValues(alpha: widget.add ? 0.22 : 0.09),
                   ),
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(7 * mm.k),
                 ),
                 child: widget.add
                     ? Center(
                         child: Text(widget.addLabel,
-                            style: _t(10.5, a: 0.66)),
+                            style: _t(10.5 * mm.k, a: 0.66)),
                       )
                     : Row(
                         children: [
@@ -1838,14 +1907,14 @@ class _SourceCardState extends State<_SourceCard> {
                                   s?.torrentName ?? '',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: _t(10.5, w: FontWeight.w600),
+                                  style: _t(10.5 * mm.k, w: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   s?.debridService ?? '',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: _t(9.5, a: 0.58),
+                                  style: _t(9.5 * mm.k, a: 0.58),
                                 ),
                               ],
                             ),
@@ -1996,21 +2065,22 @@ class _SeverityMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = ShowcaseMetrics.of(context).compact;
+    final m = ShowcaseMetrics.of(context);
+    final compact = m.compact;
     final level = _severityLevel(severity);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           severity.toUpperCase(),
-          style: _t(compact ? 9.5 : 7.5, w: FontWeight.w700, a: 0.6)
+          style: _t(compact ? 9.5 : 7.5 * m.k, w: FontWeight.w700, a: 0.6)
               .copyWith(letterSpacing: 1.0),
         ),
-        SizedBox(width: compact ? 8 : 6),
+        SizedBox(width: compact ? 8 : 6 * m.k),
         for (var i = 1; i <= 4; i++) ...[
           Container(
-            width: compact ? 10 : 8,
-            height: compact ? 3.5 : 3,
+            width: compact ? 10 : 8 * m.k,
+            height: compact ? 3.5 : 3 * m.k,
             decoration: BoxDecoration(
               color: _ink.withValues(alpha: i <= level ? 0.88 : 0.16),
               borderRadius: BorderRadius.circular(2),
@@ -2138,6 +2208,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
   }
 
   Widget _plate(BuildContext context, ParentsGuideCategory cat) {
+    final k = ShowcaseMetrics.of(context).k;
     final spoilers = _spoilersOf(cat);
     return Container(
       width: double.infinity,
@@ -2153,7 +2224,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
         children: [
           Row(
             children: [
-              Text(cat.label, style: _t(11.5, w: FontWeight.w700)),
+              Text(cat.label, style: _t(11.5 * k, w: FontWeight.w700)),
               const SizedBox(width: 10),
               _SeverityMark(severity: cat.severity),
               const Spacer(),
@@ -2161,14 +2232,14 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
                 Text(
                   '${cat.severityVotes} of ${cat.totalVotes} rated '
                   '${cat.severity.toLowerCase()}',
-                  style: _t(8.5, a: 0.4),
+                  style: _t(8.5 * k, a: 0.4),
                 ),
             ],
           ),
           const SizedBox(height: 6),
-          for (final item in _plainOf(cat)) _entry(item.text, 10.0),
+          for (final item in _plainOf(cat)) _entry(item.text, 10.0 * k),
           if (_spoilers)
-            for (final item in spoilers) _entry(item.text, 10.0),
+            for (final item in spoilers) _entry(item.text, 10.0 * k),
           if (spoilers.isNotEmpty) _spoilerRow(spoilers.length, _spoilers, () {
             setState(() => _spoilers = !_spoilers);
           }),
@@ -2205,7 +2276,8 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
       );
 
   Widget _spoilerRow(int count, bool shown, VoidCallback onToggle) {
-    final compact = ShowcaseMetrics.of(context).compact;
+    final m = ShowcaseMetrics.of(context);
+    final compact = m.compact;
     return Padding(
       padding: const EdgeInsets.only(top: 9),
       child: Row(
@@ -2216,7 +2288,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
               '${shown ? 'shown' : 'hidden'}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: _t(compact ? 11 : 8.5, a: 0.5),
+              style: _t(compact ? 11 : 8.5 * m.k, a: 0.5),
             ),
           ),
           const SizedBox(width: 10),
@@ -2227,8 +2299,8 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
             onTap: onToggle,
             child: Container(
               padding: EdgeInsets.symmetric(
-                horizontal: compact ? 11 : 9,
-                vertical: compact ? 4 : 2.5,
+                horizontal: compact ? 11 : 9 * m.k,
+                vertical: compact ? 4 : 2.5 * m.k,
               ),
               decoration: BoxDecoration(
                 border:
@@ -2238,7 +2310,7 @@ class _ShowcaseGuideState extends State<ShowcaseGuide> {
               child: Text(
                 shown ? 'HIDE' : 'SHOW',
                 style: TextStyle(
-                  fontSize: compact ? 10 : 7.5,
+                  fontSize: compact ? 10 : 7.5 * m.k,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.6,
                   color: widget.accent,
@@ -2378,11 +2450,12 @@ class _GuideCardState extends State<_GuideCard> {
           child: Align(
             child: ParallaxFocus(
               focused: _f || hovered,
-              radius: BorderRadius.circular(7),
+              radius: BorderRadius.circular(7 * m.k),
               child: Container(
                 width: m.guideW,
                 height: m.guideH,
-                padding: const EdgeInsets.fromLTRB(11, 10, 11, 9),
+                padding: EdgeInsets.fromLTRB(
+                    11 * m.k, 10 * m.k, 11 * m.k, 9 * m.k),
                 decoration: BoxDecoration(
                   color: _ink.withValues(
                       alpha: widget.selected ? 0.12 : 0.07),
@@ -2390,7 +2463,7 @@ class _GuideCardState extends State<_GuideCard> {
                     color: _ink.withValues(
                         alpha: widget.selected ? 0.22 : 0.09),
                   ),
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(7 * m.k),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2400,7 +2473,7 @@ class _GuideCardState extends State<_GuideCard> {
                         cat.label,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: _t(10.5, w: FontWeight.w600),
+                        style: _t(10.5 * m.k, w: FontWeight.w600),
                       ),
                     ),
                     Row(
@@ -2409,7 +2482,7 @@ class _GuideCardState extends State<_GuideCard> {
                         const Spacer(),
                         Text(
                           '${cat.items.length}',
-                          style: _t(8.5, w: FontWeight.w600, a: 0.38),
+                          style: _t(8.5 * m.k, w: FontWeight.w600, a: 0.38),
                         ),
                       ],
                     ),
@@ -2443,7 +2516,7 @@ class ShowcaseUniverse extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = ShowcaseMetrics.of(context);
-    final capH = m.compact ? 52.0 : 42.0;
+    final capH = m.compact ? 52.0 : 42.0 * m.k;
     return _Band(
       title: 'Universe',
       height: m.posterH * 1.10 + 24 + capH,
@@ -2540,7 +2613,8 @@ class _UniverseCardState extends State<_UniverseCard> {
                     u.relation.toUpperCase(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _t(m.compact ? 9 : 7, w: FontWeight.w700, a: 0.42)
+                    style: _t(m.compact ? 9 : 7 * m.k,
+                            w: FontWeight.w700, a: 0.42)
                         .copyWith(letterSpacing: 1.0),
                   ),
                   const SizedBox(height: 2),
@@ -2548,12 +2622,13 @@ class _UniverseCardState extends State<_UniverseCard> {
                     u.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: _t(m.compact ? 12 : 10, w: FontWeight.w600, a: 0.9),
+                    style: _t(m.compact ? 12 : 10 * m.k,
+                        w: FontWeight.w600, a: 0.9),
                   ),
                   if (u.yearLabel.isNotEmpty)
                     Text(
                       u.yearLabel,
-                      style: _t(m.compact ? 10.5 : 8.5, a: 0.45),
+                      style: _t(m.compact ? 10.5 : 8.5 * m.k, a: 0.45),
                     ),
                 ],
               ),
@@ -2643,24 +2718,25 @@ class _DykCardState extends State<_DykCard> {
         builder: (context, hovered) => Align(
           child: ParallaxFocus(
             focused: _f || hovered,
-            radius: BorderRadius.circular(7),
+            radius: BorderRadius.circular(7 * m.k),
             child: Container(
               width: m.dykW,
               height: m.dykH,
               padding: EdgeInsets.fromLTRB(
-                  m.compact ? 15 : 13, m.compact ? 13 : 11,
-                  m.compact ? 15 : 13, m.compact ? 13 : 11),
+                  m.compact ? 15 : 13 * m.k, m.compact ? 13 : 11 * m.k,
+                  m.compact ? 15 : 13 * m.k, m.compact ? 13 : 11 * m.k),
               decoration: BoxDecoration(
                 color: _ink.withValues(alpha: _f || hovered ? 0.11 : 0.07),
                 border: Border.all(color: _ink.withValues(alpha: 0.09)),
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: BorderRadius.circular(7 * m.k),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     e.kind.toUpperCase(),
-                    style: _t(m.compact ? 10 : 7.5, w: FontWeight.w700, a: 0.42)
+                    style: _t(m.compact ? 10 : 7.5 * m.k,
+                            w: FontWeight.w700, a: 0.42)
                         .copyWith(letterSpacing: 1.2),
                   ),
                   SizedBox(height: m.compact ? 8 : 6),
@@ -2669,7 +2745,7 @@ class _DykCardState extends State<_DykCard> {
                       quote ? '“${e.text}”' : e.text,
                       maxLines: m.compact ? 6 : 7,
                       overflow: TextOverflow.ellipsis,
-                      style: _t(m.compact ? 12.5 : 9.5,
+                      style: _t(m.compact ? 12.5 : 9.5 * m.k,
                               a: quote ? 0.88 : 0.8)
                           .copyWith(
                         height: 1.5,
@@ -2716,27 +2792,28 @@ class _DykMoreCardState extends State<_DykMoreCard> {
         builder: (context, hovered) => Align(
           child: ParallaxFocus(
             focused: _f || hovered,
-            radius: BorderRadius.circular(7),
+            radius: BorderRadius.circular(7 * m.k),
             child: Container(
-              width: m.compact ? 110.0 : 92.0,
+              width: m.compact ? 110.0 : 92.0 * m.k,
               height: m.dykH,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: _ink.withValues(alpha: _f || hovered ? 0.11 : 0.05),
                 border: Border.all(color: _ink.withValues(alpha: 0.09)),
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: BorderRadius.circular(7 * m.k),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     '+${widget.count}',
-                    style: _t(m.compact ? 20 : 16, w: FontWeight.w800),
+                    style: _t(m.compact ? 20 : 16 * m.k, w: FontWeight.w800),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     'ON IMDb',
-                    style: _t(m.compact ? 9 : 7, w: FontWeight.w700, a: 0.4)
+                    style: _t(m.compact ? 9 : 7 * m.k,
+                            w: FontWeight.w700, a: 0.4)
                         .copyWith(letterSpacing: 1.1),
                   ),
                 ],
@@ -2777,20 +2854,23 @@ class _Band extends StatelessWidget {
         Padding(
           padding: EdgeInsets.only(left: m.gutter, bottom: 10),
           // Compact band titles use the phone heading size; wide keeps the
-          // shipped 13pt (the 960-canvas number the TV mock pins).
+          // shipped 13pt (the 960-canvas number the TV mock pins), k-scaled
+          // back to proportion on wide touch surfaces.
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
                 title,
-                style: _t(m.compact ? 19 : 13, w: FontWeight.w600, a: 0.84),
+                style:
+                    _t(m.compact ? 19 : 13 * m.k, w: FontWeight.w600, a: 0.84),
               ),
               if (subtitle != null) ...[
                 const SizedBox(width: 9),
                 Text(
                   subtitle!,
-                  style: _t(m.compact ? 11.5 : 8.5, w: FontWeight.w600, a: 0.35),
+                  style: _t(m.compact ? 11.5 : 8.5 * m.k,
+                      w: FontWeight.w600, a: 0.35),
                 ),
               ],
             ],
@@ -2825,23 +2905,25 @@ class ShowcaseBandNote extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: EdgeInsets.fromLTRB(ShowcaseMetrics.of(context).gutter, 22,
-            ShowcaseMetrics.of(context).gutter, 8),
-        child: Row(
-          children: [
-            Text(text, style: _t(11.5, a: 0.66)),
-            if (actionLabel != null && onAction != null) ...[
-              const SizedBox(width: 12),
-              _RetryChip(
-                label: actionLabel!,
-                onTap: onAction!,
-                node: actionNode,
-              ),
-            ],
+  Widget build(BuildContext context) {
+    final m = ShowcaseMetrics.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(m.gutter, 22, m.gutter, 8),
+      child: Row(
+        children: [
+          Text(text, style: _t(11.5 * m.k, a: 0.66)),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(width: 12),
+            _RetryChip(
+              label: actionLabel!,
+              onTap: onAction!,
+              node: actionNode,
+            ),
           ],
-        ),
-      );
+        ],
+      ),
+    );
+  }
 }
 
 class _RetryChip extends StatefulWidget {
@@ -2859,31 +2941,34 @@ class _RetryChipState extends State<_RetryChip> {
   bool _f = false;
 
   @override
-  Widget build(BuildContext context) => Focus(
-        focusNode: widget.node,
-        onFocusChange: (v) => setState(() => _f = v),
-        onKeyEvent: (_, e) => _activate(e, widget.onTap),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: Container(
-            height: 22,
-            alignment: Alignment.center,
-            padding: const EdgeInsets.symmetric(horizontal: 11),
-            decoration: BoxDecoration(
-              color: _f ? _ink : _ink.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Text(
-              widget.label,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-                color: _f ? Colors.black : _ink,
-              ),
+  Widget build(BuildContext context) {
+    final k = ShowcaseMetrics.of(context).k;
+    return Focus(
+      focusNode: widget.node,
+      onFocusChange: (v) => setState(() => _f = v),
+      onKeyEvent: (_, e) => _activate(e, widget.onTap),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          height: 22 * k,
+          alignment: Alignment.center,
+          padding: EdgeInsets.symmetric(horizontal: 11 * k),
+          decoration: BoxDecoration(
+            color: _f ? _ink : _ink.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(11 * k),
+          ),
+          child: Text(
+            widget.label,
+            style: TextStyle(
+              fontSize: 10.5 * k,
+              fontWeight: FontWeight.w600,
+              color: _f ? Colors.black : _ink,
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 
@@ -2901,14 +2986,14 @@ class ShowcaseDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty && (awards ?? '').isEmpty) return const SizedBox.shrink();
+    final m = ShowcaseMetrics.of(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(ShowcaseMetrics.of(context).gutter, 26,
-          ShowcaseMetrics.of(context).gutter, 10),
+      padding: EdgeInsets.fromLTRB(m.gutter, 26, m.gutter, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Details', style: _t(13, w: FontWeight.w600, a: 0.84)),
+          Text('Details', style: _t(13 * m.k, w: FontWeight.w600, a: 0.84)),
           const SizedBox(height: 10),
           Wrap(
             spacing: 46,
@@ -2916,12 +3001,15 @@ class ShowcaseDetails extends StatelessWidget {
             children: [
               for (final r in rows)
                 SizedBox(
-                  width: 240,
+                  width: 240 * m.k,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(width: 74, child: Text(r.$1, style: _t(10, a: 0.5))),
-                      Expanded(child: Text(r.$2, style: _t(10, a: 0.82))),
+                      SizedBox(
+                          width: 74 * m.k,
+                          child: Text(r.$1, style: _t(10 * m.k, a: 0.5))),
+                      Expanded(
+                          child: Text(r.$2, style: _t(10 * m.k, a: 0.82))),
                     ],
                   ),
                 ),
@@ -2929,7 +3017,7 @@ class ShowcaseDetails extends StatelessWidget {
           ),
           if ((awards ?? '').isNotEmpty) ...[
             const SizedBox(height: 9),
-            Text(awards!, style: _t(10, a: 0.6)),
+            Text(awards!, style: _t(10 * m.k, a: 0.6)),
           ],
         ],
       ),

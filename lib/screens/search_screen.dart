@@ -5693,6 +5693,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       trailer: _heroTrailerRenderable
           ? _HeroTrailerLayer(
               trailer: _heroTrailer,
+              isTelevision: widget.isTelevision,
               heroHeight: 540,
               // Full bleed on every form factor — a letterboxed 16:9 band
               // was tried on the phone and read as a TV set embedded in the
@@ -6019,6 +6020,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             if (_heroTrailerActive)
               _HeroTrailerLayer(
                 trailer: _heroTrailer,
+                isTelevision: widget.isTelevision,
                 heroHeight: boardH,
                 fullBleed: true,
                 volume: _heroTrailerVolume,
@@ -6462,6 +6464,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             if (_heroTrailerActive)
               _HeroTrailerLayer(
                 trailer: _heroTrailer,
+                isTelevision: widget.isTelevision,
                 heroHeight: boardH,
                 fullBleed: true,
                 volume: _heroTrailerVolume,
@@ -6868,6 +6871,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   if (_heroTrailerActive)
                     _HeroTrailerLayer(
                       trailer: _heroTrailer,
+                      isTelevision: widget.isTelevision,
                       heroHeight: boardH,
                       fullBleed: true,
                       volume: _heroTrailerVolume,
@@ -7615,6 +7619,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   if (_heroTrailerActive)
                     _HeroTrailerLayer(
                       trailer: _heroTrailer,
+                      isTelevision: widget.isTelevision,
                       heroHeight: cardH,
                       fullBleed: true,
                       volume: _heroTrailerVolume,
@@ -8143,6 +8148,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   if (_heroTrailerActive)
                     _HeroTrailerLayer(
                       trailer: _heroTrailer,
+                      isTelevision: widget.isTelevision,
                       heroHeight: cardH,
                       fullBleed: true,
                       volume: _heroTrailerVolume,
@@ -12306,7 +12312,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           Positioned.fill(child: _buildBody()),
           Positioned(
             top: topInset + 10,
-            right: 14,
+            right: _SpotlightSearchButton.rightInset,
             child: _SpotlightSearchButton(
               onTap: () => setState(() {
                 _searchSheetOpen = true;
@@ -14923,6 +14929,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               Positioned.fill(
                 child: _HeroTrailerLayer(
                   trailer: _heroTrailer,
+                  isTelevision: widget.isTelevision,
                   heroHeight: heroH,
                   volume: _heroTrailerVolume,
                   loading: _heroTrailerLoading,
@@ -17179,6 +17186,12 @@ class _SpotlightSearchButton extends StatelessWidget {
   final VoidCallback onTap;
   const _SpotlightSearchButton({required this.onTap});
 
+  /// The button's geometry, named so the trailer layer's status chips can
+  /// clear it by DERIVATION — a bare 66 over there would silently regress
+  /// the clipped-"AMBIE…" overlap the moment this button moved or grew.
+  static const double rightInset = 14;
+  static const double diameter = 40;
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -17187,8 +17200,8 @@ class _SpotlightSearchButton extends StatelessWidget {
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
-            width: 40,
-            height: 40,
+            width: diameter,
+            height: diameter,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: const Color(0x8C1E1E20),
@@ -17234,11 +17247,18 @@ class _HeroTrailerLayer extends StatefulWidget {
   /// scrims ABOVE this layer instead.
   final bool fullBleed;
 
+  /// The HOST's TV verdict (probe-augmented — see main.dart), not
+  /// `PlatformUtil.isTelevision`: the two can disagree on an Android TV whose
+  /// warm-up probe failed, and the chip corner must follow the same authority
+  /// as the layout it sits in.
+  final bool isTelevision;
+
   const _HeroTrailerLayer({
     required this.trailer,
     required this.heroHeight,
     required this.volume,
     required this.loading,
+    required this.isTelevision,
     this.onPlayingChanged,
     this.takeover,
     this.fullBleed = false,
@@ -17458,16 +17478,16 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
             ),
           ),
           Positioned(
-            top: 16,
-            right: 22,
+            top: _chipTop(context),
+            right: _chipRight,
             child: _HeroTrailerLoadingPill(visible: loading),
           ),
           // Once frames are up the loading pill yields to the AMBIENT chip —
           // a quiet state affordance so the motion reads as intentional, not
           // a stray video. Same corner, so the two hand over in place.
           Positioned(
-            top: 16,
-            right: 22,
+            top: _chipTop(context),
+            right: _chipRight,
             child: _HeroAmbientChip(visible: playing && !loading),
           ),
         ],
@@ -17475,6 +17495,19 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
     );
   }
 
+  /// The status corner, per input. TV keeps the shipped 16/22 — it sits
+  /// inside a SafeArea and owns the whole corner. The touch Spotlight shell
+  /// (phone AND tablet — both float the search button over a full-bleed
+  /// board) is `SafeArea(top: false)` — the shipped corner put the chip both
+  /// UNDER the status bar and UNDER that button (the clipped "AMBIE…").
+  /// Cleared to the button's left, vertically centred on it.
+  double _chipTop(BuildContext context) => widget.isTelevision
+      ? 16.0
+      : MediaQuery.viewPaddingOf(context).top + 16.0;
+
+  double get _chipRight => widget.isTelevision
+      ? 22.0
+      : _SpotlightSearchButton.rightInset + _SpotlightSearchButton.diameter + 12;
 }
 
 /// The boxed hero video region's IPTV-favourite variant: plays a focused

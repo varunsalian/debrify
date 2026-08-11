@@ -11,6 +11,7 @@ import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/dominant_color.dart';
 import '../../utils/platform_util.dart';
+import '../../utils/wide_touch_scale.dart';
 
 /// What a card is, once a shelf stops being a list of TITLES.
 ///
@@ -266,9 +267,10 @@ enum _Tier { compact, mid, wide }
 
 class _M {
   final double w;
+  final bool dpad;
   final _Tier tier;
 
-  _M(this.w, {bool dpad = true})
+  _M(this.w, {this.dpad = true})
       : tier = dpad
             ? _Tier.wide
             : w < 600
@@ -278,6 +280,18 @@ class _M {
                     : _Tier.wide;
 
   bool get compact => tier == _Tier.compact;
+
+  /// The type scale for the wide TOUCH tiers — the same correction the
+  /// Showcase detail page applies (see `ShowcaseMetrics.k`).
+  ///
+  /// The wide hero's fixed values (identity type, the logo slot, the
+  /// identity/dots insets' non-overlap share) are 960-canvas numbers, and a
+  /// TV's logical width IS ~960. A tablet reaches the same layout at its real
+  /// width — 1366 on an iPad Pro — where those absolutes render at ~70% of
+  /// their designed proportion. Exactly 1.0 on TV (every shipped pixel keeps)
+  /// and on compact (its absolutes are phone-measured, not derived); the
+  /// formula lives in [wideTouchScale], shared with the detail page.
+  double get k => (dpad || compact) ? 1.0 : wideTouchScale(w);
 
   /// Compact values are MEASURED off the Apple TV phone app on the reference
   /// device (see spotlight_responsive_mockup/): gutter 4.8%, posters 24.3%
@@ -928,7 +942,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
           child: OverflowBox(
             alignment: Alignment.topCenter,
             maxHeight: heroH,
-            child: SizedBox(height: heroH, child: _hero(m)),
+            child: SizedBox(height: heroH, child: _hero(m, heroH)),
           ),
         ),
         // The first shelf overlaps the hero's lower edge — the tell that
@@ -1014,9 +1028,9 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     );
   }
 
-  Widget _hero(_M m) {
+  Widget _hero(_M m, double heroH) {
     if (m.compact) return _heroCompact(m);
-    return _heroWide(m);
+    return _heroWide(m, heroH);
   }
 
   /// The phone hero — the Apple phone idiom, not the TV hero cropped.
@@ -1177,10 +1191,10 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// node. The picture it reads against is [_heroBackdrop], pinned behind the
   /// list — split so the text can ride away with the shelves while the art
   /// stays put.
-  Widget _heroWide(_M m) {
+  Widget _heroWide(_M m, double heroH) {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
-    final wide = _heroForeground(m, item);
+    final wide = _heroForeground(m, item, heroH);
     if (widget.dpad) return wide;
     // Desktop and tablet drive the same wide layout by pointer/touch: swipe
     // pages the reel, a tap opens the showcased title — the exact gestures
@@ -1401,23 +1415,33 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       ? const SizedBox.shrink()
       : ColoredBox(color: ground.withValues(alpha: t));
 
-  Widget _heroForeground(_M m, StremioMeta item) {
+  Widget _heroForeground(_M m, StremioMeta item, double heroH) {
     final flip = _flip;
+    // TV keeps the shipped absolutes: on a ~960×540 canvas, 128 is the
+    // proportional shelf overlap (88) plus 40 of clearance, and 92 is the
+    // overlap plus 4. On touch the SAME structure is derived instead of
+    // fixed, because the overlap is a FRACTION of the hero and the hero is a
+    // full tablet viewport — at heroH≈1024 the overlap alone is ~167, so the
+    // absolute 128 parked the identity UNDER the first shelf's header (the
+    // observed collision), with the dots on the posters below it.
+    final overlap = heroH * _shelfOverlapFraction;
+    final identityBottom = widget.dpad ? 128.0 : overlap + 40 * m.k;
+    final dotsBottom = widget.dpad ? 92.0 : overlap + 4 * m.k;
     return Stack(
       fit: StackFit.expand,
       children: [
         Positioned(
           left: flip ? null : m.gutter,
           right: flip ? m.gutter : null,
-          bottom: 128,
+          bottom: identityBottom,
           width: m.w * (820 / 1920),
-          child: _identity(item, flip),
+          child: _identity(item, flip, m),
         ),
         if (widget.hero.length > 1)
           Positioned(
             left: 0,
             right: 0,
-            bottom: 92,
+            bottom: dotsBottom,
             // Tappable wherever there is no remote — desktop and tablet run
             // this wide layout too. On TV the padding-free dots render
             // byte-identically to HEAD.
@@ -1445,14 +1469,14 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     );
   }
 
-  Widget _identity(StremioMeta item, bool flip) {
+  Widget _identity(StremioMeta item, bool flip, _M m) {
     final cross = flip ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final align = flip ? TextAlign.right : TextAlign.left;
     return Column(
       crossAxisAlignment: cross,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _LogoOrTitle(url: item.logo, name: item.name, align: align),
+        _LogoOrTitle(url: item.logo, name: item.name, align: align, scale: m.k),
         const SizedBox(height: 9),
         Text(
           [
@@ -1461,7 +1485,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
           ].join(' · '),
           textAlign: align,
           style: TextStyle(
-            fontSize: 10.5,
+            fontSize: 10.5 * m.k,
             color: Colors.white.withValues(alpha: 0.86),
           ),
         ),
@@ -1473,7 +1497,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             textAlign: align,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 10.5,
+              fontSize: 10.5 * m.k,
               height: 1.42,
               color: Colors.white.withValues(alpha: 0.74),
             ),
@@ -1591,7 +1615,15 @@ class _LogoOrTitle extends StatelessWidget {
   final String name;
   final TextAlign align;
 
-  const _LogoOrTitle({required this.url, required this.name, required this.align});
+  /// `_M.k` — 1.0 on TV and compact, the wide-touch correction elsewhere.
+  final double scale;
+
+  const _LogoOrTitle({
+    required this.url,
+    required this.name,
+    required this.align,
+    this.scale = 1.0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1600,8 +1632,8 @@ class _LogoOrTitle extends StatelessWidget {
       maxLines: 2,
       textAlign: align,
       overflow: TextOverflow.ellipsis,
-      style: const TextStyle(
-        fontSize: 39,
+      style: TextStyle(
+        fontSize: 39 * scale,
         height: 1,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.8,
@@ -1626,8 +1658,8 @@ class _LogoOrTitle extends StatelessWidget {
     // Holding the box at full size from the first frame means the art fades
     // into a space already shaped for it and nothing else moves.
     return SizedBox(
-      width: 235,
-      height: 60,
+      width: 235 * scale,
+      height: 60 * scale,
       child: CachedNetworkImage(
         imageUrl: url!,
         fit: BoxFit.contain,
@@ -1647,7 +1679,7 @@ class _LogoOrTitle extends StatelessWidget {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: corner,
-            child: SizedBox(width: 235, child: text),
+            child: SizedBox(width: 235 * scale, child: text),
           ),
         ),
       ),
