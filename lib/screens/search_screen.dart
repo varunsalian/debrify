@@ -5419,7 +5419,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ];
       final List<(StremioAddon, StremioAddonCatalog)> candidates;
       if (source.mode == HomeHeroSourceMode.random) {
-        candidates = List.of(all);
+        // Random draws TITLES only. Live catalogs — 'tv' is what the
+        // Stremio-IPTV service itself keys on, 'channel'/'radio' are the
+        // spec's other live-ish types — serve channel logos as their art, so
+        // the reel cover-crops a wordmark to a full screen (TvVoo's logo,
+        // full-bleed, was the report). An EXPLICIT custom pick of such a
+        // catalog is left alone: choosing it by name is a deliberate act.
+        const live = {'tv', 'channel', 'radio'};
+        candidates = [
+          for (final ref in all)
+            if (!live.contains(ref.$2.type.toLowerCase())) ref,
+        ];
       } else {
         // Stored picks that no longer resolve (addon uninstalled, catalog
         // gone from its manifest) simply drop out; they are NOT removed from
