@@ -76,6 +76,34 @@ libffi.so.8
 libffi.so.7
 EOF
 
+# The third group is the rest of the GTK3 stack, and it is here for the same
+# reason as glib. We deliberately don't bundle GTK itself, so the host's
+# libgtk-3 is what loads — but LD_LIBRARY_PATH puts our lib/ first, so a
+# bundled pango or cairo is what host GTK would pick up. That pairs Ubuntu's
+# pango with the host's harfbuzz (excluded upstream), which is an undefined
+# symbol away from failing at startup. libgdk_pixbuf is worse: it loads image
+# modules from a compile-time path via a loaders.cache we don't ship, so it
+# only works host-side. Anything that can run this app has GTK3 and therefore
+# has all of these.
+cat >> "$EXCLUDED" <<'EOF'
+libcairo.so.2
+libcairo-gobject.so.2
+libpango-1.0.so.0
+libpangocairo-1.0.so.0
+libpangoft2-1.0.so.0
+libgdk_pixbuf-2.0.so.0
+libpixman-1.so.0
+libthai.so.0
+libdatrie.so.1
+libgraphite2.so.3
+libxkbcommon.so.0
+libwayland-cursor.so.0
+libwayland-egl.so.1
+libepoxy.so.0
+libatk-1.0.so.0
+libatk-bridge-2.0.so.0
+EOF
+
 MPV_LIBDIR="$(pkg-config --variable=libdir mpv)"
 
 # Don't hardcode the soname: Ubuntu 24.04 ships libmpv.so.2 (mpv 0.37+) but
