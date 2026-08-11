@@ -7217,7 +7217,66 @@ class StorageService {
       );
     }
   }
+
+  static const String _homeHeroSourceKey = 'home_hero_source_v1';
+
+  /// Where the Spotlight home layout's hero reel comes from.
+  ///
+  /// Modes: `auto` (today's behaviour — the first non-empty board row),
+  /// `random` (any installed browsable catalog, re-rolled each board load) and
+  /// `custom` (one of [HomeHeroSource.ids], catalog leaves in the Home Rows
+  /// grammar `addonId:type:catalogId`; more than one re-rolls among them each
+  /// load). Unknown modes and a custom mode with no ids read back as `auto` so
+  /// a bad write can never wedge the hero.
+  static Future<HomeHeroSource> getHomeHeroSource() async {
+    const fallback = (mode: HomeHeroSourceMode.auto, ids: <String>[]);
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_homeHeroSourceKey);
+    if (json == null) return fallback;
+    try {
+      final map = jsonDecode(json) as Map<String, dynamic>;
+      final ids = <String>[];
+      final seen = <String>{};
+      final rawIds = map['ids'];
+      if (rawIds is List) {
+        for (final e in rawIds) {
+          if (e is String && e.isNotEmpty && seen.add(e)) ids.add(e);
+        }
+      }
+      final mode = switch (map['mode']) {
+        'random' => HomeHeroSourceMode.random,
+        'custom' when ids.isNotEmpty => HomeHeroSourceMode.custom,
+        _ => HomeHeroSourceMode.auto,
+      };
+      return (mode: mode, ids: ids);
+    } catch (e) {
+      debugPrint('Error reading home hero source: $e');
+      return fallback;
+    }
+  }
+
+  /// Save the Spotlight hero source (the default `auto` + no ids = key
+  /// removed).
+  static Future<void> setHomeHeroSource(HomeHeroSource source) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (source.mode == HomeHeroSourceMode.auto && source.ids.isEmpty) {
+      await prefs.remove(_homeHeroSourceKey);
+    } else {
+      await prefs.setString(
+        _homeHeroSourceKey,
+        jsonEncode({'mode': source.mode.name, 'ids': source.ids}),
+      );
+    }
+  }
 }
+
+/// See [StorageService.getHomeHeroSource].
+enum HomeHeroSourceMode { auto, random, custom }
+
+/// The Spotlight hero source pref — see [StorageService.getHomeHeroSource].
+/// [ids] are kept even in `auto`/`random` mode so a user flipping modes in
+/// Settings doesn't lose their custom picks.
+typedef HomeHeroSource = ({HomeHeroSourceMode mode, List<String> ids});
 
 /// One opted-in extra Home row — see [StorageService.getHomeExtraRows].
 typedef HomeExtraRow = ({String id, String title});

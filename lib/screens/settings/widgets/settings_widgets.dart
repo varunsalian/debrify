@@ -1534,6 +1534,12 @@ class SettingsTile extends StatefulWidget {
   /// Renders the icon and title in the destructive red (Danger Zone).
   final bool destructive;
 
+  /// False greys the whole row out and makes it inert: no tap, no hover
+  /// light, and DPAD traversal skips it. The subtitle stays readable — a
+  /// disabled row should say WHY it's disabled (e.g. "Only used by the
+  /// Spotlight layout") rather than vanish.
+  final bool enabled;
+
   /// Lets a parent (e.g. the TV two-pane rail) drive focus onto this row.
   final FocusNode? focusNode;
 
@@ -1546,6 +1552,7 @@ class SettingsTile extends StatefulWidget {
     this.tag,
     this.trailing,
     this.destructive = false,
+    this.enabled = true,
     this.focusNode,
   });
 
@@ -1560,6 +1567,7 @@ class SettingsTile extends StatefulWidget {
     String? tag,
     Widget? trailing,
     bool destructive = false,
+    bool enabled = true,
     FocusNode? focusNode,
   }) {
     return SettingsTile(
@@ -1571,6 +1579,7 @@ class SettingsTile extends StatefulWidget {
       tag: tag,
       trailing: trailing,
       destructive: destructive,
+      enabled: enabled,
       focusNode: focusNode,
     );
   }
@@ -1586,7 +1595,7 @@ class _SettingsTileState extends State<SettingsTile> {
   @override
   Widget build(BuildContext context) {
     final t = AppThemeScope.of(context).settings;
-    final bool lit = _focused || _hovered;
+    final bool lit = widget.enabled && (_focused || _hovered);
     final Color iconColor = widget.destructive
         ? t.danger
         : (lit ? t.accent2 : t.dim);
@@ -1602,82 +1611,92 @@ class _SettingsTileState extends State<SettingsTile> {
       ),
       child: InkWell(
         focusNode: widget.focusNode,
+        // Also drops the row out of DPAD traversal — an unfocusable node
+        // never enters the traversal ring, so no remote step is eaten.
+        canRequestFocus: widget.enabled,
         onFocusChange: (f) => setState(() => _focused = f),
         onHover: (h) => setState(() => _hovered = h),
-        onTap: () async {
-          await widget.onTap();
-        },
+        onTap: widget.enabled
+            ? () async {
+                await widget.onTap();
+              }
+            : null,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 34,
-                child: Icon(widget.icon, color: iconColor, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            widget.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: widget.destructive
-                                  ? t.danger
-                                  : Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                        ),
-                        if (widget.tag != null) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: t.accent.withValues(alpha: 0.16),
-                              borderRadius: BorderRadius.circular(7),
-                            ),
+          // One veil for the whole anatomy (icon, tag chip, chevron) rather
+          // than per-part disabled colors that would drift out of sync.
+          child: Opacity(
+            opacity: widget.enabled ? 1 : 0.45,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 34,
+                  child: Icon(widget.icon, color: iconColor, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
                             child: Text(
-                              widget.tag!,
+                              widget.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: t.accent2,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 9.5,
-                                letterSpacing: 0.4,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: widget.destructive
+                                    ? t.danger
+                                    : Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                           ),
+                          if (widget.tag != null) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: t.accent.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              child: Text(
+                                widget.tag!,
+                                style: TextStyle(
+                                  color: t.accent2,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 9.5,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      widget.subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11.5, color: t.dim),
-                    ),
-                  ],
-                ),
-              ),
-              widget.trailing ??
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 20,
-                    color: t.dim2,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        widget.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11.5, color: t.dim),
+                      ),
+                    ],
                   ),
-            ],
+                ),
+                widget.trailing ??
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 20,
+                      color: t.dim2,
+                    ),
+              ],
+            ),
           ),
         ),
       ),

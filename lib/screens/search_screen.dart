@@ -4,7 +4,7 @@ import 'dart:math';
 import 'dart:ui' as ui show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -653,6 +653,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // of the board in [_load]; `iptvlist:` ids drive the IPTV list favourites
   // rows. Refreshed by [_reloadForHomeSettings].
   List<HomeExtraRow> _homeExtras = const [];
+
+  /// The Spotlight hero-source pref (`home_hero_source_v1`): which catalog the
+  /// hero reel is built from. Read in [_load], refreshed by
+  /// [_reloadForHomeSettings]; resolved into [_spotlightHeroOverride] by
+  /// [_resolveSpotlightHeroSource].
+  HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.auto, ids: const []);
 
   /// Whether any Trakt/Simkl list row is opted in — gates the tracker-row
   /// resolve in [_load] and the integrations-triggered reload.
@@ -1920,10 +1926,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (!mounted) return;
     final disabled = await StorageService.getHomeDisabledSections();
     final extras = await StorageService.getHomeExtraRows();
+    final heroSource = await StorageService.getHomeHeroSource();
     if (!mounted) return;
     final disabledUnchanged =
         disabled.length == _homeDisabled.length &&
         disabled.containsAll(_homeDisabled);
+    final heroSourceUnchanged =
+        heroSource.mode == _heroSource.mode &&
+        listEquals(heroSource.ids, _heroSource.ids);
     // Titles participate too: a stored rename must re-render the row header.
     // Diffed per family: `iptvlist:` extras feed the favourites-family rows,
     // everything else feeds the board pipeline — so toggling an IPTV list
@@ -1947,14 +1957,26 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       family(extras, iptv: true),
       family(_homeExtras, iptv: true),
     );
-    if (disabledUnchanged && boardExtrasUnchanged && iptvExtrasUnchanged) {
+    if (disabledUnchanged &&
+        boardExtrasUnchanged &&
+        iptvExtrasUnchanged &&
+        heroSourceUnchanged) {
       return;
     }
     setState(() {
       _homeDisabled = disabled;
       _homeExtras = extras;
+      _heroSource = heroSource;
     });
-    if (!disabledUnchanged || !boardExtrasUnchanged) _requestBoardReload();
+    if (!disabledUnchanged || !boardExtrasUnchanged) {
+      _requestBoardReload();
+    } else if (!heroSourceUnchanged && !widget.searchMode &&
+        !widget.discoverMode) {
+      // Only the hero source moved — re-roll the reel without refetching the
+      // whole board. `_load` isn't rerun here, so resolve from the addons the
+      // last load cached.
+      unawaited(_resolveSpotlightHeroSource(_addonsById.values.toList()));
+    }
     // IPTV list rows live outside the board's section pipeline. The loader
     // reads its own extras from storage, so it can't race the reload above.
     if (!iptvExtrasUnchanged) unawaited(_loadIptvListRows());
@@ -1996,6 +2018,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     try {
       final disabled = await StorageService.getHomeDisabledSections();
       final extras = await StorageService.getHomeExtraRows();
+      final heroSource = await StorageService.getHomeHeroSource();
       // Commit the prefs and (crucially) start the tracker fan-out only if
       // this load still owns the board — a superseded run kicking off its own
       // resolve would double the concurrent tracker requests beside the
@@ -2003,6 +2026,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (!mounted || gen != _boardLoadGen) return;
       _homeDisabled = disabled;
       _homeExtras = extras;
+      _heroSource = heroSource;
       // Opt-in Trakt/Simkl list rows, resolved IN PARALLEL with the first
       // catalog batch below. Home board only — the Search tab runs _load just
       // to warm the catalog refs for its search, and Discover never comes
@@ -2040,6 +2064,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _addonsById.clear();
       for (final a in addons) {
         _addonsById.putIfAbsent(a.id, () => a);
+      }
+      // Resolve the Spotlight hero's own reel in parallel with the first
+      // batch — its catalog may sit far down the board (or be hidden as a
+      // row), so it can't wait for a batch to happen to include it. Home
+      // board only, like the list rows above.
+      if (!widget.searchMode && !widget.discoverMode) {
+        unawaited(_resolveSpotlightHeroSource(addons));
       }
       // First batch is blocking so the board isn't empty on first paint; skip
       // runs of empty catalogs so we always land on some visible rows.
@@ -5356,14 +5387,106 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       GlobalKey<SpotlightBoardState>();
   final FocusNode _spotlightHeroNode = FocusNode(debugLabel: 'spotlight-hero');
 
+  /// The hero reel fetched from the user's chosen source (`random`/`custom`
+  /// modes), fetched by [_resolveSpotlightHeroSource] independently of the
+  /// board batches — the chosen catalog may sit pages down the board, or be
+  /// hidden as a row entirely. Null in `auto` mode, while the fetch is in
+  /// flight, and when every candidate came up dead — all of which fall back
+  /// to the first non-empty board row below.
+  CatalogSection? _spotlightHeroOverride;
+
+  /// Guards [_resolveSpotlightHeroSource] against overlapping runs (a Home
+  /// Rows save landing mid-load): only the newest run may commit.
+  int _heroSourceResolveGen = 0;
+
+  /// Fetch the hero reel for the current [_heroSource] pref.
+  ///
+  /// Candidates come from the FULL browsable set, not [_boardRefs] — hiding a
+  /// catalog's row on the board must not blank a hero pinned to that same
+  /// catalog. Candidates are shuffled so `random` mode and a multi-pick
+  /// `custom` re-roll on every board load; the first candidate that returns
+  /// items wins. Attempts are capped so a wall of dead catalogs can't fan out
+  /// unbounded fetches; exhausting the cap (or the candidates) clears the
+  /// override, which IS the auto fallback.
+  Future<void> _resolveSpotlightHeroSource(List<StremioAddon> addons) async {
+    final gen = ++_heroSourceResolveGen;
+    final source = _heroSource;
+    if (source.mode != HomeHeroSourceMode.auto) {
+      final all = [
+        for (final a in addons)
+          for (final c in a.catalogs)
+            if (c.isBrowsable) (a, c),
+      ];
+      final List<(StremioAddon, StremioAddonCatalog)> candidates;
+      if (source.mode == HomeHeroSourceMode.random) {
+        candidates = List.of(all);
+      } else {
+        // Stored picks that no longer resolve (addon uninstalled, catalog
+        // gone from its manifest) simply drop out; they are NOT removed from
+        // the pref, so reinstalling the addon brings the pick back.
+        final byId = {
+          for (final (a, c) in all) '${a.id}:${c.type}:${c.id}': (a, c),
+        };
+        candidates = [
+          for (final id in source.ids)
+            if (byId.containsKey(id)) byId[id]!,
+        ];
+      }
+      candidates.shuffle(Random());
+      const maxAttempts = 8;
+      var attempts = 0;
+      for (final (addon, catalog) in candidates) {
+        if (attempts++ >= maxAttempts) break;
+        if (!mounted || gen != _heroSourceResolveGen) return;
+        try {
+          var rawCount = 0;
+          final items = await _stremio.fetchCatalog(
+            addon,
+            catalog,
+            onRawCount: (c) => rawCount = c,
+          );
+          if (!mounted || gen != _heroSourceResolveGen) return;
+          if (items.isEmpty) continue;
+          setState(() {
+            _spotlightHeroOverride = CatalogSection(
+              title: '${addon.name}: ${catalog.name}',
+              addon: addon,
+              catalog: catalog,
+              items: items.toList(),
+              nextSkip: rawCount > 0 ? rawCount : items.length,
+            );
+          });
+          return;
+        } catch (_) {
+          // Dead addon or catalog — try the next candidate.
+        }
+      }
+    }
+    // Auto mode, no usable candidate, or every attempt failed — drop any
+    // stale override so the reel falls back rather than pinning old prefs.
+    if (!mounted || gen != _heroSourceResolveGen) return;
+    if (_spotlightHeroOverride != null) {
+      setState(() => _spotlightHeroOverride = null);
+    }
+  }
+
   /// The hero reel.
   ///
   /// NOT `_stageRails[0]`: that list is ordered Continue Watching → Favourites
   /// (which include IPTV channels and playlists, not `StremioMeta` at all) →
   /// catalog sections, and it re-orders as tracker data lands. The hero needs a
-  /// stable list of real catalog titles, so it takes the first section that has
-  /// any and caps it — a reel longer than about eight is a list, not a hero.
+  /// stable list of real catalog titles, so it takes the user's resolved
+  /// source pick when there is one, else the first section that has any items
+  /// — and caps it either way: a reel longer than about eight is a list, not
+  /// a hero.
   CatalogSection? get _spotlightHeroSection {
+    // A catalog search swaps `_sections` to results, and the reel follows
+    // them — the pinned source is Home-board furniture and must not paint
+    // over a search.
+    final override = _spotlightHeroOverride;
+    if (override != null && _catalogQuery.isEmpty && !_catalogSearching) {
+      return override;
+    }
     for (final section in _sections) {
       if (section.items.isNotEmpty) return section;
     }

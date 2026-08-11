@@ -9,6 +9,7 @@ import '../../services/trakt/trakt_service.dart';
 import '../../services/analytics_service.dart';
 import '../../utils/platform_util.dart';
 import 'home_sections_filter_page.dart';
+import 'spotlight_hero_source_page.dart';
 import 'tv_home_style_page.dart';
 import 'widgets/settings_widgets.dart';
 
@@ -34,7 +35,31 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   int _ambientTrailerVolume = 70;
   bool _tvTrailerUnderlayEnabled = true;
   String _tvHomeStyle = 'canvas';
+  HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.auto, ids: []);
   List<StremioAddon> _addons = [];
+
+  /// Whether the RESOLVED home layout is Spotlight — the only layout with the
+  /// hero reel the Hero Source row configures. Same resolution as the Home
+  /// Layout tile's caption: off-TV a stored stage style renders as Classic.
+  bool get _spotlightLayoutActive =>
+      (PlatformUtil.isTelevision
+          ? _tvHomeStyle
+          : effectiveOffTvHomeStyle(_tvHomeStyle)) ==
+      'spotlight';
+
+  /// Open the Spotlight hero-source picker, then re-read so the row caption
+  /// matches what was chosen (the picker itself live-applies each change).
+  Future<void> _openSpotlightHeroSource() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SpotlightHeroSourcePage(addons: _addons),
+      ),
+    );
+    if (!mounted) return;
+    final heroSource = await StorageService.getHomeHeroSource();
+    if (!mounted) return;
+    setState(() => _heroSource = heroSource);
+  }
 
   /// TV home layout row (this page owns it now): open the picker, then
   /// re-read so the row caption matches what was chosen.
@@ -139,6 +164,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final tvTrailerUnderlayEnabled =
           await StorageService.getTvTrailerUnderlayEnabled();
       final tvHomeStyle = await StorageService.getTvHomeStyle();
+      final heroSource = await StorageService.getHomeHeroSource();
 
       // Only the two views that the current Home screen can render are valid.
       // Migrate the former All, Addon, Trakt, and other retired choices to
@@ -168,6 +194,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _ambientTrailerVolume = ambientTrailerVolume;
         _tvTrailerUnderlayEnabled = tvTrailerUnderlayEnabled;
         _tvHomeStyle = tvHomeStyle;
+        _heroSource = heroSource;
         _loading = false;
       });
       // TV: land DPAD focus on the first row so users aren't stranded.
@@ -340,6 +367,23 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                           ? 'Loading your lists…'
                           : 'Choose which rows appear on Home',
                       onTap: _openHomeRowsManager,
+                    ),
+                    // Which catalog feeds the Spotlight layout's hero reel.
+                    // Always shown, but greyed out under any other layout —
+                    // hiding it would make the pref undiscoverable, while a
+                    // live row would invite configuring something invisible.
+                    // The Home Layout tile above re-reads the style on
+                    // return, so switching to Spotlight lights this row up
+                    // in place.
+                    SettingsTile(
+                      icon: Icons.slideshow_rounded,
+                      title: 'Hero Source',
+                      subtitle: _spotlightLayoutActive
+                          ? spotlightHeroSourceLabel(_heroSource)
+                          : 'Only used by the Spotlight home layout',
+                      tag: 'SPOTLIGHT',
+                      enabled: _spotlightLayoutActive,
+                      onTap: _openSpotlightHeroSource,
                     ),
                   ],
                 ),
