@@ -11,6 +11,7 @@ import '../../services/trakt/trakt_episode_model.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
+import '../../utils/platform_util.dart';
 import '../../utils/wide_touch_scale.dart';
 import '../episodes_panel.dart';
 import 'detail_model.dart';
@@ -256,12 +257,21 @@ class _HoverState extends State<_Hover> {
   bool _h = false;
 
   @override
-  Widget build(BuildContext context) => MouseRegion(
-        cursor: widget.cursor,
-        onEnter: (_) => setState(() => _h = true),
-        onExit: (_) => setState(() => _h = false),
-        child: widget.builder(context, _h),
-      );
+  Widget build(BuildContext context) {
+    // No hover layer on a television. An Apple TV remote's trackpad delivers
+    // pointer events (see main.dart), so an ungated MouseRegion parks a
+    // second lifted card wherever the thumb last brushed — and every DPAD
+    // step's centre-scroll then sweeps cards under that parked pointer,
+    // firing lift/drop springs mid-scroll. The Spotlight board's `hoverable`
+    // is off on TV for exactly this reason; this is the same gate.
+    if (PlatformUtil.isTelevision) return widget.builder(context, false);
+    return MouseRegion(
+      cursor: widget.cursor,
+      onEnter: (_) => setState(() => _h = true),
+      onExit: (_) => setState(() => _h = false),
+      child: widget.builder(context, _h),
+    );
+  }
 }
 
 // ── grounds ────────────────────────────────────────────────────────────────
