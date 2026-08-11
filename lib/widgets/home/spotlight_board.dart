@@ -89,11 +89,20 @@ class SpotlightShelf {
 
 /// **Spotlight** — the tvOS Home idiom.
 ///
-/// The hero is **the first item of the scroll**, not a fixed backdrop the
-/// shelves ride over. Measured off the reference: every scrolled frame has a
-/// flat `rgb(28,28,28)` gutter, so once you are past the hero its art is gone
-/// entirely — there is no dimmed artwork under the shelves. Hero and shelves
-/// therefore translate together over one ground.
+/// The hero art is a **pinned full-screen backdrop** the shelves ride over —
+/// the Apple TV app's grammar. Going DOWN does not scroll the picture away
+/// (it used to be the first item of the scroll, which sent a hard band-edge
+/// sliding up the screen — the one obviously-not-Apple frame this board
+/// produced). Instead the shelves and the hero's identity translate up while
+/// the art stays put, and a ground-coloured veil rises with the scroll so the
+/// picture dims toward the page ground and the rows stay legible whatever the
+/// theme. Only the PICTURE is pinned: identity, dots and the pointer surface
+/// ride in the scroll, because text that slides away with the rows is the
+/// reference behaviour.
+///
+/// Compact keeps the in-flow hero (the Apple *phone* measure): its art stops
+/// at ~64% of the board and fades into the ground, so there is no band edge
+/// to pin away and nothing under the fold to dim.
 ///
 /// The hero is also **a focusable row**: LEFT/RIGHT page it, dots show
 /// position, and it parks where you left it. That is the piece that changes
@@ -352,6 +361,38 @@ class SpotlightBoardState extends State<SpotlightBoard> {
 
   final ScrollController _scroll = ScrollController();
 
+  /// The hero band's height as of the last build — the scroll listener needs
+  /// it to decide "scrolled away", and a listener has no BuildContext to
+  /// measure with.
+  double _heroBandH = 0;
+
+  /// True once the board is scrolled far enough that the pinned hero is
+  /// effectively covered. Owns the trailer's lifecycle for SCROLLING, which
+  /// touch and wheel produce without ever telling the cursor: DPAD descent
+  /// goes through [_down] (which stops the trailer itself), but a swipe or a
+  /// wheel just moves the list — and the backdrop being permanently mounted
+  /// now, the video would keep decoding behind an opaque veil forever.
+  bool _scrolledAway = false;
+
+  /// Crossing detector for [_scrolledAway]: teardown on the way out,
+  /// re-arm on the way back. Also called on metrics corrections (see
+  /// [_board]) because a clamped offset never notifies the controller.
+  void _onBoardScrolled() {
+    if (_heroBandH <= 0 || !_scroll.hasClients) return;
+    final away = _scroll.offset > _heroBandH * 0.35;
+    if (away == _scrolledAway) return;
+    _scrolledAway = away;
+    if (away) {
+      _cadence?.cancel();
+      _cadence = null;
+      _stopRolling();
+    } else {
+      // Applies its own gates (DPAD hero focus, pref, dwell callback), so
+      // this is safe to fire from any scroll back to the top.
+      _restartCadence();
+    }
+  }
+
   /// Which hero item is showing. Held by ID so a rail re-order does not move
   /// the page under the user.
   String? _heroId;
@@ -431,6 +472,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // disable→re-enable of trailers strands the cadence forever.
     _cadence = null;
     if (!mounted || _row >= 0) return;
+    // Scrolled off the hero (touch/wheel — a DPAD descent goes through
+    // [_down] and cancels the clock itself): do not start a decoder behind
+    // the veil. No re-arm — scrolling back under the threshold restarts the
+    // cadence via [_onBoardScrolled].
+    if (_scrolledAway) return;
     // Touch: a covered or backgrounded board must not spin up an engine for
     // a hero nobody can see. Re-arm and wait rather than dying — the route
     // pop that reveals the board again gives no callback here.
@@ -480,6 +526,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     super.initState();
     _heroId = widget.hero.isNotEmpty ? widget.hero.first.id : null;
     widget.heroNode.addListener(_onHeroFocus);
+    _scroll.addListener(_onBoardScrolled);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _probe();
       _restartCadence();
@@ -834,54 +881,94 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   }
 
   Widget _board(_M m, double heroH) {
+    _heroBandH = heroH;
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
-    return DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [ground, SpotlightBoard.groundLowOf(app)],
+    final list = ListView(
+      controller: _scroll,
+      padding: EdgeInsets.zero,
+      children: [
+        // Laid out 88 short so the first shelf sits over the hero's lower
+        // edge; the band overflows to the hero's full height so its contents
+        // lay out against the same geometry the pinned art is drawn in. On
+        // wide this band carries only the hero's FOREGROUND (identity, dots,
+        // pointer surface, focus node) — the picture itself is pinned behind
+        // the list in the Stack below. Compact has no overlap and keeps art
+        // and identity together in flow — the hero fades to ground and the
+        // rows follow.
+        SizedBox(
+          height: heroH * (1 - (m.compact ? 0 : _shelfOverlapFraction)),
+          child: OverflowBox(
+            alignment: Alignment.topCenter,
+            maxHeight: heroH,
+            child: SizedBox(height: heroH, child: _hero(m)),
           ),
         ),
-        child: ListView(
-          controller: _scroll,
+        // The first shelf overlaps the hero's lower edge — the tell that
+        // the page continues.
+        //
+        // The hero is drawn 88 SHORTER than its visual height rather than
+        // the shelves being transformed up over it. A `Transform` moves
+        // paint and hit-testing but leaves the ListView's extent alone, so
+        // the overlap reappears as a phantom 88px gap at the bottom and
+        // the page overscrolls past its own last shelf. Sizing the hero
+        // box is the version the scroll extent agrees with.
+        Padding(
           padding: EdgeInsets.zero,
-          children: [
-            // Laid out 88 short so the first shelf sits over the hero's lower
-            // edge; the hero PAINTS its full height by overflowing downward,
-            // which the ListView clips only below the shelves that cover it
-            // anyway. Compact has no overlap — the hero fades to ground and
-            // the rows follow in flow.
-            SizedBox(
-              height: heroH * (1 - (m.compact ? 0 : _shelfOverlapFraction)),
-              child: OverflowBox(
-                alignment: Alignment.topCenter,
-                maxHeight: heroH,
-                child: SizedBox(height: heroH, child: _hero(m)),
-              ),
-            ),
-            // The first shelf overlaps the hero's lower edge — the tell that
-            // the page continues.
-            //
-            // The hero is drawn 88 SHORTER than its visual height rather than
-            // the shelves being transformed up over it. A `Transform` moves
-            // paint and hit-testing but leaves the ListView's extent alone, so
-            // the overlap reappears as a phantom 88px gap at the bottom and
-            // the page overscrolls past its own last shelf. Sizing the hero
-            // box is the version the scroll extent agrees with.
-            Padding(
-              padding: EdgeInsets.zero,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < widget.sections.length; i++) _shelf(i, m),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < widget.sections.length; i++) _shelf(i, m),
+            ],
+          ),
         ),
+        const SizedBox(height: 24),
+      ],
+    );
+    // A board reload can SHRINK the list under a parked scroll. The framework
+    // clamps the offset during layout WITHOUT notifying the controller, so
+    // the veil and the scrolled-away trailer gate would keep acting on an
+    // offset the list no longer has — a hero veiled opaque with nothing left
+    // to scroll back from. Metrics changes on the board's own axis are rare
+    // (shelf batches, viewport resizes), so a rebuild is cheap; depth 0
+    // filters out every horizontal shelf list bubbling through.
+    final content = NotificationListener<ScrollMetricsNotification>(
+      onNotification: (n) {
+        if (n.depth == 0) {
+          _onBoardScrolled();
+          if (mounted) setState(() {});
+        }
+        return false;
+      },
+      child: list,
+    );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [ground, SpotlightBoard.groundLowOf(app)],
+        ),
+      ),
+      // Wide pins the picture BEHIND the scroll view. A Scrollable claims
+      // every pointer in its viewport, which is fine here because nothing in
+      // the backdrop is interactive — the hero's tap/swipe surface and the
+      // tappable dots ride in the list with the identity.
+      child: m.compact
+          ? content
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    height: heroH,
+                    child: _heroBackdrop(heroH),
+                  ),
+                ),
+                content,
+              ],
+            ),
     );
   }
 
@@ -1029,15 +1116,21 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     );
   }
 
-  /// The TV hero, unchanged.
+  /// The TV hero's SCROLLING half: identity, dots, pointer surface, focus
+  /// node. The picture it reads against is [_heroBackdrop], pinned behind the
+  /// list — split so the text can ride away with the shelves while the art
+  /// stays put.
   Widget _heroWide(_M m) {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
-    final wide = _heroWideStack(m, item);
+    final wide = _heroForeground(m, item);
     if (widget.dpad) return wide;
     // Desktop and tablet drive the same wide layout by pointer/touch: swipe
     // pages the reel, a tap opens the showcased title — the exact gestures
     // the compact hero has. TV returns the bare stack above, untouched.
+    // This surface must live HERE, in the list, not on the backdrop: the
+    // Scrollable in front of the backdrop claims every pointer in its
+    // viewport, so a tap layer down there would never hear anything.
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onHorizontalDragEnd: (details) {
@@ -1054,7 +1147,12 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     );
   }
 
-  Widget _heroWideStack(_M m, StremioMeta item) {
+  /// The pinned picture: art, trailer, scrims, and the scroll veil. Sits
+  /// BEHIND the scroll view (see [_board]); everything here is
+  /// non-interactive by construction.
+  Widget _heroBackdrop(double heroH) {
+    final item = _heroItem;
+    if (item == null) return const SizedBox.shrink();
     final url = item.background ?? item.poster;
     final flip = _flip;
     // Both scrims below were tuned against a STILL, where they only have to
@@ -1104,7 +1202,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         // The host already owns this lifecycle for every other board; the
         // board's job is the cadence, and only the cadence.
         if (widget.trailer != null) Positioned.fill(child: widget.trailer!),
-        // The identity scrim, on whichever side the text is.
+        // The identity scrim, on whichever side the text is. Pinned WITH the
+        // art rather than scrolling with the text it serves: it covers that
+        // side's full height, so the identity stays on scrimmed picture for
+        // its whole upward travel — and a scrim that translated away with
+        // the list would drag its visible edge up the artwork.
         IgnorePointer(
           child: DecoratedBox(
             decoration: BoxDecoration(
@@ -1174,6 +1276,41 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             ),
           ),
         ),
+        // The scroll veil — what going DOWN does to the picture now that it
+        // no longer scrolls away. Ground-coloured for the same reason the
+        // fade above ends on ground: the rows and their titles are inked for
+        // the page ground, so the picture must dim TOWARD it — a black veil
+        // would put theme-inked text on a surface the theme never chose.
+        //
+        // A solid fill, not a gradient: it re-paints on every scrolled frame,
+        // and a full-screen gradient per frame is what the TV veil policy
+        // exists to avoid. Opacity is linear in offset and fully opaque by
+        // 80% of a hero-height — deep in the board the page is exactly the
+        // flat ground it always was; the art only ghosts through during the
+        // descent.
+        IgnorePointer(
+          child: AnimatedBuilder(
+            animation: _scroll,
+            builder: (context, _) {
+              final off = _scroll.hasClients ? _scroll.offset : 0.0;
+              final t = (off / (heroH * 0.8)).clamp(0.0, 1.0);
+              if (t == 0) return const SizedBox.shrink();
+              return Opacity(
+                opacity: t,
+                child: ColoredBox(color: ground),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _heroForeground(_M m, StremioMeta item) {
+    final flip = _flip;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
         Positioned(
           left: flip ? null : m.gutter,
           right: flip ? m.gutter : null,
