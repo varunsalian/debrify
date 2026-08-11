@@ -2238,6 +2238,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Let equalizer apps process audio (Android)',
         const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
       ),
+      if (_isAndroid)
+        leaf(
+          'Playback',
+          'Audio passthrough (AC3 · EAC3 · DTS core)',
+          'Bitstream audio to your receiver instead of decoding',
+          const [
+            'passthrough',
+            'bitstream',
+            'dts',
+            'ac3',
+            'dolby',
+            'receiver',
+            'avr',
+          ],
+        ),
+      if (PlatformUtil.isTvOS || PlatformUtil.isIosMobile)
+        leaf(
+          'Playback',
+          'Multichannel audio (LPCM over HDMI)',
+          'Surround tracks as 5.1/7.1 PCM on capable receivers',
+          const [
+            'multichannel',
+            'surround',
+            '5.1',
+            '7.1',
+            'lpcm',
+            'audio channels',
+          ],
+        ),
       if (PlatformUtil.isTvOS)
         leaf(
           'Playback',

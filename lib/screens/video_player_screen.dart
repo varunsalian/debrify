@@ -3,7 +3,7 @@ import '../utils/media_kit_init.dart';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import '../utils/app_storage.dart';
@@ -27,6 +27,7 @@ import '../services/debrid_service.dart';
 import '../services/premiumize_service.dart';
 import '../services/alldebrid_service.dart';
 import '../utils/platform_util.dart';
+import '../utils/player_audio_config.dart';
 import '../utils/time_formatters.dart';
 import '../utils/series_parser.dart';
 import '../utils/movie_parser.dart';
@@ -369,6 +370,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// Preloaded in [_loadPlayerDefaults]; [_createPlayerInstance] is
   /// synchronous and cannot read prefs itself.
   bool _tvosForceSoftwareDecode = false;
+
+  /// Audio-output settings (AUDIO_FIDELITY_PLAN.md), preloaded in
+  /// [_loadPlayerDefaults] and applied by [_configurePlayerAudio].
+  bool _audioPassthroughEnabled = false;
+  bool _systemAudioEffectsEnabled = false;
+  bool _appleMultichannelEnabled = false;
   int _playerInstanceGeneration = 0;
   bool _playerPresentationInitialized = false;
 
@@ -1983,8 +1990,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     try {
       final platform = _player.platform;
       if (platform is! mk.NativePlayer) return;
-      if (!await StorageService.getPlayerSystemAudioEffects()) return;
-      await platform.setProperty('ao', 'audiotrack,opensles');
+      // The CACHED field, deliberately: [_configurePlayerAudio] chose the
+      // audio output from it, and a fresh preference read here could
+      // diverge mid-session — announcing a session on an output that was
+      // never switched, or vice versa. "Restart playback to apply" is the
+      // settings contract for both halves.
+      if (!_systemAudioEffectsEnabled) return;
+      // `ao=audiotrack,...` itself is owned by [_configurePlayerAudio] now
+      // (the passthrough setting needs the same output, and two writers of
+      // `ao` is how the two settings would fight) — this method keeps only
+      // the session-id half.
       final sessionId = await AudioEffectSessionService.generateSessionId();
       // No id available: still worth keeping the effects-capable output, since
       // effect apps that detect sessions on their own can then attach.
@@ -2105,6 +2120,75 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _installTvosDecodeRemedy(player);
     _bindPlayerInstanceSubscriptions(instanceGeneration, player);
     unawaited(_installDecoderObservers(instanceGeneration, player));
+  }
+
+  /// Serializes live passthrough flips: each runs WHOLE, in order. Without
+  /// this a rapid double-toggle could interleave two aid cycles and leave
+  /// the newer one reading `aid=no` mid-way through the older one's cycle —
+  /// stranding the player silent.
+  Future<void> _passthroughFlipChain = Future<void>.value();
+
+  /// The in-player passthrough flip — persists the same setting the
+  /// Playback Defaults row writes, applies the explicit property values
+  /// (including the OFF restores), then cycles the audio track so the
+  /// CURRENT file's audio chain re-initialises: `audio-spdif` is read at
+  /// decoder init, and `ao` reloads on the reconfig. Sub-second audio gap,
+  /// position untouched. Fails soft: playback outlives any of this (and
+  /// mpv gives no rejection signal to roll a switch back on — the toggle's
+  /// caption owns the "silence means off" contract).
+  Future<void> _setAudioPassthroughLive(bool enabled) {
+    final flip = _passthroughFlipChain.then(
+      (_) => _applyPassthroughFlip(enabled),
+    );
+    _passthroughFlipChain = flip.catchError((_) {});
+    return flip;
+  }
+
+  Future<void> _applyPassthroughFlip(bool enabled) async {
+    _audioPassthroughEnabled = enabled;
+    try {
+      await StorageService.setAudioPassthroughEnabled(enabled);
+      final platform = _player.platform;
+      if (platform is! mk.NativePlayer) return;
+      for (final (property, value)
+          in PlayerAudioConfig.androidLiveToggleProperties(
+        passthroughEnabled: enabled,
+        systemAudioEffects: _systemAudioEffectsEnabled,
+      )) {
+        await platform.setProperty(property, value);
+      }
+      final aid = await platform.getProperty('aid');
+      if (aid.isNotEmpty && aid != 'no') {
+        await platform.setProperty('aid', 'no');
+        await platform.setProperty('aid', aid);
+      }
+    } catch (e) {
+      debugPrint('VideoPlayer: live passthrough toggle failed: $e');
+    }
+  }
+
+  /// The single owner of the player's audio-output properties — ordered
+  /// list from [PlayerAudioConfig], awaited before the first open, run at
+  /// EVERY player-instance creation site (initial + the Android renderer
+  /// fallback recreate). Fails soft per property: audio configuration is a
+  /// nice-to-have, playback is not.
+  Future<void> _configurePlayerAudio(mk.Player player) async {
+    final platform = player.platform;
+    if (platform is! mk.NativePlayer) return;
+    final props = PlayerAudioConfig.audioProperties(
+      isAndroid: !kIsWeb && Platform.isAndroid,
+      isApple: PlatformUtil.isTvOS || PlatformUtil.isIosMobile,
+      passthroughEnabled: _audioPassthroughEnabled,
+      systemAudioEffects: _systemAudioEffectsEnabled,
+      multichannelEnabled: _appleMultichannelEnabled,
+    );
+    for (final (property, value) in props) {
+      try {
+        await platform.setProperty(property, value);
+      } catch (e) {
+        debugPrint('VideoPlayer: audio config $property=$value failed: $e');
+      }
+    }
   }
 
   /// tvOS only: the 10-bit remedy ladder, bound to THIS player instance's
@@ -2326,6 +2410,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     await _claimVideoOutput();
     if (!mounted) return;
     _createPlayerInstance(_androidVideoRendererMode);
+    await _configurePlayerAudio(_player);
     // libmpv exposes `stream-record`; the web backend does not. Gate the
     // record control on having a native player — and, on Android, on the
     // finished file being publishable at all. Below API 29 there is no
@@ -2850,6 +2935,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await _claimVideoOutput();
       if (!mounted) return;
       _createPlayerInstance(AndroidVideoRendererMode.automatic);
+      await _configurePlayerAudio(_player);
       await _attachAudioEffectSession();
       if (!mounted) return;
       setState(() {});
@@ -2939,11 +3025,23 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     var previousDecoder = '';
     var previousOutput = '';
     var stable = false;
+    // Audio, read on the DEVICE side (AUDIO_FIDELITY_PLAN.md): what the AO
+    // actually writes, not what the decoder produced — the gap between the
+    // two is the downgrade being diagnosed.
+    var aoName = '';
+    var audioChannels = '';
+    var previousAo = '';
+    var previousAudioChannels = '';
+    var audioCodec = '';
+    var decodedChannels = '';
+    var audioFormat = '';
 
     try {
       // VideoParams means a decoder has produced metadata, not necessarily
       // that the output surface has finished attaching. Require two matching
       // reads so an early `current-vo=null` is never presented as the verdict.
+      // Audio joins the match condition but not the readiness one: a
+      // video-only file has no AO to wait for, and empty-matches-empty.
       for (var attempt = 0; attempt < 12; attempt++) {
         if (!mounted ||
             generation != _decoderProbeGeneration ||
@@ -2952,17 +3050,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         }
         decoder = await platform.getProperty('hwdec-current');
         output = await platform.getProperty('current-vo');
+        aoName = await platform.getProperty('current-ao');
+        audioChannels =
+            await platform.getProperty('audio-out-params/channel-count');
         final outputReady = output.isNotEmpty && output != 'null';
         final decoderReady = decoder.isNotEmpty;
         if (decoderReady &&
             outputReady &&
             decoder == previousDecoder &&
-            output == previousOutput) {
+            output == previousOutput &&
+            aoName == previousAo &&
+            audioChannels == previousAudioChannels) {
           stable = true;
           break;
         }
         previousDecoder = decoder;
         previousOutput = output;
+        previousAo = aoName;
+        previousAudioChannels = audioChannels;
         await Future<void>.delayed(const Duration(milliseconds: 250));
       }
       if (!mounted ||
@@ -2971,6 +3076,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         return;
       }
       codec = await platform.getProperty('video-codec');
+      audioCodec = await platform.getProperty('audio-codec-name');
+      decodedChannels =
+          await platform.getProperty('audio-params/channel-count');
+      audioFormat = await platform.getProperty('audio-out-params/format');
     } catch (_) {
       if (!mounted || generation != _decoderProbeGeneration) return;
       _emitDecoderDiagnosticOnce(
@@ -3043,6 +3152,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           'decoder=${decoder.isEmpty ? 'unknown' : decoder} '
           'output=$normalizedOutput '
           '$remedyFields'
+          'audio_codec=${audioCodec.isEmpty ? 'none' : audioCodec} '
+          'decoded_channels=${decodedChannels.isEmpty ? 'none' : decodedChannels} '
+          'audio_channels=${audioChannels.isEmpty ? 'none' : audioChannels} '
+          'audio_format=${audioFormat.isEmpty ? 'none' : audioFormat} '
+          'ao=${aoName.isEmpty ? 'none' : aoName} '
           'requested_renderer=$requestedRenderer '
           'resolution=${width}x$height',
     );
@@ -4104,6 +4218,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (PlatformUtil.isTvOS) {
       _tvosForceSoftwareDecode =
           await StorageService.getTvosForceSoftwareDecode();
+    }
+
+    // Audio-output settings, preloaded for [_configurePlayerAudio] — the
+    // single owner of ao / audio-spdif / audio-channels
+    // (AUDIO_FIDELITY_PLAN.md).
+    if (!kIsWeb && Platform.isAndroid) {
+      _audioPassthroughEnabled =
+          await StorageService.getAudioPassthroughEnabled();
+      _systemAudioEffectsEnabled =
+          await StorageService.getPlayerSystemAudioEffects();
+    } else if (PlatformUtil.isTvOS || PlatformUtil.isIosMobile) {
+      _appleMultichannelEnabled =
+          await StorageService.getAppleMultichannelAudio();
     }
 
     debugPrint('VideoPlayer: Loaded defaults - aspect=$_aspectMode');
@@ -11913,6 +12040,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // Fires only on a genuine subtitle switch (not audio, not re-select, not a
       // failed load): the sync offset was calibrated for the previous subtitle.
       onSubtitleTrackChanged: _resetSubtitleSyncOffset,
+      // Android bitstream passthrough, applied LIVE (same stored setting as
+      // the Playback Defaults row).
+      audioPassthrough: !kIsWeb && Platform.isAndroid
+          ? _audioPassthroughEnabled
+          : null,
+      onAudioPassthroughChanged: !kIsWeb && Platform.isAndroid
+          ? _setAudioPassthroughLive
+          : null,
       onSubtitleStyleChanged: _onSubtitleStyleChanged,
       onSyncOverlayRequested: _showSyncOverlayPanel,
       contentImdbId: effectiveImdbId,

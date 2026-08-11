@@ -200,6 +200,9 @@ class StorageService {
       'android_video_renderer_mode';
   static const String _tvosForceSoftwareDecodeKey =
       'tvos_force_software_decode';
+  static const String _audioPassthroughKey = 'player_audio_passthrough';
+  static const String _appleMultichannelAudioKey =
+      'player_apple_multichannel_audio';
   static const String _uiSoundsKey = 'ui_sounds';
   static const String _uiHapticsKey = 'ui_haptics';
   static const String _subtitleAutoSyncKey = 'subtitle_auto_sync_enabled';
@@ -6137,6 +6140,34 @@ class StorageService {
   static Future<void> setPlayerSystemAudioEffects(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
+  }
+
+  /// Android Dart player only: bitstream AC3/EAC3/DTS-core to the audio
+  /// device instead of decoding to PCM (AUDIO_FIDELITY_PLAN.md). Default
+  /// false — passthrough is fail-loud on routes that misreport support,
+  /// so only the user can turn it on.
+  static Future<bool> getAudioPassthroughEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_audioPassthroughKey) ?? false;
+  }
+
+  static Future<void> setAudioPassthroughEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_audioPassthroughKey, enabled);
+  }
+
+  /// Apple (tvOS/iOS) Dart player: request the track's real channel layout
+  /// (`audio-channels=auto`) so an HDMI/eARC AVR route gets full
+  /// multichannel LPCM. Default false until route-safety is field-proven
+  /// (AUDIO_FIDELITY_PLAN.md rev 2).
+  static Future<bool> getAppleMultichannelAudio() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_appleMultichannelAudioKey) ?? false;
+  }
+
+  static Future<void> setAppleMultichannelAudio(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_appleMultichannelAudioKey, enabled);
   }
 
   /// Apple TV only: force the media-kit player to software video decoding.

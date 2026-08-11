@@ -84,6 +84,8 @@ class _ExternalPlayerSettingsPageState
   int _nightModeIndex = 0; // Off
   bool _systemAudioEffects = false; // Android only, opt-in
   bool _tvosForceSoftwareDecode = false; // Apple TV only, opt-in
+  bool _audioPassthrough = false; // Android only, opt-in
+  bool _appleMultichannel = false; // tvOS/iOS only, opt-in
   AndroidVideoRendererMode _androidVideoRendererMode =
       AndroidVideoRendererMode.automatic;
   bool _startPortrait = false; // Phone only, opt-in
@@ -113,6 +115,8 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _defaultSubtitleLangFocusNode = FocusNode();
   final FocusNode _systemAudioEffectsFocusNode = FocusNode();
   final FocusNode _tvosForceSwDecodeFocusNode = FocusNode();
+  final FocusNode _audioPassthroughFocusNode = FocusNode();
+  final FocusNode _appleMultichannelFocusNode = FocusNode();
   final FocusNode _androidVideoRendererFocusNode = FocusNode();
   final FocusNode _startPortraitFocusNode = FocusNode();
   final FocusNode _subtitleAutoSyncFocusNode = FocusNode();
@@ -129,6 +133,8 @@ class _ExternalPlayerSettingsPageState
   bool _defaultSubtitleLangFocused = false;
   bool _systemAudioEffectsFocused = false;
   bool _tvosForceSwDecodeFocused = false;
+  bool _audioPassthroughFocused = false;
+  bool _appleMultichannelFocused = false;
   bool _androidVideoRendererFocused = false;
   bool _startPortraitFocused = false;
   bool _subtitleAutoSyncFocused = false;
@@ -235,6 +241,18 @@ class _ExternalPlayerSettingsPageState
         _tvosForceSwDecodeFocused = _tvosForceSwDecodeFocusNode.hasFocus;
       });
     });
+    _audioPassthroughFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _audioPassthroughFocused = _audioPassthroughFocusNode.hasFocus;
+      });
+    });
+    _appleMultichannelFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _appleMultichannelFocused = _appleMultichannelFocusNode.hasFocus;
+      });
+    });
     _androidVideoRendererFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -324,6 +342,8 @@ class _ExternalPlayerSettingsPageState
     _defaultSubtitleLangFocusNode.dispose();
     _systemAudioEffectsFocusNode.dispose();
     _tvosForceSwDecodeFocusNode.dispose();
+    _audioPassthroughFocusNode.dispose();
+    _appleMultichannelFocusNode.dispose();
     _androidVideoRendererFocusNode.dispose();
     _startPortraitFocusNode.dispose();
     _subtitleAutoSyncFocusNode.dispose();
@@ -436,6 +456,13 @@ class _ExternalPlayerSettingsPageState
       final tvosForceSoftwareDecode = PlatformUtil.isTvOS
           ? await StorageService.getTvosForceSoftwareDecode()
           : false;
+      final audioPassthrough = Platform.isAndroid
+          ? await StorageService.getAudioPassthroughEnabled()
+          : false;
+      final appleMultichannel =
+          (PlatformUtil.isTvOS || PlatformUtil.isIosMobile)
+          ? await StorageService.getAppleMultichannelAudio()
+          : false;
       final androidVideoRendererMode =
           await StorageService.getAndroidVideoRendererMode();
       final startPortrait = await StorageService.getPlayerStartPortrait();
@@ -491,6 +518,8 @@ class _ExternalPlayerSettingsPageState
         _nightModeIndex = nightModeIndex;
         _systemAudioEffects = systemAudioEffects;
         _tvosForceSoftwareDecode = tvosForceSoftwareDecode;
+        _audioPassthrough = audioPassthrough;
+        _appleMultichannel = appleMultichannel;
         _androidVideoRendererMode = androidVideoRendererMode;
         _startPortrait = startPortrait;
         _subtitleAutoSync = subtitleAutoSync;
@@ -954,6 +983,16 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setTvosForceSoftwareDecode(bool enabled) async {
     setState(() => _tvosForceSoftwareDecode = enabled);
     await StorageService.setTvosForceSoftwareDecode(enabled);
+  }
+
+  Future<void> _setAudioPassthrough(bool enabled) async {
+    setState(() => _audioPassthrough = enabled);
+    await StorageService.setAudioPassthroughEnabled(enabled);
+  }
+
+  Future<void> _setAppleMultichannel(bool enabled) async {
+    setState(() => _appleMultichannel = enabled);
+    await StorageService.setAppleMultichannelAudio(enabled);
   }
 
   Future<void> _setAndroidVideoRendererMode(String storageKey) async {
@@ -2203,6 +2242,42 @@ class _ExternalPlayerSettingsPageState
                               onChanged: _setSystemAudioEffects,
                               focusNode: _systemAudioEffectsFocusNode,
                               isFocused: _systemAudioEffectsFocused,
+                            ),
+                            // Bitstream passthrough (AUDIO_FIDELITY_PLAN.md).
+                            // Opt-in: a route that misreports support plays
+                            // silence, and only the user knows their chain.
+                            const SizedBox(height: 4),
+                            _buildCheckboxTile(
+                              context,
+                              title: 'Audio passthrough (AC3 · EAC3 · DTS core)',
+                              subtitle:
+                                  'Send the original bitstream to your receiver '
+                                  'instead of decoding. Requires an HDMI chain '
+                                  'that supports it — if you hear silence, turn '
+                                  'this off. Restart playback to apply.',
+                              value: _audioPassthrough,
+                              onChanged: _setAudioPassthrough,
+                              focusNode: _audioPassthroughFocusNode,
+                              isFocused: _audioPassthroughFocused,
+                            ),
+                          ],
+
+                          // Apple multichannel LPCM (AUDIO_FIDELITY_PLAN.md).
+                          // Opt-in until AirPlay/spatial routes are proven.
+                          if (PlatformUtil.isTvOS ||
+                              PlatformUtil.isIosMobile) ...[
+                            const SizedBox(height: 4),
+                            _buildCheckboxTile(
+                              context,
+                              title: 'Multichannel audio (LPCM over HDMI)',
+                              subtitle:
+                                  'Output surround tracks as 5.1/7.1 PCM when '
+                                  'the connected receiver supports it, instead '
+                                  'of stereo. Restart playback to apply.',
+                              value: _appleMultichannel,
+                              onChanged: _setAppleMultichannel,
+                              focusNode: _appleMultichannelFocusNode,
+                              isFocused: _appleMultichannelFocused,
                             ),
                           ],
                         ],
