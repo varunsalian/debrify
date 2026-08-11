@@ -199,6 +199,42 @@ void _keepVisible(BuildContext context) {
   );
 }
 
+/// Pointer hover for a focusable card, feeding the SAME visual the DPAD
+/// cursor gets — the ParallaxFocus lift and any focus plate — so mousing
+/// across a rail reads like walking it with a remote.
+///
+/// Purely visual by design: hover never requests real focus, because focus
+/// has side effects here ([_keepVisible]'s rail scroll, the guide band's
+/// follow-focus select) and a mouse sweeping across the page must not fire
+/// them. Owns its own state so each card only ORs the result in.
+class _Hover extends StatefulWidget {
+  final Widget Function(BuildContext, bool hovered) builder;
+
+  /// Click for cards a tap activates; basic for the focus-only reading cards
+  /// (cast, Did You Know) where a pointer press does nothing.
+  final MouseCursor cursor;
+
+  const _Hover({
+    required this.builder,
+    this.cursor = SystemMouseCursors.click,
+  });
+
+  @override
+  State<_Hover> createState() => _HoverState();
+}
+
+class _HoverState extends State<_Hover> {
+  bool _h = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        cursor: widget.cursor,
+        onEnter: (_) => setState(() => _h = true),
+        onExit: (_) => setState(() => _h = false),
+        child: widget.builder(context, _h),
+      );
+}
+
 // ── grounds ────────────────────────────────────────────────────────────────
 
 /// The scrolled ground: the same artwork as a low-frequency colour field.
@@ -1602,51 +1638,56 @@ class _CastTileState extends State<_CastTile> {
         setState(() => _f = v);
         if (v) _keepVisible(context);
       },
-      child: SizedBox(
-        width: widget.size,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ParallaxFocus(
-              focused: _f,
-              shape: ParallaxShape.castCircle,
-              radius: BorderRadius.circular(widget.size / 2),
-              child: ClipOval(
-                child: SizedBox(
-                  width: widget.size,
-                  height: widget.size,
-                  child: (url != null && url.isNotEmpty)
-                      ? CachedNetworkImage(
-                          imageUrl: url,
-                          fit: BoxFit.cover,
-                          cacheManager: DebrifyImageCache.manager,
-                          memCacheWidth: 260,
-                          placeholder: (_, __) =>
-                              const ColoredBox(color: Color(0xFF4A4A55)),
-                          errorWidget: (_, __, ___) =>
-                              const ColoredBox(color: Color(0xFF4A4A55)),
-                        )
-                      : const ColoredBox(color: Color(0xFF4A4A55)),
+      // Basic cursor: a cast tile is ambient reading — SELECT and tap do
+      // nothing — but the lift still answers "am I on this one".
+      child: _Hover(
+        cursor: MouseCursor.defer,
+        builder: (context, hovered) => SizedBox(
+          width: widget.size,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ParallaxFocus(
+                focused: _f || hovered,
+                shape: ParallaxShape.castCircle,
+                radius: BorderRadius.circular(widget.size / 2),
+                child: ClipOval(
+                  child: SizedBox(
+                    width: widget.size,
+                    height: widget.size,
+                    child: (url != null && url.isNotEmpty)
+                        ? CachedNetworkImage(
+                            imageUrl: url,
+                            fit: BoxFit.cover,
+                            cacheManager: DebrifyImageCache.manager,
+                            memCacheWidth: 260,
+                            placeholder: (_, __) =>
+                                const ColoredBox(color: Color(0xFF4A4A55)),
+                            errorWidget: (_, __, ___) =>
+                                const ColoredBox(color: Color(0xFF4A4A55)),
+                          )
+                        : const ColoredBox(color: Color(0xFF4A4A55)),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 9),
-            Text(
-              widget.member.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: _t(12.5),
-            ),
-            if ((widget.member.character ?? '').isNotEmpty)
+              const SizedBox(height: 9),
               Text(
-                widget.member.character!,
+                widget.member.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: _t(11.5, a: 0.55),
+                style: _t(12.5),
               ),
-          ],
+              if ((widget.member.character ?? '').isNotEmpty)
+                Text(
+                  widget.member.character!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: _t(11.5, a: 0.55),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -1751,64 +1792,67 @@ class _SourceCardState extends State<_SourceCard> {
         if (v) _keepVisible(context);
       },
       onKeyEvent: (_, e) => _activate(e, widget.onTap),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        // Same reason as `_Poster`: the Sources band is 96 tall to leave the
-        // lift room, and the tight cross-axis constraint would stretch this
-        // 66pt card to fill it.
-        child: Align(
-          child: ParallaxFocus(
-            focused: _f,
-            shape: ParallaxShape.sourceCard,
-            radius: BorderRadius.circular(7),
-            child: Container(
-              // Wide keeps the shipped 280/150 exactly; compact grows the
-              // bound card to 75% of the width (the mock's source card) and
-              // the add chip a touch for fingers.
-              width: () {
-                final mm = ShowcaseMetrics.of(context);
-                if (!mm.compact) return widget.add ? 150.0 : 280.0;
-                return widget.add ? 160.0 : mm.srcW;
-              }(),
-              height: 66,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-              decoration: BoxDecoration(
-                color: widget.add ? null : _ink.withValues(alpha: 0.07),
-                border: Border.all(
-                  color: _ink.withValues(alpha: widget.add ? 0.22 : 0.09),
+      child: _Hover(
+        builder: (context, hovered) => GestureDetector(
+          onTap: widget.onTap,
+          // Same reason as `_Poster`: the Sources band is 96 tall to leave
+          // the lift room, and the tight cross-axis constraint would stretch
+          // this 66pt card to fill it.
+          child: Align(
+            child: ParallaxFocus(
+              focused: _f || hovered,
+              shape: ParallaxShape.sourceCard,
+              radius: BorderRadius.circular(7),
+              child: Container(
+                // Wide keeps the shipped 280/150 exactly; compact grows the
+                // bound card to 75% of the width (the mock's source card) and
+                // the add chip a touch for fingers.
+                width: () {
+                  final mm = ShowcaseMetrics.of(context);
+                  if (!mm.compact) return widget.add ? 150.0 : 280.0;
+                  return widget.add ? 160.0 : mm.srcW;
+                }(),
+                height: 66,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                decoration: BoxDecoration(
+                  color: widget.add ? null : _ink.withValues(alpha: 0.07),
+                  border: Border.all(
+                    color: _ink.withValues(alpha: widget.add ? 0.22 : 0.09),
+                  ),
+                  borderRadius: BorderRadius.circular(7),
                 ),
-                borderRadius: BorderRadius.circular(7),
-              ),
-              child: widget.add
-                  ? Center(
-                      child: Text(widget.addLabel,
-                          style: _t(10.5, a: 0.66)),
-                    )
-                  : Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                s?.torrentName ?? '',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: _t(10.5, w: FontWeight.w600),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                s?.debridService ?? '',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: _t(9.5, a: 0.58),
-                              ),
-                            ],
+                child: widget.add
+                    ? Center(
+                        child: Text(widget.addLabel,
+                            style: _t(10.5, a: 0.66)),
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  s?.torrentName ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: _t(10.5, w: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  s?.debridService ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: _t(9.5, a: 0.58),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+              ),
             ),
           ),
         ),
@@ -1888,33 +1932,34 @@ class _PosterState extends State<_Poster> {
         if (v) _keepVisible(context);
       },
       onKeyEvent: (_, e) => _activate(e, () => widget.onTap?.call(widget.item)),
-      child: GestureDetector(
-        onTap: () => widget.onTap?.call(widget.item),
-        // The band is taller than the card so the lift has somewhere to go,
-        // and a horizontal ListView constrains its children to that height
-        // TIGHTLY — without an Align the poster is stretched to the band while
-        // its width stays `m.poster`, drawing a 2:3 poster at about 0.53:1.
-        child: Align(
-          child: ParallaxFocus(
-            focused: _f,
-            radius: BorderRadius.circular(7),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(7),
-              child: SizedBox(
-                width: widget.width,
-                height: widget.height,
-                child: (url != null && url.isNotEmpty)
-                    ? CachedNetworkImage(
-                        imageUrl: url,
-                        fit: BoxFit.cover,
-                        cacheManager: DebrifyImageCache.manager,
-                        memCacheWidth: 300,
-                        placeholder: (_, __) =>
-                            ColoredBox(color: slot),
-                        errorWidget: (_, __, ___) =>
-                            ColoredBox(color: slot),
-                      )
-                    : ColoredBox(color: slot),
+      child: _Hover(
+        builder: (context, hovered) => GestureDetector(
+          onTap: () => widget.onTap?.call(widget.item),
+          // The band is taller than the card so the lift has somewhere to go,
+          // and a horizontal ListView constrains its children to that height
+          // TIGHTLY — without an Align the poster is stretched to the band
+          // while its width stays `m.poster`, drawing a 2:3 poster at about
+          // 0.53:1.
+          child: Align(
+            child: ParallaxFocus(
+              focused: _f || hovered,
+              radius: BorderRadius.circular(7),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(7),
+                child: SizedBox(
+                  width: widget.width,
+                  height: widget.height,
+                  child: (url != null && url.isNotEmpty)
+                      ? CachedNetworkImage(
+                          imageUrl: url,
+                          fit: BoxFit.cover,
+                          cacheManager: DebrifyImageCache.manager,
+                          memCacheWidth: 300,
+                          placeholder: (_, __) => ColoredBox(color: slot),
+                          errorWidget: (_, __, ___) => ColoredBox(color: slot),
+                        )
+                      : ColoredBox(color: slot),
+                ),
               ),
             ),
           ),
@@ -2327,47 +2372,49 @@ class _GuideCardState extends State<_GuideCard> {
         }
       },
       onKeyEvent: (_, e) => _activate(e, widget.onOk),
-      child: GestureDetector(
-        onTap: widget.onSelect,
-        child: Align(
-          child: ParallaxFocus(
-            focused: _f,
-            radius: BorderRadius.circular(7),
-            child: Container(
-              width: m.guideW,
-              height: m.guideH,
-              padding: const EdgeInsets.fromLTRB(11, 10, 11, 9),
-              decoration: BoxDecoration(
-                color: _ink.withValues(
-                    alpha: widget.selected ? 0.12 : 0.07),
-                border: Border.all(
+      child: _Hover(
+        builder: (context, hovered) => GestureDetector(
+          onTap: widget.onSelect,
+          child: Align(
+            child: ParallaxFocus(
+              focused: _f || hovered,
+              radius: BorderRadius.circular(7),
+              child: Container(
+                width: m.guideW,
+                height: m.guideH,
+                padding: const EdgeInsets.fromLTRB(11, 10, 11, 9),
+                decoration: BoxDecoration(
                   color: _ink.withValues(
-                      alpha: widget.selected ? 0.22 : 0.09),
+                      alpha: widget.selected ? 0.12 : 0.07),
+                  border: Border.all(
+                    color: _ink.withValues(
+                        alpha: widget.selected ? 0.22 : 0.09),
+                  ),
+                  borderRadius: BorderRadius.circular(7),
                 ),
-                borderRadius: BorderRadius.circular(7),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      cat.label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: _t(10.5, w: FontWeight.w600),
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      _SeverityMark(severity: cat.severity),
-                      const Spacer(),
-                      Text(
-                        '${cat.items.length}',
-                        style: _t(8.5, w: FontWeight.w600, a: 0.38),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        cat.label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: _t(10.5, w: FontWeight.w600),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                    Row(
+                      children: [
+                        _SeverityMark(severity: cat.severity),
+                        const Spacer(),
+                        Text(
+                          '${cat.items.length}',
+                          style: _t(8.5, w: FontWeight.w600, a: 0.38),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -2454,59 +2501,62 @@ class _UniverseCardState extends State<_UniverseCard> {
       },
       onKeyEvent: (_, e) => _activate(
           e, widget.onOpen == null ? null : () => widget.onOpen!(u)),
-      child: GestureDetector(
-        onTap: () => widget.onOpen?.call(u),
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: SizedBox(
-            width: widget.width,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ParallaxFocus(
-                  focused: _f,
-                  radius: BorderRadius.circular(7),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(7),
-                    child: SizedBox(
-                      width: widget.width,
-                      height: widget.height,
-                      child: (url != null && url.isNotEmpty)
-                          ? CachedNetworkImage(
-                              imageUrl: url,
-                              fit: BoxFit.cover,
-                              cacheManager: DebrifyImageCache.manager,
-                              memCacheWidth: 300,
-                              placeholder: (_, __) => ColoredBox(color: slot),
-                              errorWidget: (_, __, ___) =>
-                                  ColoredBox(color: slot),
-                            )
-                          : ColoredBox(color: slot),
+      child: _Hover(
+        builder: (context, hovered) => GestureDetector(
+          onTap: () => widget.onOpen?.call(u),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: widget.width,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ParallaxFocus(
+                    focused: _f || hovered,
+                    radius: BorderRadius.circular(7),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: SizedBox(
+                        width: widget.width,
+                        height: widget.height,
+                        child: (url != null && url.isNotEmpty)
+                            ? CachedNetworkImage(
+                                imageUrl: url,
+                                fit: BoxFit.cover,
+                                cacheManager: DebrifyImageCache.manager,
+                                memCacheWidth: 300,
+                                placeholder: (_, __) =>
+                                    ColoredBox(color: slot),
+                                errorWidget: (_, __, ___) =>
+                                    ColoredBox(color: slot),
+                              )
+                            : ColoredBox(color: slot),
+                      ),
                     ),
                   ),
-                ),
-                SizedBox(height: m.compact ? 8 : 7),
-                Text(
-                  u.relation.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: _t(m.compact ? 9 : 7, w: FontWeight.w700, a: 0.42)
-                      .copyWith(letterSpacing: 1.0),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  u.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: _t(m.compact ? 12 : 10, w: FontWeight.w600, a: 0.9),
-                ),
-                if (u.yearLabel.isNotEmpty)
+                  SizedBox(height: m.compact ? 8 : 7),
                   Text(
-                    u.yearLabel,
-                    style: _t(m.compact ? 10.5 : 8.5, a: 0.45),
+                    u.relation.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _t(m.compact ? 9 : 7, w: FontWeight.w700, a: 0.42)
+                        .copyWith(letterSpacing: 1.0),
                   ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    u.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _t(m.compact ? 12 : 10, w: FontWeight.w600, a: 0.9),
+                  ),
+                  if (u.yearLabel.isNotEmpty)
+                    Text(
+                      u.yearLabel,
+                      style: _t(m.compact ? 10.5 : 8.5, a: 0.45),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -2587,45 +2637,49 @@ class _DykCardState extends State<_DykCard> {
         setState(() => _f = v);
         if (v) _keepVisible(context);
       },
-      child: Align(
-        child: ParallaxFocus(
-          focused: _f,
-          radius: BorderRadius.circular(7),
-          child: Container(
-            width: m.dykW,
-            height: m.dykH,
-            padding: EdgeInsets.fromLTRB(
-                m.compact ? 15 : 13, m.compact ? 13 : 11,
-                m.compact ? 15 : 13, m.compact ? 13 : 11),
-            decoration: BoxDecoration(
-              color: _ink.withValues(alpha: _f ? 0.11 : 0.07),
-              border: Border.all(color: _ink.withValues(alpha: 0.09)),
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  e.kind.toUpperCase(),
-                  style: _t(m.compact ? 10 : 7.5, w: FontWeight.w700, a: 0.42)
-                      .copyWith(letterSpacing: 1.2),
-                ),
-                SizedBox(height: m.compact ? 8 : 6),
-                Expanded(
-                  child: Text(
-                    quote ? '“${e.text}”' : e.text,
-                    maxLines: m.compact ? 6 : 7,
-                    overflow: TextOverflow.ellipsis,
-                    style: _t(m.compact ? 12.5 : 9.5,
-                            a: quote ? 0.88 : 0.8)
-                        .copyWith(
-                      height: 1.5,
-                      fontStyle:
-                          quote ? FontStyle.italic : FontStyle.normal,
+      // Basic cursor: ambient reading, SELECT is deliberately inert.
+      child: _Hover(
+        cursor: MouseCursor.defer,
+        builder: (context, hovered) => Align(
+          child: ParallaxFocus(
+            focused: _f || hovered,
+            radius: BorderRadius.circular(7),
+            child: Container(
+              width: m.dykW,
+              height: m.dykH,
+              padding: EdgeInsets.fromLTRB(
+                  m.compact ? 15 : 13, m.compact ? 13 : 11,
+                  m.compact ? 15 : 13, m.compact ? 13 : 11),
+              decoration: BoxDecoration(
+                color: _ink.withValues(alpha: _f || hovered ? 0.11 : 0.07),
+                border: Border.all(color: _ink.withValues(alpha: 0.09)),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    e.kind.toUpperCase(),
+                    style: _t(m.compact ? 10 : 7.5, w: FontWeight.w700, a: 0.42)
+                        .copyWith(letterSpacing: 1.2),
+                  ),
+                  SizedBox(height: m.compact ? 8 : 6),
+                  Expanded(
+                    child: Text(
+                      quote ? '“${e.text}”' : e.text,
+                      maxLines: m.compact ? 6 : 7,
+                      overflow: TextOverflow.ellipsis,
+                      style: _t(m.compact ? 12.5 : 9.5,
+                              a: quote ? 0.88 : 0.8)
+                          .copyWith(
+                        height: 1.5,
+                        fontStyle:
+                            quote ? FontStyle.italic : FontStyle.normal,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -2656,33 +2710,37 @@ class _DykMoreCardState extends State<_DykMoreCard> {
         setState(() => _f = v);
         if (v) _keepVisible(context);
       },
-      child: Align(
-        child: ParallaxFocus(
-          focused: _f,
-          radius: BorderRadius.circular(7),
-          child: Container(
-            width: m.compact ? 110.0 : 92.0,
-            height: m.dykH,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _ink.withValues(alpha: _f ? 0.11 : 0.05),
-              border: Border.all(color: _ink.withValues(alpha: 0.09)),
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '+${widget.count}',
-                  style: _t(m.compact ? 20 : 16, w: FontWeight.w800),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'ON IMDb',
-                  style: _t(m.compact ? 9 : 7, w: FontWeight.w700, a: 0.4)
-                      .copyWith(letterSpacing: 1.1),
-                ),
-              ],
+      // Basic cursor: like its siblings, this card is not activatable.
+      child: _Hover(
+        cursor: MouseCursor.defer,
+        builder: (context, hovered) => Align(
+          child: ParallaxFocus(
+            focused: _f || hovered,
+            radius: BorderRadius.circular(7),
+            child: Container(
+              width: m.compact ? 110.0 : 92.0,
+              height: m.dykH,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _ink.withValues(alpha: _f || hovered ? 0.11 : 0.05),
+                border: Border.all(color: _ink.withValues(alpha: 0.09)),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '+${widget.count}',
+                    style: _t(m.compact ? 20 : 16, w: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'ON IMDb',
+                    style: _t(m.compact ? 9 : 7, w: FontWeight.w700, a: 0.4)
+                        .copyWith(letterSpacing: 1.1),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

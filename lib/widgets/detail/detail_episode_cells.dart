@@ -65,6 +65,14 @@ class DetailEpisodeInteraction extends StatefulWidget {
 
 class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
   bool _focused = false;
+
+  /// Pointer hover, feeding the SAME visual the DPAD cursor gets — the lift
+  /// and the caption plate — so mousing across the rail reads like walking
+  /// it with a remote. Purely visual: hover must not request focus (that
+  /// would fire [DetailEpisodeInteraction.onFocusChange] and the
+  /// ensure-visible scroll, letting the mouse yank the rail around) and it
+  /// is never reported upward.
+  bool _hovered = false;
   Timer? _holdTimer;
   bool _holdFired = false;
   bool _keyDownSeen = false;
@@ -168,6 +176,8 @@ class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
       },
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
         child: GestureDetector(
           onTap: widget.onPlay,
           onLongPress: () {
@@ -177,7 +187,9 @@ class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
           behavior: HitTestBehavior.opaque,
           // Isolate the repaint: focus flips a ring and an overlay, and without
           // a boundary every DPAD move repaints the whole rail's layer.
-          child: RepaintBoundary(child: widget.builder(context, _focused)),
+          child: RepaintBoundary(
+            child: widget.builder(context, _focused || _hovered),
+          ),
         ),
       ),
     );
