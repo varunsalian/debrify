@@ -3,6 +3,9 @@ import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/main_page_bridge.dart';
+import '../../theme/app_focus.dart';
+import '../../theme/widgets/parallax_focus.dart';
+import 'settings_spotlight_shell.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
 
@@ -198,7 +201,15 @@ class _Category {
   /// One-line hint of what the category holds, shown under [label] in the
   /// rail so a glance down the list previews each section's contents.
   final String subtitle;
-  const _Category(this.icon, this.label, this.subtitle);
+  final String title;
+  final String description;
+  const _Category(
+    this.icon,
+    this.label,
+    this.subtitle,
+    this.title,
+    this.description,
+  );
 }
 
 // ONE information architecture, shared verbatim with the phone layout and the
@@ -206,45 +217,83 @@ class _Category {
 // Section names here MUST match _SettingsLayout's section titles and the
 // search registrations in settings_screen.dart.
 const List<_Category> _kCategories = [
-  _Category(Icons.link_rounded, 'Connections', 'Debrid, cloud, IPTV & more'),
-  _Category(Icons.sync_rounded, 'Trackers', 'Trakt & Simkl watch history'),
+  _Category(
+    Icons.link_rounded,
+    'Connections',
+    'Debrid, cloud, IPTV & more',
+    'Services, all in one place.',
+    'See what is ready, what needs attention, and where playback will go.',
+  ),
+  _Category(
+    Icons.sync_rounded,
+    'Trackers',
+    'Trakt & Simkl watch history',
+    'Keep every watch in sync.',
+    'Connect watch-history services and see their health at a glance.',
+  ),
   _Category(
     Icons.home_rounded,
     'Home & Display',
     'Home screen rows & keyboard',
+    'Shape the room you come home to.',
+    'Arrange the home screen and tune this television for the room.',
   ),
   _Category(
-    Icons.palette_rounded,
+    Icons.auto_awesome_rounded,
     'Appearance',
     'Text, home, sidebar, IPTV & player looks',
+    'Make the interface feel like yours.',
+    'A Look sets the room. Fine-tune only the controls that matter.',
   ),
   _Category(
     Icons.play_circle_outline_rounded,
     'Playback',
     'Player, skip segments, subtitles & audio',
+    'Playback without surprises.',
+    'Choose how videos start and what plays them on this television.',
   ),
-  _Category(Icons.search_rounded, 'Search', 'Engines, filters & providers'),
+  _Category(
+    Icons.search_rounded,
+    'Search',
+    'Engines, filters & providers',
+    'Find the right source faster.',
+    'Engines, default filters, and provider routing form one pipeline.',
+  ),
   _Category(
     Icons.fiber_dvr_rounded,
     'Live TV & DVR',
     'Debrify TV, recordings & IPTV',
+    'Live television, organized.',
+    'Manage channel sources, recordings, and the on-screen guide.',
   ),
   _Category(
     Icons.devices_rounded,
     'Devices',
     'Remote control & setup transfer',
+    'Let your devices work together.',
+    'Control another screen or move this setup without retyping it.',
   ),
   _Category(
     Icons.storage_rounded,
     'Data & Backup',
     'Downloads, backup & restore',
+    'Your data, under your control.',
+    'Manage stored state and keep a portable copy of your setup.',
   ),
   _Category(
     Icons.info_outline_rounded,
     'About',
     'Updates, version & community',
+    'Debrify, up to date.',
+    'Version, release checks, and the places where the community meets.',
   ),
-  _Category(Icons.warning_amber_rounded, 'Danger Zone', 'Reset Debrify'),
+  _Category(
+    Icons.warning_amber_rounded,
+    'Danger Zone',
+    'Reset Debrify',
+    'Start over, deliberately.',
+    'Destructive actions stay isolated and explain what they remove.',
+  ),
 ];
 
 class _SettingsTvLayoutState extends State<SettingsTvLayout> {
@@ -370,10 +419,11 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   // scrolled down would focus the (off-screen) top row with no visible
   // highlight.
   void _enterPane() {
-    _focusPaneRow(0);
+    _focusPaneRow(0, travel: const Offset(1, 0));
   }
 
-  void _focusPaneRow(int i) {
+  void _focusPaneRow(int i, {Offset travel = Offset.zero}) {
+    if (travel != Offset.zero) ParallaxTravel.note(travel);
     final node = _paneNodes[i];
     node.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -389,6 +439,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.arrowUp) {
+      ParallaxTravel.note(const Offset(0, -1));
       // Above the first category sits the search item.
       if (index > 0) {
         _railNodes[index - 1].requestFocus();
@@ -398,7 +449,10 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowDown) {
-      if (index < _railNodes.length - 1) _railNodes[index + 1].requestFocus();
+      if (index < _railNodes.length - 1) {
+        ParallaxTravel.note(const Offset(0, 1));
+        _railNodes[index + 1].requestFocus();
+      }
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowRight) {
@@ -408,6 +462,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
     if (key == LogicalKeyboardKey.arrowLeft) {
       // Always consume Left so focus never escapes the rail via directional
       // traversal, even if the sidebar hand-off isn't registered.
+      ParallaxTravel.note(const Offset(-1, 0));
       MainPageBridge.focusTvSidebar?.call();
       return KeyEventResult.handled;
     }
@@ -420,6 +475,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.arrowDown) {
+      ParallaxTravel.note(const Offset(0, 1));
       _railNodes[0].requestFocus();
       return KeyEventResult.handled;
     }
@@ -431,6 +487,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowLeft) {
+      ParallaxTravel.note(const Offset(-1, 0));
       MainPageBridge.focusTvSidebar?.call();
       return KeyEventResult.handled;
     }
@@ -440,13 +497,25 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   KeyEventResult _paneKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
+    final i = _paneNodes.indexWhere((n) => n.hasFocus);
+    final grid =
+        (_selected.value == 0 || _selected.value == 1) &&
+        MediaQuery.sizeOf(context).width >= 880;
     if (key == LogicalKeyboardKey.arrowLeft) {
+      if (grid && i > 0 && i.isOdd && _isPaneRowLive(i - 1)) {
+        _focusPaneRow(i - 1, travel: const Offset(-1, 0));
+        return KeyEventResult.handled;
+      }
       // Return to the category we're viewing, not whichever rail item happens
       // to sit to the left geometrically.
+      ParallaxTravel.note(const Offset(-1, 0));
       _railNodes[_selected.value].requestFocus();
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowRight) {
+      if (grid && i >= 0 && i.isEven && _isPaneRowLive(i + 1)) {
+        _focusPaneRow(i + 1, travel: const Offset(1, 0));
+      }
       // Nothing to the right of the pane — trap so focus can't escape.
       return KeyEventResult.handled;
     }
@@ -456,14 +525,16 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
     // mounted — the pool is reused across categories and a FocusNode's context
     // is NOT nulled on unmount, so `context != null` would be a stale true for
     // a node last attached by a larger, previously-visited category.
-    final i = _paneNodes.indexWhere((n) => n.hasFocus);
+    final step = grid ? 2 : 1;
     if (key == LogicalKeyboardKey.arrowUp) {
-      if (i > 0 && _isPaneRowLive(i - 1)) _focusPaneRow(i - 1);
+      if (i - step >= 0 && _isPaneRowLive(i - step)) {
+        _focusPaneRow(i - step, travel: const Offset(0, -1));
+      }
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowDown) {
-      if (i >= 0 && i + 1 < _paneNodes.length && _isPaneRowLive(i + 1)) {
-        _focusPaneRow(i + 1);
+      if (i >= 0 && i + step < _paneNodes.length && _isPaneRowLive(i + step)) {
+        _focusPaneRow(i + step, travel: const Offset(0, 1));
       }
       return KeyEventResult.handled;
     }
@@ -478,37 +549,119 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
     final t = AppThemeScope.of(context).settings;
     return SettingsBackground(
       child: SafeArea(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Invisible entry proxy: the parent State focuses [firstFocusNode]
-            // on sidebar hand-off / logout restore; [_onEntryFocus] then
-            // redirects to the selected category's rail item.
-            if (widget.firstFocusNode != null)
-              Focus(
-                focusNode: widget.firstFocusNode,
-                skipTraversal: true,
-                descendantsAreFocusable: false,
-                child: const SizedBox.shrink(),
-              ),
-            _buildRail(),
-            Container(width: 1, color: t.line),
-            // Only the pane rebuilds when the category changes.
-            Expanded(
-              child: ValueListenableBuilder<int>(
-                valueListenable: _selected,
-                builder: (context, selected, _) => _buildPane(selected),
-              ),
-            ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final railWidth = (constraints.maxWidth * 0.33).clamp(236.0, 320.0);
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Invisible entry proxy: the parent State focuses
+                // [firstFocusNode] on sidebar hand-off / logout restore;
+                // [_onEntryFocus] redirects to the selected rail item.
+                if (widget.firstFocusNode != null)
+                  Focus(
+                    focusNode: widget.firstFocusNode,
+                    skipTraversal: true,
+                    descendantsAreFocusable: false,
+                    child: const SizedBox.shrink(),
+                  ),
+                _buildRail(railWidth),
+                Container(width: 1, color: t.line),
+                // Only the pane rebuilds when the category changes.
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: ValueListenableBuilder<int>(
+                          valueListenable: _selected,
+                          builder: (context, selected, _) =>
+                              _buildPane(selected),
+                        ),
+                      ),
+                      _buildFooter(),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildRail() {
+  Widget _buildFooter() {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
+    Widget hint(String key, String label) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: app.shape.br(5),
+            border: Border.all(color: t.line),
+          ),
+          child: Text(
+            key,
+            style: TextStyle(
+              fontFamily: 'JetBrainsMono',
+              fontSize: 8,
+              color: t.dim,
+            ),
+          ),
+        ),
+        const SizedBox(width: 7),
+        Text(label, style: TextStyle(fontSize: 9, color: t.dim2)),
+      ],
+    );
+    return Container(
+      height: 46,
+      margin: const EdgeInsets.only(right: 36),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: t.line)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final showSaved = constraints.maxWidth >= 650;
+          return Row(
+            children: [
+              const SizedBox(width: 32),
+              hint('←', 'categories'),
+              const SizedBox(width: 17),
+              hint('↑ ↓', 'move'),
+              const SizedBox(width: 17),
+              hint('OK', 'open'),
+              if (showSaved) ...[
+                const Spacer(),
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: t.success,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  'Changes save automatically',
+                  style: TextStyle(
+                    fontFamily: 'JetBrainsMono',
+                    fontSize: 8,
+                    color: t.success.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRail(double width) {
     return SizedBox(
-      width: 320,
+      width: width,
       child: SingleChildScrollView(
         controller: _railScroll,
         padding: const EdgeInsets.fromLTRB(24, 28, 16, 20),
@@ -516,17 +669,8 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Padding(
-              padding: EdgeInsets.only(left: 14, bottom: 18),
-              child: Text(
-                'Settings',
-                // No color: inherits onSurface, so it follows Appearance →
-                // Text Brightness.
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3,
-                ),
-              ),
+              padding: EdgeInsets.only(left: 12, right: 8, bottom: 20),
+              child: SettingsRootHeader(compact: true),
             ),
             _RailSearchItem(
               focusNode: _searchNode,
@@ -561,21 +705,53 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           controller: _paneScroll,
           padding: const EdgeInsets.fromLTRB(32, 30, 40, 40),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
+            constraints: const BoxConstraints(maxWidth: 900),
             child: Column(
               key: ValueKey<int>(selected),
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(left: 2, bottom: 18),
-                  child: Text(
-                    _kCategories[selected].label,
-                    // No color: inherits onSurface (Text Brightness).
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.2,
-                    ),
+                  padding: const EdgeInsets.only(left: 2, bottom: 22),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _kCategories[selected].label.toUpperCase(),
+                        style: TextStyle(
+                          fontFamily: 'JetBrainsMono',
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2,
+                          color: selected == 10
+                              ? AppThemeScope.of(context).settings.danger
+                              : AppThemeScope.of(
+                                  context,
+                                ).settings.accent.withValues(alpha: 0.9),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _kCategories[selected].title,
+                        style: const TextStyle(
+                          fontSize: 28,
+                          height: 1.06,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.7,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 620),
+                        child: Text(
+                          _kCategories[selected].description,
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.45,
+                            color: AppThemeScope.of(context).settings.dim,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 ..._buildPaneChildren(selected),
@@ -590,27 +766,9 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
   List<Widget> _buildPaneChildren(int category) {
     switch (category) {
       case 0: // Connections
-        return [
-          for (int i = 0; i < widget.connections.length; i++) ...[
-            if (i != 0) const SizedBox(height: 10),
-            ConnectionCard(
-              info: widget.connections[i],
-              focusNode: _paneNodes[i],
-              isLeftColumn: false,
-            ),
-          ],
-        ];
+        return [_buildConnectionGrid(widget.connections)];
       case 1: // Trackers
-        return [
-          for (int i = 0; i < widget.trackers.length; i++) ...[
-            if (i != 0) const SizedBox(height: 10),
-            ConnectionCard(
-              info: widget.trackers[i],
-              focusNode: _paneNodes[i],
-              isLeftColumn: false,
-            ),
-          ],
-        ];
+        return [_buildConnectionGrid(widget.trackers)];
       case 2: // Home & Display
         // Nodes stay CONTIGUOUS from 0 — the DPAD walker only advances to
         // the immediately adjacent live node, so a gap strands Down.
@@ -643,17 +801,19 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
         // boundaries: 0..14 top to bottom, headers excluded. Section headers
         // are plain text and take no focus, so DPAD steps over them.
         return [
+          SettingsLookHero(
+            label: widget.looksLabel,
+            subtitle: 'Full-bleed art, borderless focus, and ambient detail.',
+            onTap: widget.onOpenLooks,
+            focusNode: _paneNodes[0],
+          ),
+          const SizedBox(height: 18),
           SettingsSection(
             title: 'Presets',
-            blurb: 'One pick that sets the theme, layouts and launch '
+            blurb:
+                'One pick that sets the theme, layouts and launch '
                 'animation together.',
             children: [
-              SettingsTile.spec(
-                SettingsRows.looks,
-                subtitle: widget.looksLabel,
-                onTap: widget.onOpenLooks,
-                focusNode: _paneNodes[0],
-              ),
               SettingsTile.spec(
                 SettingsRows.themeTokens,
                 subtitle: widget.themeTokensLabel,
@@ -738,7 +898,8 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
           const SizedBox(height: 18),
           SettingsSection(
             title: 'Display',
-            blurb: 'How this device draws. These affect performance, not '
+            blurb:
+                'How this device draws. These affect performance, not '
                 'style.',
             children: [
               SettingsTile.spec(
@@ -986,6 +1147,32 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
         return const [];
     }
   }
+
+  Widget _buildConnectionGrid(List<ConnectionInfo> connections) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoColumns = MediaQuery.sizeOf(context).width >= 880;
+        final width = twoColumns
+            ? (constraints.maxWidth - 12) / 2
+            : constraints.maxWidth;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (var i = 0; i < connections.length; i++)
+              SizedBox(
+                width: width,
+                child: ConnectionCard(
+                  info: connections[i],
+                  focusNode: _paneNodes[i],
+                  isLeftColumn: false,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 /// A single category rail item. Self-contained so a focus move only rebuilds
@@ -1021,104 +1208,115 @@ class _RailItemState extends State<_RailItem> {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     final t = app.settings;
+    final inverse =
+        _focused && app.focus.expression == FocusExpression.parallax;
+    final focusInk = inverse ? app.inkOn(app.core.tx) : app.core.tx;
+    final radius = app.shape.br(11);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
-      child: Focus(
-        // Key handler only — the InkWell below owns the focusable node, so
-        // this wrapper must not be a focus target itself.
-        canRequestFocus: false,
-        skipTraversal: true,
-        onKeyEvent: (node, event) => widget.onKey(node, event, widget.index),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: app.shape.br(12),
-          child: InkWell(
-            focusNode: widget.focusNode,
-            borderRadius: app.shape.br(12),
-            onTap: widget.onActivate,
-            onFocusChange: (f) {
-              setState(() => _focused = f);
-              if (f) {
-                widget.onFocused(widget.index);
-                // Scroll the focused item into view — the rail scrolls now.
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && context.mounted) tvRevealMinimal(context);
-                });
-              }
-            },
-            child: ValueListenableBuilder<int>(
-              valueListenable: widget.selected,
-              builder: (context, sel, _) {
-                final bool selected = sel == widget.index;
-                final bool focused = _focused;
-                final Color fg = (focused || selected)
-                    ? app.core.tx
-                    : t.dim;
-                final Color iconColor = (focused || selected)
-                    ? t.accent2
-                    : t.dim;
-                // Subtitle brightens with the row but stays a step dimmer than
-                // the title so the label still reads as primary.
-                final Color subColor = (focused || selected)
-                    ? app.fade(app.core.tx, 0.60)
-                    : t.dim2;
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? (focused
-                              ? t.panel2
-                              : t.accent.withValues(alpha: 0.12))
-                        : (focused ? t.panel2 : Colors.transparent),
-                    borderRadius: app.shape.br(12),
-                    border: Border.all(
-                      color: focused ? t.accent : Colors.transparent,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(widget.category.icon, size: 20, color: iconColor),
-                      const SizedBox(width: 13),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              widget.category.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: selected
-                                    ? FontWeight.w700
-                                    : FontWeight.w600,
-                                color: fg,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              widget.category.subtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11,
-                                height: 1.2,
-                                fontWeight: FontWeight.w500,
-                                color: subColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
+      child: ParallaxFocus(
+        focused: _focused,
+        shape: ParallaxShape.settingsRow,
+        radius: radius,
+        child: Focus(
+          // Key handler only — the InkWell below owns the focusable node, so
+          // this wrapper must not be a focus target itself.
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: (node, event) => widget.onKey(node, event, widget.index),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: radius,
+            child: InkWell(
+              focusNode: widget.focusNode,
+              borderRadius: radius,
+              onTap: widget.onActivate,
+              onFocusChange: (f) {
+                setState(() => _focused = f);
+                if (f) {
+                  widget.onFocused(widget.index);
+                  // Scroll the focused item into view — the rail scrolls now.
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && context.mounted) tvRevealMinimal(context);
+                  });
+                }
               },
+              child: ValueListenableBuilder<int>(
+                valueListenable: widget.selected,
+                builder: (context, sel, _) {
+                  final bool selected = sel == widget.index;
+                  final bool focused = _focused;
+                  final Color fg = inverse
+                      ? focusInk
+                      : (focused || selected)
+                      ? app.core.tx
+                      : t.dim;
+                  final Color iconColor = inverse
+                      ? focusInk
+                      : (focused || selected)
+                      ? t.accent2
+                      : t.dim;
+                  // Subtitle brightens with the row but stays a step dimmer than
+                  // the title so the label still reads as primary.
+                  final Color subColor = inverse
+                      ? focusInk.withValues(alpha: 0.52)
+                      : (focused || selected)
+                      ? app.fade(app.core.tx, 0.60)
+                      : t.dim2;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: inverse
+                          ? app.core.tx
+                          : selected
+                          ? app.fade(app.core.tx, 0.1)
+                          : (focused ? t.panel2 : Colors.transparent),
+                      borderRadius: radius,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(widget.category.icon, size: 20, color: iconColor),
+                        const SizedBox(width: 13),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                widget.category.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: selected
+                                      ? FontWeight.w700
+                                      : FontWeight.w600,
+                                  color: fg,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                widget.category.subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w500,
+                                  color: subColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -1153,60 +1351,78 @@ class _RailSearchItemState extends State<_RailSearchItem> {
     final app = AppThemeScope.of(context);
     final t = app.settings;
     final bool focused = _focused;
-    final Color fg = focused ? app.core.tx : t.dim;
+    final inverse = focused && app.focus.expression == FocusExpression.parallax;
+    final Color fg = inverse
+        ? app.inkOn(app.core.tx)
+        : focused
+        ? app.core.tx
+        : t.dim;
+    final radius = app.shape.br(22);
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
-      child: Focus(
-        canRequestFocus: false,
-        skipTraversal: true,
-        onKeyEvent: widget.onKey,
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: app.shape.br(12),
-          child: InkWell(
-            focusNode: widget.focusNode,
-            borderRadius: app.shape.br(12),
-            onTap: widget.onActivate,
-            onFocusChange: (f) {
-              setState(() => _focused = f);
-              if (f) {
-                // Reveal the top of the rail (search sits above category 0).
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && context.mounted) tvRevealMinimal(context);
-                });
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: focused ? t.panel2 : t.panel,
-                borderRadius: app.shape.br(12),
-                border: Border.all(
-                  color: focused ? t.accent : t.line,
-                  width: focused ? 1.5 : 1,
+      child: ParallaxFocus(
+        focused: focused,
+        shape: ParallaxShape.settingsRow,
+        radius: radius,
+        child: Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: widget.onKey,
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: radius,
+            child: InkWell(
+              focusNode: widget.focusNode,
+              borderRadius: radius,
+              onTap: widget.onActivate,
+              onFocusChange: (f) {
+                setState(() => _focused = f);
+                if (f) {
+                  // Reveal the top of the rail (search sits above category 0).
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && context.mounted) tvRevealMinimal(context);
+                  });
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
                 ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.search_rounded,
-                    size: 20,
-                    color: focused ? t.accent2 : t.dim,
+                decoration: BoxDecoration(
+                  color: inverse
+                      ? app.core.tx
+                      : (focused ? t.panel2 : app.fade(app.core.tx, 0.07)),
+                  borderRadius: radius,
+                  border: Border.all(
+                    color: inverse
+                        ? app.core.tx
+                        : (focused ? t.accent : t.line),
+                    width: 1,
                   ),
-                  const SizedBox(width: 13),
-                  Expanded(
-                    child: Text(
-                      'Search settings',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: fg,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.search_rounded,
+                      size: 20,
+                      color: inverse ? fg : (focused ? t.accent2 : t.dim),
+                    ),
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Text(
+                        'Search settings',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: fg,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

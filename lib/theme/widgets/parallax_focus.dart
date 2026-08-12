@@ -18,7 +18,12 @@ enum ParallaxShape {
   sourceCard(1.10),
   episodeStill(1.055),
   castCircle(1.08),
-  pill(1.06);
+  pill(1.06),
+
+  /// A full-width settings row or category cell. It needs the same lift and
+  /// travelling glare as Spotlight cards, but only enough scale to separate
+  /// from its neighbours without colliding with the dense list around it.
+  settingsRow(1.018);
 
   const ParallaxShape(this.scale);
 
@@ -196,7 +201,9 @@ class _ParallaxBodyState extends State<_ParallaxBody>
 
   /// UNBOUNDED. A bounded controller clamps at 1.0 and an under-damped spring
   /// would lose exactly the overshoot this whole widget exists for.
-  late final AnimationController _c = AnimationController.unbounded(vsync: this);
+  late final AnimationController _c = AnimationController.unbounded(
+    vsync: this,
+  );
 
   /// The lean's decay, driven off the same controller rather than a second
   /// one: it is a function of how far the lift has progressed, so two springs
@@ -261,22 +268,17 @@ class _ParallaxBodyState extends State<_ParallaxBody>
 
     final spring = widget.spring;
     if (spring == null) {
-      _c.animateTo(
-        target,
-        duration: widget.duration,
-        curve: widget.curve,
-      );
+      _c.animateTo(target, duration: widget.duration, curve: widget.curve);
       return;
     }
     // Seeded with the CURRENT velocity, which is what lets an interrupted
     // move continue rather than restart.
-    _c
-        .animateWith(SpringSimulation(spring, _c.value, target, _c.velocity))
-        // A spring stops when it is within tolerance of its target, not ON it
-        // — measured ~2% high, which leaves a settled card permanently that
-        // much oversized. Land it exactly, and only if this is still the move
-        // that was started (a later one will have set its own target).
-        .whenCompleteOrCancel(() {
+    _c.animateWith(SpringSimulation(spring, _c.value, target, _c.velocity))
+    // A spring stops when it is within tolerance of its target, not ON it
+    // — measured ~2% high, which leaves a settled card permanently that
+    // much oversized. Land it exactly, and only if this is still the move
+    // that was started (a later one will have set its own target).
+    .whenCompleteOrCancel(() {
       if (mounted && _c.value != target && !_c.isAnimating) {
         _c.value = target;
       }
@@ -388,7 +390,10 @@ class _ParallaxBodyState extends State<_ParallaxBody>
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.45 * unit),
-                    offset: Offset(-ry * _shadowPerDeg, 16 + rx * _shadowPerDeg),
+                    offset: Offset(
+                      -ry * _shadowPerDeg,
+                      16 + rx * _shadowPerDeg,
+                    ),
                     blurRadius: 25,
                   ),
                 ],

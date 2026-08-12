@@ -11,7 +11,6 @@ import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../utils/app_version_info.dart';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import '../utils/app_storage.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -42,6 +41,7 @@ import '../services/update_service.dart';
 import '../widgets/support_donation_chooser_dialog.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/settings_tv_layout.dart';
+import 'settings/settings_spotlight_shell.dart';
 import 'settings/settings_search.dart';
 import 'settings/discover_layout_page.dart';
 import 'settings/iptv_style_page.dart';
@@ -902,8 +902,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       phoneNavStyleLabel: _phoneNavStyle == 'floating'
           ? 'Floating button'
           : 'Classic bar',
-      desktopSidebarStyleLabel:
-          desktopSidebarStyleLabel(_desktopSidebarStyle),
+      desktopSidebarStyleLabel: desktopSidebarStyleLabel(_desktopSidebarStyle),
       onOpenDesktopSidebarStyle: _openDesktopSidebarStyle,
     );
   }
@@ -4373,6 +4372,119 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
+const List<SettingsCategoryDefinition> _kAdaptiveSettingsCategories = [
+  SettingsCategoryDefinition(
+    icon: Icons.link_rounded,
+    label: 'Connections',
+    subtitle: 'Debrid, cloud, IPTV & more',
+    eyebrow: 'Connections',
+    title: 'Services, all in one place.',
+    description:
+        'See what is ready, what needs attention, and where playback will go '
+        'before opening a provider.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.sync_rounded,
+    label: 'Trackers',
+    subtitle: 'Trakt & Simkl watch history',
+    eyebrow: 'Trackers',
+    title: 'Keep every watch in sync.',
+    description:
+        'Connect watch-history services and see their health without digging '
+        'through account screens.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.home_rounded,
+    label: 'Home & Display',
+    subtitle: 'Rows, artwork & navigation',
+    eyebrow: 'Home & Display',
+    title: 'Shape the room you come home to.',
+    description:
+        'Arrange the home screen and choose the navigation that fits this '
+        'device.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.auto_awesome_rounded,
+    label: 'Appearance',
+    subtitle: 'Look, text, motion & layouts',
+    eyebrow: 'Appearance',
+    title: 'Make the interface feel like yours.',
+    description:
+        'A Look sets the room. Individual controls below let you adjust only '
+        'what matters.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.play_circle_outline_rounded,
+    label: 'Playback',
+    subtitle: 'Player, subtitles & audio',
+    eyebrow: 'Playback',
+    title: 'Playback without surprises.',
+    description:
+        'Choose how videos start, what plays them, and the behavior shared by '
+        'movies and episodes.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.search_rounded,
+    label: 'Search',
+    subtitle: 'Engines, filters & providers',
+    eyebrow: 'Search',
+    title: 'Find the right source faster.',
+    description:
+        'Search engines, default filters, and provider routing form one clear '
+        'pipeline.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.live_tv_rounded,
+    label: 'Live TV & DVR',
+    subtitle: 'Channels, guide & recordings',
+    eyebrow: 'Live TV & DVR',
+    title: 'Live television, organized.',
+    description:
+        'Manage channel sources, recordings, and the guide from one focused '
+        'area.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.devices_rounded,
+    label: 'Devices',
+    subtitle: 'Remote & setup transfer',
+    eyebrow: 'Devices',
+    title: 'Let your devices work together.',
+    description:
+        'Control another screen or move this setup without re-entering every '
+        'service.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.storage_rounded,
+    label: 'Data & Backup',
+    subtitle: 'Downloads, backup & restore',
+    eyebrow: 'Data & Backup',
+    title: 'Your data, under your control.',
+    description:
+        'Downloads, playback state, and portable backups are separated into '
+        'clear actions.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.info_outline_rounded,
+    label: 'About',
+    subtitle: 'Updates, version & community',
+    eyebrow: 'About',
+    title: 'Debrify, up to date.',
+    description:
+        'Version, release checks, and the places where the community meets.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.warning_amber_rounded,
+    label: 'Danger Zone',
+    subtitle: 'Reset Debrify',
+    eyebrow: 'Danger Zone',
+    title: 'Start over, deliberately.',
+    description:
+        'Destructive actions stay isolated and explain exactly what they '
+        'remove.',
+    destructive: true,
+  ),
+];
+
 class _SettingsLayout extends StatelessWidget {
   final ConnectionsSummary connections;
   final VoidCallback onOpenSearch;
@@ -4515,9 +4627,374 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenDesktopSidebarStyle,
   });
 
+  List<ConnectionInfo> get _providerConnections => [
+    connections.realDebrid,
+    connections.torbox,
+    connections.premiumize,
+    connections.allDebrid,
+    connections.pikpak,
+    connections.webDav,
+    connections.indexerManagers,
+    connections.iptv,
+  ];
+
+  List<ConnectionInfo> get _trackerConnections => [
+    connections.trakt,
+    connections.simkl,
+    if (connections.mdblist != null) connections.mdblist!,
+  ];
+
+  Widget _buildSpotlight(BuildContext context) {
+    final attention = _providerConnections.where(
+      settingsConnectionNeedsAttention,
+    );
+    final attentionCount = attention.length;
+    final readyCount = _providerConnections
+        .where(settingsConnectionIsReady)
+        .length;
+    final firstAttention = attention.isEmpty ? null : attention.first;
+    final summaryTone = attentionCount == 0
+        ? SettingsSummaryTone.good
+        : SettingsSummaryTone.attention;
+    final summaryTitle = attentionCount > 0
+        ? '$attentionCount connection${attentionCount == 1 ? '' : 's'} need attention.'
+        : readyCount > 0
+        ? 'Everything connected looks ready.'
+        : 'Connect a playback service.';
+    final summarySubtitle = attentionCount > 0
+        ? '${firstAttention!.title} reports ${firstAttention.status.toLowerCase()}. '
+              'Review it before your next playback.'
+        : readyCount > 0
+        ? '$readyCount services are configured on this device.'
+        : 'Add a debrid, cloud, or IPTV service to get started.';
+    final summaryTarget = firstAttention ?? _providerConnections.first;
+    return SettingsSpotlightShell(
+      categories: _kAdaptiveSettingsCategories,
+      onOpenSearch: onOpenSearch,
+      compactSummary: SettingsSpotlightSummaryCard(
+        eyebrow: attentionCount > 0 ? 'Connection check' : 'Service health',
+        title: summaryTitle,
+        subtitle: summarySubtitle,
+        actionLabel: attentionCount > 0
+            ? 'Review ${summaryTarget.title}'
+            : readyCount > 0
+            ? 'Manage connections'
+            : 'Connect a service',
+        tone: summaryTone,
+        onTap: () => unawaited(summaryTarget.onTap()),
+      ),
+      categoryBuilder: _buildSpotlightCategory,
+    );
+  }
+
+  Widget _buildConnectionGrid(
+    BuildContext context,
+    List<ConnectionInfo> items,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoColumns = constraints.maxWidth >= 680;
+        final width = twoColumns
+            ? (constraints.maxWidth - 10) / 2
+            : constraints.maxWidth;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final info in items)
+              SizedBox(
+                width: width,
+                child: ConnectionCard(info: info, isLeftColumn: false),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSpotlightCategory(BuildContext context, int category) {
+    final t = AppThemeScope.of(context).settings;
+    switch (category) {
+      case 0:
+        return _buildConnectionGrid(context, _providerConnections);
+      case 1:
+        return _buildConnectionGrid(context, _trackerConnections);
+      case 2:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.homePage,
+              onTap: onOpenHomePageSettings,
+            ),
+            SettingsTile.spec(
+              SettingsRows.navigationStyle,
+              subtitle: phoneNavStyleLabel,
+              onTap: onOpenNavigationSettings,
+            ),
+            SettingsTile.spec(
+              SettingsRows.desktopSidebarStyle,
+              subtitle: desktopSidebarStyleLabel,
+              onTap: onOpenDesktopSidebarStyle,
+            ),
+          ],
+        );
+      case 3:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SettingsLookHero(
+              label: AppLooks.active()?.label ?? 'Custom',
+              subtitle: 'Full-bleed art, borderless focus, and ambient detail.',
+              onTap: onOpenLooks,
+            ),
+            const SizedBox(height: 18),
+            SettingsSection(
+              title: 'Presets',
+              blurb:
+                  'One pick sets the theme, layouts, and launch animation '
+                  'together.',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.themeTokens,
+                  subtitle: themeTokensLabel,
+                  onTap: onOpenThemeTokens,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            SettingsSection(
+              title: 'Theme',
+              blurb: 'Colour, focus, and motion. Applies everywhere.',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.textBrightness,
+                  subtitle: textBrightnessLabel,
+                  onTap: onOpenTextBrightness,
+                ),
+                SettingsTile.spec(
+                  SettingsRows.launchAnimation,
+                  subtitle: launchAnimationLabel,
+                  onTap: onOpenLaunchAnimation,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            SettingsSection(
+              title: 'Screen layouts',
+              blurb: 'Where things sit. Each screen is chosen separately.',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.detailPageStyle,
+                  subtitle: detailPageStyleLabel,
+                  onTap: onOpenDetailPageStyle,
+                ),
+                if (showIptvAppearance)
+                  SettingsTile.spec(
+                    SettingsRows.iptvAppearance,
+                    subtitle: iptvStyleLabel,
+                    onTap: onOpenIptvStyle,
+                  ),
+                SettingsTile.spec(
+                  SettingsRows.playerGuideStyle,
+                  subtitle: playerGuideStyleLabel,
+                  onTap: onOpenPlayerGuideStyle,
+                ),
+                if (!PlatformUtil.isTelevision)
+                  SettingsTile.spec(
+                    SettingsRows.playerDock,
+                    subtitle: playerDockLabel,
+                    onTap: onOpenPlayerDock,
+                  ),
+                SettingsTile.spec(
+                  SettingsRows.parentsGuideStyle,
+                  subtitle: parentsGuideStyleLabel,
+                  onTap: onOpenParentsGuideStyle,
+                ),
+              ],
+            ),
+          ],
+        );
+      case 4:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.player,
+              onTap: onOpenExternalPlayerSettings,
+            ),
+          ],
+        );
+      case 5:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.searchSettings,
+              onTap: onOpenTorrentSettings,
+            ),
+            SettingsTile.spec(
+              SettingsRows.filterSettings,
+              onTap: onOpenFilterSettings,
+            ),
+            SettingsTile.spec(
+              SettingsRows.providerSettings,
+              onTap: onOpenProviderSettings,
+            ),
+            SettingsTile.spec(
+              SettingsRows.quickPlay,
+              onTap: onOpenQuickPlaySettings,
+            ),
+          ],
+        );
+      case 6:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.debrifyTv,
+              onTap: onOpenDebrifyTvSettings,
+            ),
+            SettingsTile.spec(SettingsRows.recordings, onTap: onOpenRecordings),
+            SettingsTile.spec(
+              SettingsRows.iptvPlaylists,
+              onTap: onOpenIptvSettings,
+            ),
+          ],
+        );
+      case 7:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.remote,
+              onTap: () async => onOpenRemoteControl(),
+            ),
+          ],
+        );
+      case 8:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (onOpenDownloadLocation != null) ...[
+              SettingsSection(
+                title: 'Downloads',
+                children: [
+                  SettingsTile.spec(
+                    SettingsRows.downloadLocation,
+                    subtitle: downloadLocationSubtitle,
+                    onTap: onOpenDownloadLocation!,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+            ],
+            SettingsSection(
+              title: 'Maintenance',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.clearDownloads,
+                  onTap: onClearDownloads,
+                ),
+                SettingsTile.spec(
+                  SettingsRows.clearPlayback,
+                  onTap: onClearPlayback,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            SettingsSection(
+              title: 'Backup & Restore',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.createBackup,
+                  onTap: onCreateBackup,
+                ),
+                SettingsTile.spec(
+                  SettingsRows.restoreBackup,
+                  onTap: onRestoreBackup,
+                ),
+              ],
+            ),
+          ],
+        );
+      case 9:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SettingsSection(
+              title: 'Updates',
+              children: [
+                SettingsToggleTile.spec(
+                  SettingsRows.autoUpdate,
+                  value: autoUpdateChecksEnabled,
+                  onChanged: onToggleAutoUpdateChecks,
+                ),
+                SettingsTile.spec(
+                  SettingsRows.checkUpdates,
+                  subtitle: updateSubtitle,
+                  onTap: onCheckForUpdates,
+                  tag: 'New',
+                  trailing: checkingUpdates
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        )
+                      : null,
+                ),
+                SettingsInfoTile.spec(SettingsRows.version, value: appVersion),
+              ],
+            ),
+            const SizedBox(height: 18),
+            SettingsSection(
+              title: 'Community & Support',
+              children: [
+                if (showSupportDonation)
+                  SettingsTile(
+                    icon: SettingsRows.supportDebrify.icon,
+                    title: supportDonationLabel,
+                    subtitle: supportDonationSubtitle,
+                    onTap: onOpenSupportDonation,
+                  ),
+                SettingsTile.spec(
+                  SettingsRows.reddit,
+                  onTap: () => launchSettingsUrl(SettingsRows.reddit.url!),
+                ),
+                SettingsTile.spec(
+                  SettingsRows.discord,
+                  onTap: () => launchSettingsUrl(SettingsRows.discord.url!),
+                ),
+                SettingsTile.spec(
+                  SettingsRows.github,
+                  onTap: () => launchSettingsUrl(SettingsRows.github.url!),
+                ),
+              ],
+            ),
+          ],
+        );
+      case 10:
+        return SettingsSection(
+          title: '',
+          accentColor: t.danger,
+          children: [
+            SettingsTile.spec(
+              SettingsRows.resetDebrify,
+              onTap: onDangerAction,
+              destructive: true,
+            ),
+          ],
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
+    final app = AppThemeScope.of(context);
+    if (app.id == 'spotlight') return _buildSpotlight(context);
+    final t = app.settings;
     return SettingsBackground(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
@@ -4560,7 +5037,8 @@ class _SettingsLayout extends StatelessWidget {
                 // layout never renders on Android TV.
                 SettingsSection(
                   title: 'Presets',
-                  blurb: 'One pick that sets the theme, layouts and launch '
+                  blurb:
+                      'One pick that sets the theme, layouts and launch '
                       'animation together.',
                   children: [
                     SettingsTile.spec(
@@ -4578,7 +5056,8 @@ class _SettingsLayout extends StatelessWidget {
                 const SizedBox(height: 24),
                 SettingsSection(
                   title: 'Theme',
-                  blurb: 'Colour, focus and motion. Applies everywhere in the '
+                  blurb:
+                      'Colour, focus and motion. Applies everywhere in the '
                       'app.',
                   children: [
                     SettingsTile.spec(
