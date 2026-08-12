@@ -11,6 +11,24 @@ import 'udp_command_service.dart';
 /// Connection state enum
 enum RemoteConnectionState { disconnected, scanning, connecting, connected }
 
+enum _RemoteRole { stopped, receiver, sender }
+
+/// A caller-owned claim on receiver mode. Releasing the final claim restores
+/// the role that was active before the first claim was acquired.
+class ReceiverLease {
+  ReceiverLease._(this._owner, this._id);
+
+  final RemoteControlState _owner;
+  final int _id;
+  bool _released = false;
+
+  Future<void> release() async {
+    if (_released) return;
+    _released = true;
+    await _owner._releaseReceiverLease(_id);
+  }
+}
+
 /// State manager for remote control functionality
 class RemoteControlState extends ChangeNotifier {
   // Singleton
@@ -29,6 +47,22 @@ class RemoteControlState extends ChangeNotifier {
   String? _lastError;
   bool _isTv = false;
   String _deviceId = '';
+  _RemoteRole _role = _RemoteRole.stopped;
+  String? _receiverName;
+
+  Future<void> _roleQueue = Future<void>.value();
+  int _nextLeaseId = 0;
+  final Set<int> _receiverLeases = <int>{};
+  _RemoteRole? _roleBeforeLeases;
+  String? _receiverNameBeforeLeases;
+
+  @visibleForTesting
+  Future<void> Function(String name)? debugReceiverStarter;
+  @visibleForTesting
+  Future<void> Function()? debugSenderStarter;
+  @visibleForTesting
+  Future<void> Function()? debugRoleStopper;
+  bool _debugReceiverBound = false;
 
   // Callbacks for TV mode
   void Function(String action, String command, String? data)? onCommandReceived;
@@ -46,8 +80,18 @@ class RemoteControlState extends ChangeNotifier {
 
   /// Initialize receiver mode - start listening for incoming commands.
   /// Any device can call this; it's also the default for Android TV at boot.
-  Future<void> startTvListener(String deviceName) async {
+  Future<void> startTvListener(String deviceName) =>
+      _enqueueRoleChange(() => _switchToReceiverRaw(deviceName));
+
+  Future<void> _startTvListenerRaw(String deviceName) async {
+    if (_role == _RemoteRole.receiver &&
+        _receiverName == deviceName &&
+        (_debugReceiverBound ||
+            (_discoveryService != null && _commandService != null))) {
+      return;
+    }
     _isTv = true;
+    _receiverName = deviceName;
     _deviceId = _generateDeviceId();
 
     // Wire dispatch into the command router by default so callers don't have
@@ -60,6 +104,16 @@ class RemoteControlState extends ChangeNotifier {
     debugPrint(
       'RemoteControlState: Starting receiver listener as "$deviceName"',
     );
+
+    final testStarter = debugReceiverStarter;
+    if (testStarter != null) {
+      await testStarter(deviceName);
+      _debugReceiverBound = true;
+      _role = _RemoteRole.receiver;
+      _connectionState = RemoteConnectionState.disconnected;
+      notifyListeners();
+      return;
+    }
 
     // Start discovery service (to respond to discovery requests)
     _discoveryService = UdpDiscoveryService(
@@ -85,18 +139,28 @@ class RemoteControlState extends ChangeNotifier {
     };
     await _commandService!.start();
 
+    _role = _RemoteRole.receiver;
     _connectionState = RemoteConnectionState.disconnected;
     notifyListeners();
   }
 
   /// Initialize for Mobile mode - start scanning for TVs
-  Future<void> startMobileDiscovery() async {
+  Future<void> startMobileDiscovery() => _enqueueRoleChange(() async {
+    if (_role == _RemoteRole.sender && isScanning) {
+      debugPrint('RemoteControlState: Already scanning');
+      return;
+    }
+    await _switchToSenderRaw();
+  });
+
+  Future<void> _startMobileDiscoveryRaw() async {
     if (_connectionState == RemoteConnectionState.scanning) {
       debugPrint('RemoteControlState: Already scanning');
       return;
     }
 
     _isTv = false;
+    _receiverName = null;
     _deviceId = _generateDeviceId();
     _discoveredDevices = [];
 
@@ -105,6 +169,13 @@ class RemoteControlState extends ChangeNotifier {
     _connectionState = RemoteConnectionState.scanning;
     _lastError = null;
     notifyListeners();
+
+    final testStarter = debugSenderStarter;
+    if (testStarter != null) {
+      await testStarter();
+      _role = _RemoteRole.sender;
+      return;
+    }
 
     // Start discovery service
     _discoveryService = UdpDiscoveryService(deviceId: _deviceId, isTv: false);
@@ -134,19 +205,145 @@ class RemoteControlState extends ChangeNotifier {
     };
 
     await _discoveryService!.start();
+    _role = _RemoteRole.sender;
   }
 
   /// Stop all services
-  Future<void> stop() async {
-    await _discoveryService?.stop();
-    await _commandService?.stop();
+  Future<void> stop() => _enqueueRoleChange(_stopRaw);
+
+  Future<void> _stopRaw() async {
+    final testStopper = debugRoleStopper;
+    if (testStopper != null) {
+      await testStopper();
+    } else {
+      await _discoveryService?.stop();
+      await _commandService?.stop();
+    }
     _discoveryService = null;
     _commandService = null;
     _connectionState = RemoteConnectionState.disconnected;
     _connectedDevice = null;
     _discoveredDevices = [];
+    _role = _RemoteRole.stopped;
+    _receiverName = null;
+    _debugReceiverBound = false;
     notifyListeners();
   }
+
+  Future<void> _switchToReceiverRaw(String deviceName) async {
+    if (_role == _RemoteRole.receiver &&
+        _receiverName == deviceName &&
+        (_debugReceiverBound ||
+            (_discoveryService != null && _commandService != null))) {
+      return;
+    }
+    if (_role != _RemoteRole.stopped ||
+        _discoveryService != null ||
+        _commandService != null ||
+        _debugReceiverBound) {
+      await _stopRaw();
+    }
+    try {
+      await _startTvListenerRaw(deviceName);
+    } catch (_) {
+      await _stopRaw();
+      rethrow;
+    }
+  }
+
+  Future<void> _switchToSenderRaw() async {
+    if (_role != _RemoteRole.stopped ||
+        _discoveryService != null ||
+        _commandService != null ||
+        _debugReceiverBound) {
+      await _stopRaw();
+    }
+    try {
+      await _startMobileDiscoveryRaw();
+    } catch (_) {
+      await _stopRaw();
+      rethrow;
+    }
+  }
+
+  Future<T> _enqueueRoleChange<T>(Future<T> Function() operation) {
+    final completer = Completer<T>();
+    _roleQueue = _roleQueue.catchError((_) {}).then((_) async {
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
+    return completer.future;
+  }
+
+  /// Ensures receiver mode is fully bound and returns a distinct caller lease.
+  /// Starts, restores, and stops share one queue so backing out cannot race a
+  /// pending socket bind.
+  Future<ReceiverLease> ensureReceiverMode(String deviceName) =>
+      _enqueueRoleChange(() async {
+        final id = ++_nextLeaseId;
+        if (_receiverLeases.isEmpty) {
+          _roleBeforeLeases = _role;
+          _receiverNameBeforeLeases = _receiverName;
+        }
+        _receiverLeases.add(id);
+        try {
+          await _switchToReceiverRaw(deviceName);
+        } catch (error, stackTrace) {
+          _receiverLeases.remove(id);
+          if (_receiverLeases.isEmpty) {
+            final previous = _roleBeforeLeases ?? _RemoteRole.stopped;
+            final previousName = _receiverNameBeforeLeases;
+            _roleBeforeLeases = null;
+            _receiverNameBeforeLeases = null;
+            try {
+              switch (previous) {
+                case _RemoteRole.receiver:
+                  if (previousName != null) {
+                    await _switchToReceiverRaw(previousName);
+                  }
+                case _RemoteRole.sender:
+                  await _switchToSenderRaw();
+                case _RemoteRole.stopped:
+                  await _stopRaw();
+              }
+            } catch (restoreError) {
+              debugPrint(
+                'RemoteControlState: Could not restore role after a failed '
+                'receiver lease: $restoreError',
+              );
+            }
+          }
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+        return ReceiverLease._(this, id);
+      });
+
+  Future<void> _releaseReceiverLease(int id) => _enqueueRoleChange(() async {
+    if (!_receiverLeases.remove(id)) return;
+    if (_receiverLeases.isNotEmpty) return;
+
+    final previous = _roleBeforeLeases ?? _RemoteRole.stopped;
+    final previousReceiverName = _receiverNameBeforeLeases;
+    _roleBeforeLeases = null;
+    _receiverNameBeforeLeases = null;
+    switch (previous) {
+      case _RemoteRole.receiver:
+        if (previousReceiverName != null &&
+            previousReceiverName != _receiverName) {
+          await _switchToReceiverRaw(previousReceiverName);
+        }
+        return;
+      case _RemoteRole.sender:
+        await _switchToSenderRaw();
+        return;
+      case _RemoteRole.stopped:
+        await _stopRaw();
+        return;
+    }
+  });
 
   /// Connect to a device by manually entered IP (e.g. Tailscale / VPN address).
   /// Bypasses UDP broadcast discovery — useful when the receiver is reachable
@@ -263,22 +460,43 @@ class RemoteControlState extends ChangeNotifier {
   /// Switch this device into RECEIVER mode (listens for incoming commands).
   /// Stops any existing sender/receiver state first. Safe to call from any platform.
   Future<void> switchToReceiverMode(String deviceName) async {
-    await stop();
-    await startTvListener(deviceName);
+    await _enqueueRoleChange(() => _switchToReceiverRaw(deviceName));
   }
 
   /// Switch this device into SENDER mode (scans for receivers and sends commands).
   /// Stops any existing sender/receiver state first.
   Future<void> switchToSenderMode() async {
-    await stop();
-    await startMobileDiscovery();
+    await _enqueueRoleChange(_switchToSenderRaw);
   }
 
   /// Restart scanning (for mobile)
   Future<void> rescan() async {
-    await stop();
-    await startMobileDiscovery();
+    await _enqueueRoleChange(_switchToSenderRaw);
   }
+
+  /// Test-only singleton reset. Production [stop] deliberately keeps [isTv]
+  /// semantics unchanged; tests need a hermetic way to clear process state.
+  @visibleForTesting
+  Future<void> debugResetForTesting() async {
+    await _enqueueRoleChange(() async {
+      await _stopRaw();
+      _isTv = false;
+      _receiverLeases.clear();
+      _roleBeforeLeases = null;
+      _receiverNameBeforeLeases = null;
+      _nextLeaseId = 0;
+      onCommandReceived = null;
+    });
+    debugReceiverStarter = null;
+    debugSenderStarter = null;
+    debugRoleStopper = null;
+  }
+
+  @visibleForTesting
+  String get debugRole => _role.name;
+
+  @visibleForTesting
+  int get debugReceiverLeaseCount => _receiverLeases.length;
 
   /// Disconnect from current device (for mobile)
   Future<void> disconnect() async {

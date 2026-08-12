@@ -1,0 +1,1148 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>First Run — Debrify onboarding, redesigned</title>
+<style>
+  :root{
+    --ink:#0B0912; --panel:#131020;
+    --hair:rgba(167,139,250,.16); --hair2:rgba(255,255,255,.07);
+    --tx:#EAE7F3; --dim:#9A93B0; --dimmer:#6E6785; --acc:#A78BFA;
+    --ok:#34D399; --warn:#FBBF24; --bad:#F87171;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --ink:#E9E7EF; --panel:#FBFAFD; --hair:rgba(88,60,190,.20); --hair2:rgba(20,17,30,.10);
+           --tx:#17141F; --dim:#59526B; --dimmer:#8B849C; --acc:#5B3BD4; }
+  }
+  :root[data-theme="dark"]{ --ink:#0B0912; --panel:#131020; --hair:rgba(167,139,250,.16);
+           --hair2:rgba(255,255,255,.07); --tx:#EAE7F3; --dim:#9A93B0; --dimmer:#6E6785; --acc:#A78BFA; }
+  :root[data-theme="light"]{ --ink:#E9E7EF; --panel:#FBFAFD; --hair:rgba(88,60,190,.20);
+           --hair2:rgba(20,17,30,.10); --tx:#17141F; --dim:#59526B; --dimmer:#8B849C; --acc:#5B3BD4; }
+
+  body{ margin:0; background:var(--ink); color:var(--tx); font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 28px 160px; }
+
+  .top{ position:sticky; top:0; z-index:60; background:color-mix(in srgb, var(--ink) 88%, transparent);
+        border-bottom:1px solid var(--hair2); backdrop-filter:blur(14px); }
+  .topin{ max-width:1180px; margin:0 auto; padding:11px 28px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .brandmark{ font:600 12px/1 var(--mono); letter-spacing:.16em; color:var(--acc); text-transform:uppercase; }
+  .jump{ display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; }
+  .jump a{ font:600 11.5px/1 var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--dim);
+           text-decoration:none; padding:6px 9px; border-radius:6px; border:1px solid transparent; }
+  .jump a:hover{ color:var(--tx); border-color:var(--hair); }
+
+  h1{ font:700 30px/1.15 var(--sans); margin:44px 0 10px; letter-spacing:-.02em; }
+  .lede{ color:var(--dim); font-size:15px; line-height:1.62; max-width:76ch; margin:0 0 8px; }
+  .lede b{ color:var(--tx); font-weight:600; }
+  h2{ font:700 21px/1.2 var(--sans); margin:64px 0 6px; letter-spacing:-.01em; }
+  h2 .num{ font:600 12px/1 var(--mono); color:var(--acc); letter-spacing:.14em; display:block; margin-bottom:9px; }
+  h3{ font:600 15px/1.3 var(--sans); margin:30px 0 6px; }
+  .sub{ color:var(--dim); font-size:14px; line-height:1.62; max-width:74ch; margin:0 0 18px; }
+  .keys{ font:600 11px/1.7 var(--mono); color:var(--dimmer); letter-spacing:.06em; margin:0 0 14px; }
+  .keys kbd{ border:1px solid var(--hair); border-radius:4px; padding:3px 6px; color:var(--dim); }
+
+  .stage{ position:relative; width:100%; aspect-ratio:16/9; border-radius:10px; overflow:hidden;
+          border:1px solid var(--hair2); background:#000; outline:none; }
+  .stage:focus{ box-shadow:0 0 0 2px var(--acc); }
+  .stage .scaler{ position:absolute; inset:0; width:1920px; height:1080px; transform-origin:0 0; }
+  .jumps{ display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px; }
+  .jumps button{ font:600 11px/1 var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--dim);
+                 padding:8px 11px; border-radius:7px; border:1px solid var(--hair2); background:none; cursor:pointer; }
+  .jumps button:hover{ color:var(--tx); border-color:var(--hair); }
+  .jumps button.on{ color:var(--acc); border-color:var(--hair); background:color-mix(in srgb,var(--acc) 9%,transparent); }
+  .stagenote{ font:500 12px/1.6 var(--mono); color:var(--dimmer); margin:10px 0 0; letter-spacing:.03em; }
+  .stagenote b{ color:var(--dim); }
+
+  table{ border-collapse:collapse; width:100%; margin:16px 0 0; font-size:13px; }
+  th,td{ text-align:left; padding:7px 10px; border-bottom:1px solid var(--hair2); vertical-align:top; }
+  th{ font:600 10.5px/1 var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--dimmer); }
+  td:first-child{ color:var(--tx); font-weight:500; width:30%; }
+  td code,code{ font:500 12px/1.5 var(--mono); color:var(--acc); }
+  .note{ border-left:2px solid var(--acc); padding:2px 0 2px 14px; margin:22px 0; color:var(--dim);
+         font-size:13.5px; line-height:1.68; }
+  .note b{ color:var(--tx); font-weight:600; }
+  .note.bad{ border-color:var(--bad); }
+  .frames{ display:flex; gap:26px; flex-wrap:wrap; margin-top:20px; }
+  .fcap{ font:600 11px/1 var(--mono); color:var(--dimmer); letter-spacing:.1em; text-transform:uppercase;
+         margin:12px 0 0; text-align:center; }
+
+  /* ══════════ PHONE / TABLET FRAMES ══════════ */
+  .phone{ position:relative; width:360px; height:740px; border-radius:36px; overflow:hidden;
+          border:1px solid var(--hair2); background:#1B1C1C; box-shadow:0 30px 60px rgba(0,0,0,.4); }
+  .tablet{ position:relative; width:640px; height:854px; border-radius:22px; overflow:hidden;
+           border:1px solid var(--hair2); background:#1B1C1C; box-shadow:0 30px 60px rgba(0,0,0,.4); }
+
+  /* ══════════════════════════════════════════════════════════════
+     TV LAYER — drawn at 1920×1080. Logical values = ÷2.
+     Ground, type stack and focus mechanic come straight from
+     apple_look_mockup / plan/APPLE_LOOK_PLAN.md.
+     ══════════════════════════════════════════════════════════════ */
+  .tv{ position:absolute; inset:0; overflow:hidden; color:#fff;
+       background:linear-gradient(to bottom,#1B1C1C 0%,#1F1D1C 100%);
+       font-family:-apple-system,"SF Pro Display","SF Pro Text",system-ui,sans-serif; }
+  .tv *{ box-sizing:border-box; }
+  .tv .screen{ position:absolute; inset:0; opacity:0; pointer-events:none;
+               transition:opacity .34s ease, transform .34s cubic-bezier(.22,.7,.3,1);
+               transform:translateX(26px); }
+  .tv .screen.on{ opacity:1; pointer-events:auto; transform:none; }
+
+  /* ── the standing rail: identity + ladder. Never moves between steps. ── */
+  .rail{ position:absolute; left:84px; top:96px; width:600px; }
+  .back{ width:66px; height:66px; border-radius:33px; background:rgba(255,255,255,.08);
+         display:flex; align-items:center; justify-content:center; font-size:30px; color:rgba(255,255,255,.75);
+         margin-bottom:44px; transition:transform .2s cubic-bezier(.2,.9,.25,1.05), background .2s, box-shadow .2s; }
+  .back.f{ background:#fff; color:#000; transform:scale(1.08); box-shadow:0 18px 40px rgba(0,0,0,.5); }
+  .eyebrow{ font:600 20px/1 var(--mono); letter-spacing:.22em; color:rgba(255,255,255,.42);
+            text-transform:uppercase; margin-bottom:22px; }
+  .h1tv{ font-size:62px; font-weight:700; letter-spacing:-1.4px; line-height:1.06; margin-bottom:20px; }
+  .subtv{ font-size:25px; line-height:1.46; color:rgba(255,255,255,.6); }
+  .ladder{ position:absolute; left:84px; bottom:88px; width:600px; }
+  .lad{ display:flex; align-items:center; gap:18px; padding:11px 0; font-size:22px;
+        color:rgba(255,255,255,.34); }
+  .lad .dot{ width:22px; height:22px; border-radius:11px; border:2px solid rgba(255,255,255,.24);
+             display:flex; align-items:center; justify-content:center; font-size:13px; flex:0 0 auto; }
+  .lad.done{ color:rgba(255,255,255,.56); }
+  .lad.done .dot{ background:var(--ok); border-color:var(--ok); color:#04231A; font-weight:800; }
+  .lad.now{ color:#fff; font-weight:600; }
+  .lad.now .dot{ border-color:#fff; background:#fff; }
+  .railfoot{ font-size:19px; color:rgba(255,255,255,.34); margin-top:22px; line-height:1.5; }
+
+  /* ── the acting stage: everything interactive lives right of the rail ── */
+  .act{ position:absolute; left:768px; right:84px; top:96px; bottom:214px;
+        display:flex; flex-direction:column; justify-content:center; }
+  .actfoot{ position:absolute; left:768px; right:84px; bottom:88px; display:flex; align-items:center; gap:26px; }
+  .count{ font-size:22px; color:rgba(255,255,255,.5); margin-right:auto; }
+
+  /* focus grammar: borderless. Lift + fill is the signal. */
+  .fx{ transition:transform .22s cubic-bezier(.2,.9,.25,1.06), background .2s ease, box-shadow .22s ease;
+       will-change:transform; }
+  .card{ position:relative; border-radius:22px; background:rgba(255,255,255,.055);
+         border:1px solid rgba(255,255,255,.07); overflow:hidden; }
+  .card.f{ background:rgba(255,255,255,.15); border-color:rgba(255,255,255,.16);
+           transform:translateY(-10px) scale(1.035); box-shadow:0 30px 64px rgba(0,0,0,.55); z-index:4; }
+  .card .glare{ position:absolute; left:-35%; top:-60%; width:170%; height:170%; pointer-events:none; opacity:0;
+     background:radial-gradient(circle at 50% 50%, rgba(255,255,255,.26) 0%, rgba(255,255,255,.1) 30%, transparent 60%);
+     mix-blend-mode:screen; transition:opacity .25s; }
+  .card.f .glare{ opacity:1; }
+
+  .pill{ height:72px; border-radius:36px; background:rgba(255,255,255,.2); color:#fff; font-size:25px;
+         font-weight:600; display:inline-flex; align-items:center; gap:12px; padding:0 42px; white-space:nowrap; }
+  .pill.f{ background:#fff; color:#000; transform:scale(1.05); box-shadow:0 18px 44px rgba(0,0,0,.5); }
+  .pill.dim{ background:rgba(255,255,255,.1); color:rgba(255,255,255,.4); }
+  .ghost{ font-size:23px; color:rgba(255,255,255,.55); padding:16px 22px; border-radius:16px; }
+  .ghost.f{ color:#fff; background:rgba(255,255,255,.14); transform:scale(1.04); }
+
+  /* ── mode rows (welcome) ─────────────────────────────────── */
+  .moderow{ display:flex; align-items:center; gap:32px; padding:34px 38px; margin-bottom:24px; }
+  .modemark{ width:96px; height:96px; border-radius:26px; background:rgba(255,255,255,.1);
+             display:flex; align-items:center; justify-content:center; font-size:44px; flex:0 0 auto; }
+  .moderow.f .modemark{ background:rgba(255,255,255,.2); }
+  .modettl{ font-size:34px; font-weight:600; margin-bottom:10px; }
+  .modesub{ font-size:22px; line-height:1.42; color:rgba(255,255,255,.58); }
+  .modefoot{ font-size:19px; color:rgba(255,255,255,.4); margin-top:10px; }
+  .chevr{ font-size:34px; color:rgba(255,255,255,.3); margin-left:auto; }
+  .moderow.f .chevr{ color:rgba(255,255,255,.8); }
+
+  /* ── service grid ─────────────────────────────────────────── */
+  .grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:26px; }
+  .svc{ height:250px; padding:28px; display:flex; flex-direction:column; }
+  .svcmark{ width:74px; height:74px; border-radius:20px; display:flex; align-items:center; justify-content:center;
+            font-size:26px; font-weight:800; letter-spacing:-.5px; color:#fff; margin-bottom:22px; }
+  .svcttl{ font-size:29px; font-weight:600; margin-bottom:9px; }
+  .svcsub{ font-size:20px; line-height:1.38; color:rgba(255,255,255,.52); }
+  .tick{ position:absolute; right:24px; top:24px; width:40px; height:40px; border-radius:20px;
+         border:2px solid rgba(255,255,255,.22); display:flex; align-items:center; justify-content:center;
+         font-size:20px; color:transparent; transition:all .2s; }
+  .svc.sel .tick{ background:var(--ok); border-color:var(--ok); color:#04231A; font-weight:800; }
+  .svc.none{ background:none; border:1px dashed rgba(255,255,255,.18); align-items:center; justify-content:center; }
+  .svc.none .svcttl{ margin:0; color:rgba(255,255,255,.66); }
+
+  /* ── KEY ENTRY: the field band is FIXED above the keyboard band ─── */
+  .kscreen .krail{ position:absolute; left:84px; top:96px; width:120px; }
+  .kbody{ position:absolute; left:250px; right:84px; top:96px; height:470px; }
+  .khead{ display:flex; align-items:center; gap:22px; margin-bottom:34px; }
+  .khead .svcmark{ width:64px; height:64px; border-radius:18px; font-size:22px; margin:0; }
+  .kttl{ font-size:40px; font-weight:700; letter-spacing:-.6px; }
+  .ksub{ font-size:21px; color:rgba(255,255,255,.5); margin-top:6px; }
+  .methods{ display:flex; gap:16px; margin-bottom:34px; }
+  .meth{ height:64px; border-radius:32px; padding:0 28px; display:flex; align-items:center; gap:12px;
+         font-size:21px; color:rgba(255,255,255,.6); background:rgba(255,255,255,.06); }
+  .meth.on{ background:rgba(255,255,255,.16); color:#fff; }
+  .meth.f{ background:#fff; color:#000; transform:scale(1.06); box-shadow:0 16px 36px rgba(0,0,0,.5); }
+  .fieldwrap{ position:relative; }
+  .fieldlbl{ font-size:20px; color:rgba(255,255,255,.46); margin-bottom:14px; letter-spacing:.4px; }
+  .field{ height:124px; border-radius:20px; background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.12);
+          display:flex; align-items:center; padding:0 34px; gap:4px;
+          font-family:var(--mono); font-size:38px; letter-spacing:5px; overflow:hidden; }
+  .field.f{ border-color:rgba(255,255,255,.5); background:rgba(0,0,0,.55); }
+  .field .ph{ color:rgba(255,255,255,.26); letter-spacing:1px; font-size:30px; font-family:-apple-system,system-ui; }
+  .caret{ width:3px; height:52px; background:#fff; margin-left:4px; animation:blink 1.06s steps(1) infinite; }
+  @keyframes blink{ 50%{ opacity:0 } }
+  .status{ display:flex; align-items:center; gap:14px; font-size:22px; margin-top:22px;
+           color:rgba(255,255,255,.55); min-height:36px; }
+  .status .sdot{ width:14px; height:14px; border-radius:7px; background:rgba(255,255,255,.3); }
+  .status.ok{ color:var(--ok); } .status.ok .sdot{ background:var(--ok); }
+  .status.work{ color:var(--warn); } .status.work .sdot{ background:var(--warn); animation:pulse 1s infinite; }
+  @keyframes pulse{ 50%{ opacity:.25 } }
+
+  .kbband{ position:absolute; left:0; right:0; bottom:0; height:452px; padding:34px 84px 0;
+           background:rgba(255,255,255,.035); border-top:1px solid rgba(255,255,255,.07); }
+  .kbgrid{ display:flex; gap:20px; }
+  .kbkeys{ flex:1; }
+  .krow{ display:flex; gap:13px; margin-bottom:13px; }
+  .key{ width:88px; height:78px; border-radius:16px; background:rgba(255,255,255,.07); display:flex;
+        align-items:center; justify-content:center; font-size:30px; font-weight:500; }
+  .key.f{ background:#fff; color:#000; transform:scale(1.1); box-shadow:0 16px 34px rgba(0,0,0,.55); z-index:3; }
+  .key.wide{ width:auto; flex:1; font-size:24px; gap:10px; }
+  .kbside{ width:330px; display:flex; flex-direction:column; gap:13px; }
+  .sidekey{ height:78px; border-radius:16px; background:rgba(255,255,255,.09); display:flex; align-items:center;
+            justify-content:center; gap:12px; font-size:23px; font-weight:600; }
+  .sidekey.f{ background:#fff; color:#000; transform:scale(1.05); box-shadow:0 16px 34px rgba(0,0,0,.55); }
+  .sidekey.go{ background:rgba(255,255,255,.22); }
+  .sidekey.go.f{ background:#fff; }
+  .kbhint{ position:absolute; right:84px; top:-46px; font-size:19px; color:rgba(255,255,255,.34); }
+
+  /* phone-send panel (alternative method) */
+  .sendpanel{ display:flex; gap:34px; align-items:stretch; }
+  .qr{ width:250px; height:250px; border-radius:22px; background:#fff; padding:18px; flex:0 0 auto; }
+  .qr svg{ width:100%; height:100%; display:block; }
+  .sendcopy{ font-size:24px; line-height:1.5; color:rgba(255,255,255,.62); padding-top:6px; }
+  .sendcopy b{ color:#fff; font-weight:600; }
+
+  /* ── engines: the live catalogue, one tile each ──────────────── */
+  .enggrid{ display:grid; grid-template-columns:repeat(4,1fr); gap:22px; }
+  .eng{ height:172px; padding:24px; display:flex; flex-direction:column; }
+  .engttl{ font-size:26px; font-weight:600; margin-bottom:9px; padding-right:44px; }
+  .engsub{ font-size:19px; line-height:1.36; color:rgba(255,255,255,.5); }
+  .eng .tick{ right:20px; top:20px; width:34px; height:34px; border-radius:17px; font-size:17px; }
+  .eng.sel .tick{ background:var(--ok); border-color:var(--ok); color:#04231A; font-weight:800; }
+
+  /* ── trackers ─────────────────────────────────────────────── */
+  .trkrow{ display:flex; gap:28px; }
+  .trkcard{ flex:1; padding:36px; display:flex; flex-direction:column; min-height:430px; }
+  .trkmark{ width:84px; height:84px; border-radius:24px; display:flex; align-items:center; justify-content:center;
+            font-size:30px; font-weight:800; margin-bottom:24px; }
+  .trkttl{ font-size:32px; font-weight:600; margin-bottom:10px; }
+  .trksub{ font-size:20px; line-height:1.44; color:rgba(255,255,255,.52); margin-bottom:26px; }
+  .trkact{ margin-top:auto; }
+  .code{ font-family:var(--mono); font-size:58px; font-weight:700; letter-spacing:9px;
+         background:rgba(0,0,0,.35); border-radius:18px; padding:22px 0; text-align:center; margin:6px 0 18px; }
+  .codeurl{ font-size:22px; color:rgba(255,255,255,.66); margin-bottom:10px; }
+  .codetimer{ font-size:19px; color:rgba(255,255,255,.4); }
+  .trkcard.dimmed{ opacity:.42; }
+
+  /* ── import from another device ───────────────────────────── */
+  .impwrap{ display:flex; gap:44px; height:100%; }
+  .impsteps{ width:520px; }
+  .impstep{ display:flex; gap:20px; padding:22px 0; }
+  .impno{ width:44px; height:44px; border-radius:22px; background:rgba(255,255,255,.1); flex:0 0 auto;
+          display:flex; align-items:center; justify-content:center; font-size:21px; font-weight:700; }
+  .impstep.done .impno{ background:var(--ok); color:#04231A; }
+  .impttl{ font-size:26px; font-weight:600; margin-bottom:7px; }
+  .impsub{ font-size:20px; line-height:1.42; color:rgba(255,255,255,.5); }
+  .imppanel{ flex:1; border-radius:26px; background:rgba(255,255,255,.05);
+             border:1px solid rgba(255,255,255,.07); padding:40px; position:relative; overflow:hidden; }
+  .radar{ position:absolute; right:-90px; top:-90px; width:420px; height:420px; border-radius:50%;
+          border:1px solid rgba(52,211,153,.22); }
+  .radar::after{ content:""; position:absolute; inset:60px; border-radius:50%;
+                 border:1px solid rgba(52,211,153,.16); animation:ping 2.4s ease-out infinite; }
+  @keyframes ping{ 0%{ transform:scale(.6); opacity:.9 } 100%{ transform:scale(1.35); opacity:0 } }
+  .devname{ font-size:44px; font-weight:700; letter-spacing:-.6px; margin:8px 0 12px; }
+  .conn{ display:inline-flex; align-items:center; gap:12px; font-size:22px; color:var(--ok);
+         background:rgba(52,211,153,.12); border-radius:20px; padding:9px 20px; margin-bottom:32px; }
+  .arriving{ font-size:22px; line-height:2.05; color:rgba(255,255,255,.66); }
+  .arriving i{ color:var(--ok); font-style:normal; margin-right:12px; }
+  .bar{ height:10px; border-radius:5px; background:rgba(255,255,255,.1); margin-top:28px; overflow:hidden; }
+  .bar span{ display:block; height:100%; background:var(--ok); border-radius:5px; transition:width .5s; }
+
+  /* ── done ─────────────────────────────────────────────────── */
+  .donetick{ width:130px; height:130px; border-radius:65px; background:rgba(52,211,153,.14);
+             border:2px solid rgba(52,211,153,.5); color:var(--ok); display:flex; align-items:center;
+             justify-content:center; font-size:62px; margin-bottom:36px; }
+  .sumrow{ display:flex; align-items:center; gap:18px; font-size:24px; padding:16px 0;
+           border-bottom:1px solid rgba(255,255,255,.06); }
+  .sumrow .st{ margin-left:auto; font-size:21px; color:var(--ok); }
+  .sumrow.skip{ color:rgba(255,255,255,.42); } .sumrow.skip .st{ color:rgba(255,255,255,.34); }
+
+  /* ══════════════════════════════════════════════════════════════
+     PHONE LAYER — 360-wide frames, real CSS px (≈ logical dp)
+     ══════════════════════════════════════════════════════════════ */
+  .ph{ position:absolute; inset:0; color:#fff; overflow:hidden;
+       background:linear-gradient(to bottom,#1B1C1C 0%,#1F1D1C 100%);
+       font-family:-apple-system,"SF Pro Text",system-ui,sans-serif; }
+  .ph *{ box-sizing:border-box; }
+  .phtop{ padding:44px 24px 0; }
+  .segs{ display:flex; gap:6px; margin-bottom:26px; }
+  .segs i{ flex:1; height:4px; border-radius:2px; background:rgba(255,255,255,.14); }
+  .segs i.on{ background:#fff; } .segs i.was{ background:rgba(255,255,255,.4); }
+  .phback{ width:38px; height:38px; border-radius:19px; background:rgba(255,255,255,.08);
+           display:flex; align-items:center; justify-content:center; font-size:19px; margin-bottom:22px; }
+  .phttl{ font-size:28px; font-weight:700; letter-spacing:-.7px; line-height:1.14; margin-bottom:11px; }
+  .phsub{ font-size:15px; line-height:1.5; color:rgba(255,255,255,.56); }
+  .phbody{ padding:22px 24px 0; }
+  .phcard{ border-radius:18px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.07);
+           padding:14px; display:flex; align-items:center; gap:13px; margin-bottom:10px; position:relative; }
+  .phmark{ width:42px; height:42px; border-radius:14px; display:flex; align-items:center; justify-content:center;
+           font-size:16px; font-weight:800; flex:0 0 auto; }
+  .phname{ font-size:17px; font-weight:600; margin-bottom:4px; }
+  .phdesc{ font-size:13px; color:rgba(255,255,255,.5); line-height:1.35; }
+  .phtick{ width:26px; height:26px; border-radius:13px; border:2px solid rgba(255,255,255,.2);
+           display:flex; align-items:center; justify-content:center; font-size:13px; color:transparent;
+           margin-left:auto; flex:0 0 auto; }
+  .phcard.sel{ background:rgba(255,255,255,.13); border-color:rgba(255,255,255,.18); }
+  .phcard.sel .phtick{ background:var(--ok); border-color:var(--ok); color:#04231A; font-weight:800; }
+  .phcta{ position:absolute; left:0; right:0; bottom:0; padding:16px 24px 30px;
+          background:linear-gradient(to top,#1F1D1C 62%,rgba(31,29,28,0)); }
+  .phpill{ height:52px; border-radius:26px; background:#fff; color:#000; font-size:17px; font-weight:600;
+           display:flex; align-items:center; justify-content:center; gap:9px; }
+  .phpill.dim{ background:rgba(255,255,255,.12); color:rgba(255,255,255,.4); }
+  .phghost{ text-align:center; font-size:15px; color:rgba(255,255,255,.5); margin-top:14px; }
+  /* the keyboard-aware key screen */
+  .phkb{ position:absolute; left:0; right:0; bottom:0; height:292px; background:#151515;
+         border-top:1px solid rgba(255,255,255,.08); padding:8px 4px; }
+  .phkrow{ display:flex; gap:5px; justify-content:center; margin-bottom:9px; }
+  .phkey{ width:31px; height:40px; border-radius:6px; background:rgba(255,255,255,.14); display:flex;
+          align-items:center; justify-content:center; font-size:15px; }
+  .phkey.w{ width:52px; font-size:12px; }
+  .phfield{ border-radius:14px; background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.5);
+            padding:15px 16px; font-family:var(--mono); font-size:16px; letter-spacing:2px;
+            word-break:break-all; line-height:1.4; }
+  .phchip{ display:inline-flex; align-items:center; gap:8px; height:34px; border-radius:17px; padding:0 14px;
+           background:rgba(52,211,153,.14); color:var(--ok); font-size:13px; font-weight:600; margin-top:12px; }
+  .phstickycta{ position:absolute; left:0; right:0; bottom:292px; padding:12px 24px 14px;
+                background:#1F1D1C; border-top:1px solid rgba(255,255,255,.06); }
+
+  /* ══════════ TABLET ══════════ */
+  .tb{ position:absolute; inset:0; color:#fff; overflow:hidden;
+       background:linear-gradient(to bottom,#1B1C1C 0%,#1F1D1C 100%);
+       font-family:-apple-system,"SF Pro Text",system-ui,sans-serif; padding:52px 44px; }
+  .tb *{ box-sizing:border-box; }
+  .tbhead{ margin-bottom:34px; }
+  .tbeyebrow{ font:600 12px/1 var(--mono); letter-spacing:.2em; color:rgba(255,255,255,.4);
+              text-transform:uppercase; margin-bottom:14px; }
+  .tbttl{ font-size:40px; font-weight:700; letter-spacing:-1px; margin-bottom:10px; }
+  .tbsub{ font-size:17px; color:rgba(255,255,255,.56); }
+  .tbgrid{ display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+  .tbsegs{ display:flex; gap:6px; margin-bottom:26px; }
+  .tbsegs i{ flex:1; height:4px; border-radius:2px; background:rgba(255,255,255,.14); }
+  .tbsegs i.on{ background:#fff; } .tbsegs i.was{ background:rgba(255,255,255,.4); }
+  .tbcta{ position:absolute; left:44px; right:44px; bottom:44px; display:flex; align-items:center; gap:20px; }
+</style>
+
+<div class="top"><div class="topin">
+  <span class="brandmark">Debrify · first run</span>
+  <span style="font-size:12px;color:var(--dimmer)">Onboarding, redesigned for the Spotlight look</span>
+  <nav class="jump">
+    <a href="#tv">TV</a><a href="#key">Key entry</a><a href="#import">Import</a>
+    <a href="#phone">Phone</a><a href="#tablet">Tablet</a><a href="#why">Why</a><a href="#dpad">DPAD</a>
+  </nav>
+</div></div>
+
+<div class="wrap">
+
+<h1>First Run</h1>
+<p class="lede">
+  The shipped flow is a <b>560px dialog</b> on a slate gradient, sitting inside a scroll view, with a chip
+  wall, a one-line text field and a keyboard that lands on top of it. This replaces it with a
+  <b>full-screen, two-column stage</b> in the same idiom as Spotlight and Showcase: neutral
+  <code>#1B1C1C</code> ground, SF stack, borderless focus that lifts rather than rings, and a
+  <b>standing rail</b> on the left that tells you where you are the entire way through.
+</p>
+<p class="lede">
+  Three structural fixes carry most of the value: <b>the keyboard can never cover the field</b> (they are
+  two fixed bands, not a stack), <b>every step is reversible and skippable</b>, and <b>the phone is a
+  first-class input device</b> for the one thing a remote is terrible at — typing a 40-character token.
+</p>
+
+<h2 id="tv"><span class="num">01 · TELEVISION — 1920 × 1080</span>The flow, playable</h2>
+<p class="sub">
+  Click the frame, then drive it: arrows move focus, <kbd>Enter</kbd> activates, <kbd>Backspace</kbd> goes back.
+  <b>LEFT from the first column parks on the Back button</b> — the same "left edge is the way out" grammar the
+  TV sidebar uses. Nothing here is geometric traversal; every move is an explicit target.
+</p>
+<p class="keys">
+  <kbd>← ↑ → ↓</kbd> move &nbsp;·&nbsp; <kbd>Enter</kbd> select &nbsp;·&nbsp; <kbd>Backspace</kbd> back
+  &nbsp;·&nbsp; on the key screen the letter keys really type
+</p>
+<div class="jumps" id="jumps"></div>
+
+<div class="stage" id="tvstage" tabindex="0"><div class="scaler"><div class="tv" id="tv">
+
+  <!-- ══════════ 1 · WELCOME / MODE ══════════ -->
+  <div class="screen" data-s="welcome">
+    <div class="rail">
+      <div class="eyebrow">Welcome</div>
+      <div class="h1tv">Let's set<br>Debrify up.</div>
+      <div class="subtv">About two minutes. Every step can be skipped, and everything lives in Settings afterwards.</div>
+    </div>
+    <div class="ladder" id="lad-welcome"></div>
+    <div class="act">
+      <div class="card fx moderow" data-r="0" data-c="0" data-go="services">
+        <div class="glare"></div>
+        <div class="modemark">⌘</div>
+        <div>
+          <div class="modettl">Set it up here</div>
+          <div class="modesub">Connect your debrid service, pick search engines, link a tracker.</div>
+        </div>
+        <div class="chevr">›</div>
+      </div>
+      <div class="card fx moderow" data-r="1" data-c="0" data-go="import">
+        <div class="glare"></div>
+        <div class="modemark">⇄</div>
+        <div>
+          <div class="modettl">Bring it from another device</div>
+          <div class="modesub">Copy everything — services, addons, channels — from a device that already has Debrify.</div>
+          <div class="modefoot">Both devices on the same Wi-Fi.</div>
+        </div>
+        <div class="chevr">›</div>
+      </div>
+      <div class="ghost fx" data-r="2" data-c="0" data-go="done" style="align-self:flex-start;margin-top:14px">
+        Skip — I'll do this later
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 2 · SERVICES ══════════ -->
+  <div class="screen" data-s="services">
+    <div class="rail">
+      <div class="back fx" data-r="0" data-c="-1" data-back="1">‹</div>
+      <div class="eyebrow">Step 1 of 4</div>
+      <div class="h1tv">Which services<br>do you have?</div>
+      <div class="subtv">Pick any that you already pay for. Debrify uses them to turn a link into a stream.</div>
+    </div>
+    <div class="ladder" id="lad-services"></div>
+    <div class="act">
+      <div class="grid" id="svcgrid"></div>
+    </div>
+    <div class="actfoot">
+      <div class="count" id="svccount">Nothing selected</div>
+      <div class="ghost fx" data-r="3" data-c="0" data-go="engines">I don't have any</div>
+      <div class="pill fx dim" id="svcgo" data-r="3" data-c="1" data-go="key">Continue <span>›</span></div>
+    </div>
+  </div>
+
+  <!-- ══════════ 3 · KEY ENTRY ══════════ -->
+  <div class="screen kscreen" data-s="key">
+    <div class="krail">
+      <div class="back fx" data-r="0" data-c="-1" data-back="1">‹</div>
+    </div>
+    <div class="kbody">
+      <div class="khead">
+        <div class="svcmark" style="background:linear-gradient(135deg,#1E3A8A,#6366F1)">RD</div>
+        <div>
+          <div class="kttl">Real-Debrid</div>
+          <div class="ksub">Service 1 of 2 · your token is on real-debrid.com/apitoken</div>
+        </div>
+      </div>
+      <div class="methods">
+        <div class="meth fx on" data-r="0" data-c="0" data-meth="type">⌨ Type it</div>
+        <div class="meth fx" data-r="0" data-c="1" data-meth="phone">▢ Send from my phone</div>
+        <div class="meth fx" data-r="0" data-c="2" data-meth="paste">⧉ Paste</div>
+      </div>
+
+      <div id="typepane">
+        <div class="fieldlbl">API TOKEN</div>
+        <div class="field fx" data-r="1" data-c="0" id="keyfield">
+          <span class="ph">40 characters — it appears here as you type</span>
+        </div>
+        <div class="status" id="keystatus"><span class="sdot"></span><span>Nothing entered yet</span></div>
+      </div>
+
+      <div id="phonepane" style="display:none">
+        <div class="sendpanel">
+          <div class="qr">
+            <svg viewBox="0 0 21 21" shape-rendering="crispEdges"><rect width="21" height="21" fill="#fff"/>
+            <g fill="#000"><rect x="0" y="0" width="7" height="7"/><rect x="1" y="1" width="5" height="5" fill="#fff"/>
+            <rect x="2" y="2" width="3" height="3"/><rect x="14" y="0" width="7" height="7"/>
+            <rect x="15" y="1" width="5" height="5" fill="#fff"/><rect x="16" y="2" width="3" height="3"/>
+            <rect x="0" y="14" width="7" height="7"/><rect x="1" y="15" width="5" height="5" fill="#fff"/>
+            <rect x="2" y="16" width="3" height="3"/>
+            <rect x="9" y="0" width="1" height="1"/><rect x="11" y="1" width="1" height="1"/><rect x="9" y="2" width="2" height="1"/>
+            <rect x="12" y="3" width="1" height="2"/><rect x="9" y="4" width="1" height="2"/><rect x="11" y="5" width="2" height="1"/>
+            <rect x="8" y="8" width="2" height="1"/><rect x="12" y="8" width="1" height="2"/><rect x="16" y="9" width="2" height="1"/>
+            <rect x="19" y="9" width="1" height="2"/><rect x="8" y="10" width="1" height="3"/><rect x="10" y="10" width="2" height="1"/>
+            <rect x="14" y="11" width="1" height="2"/><rect x="17" y="11" width="2" height="1"/><rect x="11" y="12" width="2" height="1"/>
+            <rect x="16" y="13" width="1" height="2"/><rect x="9" y="14" width="1" height="2"/><rect x="11" y="15" width="2" height="1"/>
+            <rect x="13" y="16" width="1" height="2"/><rect x="18" y="15" width="2" height="1"/><rect x="10" y="17" width="2" height="1"/>
+            <rect x="15" y="18" width="1" height="2"/><rect x="17" y="19" width="3" height="1"/><rect x="9" y="19" width="2" height="1"/>
+            </g></svg>
+          </div>
+          <div class="sendcopy">
+            Open Debrify on your phone → <b>Remote › Send</b>, pick <b>Living Room TV</b>,<br>
+            then tap <b>Send this key</b>. It lands here in a second and this step finishes itself.<br><br>
+            <span style="color:rgba(255,255,255,.4);font-size:21px">Or scan the code to open the pairing screen directly.</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="pastepane" style="display:none">
+        <div class="fieldlbl">CLIPBOARD</div>
+        <div class="field fx" data-r="1" data-c="0" style="font-size:30px;letter-spacing:2px">
+          KX7M·QF2P·9LDA·TR4E·6NBV·8WCS·1JHY·30ZU
+        </div>
+        <div class="status ok"><span class="sdot"></span><span>Looks like a Real-Debrid token — press Use it below</span></div>
+      </div>
+    </div>
+
+    <div class="kbband" id="kbband">
+      <div class="kbhint">The field sits in its own band. The keyboard never covers it.</div>
+      <div class="kbgrid">
+        <div class="kbkeys" id="kbkeys"></div>
+        <div class="kbside">
+          <div class="sidekey fx" data-r="9" data-c="0" data-act="paste">⧉ Paste</div>
+          <div class="sidekey fx" data-r="10" data-c="0" data-act="del">⌫ Delete</div>
+          <div class="sidekey fx" data-r="11" data-c="0" data-act="clear">Clear</div>
+          <div class="sidekey go fx" data-r="12" data-c="0" data-act="done">Connect ›</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 4 · ENGINES ══════════ -->
+  <div class="screen" data-s="engines">
+    <div class="rail">
+      <div class="back fx" data-r="0" data-c="-1" data-back="1">‹</div>
+      <div class="eyebrow">Step 2 of 4</div>
+      <div class="h1tv">Where should<br>we search?</div>
+      <div class="subtv">These are the sources Debrify searches for files. All eight are on — turn off any you don't want, or all of them if you only use Stremio addons.</div>
+    </div>
+    <div class="ladder" id="lad-engines"></div>
+    <div class="act">
+      <div class="enggrid" id="enggrid"></div>
+    </div>
+    <div class="actfoot">
+      <div class="count" id="engcount">All 8 selected</div>
+      <div class="ghost fx" data-r="2" data-c="0" data-eng-all="off">Turn all off</div>
+      <div class="pill fx" data-r="2" data-c="1" data-go="trackers">Continue <span>›</span></div>
+    </div>
+  </div>
+
+  <!-- ══════════ 5 · TRACKERS ══════════ -->
+  <div class="screen" data-s="trackers">
+    <div class="rail">
+      <div class="back fx" data-r="0" data-c="-1" data-back="1">‹</div>
+      <div class="eyebrow">Step 3 of 4</div>
+      <div class="h1tv">Keep your<br>progress synced.</div>
+      <div class="subtv">A tracker remembers what you've watched, across every device. Optional, and you can connect both.</div>
+    </div>
+    <div class="ladder" id="lad-trackers"></div>
+    <div class="act">
+      <div class="trkrow">
+        <div class="card fx trkcard" id="traktcard" data-r="0" data-c="0" data-trk="trakt">
+          <div class="glare"></div>
+          <div class="trkmark" style="background:#ED1C24">T</div>
+          <div class="trkttl">Trakt</div>
+          <div class="trksub">Scrobbles what you watch, syncs your watchlist and Continue Watching.</div>
+          <div class="trkact"><div class="pill" style="pointer-events:none">Connect</div></div>
+        </div>
+        <div class="card fx trkcard" id="simklcard" data-r="0" data-c="1" data-trk="simkl">
+          <div class="glare"></div>
+          <div class="trkmark" style="background:#0B0F14;border:1px solid rgba(255,255,255,.2)">S</div>
+          <div class="trkttl">Simkl</div>
+          <div class="trksub">Same idea, with stronger anime coverage. Tokens never expire.</div>
+          <div class="trkact"><div class="pill" style="pointer-events:none">Connect</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="actfoot">
+      <div class="count">Both optional</div>
+      <div class="ghost fx" data-r="1" data-c="0" data-go="done">Skip both</div>
+      <div class="pill fx" data-r="1" data-c="1" data-go="done">Done <span>›</span></div>
+    </div>
+  </div>
+
+  <!-- ══════════ 6 · IMPORT FROM ANOTHER DEVICE ══════════ -->
+  <div class="screen" data-s="import">
+    <div class="rail" style="width:520px">
+      <div class="back fx" data-r="0" data-c="-1" data-back="1">‹</div>
+      <div class="eyebrow">Import</div>
+      <div class="h1tv">Send it<br>from your phone.</div>
+      <div class="subtv">This device is now visible on your network. Do these three things on the phone.</div>
+      <div class="railfoot">Nothing leaves your Wi-Fi. Debrify talks device-to-device.</div>
+    </div>
+    <div class="act" style="left:700px">
+      <div class="impwrap">
+        <div class="impsteps">
+          <div class="impstep done"><div class="impno">✓</div><div>
+            <div class="impttl">Open Remote on the phone</div>
+            <div class="impsub">Menu › Remote, at the bottom of the list.</div></div></div>
+          <div class="impstep done"><div class="impno">✓</div><div>
+            <div class="impttl">Choose Send</div>
+            <div class="impsub">The phone becomes the sender.</div></div></div>
+          <div class="impstep"><div class="impno">3</div><div>
+            <div class="impttl">Pick this device, tap Transfer Everything</div>
+            <div class="impsub">This screen finishes on its own when it arrives.</div></div></div>
+        </div>
+        <div class="imppanel">
+          <div class="radar"></div>
+          <div style="font-size:20px;color:rgba(255,255,255,.44);letter-spacing:.2em">THIS DEVICE</div>
+          <div class="devname">Living Room TV</div>
+          <div class="conn"><span style="width:12px;height:12px;border-radius:6px;background:var(--ok);display:block"></span> Phone connected</div>
+          <div class="arriving" id="arriving"></div>
+          <div class="bar"><span id="impbar" style="width:0%"></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="actfoot">
+      <div class="count">Waiting for the transfer…</div>
+      <div class="ghost fx" data-r="1" data-c="0" data-go="welcome">Set up here instead</div>
+    </div>
+  </div>
+
+  <!-- ══════════ 7 · DONE ══════════ -->
+  <div class="screen" data-s="done">
+    <div class="rail">
+      <div class="eyebrow">All set</div>
+      <div class="h1tv">You're ready<br>to watch.</div>
+      <div class="subtv">Anything you skipped is one screen away — Settings › Services.</div>
+    </div>
+    <div class="ladder" id="lad-done"></div>
+    <div class="act">
+      <div class="donetick">✓</div>
+      <div style="max-width:760px">
+        <div class="sumrow"><span>Real-Debrid</span><span class="st">Premium · 245 days</span></div>
+        <div class="sumrow"><span>Search engines</span><span class="st">6 imported</span></div>
+        <div class="sumrow"><span>Trakt</span><span class="st">Connected as varun</span></div>
+        <div class="sumrow skip"><span>Simkl</span><span class="st">Skipped</span></div>
+      </div>
+    </div>
+    <div class="actfoot">
+      <div class="count"></div>
+      <div class="pill fx" data-r="0" data-c="0" data-go="welcome">Start watching <span>›</span></div>
+    </div>
+  </div>
+
+</div></div></div>
+<p class="stagenote"><b>Stage:</b> pick a service on step 1, then type on the key screen — the letter keys really
+enter characters and the field validates when you hit <b>Connect</b>.</p>
+
+<h2 id="key"><span class="num">02 · THE KEYBOARD FIX</span>Two bands, never a stack</h2>
+<p class="sub">
+  Today the API-key field is one line inside a <code>SingleChildScrollView</code> in a 560-wide dialog; the TV
+  in-app keyboard opens over the bottom of the screen and the field is behind it, so on a couch you are typing a
+  40-character token you cannot see. The redesign makes the geometry structural rather than incidental:
+</p>
+<table>
+  <tr><th>Band</th><th>Occupies</th><th>Rule</th></tr>
+  <tr><td>Rail</td><td>x 42–125 (logical)</td><td>Back only. Collapses on this step — the task owns the screen.</td></tr>
+  <tr><td>Field band</td><td>y 48–283</td><td>Header, method tabs, the token echo and its live status. <b>Fixed.</b></td></tr>
+  <tr><td>Keyboard band</td><td>y 314–540</td><td>Keys + the action column. <b>Fixed.</b> It cannot overlap the field because it is a sibling with its own height, not an overlay.</td></tr>
+</table>
+<p class="sub" style="margin-top:14px">
+  The echo itself is readable from three metres: 19px logical mono, 2.5px tracking, grouped in fours, with a
+  live caret. Status sits directly under it and speaks in one line — <i>Nothing entered yet</i> →
+  <i>32 of 40</i> → <i>Checking…</i> → <i>Premium · 245 days left</i>. There is no error text that appears
+  only after you commit.
+</p>
+<div class="note">
+  <b>Three ways in, not one.</b> Typing is the fallback, not the expectation. <b>Send from my phone</b> reuses
+  the remote-control channel that already exists (<code>RemoteCommandRouter</code>) for a single key rather than
+  a whole config, and <b>Paste</b> is offered up front because most users open the token page on a phone and
+  copy it. On phone/desktop the same three appear as a segmented control.
+</div>
+
+<h2 id="import"><span class="num">03 · IMPORT</span>A checklist that stays put</h2>
+<p class="sub">
+  The shipped guide auto-advances five mock phone screens every five seconds, so the instruction you are reading
+  moves out from under you. Here the three steps are a <b>static checklist</b> that ticks as the transfer
+  progresses, and the right panel carries the live half: this device's advertised name in large type, the
+  connection state, and each item as it lands. A dead transfer shows <i>"Lost the phone — reconnect and it
+  resumes"</i> instead of silently pulsing forever.
+</p>
+
+<h2 id="phone"><span class="num">04 · PHONE — 360 × 740 LOGICAL</span>Same flow, thumb-first</h2>
+<p class="sub">
+  One column, segmented progress at the top, and a CTA that is <b>sticky above the keyboard</b> rather than
+  below the fold. The key screen is the same two-band idea expressed for a soft keyboard: the field is pinned
+  directly above the inset, the CTA rides on top of it, and a clipboard match is offered as a chip instead of
+  being buried in a menu.
+</p>
+<div class="frames">
+  <div><div class="phone"><div class="ph">
+    <div class="phtop">
+      <div class="segs"><i class="on"></i><i></i><i></i><i></i></div>
+      <div class="phttl">Which services<br>do you have?</div>
+      <div class="phsub">Pick any you already pay for. You can add more later.</div>
+    </div>
+    <div class="phbody">
+      <div class="phcard sel"><div class="phmark" style="background:linear-gradient(135deg,#1E3A8A,#6366F1)">RD</div>
+        <div><div class="phname">Real-Debrid</div><div class="phdesc">The most common. Fast links.</div></div>
+        <div class="phtick">✓</div></div>
+      <div class="phcard"><div class="phmark" style="background:linear-gradient(135deg,#7C3AED,#EC4899)">TB</div>
+        <div><div class="phname">Torbox</div><div class="phdesc">Newer, generous caching.</div></div>
+        <div class="phtick">✓</div></div>
+      <div class="phcard sel"><div class="phmark" style="background:linear-gradient(135deg,#26A69A,#00796B)">AD</div>
+        <div><div class="phname">AllDebrid</div><div class="phdesc">Wide host support.</div></div>
+        <div class="phtick">✓</div></div>
+      <div class="phcard"><div class="phmark" style="background:linear-gradient(135deg,#FB923C,#EA580C)">PM</div>
+        <div><div class="phname">Premiumize</div><div class="phdesc">Cloud + debrid in one.</div></div>
+        <div class="phtick">✓</div></div>
+      <div class="phcard"><div class="phmark" style="background:linear-gradient(135deg,#10B981,#059669)">PP</div>
+        <div><div class="phname">PikPak</div><div class="phdesc">Cloud drive. Email sign-in.</div></div>
+        <div class="phtick">✓</div></div>
+    </div>
+    <div class="phcta">
+      <div class="phpill">Continue with 2 ›</div>
+      <div class="phghost">I don't have any</div>
+    </div>
+  </div></div><p class="fcap">Services</p></div>
+
+  <div><div class="phone"><div class="ph">
+    <div class="phtop" style="padding-bottom:0">
+      <div class="segs"><i class="was"></i><i class="on"></i><i></i><i></i></div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+        <div class="phback" style="margin:0">‹</div>
+        <div class="phttl" style="font-size:23px;margin:0">Real-Debrid token</div>
+      </div>
+      <div class="phsub" style="margin-bottom:14px">Service 1 of 2 · paste, type, or send it over</div>
+      <div style="display:flex;gap:7px;margin-bottom:16px">
+        <div style="flex:1;height:32px;border-radius:16px;background:rgba(255,255,255,.16);display:flex;
+                    align-items:center;justify-content:center;font-size:13px;font-weight:600">Type</div>
+        <div style="flex:1;height:32px;border-radius:16px;background:rgba(255,255,255,.05);display:flex;
+                    align-items:center;justify-content:center;font-size:13px;color:rgba(255,255,255,.55)">Phone</div>
+        <div style="flex:1;height:32px;border-radius:16px;background:rgba(255,255,255,.05);display:flex;
+                    align-items:center;justify-content:center;font-size:13px;color:rgba(255,255,255,.55)">Paste</div>
+      </div>
+      <div class="phfield">KX7MQF2P9LDA<span style="opacity:.55">TR4E</span><span
+        style="display:inline-block;width:2px;height:15px;background:#fff;vertical-align:-2px"></span></div>
+      <div class="phchip">⧉ Clipboard has a 40-character key — use it</div>
+    </div>
+    <div class="phstickycta"><div class="phpill">Connect Real-Debrid</div></div>
+    <div class="phkb">
+      <div class="phkrow"><div class="phkey">Q</div><div class="phkey">W</div><div class="phkey">E</div><div class="phkey">R</div><div class="phkey">T</div><div class="phkey">Y</div><div class="phkey">U</div><div class="phkey">I</div><div class="phkey">O</div><div class="phkey">P</div></div>
+      <div class="phkrow"><div class="phkey">A</div><div class="phkey">S</div><div class="phkey">D</div><div class="phkey">F</div><div class="phkey">G</div><div class="phkey">H</div><div class="phkey">J</div><div class="phkey">K</div><div class="phkey">L</div></div>
+      <div class="phkrow"><div class="phkey w">⇧</div><div class="phkey">Z</div><div class="phkey">X</div><div class="phkey">C</div><div class="phkey">V</div><div class="phkey">B</div><div class="phkey">N</div><div class="phkey">M</div><div class="phkey w">⌫</div></div>
+      <div class="phkrow"><div class="phkey w">123</div><div class="phkey" style="width:150px">space</div><div class="phkey w">done</div></div>
+    </div>
+  </div></div><p class="fcap">Key entry · keyboard up</p></div>
+
+  <div><div class="phone"><div class="ph">
+    <div class="phtop">
+      <div class="segs"><i class="was"></i><i class="was"></i><i class="was"></i><i class="on"></i></div>
+      <div class="phttl">Keep your<br>progress synced.</div>
+      <div class="phsub">Optional. Connect one, both, or neither.</div>
+    </div>
+    <div class="phbody">
+      <div class="phcard" style="flex-direction:column;align-items:flex-start;gap:0;padding:20px">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+          <div class="phmark" style="background:#ED1C24">T</div>
+          <div><div class="phname">Trakt</div><div class="phdesc">Watchlist + Continue Watching</div></div>
+        </div>
+        <div style="width:100%;border-radius:12px;background:rgba(0,0,0,.35);padding:14px;text-align:center;
+                    font-family:var(--mono);font-size:26px;font-weight:700;letter-spacing:5px">A1B2·C3D4</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.55);margin-top:11px">
+          Opening trakt.tv/activate… · expires in 9m 41s</div>
+      </div>
+      <div class="phcard">
+        <div class="phmark" style="background:#0B0F14;border:1px solid rgba(255,255,255,.2)">S</div>
+        <div><div class="phname">Simkl</div><div class="phdesc">Stronger anime coverage.</div></div>
+        <div class="phtick"></div>
+      </div>
+    </div>
+    <div class="phcta">
+      <div class="phpill dim">Waiting for authorisation…</div>
+      <div class="phghost">Skip both</div>
+    </div>
+  </div></div><p class="fcap">Trackers · code in place</p></div>
+</div>
+
+<h2 id="tablet"><span class="num">05 · TABLET &amp; DESKTOP — 640 SHOWN, 1194 LOGICAL</span>The middle size</h2>
+<p class="sub">
+  Between 600 and 1000 logical px the rail collapses into a header and the grid goes to two columns; above that
+  it is the TV layout with pointer affordances (hover = the same lift, at 60% amplitude). The CTA row stays
+  bottom-anchored so the primary action is in the same place at every width.
+</p>
+<div class="frames">
+  <div><div class="tablet"><div class="tb">
+    <div class="tbsegs"><i class="on"></i><i></i><i></i><i></i></div>
+    <div class="tbhead">
+      <div class="tbeyebrow">Step 1 of 4</div>
+      <div class="tbttl">Which services do you have?</div>
+      <div class="tbsub">Pick any that you already pay for — Debrify turns their links into streams.</div>
+    </div>
+    <div class="tbgrid">
+      <div class="phcard sel" style="padding:20px"><div class="phmark" style="background:linear-gradient(135deg,#1E3A8A,#6366F1)">RD</div>
+        <div><div class="phname">Real-Debrid</div><div class="phdesc">The most common. Fast links.</div></div><div class="phtick">✓</div></div>
+      <div class="phcard" style="padding:20px"><div class="phmark" style="background:linear-gradient(135deg,#7C3AED,#EC4899)">TB</div>
+        <div><div class="phname">Torbox</div><div class="phdesc">Newer, generous caching.</div></div><div class="phtick">✓</div></div>
+      <div class="phcard" style="padding:20px"><div class="phmark" style="background:linear-gradient(135deg,#26A69A,#00796B)">AD</div>
+        <div><div class="phname">AllDebrid</div><div class="phdesc">Wide host support.</div></div><div class="phtick">✓</div></div>
+      <div class="phcard" style="padding:20px"><div class="phmark" style="background:linear-gradient(135deg,#FB923C,#EA580C)">PM</div>
+        <div><div class="phname">Premiumize</div><div class="phdesc">Cloud + debrid in one.</div></div><div class="phtick">✓</div></div>
+      <div class="phcard" style="padding:20px"><div class="phmark" style="background:linear-gradient(135deg,#10B981,#059669)">PP</div>
+        <div><div class="phname">PikPak</div><div class="phdesc">Cloud drive. Email sign-in.</div></div><div class="phtick">✓</div></div>
+      <div class="phcard" style="padding:20px;background:none;border:1px dashed rgba(255,255,255,.18);
+           justify-content:center"><div class="phname" style="color:rgba(255,255,255,.6)">None of these</div></div>
+    </div>
+    <div class="tbcta">
+      <div style="font-size:14px;color:rgba(255,255,255,.45);margin-right:auto">1 selected</div>
+      <div style="font-size:15px;color:rgba(255,255,255,.55)">I don't have any</div>
+      <div class="phpill" style="width:210px">Continue ›</div>
+    </div>
+  </div></div><p class="fcap">Tablet · 2-column, header rail</p></div>
+</div>
+
+<h2 id="why"><span class="num">06 · WHY</span>Every change, against what ships today</h2>
+<table>
+  <tr><th>Problem today</th><th>Where</th><th>Redesign</th></tr>
+  <tr><td>Keyboard covers the field</td><td><code>_buildIntegrationStep</code> — one <code>TvTextField</code> inside a scroll view in a 560px dialog</td><td>Field band and keyboard band are fixed siblings. Overlap is impossible by construction.</td></tr>
+  <tr><td>Token unreadable from the couch</td><td>Standard field text</td><td>19px logical mono echo, grouped in fours, live caret, count and validation state under it.</td></tr>
+  <tr><td>Typing a 40-char key on a remote</td><td>Only input path</td><td>Three: type, <b>send from phone</b> (existing remote channel), paste. Typing is the fallback.</td></tr>
+  <tr><td>Slate-gradient dialog, off-theme</td><td><code>InitialSetupFlow.show</code> · <code>LegacyThemeBoundary</code></td><td>Full-screen Spotlight ground <code>#1B1C1C→#1F1D1C</code>, SF stack, borderless focus. Same idiom as Home and Detail.</td></tr>
+  <tr><td>No idea how long it takes</td><td>No progress anywhere</td><td>Standing rail: 4 named steps, done/now/next, visible on every screen. Phone gets segments.</td></tr>
+  <tr><td>No way back after the welcome step</td><td><code>_goBack</code> only exists on integration steps</td><td>Back on every screen, at a fixed spot, reachable with one LEFT.</td></tr>
+  <tr><td>Cannot leave without finishing</td><td><code>PopScope(canPop:false)</code> + <code>barrierDismissible:false</code></td><td>"Skip — I'll do this later" on the welcome screen. Setup completion still records.</td></tr>
+  <tr><td>Engine step is an undifferentiated checkbox list — names only, no idea what any of them are</td><td><code>_buildEngineSelectionStep</code>, inside a 280px-max <code>ListView</code></td><td>One tile per engine with a one-line "what this is", all on by default (unchanged), plus a single "Turn all off" for addon-only users. The catalogue is fetched live, so the grid reflows to whatever <code>metadata.yaml</code> holds — 8 today.</td></tr>
+  <tr><td>Trakt and Simkl are two near-identical screens</td><td><code>_buildTraktStep</code> + <code>_buildSimklStep</code>, ~800 lines duplicated</td><td>One screen, two cards. The card you pick becomes the code panel in place; the other stays visible.</td></tr>
+  <tr><td>Import guide slides away while you read it</td><td>5s auto-advance, wraps forever</td><td>Static three-item checklist that ticks; the live half is a separate panel that can't move the instructions.</td></tr>
+  <tr><td>Nothing tells you what you ended up with</td><td>Flow just pops</td><td>Summary screen: what connected, what was skipped, where to change it.</td></tr>
+  <tr><td>Provider chips carry no meaning</td><td>Icon + name only</td><td>Cards with a one-line "what this is", so someone who doesn't know the difference can still choose.</td></tr>
+</table>
+
+<h2 id="dpad"><span class="num">07 · DPAD</span>Explicit targets, no geometric traversal</h2>
+<p class="sub">
+  Each screen declares its own grid. Movement is clamped, never wrapped — an unreachable focus is worse on a
+  remote than a dead end. LEFT at column 0 is the single exception: it parks on Back, and RIGHT returns you
+  exactly where you were.
+</p>
+<table>
+  <tr><th>Screen</th><th>Grid</th><th>Landing focus</th><th>LEFT at col 0</th></tr>
+  <tr><td>Welcome</td><td>3 rows × 1</td><td>Set it up here</td><td>—</td></tr>
+  <tr><td>Services</td><td>2 rows × 3, then footer row</td><td>First unselected card</td><td>Back</td></tr>
+  <tr><td>Key entry</td><td>methods · field · 4 keyboard rows · side column</td><td><b>Paste</b> if the clipboard matches, else the first key</td><td>Back</td></tr>
+  <tr><td>Engines</td><td>2 × 4, then footer row</td><td>First tile</td><td>Back</td></tr>
+  <tr><td>Trackers</td><td>1 × 2, footer</td><td>Trakt</td><td>Back</td></tr>
+  <tr><td>Import</td><td>footer only</td><td>Set up here instead</td><td>Back</td></tr>
+  <tr><td>Done</td><td>1 × 1</td><td>Start watching</td><td>—</td></tr>
+</table>
+<div class="note">
+  <b>Focus survives the step change.</b> Every transition targets a named node in a post-frame callback, the
+  same pattern <code>_requestFocusForCurrentStep</code> already uses — but it is declared per screen in one
+  table rather than reconstructed from <code>_stepIndex</code> arithmetic.
+</div>
+<div class="note bad">
+  <b>Not built here, on purpose.</b> The spring focus engine (ζ≈0.82 overshoot) is a CSS approximation in this
+  mock; in Flutter it is the existing <code>FocusExpression</code> mechanic from the Spotlight look, reused
+  rather than reinvented. Same for the ident/splash handoff — unchanged.
+</div>
+
+</div>
+
+<script>
+/* ═══════════ stage scaling ═══════════ */
+function fitStage(st){
+  const sc = st.querySelector('.scaler');
+  sc.style.transform = 'scale(' + (st.clientWidth/1920) + ')';
+}
+const stage = document.getElementById('tvstage');
+new ResizeObserver(()=>fitStage(stage)).observe(stage);
+fitStage(stage);
+
+/* ═══════════ data ═══════════ */
+const SERVICES = [
+  {id:'rd', ab:'RD', name:'Real-Debrid',  desc:'The most common. Fast, cached links.', g:'linear-gradient(135deg,#1E3A8A,#6366F1)'},
+  {id:'tb', ab:'TB', name:'Torbox',       desc:'Newer, generous caching.',             g:'linear-gradient(135deg,#7C3AED,#EC4899)'},
+  {id:'ad', ab:'AD', name:'AllDebrid',    desc:'Wide host support.',                   g:'linear-gradient(135deg,#26A69A,#00796B)'},
+  {id:'pm', ab:'PM', name:'Premiumize',   desc:'Cloud storage and debrid in one.',     g:'linear-gradient(135deg,#FB923C,#EA580C)'},
+  {id:'pp', ab:'PP', name:'PikPak',       desc:'Cloud drive. Signs in with email.',    g:'linear-gradient(135deg,#10B981,#059669)'},
+];
+const ENGINES = [
+  {id:'tpb',  name:'The Pirate Bay', desc:'The big general index.'},
+  {id:'sol',  name:'SolidTorrents',  desc:'General, clean metadata.'},
+  {id:'trio', name:'Torrentio',      desc:'Aggregator — many sites at once.'},
+  {id:'csv',  name:'Torrents CSV',   desc:'Open dataset. Very fast.'},
+  {id:'yts',  name:'YTS',            desc:'Movies, small encodes.'},
+  {id:'knab', name:'Knaben',         desc:'Multi-site aggregator.'},
+  {id:'nyaa', name:'Nyaa',           desc:'Anime.'},
+  {id:'rar',  name:'TheRARBG',       desc:'General, RARBG successor.'},
+];
+const LADDER = [
+  {k:'services', t:'Services'},
+  {k:'engines',  t:'Search engines'},
+  {k:'trackers', t:'Trackers'},
+  {k:'done',     t:'Finish'},
+];
+const ORDER = ['services','engines','trackers','done'];
+
+/* ═══════════ build service grid ═══════════ */
+const selected = new Set();
+const grid = document.getElementById('svcgrid');
+SERVICES.forEach((s,i)=>{
+  const el = document.createElement('div');
+  el.className = 'card fx svc';
+  el.dataset.r = Math.floor(i/3); el.dataset.c = i%3; el.dataset.svc = s.id;
+  el.innerHTML = '<div class="glare"></div><div class="tick">✓</div>' +
+    '<div class="svcmark" style="background:'+s.g+'">'+s.ab+'</div>' +
+    '<div class="svcttl">'+s.name+'</div><div class="svcsub">'+s.desc+'</div>';
+  grid.appendChild(el);
+});
+const noneCard = document.createElement('div');
+noneCard.className = 'card fx svc none'; noneCard.dataset.r = 1; noneCard.dataset.c = 2;
+noneCard.dataset.go = 'engines';
+noneCard.innerHTML = '<div class="svcttl">None of these</div>';
+grid.appendChild(noneCard);
+
+/* ═══════════ build engine grid — the live catalogue is 8 as of today ═══════════ */
+const engOn = new Set(ENGINES.map(e=>e.id));
+const eg = document.getElementById('enggrid');
+ENGINES.forEach((e,i)=>{
+  const el = document.createElement('div');
+  el.className = 'card fx eng sel';
+  el.dataset.r = Math.floor(i/4); el.dataset.c = i%4; el.dataset.eng = e.id;
+  el.innerHTML = '<div class="glare"></div><div class="tick">✓</div>' +
+    '<div class="engttl">'+e.name+'</div><div class="engsub">'+e.desc+'</div>';
+  eg.appendChild(el);
+});
+function paintEngCount(){
+  const n = engOn.size;
+  document.getElementById('engcount').textContent =
+    n === ENGINES.length ? 'All '+n+' selected'
+    : n === 0 ? 'None — Stremio addons only'
+    : n + ' of ' + ENGINES.length + ' selected';
+}
+
+/* ═══════════ build ladders ═══════════ */
+function paintLadders(active){
+  LADDER.forEach(()=>{});
+  document.querySelectorAll('.ladder').forEach(l=>{
+    const screen = l.id.replace('lad-','');
+    const idx = ORDER.indexOf(active);
+    l.innerHTML = LADDER.map((s,i)=>{
+      const st = i < idx ? 'done' : (i === idx ? 'now' : '');
+      return '<div class="lad '+st+'"><span class="dot">'+(i<idx?'✓':'')+'</span>'+s.t+'</div>';
+    }).join('') + '<div class="railfoot">Skip anything. It all lives in Settings › Services afterwards.</div>';
+  });
+}
+
+/* ═══════════ keyboard ═══════════ */
+const ROWS = ['1234567890','QWERTYUIOP','ASDFGHJKL','ZXCVBNM-_'];
+const kb = document.getElementById('kbkeys');
+ROWS.forEach((row,ri)=>{
+  const r = document.createElement('div'); r.className = 'krow';
+  row.split('').forEach((ch,ci)=>{
+    const k = document.createElement('div');
+    k.className = 'key fx'; k.textContent = ch;
+    k.dataset.r = 5+ri; k.dataset.c = ci; k.dataset.ch = ch;
+    r.appendChild(k);
+  });
+  kb.appendChild(r);
+});
+
+/* ═══════════ focus engine ═══════════ */
+let cur = 'welcome';
+const history = [];
+let pos = {r:0,c:0}, parked = null;
+
+function screenEl(){ return document.querySelector('.screen[data-s="'+cur+'"]'); }
+function nodes(){ return [...screenEl().querySelectorAll('[data-r]')].filter(n=>n.offsetParent !== null); }
+function paintFocus(){
+  document.querySelectorAll('.f').forEach(n=>n.classList.remove('f'));
+  const n = nodes().find(x=>+x.dataset.r === pos.r && +x.dataset.c === pos.c);
+  if(n) n.classList.add('f');
+}
+function nearest(r, c){
+  const ns = nodes().filter(n=>+n.dataset.r === r);
+  if(!ns.length) return null;
+  return ns.reduce((a,b)=> Math.abs(+b.dataset.c - c) < Math.abs(+a.dataset.c - c) ? b : a);
+}
+function move(dr, dc){
+  const ns = nodes();
+  if(dc === -1 && pos.c === 0){                       // LEFT edge → Back
+    const back = ns.find(n=>n.dataset.back);
+    if(back){ parked = {...pos}; pos = {r:+back.dataset.r, c:+back.dataset.c}; paintFocus(); return; }
+  }
+  if(dc === 1 && parked && pos.c === -1){ pos = parked; parked = null; paintFocus(); return; }
+  if(dr){
+    const rowsAvail = [...new Set(ns.map(n=>+n.dataset.r))].sort((a,b)=>a-b).filter(r=>r>=0);
+    const i = rowsAvail.indexOf(pos.r);
+    const nr = rowsAvail[Math.min(rowsAvail.length-1, Math.max(0, (i<0?0:i)+dr))];
+    const t = nearest(nr, pos.c); if(t) pos = {r:+t.dataset.r, c:+t.dataset.c};
+  } else {
+    const inRow = ns.filter(n=>+n.dataset.r === pos.r).sort((a,b)=>+a.dataset.c - +b.dataset.c);
+    const i = inRow.findIndex(n=>+n.dataset.c === pos.c);
+    const t = inRow[Math.min(inRow.length-1, Math.max(0, i+dc))];
+    if(t) pos = {r:+t.dataset.r, c:+t.dataset.c};
+  }
+  parked = null;
+  paintFocus();
+}
+
+/* landing focus per screen — declared, never derived */
+const LANDING = {
+  welcome:{r:0,c:0}, services:{r:0,c:0}, key:{r:9,c:0},
+  engines:{r:0,c:0}, trackers:{r:0,c:0}, import:{r:1,c:0}, done:{r:0,c:0}
+};
+function go(s, push=true){
+  if(push && s !== cur) history.push(cur);
+  cur = s;
+  document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('on', x.dataset.s === s));
+  paintLadders(s);
+  pos = {...(LANDING[s]||{r:0,c:0})}; parked = null;
+  paintFocus();
+  document.querySelectorAll('#jumps button').forEach(b=>b.classList.toggle('on', b.dataset.s === s));
+  if(s === 'import') runImport();
+}
+
+/* review shortcuts: buttons + #s=<screen> deep link */
+const SCREENS = [['welcome','Welcome'],['services','Services'],['key','Key entry'],['engines','Engines'],
+                 ['trackers','Trackers'],['import','Import'],['done','Done']];
+const jumps = document.getElementById('jumps');
+SCREENS.forEach(([id,label])=>{
+  const b = document.createElement('button');
+  b.textContent = label; b.dataset.s = id;
+  b.onclick = ()=>{ go(id); stage.focus(); };
+  jumps.appendChild(b);
+});
+function back(){
+  if(!history.length) return;
+  const prev = history.pop();
+  go(prev, false);
+}
+
+/* ═══════════ activation ═══════════ */
+let token = '';
+let meth = 'type';
+const fieldEl = document.getElementById('keyfield');
+const statusEl = document.getElementById('keystatus');
+const DEMO = 'KX7MQF2P9LDATR4E6NBV8WCS1JHY30ZUFA5PMQ2R';
+
+function paintField(){
+  if(!token.length){
+    fieldEl.innerHTML = '<span class="ph">40 characters — it appears here as you type</span>';
+  } else {
+    const grouped = token.match(/.{1,4}/g).join(' ');
+    fieldEl.innerHTML = '<span>'+grouped+'</span><span class="caret"></span>';
+  }
+  setStatus(token.length ? (token.length >= 40 ? 'ok' : '') :'',
+    token.length ? (token.length >= 40 ? 'Looks complete — press Connect' : token.length+' of 40')
+                 : 'Nothing entered yet');
+}
+function setStatus(kind, text){
+  statusEl.className = 'status ' + kind;
+  statusEl.innerHTML = '<span class="sdot"></span><span>'+text+'</span>';
+}
+function setMethod(m){
+  meth = m;
+  document.querySelectorAll('.meth').forEach(x=>x.classList.toggle('on', x.dataset.meth === m));
+  document.getElementById('typepane').style.display  = m === 'type'  ? '' : 'none';
+  document.getElementById('phonepane').style.display = m === 'phone' ? '' : 'none';
+  document.getElementById('pastepane').style.display = m === 'paste' ? '' : 'none';
+  document.getElementById('kbband').style.opacity    = m === 'type'  ? '1' : '.28';
+  if(m === 'phone') simulatePhoneSend();
+}
+let phoneTimer;
+function simulatePhoneSend(){
+  clearTimeout(phoneTimer);
+  phoneTimer = setTimeout(()=>{
+    if(meth !== 'phone' || cur !== 'key') return;
+    token = DEMO; setMethod('type'); paintField();
+    setStatus('work','Key received from Living Room phone — checking…');
+    setTimeout(()=>{ if(cur==='key') setStatus('ok','Premium · 245 days left'); }, 1100);
+  }, 2600);
+}
+function connect(){
+  if(token.length < 8){ setStatus('','Enter the token first, or send it from your phone'); return; }
+  setStatus('work','Checking with Real-Debrid…');
+  setTimeout(()=>{
+    setStatus('ok','Connected — Premium · 245 days left');
+    setTimeout(()=>go('engines'), 900);
+  }, 1200);
+}
+
+function activate(){
+  const n = nodes().find(x=>+x.dataset.r === pos.r && +x.dataset.c === pos.c);
+  if(!n) return;
+  if(n.dataset.back){ back(); return; }
+  if(n.dataset.svc){
+    n.classList.toggle('sel');
+    selected.has(n.dataset.svc) ? selected.delete(n.dataset.svc) : selected.add(n.dataset.svc);
+    const c = selected.size;
+    document.getElementById('svccount').textContent =
+      c ? c + (c===1?' service':' services') + ' selected' : 'Nothing selected';
+    document.getElementById('svcgo').classList.toggle('dim', c===0);
+    document.getElementById('svcgo').innerHTML = c
+      ? 'Continue with ' + c + ' <span>›</span>' : 'Continue <span>›</span>';
+    return;
+  }
+  if(n.dataset.meth){ setMethod(n.dataset.meth); return; }
+  if(n.dataset.ch){ if(token.length < 40){ token += n.dataset.ch; paintField(); } return; }
+  if(n.dataset.act){
+    if(n.dataset.act === 'del'){ token = token.slice(0,-1); paintField(); }
+    if(n.dataset.act === 'clear'){ token = ''; paintField(); }
+    if(n.dataset.act === 'paste'){ token = DEMO; paintField(); setStatus('ok','Pasted from clipboard — press Connect'); }
+    if(n.dataset.act === 'done'){ connect(); }
+    return;
+  }
+  if(n.dataset.eng){
+    const id = n.dataset.eng;
+    engOn.has(id) ? engOn.delete(id) : engOn.add(id);
+    n.classList.toggle('sel', engOn.has(id));
+    paintEngCount();
+    return;
+  }
+  if(n.dataset.engAll !== undefined){
+    const turningOff = engOn.size > 0;
+    engOn.clear();
+    if(!turningOff) ENGINES.forEach(e=>engOn.add(e.id));
+    document.querySelectorAll('.eng').forEach(x=>x.classList.toggle('sel', engOn.has(x.dataset.eng)));
+    n.textContent = turningOff ? 'Turn all on' : 'Turn all off';
+    paintEngCount();
+    return;
+  }
+  if(n.dataset.trk){ showCode(n.dataset.trk); return; }
+  if(n.dataset.go){
+    if(n.dataset.go === 'key' && document.getElementById('svcgo').classList.contains('dim')) return;
+    go(n.dataset.go);
+    return;
+  }
+}
+
+/* tracker → code panel in place */
+function showCode(which){
+  const card  = document.getElementById(which === 'trakt' ? 'traktcard' : 'simklcard');
+  const other = document.getElementById(which === 'trakt' ? 'simklcard' : 'traktcard');
+  other.classList.add('dimmed');
+  card.querySelector('.trkact').innerHTML =
+    '<div class="code">A1B2·C3D4</div>' +
+    '<div class="codeurl">Go to <b>' + (which==='trakt'?'trakt.tv/activate':'simkl.com/pin') + '</b> and enter it</div>' +
+    '<div class="codetimer">Waiting… expires in 9m 41s</div>';
+  card.querySelector('.trksub').textContent = 'On your phone or laptop — any browser works.';
+}
+
+/* import simulation */
+let impRun = false;
+function runImport(){
+  if(impRun) return; impRun = true;
+  const items = ['Real-Debrid','Torbox','Search engines','Stremio addons','IPTV providers','Trakt session','TV channels'];
+  const box = document.getElementById('arriving'); const bar = document.getElementById('impbar');
+  box.innerHTML = ''; let i = 0;
+  const t = setInterval(()=>{
+    if(i >= items.length){ clearInterval(t); box.innerHTML += '<div style="margin-top:14px;color:#fff">Everything arrived — restarting…</div>'; return; }
+    box.innerHTML += '<div><i>✓</i>'+items[i]+'</div>';
+    bar.style.width = Math.round(((i+1)/items.length)*100) + '%';
+    i++;
+  }, 900);
+}
+
+/* ═══════════ input ═══════════ */
+stage.addEventListener('keydown', e=>{
+  const k = e.key;
+  if(k === 'ArrowLeft'){ move(0,-1); e.preventDefault(); }
+  else if(k === 'ArrowRight'){ move(0,1); e.preventDefault(); }
+  else if(k === 'ArrowUp'){ move(-1,0); e.preventDefault(); }
+  else if(k === 'ArrowDown'){ move(1,0); e.preventDefault(); }
+  else if(k === 'Enter' || k === ' '){ activate(); e.preventDefault(); }
+  else if(k === 'Backspace'){ back(); e.preventDefault(); }
+});
+stage.addEventListener('click', e=>{
+  const n = e.target.closest('[data-r]');
+  stage.focus();
+  if(!n) return;
+  pos = {r:+n.dataset.r, c:+n.dataset.c}; parked = null; paintFocus(); activate();
+});
+
+paintField();
+const deep = (location.hash.match(/s=([a-z]+)/)||[])[1];
+go(SCREENS.some(s=>s[0]===deep) ? deep : 'welcome', false);
+</script>

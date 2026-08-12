@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import '../../utils/app_storage.dart';
 
 /// Metadata for an imported engine
@@ -21,12 +20,12 @@ class ImportedEngineMetadata {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'fileName': fileName,
-        'displayName': displayName,
-        'importedAt': importedAt.toIso8601String(),
-        'icon': icon,
-      };
+    'id': id,
+    'fileName': fileName,
+    'displayName': displayName,
+    'importedAt': importedAt.toIso8601String(),
+    'icon': icon,
+  };
 
   factory ImportedEngineMetadata.fromJson(Map<String, dynamic> json) {
     return ImportedEngineMetadata(
@@ -39,13 +38,58 @@ class ImportedEngineMetadata {
   }
 }
 
+/// One engine prepared for a batch import.
+class LocalEngineWrite {
+  const LocalEngineWrite({
+    required this.engineId,
+    required this.fileName,
+    required this.yamlContent,
+    required this.displayName,
+    this.icon,
+  });
+
+  final String engineId;
+  final String fileName;
+  final String yamlContent;
+  final String displayName;
+  final String? icon;
+}
+
+/// Keeps a completed batch reversible until its caller has refreshed runtime
+/// state. This closes the small window between disk commit and registry reload.
+class LocalEngineTransaction {
+  LocalEngineTransaction._(
+    this._storage,
+    this._previousMetadata,
+    this._previousFiles,
+  );
+
+  final LocalEngineStorage _storage;
+  final Map<String, ImportedEngineMetadata?> _previousMetadata;
+  final Map<String, List<int>?> _previousFiles;
+  bool _closed = false;
+
+  void commit() => _closed = true;
+
+  Future<void> rollback() async {
+    if (_closed) return;
+    _closed = true;
+    await _storage._restoreBatch(_previousMetadata, _previousFiles);
+  }
+}
+
+class _EngineBatchCanceled implements Exception {
+  const _EngineBatchCanceled();
+}
+
 /// Manages local storage of imported engine YAML files
 class LocalEngineStorage {
   static const String _enginesDirName = 'engines';
   static const String _metadataFileName = 'metadata.json';
 
   static LocalEngineStorage? _instance;
-  static LocalEngineStorage get instance => _instance ??= LocalEngineStorage._();
+  static LocalEngineStorage get instance =>
+      _instance ??= LocalEngineStorage._();
 
   LocalEngineStorage._();
 
@@ -65,7 +109,9 @@ class LocalEngineStorage {
     }
 
     await _loadMetadata();
-    debugPrint('LocalEngineStorage: Initialized with ${_metadata?.length ?? 0} engines');
+    debugPrint(
+      'LocalEngineStorage: Initialized with ${_metadata?.length ?? 0} engines',
+    );
   }
 
   /// Get the engines directory path
@@ -86,7 +132,9 @@ class LocalEngineStorage {
 
         _metadata = {};
         enginesJson.forEach((key, value) {
-          _metadata![key] = ImportedEngineMetadata.fromJson(value as Map<String, dynamic>);
+          _metadata![key] = ImportedEngineMetadata.fromJson(
+            value as Map<String, dynamic>,
+          );
         });
       } catch (e) {
         debugPrint('LocalEngineStorage: Failed to load metadata: $e');
@@ -164,6 +212,99 @@ class LocalEngineStorage {
 
     await _saveMetadata();
     debugPrint('LocalEngineStorage: Saved engine $engineId');
+  }
+
+  /// Writes a prepared batch as one reversible operation.
+  ///
+  /// If [isCanceled] becomes true after any file write, every affected file and
+  /// metadata entry are restored before this returns `null`. On
+  /// success the caller owns the returned transaction until it either commits
+  /// after refreshing runtime state or rolls back.
+  Future<LocalEngineTransaction?> saveEnginesAtomically(
+    List<LocalEngineWrite> engines, {
+    bool Function()? isCanceled,
+  }) async {
+    await initialize();
+    if (engines.isEmpty) return null;
+
+    final previousMetadata = <String, ImportedEngineMetadata?>{
+      for (final engine in engines)
+        engine.engineId: _metadata![engine.engineId],
+    };
+    final affectedFileNames = <String>{
+      for (final engine in engines) engine.fileName,
+      for (final engine in engines)
+        if (previousMetadata[engine.engineId] != null)
+          previousMetadata[engine.engineId]!.fileName,
+    };
+    final previousFiles = <String, List<int>?>{};
+    for (final fileName in affectedFileNames) {
+      final file = File('${_enginesDir!.path}/$fileName');
+      previousFiles[fileName] = await file.exists()
+          ? await file.readAsBytes()
+          : null;
+    }
+
+    final transaction = LocalEngineTransaction._(
+      this,
+      previousMetadata,
+      previousFiles,
+    );
+    try {
+      for (final engine in engines) {
+        if (isCanceled?.call() ?? false) {
+          throw const _EngineBatchCanceled();
+        }
+        final file = File('${_enginesDir!.path}/${engine.fileName}');
+        await file.writeAsString(engine.yamlContent, flush: true);
+        _metadata![engine.engineId] = ImportedEngineMetadata(
+          id: engine.engineId,
+          fileName: engine.fileName,
+          displayName: engine.displayName,
+          importedAt: DateTime.now(),
+          icon: engine.icon,
+        );
+        if (isCanceled?.call() ?? false) {
+          throw const _EngineBatchCanceled();
+        }
+      }
+      await _saveMetadata();
+      if (isCanceled?.call() ?? false) {
+        throw const _EngineBatchCanceled();
+      }
+      return transaction;
+    } on _EngineBatchCanceled {
+      await transaction.rollback();
+      return null;
+    } catch (_) {
+      await transaction.rollback();
+      rethrow;
+    }
+  }
+
+  Future<void> _restoreBatch(
+    Map<String, ImportedEngineMetadata?> previousMetadata,
+    Map<String, List<int>?> previousFiles,
+  ) async {
+    for (final entry in previousFiles.entries) {
+      final file = File('${_enginesDir!.path}/${entry.key}');
+      final bytes = entry.value;
+      if (bytes == null) {
+        if (await file.exists()) await file.delete();
+      } else {
+        await file.writeAsBytes(bytes, flush: true);
+      }
+    }
+    for (final entry in previousMetadata.entries) {
+      final metadata = entry.value;
+      if (metadata == null) {
+        _metadata!.remove(entry.key);
+      } else {
+        _metadata![entry.key] = metadata;
+      }
+    }
+    await _saveMetadata();
+    debugPrint('LocalEngineStorage: Rolled back engine batch');
   }
 
   /// Delete an imported engine

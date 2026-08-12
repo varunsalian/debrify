@@ -29,10 +29,7 @@ class _MetadataCache {
   final List<RemoteEngineInfo> engines;
   final DateTime fetchedAt;
 
-  _MetadataCache({
-    required this.engines,
-    required this.fetchedAt,
-  });
+  _MetadataCache({required this.engines, required this.fetchedAt});
 
   bool get isExpired {
     final now = DateTime.now();
@@ -52,14 +49,16 @@ class RemoteEngineManager {
   static const String _apiBaseUrl = 'https://gitlab.com/api/v4/projects';
 
   /// Raw file URL for downloading YAML content
-  static const String _rawBaseUrl = 'https://gitlab.com/mediacontent/search-engines/-/raw';
+  static const String _rawBaseUrl =
+      'https://gitlab.com/mediacontent/search-engines/-/raw';
 
   http.Client _client;
 
   // In-memory cache for metadata.yaml with 5-minute TTL
   _MetadataCache? _metadataCache;
 
-  RemoteEngineManager({http.Client? client}) : _client = client ?? http.Client();
+  RemoteEngineManager({http.Client? client})
+    : _client = client ?? http.Client();
 
   /// Helper method to fetch HTTP requests with proper timeout handling
   ///
@@ -82,23 +81,25 @@ class RemoteEngineManager {
   }) async {
     try {
       // Perform the HTTP request with timeout
-      final response = await _client.get(url, headers: headers).timeout(
-        timeout,
-        onTimeout: () {
-          // This callback is called when timeout occurs
-          // Close the client to terminate all active connections
-          _client.close();
-
-          // Create a new client for future requests
-          _client = http.Client();
-
-          // Throw a clear timeout error
-          throw TimeoutException(
-            'Request to ${url.host} timed out after ${timeout.inSeconds} seconds',
+      final response = await _client
+          .get(url, headers: headers)
+          .timeout(
             timeout,
+            onTimeout: () {
+              // This callback is called when timeout occurs
+              // Close the client to terminate all active connections
+              _client.close();
+
+              // Create a new client for future requests
+              _client = http.Client();
+
+              // Throw a clear timeout error
+              throw TimeoutException(
+                'Request to ${url.host} timed out after ${timeout.inSeconds} seconds',
+                timeout,
+              );
+            },
           );
-        },
-      );
 
       return response;
     } on TimeoutException {
@@ -122,7 +123,9 @@ class RemoteEngineManager {
     try {
       // Check cache first
       if (_metadataCache != null && !_metadataCache!.isExpired) {
-        debugPrint('RemoteEngineManager: Using cached metadata (age: ${DateTime.now().difference(_metadataCache!.fetchedAt).inSeconds}s)');
+        debugPrint(
+          'RemoteEngineManager: Using cached metadata (age: ${DateTime.now().difference(_metadataCache!.fetchedAt).inSeconds}s)',
+        );
         return _metadataCache!.engines;
       }
 
@@ -138,10 +141,14 @@ class RemoteEngineManager {
           fetchedAt: DateTime.now(),
         );
 
-        debugPrint('RemoteEngineManager: Successfully fetched ${engines.length} engines from metadata.yaml');
+        debugPrint(
+          'RemoteEngineManager: Successfully fetched ${engines.length} engines from metadata.yaml',
+        );
         return engines;
       } catch (e) {
-        debugPrint('RemoteEngineManager: Failed to fetch metadata.yaml, falling back to old method: $e');
+        debugPrint(
+          'RemoteEngineManager: Failed to fetch metadata.yaml, falling back to old method: $e',
+        );
 
         // Fallback to old method: fetch file list and download all YAMLs
         return await _fetchEnginesLegacy();
@@ -177,6 +184,7 @@ class RemoteEngineManager {
 
       final name = engineEntry['name'] as String?;
       final path = engineEntry['path'] as String?;
+      final description = engineEntry['description'] as String?;
 
       if (name == null || path == null) {
         debugPrint('RemoteEngineManager: Skipping invalid entry: $engineEntry');
@@ -188,15 +196,15 @@ class RemoteEngineManager {
       final fileName = path.split('/').last;
       final id = fileName.replaceAll('.yaml', '');
 
-      engines.add(RemoteEngineInfo(
-        id: id,
-        fileName: fileName,
-        displayName: name,
-        // Note: metadata.yaml doesn't include icons or descriptions
-        // These can be added to metadata.yaml in the future if needed
-        icon: null,
-        description: null,
-      ));
+      engines.add(
+        RemoteEngineInfo(
+          id: id,
+          fileName: fileName,
+          displayName: name,
+          icon: null,
+          description: description,
+        ),
+      );
     }
 
     return engines;
@@ -210,7 +218,9 @@ class RemoteEngineManager {
     final response = await _fetchWithTimeout(Uri.parse(url));
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to fetch metadata.yaml: HTTP ${response.statusCode}');
+      throw Exception(
+        'Failed to fetch metadata.yaml: HTTP ${response.statusCode}',
+      );
     }
 
     return response.body;
@@ -219,17 +229,21 @@ class RemoteEngineManager {
   /// LEGACY: Old method that fetches file list then downloads all YAMLs
   /// Used as fallback if metadata.yaml is unavailable
   Future<List<RemoteEngineInfo>> _fetchEnginesLegacy() async {
-    debugPrint('RemoteEngineManager: Using legacy method (fetching all YAML files)');
+    debugPrint(
+      'RemoteEngineManager: Using legacy method (fetching all YAML files)',
+    );
 
     // Step 1: Get file list from GitLab API
     final fileList = await _fetchFileList();
 
     // Step 2: Filter for .yaml files (exclude _defaults.yaml and metadata.yaml)
     final yamlFiles = fileList
-        .where((file) =>
-            file['name'].toString().endsWith('.yaml') &&
-            !file['name'].toString().startsWith('_') &&
-            file['name'].toString() != _metadataFileName)
+        .where(
+          (file) =>
+              file['name'].toString().endsWith('.yaml') &&
+              !file['name'].toString().startsWith('_') &&
+              file['name'].toString() != _metadataFileName,
+        )
         .toList();
 
     debugPrint('RemoteEngineManager: Found ${yamlFiles.length} engine files');
@@ -244,14 +258,18 @@ class RemoteEngineManager {
           engines.add(info);
         }
       } catch (e) {
-        debugPrint('RemoteEngineManager: Failed to fetch info for $fileName: $e');
+        debugPrint(
+          'RemoteEngineManager: Failed to fetch info for $fileName: $e',
+        );
         // Add with basic info if metadata fetch fails
         final id = fileName.replaceAll('.yaml', '');
-        engines.add(RemoteEngineInfo(
-          id: id,
-          fileName: fileName,
-          displayName: _formatDisplayName(id),
-        ));
+        engines.add(
+          RemoteEngineInfo(
+            id: id,
+            fileName: fileName,
+            displayName: _formatDisplayName(id),
+          ),
+        );
       }
     }
 
@@ -260,7 +278,8 @@ class RemoteEngineManager {
 
   /// Fetch the list of files from GitLab repository
   Future<List<Map<String, dynamic>>> _fetchFileList() async {
-    final url = '$_apiBaseUrl/$_gitlabProject/repository/tree?path=$_enginePath&ref=$_branch';
+    final url =
+        '$_apiBaseUrl/$_gitlabProject/repository/tree?path=$_enginePath&ref=$_branch';
     debugPrint('RemoteEngineManager: Fetching file list from: $url');
 
     final response = await _fetchWithTimeout(
@@ -269,7 +288,9 @@ class RemoteEngineManager {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('GitLab API returned ${response.statusCode}: ${response.body}');
+      throw Exception(
+        'GitLab API returned ${response.statusCode}: ${response.body}',
+      );
     }
 
     final List<dynamic> files = json.decode(response.body);
@@ -286,7 +307,8 @@ class RemoteEngineManager {
       if (yaml == null) return null;
 
       final id = yaml['id'] as String? ?? fileName.replaceAll('.yaml', '');
-      final displayName = yaml['display_name'] as String? ?? _formatDisplayName(id);
+      final displayName =
+          yaml['display_name'] as String? ?? _formatDisplayName(id);
       final icon = yaml['icon'] as String?;
 
       return RemoteEngineInfo(
@@ -312,7 +334,9 @@ class RemoteEngineManager {
       final response = await _fetchWithTimeout(Uri.parse(url));
 
       if (response.statusCode != 200) {
-        debugPrint('RemoteEngineManager: Download failed with ${response.statusCode}');
+        debugPrint(
+          'RemoteEngineManager: Download failed with ${response.statusCode}',
+        );
         return null;
       }
 
@@ -330,9 +354,11 @@ class RemoteEngineManager {
   String _formatDisplayName(String id) {
     return id
         .split('_')
-        .map((word) => word.isNotEmpty
-            ? '${word[0].toUpperCase()}${word.substring(1)}'
-            : '')
+        .map(
+          (word) => word.isNotEmpty
+              ? '${word[0].toUpperCase()}${word.substring(1)}'
+              : '',
+        )
         .join(' ');
   }
 
