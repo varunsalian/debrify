@@ -1275,24 +1275,33 @@ class _SeasonPillState extends State<_SeasonPill> {
       // Selecting on FOCUS would reload the episode list on every step of a
       // walk across the seasons. OK commits; the walk is free.
       onKeyEvent: (_, e) => _activate(e, widget.onTap),
-      child: ParallaxFocus(
-        focused: _f,
-        shape: ParallaxShape.pill,
-        radius: BorderRadius.circular(12.5 * k),
-        child: Container(
-          height: 25 * k,
-          alignment: Alignment.center,
-          padding: EdgeInsets.symmetric(horizontal: 15 * k),
-          decoration: BoxDecoration(
-            color: (_f || widget.active)
-                ? _ink.withValues(alpha: _f ? 0.28 : 0.18)
-                : null,
-            borderRadius: BorderRadius.circular(12.5 * k),
-          ),
-          child: Text(
-            widget.label,
-            style: _t(12.5 * k,
-                w: FontWeight.w600, a: widget.active || _f ? 1 : 0.55),
+      // The wide row is what every TOUCH tablet gets (compact swaps in the
+      // dropdown below 600), so the pill needs a finger path too — OK-only
+      // left the season control dead under a finger. Opaque: the pill draws
+      // no background until it is focused or active, and a bare DecoratedBox
+      // defers the hit test to the Text, so the padding would miss.
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: ParallaxFocus(
+          focused: _f,
+          shape: ParallaxShape.pill,
+          radius: BorderRadius.circular(12.5 * k),
+          child: Container(
+            height: 25 * k,
+            alignment: Alignment.center,
+            padding: EdgeInsets.symmetric(horizontal: 15 * k),
+            decoration: BoxDecoration(
+              color: (_f || widget.active)
+                  ? _ink.withValues(alpha: _f ? 0.28 : 0.18)
+                  : null,
+              borderRadius: BorderRadius.circular(12.5 * k),
+            ),
+            child: Text(
+              widget.label,
+              style: _t(12.5 * k,
+                  w: FontWeight.w600, a: widget.active || _f ? 1 : 0.55),
+            ),
           ),
         ),
       ),
