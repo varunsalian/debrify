@@ -5,6 +5,7 @@ import '../../models/stremio_addon.dart';
 import '../../services/imdb_enrichment_service.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../episodes_panel.dart';
+import '../section_reveal.dart';
 import 'detail_episode_cells.dart';
 import 'detail_model.dart';
 import 'detail_style.dart';
@@ -367,7 +368,62 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   /// it (a finger needs what a remote never did).
   static const double _seasonPillBandHeight = 56;
 
+  /// Which bands have played their entrance, by band key.
+  ///
+  /// Held HERE rather than inside the reveal widget because the list is lazy:
+  /// scroll a band more than `cacheExtent` away and its element — and any
+  /// state it owned — is collected, so a band the user had already watched
+  /// arrive would arrive again on every pass down the page.
+  final Set<String> _revealed = {};
+
+  /// Touch's answer to the DPAD's band cursor.
+  ///
+  /// On a remote the lift and `_reveal`'s parking scroll are what say which
+  /// band you are in. Under a finger nothing moves but the page itself, so
+  /// each band earns its arrival instead: it fades, rises and comes forward
+  /// the first time it crosses into the viewport, then holds still while it is
+  /// read.
+  ///
+  /// DPAD gets the band untouched. An entrance there would animate against the
+  /// parking scroll that put the band on screen, and the motion tokens already
+  /// return [EntranceStyle.none] on television.
+  ///
+  /// Keyed per band rather than by list position: Seasons and Episodes appear
+  /// once their data lands, and without a key the arriving band would inherit
+  /// the state of whatever sat at its index before.
+  Widget _band(String id, Widget child) => widget.dpad
+      ? child
+      : SectionReveal(
+          key: ValueKey('showcase-band-$id'),
+          startWhenVisible: true,
+          scaleFrom: 0.98,
+          alreadyRevealed: _revealed.contains(id),
+          onRevealed: () => _revealed.add(id),
+          child: child,
+        );
+
   void _reveal(_Band band) {
+    // A band the cursor steps into must be sitting at its RESTING transform
+    // before anything measures it. `ensureVisible` composes the paint
+    // transforms of every ancestor, and an unrevealed band is still holding
+    // the entrance's 4% drop and 0.98 scale — so the parking scroll would be
+    // computed off a rect that is about to move, and the band would settle
+    // off its `rest` alignment. Marking it revealed snaps it to rest; the
+    // scroll waits one frame for that to land.
+    //
+    // dpad:false pages reach here too — they still receive arrow keys from
+    // real keyboards — which is exactly the case the wrapper affects.
+    if (!widget.dpad && !_revealed.contains(band.key)) {
+      setState(() => _revealed.add(band.key));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _park(band);
+      });
+      return;
+    }
+    _park(band);
+  }
+
+  void _park(_Band band) {
     final ctx = band.anchor.currentContext;
     if (ctx == null) return;
     // The VIEWPORT, not the screen. `MediaQuery` height includes the overscan
@@ -735,82 +791,116 @@ class _DetailShowcaseState extends State<DetailShowcase> {
               height: _heroHeight(view, viewport),
             ),
             if (view != null && view.seasons.length > 1)
-              ShowcaseSeasons(
-                key: _seasonsKey,
-                view: view,
-                nodes: _grow(
-                  _seasonNodes,
-                  view.seasons.length,
-                  'showcase-season',
+              _band(
+                'seasons',
+                ShowcaseSeasons(
+                  key: _seasonsKey,
+                  view: view,
+                  nodes: _grow(
+                    _seasonNodes,
+                    view.seasons.length,
+                    'showcase-season',
+                  ),
                 ),
               ),
             if (view != null && view.episodes.isNotEmpty)
-              _episodes(view)
+              _band('episodes', _episodes(view))
             else if (view != null && view.loading)
-              const ShowcaseBandNote(text: 'Loading episodes…')
+              // The same slot as the rail it stands in for, so the swap from
+              // note to episodes is not a second arrival.
+              _band('episodes', const ShowcaseBandNote(text: 'Loading episodes…'))
             else if (view != null && view.unavailable)
-              ShowcaseBandNote(
-                text: 'Episodes unavailable',
-                actionLabel: 'Retry',
-                onAction: view.onRetry,
-                actionNode: _grow(_retryNodes, 1, 'showcase-retry').first,
+              // 'retry' matches this note's key in `_bands` — the ladder
+              // treats it as a band of its own, so the reveal must too, or
+              // the one band the user is staring at is the one that pops in
+              // while its neighbours fade.
+              _band(
+                'retry',
+                ShowcaseBandNote(
+                  text: 'Episodes unavailable',
+                  actionLabel: 'Retry',
+                  onAction: view.onRetry,
+                  actionNode: _grow(_retryNodes, 1, 'showcase-retry').first,
+                ),
               ),
             if (m.cast.isNotEmpty)
-              ShowcaseCast(
-                key: _castKey,
-                cast: m.cast,
-                nodes: _grow(_castNodes, m.cast.length, 'showcase-cast'),
+              _band(
+                'cast',
+                ShowcaseCast(
+                  key: _castKey,
+                  cast: m.cast,
+                  nodes: _grow(_castNodes, m.cast.length, 'showcase-cast'),
+                ),
               ),
             if (_hasGuide)
-              ShowcaseGuide(
-                key: _guideKey,
-                guide: m.parentsGuide!,
-                nodes: _grow(
-                  _guideNodes,
-                  m.parentsGuide!.categories.length,
-                  'showcase-guide',
+              _band(
+                'guide',
+                ShowcaseGuide(
+                  key: _guideKey,
+                  guide: m.parentsGuide!,
+                  nodes: _grow(
+                    _guideNodes,
+                    m.parentsGuide!.categories.length,
+                    'showcase-guide',
+                  ),
+                  accent: m.accent,
                 ),
-                accent: m.accent,
               ),
-            ShowcaseSources(
-              key: _sourcesKey,
-              sources: m.boundSources,
-              nodes: _grow(
-                _sourceNodes,
-                m.boundSources.length +
-                    1 +
-                    (m.isMovie && m.onBrowse != null ? 1 : 0),
-                'showcase-source',
+            _band(
+              'sources',
+              ShowcaseSources(
+                key: _sourcesKey,
+                sources: m.boundSources,
+                nodes: _grow(
+                  _sourceNodes,
+                  m.boundSources.length +
+                      1 +
+                      (m.isMovie && m.onBrowse != null ? 1 : 0),
+                  'showcase-source',
+                ),
+                onOpen: m.onManageSources ?? m.onSelectSource,
+                onBrowseAll: m.isMovie ? m.onBrowse : null,
               ),
-              onOpen: m.onManageSources ?? m.onSelectSource,
-              onBrowseAll: m.isMovie ? m.onBrowse : null,
             ),
             if (m.recommendations.isNotEmpty)
-              ShowcaseRecs(
-                key: _recsKey,
-                items: m.recommendations,
-                nodes: _grow(_recNodes, m.recommendations.length, 'showcase-rec'),
-                onTap: m.onRecommendationTap,
+              _band(
+                'recs',
+                ShowcaseRecs(
+                  key: _recsKey,
+                  items: m.recommendations,
+                  nodes:
+                      _grow(_recNodes, m.recommendations.length, 'showcase-rec'),
+                  onTap: m.onRecommendationTap,
+                ),
               ),
             if (_universe.isNotEmpty)
-              ShowcaseUniverse(
-                key: _uniKey,
-                items: _universe,
-                nodes: _grow(_uniNodes, _universe.length, 'showcase-uni'),
-                onOpen:
-                    m.onRecommendationTap != null ? _openUniverse : null,
+              _band(
+                'universe',
+                ShowcaseUniverse(
+                  key: _uniKey,
+                  items: _universe,
+                  nodes: _grow(_uniNodes, _universe.length, 'showcase-uni'),
+                  onOpen:
+                      m.onRecommendationTap != null ? _openUniverse : null,
+                ),
               ),
             if (_dyk.isNotEmpty)
-              ShowcaseDidYouKnow(
-                key: _dykKey,
-                entries: _dyk,
-                total: _x?.didYouKnowTotal ?? _dyk.length,
-                countLine: _dykCountLine,
-                nodes: _grow(_dykNodes, _dykNodeCount, 'showcase-dyk'),
+              _band(
+                'dyk',
+                ShowcaseDidYouKnow(
+                  key: _dykKey,
+                  entries: _dyk,
+                  total: _x?.didYouKnowTotal ?? _dyk.length,
+                  countLine: _dykCountLine,
+                  nodes: _grow(_dykNodes, _dykNodeCount, 'showcase-dyk'),
+                ),
               ),
             // Reference material, last and unfocusable — it is not a band in
             // the DPAD ladder, it is the page's footer.
-            ShowcaseDetails(rows: m.detailRows, awards: m.awards),
+            _band(
+              'details',
+              ShowcaseDetails(rows: m.detailRows, awards: m.awards),
+            ),
             const SizedBox(height: 40),
           ],
         ),

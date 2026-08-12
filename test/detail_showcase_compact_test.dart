@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:debrify/models/stremio_addon.dart';
@@ -6,6 +7,7 @@ import 'package:debrify/services/imdb_enrichment_service.dart';
 import 'package:debrify/services/imdb_parents_guide_service.dart';
 import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
+import 'package:debrify/theme/app_motion.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/widgets/detail/detail_layout_showcase.dart';
@@ -13,6 +15,7 @@ import 'package:debrify/widgets/detail/detail_model.dart';
 import 'package:debrify/widgets/detail/showcase_parts.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/episodes_panel.dart';
+import 'package:debrify/widgets/section_reveal.dart';
 
 /// Showcase's compact (phone) presentation and touch drivers.
 ///
@@ -142,12 +145,24 @@ Widget _host(
   bool manySeasons = true,
   void Function(TraktEpisode)? options,
   void Function(int)? selectSeason,
+  // The band reveal is token-driven, and `fromDetail` carries no entrance —
+  // so a test that wants one has to say so, the way `ThemeSpec` does for the
+  // Looks that ship it (Spotlight is `fadeUp`).
+  EntranceStyle? entrance,
+  AppTheme? theme,
 }) =>
     MediaQuery(
       data: MediaQueryData(size: size),
       child: MaterialApp(
         home: AppThemeScope(
-          theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+          theme: theme ??
+              AppTheme.fromDetail(
+                DetailThemes.byId('signal'),
+                motion: entrance == null
+                    ? null
+                    : MotionTokens.of(MotionCharacter.settle)
+                        .copyWith(entrance: entrance),
+              ),
           child: Scaffold(
             body: DetailShowcase(
               model: m,
@@ -601,4 +616,121 @@ void main() {
     expect(find.text('Universe', skipOffstage: false), findsNothing);
     expect(find.text('Did You Know', skipOffstage: false), findsNothing);
   });
+
+  // ── the band reveal ───────────────────────────────────────────────────────
+  //
+  // Touch has no band cursor: nothing lifts, nothing parks, and the only thing
+  // that moves is the page. So each band arrives as it crosses into the
+  // viewport. The property that matters most is the failure DIRECTION — a band
+  // that never gets its trigger must end up visible, not stranded at opacity 0
+  // with the page apparently missing its content. `section_reveal_test.dart`
+  // owns that guarantee at the widget level; these cover the page's wiring.
+
+  testWidgets('a band below the fold waits, then arrives on scroll',
+      (tester) async {
+    _surface(tester, _phone);
+    await tester.pumpWidget(_host(_model(),
+        dpad: false, size: _phone, entrance: EntranceStyle.fadeUp));
+    await tester.pumpAndSettle();
+
+    // The hero deliberately stops short of a full screenful to leave the next
+    // band PEEKING, so Seasons is already on screen — and a band you can see
+    // has arrived, rather than waiting for a scroll that may never come.
+    expect(_bandOpacity(tester, 'seasons'), 1,
+        reason: 'the peek band is visible at rest, so it has already arrived');
+
+    // Cast sits a screenful further down. Mounted — `cacheExtent` builds well
+    // past the fold — but not yet arrived, which is exactly the case a
+    // mount-triggered reveal gets wrong.
+    expect(_bandOpacity(tester, 'cast'), 0,
+        reason: 'built ahead of the fold, but not revealed');
+
+    await tester.drag(find.byType(DetailShowcase), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+
+    expect(_bandOpacity(tester, 'cast'), 1);
+  });
+
+  testWidgets('stepping the ladder into a band snaps it to rest first',
+      (tester) async {
+    _surface(tester, _phone);
+    await tester.pumpWidget(_host(_model(),
+        dpad: false, size: _phone, entrance: EntranceStyle.fadeUp));
+    await tester.pumpAndSettle();
+    expect(_bandOpacity(tester, 'cast'), 0);
+
+    // dpad:false pages still receive arrow keys from real keyboards, and the
+    // ladder parks the band it steps into with `Scrollable.ensureVisible` —
+    // which composes the paint transforms of every ancestor. Measuring a band
+    // through a half-played entrance parks it off its `rest` alignment, so
+    // the band is snapped to rest BEFORE the scroll is computed.
+    for (var i = 0; i < 3; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
+
+    expect(_bandOpacity(tester, 'cast'), 1,
+        reason: 'the band the cursor stepped into is at rest, not mid-reveal');
+  });
+
+  testWidgets('a look with no entrance token shows its bands outright',
+      (tester) async {
+    _surface(tester, _phone);
+    // No `entrance:` — the default `EntranceStyle.none`, which must mean the
+    // band is simply there rather than a band that waits for a trigger the
+    // look never intends to fire.
+    await tester.pumpWidget(_host(_model(), dpad: false, size: _phone));
+    await tester.pumpAndSettle();
+
+    expect(_revealWrappers(tester, 'seasons'), 0,
+        reason: 'no entrance means no reveal wrapper at all, not opacity 0');
+  });
+
+  testWidgets('DPAD keeps its own choreography — no reveal wrapper',
+      (tester) async {
+    _surface(tester, _tv);
+    await tester.pumpWidget(_host(_model(),
+        dpad: true, size: _tv, entrance: EntranceStyle.fadeUp));
+    await tester.pumpAndSettle();
+
+    // An entrance here would animate against `_reveal`'s parking scroll, which
+    // is what puts a band on screen when the remote steps into it.
+    expect(find.byKey(const ValueKey('showcase-band-seasons'),
+        skipOffstage: false), findsNothing);
+    expect(find.byType(SectionReveal, skipOffstage: false), findsNothing);
+  });
 }
+
+/// The reveal's own [FadeTransition] — the outermost one under the band's key,
+/// which is [SectionReveal]'s, not any fade a cell paints inside itself.
+///
+/// `skipOffstage: false` on EVERY finder here, the inner one included: the
+/// band that matters most is one built ahead of the fold, and a sliver's cache
+/// region counts as offstage — so a default `byType` finds nothing inside it
+/// however the descendant finder is configured.
+double _bandOpacity(WidgetTester t, String id) => t
+    .widgetList<FadeTransition>(
+      find.descendant(
+        of: find.byKey(ValueKey('showcase-band-$id'), skipOffstage: false),
+        matching: find.byType(FadeTransition, skipOffstage: false),
+        skipOffstage: false,
+      ),
+    )
+    .first
+    .opacity
+    .value;
+
+/// How many reveal wrappers the band actually mounted.
+///
+/// Counts [SectionReveal.activeKey] rather than a widget TYPE: asserting that
+/// no `FadeTransition` exists anywhere under the band would also fail the day
+/// a season pill or a poster gains a cross-fade of its own, sending the next
+/// maintainer to the reveal to debug a change they made elsewhere.
+int _revealWrappers(WidgetTester t, String id) => find
+    .descendant(
+      of: find.byKey(ValueKey('showcase-band-$id'), skipOffstage: false),
+      matching: find.byKey(SectionReveal.activeKey, skipOffstage: false),
+      skipOffstage: false,
+    )
+    .evaluate()
+    .length;
