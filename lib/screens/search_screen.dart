@@ -2190,16 +2190,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   /// Load and append the next batch of board rows (deduped against re-entry).
-  Future<void> _loadMoreBoard() async {
-    if (_boardLoadingMore || _boardCursor >= _boardRefs.length) return;
+  Future<bool> _loadMoreBoard() async {
+    if (_boardLoadingMore || _boardCursor >= _boardRefs.length) return false;
     // Bind this append to the load generation that owns the current cursor —
     // if a full reload lands mid-fetch, the stale batch must not append onto
     // (or advance) the fresh board.
     final gen = _boardLoadGen;
+    var appended = false;
     setState(() => _boardLoadingMore = true);
     try {
       final more = await _fetchBoardBatchUntilNonEmpty(gen);
-      if (!mounted || gen != _boardLoadGen) return;
+      if (!mounted || gen != _boardLoadGen) return false;
       if (more.isNotEmpty) {
         // Always keep the board cache growing so nothing is lost…
         _homeSections = [..._homeSections, ...more];
@@ -2209,6 +2210,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // there would corrupt the search view. They'll reappear on _restoreHome.
         if (_catalogQuery.isEmpty && !_catalogSearching) {
           _appendSections(more);
+          appended = true;
           // A DPAD-down past the last row may be waiting on this batch —
           // classic's deferred move, and the stage layouts' rail advance.
           _maybeCompleteDeferredDown();
@@ -2219,6 +2221,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (mounted) setState(() => _boardLoadingMore = false);
       _maybeAutoFillBoard();
     }
+    return appended;
   }
 
   /// Append newly-loaded board rows without disturbing the rows already shown:
@@ -5675,7 +5678,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         final catalogRow = row - leading;
         if (catalogRow >= 0) unawaited(_loadMoreRow(catalogRow));
       },
-      onLoadMoreShelves: () => unawaited(_loadMoreBoard()),
+      onLoadMoreShelves: _loadMoreBoard,
       // The board owns the CADENCE; the resolve and the video stay here.
       //
       // Every other entry into `_scheduleHeroTrailer` is still excluded for
