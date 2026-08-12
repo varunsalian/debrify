@@ -567,16 +567,20 @@ class TorrentService {
     required bool isMovie,
     int? season,
     int? episode,
+    List<int>? availableSeasons,
     String? contentType,
     Duration? timeout,
+    bool preserveOrder = false,
   }) {
     return _searchStremioAddons(
       imdbId: imdbId,
       isMovie: isMovie,
       season: season,
       episode: episode,
+      availableSeasons: availableSeasons,
       contentType: contentType,
       timeout: timeout,
+      preserveOrder: preserveOrder,
     );
   }
 
@@ -589,6 +593,7 @@ class TorrentService {
     String?
     contentType, // Optional explicit content type (for TV channels, etc.)
     Duration? timeout,
+    bool preserveOrder = false,
   }) async {
     try {
       final stremioService = StremioService.instance;
@@ -611,6 +616,7 @@ class TorrentService {
         episode: episode,
         availableSeasons: availableSeasons,
         timeout: timeout,
+        preserveOrder: preserveOrder,
       );
 
       return {

@@ -9,6 +9,7 @@ import 'debrid_service.dart';
 import 'iptv_media_store.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
+import '../models/quick_play_rules.dart';
 import '../models/webdav_item.dart';
 import '../models/android_video_renderer_mode.dart';
 import '../models/tv_hero_artwork_quality.dart';
@@ -398,6 +399,8 @@ class StorageService {
   static const String _quickPlayTryMultipleTorrentsKey =
       'quick_play_try_multiple_torrents';
   static const String _quickPlayMaxRetriesKey = 'quick_play_max_retries';
+  static const String _quickPlayMovieRulesKey = 'quick_play_movie_rules_v2';
+  static const String _quickPlaySeriesRulesKey = 'quick_play_series_rules_v2';
 
   // Series auto-pin: on a series play with no pinned source, search packs
   // first (complete series → season pack), and pin whatever source plays so
@@ -5667,6 +5670,9 @@ class StorageService {
     return prefs.getBool(_quickPlayHonorsFiltersKey) ?? true;
   }
 
+  /// Legacy global preference retained for migration and profile-less callers.
+  /// The Quick Play page owns the independent Movie and Series `useFilters`
+  /// values; a global write must never silently rewrite either profile.
   static Future<void> setQuickPlayHonorsFilters(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_quickPlayHonorsFiltersKey, value);
@@ -5913,6 +5919,103 @@ class StorageService {
 
   // Quick Play Cache Fallback Settings methods
 
+  /// Loads the per-content Quick Play profile. When no v2 profile exists,
+  /// legacy filter/retry/series-pack preferences are folded into one without
+  /// changing what the next play will do. Non-default legacy values are
+  /// labelled Custom; an untouched install is Debrify default.
+  static Future<QuickPlayRules> getQuickPlayRules({
+    required bool isMovie,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    return _quickPlayRulesFromPrefs(prefs, isMovie: isMovie);
+  }
+
+  static QuickPlayRules _quickPlayRulesFromPrefs(
+    SharedPreferences prefs, {
+    required bool isMovie,
+  }) {
+    final key = isMovie ? _quickPlayMovieRulesKey : _quickPlaySeriesRulesKey;
+    final stored = prefs.getString(key);
+    if (stored != null) {
+      try {
+        final decoded = jsonDecode(stored);
+        if (decoded is Map<String, dynamic>) {
+          return QuickPlayRules.fromJson(decoded, isMovie: isMovie);
+        }
+        if (decoded is Map) {
+          return QuickPlayRules.fromJson(
+            decoded.map((key, value) => MapEntry(key.toString(), value)),
+            isMovie: isMovie,
+          );
+        }
+      } catch (e) {
+        debugPrint('Invalid Quick Play profile, using legacy values: $e');
+      }
+    }
+
+    final defaults = QuickPlayRules.debrifyDefault(isMovie: isMovie);
+    final migrated = defaults.copyWith(
+      preset: QuickPlayPreset.debrifyDefault,
+      useFilters: prefs.getBool(_quickPlayHonorsFiltersKey) ?? true,
+      tryNextOnFailure: prefs.getBool(_quickPlayTryMultipleTorrentsKey) ?? true,
+      maxAttempts: prefs.getInt(_quickPlayMaxRetriesKey) ?? 5,
+      preferSeriesPacks:
+          !isMovie && (prefs.getBool(_autoBindSeriesPacksKey) ?? true),
+    );
+    return migrated == defaults
+        ? migrated
+        : migrated.copyWith(preset: QuickPlayPreset.custom);
+  }
+
+  static Future<void> setQuickPlayRules(
+    QuickPlayRules rules, {
+    required bool isMovie,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final siblingIsMovie = !isMovie;
+    final siblingKey = siblingIsMovie
+        ? _quickPlayMovieRulesKey
+        : _quickPlaySeriesRulesKey;
+    // Snapshot an as-yet-unpersisted sibling BEFORE updating the legacy global
+    // mirrors below. Otherwise saving Movies first could make a later Series
+    // migration inherit the movie retry count (and vice versa).
+    final sibling = prefs.containsKey(siblingKey)
+        ? null
+        : _quickPlayRulesFromPrefs(prefs, isMovie: siblingIsMovie);
+    await prefs.setString(
+      isMovie ? _quickPlayMovieRulesKey : _quickPlaySeriesRulesKey,
+      jsonEncode(rules.toJson()),
+    );
+    if (sibling != null) {
+      await prefs.setString(siblingKey, jsonEncode(sibling.toJson()));
+    }
+
+    // Keep old readers and downgrade builds safe. Media-specific values can't
+    // be represented perfectly by the legacy global keys, so the active v2
+    // playback path never reads these; they are compatibility mirrors only.
+    await prefs.setBool(
+      _quickPlayTryMultipleTorrentsKey,
+      rules.tryNextOnFailure,
+    );
+    await prefs.setInt(_quickPlayMaxRetriesKey, rules.maxAttempts);
+    if (!isMovie) {
+      await prefs.setBool(_autoBindSeriesPacksKey, rules.preferSeriesPacks);
+    }
+  }
+
+  static Future<void> restoreQuickPlayDefaults() async {
+    await setQuickPlayRules(
+      QuickPlayRules.debrifyDefault(isMovie: true),
+      isMovie: true,
+    );
+    await setQuickPlayRules(
+      QuickPlayRules.debrifyDefault(isMovie: false),
+      isMovie: false,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_quickPlayHonorsFiltersKey, true);
+  }
+
   /// Get whether to try multiple torrents if first is not cached
   /// Default: true (try next torrent on failure)
   static Future<bool> getQuickPlayTryMultipleTorrents() async {
@@ -5979,6 +6082,8 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_quickPlayTryMultipleTorrentsKey);
     await prefs.remove(_quickPlayMaxRetriesKey);
+    await prefs.remove(_quickPlayMovieRulesKey);
+    await prefs.remove(_quickPlaySeriesRulesKey);
   }
 
   // External Player Settings methods
