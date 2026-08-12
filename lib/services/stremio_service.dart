@@ -729,6 +729,8 @@ class StremioService {
         streamId,
         timeout: timeout,
       ).catchError((e) {
+        final sourceKey = 'stremio:${probe.addon.name}'.toLowerCase();
+        addonErrors[sourceKey] = e.toString();
         debugPrint(
           'StremioService: ${probe.addon.name} error probing S${probe.seasonNum}E1: $e',
         );
@@ -755,24 +757,17 @@ class StremioService {
       'StremioService: Season probing returned ${fallbackTorrents.length} torrents',
     );
 
-    // Step 4: Combine all torrents and filter to packs
-    final Map<String, Torrent> uniqueTorrents = {};
-
-    // Add initial torrents
-    for (final torrent in allTorrents) {
-      uniqueTorrents[torrent.infohash] = torrent;
-    }
-
-    // Add fallback torrents
-    for (final torrent in fallbackTorrents) {
-      if (!uniqueTorrents.containsKey(torrent.infohash)) {
-        uniqueTorrents[torrent.infohash] = torrent;
-      }
-    }
-
-    allTorrents = uniqueTorrents.values.toList();
+    // Step 4: Combine all torrents and filter to packs. Exact-order profiles
+    // retain every row exactly as returned, including repeated hashes from
+    // different addons; normal ranking keeps the historical hash dedupe.
+    allTorrents = mergeSmartFallbackTorrents(
+      allTorrents,
+      fallbackTorrents,
+      preserveOrder: preserveOrder,
+    );
     debugPrint(
-      'StremioService: Combined total: ${allTorrents.length} unique torrents',
+      'StremioService: Combined total: ${allTorrents.length} '
+      '${preserveOrder ? 'ordered items' : 'unique torrents'}',
     );
 
     // Filter combined results to packs only
@@ -1178,6 +1173,26 @@ class StremioService {
     List<StremioStream> streams, {
     bool preserveOrder = false,
   }) => _convertToTorrents(streams, preserveOrder: preserveOrder);
+
+  /// Merge the bare-series and season-probe batches. Public for focused tests
+  /// because exact-order's duplicate-preservation contract is easy to regress
+  /// when changing the smart fallback independently from normal conversion.
+  @visibleForTesting
+  List<Torrent> mergeSmartFallbackTorrents(
+    List<Torrent> initial,
+    List<Torrent> fallback, {
+    bool preserveOrder = false,
+  }) {
+    if (preserveOrder) return [...initial, ...fallback];
+    final unique = <String, Torrent>{};
+    for (final torrent in initial) {
+      unique[torrent.infohash] = torrent;
+    }
+    for (final torrent in fallback) {
+      unique.putIfAbsent(torrent.infohash, () => torrent);
+    }
+    return unique.values.toList();
+  }
 
   List<Torrent> _convertToTorrents(
     List<StremioStream> streams, {

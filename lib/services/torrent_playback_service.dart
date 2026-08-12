@@ -1038,6 +1038,7 @@ class TorrentPlaybackService {
         meta: meta,
         label: label,
         rules: rules,
+        forceAddonOnly: true,
       );
       return;
     }
@@ -1513,6 +1514,42 @@ class TorrentPlaybackService {
   @visibleForTesting
   static bool allowsAddonSearch(QuickPlayRules rules) =>
       rules.sourceMode != QuickPlaySourceMode.torrentsOnly;
+
+  /// Search stages used by the direct-stream/auto-advance flow. Forced and
+  /// provider-free calls stay addon-only. Untouched series profiles retain the
+  /// shipped combined request; once a user explicitly chooses a source order,
+  /// that order is authoritative in this path too.
+  @visibleForTesting
+  static List<QuickPlaySourceMode> addonStreamSearchPlan(
+    QuickPlayRules rules, {
+    bool noProvider = false,
+    bool forceAddonOnly = false,
+  }) {
+    if (noProvider || forceAddonOnly) {
+      return const [QuickPlaySourceMode.addonsOnly];
+    }
+    if (rules.preserveLegacyCombinedPackSearch) {
+      return const [QuickPlaySourceMode.together];
+    }
+    switch (rules.sourceMode) {
+      case QuickPlaySourceMode.torrentsThenAddons:
+        return const [
+          QuickPlaySourceMode.torrentsOnly,
+          QuickPlaySourceMode.addonsOnly,
+        ];
+      case QuickPlaySourceMode.addonsThenTorrents:
+        return const [
+          QuickPlaySourceMode.addonsOnly,
+          QuickPlaySourceMode.torrentsOnly,
+        ];
+      case QuickPlaySourceMode.together:
+        return const [QuickPlaySourceMode.together];
+      case QuickPlaySourceMode.torrentsOnly:
+        return const [QuickPlaySourceMode.torrentsOnly];
+      case QuickPlaySourceMode.addonsOnly:
+        return const [QuickPlaySourceMode.addonsOnly];
+    }
+  }
 
   /// Search services report per-engine/addon failures in-band. An empty pack
   /// result with one of these errors is inconclusive and must not be written to
@@ -2102,9 +2139,15 @@ class TorrentPlaybackService {
     final addonTimeout = rules.addonTimeoutSeconds == 15
         ? null
         : Duration(seconds: rules.addonTimeoutSeconds);
+    final engineTimeout = rules.searchTimeoutSeconds == 0
+        ? null
+        : Duration(seconds: rules.searchTimeoutSeconds);
     final exactAddonOrder = rules.ranking == QuickPlayRanking.exactOrder;
-    Future<Map<String, dynamic>> search() => noProvider || forceAddonOnly
-        ? TorrentService.searchStremioAddonsOnly(
+
+    Future<Map<String, dynamic>> query(QuickPlaySourceMode stage) {
+      switch (stage) {
+        case QuickPlaySourceMode.addonsOnly:
+          return TorrentService.searchStremioAddonsOnly(
             imdbId: id,
             isMovie: isMovie,
             season: season,
@@ -2112,18 +2155,68 @@ class TorrentPlaybackService {
             contentType: meta.contentType,
             timeout: addonTimeout,
             preserveOrder: exactAddonOrder,
-          )
-        : TorrentService.searchByImdbWithStremio(
+          );
+        case QuickPlaySourceMode.torrentsOnly:
+          return TorrentService.searchByImdb(
+            id,
+            isMovie: isMovie,
+            season: season,
+            episode: episode,
+            timeout: engineTimeout,
+          );
+        case QuickPlaySourceMode.together:
+          return TorrentService.searchByImdbWithStremio(
             id,
             isMovie: isMovie,
             season: season,
             episode: episode,
             contentType: meta.contentType,
-            engineTimeout: rules.searchTimeoutSeconds == 0
-                ? null
-                : Duration(seconds: rules.searchTimeoutSeconds),
+            engineTimeout: engineTimeout,
             stremioTimeout: addonTimeout,
           );
+        case QuickPlaySourceMode.torrentsThenAddons:
+        case QuickPlaySourceMode.addonsThenTorrents:
+          throw StateError('Fallback source modes must be expanded first');
+      }
+    }
+
+    Future<Map<String, dynamic>> search() async {
+      final torrents = <Torrent>[];
+      final engineErrors = <String, String>{};
+      final addonErrors = <String, String>{};
+      for (final stage in addonStreamSearchPlan(
+        rules,
+        noProvider: noProvider,
+        forceAddonOnly: forceAddonOnly,
+      )) {
+        final result = await query(stage);
+        final stageTorrents = (result['torrents'] as List).cast<Torrent>();
+        torrents.addAll(stageTorrents);
+        engineErrors.addAll(
+          (result['engineErrors'] as Map?)?.cast<String, String>() ?? const {},
+        );
+        addonErrors.addAll(
+          (result['addonErrors'] as Map?)?.cast<String, String>() ?? const {},
+        );
+        // Ordered source modes are fallback searches: do not query the second
+        // family after the first produced something Quick Play is allowed to
+        // attempt. Direct links disabled by the profile and external-only rows
+        // do not suppress the fallback.
+        final foundUsable = stageTorrents.any(
+          (torrent) =>
+              (rules.allowDirectLinks ||
+                  torrent.streamType != StreamType.directUrl) &&
+              isAutoPlayableCandidate(torrent),
+        );
+        if (foundUsable) break;
+      }
+      return {
+        'torrents': torrents,
+        'engineErrors': engineErrors,
+        'addonErrors': addonErrors,
+      };
+    }
+
     Map<String, dynamic> res;
     try {
       res = await search();

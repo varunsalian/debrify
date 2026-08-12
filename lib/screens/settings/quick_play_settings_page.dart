@@ -575,6 +575,19 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
     QuickPlayPreset.fastest,
   ];
 
+  static const _attemptOptions = [
+    SettingsSelectOption('1', 'Stop immediately'),
+    SettingsSelectOption('2', 'Try up to 2'),
+    SettingsSelectOption('3', 'Try up to 3'),
+    SettingsSelectOption('4', 'Try up to 4'),
+    SettingsSelectOption('5', 'Try up to 5'),
+    SettingsSelectOption('6', 'Try up to 6'),
+    SettingsSelectOption('7', 'Try up to 7'),
+    SettingsSelectOption('8', 'Try up to 8'),
+    SettingsSelectOption('9', 'Try up to 9'),
+    SettingsSelectOption('10', 'Try up to 10'),
+  ];
+
   QuickPlayRules get _rules => _series ? _show : _movie;
   bool get _isMovie => !_series;
   FocusNode get _activeTab => _series ? _seriesTab : _movieTab;
@@ -675,8 +688,8 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
 
   List<FocusNode> get _vertical => [
     _filters,
-    if (_series) _packs,
-    _failure,
+    if (_series && !_pikPak) _packs,
+    if (!_pikPak) _failure,
     _direct,
     _advancedNode,
     if (_advanced) ...[
@@ -684,10 +697,10 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
       _ranking,
       _relax,
       _validate,
-      if (_series) _packOrder,
+      if (_series && !_pikPak) _packOrder,
       _searchWait,
       _addonWait,
-      if (_series) _packCache,
+      if (_series && !_pikPak) _packCache,
     ],
     _reset,
   ];
@@ -824,7 +837,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
                     const SizedBox(height: 12),
                     const SettingsInfoBanner(
                       text:
-                          'PikPak safely skips pack probing and tries one torrent because each probe creates an offline download.',
+                          'PikPak safely skips pack probing and tries one torrent because each probe creates an offline download. Those controls are hidden while PikPak is your default provider.',
                     ),
                   ],
                   const SizedBox(height: 18),
@@ -1011,7 +1024,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
           value: _rules.useFilters,
           onChanged: (v) => _change((r) => r.copyWith(useFilters: v)),
         ),
-        if (_series) ...[
+        if (_series && !_pikPak) ...[
           _divider(),
           SettingsToggleTile(
             focusNode: _packs,
@@ -1022,31 +1035,33 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
             onChanged: (v) => _change(
               (r) => r.copyWith(
                 preferSeriesPacks: v,
-                packPreference: v
+                packPreference:
+                    v &&
+                        r.packPreference ==
+                            QuickPlayPackPreference.exactEpisodeOnly
                     ? QuickPlayPackPreference.widestFirst
-                    : QuickPlayPackPreference.exactEpisodeOnly,
+                    : r.packPreference,
               ),
             ),
           ),
         ],
-        _divider(),
-        _selectRow(
-          icon: Icons.replay_rounded,
-          title: 'If a result fails',
-          subtitle: 'Try another source instead of stopping',
-          node: _failure,
-          value: _rules.tryNextOnFailure ? '${_rules.maxAttempts}' : '1',
-          options: const [
-            SettingsSelectOption('1', 'Stop immediately'),
-            SettingsSelectOption('3', 'Try up to 3'),
-            SettingsSelectOption('5', 'Try up to 5'),
-            SettingsSelectOption('10', 'Try up to 10'),
-          ],
-          onChanged: (v) {
-            final n = int.parse(v);
-            _change((r) => r.copyWith(tryNextOnFailure: n > 1, maxAttempts: n));
-          },
-        ),
+        if (!_pikPak) ...[
+          _divider(),
+          _selectRow(
+            icon: Icons.replay_rounded,
+            title: 'If a result fails',
+            subtitle: 'Try another source instead of stopping',
+            node: _failure,
+            value: _rules.tryNextOnFailure ? '${_rules.maxAttempts}' : '1',
+            options: _attemptOptions,
+            onChanged: (v) {
+              final n = int.parse(v);
+              _change(
+                (r) => r.copyWith(tryNextOnFailure: n > 1, maxAttempts: n),
+              );
+            },
+          ),
+        ],
         _divider(),
         SettingsToggleTile(
           focusNode: _direct,
@@ -1169,7 +1184,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
               onChanged: (v) =>
                   _change((r) => r.copyWith(validateDirectLinks: v)),
             ),
-            if (_series) ...[
+            if (_series && !_pikPak) ...[
               _divider(),
               _selectRow(
                 icon: Icons.layers_rounded,
@@ -1245,7 +1260,7 @@ class _QuickPlaySettingsPageState extends State<QuickPlaySettingsPage> {
               onChanged: (v) =>
                   _change((r) => r.copyWith(addonTimeoutSeconds: int.parse(v))),
             ),
-            if (_series) ...[
+            if (_series && !_pikPak) ...[
               _divider(),
               _selectRow(
                 icon: Icons.history_rounded,

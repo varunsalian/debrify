@@ -484,6 +484,57 @@ void main() {
       expect(TorrentPlaybackService.allowsAddonSearch(torrentsOnly), isFalse);
       expect(TorrentPlaybackService.allowsAddonSearch(defaultRules), isTrue);
     });
+
+    test('direct-stream paths honor explicit source plans', () {
+      final defaultSeries = QuickPlayRules.debrifyDefault(isMovie: false);
+      final explicit = defaultSeries.copyWith(
+        preset: QuickPlayPreset.custom,
+        preserveLegacyCombinedPackSearch: false,
+      );
+
+      expect(TorrentPlaybackService.addonStreamSearchPlan(defaultSeries), [
+        QuickPlaySourceMode.together,
+      ]);
+      expect(
+        TorrentPlaybackService.addonStreamSearchPlan(
+          explicit.copyWith(sourceMode: QuickPlaySourceMode.addonsThenTorrents),
+        ),
+        [QuickPlaySourceMode.addonsOnly, QuickPlaySourceMode.torrentsOnly],
+      );
+      expect(
+        TorrentPlaybackService.addonStreamSearchPlan(
+          explicit.copyWith(sourceMode: QuickPlaySourceMode.torrentsOnly),
+        ),
+        [QuickPlaySourceMode.torrentsOnly],
+      );
+      expect(
+        TorrentPlaybackService.addonStreamSearchPlan(
+          explicit.copyWith(sourceMode: QuickPlaySourceMode.torrentsOnly),
+          noProvider: true,
+        ),
+        [QuickPlaySourceMode.addonsOnly],
+      );
+    });
+  });
+
+  group('series smart fallback ordering', () {
+    test('exact order keeps repeated hashes across both batches', () {
+      final repeated = _torrent('same release');
+      final later = _torrent('later release');
+
+      final exact = StremioService.instance.mergeSmartFallbackTorrents(
+        [repeated],
+        [repeated, later],
+        preserveOrder: true,
+      );
+      expect(exact, [repeated, repeated, later]);
+
+      final normal = StremioService.instance.mergeSmartFallbackTorrents(
+        [repeated],
+        [repeated, later],
+      );
+      expect(normal, [repeated, later]);
+    });
   });
 
   group('series pack source priority', () {
