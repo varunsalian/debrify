@@ -39,6 +39,7 @@ import '../services/stremio_service.dart';
 import '../services/next_episode_service.dart';
 import '../services/storage_service.dart';
 import '../services/tv_hero_artwork_quality_controller.dart';
+import '../services/tvos_top_shelf_service.dart';
 import '../services/torbox_service.dart';
 import '../services/torrent_bulk_add_service.dart';
 import '../services/torrent_playback_service.dart';
@@ -1293,6 +1294,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // (not the Search/Discover variants) claims it; the opener switches here via
     // switchTab(15) right after setting it, so it's present by the time we mount.
     if (!widget.searchMode && !widget.discoverMode) {
+      MainPageBridge.registerCatalogDetailOpenHandler(
+        _openPendingCatalogDetail,
+      );
       final pending = MainPageBridge.pendingCatalogDetailOpen;
       if (pending != null) {
         MainPageBridge.pendingCatalogDetailOpen = null;
@@ -1748,6 +1752,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
     }
     MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
+    if (!widget.searchMode && !widget.discoverMode) {
+      MainPageBridge.unregisterCatalogDetailOpenHandler(
+        _openPendingCatalogDetail,
+      );
+    }
     if (widget.searchMode) {
       MainPageBridge.unregisterTabBackHandler('search', _handleSearchBack);
     }
@@ -4229,6 +4238,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
     }
     setState(() => _sections = sections);
+    _publishTopShelfSpotlight();
     unawaited(_refreshBoundSources());
     // Seed the hero with the first item so it isn't blank before DPAD focus
     // lands (see [_heroActive] for when the hero is shown).
@@ -5485,6 +5495,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               nextSkip: rawCount > 0 ? rawCount : items.length,
             );
           });
+          _publishTopShelfSpotlight();
           return;
         } catch (_) {
           // Dead addon or catalog — try the next candidate.
@@ -5497,6 +5508,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (_spotlightHeroOverride != null) {
       setState(() => _spotlightHeroOverride = null);
     }
+    _publishTopShelfSpotlight();
   }
 
   /// The hero reel.
@@ -5524,6 +5536,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   List<StremioMeta> get _spotlightHero =>
       _spotlightHeroSection?.items.take(8).toList() ?? const [];
+
+  void _publishTopShelfSpotlight() {
+    if (!PlatformUtil.isTvOS || widget.searchMode || widget.discoverMode) return;
+    unawaited(
+      TvosTopShelfService.instance.publishSpotlight(
+        _spotlightHero,
+        sourceTitle: _spotlightHeroSection?.title,
+      ),
+    );
+  }
 
   List<SpotlightShelf> get _spotlightShelves => [
     for (final rail in _canvasRails) _spotlightShelfForRail(rail),

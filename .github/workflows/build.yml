@@ -378,7 +378,19 @@ jobs:
         for f in "$APP"/Frameworks/*.framework; do
           [ -d "$f" ] && codesign -f -s - --timestamp=none "$f"
         done
-        codesign -f -s - --timestamp=none "$APP"
+        for extension in "$APP"/PlugIns/*.appex; do
+          [ -d "$extension" ] || continue
+          for d in "$extension"/Frameworks/*.dylib; do
+            [ -f "$d" ] && codesign -f -s - --timestamp=none "$d"
+          done
+          for f in "$extension"/Frameworks/*.framework; do
+            [ -d "$f" ] && codesign -f -s - --timestamp=none "$f"
+          done
+          codesign -f -s - --timestamp=none \
+            --entitlements tvos/TopShelf/TopShelf.entitlements "$extension"
+        done
+        codesign -f -s - --timestamp=none \
+          --entitlements tvos/Runner/Runner.entitlements "$APP"
 
         missing=0
         check() {
@@ -392,10 +404,19 @@ jobs:
         for f in "$APP"/Frameworks/*.framework; do
           check "$f/$(basename "$f" .framework)"
         done
+        for extension in "$APP"/PlugIns/*.appex; do
+          [ -d "$extension" ] || continue
+          check "$extension/$(basename "$extension" .appex)"
+          for d in "$extension"/Frameworks/*.dylib; do check "$d"; done
+          for f in "$extension"/Frameworks/*.framework; do
+            check "$f/$(basename "$f" .framework)"
+          done
+        done
         if [ "$missing" -ne 0 ]; then
           echo "::error::$missing binary(ies) left unsigned; IPA would not sideload"
           exit 1
         fi
+        codesign --verify --deep --strict "$APP"
         echo "all binaries carry LC_CODE_SIGNATURE"
 
     - name: Create unsigned IPA (release)

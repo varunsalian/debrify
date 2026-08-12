@@ -134,6 +134,40 @@ class MainPageBridge {
   /// episode (int?), originTab (int? — tab to return to when the detail closes).
   static Map<String, dynamic>? pendingCatalogDetailOpen;
 
+  /// Live counterpart to [pendingCatalogDetailOpen], owned by the mounted Home
+  /// board. Top Shelf can open the app while Home is already active, in which
+  /// case switching to tab 15 would not remount it and consume the pending map.
+  static Future<void> Function(Map<String, dynamic> data)?
+  _catalogDetailOpenHandler;
+
+  static void registerCatalogDetailOpenHandler(
+    Future<void> Function(Map<String, dynamic> data) handler,
+  ) {
+    _catalogDetailOpenHandler = handler;
+  }
+
+  static void unregisterCatalogDetailOpenHandler(
+    Future<void> Function(Map<String, dynamic> data) handler,
+  ) {
+    if (_catalogDetailOpenHandler == handler) {
+      _catalogDetailOpenHandler = null;
+    }
+  }
+
+  /// Routes a detail request to the live Home board when it is visible, or
+  /// stores a one-shot handoff and switches Home in when another tab is active.
+  static void requestCatalogDetailOpen(Map<String, dynamic> data) {
+    final copied = Map<String, dynamic>.from(data);
+    final handler = _catalogDetailOpenHandler;
+    if (_activeTvTabIndex == 15 && handler != null) {
+      pendingCatalogDetailOpen = null;
+      unawaited(handler(copied));
+      return;
+    }
+    pendingCatalogDetailOpen = copied;
+    switchTab?.call(15);
+  }
+
   /// A one-shot request from the Search tab's Lists mode to open a specific
   /// MDBList list on the Discover tab. The requester fills this and switches to
   /// Discover via [switchTab]; the Discover SearchScreen consumes it on mount.
