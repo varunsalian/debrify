@@ -88,6 +88,8 @@ import 'video_player/services/subtitle_settings_service.dart';
 import 'video_player/services/playback_ui_clock.dart';
 import 'video_player/services/skip_segment_ui_controller.dart';
 import 'video_player/services/android_renderer_startup_fallback.dart';
+import 'video_player/services/iptv_tune_diagnostics.dart';
+import 'video_player/services/iptv_live_recovery.dart';
 import 'video_player/widgets/subtitle_line_picker_overlay.dart';
 import 'video_player/widgets/skip_segment_button.dart';
 import 'video_player/widgets/sleep_timer_sheet.dart';
@@ -582,6 +584,110 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // IPTV channel sheet state
   bool _showIptvChannelSheet = false;
   int _currentIptvIndex = 0;
+  /// Phase 0 of the IPTV resilience plan: per-tune debugPrint diagnostics,
+  /// same log grammar as the native player's IptvTuneDiagnostics.kt. Inert
+  /// for non-IPTV playback (nothing calls onTuneStart there).
+  final IptvTuneDiagnostics _iptvDiag = IptvTuneDiagnostics();
+
+  // ── IPTV live recovery (Phases 2/5 of the resilience plan) ─────────────
+  //
+  // The ONE owner of live re-opens. Sources: live EOF (mpv completed),
+  // stream errors, the stall detector, lifecycle rejoin. See
+  // iptv_live_recovery.dart; the native player runs the same machine.
+
+  /// Bottom-center reconnect pill text; null = hidden.
+  final ValueNotifier<String?> _iptvReconnectText = ValueNotifier(null);
+
+  /// Wall time we were backgrounded; a live channel resumed after more than
+  /// 30s away re-tunes to the live edge instead of resuming stale bytes.
+  DateTime? _backgroundedAt;
+
+  late final IptvLiveRecovery _iptvLiveRecovery = IptvLiveRecovery(
+    isEligible: _iptvRecoveryEligible,
+    performRetune: _performIptvLiveRetune,
+    onEpisodeVisible: (_) => _iptvReconnectText.value = 'Reconnecting…',
+    onRecovered: () => _iptvReconnectText.value = null,
+    onSurrender: (source) {
+      _iptvDiag.onRecovery(source, 'surrender');
+      _iptvReconnectText.value = 'Stream lost';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "${_currentIptvChannel?.name ?? 'This channel'} keeps dropping",
+          ),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () => _iptvLiveRecovery.userRetry('snackbar-retry'),
+          ),
+        ),
+      );
+    },
+  );
+
+  /// The machine may act only on a LIVE channel with playback wanted and
+  /// nobody else in charge: sleep stops outrank reconnects, a backgrounded
+  /// app must stay quiet (the resume path re-arms recovery itself).
+  bool _iptvRecoveryEligible() {
+    if (!mounted || _screenDisposed) return false;
+    final channel = _currentIptvChannel;
+    if (channel == null || !channel.isLive) return false;
+    if (_sleepStopLatched) return false;
+    if (_sleepTimerMode == SleepTimerMode.endOfItem) return false;
+    if (_pausedByLifecycle) return false;
+    // An explicit user pause (including the PiP pause action) means nobody
+    // asked for playback — a pending retry must not restart the channel
+    // (codex round 2, finding 3).
+    if (_activeMediaUserPaused) return false;
+    return true;
+  }
+
+  /// Re-open the current live channel with its full identity (URL + the
+  /// channel's own headers — plan finding P7). A fresh open joins the live
+  /// edge. Stremio channels re-run the whole switch so their candidate
+  /// ladder stays the owner of which URL plays; [IptvLiveRecovery.expectRetune]
+  /// keeps the recovery episode alive across that switch's tune-start.
+  void _performIptvLiveRetune(String source, int attempt) {
+    final channel = _currentIptvChannel;
+    if (channel == null || !channel.isLive) return;
+    _iptvDiag.onRecovery(source, 'retune', 'attempt=$attempt');
+    if (StremioIptvService.isStremioChannelUrl(channel.url)) {
+      // expectRetune is consumed synchronously by the switch's entry (its
+      // ticket + machine bookkeeping run before any await), so no real zap
+      // can pick the flag up instead.
+      _iptvLiveRecovery.expectRetune = true;
+      unawaited(
+        _switchToIptvChannel(_currentIptvIndex, quietRecovery: true),
+      );
+      return;
+    }
+    // Direct reopen path. The ticket pins this retune to the channel the
+    // machine saw: a real zap bumps it and the stale retune dissolves at
+    // the checks below instead of stealing playback back (codex round 2's
+    // blocker).
+    final ticket = _iptvSwitchTicket;
+    unawaited(() async {
+      // mpv makes no promise about `stream-record` across an open() — a
+      // running capture must be stopped first, exactly like every other
+      // media replacement path (codex round 2, finding 6).
+      await _stopRecording(userInitiated: false);
+      if (!mounted || ticket != _iptvSwitchTicket) return;
+      _iptvDiag.onTuneStart(channel.name, channel.url, isLive: true);
+      _iptvLiveRecovery.expectRetune = true;
+      _iptvLiveRecovery.onTuneStarted();
+      try {
+        await _openMedia(
+          mk.Media(channel.url, httpHeaders: channel.playbackHeaders),
+          play: true,
+          liveStream: true,
+        );
+      } catch (e) {
+        debugPrint('Player: IPTV live retune failed to open: $e');
+      }
+    }());
+  }
+
   List<IptvChannel>? _iptvChannelsOverride;
   IptvGuideContext? _iptvGuideContextOverride;
   final IptvCatchupRequestGate _iptvCatchupRequests = IptvCatchupRequestGate();
@@ -2446,6 +2552,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     _currentStreamUrl = initialUrl.isNotEmpty ? initialUrl : null;
 
+    // IPTV launch: the first tune starts here, before either open branch
+    // below (IPTV is never PikPak). Zaps re-arm this in _switchToIptvChannel.
+    var launchIsLiveIptv = false;
+    final launchIptvChannels = _effectiveIptvChannels;
+    if (launchIptvChannels != null && initialUrl.isNotEmpty) {
+      final launchIdx = widget.iptvStartIndex ?? 0;
+      final launchChannel =
+          (launchIdx >= 0 && launchIdx < launchIptvChannels.length)
+          ? launchIptvChannels[launchIdx]
+          : null;
+      _iptvDiag.onTuneStart(
+        launchChannel?.name,
+        initialUrl,
+        isLive: launchChannel?.isLive ?? true,
+      );
+      _iptvLiveRecovery.onTuneStarted();
+      launchIsLiveIptv = launchChannel?.isLive ?? true;
+    }
+
     // Only open the player if we have a valid URL
     if (initialUrl.isNotEmpty) {
       // For PikPak videos from playlist or any PikPak URL, use cold storage retry logic
@@ -2495,6 +2620,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               mk.Media(initialUrl, httpHeaders: widget.httpHeaders),
               play: !hasExternalAudio,
               desiredPlay: true,
+              liveStream: launchIsLiveIptv,
             )
             .then((_) async {
               // Wait for the video to load and duration to be available
@@ -2556,6 +2682,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // failures are visible to both diagnostics and the startup guard.
     _paramsSub = player.stream.videoParams.listen((params) {
       if (!isCurrent()) return;
+      // First sized params ≈ first decoded frame — close enough for the
+      // zap-speed number, and it avoids one more subscription slot.
+      if ((params.w ?? 0) > 0) {
+        _iptvDiag.onFirstFrame();
+        _iptvLiveRecovery.onFirstFrame();
+      }
       _handleDecoderProbeParams(params);
     });
     _rendererStartupErrorSub = player.stream.error.listen((error) {
@@ -2573,6 +2705,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     _posSub = player.stream.position.listen((d) {
       if (!isCurrent()) return;
+      _iptvDiag.onProgress(d, playing: _isPlaying);
+      // _isPlaying tracks mpv's pause property: a cache-stall keeps it true
+      // (stall detector armed), a user pause flips it false (excluded).
+      if (_effectiveIptvChannels != null) {
+        _iptvLiveRecovery.onProgress(d, wantsPlayback: _isPlaying);
+      }
       _position = d;
       _playbackUiClock.updatePosition(d);
       _syncSkipSegmentsForCurrentContent();
@@ -2648,9 +2786,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       setState(() {});
     });
     _completedSub = player.stream.completed.listen((done) {
-      if (done && isCurrent()) _onPlaybackEnded();
+      if (done && isCurrent()) {
+        _iptvDiag.onPlaybackEnded(_position);
+        _onPlaybackEnded();
+      }
     });
     _bufferingSub = player.stream.buffering.listen((isBuffering) {
+      if (isCurrent()) _iptvDiag.onBuffering(isBuffering, _position);
       if (!isCurrent() || !_isReady || _isTransitioning) return;
       if (isBuffering) {
         _bufferingDebounceTimer?.cancel();
@@ -2946,6 +3088,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         media,
         play: playOnOpen,
         desiredPlay: shouldResumePlayback,
+        // The recreated player starts with a clean property set — without
+        // this a live channel would silently lose its ffmpeg reconnect
+        // options at the renderer fallback (codex round 2, finding 16).
+        liveStream: isLive,
       );
       if (needsPreparation) await _waitForVideoReady();
       if (!mounted) return;
@@ -3189,11 +3335,40 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     mk.Media media, {
     required bool play,
     bool? desiredPlay,
+    bool liveStream = false,
   }) async {
     _activeOpenedMedia = media;
     _activeMediaShouldPlay = desiredPlay ?? play;
     _activeMediaUserPaused = false;
     _beginMediaGeneration();
+    // Live IPTV (Phase 2, Layer 1): ffmpeg-level reconnect. mpv's default
+    // reconnect covers only seekable inputs — a live/streamed input NEVER
+    // reconnects without reconnect_streamed. Repairs happen inside the
+    // protocol layer while the demuxer cache plays through, so the common
+    // connection drop is invisible. Cleared for non-live opens: the
+    // property is player-global and reconnect-on-error semantics are wrong
+    // for finite files (mpv's own defaults handle those).
+    final platform = _player.platform;
+    if (platform is mk.NativePlayer) {
+      try {
+        await platform.setProperty(
+          'stream-lavf-o',
+          // reconnect_on_http_error=5xx covers server-side hiccups at the
+          // protocol layer. Deliberately narrow: NOT auth-class 4xx (same
+          // answer every time — must surface), and not 429 (a comma-list
+          // value can't ride mpv's key-value list safely, and escalating a
+          // rate limit to the slower ladder is politer to the origin).
+          liveStream
+              ? 'reconnect=1,reconnect_streamed=1,'
+                    'reconnect_on_network_error=1,'
+                    'reconnect_on_http_error=5xx,'
+                    'reconnect_delay_max=5'
+              : '',
+        );
+      } catch (e) {
+        debugPrint('Player: stream-lavf-o set failed: $e');
+      }
+    }
     final remedy = _tvosDecodeRemedy;
     if (remedy != null) {
       // AWAITED before open: remedy properties are ordinary runtime options
@@ -3338,6 +3513,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   }
 
   Future<void> _onPlaybackEnded() async {
+    // LIVE IPTV: an ended live stream is a dropped connection, not a
+    // finished item — the origin closed on us (mpv's keep-open parks on the
+    // last frame, which is the "fake pause" from the Discord report). The
+    // recovery machine re-tunes to the live edge; nothing below this line
+    // (scrobble stop, mark-as-finished, episode advance) may interpret a
+    // live EOF as "watched to the end" — so live returns here even when the
+    // machine declines (backgrounded, sleep-stopped).
+    final endedLiveChannel = _currentIptvChannel;
+    if (endedLiveChannel != null && endedLiveChannel.isLive) {
+      _iptvLiveRecovery.onEnded();
+      return;
+    }
+
     // Scrobble stop to Trakt when movie finishes
     _stopTraktHeartbeat();
     _traktScrobble('stop');
@@ -5090,9 +5278,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// pre-existing behavior) is an indefinite black screen that reads as the
   /// whole IPTV section being broken.
   void _onIptvStreamError(String error) {
+    _iptvDiag.onError(error);
     if (!mounted || _iptvErrorsMuted) return;
     final channels = _effectiveIptvChannels;
     if (channels == null) return;
+
+    // Phase 2: a live channel's error goes to the recovery machine first —
+    // the snackbar below is now the SURRENDER voice (via the machine's
+    // onSurrender), not the first response. Non-live keeps the old
+    // say-it-immediately behavior. Auth-class failures (mpv's error string
+    // is all we have — best-effort match) skip the ladder entirely: a
+    // 401/403/404 repeats deterministically, so say so NOW instead of
+    // retrying for 75 seconds (mirror of the TV policy's AUTH class).
+    final looksAuthError = RegExp(
+      r'\b(401|403|404)\b',
+    ).hasMatch(error);
+    if (_currentIptvChannel?.isLive == true &&
+        !looksAuthError &&
+        _iptvLiveRecovery.onError()) {
+      return;
+    }
 
     final now = DateTime.now();
     final last = _lastIptvErrorShown;
@@ -5918,27 +6123,46 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return candidate;
   }
 
-  Future<void> _switchToIptvChannel(int index) async {
+  Future<void> _switchToIptvChannel(
+    int index, {
+    bool quietRecovery = false,
+  }) async {
     final channels = _effectiveIptvChannels;
     if (channels == null || index < 0 || index >= channels.length) return;
-    // A channel change ends the current recording (the stream identity flips).
-    // Unconditional: it must also cancel a start still awaiting its storage
-    // setup, which `_isRecording` would not report yet.
-    await _stopRecording(userInitiated: false);
-    _cancelPendingIptvCatchup();
+    // Ticket FIRST, before any await — codex round 2's blocker: with the
+    // ticket taken after the recording stop below, two overlapping switch
+    // calls could resume from that await in either order and the OLDER
+    // intent could take the newer ticket, hijacking playback back to the
+    // channel the user just left.
     final ticket = ++_iptvSwitchTicket;
     // This switch owns the error gate now (a superseded ladder's state doesn't
     // survive). Muted until the new media is opened below; the burst debounce
     // resets too, so this channel can report its own failure.
     _iptvErrorsMuted = true;
     _lastIptvErrorShown = null;
+    // One machine tune-start per SWITCH, not per Stremio candidate — the
+    // candidate ladder below is this switch's own hunt. A machine-driven
+    // stremio re-tune arrives here with expectRetune set and keeps its
+    // episode; a real zap resets the machine and takes the pill with it.
+    final wasRecoveryRetune = _iptvLiveRecovery.expectRetune;
+    _iptvLiveRecovery.onTuneStarted();
+    if (!wasRecoveryRetune) _iptvReconnectText.value = null;
+    // A channel change ends the current recording (the stream identity flips).
+    // Unconditional: it must also cancel a start still awaiting its storage
+    // setup, which `_isRecording` would not report yet.
+    await _stopRecording(userInitiated: false);
+    if (!mounted || ticket != _iptvSwitchTicket) return;
+    _cancelPendingIptvCatchup();
 
     _hideIptvChannelSheet();
 
     final channel = channels[index];
     _clearBufferingIndicator();
     setState(() {
-      _isTransitioning = true;
+      // A quiet recovery re-tune is not a zap: no transition overlay, no
+      // zap banner — the reconnect pill is the only narration (plan
+      // invariant "retune ≠ zap"; codex round 2, finding 14).
+      _isTransitioning = !quietRecovery;
       _tvScrubGeneration++;
       _tvAbandonScrub();
       _currentIptvIndex = index;
@@ -5947,12 +6171,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // showing the launch channel under the new channel's number.
       _currentChannelName = channel.name;
     });
-    _startTransitionOverlay();
+    if (!quietRecovery) _startTransitionOverlay();
     // Identity paints from the channel itself, so it is correct before a
     // single byte of the new stream has arrived; the guide fills in behind it.
     // Zapping to on-demand retires the panel outright — it has no live
     // identity to present, and leaving it up would describe the wrong item.
-    if (channel.isLive) {
+    if (channel.isLive && !quietRecovery) {
       _prepareIptvBannerData(channel);
       _raiseIptvZapBanner();
       // The guide follows what is playing, so reopening it lands on the
@@ -6007,7 +6231,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         for (var i = 0; i < candidates.length; i++) {
           if (!mounted || ticket != _iptvSwitchTicket) return;
           final url = candidates[i].url;
-          final ok = await _tryOpenLiveStream(url);
+          _iptvDiag.onTuneStart(channel.name, url, isLive: channel.isLive);
+          _iptvDiag.note('stremio candidate ${i + 1}/${candidates.length}');
+          final ok = await _tryOpenLiveStream(
+            url,
+            httpHeaders: channel.playbackHeaders,
+          );
           // A newer switch superseded this ladder mid-probe: its success or
           // failure belongs to the other channel's playback now — don't
           // credit it here.
@@ -6039,6 +6268,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // the channel rather than widget.httpHeaders.
       _setIptvSources(null, null);
       try {
+        _iptvDiag.onTuneStart(channel.name, channel.url, isLive: channel.isLive);
         final media = mk.Media(
           channel.url,
           httpHeaders: channel.playbackHeaders,
@@ -6047,7 +6277,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // reports from here is this channel's, including a fast failure that
         // lands while open() is still awaiting.
         _iptvErrorsMuted = false;
-        await _openMedia(media, play: true);
+        await _openMedia(media, play: true, liveStream: channel.isLive);
       } catch (e) {
         debugPrint('Player: IPTV channel switch failed: $e');
       }
@@ -6094,6 +6324,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   Future<bool> _tryOpenLiveStream(
     String url, {
     Duration timeout = const Duration(seconds: 12),
+    Map<String, String>? httpHeaders,
   }) async {
     // Every live media replacement ends the recording, not just a channel zap:
     // picking another row in the Sources sheet lands here via
@@ -6125,7 +6356,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }),
     ];
     try {
-      await _openMedia(mk.Media(url), play: true);
+      // Plan finding P7: candidate opens used to drop the channel's own
+      // headers — the one open path that lost them. Carry them like every
+      // other open does.
+      await _openMedia(
+        mk.Media(url, httpHeaders: httpHeaders),
+        play: true,
+        liveStream: true,
+      );
       openDone = true;
     } catch (e) {
       debugPrint('Player: stremio candidate failed to open: $e');
@@ -6204,10 +6442,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _currentSourceIndex = index;
     });
     _startTransitionOverlay();
+    // A deliberate source pick is a fresh tune: any recovery episode (and
+    // its pill) belonged to the link being abandoned.
+    _iptvLiveRecovery.onTuneStarted();
+    _iptvReconnectText.value = null;
     try {
       await _player.pause();
     } catch (_) {}
-    final ok = await _tryOpenLiveStream(url);
+    final ok = await _tryOpenLiveStream(
+      url,
+      httpHeaders: _currentIptvChannel?.playbackHeaders,
+    );
     if (!mounted || ticket != _iptvSwitchTicket) return;
     if (ok) {
       if (key != null) {
@@ -8109,6 +8354,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // moments later and plays behind the backgrounded app with the guard in
     // the playing listener disarmed. A user's own pause has neither set.
     if (!_playerCreated || (!_isPlaying && !_isTransitioning)) return;
+    // A recovery in flight must not re-open streams behind a backgrounded
+    // app; the resume path below re-arms recovery when it matters.
+    _backgroundedAt = DateTime.now();
+    _iptvLiveRecovery.cancel();
+    _iptvReconnectText.value = null;
     _pausedByLifecycle = true;
     unawaited(_player.pause());
   }
@@ -8131,6 +8381,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // if the sleep timer fired while we were away, stay paused until someone
     // presses play.
     if (_sleepStopLatched) return;
+    // LIVE, back after a real absence: the paused stream is minutes behind
+    // the edge (or dead). Re-tune to the live edge — same "comes back
+    // playing" contract, at the right point in the broadcast. Short trips
+    // keep the cheap in-buffer resume (legitimate timeshift).
+    final backgroundedAt = _backgroundedAt;
+    _backgroundedAt = null;
+    if (_currentIptvChannel?.isLive == true &&
+        backgroundedAt != null &&
+        DateTime.now().difference(backgroundedAt) >
+            const Duration(seconds: 30)) {
+      _iptvLiveRecovery.userRetry('lifecycle-rejoin');
+      return;
+    }
     unawaited(_player.play());
   }
 
@@ -8155,6 +8418,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    _iptvDiag.onSessionEnd();
+    _iptvLiveRecovery.cancel();
+    _iptvReconnectText.dispose();
     // The sleep timer belongs to this playback session — a pending one must not
     // outlive the player and fire against a disposed state.
     _sleepTimer?.cancel();
@@ -10611,6 +10877,45 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                     ),
                                   ),
                                 ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // IPTV live reconnect pill (Phase 5 of the resilience plan):
+                // only a recovery episode that has run >2s shows it — the
+                // invisible fast reconnects stay invisible.
+                ValueListenableBuilder<String?>(
+                  valueListenable: _iptvReconnectText,
+                  builder: (context, text, _) {
+                    return IgnorePointer(
+                      ignoring: true,
+                      child: AnimatedOpacity(
+                        opacity: text != null ? 1 : 0,
+                        duration: const Duration(milliseconds: 150),
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 56),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(22),
+                              ),
+                              child: Text(
+                                text ?? '',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),

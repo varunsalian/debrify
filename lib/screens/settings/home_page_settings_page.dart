@@ -273,6 +273,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       ].where((e) => e.catalogs.isNotEmpty).toList();
       final disabled = await StorageService.getHomeDisabledSections();
       final extras = await StorageService.getHomeExtraRows();
+      final rowOrder = await StorageService.getHomeRowOrder();
       var iptvLists = const <IptvListMeta>[];
       try {
         iptvLists = await StorageService.getIptvLists();
@@ -296,6 +297,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
             catalogTree: tree,
             disabled: Set.of(disabled),
             extraRows: extras,
+            rowOrder: rowOrder,
             traktUserLists: traktUserLists,
             iptvLists: iptvLists,
             isTelevision: PlatformUtil.isTelevision,
@@ -358,14 +360,14 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                       // condition.
                       focusNode: _firstTileFocusNode,
                     ),
-                    // Home Rows manager entry — hide/show individual rows.
+                    // Home Rows manager entry — show, hide, and arrange rows.
                     // SettingsTile (not bare ListTile) so DPAD focus shows.
                     SettingsTile(
                       icon: Icons.dashboard_customize_rounded,
                       title: 'Home Rows',
                       subtitle: _gatheringHomeRows
                           ? 'Loading your lists…'
-                          : 'Choose which rows appear on Home',
+                          : 'Choose and arrange what appears on Home',
                       onTap: _openHomeRowsManager,
                     ),
                     // Which catalog feeds the Spotlight layout's hero reel.

@@ -26,6 +26,7 @@ import '../services/debrify_tv_repository.dart';
 import '../services/engine/dynamic_engine.dart';
 import '../services/engine/settings_manager.dart';
 import '../services/home_list_rows.dart';
+import '../services/home_row_order.dart';
 import '../services/iptv_cw_router.dart';
 import '../services/iptv_media_store.dart';
 import '../services/local_bound_source_service.dart';
@@ -654,6 +655,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // rows. Refreshed by [_reloadForHomeSettings].
   List<HomeExtraRow> _homeExtras = const [];
 
+  /// Stable ids in the user's global Home-row order. Rows not present append
+  /// canonically; ids whose backing row is temporarily unavailable stay saved.
+  List<String> _homeRowOrder = const [];
+
   /// The Spotlight hero-source pref (`home_hero_source_v1`): which catalog the
   /// hero reel is built from. Read in [_load], refreshed by
   /// [_reloadForHomeSettings]; resolved into [_spotlightHeroOverride] by
@@ -869,6 +874,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _cwMovies.isNotEmpty &&
         !_homeDisabled.contains('cw:movies'))
       _CwRow(
+        rowId: 'cw:movies',
         title: 'Continue Watching',
         tag: 'Movies',
         kind: _CwKind.local,
@@ -885,6 +891,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _cwSeries.isNotEmpty &&
         !_homeDisabled.contains('cw:series'))
       _CwRow(
+        rowId: 'cw:series',
         title: 'Continue Watching',
         tag: 'Series',
         kind: _CwKind.local,
@@ -899,6 +906,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ),
     if (_traktMovies.isNotEmpty && !_homeDisabled.contains('trakt:movies'))
       _CwRow(
+        rowId: 'trakt:movies',
         title: 'Trakt Continue Watching',
         tag: 'Movies',
         kind: _CwKind.trakt,
@@ -913,6 +921,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ),
     if (_traktSeries.isNotEmpty && !_homeDisabled.contains('trakt:shows'))
       _CwRow(
+        rowId: 'trakt:shows',
         title: 'Trakt Continue Watching',
         tag: 'Shows',
         kind: _CwKind.trakt,
@@ -933,6 +942,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // that zero-shift too, but it isn't worth the board index-math complexity.)
     if (_simklMovies.isNotEmpty && !_homeDisabled.contains('simkl:movies'))
       _CwRow(
+        rowId: 'simkl:movies',
         title: 'Simkl Continue Watching',
         tag: 'Movies',
         kind: _CwKind.simkl,
@@ -947,6 +957,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ),
     if (_simklSeries.isNotEmpty && !_homeDisabled.contains('simkl:shows'))
       _CwRow(
+        rowId: 'simkl:shows',
         title: 'Simkl Continue Watching',
         tag: 'Shows',
         kind: _CwKind.simkl,
@@ -965,6 +976,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // (routeKey) since these metas carry no imdbId.
     if (_iptvCwMovies.isNotEmpty && !_homeDisabled.contains('iptv:movies'))
       _CwRow(
+        rowId: 'iptv:movies',
         title: 'IPTV Continue Watching',
         tag: 'Movies',
         kind: _CwKind.iptv,
@@ -978,6 +990,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ),
     if (_iptvCwSeries.isNotEmpty && !_homeDisabled.contains('iptv:series'))
       _CwRow(
+        rowId: 'iptv:series',
         title: 'IPTV Continue Watching',
         tag: 'Series',
         kind: _CwKind.iptv,
@@ -1014,6 +1027,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _catalogQuery.isEmpty &&
       !_catalogSearching;
 
+  /// Home ordering is presentation state for the Home board only. Search and
+  /// Discover share some rail/focus helpers, but keep result-source order.
+  bool get _homeRowOrderActive =>
+      !widget.searchMode &&
+      !widget.discoverMode &&
+      _catalogQuery.isEmpty &&
+      !_catalogSearching;
+
   /// Whether the Trakt rows should be held open with skeleton placeholders: the
   /// account is connected, its (slow, network) Continue Watching fetch is in
   /// flight, and there are no real Trakt rows on-screen yet. Reserving the slot
@@ -1035,13 +1056,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _traktSeries.isEmpty &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
-
-  /// How many skeleton Trakt rows to reserve while [_traktReserving]. Two —
-  /// Movies then Shows — matches the shape most connected accounts resolve to,
-  /// so the common case fills in with zero layout shift. (A connected account
-  /// with fewer real rows collapses the extras once, early, before the user is
-  /// deep in the board — far less jarring than a mid-navigation insert.)
-  int get _traktSkeletonRowCount => _traktReserving ? 2 : 0;
 
   // Hero state. Driven by ValueNotifiers so focus-driven hero swaps rebuild
   // only the spotlight, never the whole board (important on low-power TVs).
@@ -1926,6 +1940,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (!mounted) return;
     final disabled = await StorageService.getHomeDisabledSections();
     final extras = await StorageService.getHomeExtraRows();
+    final rowOrder = await StorageService.getHomeRowOrder();
     final heroSource = await StorageService.getHomeHeroSource();
     if (!mounted) return;
     final disabledUnchanged =
@@ -1934,6 +1949,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final heroSourceUnchanged =
         heroSource.mode == _heroSource.mode &&
         listEquals(heroSource.ids, _heroSource.ids);
+    final rowOrderUnchanged = HomeRowOrder.equals(rowOrder, _homeRowOrder);
     // Titles participate too: a stored rename must re-render the row header.
     // Diffed per family: `iptvlist:` extras feed the favourites-family rows,
     // everything else feeds the board pipeline — so toggling an IPTV list
@@ -1960,15 +1976,19 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (disabledUnchanged &&
         boardExtrasUnchanged &&
         iptvExtrasUnchanged &&
+        rowOrderUnchanged &&
         heroSourceUnchanged) {
       return;
     }
     setState(() {
       _homeDisabled = disabled;
       _homeExtras = extras;
+      _homeRowOrder = rowOrder;
       _heroSource = heroSource;
     });
-    if (!disabledUnchanged || !boardExtrasUnchanged) {
+    if (!disabledUnchanged ||
+        !boardExtrasUnchanged ||
+        (!rowOrderUnchanged && !widget.searchMode && !widget.discoverMode)) {
       _requestBoardReload();
     } else if (!heroSourceUnchanged && !widget.searchMode &&
         !widget.discoverMode) {
@@ -2018,6 +2038,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     try {
       final disabled = await StorageService.getHomeDisabledSections();
       final extras = await StorageService.getHomeExtraRows();
+      final rowOrder = await StorageService.getHomeRowOrder();
       final heroSource = await StorageService.getHomeHeroSource();
       // Commit the prefs and (crucially) start the tracker fan-out only if
       // this load still owns the board — a superseded run kicking off its own
@@ -2026,6 +2047,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (!mounted || gen != _boardLoadGen) return;
       _homeDisabled = disabled;
       _homeExtras = extras;
+      _homeRowOrder = rowOrder;
       _heroSource = heroSource;
       // Opt-in Trakt/Simkl list rows, resolved IN PARALLEL with the first
       // catalog batch below. Home board only — the Search tab runs _load just
@@ -2051,15 +2073,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // them without a query just returns empty after a wasted round trip, so
       // skip them here (they still power the Keyword/catalog search path).
       // Catalogs the user hid in the Home Rows manager are skipped too.
+      final boardRefs = [
+        for (final a in addons)
+          for (final c in a.catalogs)
+            if (c.isBrowsable &&
+                !_homeDisabled.contains('${a.id}:${c.type}:${c.id}'))
+              (a, c),
+      ];
       _boardRefs
         ..clear()
-        ..addAll([
-          for (final a in addons)
-            for (final c in a.catalogs)
-              if (c.isBrowsable &&
-                  !_homeDisabled.contains('${a.id}:${c.type}:${c.id}'))
-                (a, c),
-        ]);
+        ..addAll(
+          _homeRowOrderActive
+              ? HomeRowOrder.apply(
+                  boardRefs,
+                  _homeRowOrder,
+                  _catalogRefRowId,
+                )
+              : boardRefs,
+        );
       _boardCursor = 0;
       _addonsById.clear();
       for (final a in addons) {
@@ -2190,16 +2221,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   /// Load and append the next batch of board rows (deduped against re-entry).
-  Future<void> _loadMoreBoard() async {
-    if (_boardLoadingMore || _boardCursor >= _boardRefs.length) return;
+  Future<bool> _loadMoreBoard() async {
+    if (_boardLoadingMore || _boardCursor >= _boardRefs.length) return false;
     // Bind this append to the load generation that owns the current cursor —
     // if a full reload lands mid-fetch, the stale batch must not append onto
     // (or advance) the fresh board.
     final gen = _boardLoadGen;
+    var appended = false;
     setState(() => _boardLoadingMore = true);
     try {
       final more = await _fetchBoardBatchUntilNonEmpty(gen);
-      if (!mounted || gen != _boardLoadGen) return;
+      if (!mounted || gen != _boardLoadGen) return false;
       if (more.isNotEmpty) {
         // Always keep the board cache growing so nothing is lost…
         _homeSections = [..._homeSections, ...more];
@@ -2209,6 +2241,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // there would corrupt the search view. They'll reappear on _restoreHome.
         if (_catalogQuery.isEmpty && !_catalogSearching) {
           _appendSections(more);
+          appended = true;
           // A DPAD-down past the last row may be waiting on this batch —
           // classic's deferred move, and the stage layouts' rail advance.
           _maybeCompleteDeferredDown();
@@ -2219,6 +2252,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       if (mounted) setState(() => _boardLoadingMore = false);
       _maybeAutoFillBoard();
     }
+    return appended;
   }
 
   /// Append newly-loaded board rows without disturbing the rows already shown:
@@ -2659,6 +2693,25 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   int get _favRowCount => _favRowKinds.length;
   bool get _anyFavVisible => _favRowKinds.isNotEmpty;
 
+  String _favRowId(_FavRowRef ref) {
+    if (ref.isIptvList) {
+      return HomeExtraRowIds.iptvList(_iptvListRows[ref.list].listId);
+    }
+    return switch (ref.kind) {
+      _FavKind.playlist => 'fav:playlist',
+      _FavKind.debrify => 'fav:debrify',
+      _FavKind.stremio => 'fav:stremio',
+      _FavKind.iptv => 'fav:iptv',
+    };
+  }
+
+  String _sectionRowId(CatalogSection section) => section is HomeListSection
+      ? section.rowId
+      : '${section.addon.id}:${section.catalog.type}:${section.catalog.id}';
+
+  String _catalogRefRowId((StremioAddon, StremioAddonCatalog) ref) =>
+      '${ref.$1.id}:${ref.$2.type}:${ref.$2.id}';
+
   /// The focus-node list backing a favourites row of the given [ref].
   List<FocusNode> _favNodesFor(_FavRowRef ref) {
     if (ref.isIptvList) return _iptvListRows[ref.list].nodes;
@@ -2695,25 +2748,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   // moved elsewhere meanwhile, the deferred move is dropped, so a late load
   // can never yank focus away from the user.
   FocusNode? _pendingDownOrigin;
-  int _pendingDownCwIndex = -1; // set when pressed on the last CW row
   int _pendingDownRowIndex = -1; // set when pressed on a catalog row
+  String? _pendingDownHomeRowId; // stable id on the globally ordered Home
   int _pendingDownCol = 0;
   DateTime? _pendingDownAt;
   static const Duration _pendingDownMaxAge = Duration(seconds: 3);
 
-  /// DPAD-down off the LAST Continue Watching row: favourites first, then the
-  /// catalog, else remember the press for when a row below loads.
-  void _focusBelowCw(int cwIndex, int col) {
-    if (_focusFavRowAt(0, col)) return;
-    if (_focusRow(0, col)) return;
-    _deferDownMove(cwIndex: cwIndex, column: col);
-  }
-
-  void _deferDownMove({int cwIndex = -1, int rowIndex = -1, required int column}) {
+  void _deferDownMove({
+    int rowIndex = -1,
+    String? homeRowId,
+    required int column,
+  }) {
     _pendingDownOrigin = FocusManager.instance.primaryFocus;
     if (_pendingDownOrigin == null) return;
-    _pendingDownCwIndex = cwIndex;
     _pendingDownRowIndex = rowIndex;
+    _pendingDownHomeRowId = homeRowId;
     _pendingDownCol = column;
     _pendingDownAt = DateTime.now();
   }
@@ -2721,6 +2770,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   void _clearDeferredDown() {
     _pendingDownOrigin = null;
     _pendingDownAt = null;
+    _pendingDownHomeRowId = null;
   }
 
   /// Complete a recent deferred DPAD-down, called whenever a row load settles.
@@ -2743,12 +2793,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
       final col = _pendingDownCol;
       final bool moved;
-      if (_pendingDownCwIndex >= 0) {
-        // From the last CW row: the row that loaded in below it may be a new
-        // Trakt CW row, a favourites row, or the first catalog row.
-        moved = _focusCwRow(_pendingDownCwIndex + 1, col) ||
-            _focusFavRowAt(0, col) ||
-            _focusRow(0, col);
+      final homeRowId = _pendingDownHomeRowId;
+      if (homeRowId != null) {
+        final rails = _canvasRails;
+        final current = rails.indexWhere(
+          (rail) => _canvasRailRowId(rail) == homeRowId,
+        );
+        moved = current >= 0 && _focusHomeRailAt(current + 1, col);
       } else if (_pendingDownRowIndex >= 0) {
         moved = _focusRow(_pendingDownRowIndex + 1, col);
       } else {
@@ -2759,23 +2810,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     });
   }
 
-  /// DPAD-up target for a favourites row: the previous favourites row, else the
-  /// last Continue Watching row, else off the top of the board (to the sidebar).
-  VoidCallback _favRowOnUp(int favIndex, int cwCount, int column) =>
-      favIndex > 0
-      ? () => _focusFavRowAt(favIndex - 1, column)
-      : (cwCount > 0
-            ? () => _focusCwRow(cwCount - 1, column)
-            : () => _leaveBoardTop());
+  VoidCallback _favRowOnUp(String rowId, int column) =>
+      () => _focusRelativeHomeRail(rowId, -1, column);
 
-  /// DPAD-down target for a favourites row: the next favourites row, else the
-  /// first catalog row (deferred until one loads if none has yet).
-  VoidCallback _favRowOnDown(int favIndex, int column) =>
-      favIndex < _favRowCount - 1
-      ? () => _focusFavRowAt(favIndex + 1, column)
-      : () {
-          if (!_focusRow(0, column)) _deferDownMove(column: column);
-        };
+  VoidCallback _favRowOnDown(String rowId, int column) =>
+      () => _focusRelativeHomeRail(rowId, 1, column);
 
   /// Load the user's starred Debrify TV channels for the leading favourites row.
   /// Silently leaves the row empty on any error (it just won't render).
@@ -4175,12 +4214,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   void _applySections(List<CatalogSection> sections) {
     _boardGen++;
     _boardAppliedAt = DateTime.now();
-    // `sec:<i>` rail keys are POSITIONAL: after a reseed index 3 is a
-    // different catalog, so keeping the key would silently show a rail the
-    // user never chose (and restore a column into it). CW and favourites keys
-    // are content-addressed and stay valid, so only the section keys go.
-    if (_canvasRailKey?.startsWith('sec:') ?? false) _canvasRailKey = null;
-    _canvasCols.removeWhere((key, _) => key.startsWith('sec:'));
+    // Rail keys are content-addressed by stable Home-row id, so a reload can
+    // preserve the active rail even when its numeric section index changes.
     _pendingStageAdvanceKey = null;
     _pendingStageAdvanceAt = null;
     _stageGeneration++;
@@ -4475,18 +4510,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // Canvas renders exactly ONE rail, so aim at its nearest mounted cell;
     // null (rails still loading) falls through to the classic targets.
     if (_stageActive) return _stageFocusTarget();
-    if (_cwVisible) {
-      final rows = _cwRows;
-      if (rows.isNotEmpty && rows.first.nodes.isNotEmpty) {
-        return rows.first.nodes.first;
-      }
-    }
-    if (_anyFavVisible) {
-      final favNodes = _favNodesFor(_favRowKinds.first);
-      if (favNodes.isNotEmpty) return favNodes.first;
-    }
-    if (_rowNodes.isNotEmpty && _rowNodes.first.isNotEmpty) {
-      return _rowNodes.first.first;
+    for (final rail in _canvasRails) {
+      final nodes = _canvasRailNodes(rail);
+      if (nodes.isNotEmpty) return nodes.first;
     }
     return null;
   }
@@ -4546,14 +4572,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return false;
     }
 
-    for (final row in _cwRows) {
-      if (tryRow(row.nodes)) return;
-    }
-    for (final kind in _favRowKinds) {
-      if (tryRow(_favNodesFor(kind))) return;
-    }
-    for (final row in _rowNodes) {
-      if (tryRow(row)) return;
+    for (final rail in _canvasRails) {
+      if (tryRow(_canvasRailNodes(rail))) return;
     }
   }
 
@@ -5347,18 +5367,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   String _canvasRailKeyOf(_CanvasRail rail) {
-    if (rail.cw != null) return 'cw:${rail.cw!.title}:${rail.cw!.tag ?? ''}';
-    if (rail.favKind != null) {
-      final ref = rail.favKind!;
-      // Content-addressed: a list row keys on its LIST ID, so reordering or
-      // adding lists never makes the remembered rail point at a different
-      // list (unlike the positional `sec:` keys below).
-      if (ref.isIptvList) {
-        return 'fav:iptvlist:${_iptvListRows[ref.list].listId}';
-      }
-      return 'fav:${ref.kind.name}';
-    }
-    return 'sec:${rail.sectionIndex}';
+    return 'row:${_canvasRailRowId(rail)}';
   }
 
   /// Where the active rail currently sits in [rails] — re-resolved every
@@ -5492,9 +5501,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// The hero reel.
   ///
-  /// NOT `_stageRails[0]`: that list is ordered Continue Watching → Favourites
-  /// (which include IPTV channels and playlists, not `StremioMeta` at all) →
-  /// catalog sections, and it re-orders as tracker data lands. The hero needs a
+  /// NOT `_stageRails[0]`: the user's first row may be a channel, playlist, or
+  /// Continue Watching rail rather than a catalog, and rails can arrive as
+  /// tracker data lands. The hero needs a
   /// stable list of real catalog titles, so it takes the user's resolved
   /// source pick when there is one, else the first section that has any items
   /// — and caps it either way: a reel longer than about eight is a list, not
@@ -5516,15 +5525,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   List<StremioMeta> get _spotlightHero =>
       _spotlightHeroSection?.items.take(8).toList() ?? const [];
 
-  /// Continue Watching first, then the catalog shelves — the order the other
-  /// boards already use, and the order someone opening Home actually wants.
-  ///
-  /// Built as descriptors rather than handing the board `_sections`, because
-  /// CW carries progress and a context menu that a `CatalogSection` has no
-  /// room for. Favourites rails are still absent; they are not `StremioMeta`.
   List<SpotlightShelf> get _spotlightShelves => [
-    for (final row in _cwRows)
-      SpotlightShelf(
+    for (final rail in _canvasRails) _spotlightShelfForRail(rail),
+  ];
+
+  SpotlightShelf _spotlightShelfForRail(_CanvasRail rail) {
+    final row = rail.cw;
+    if (row != null) {
+      return SpotlightShelf(
         title: row.tag == null ? row.title : '${row.title} · ${row.tag}',
         nodes: row.nodes,
         items: [
@@ -5538,22 +5546,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               onOptions: () => row.onQuickPlay(m),
             ),
         ],
-      ),
-    for (final ref in _favRowKinds) _spotlightFavShelf(ref),
-    for (var i = 0; i < _sections.length; i++)
-      SpotlightShelf(
-        title: _sections[i].title,
-        nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
-        items: [
-          for (final m in _sections[i].items)
-            SpotlightCard(
-              image: m.poster,
-              title: m.name,
-              onOpen: () => _openItem(m, _sections[i].addon),
-            ),
-        ],
-      ),
-  ];
+      );
+    }
+    final fav = rail.favKind;
+    if (fav != null) return _spotlightFavShelf(fav);
+    final i = rail.sectionIndex!;
+    return SpotlightShelf(
+      title: _sections[i].title,
+      nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
+      items: [
+        for (final m in _sections[i].items)
+          SpotlightCard(
+            image: m.poster,
+            title: m.name,
+            onOpen: () => _openItem(m, _sections[i].addon),
+          ),
+      ],
+    );
+  }
 
   /// A favourites rail as Spotlight cards.
   ///
@@ -5657,12 +5667,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   Widget _buildSpotlightBoard() {
-    // Shelf indices are CW, then favourites, then catalog — so the catalog
-    // row a shelf index maps to is offset by BOTH leading groups. Snapshotted
-    // rather than recomputed in the callback: both getters can change between
-    // this build and the callback firing, and paging the wrong row (or one out
-    // of range) is the result.
-    final leading = _cwRows.length + _favRowKinds.length;
+    // Snapshot row descriptors with the shelf list: async inserts must not
+    // make a callback page a different catalog than the shelf it came from.
+    final rails = _canvasRails;
     return SpotlightBoard(
       key: _spotlightKey,
       hero: _spotlightHero,
@@ -5672,10 +5679,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       dpad: widget.isTelevision,
       onHeroOpen: _openItem,
       onLoadMoreRow: (row) {
-        final catalogRow = row - leading;
-        if (catalogRow >= 0) unawaited(_loadMoreRow(catalogRow));
+        if (row < 0 || row >= rails.length) return;
+        final catalogRow = rails[row].sectionIndex;
+        if (catalogRow != null) unawaited(_loadMoreRow(catalogRow));
       },
-      onLoadMoreShelves: () => unawaited(_loadMoreBoard()),
+      onLoadMoreShelves: _loadMoreBoard,
       // The board owns the CADENCE; the resolve and the video stay here.
       //
       // Every other entry into `_scheduleHeroTrailer` is still excluded for
@@ -5772,15 +5780,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
-  /// The Canvas rails: every non-empty CW row, then every visible FAVOURITES
-  /// rail (same kinds and order as the classic board), then every non-empty
-  /// catalog section. The MDBList lists rail is NOT here by design — it's a
+  /// Every non-empty Home rail in the board's built-in order.
+  /// The MDBList lists rail is NOT here by design — it's a
   /// catalog-SEARCH results rail (`_listsRailVisible` requires a query) and
   /// the TV home board is chrome-free, so it can never appear on this
   /// surface. FocusNode lists are reused from the classic board's per-row
   /// lists — only one view is ever mounted, and reuse keeps node counts
   /// synced through paging for free.
-  List<_CanvasRail> get _canvasRails {
+  List<_CanvasRail> get _canonicalCanvasRails {
     final rails = <_CanvasRail>[];
     if (_cwVisible) {
       final cwRows = _cwRows;
@@ -5798,6 +5805,76 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       rails.add(_CanvasRail(sectionIndex: i));
     }
     return rails;
+  }
+
+  /// The canonical rails, globally sorted by the user's saved row ids.
+  List<_CanvasRail> get _canvasRails {
+    final rails = _canonicalCanvasRails;
+    return _homeRowOrderActive
+        ? HomeRowOrder.apply(rails, _homeRowOrder, _canvasRailRowId)
+        : rails;
+  }
+
+  /// Classic renders the same globally ordered rails as every stage layout,
+  /// plus focusless Trakt placeholders while that account is loading.
+  List<_CanvasRail> get _classicHomeRails {
+    var rails = _canonicalCanvasRails;
+    if (_traktReserving) {
+      final skeletons = <_CanvasRail>[];
+      if (!_homeDisabled.contains('trakt:movies')) {
+        skeletons.add(const _CanvasRail(traktSkeletonIndex: 0));
+      }
+      if (!_homeDisabled.contains('trakt:shows')) {
+        skeletons.add(const _CanvasRail(traktSkeletonIndex: 1));
+      }
+      // In the built-in order placeholders belong after the real CW block and
+      // before favourites/sections. Build that canonical sequence first, then
+      // let a saved order move the placeholders wherever the user requested.
+      rails = HomeRowOrder.insertAfterLeadingRun(
+        rails,
+        skeletons,
+        (rail) => rail.cw != null,
+      );
+    }
+    return _homeRowOrderActive
+        ? HomeRowOrder.apply(rails, _homeRowOrder, _canvasRailRowId)
+        : rails;
+  }
+
+  String _canvasRailRowId(_CanvasRail rail) {
+    if (rail.cw != null) return rail.cw!.rowId;
+    if (rail.favKind != null) return _favRowId(rail.favKind!);
+    if (rail.traktSkeletonIndex >= 0) {
+      return rail.traktSkeletonIndex == 0 ? 'trakt:movies' : 'trakt:shows';
+    }
+    return _sectionRowId(_sections[rail.sectionIndex!]);
+  }
+
+  bool _focusHomeRailAt(int index, int column) {
+    final rails = _canvasRails;
+    if (index < 0 || index >= rails.length) return false;
+    final nodes = _canvasRailNodes(rails[index]);
+    if (nodes.isEmpty) return false;
+    _requestRowFocus(nodes, column.clamp(0, nodes.length - 1));
+    return true;
+  }
+
+  /// Classic-board vertical focus by stable row id. The ordered list is
+  /// re-resolved on every press because tracker/favourite rows can arrive
+  /// asynchronously and catalog batches can insert around the current row.
+  void _focusRelativeHomeRail(String rowId, int delta, int column) {
+    final rails = _canvasRails;
+    final current = rails.indexWhere((rail) => _canvasRailRowId(rail) == rowId);
+    if (current < 0) return;
+    for (var i = current + delta; i >= 0 && i < rails.length; i += delta) {
+      if (_focusHomeRailAt(i, column)) return;
+    }
+    if (delta < 0) {
+      _leaveBoardTop();
+      return;
+    }
+    if (_boardHasMore) _loadMoreBoard();
+    _deferDownMove(homeRowId: rowId, column: column);
   }
 
   // ── TONIGHT zone state ───────────────────────────────────────────────────
@@ -14825,95 +14902,102 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                   Expanded(
                     child: _dimRowsForTrailer(
                       Builder(
-                      builder: (context) {
-                        // Leading board rows, in order: Continue Watching (local, then
-                        // Trakt), then the favourites rows (IPTV, Debrify TV, Stremio TV —
-                        // matching the Home screen); the catalog sections follow, offset by
-                        // the total leading row count.
-                        final cwRows = showCw ? _cwRows : const <_CwRow>[];
-                        final cwCount = cwRows.length;
-                        // Skeleton Trakt rows, held open in the Trakt slot (right after
-                        // the local Continue Watching rows) while the slow fetch is in
-                        // flight, so the real rows fill in place instead of inserting
-                        // and shoving everything below them down. Non-focusable — the
-                        // DPAD wiring skips straight over them (see `down`/`up` in
-                        // [_buildContinueWatchingRow]).
-                        final skelCount = _traktSkeletonRowCount;
-                        final favKinds = _favRowKinds;
-                        final favCount = favKinds.length;
-                        // The MDBList "Lists" rail, when a search matched lists.
-                        // It renders ONLY during a search, where CW/skeleton/fav
-                        // rows are all hidden — so it's the sole leading row and
-                        // its `- listsCount` offsets below are no-ops whenever
-                        // those other leading rows are present.
-                        final listsCount = _listsRailVisible ? 1 : 0;
-                        final leadingCount =
-                            listsCount + cwCount + skelCount + favCount;
-                        // Footer spinner tracks the actual fetch, not just "more remain":
-                        // `_boardCursor` advances synchronously so the final in-flight batch
-                        // still shows it, and an idle board with more rows doesn't spin.
-                        final showFooter = _boardLoadingMore;
-                        return ListView.builder(
-                          controller: _boardScroll,
-                          padding: const EdgeInsets.only(top: 6, bottom: 32),
-                          // ~1.5 rows of pre-build. 800 meant a vertical DPAD
-                          // move could construct several whole rows (each
-                          // 15-25 poster cards) in one frame — a visible
-                          // build/layout burst on the TV chip. Smaller extent
-                          // = smaller, more frequent builds.
-                          cacheExtent: 300,
-                          itemCount:
-                              _sections.length +
-                              leadingCount +
-                              (showFooter ? 1 : 0),
-                          itemBuilder: (context, i) {
-                            Widget row;
-                            if (i < listsCount) {
-                              row = _buildListsRailRow();
-                            } else if (i < listsCount + cwCount) {
-                              row = _buildContinueWatchingRow(
-                                cwRows[i - listsCount],
-                                i - listsCount,
-                                cwCount,
-                                favCount,
-                              );
-                            } else if (i < listsCount + cwCount + skelCount) {
-                              row = _buildTraktSkeletonRow(
-                                i - listsCount - cwCount,
-                              );
-                            } else if (i < leadingCount) {
-                              final favIndex =
-                                  i - listsCount - cwCount - skelCount;
-                              row = _buildFavRow(
-                                favKinds[favIndex],
-                                favIndex,
-                                cwCount,
-                              );
-                            } else {
-                              final s = i - leadingCount;
-                              if (s >= _sections.length) {
-                                return _buildBoardFooter();
-                              }
-                              row = _buildRow(s);
+                        builder: (context) {
+                          // Home uses one globally ordered descriptor list across
+                          // every row family. Search results keep their dedicated
+                          // Lists + catalog shape and never read the Home order.
+                          final orderedHome = _homeRowOrderActive;
+                          final homeRails = orderedHome
+                              ? _classicHomeRails
+                              : const <_CanvasRail>[];
+                          final revealPrefix = 'board-reveal-$_boardGen-';
+                          final homeRailIndex = <String, int>{
+                            for (var i = 0; i < homeRails.length; i++)
+                              _canvasRailRowId(homeRails[i]): i,
+                          };
+                          int? findHomeRailIndex(Key key) {
+                            if (!orderedHome || key is! ValueKey<String>) {
+                              return null;
                             }
-                            // Staggered entrance for the first screenful of rows when a
-                            // fresh board lands (initial load / search swap): each row
-                            // fades in and rises a touch, offset per index, so the
-                            // board composes itself instead of popping. Rows built
-                            // later (scroll, appends) skip it — the key gates replay to
-                            // section swaps and the time window skips stale mounts.
-                            final fresh =
-                                DateTime.now().difference(_boardAppliedAt) <
-                                const Duration(milliseconds: 1800);
-                            return _EntranceReveal(
-                              key: ValueKey('board-reveal-$_boardGen-$i'),
-                              play: fresh && i < 6,
-                              delayMs: 60 * i,
-                              child: row,
-                            );
-                          },
-                        );
-                      },
+                            final value = key.value;
+                            if (!value.startsWith(revealPrefix)) return null;
+                            return homeRailIndex[
+                              value.substring(revealPrefix.length)
+                            ];
+                          }
+                          // The MDBList "Lists" rail, when a search matched
+                          // lists. It only renders during a search, where the
+                          // Home-only rows are hidden.
+                          final listsCount = _listsRailVisible ? 1 : 0;
+                          final showFooter = _boardLoadingMore;
+                          return ListView.builder(
+                            controller: _boardScroll,
+                            // A lazy sliver cannot relocate a keyed child by
+                            // itself. Tracker/CW rows can arrive above the
+                            // focused row, so provide the new index to preserve
+                            // its entrance state and Focus attachment.
+                            findChildIndexCallback: orderedHome
+                                ? findHomeRailIndex
+                                : null,
+                            padding: const EdgeInsets.only(top: 6, bottom: 32),
+                            // ~1.5 rows of pre-build. Smaller extent means
+                            // smaller, more frequent builds on weak TV chips.
+                            cacheExtent: 300,
+                            itemCount:
+                                (orderedHome
+                                    ? homeRails.length
+                                    : _sections.length + listsCount) +
+                                (showFooter ? 1 : 0),
+                            itemBuilder: (context, i) {
+                              Widget row;
+                              var revealIdentity = 'index:$i';
+                              if (orderedHome && i < homeRails.length) {
+                                final rail = homeRails[i];
+                                final rowId = _canvasRailRowId(rail);
+                                revealIdentity = rowId;
+                                if (rail.traktSkeletonIndex >= 0) {
+                                  row = _buildTraktSkeletonRow(
+                                    rail.traktSkeletonIndex,
+                                  );
+                                } else if (rail.cw != null) {
+                                  row = _buildContinueWatchingRow(
+                                    rail.cw!,
+                                    rail.cwIndex,
+                                    rowId,
+                                  );
+                                } else if (rail.favKind != null) {
+                                  row = _buildFavRow(rail.favKind!, rowId);
+                                } else {
+                                  row = _buildRow(
+                                    rail.sectionIndex!,
+                                    homeRowId: rowId,
+                                  );
+                                }
+                              } else if (orderedHome) {
+                                return _buildBoardFooter();
+                              } else if (i < listsCount) {
+                                row = _buildListsRailRow();
+                              } else {
+                                final s = i - listsCount;
+                                if (s >= _sections.length) {
+                                  return _buildBoardFooter();
+                                }
+                                row = _buildRow(s);
+                              }
+                              // Staggered entrance for the first screenful of
+                              // rows when a fresh board lands.
+                              final fresh =
+                                  DateTime.now().difference(_boardAppliedAt) <
+                                  const Duration(milliseconds: 1800);
+                              return _EntranceReveal(
+                                key: ValueKey('$revealPrefix$revealIdentity'),
+                                play: fresh && i < 6,
+                                delayMs: 60 * i,
+                                child: row,
+                              );
+                            },
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -15650,7 +15734,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
-  Widget _buildRow(int rowIndex) {
+  Widget _buildRow(int rowIndex, {String? homeRowId}) {
     final section = _sections[rowIndex];
     final nodes = _rowNodes[rowIndex];
     final tv = widget.isTelevision;
@@ -15691,23 +15775,30 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 // leading See-All tile). DPAD-up from row 0 leaves the board;
                 // col-0 DPAD-left drops to the sidebar (handled in _BoardCell
                 // when onLeftEdge is null).
-                VoidCallback up(int col) => rowIndex == 0
-                    ? (_listsRailVisible
-                          ? () => _focusListsRailAt(col)
-                          : (_anyFavVisible
-                                ? () => _focusFavRowAt(_favRowCount - 1, col)
-                                : (_cwVisible
-                                      ? () =>
-                                            _focusCwRow(_cwRows.length - 1, col)
-                                      : () => _leaveBoardTop())))
-                    : () => _focusRow(rowIndex - 1, col);
+                VoidCallback up(int col) => homeRowId != null
+                    ? () => _focusRelativeHomeRail(homeRowId, -1, col)
+                    : rowIndex == 0
+                        ? (_listsRailVisible
+                              ? () => _focusListsRailAt(col)
+                              : (_anyFavVisible
+                                    ? () =>
+                                          _focusFavRowAt(_favRowCount - 1, col)
+                                    : (_cwVisible
+                                          ? () => _focusCwRow(
+                                              _cwRows.length - 1,
+                                              col,
+                                            )
+                                          : () => _leaveBoardTop())))
+                        : () => _focusRow(rowIndex - 1, col);
                 // Down past the last loaded row kicks the next batch load
                 // (inside _focusRow) and defers the move until it lands.
-                VoidCallback down(int col) => () {
-                  if (!_focusRow(rowIndex + 1, col)) {
-                    _deferDownMove(rowIndex: rowIndex, column: col);
-                  }
-                };
+                VoidCallback down(int col) => homeRowId != null
+                    ? () => _focusRelativeHomeRail(homeRowId, 1, col)
+                    : () {
+                        if (!_focusRow(rowIndex + 1, col)) {
+                          _deferDownMove(rowIndex: rowIndex, column: col);
+                        }
+                      };
                 return ListView.builder(
                   scrollDirection: Axis.horizontal,
                   // Clip the horizontal viewport so scrolled-off cards don't paint
@@ -15800,17 +15891,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   /// A leading Continue Watching row (local or Trakt) — same poster cards as the
-  /// catalog rows, plus a bottom progress bar and an optional type tag.
-  /// [cwIndex] is this row's position among the visible CW rows and [cwCount]
-  /// the total, so DPAD up/down can move between CW rows and into the catalog.
-  /// [favCount] is the number of favourites rows just below, so the last CW
-  /// row's DPAD-down lands on the first of them instead of the first catalog row.
-  Widget _buildContinueWatchingRow(
-    _CwRow row,
-    int cwIndex,
-    int cwCount,
-    int favCount,
-  ) {
+  /// catalog rows, plus a bottom progress bar and an optional type tag. Vertical
+  /// navigation resolves [homeRowId] against the live global order.
+  Widget _buildContinueWatchingRow(_CwRow row, int cwIndex, String homeRowId) {
     final tv = widget.isTelevision;
     final posterW = _railPosterW(context);
     final posterH = posterW * 3 / 2;
@@ -15830,12 +15913,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               // Rows start on the first poster (no leading See-All tile). DPAD-up
               // from the first CW row leaves the board; col-0 DPAD-left drops to
               // the sidebar (handled in _BoardCell when onLeftEdge is null).
-              VoidCallback up(int col) => cwIndex == 0
-                  ? () => _leaveBoardTop()
-                  : () => _focusCwRow(cwIndex - 1, col);
-              VoidCallback down(int col) => cwIndex < cwCount - 1
-                  ? () => _focusCwRow(cwIndex + 1, col)
-                  : () => _focusBelowCw(cwIndex, col);
+              VoidCallback up(int col) =>
+                  () => _focusRelativeHomeRail(homeRowId, -1, col);
+              VoidCallback down(int col) =>
+                  () => _focusRelativeHomeRail(homeRowId, 1, col);
               return ListView.builder(
                 scrollDirection: Axis.horizontal,
                 clipBehavior: Clip.hardEdge,
@@ -15902,20 +15983,20 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     );
   }
 
-  /// Dispatch to the right favourites-row builder for [ref]. [favIndex] is the
-  /// row's position among the visible favourites rows and [cwCount] the number
-  /// of Continue Watching rows above them (both drive the DPAD up/down wiring).
-  Widget _buildFavRow(_FavRowRef ref, int favIndex, int cwCount) {
-    if (ref.isIptvList) return _buildIptvListRow(ref, favIndex, cwCount);
+  /// Dispatch to the right favourites-row builder for [ref].
+  Widget _buildFavRow(_FavRowRef ref, String homeRowId) {
+    if (ref.isIptvList) {
+      return _buildIptvListRow(ref, homeRowId);
+    }
     switch (ref.kind) {
       case _FavKind.iptv:
-        return _buildIptvFavRow(favIndex, cwCount);
+        return _buildIptvFavRow(homeRowId);
       case _FavKind.debrify:
-        return _buildTvFavRow(favIndex, cwCount);
+        return _buildTvFavRow(homeRowId);
       case _FavKind.stremio:
-        return _buildStremioTvFavRow(favIndex, cwCount);
+        return _buildStremioTvFavRow(homeRowId);
       case _FavKind.playlist:
-        return _buildPlaylistFavRow(favIndex, cwCount);
+        return _buildPlaylistFavRow(homeRowId);
     }
   }
 
@@ -15990,7 +16071,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// The "Debrify TV" row of favourited keyword channels, styled to match the
   /// catalog rows (same poster-shaped cards + title below).
-  Widget _buildTvFavRow(int favIndex, int cwCount) {
+  Widget _buildTvFavRow(String homeRowId) {
     final tv = widget.isTelevision;
     return _buildFavRowShell(
       title: 'Debrify TV',
@@ -16010,8 +16091,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           isTelevision: tv,
           column: col,
           rowNodes: _tvFavNodes,
-          onUp: _favRowOnUp(favIndex, cwCount, col),
-          onDown: _favRowOnDown(favIndex, col),
+          onUp: _favRowOnUp(homeRowId, col),
+          onDown: _favRowOnDown(homeRowId, col),
           // Debrify channels have no artwork — the glyph fallback + channel
           // number badge is the intended look.
           child: _ArtPoster(
@@ -16031,7 +16112,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// The "Stremio TV" row of favourited channels. Each card shows the channel's
   /// current now-playing item poster (rotating on the same schedule as the Home
   /// / Stremio TV screens); tapping opens the channel.
-  Widget _buildStremioTvFavRow(int favIndex, int cwCount) {
+  Widget _buildStremioTvFavRow(String homeRowId) {
     final tv = widget.isTelevision;
     return _buildFavRowShell(
       title: 'Stremio TV',
@@ -16051,8 +16132,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           isTelevision: tv,
           column: col,
           rowNodes: _stvFavNodes,
-          onUp: _favRowOnUp(favIndex, cwCount, col),
-          onDown: _favRowOnDown(favIndex, col),
+          onUp: _favRowOnUp(homeRowId, col),
+          onDown: _favRowOnDown(homeRowId, col),
           child: _ArtPoster(
             imageUrl: art,
             title: channel.displayName,
@@ -16069,7 +16150,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// The "IPTV" row of favourited live channels. Cards show the channel logo
   /// (glyph fallback); tapping plays the stream directly.
-  Widget _buildIptvFavRow(int favIndex, int cwCount) {
+  Widget _buildIptvFavRow(String homeRowId) {
     final tv = widget.isTelevision;
     return _buildFavRowShell(
       title: 'IPTV',
@@ -16084,8 +16165,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           isTelevision: tv,
           column: col,
           rowNodes: _iptvFavNodes,
-          onUp: _favRowOnUp(favIndex, cwCount, col),
-          onDown: _favRowOnDown(favIndex, col),
+          onUp: _favRowOnUp(homeRowId, col),
+          onDown: _favRowOnDown(homeRowId, col),
           child: _ArtPoster(
             imageUrl: channel.logoUrl,
             title: channel.name,
@@ -16109,7 +16190,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// favourites row, but content-aware: play routes by the stored content
   /// type (lists can hold VOD/series alongside live), and only a live entry
   /// retunes the hero's live preview on focus.
-  Widget _buildIptvListRow(_FavRowRef ref, int favIndex, int cwCount) {
+  Widget _buildIptvListRow(_FavRowRef ref, String homeRowId) {
     final tv = widget.isTelevision;
     final row = _iptvListRows[ref.list];
     return _buildFavRowShell(
@@ -16126,8 +16207,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           isTelevision: tv,
           column: col,
           rowNodes: row.nodes,
-          onUp: _favRowOnUp(favIndex, cwCount, col),
-          onDown: _favRowOnDown(favIndex, col),
+          onUp: _favRowOnUp(homeRowId, col),
+          onDown: _favRowOnDown(homeRowId, col),
           child: _ArtPoster(
             imageUrl: channel.logoUrl,
             title: channel.name,
@@ -16149,7 +16230,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// The "Playlist" row of the user's saved items. Cards show the item poster
   /// with a resume-progress bar; tapping opens the full action menu
   /// ([_onPlaylistItemTap]) — this row is a complete playlist manager on its own.
-  Widget _buildPlaylistFavRow(int favIndex, int cwCount) {
+  Widget _buildPlaylistFavRow(String homeRowId) {
     final tv = widget.isTelevision;
     return _buildFavRowShell(
       title: 'Playlist',
@@ -16163,8 +16244,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           isTelevision: tv,
           column: col,
           rowNodes: _playlistFavNodes,
-          onUp: _favRowOnUp(favIndex, cwCount, col),
-          onDown: _favRowOnDown(favIndex, col),
+          onUp: _favRowOnUp(homeRowId, col),
+          onDown: _favRowOnDown(homeRowId, col),
           child: _ArtPoster(
             imageUrl: posterUrl,
             title: title,
@@ -18345,6 +18426,7 @@ enum _CwKind { local, trakt, simkl, iptv }
 /// header, focus nodes, per-item progress lookup, and open / quick-play
 /// handlers so the local and Trakt sources render through one row builder.
 class _CwRow {
+  final String rowId;
   final String title; // e.g. 'Continue Watching' or 'Trakt Movies'
   final String? tag; // 'Movies' / 'Series' pill, or null
   final _CwKind kind;
@@ -18365,6 +18447,7 @@ class _CwRow {
   final VoidCallback? onSeeAll;
 
   const _CwRow({
+    required this.rowId,
     required this.title,
     required this.tag,
     required this.kind,
@@ -18686,11 +18769,13 @@ class _CanvasRail {
   final int cwIndex;
   final _FavRowRef? favKind;
   final int? sectionIndex;
+  final int traktSkeletonIndex;
   const _CanvasRail({
     this.cw,
     this.cwIndex = -1,
     this.favKind,
     this.sectionIndex,
+    this.traktSkeletonIndex = -1,
   });
 }
 

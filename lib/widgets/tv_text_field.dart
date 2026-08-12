@@ -9,6 +9,7 @@ import '../theme/overlay_theme.dart';
 import '../services/tvos_keyboard_signal.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
+import 'onboarding/tv_keyboard_slot.dart';
 import 'tv_keyboard.dart';
 
 /// Text field that is safe to use on TV.
@@ -37,6 +38,7 @@ class TvTextField extends StatefulWidget {
     this.style,
     this.textAlign = TextAlign.start,
     this.textInputAction,
+    this.keyboardSubmitLabel,
     this.textCapitalization = TextCapitalization.none,
     this.keyboardType,
     this.autofocus = false,
@@ -79,6 +81,7 @@ class TvTextField extends StatefulWidget {
   final TextStyle? style;
   final TextAlign textAlign;
   final TextInputAction? textInputAction;
+  final String? keyboardSubmitLabel;
   final TextCapitalization textCapitalization;
 
   /// Off-TV / opt-out only; the shell always uses [TextInputType.none].
@@ -234,6 +237,9 @@ class _EdgeRightAction extends Action<_EdgeRightIntent> {
 }
 
 class TvTextFieldState extends State<TvTextField> {
+  @visibleForTesting
+  bool get debugHasKeyboardOverlay => _overlay != null;
+
   /// TV only: the actual TextField's node — skipTraversal so the shell is the
   /// only DPAD stop; focused exclusively by OK ("start editing") or a tap.
   final FocusNode _editNode = FocusNode(
@@ -243,10 +249,12 @@ class TvTextFieldState extends State<TvTextField> {
 
   FocusNode? _internalShellNode;
   FocusNode get _shellNode =>
-      widget.focusNode ?? (_internalShellNode ??= FocusNode(debugLabel: 'tv-textfield-shell'));
+      widget.focusNode ??
+      (_internalShellNode ??= FocusNode(debugLabel: 'tv-textfield-shell'));
 
   TvKeyboardController? _kb;
   OverlayEntry? _overlay;
+  TvKeyboardSession? _keyboardSlot;
   bool _editing = false;
   bool _focused = false;
 
@@ -271,6 +279,7 @@ class TvTextFieldState extends State<TvTextField> {
 
   void _armPopGuard() {
     _popGuard = true;
+    _keyboardSlot?.holdBack();
     _popGuardTimer?.cancel();
     // Same-press pops arrive within milliseconds; 300ms covers any dispatch
     // path's latency while staying under a deliberate human double-press.
@@ -328,7 +337,6 @@ class TvTextFieldState extends State<TvTextField> {
   /// Cancels the Apple TV "editing finished" subscription.
   VoidCallback? _tvosEndEditing;
 
-
   @override
   void initState() {
     super.initState();
@@ -340,6 +348,12 @@ class TvTextFieldState extends State<TvTextField> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _keyboardSlot = TvKeyboardSlot.maybeOf(context);
+  }
+
+  @override
   void didUpdateWidget(covariant TvTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.focusNode != widget.focusNode) {
@@ -347,6 +361,12 @@ class TvTextFieldState extends State<TvTextField> {
         _handleFocusChange,
       );
       _shellNode.addListener(_handleFocusChange);
+    }
+    // The disabled passthrough TextField sets the shared shell node's
+    // canRequestFocus to false. When TV-shell mode comes back, its outer Focus
+    // reuses that node and does not reset the property on its own.
+    if (!oldWidget.enabled && widget.enabled && _tvShell) {
+      _shellNode.canRequestFocus = true;
     }
   }
 
@@ -357,7 +377,14 @@ class TvTextFieldState extends State<TvTextField> {
     _noticeTimer?.cancel();
     _cancelVoiceSession();
     _removeOverlay();
-    _kb?.dispose();
+    final keyboard = _kb;
+    final slot = _keyboardSlot;
+    _kb = null;
+    if (keyboard != null && slot != null) {
+      slot.detachDeferred(keyboard, afterDetach: keyboard.dispose);
+    } else {
+      keyboard?.dispose();
+    }
     (widget.focusNode ?? _internalShellNode)?.removeListener(
       _handleFocusChange,
     );
@@ -406,46 +433,55 @@ class TvTextFieldState extends State<TvTextField> {
       onVoiceStop: _stopVoiceInput,
       onPaste: _pasteFromClipboard,
       voiceAvailable: TvVoiceInput.availableCached ?? false,
-      submitLabel: switch (widget.textInputAction) {
-        TextInputAction.search => 'Search',
-        TextInputAction.go => 'Go',
-        TextInputAction.next => 'Next',
-        TextInputAction.send => 'Send',
-        _ => 'Done',
-      },
+      submitLabel:
+          widget.keyboardSubmitLabel ??
+          switch (widget.textInputAction) {
+            TextInputAction.search => 'Search',
+            TextInputAction.go => 'Go',
+            TextInputAction.next => 'Next',
+            TextInputAction.send => 'Send',
+            _ => 'Done',
+          },
       startShifted:
           widget.textCapitalization != TextCapitalization.none &&
           widget.controller.text.isEmpty,
     );
-    final overlay = Overlay.of(context, rootOverlay: true);
-    // A bare OverlayEntry inherits nothing local — and this keyboard opens
-    // from INCLUDED and FROZEN surfaces alike. Snapshot the field's ambient
-    // themes so the panel renders what its field renders (the legacy freeze
-    // included when the field sits inside a LegacyThemeBoundary). Inside the
-    // Positioned: CapturedThemes.wrap inserts plain widgets, and Positioned
-    // must stay the overlay Stack's direct child.
-    final capturedThemes = captureAppThemes(context);
-    _overlay = OverlayEntry(
-      builder: (_) => Positioned(
-        left: 0,
-        right: 0,
-        bottom: 16,
-        child: capturedThemes.wrap(SafeArea(
-          child: Center(
-            child: TvKeyboardPanel(
-              controller: _kb!,
-              // The panel's own defaults are these same literals, so a token
-              // left null lands on exactly what shipped either way.
-              accent: widget.accent,
-              ground: widget.keyboardGround,
-              ink: widget.keyboardInk,
-              inkOnAccent: widget.keyboardInkOnAccent,
+    final slot = _keyboardSlot;
+    if (slot != null) {
+      slot.attach(_kb!);
+    } else {
+      final overlay = Overlay.of(context, rootOverlay: true);
+      // A bare OverlayEntry inherits nothing local — and this keyboard opens
+      // from INCLUDED and FROZEN surfaces alike. Snapshot the field's ambient
+      // themes so the panel renders what its field renders (the legacy freeze
+      // included when the field sits inside a LegacyThemeBoundary). Inside the
+      // Positioned: CapturedThemes.wrap inserts plain widgets, and Positioned
+      // must stay the overlay Stack's direct child.
+      final capturedThemes = captureAppThemes(context);
+      _overlay = OverlayEntry(
+        builder: (_) => Positioned(
+          left: 0,
+          right: 0,
+          bottom: 16,
+          child: capturedThemes.wrap(
+            SafeArea(
+              child: Center(
+                child: TvKeyboardPanel(
+                  controller: _kb!,
+                  // The panel's own defaults are these same literals, so a token
+                  // left null lands on exactly what shipped either way.
+                  accent: widget.accent,
+                  ground: widget.keyboardGround,
+                  ink: widget.keyboardInk,
+                  inkOnAccent: widget.keyboardInkOnAccent,
+                ),
+              ),
             ),
           ),
-        )),
-      ),
-    );
-    overlay.insert(_overlay!);
+        ),
+      );
+      overlay.insert(_overlay!);
+    }
     if (!widget.controller.selection.isValid) {
       widget.controller.selection = TextSelection.collapsed(
         offset: widget.controller.text.length,
@@ -465,11 +501,13 @@ class TvTextFieldState extends State<TvTextField> {
     // there's no enclosing scrollable.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_editing) return;
-      Scrollable.ensureVisible(
-        context,
-        alignment: 0.2,
-        duration: const Duration(milliseconds: 150),
-      );
+      if (_keyboardSlot == null) {
+        Scrollable.ensureVisible(
+          context,
+          alignment: 0.2,
+          duration: const Duration(milliseconds: 150),
+        );
+      }
     });
   }
 
@@ -481,6 +519,8 @@ class TvTextFieldState extends State<TvTextField> {
     _editing = false;
     _useSystemIme = false;
     _removeOverlay();
+    final keyboard = _kb;
+    if (keyboard != null) _keyboardSlot?.detach(keyboard);
     if (mounted) {
       if (refocusShell) _shellNode.requestFocus();
       setState(() {});
@@ -497,7 +537,9 @@ class TvTextFieldState extends State<TvTextField> {
     if (!_editing || _useSystemIme) return;
     _editing = false;
     _removeOverlay();
-    _kb?.dispose();
+    final keyboard = _kb;
+    if (keyboard != null) _keyboardSlot?.detach(keyboard);
+    keyboard?.dispose();
     _kb = null;
     setState(() => _useSystemIme = true);
     _imeSwitch = true;
@@ -679,6 +721,10 @@ class TvTextFieldState extends State<TvTextField> {
     if (next.text != oldValue.text) widget.onChanged?.call(next.text);
   }
 
+  /// Inserts text through the same formatter/onChanged path as a keyboard key.
+  /// Used by onboarding's Paste method chip.
+  void insertText(String s) => _insertText(s);
+
   void _insertText(String s) {
     final v = widget.controller.value;
     final sel = v.selection;
@@ -804,7 +850,8 @@ class TvTextFieldState extends State<TvTextField> {
 
   KeyEventResult _handleShellKey(FocusNode node, KeyEvent event) {
     final key = event.logicalKey;
-    final isBackKey = key == LogicalKeyboardKey.escape ||
+    final isBackKey =
+        key == LogicalKeyboardKey.escape ||
         key == LogicalKeyboardKey.goBack ||
         key == LogicalKeyboardKey.browserBack;
     // Arrows accept key-repeat (held DPAD keeps moving); OK/Back act on the
@@ -896,7 +943,10 @@ class TvTextFieldState extends State<TvTextField> {
         );
     // The shell isn't the TextField's focus, so borrow the focused border for
     // the ring — the field looks "selected" without any keyboard appearing.
-    if (shellFocused && !_editing && !_useSystemIme && deco.focusedBorder != null) {
+    if (shellFocused &&
+        !_editing &&
+        !_useSystemIme &&
+        deco.focusedBorder != null) {
       deco = deco.copyWith(enabledBorder: deco.focusedBorder);
     }
     return deco;
@@ -1139,7 +1189,7 @@ class TvTextFieldState extends State<TvTextField> {
     // `!_editing` alone re-arms the route a few milliseconds too early.
     return PopScope(
       canPop: !_editing && !_popGuard,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         _endEdit();
       },
@@ -1148,31 +1198,47 @@ class TvTextFieldState extends State<TvTextField> {
         autofocus: widget.autofocus,
         onKeyEvent: _handleShellKey,
         child: Shortcuts(
-        // In the system-IME hand-off the panel is gone: leave every key to the
-        // IME / stock text editing instead of routing it at a dead keyboard.
-        shortcuts: _useSystemIme
-            ? const <ShortcutActivator, Intent>{}
-            : const <ShortcutActivator, Intent>{
-                SingleActivator(LogicalKeyboardKey.arrowLeft): _KbNavIntent(-1, 0),
-                SingleActivator(LogicalKeyboardKey.arrowRight): _KbNavIntent(1, 0),
-                SingleActivator(LogicalKeyboardKey.arrowUp): _KbNavIntent(0, -1),
-                SingleActivator(LogicalKeyboardKey.arrowDown): _KbNavIntent(0, 1),
-                SingleActivator(LogicalKeyboardKey.select): _KbActivateIntent(),
-                SingleActivator(LogicalKeyboardKey.enter): _KbActivateIntent(),
-                SingleActivator(LogicalKeyboardKey.numpadEnter): _KbActivateIntent(),
-                SingleActivator(LogicalKeyboardKey.gameButtonA): _KbActivateIntent(),
-              },
-        child: Actions(
-          // isEnabled-gated: outside an active edit session (e.g. a suffix ✕
-          // button inside this subtree holds focus) the disabled actions fall
-          // through, so the key keeps bubbling instead of dying against a
-          // null/stale keyboard controller.
-          actions: <Type, Action<Intent>>{
-            _KbNavIntent: _KbNavAction(this),
-            _KbActivateIntent: _KbActivateAction(this),
-          },
-          child: field,
-        ),
+          // In the system-IME hand-off the panel is gone: leave every key to the
+          // IME / stock text editing instead of routing it at a dead keyboard.
+          shortcuts: _useSystemIme
+              ? const <ShortcutActivator, Intent>{}
+              : const <ShortcutActivator, Intent>{
+                  SingleActivator(LogicalKeyboardKey.arrowLeft): _KbNavIntent(
+                    -1,
+                    0,
+                  ),
+                  SingleActivator(LogicalKeyboardKey.arrowRight): _KbNavIntent(
+                    1,
+                    0,
+                  ),
+                  SingleActivator(LogicalKeyboardKey.arrowUp): _KbNavIntent(
+                    0,
+                    -1,
+                  ),
+                  SingleActivator(LogicalKeyboardKey.arrowDown): _KbNavIntent(
+                    0,
+                    1,
+                  ),
+                  SingleActivator(LogicalKeyboardKey.select):
+                      _KbActivateIntent(),
+                  SingleActivator(LogicalKeyboardKey.enter):
+                      _KbActivateIntent(),
+                  SingleActivator(LogicalKeyboardKey.numpadEnter):
+                      _KbActivateIntent(),
+                  SingleActivator(LogicalKeyboardKey.gameButtonA):
+                      _KbActivateIntent(),
+                },
+          child: Actions(
+            // isEnabled-gated: outside an active edit session (e.g. a suffix ✕
+            // button inside this subtree holds focus) the disabled actions fall
+            // through, so the key keeps bubbling instead of dying against a
+            // null/stale keyboard controller.
+            actions: <Type, Action<Intent>>{
+              _KbNavIntent: _KbNavAction(this),
+              _KbActivateIntent: _KbActivateAction(this),
+            },
+            child: field,
+          ),
         ),
       ),
     );

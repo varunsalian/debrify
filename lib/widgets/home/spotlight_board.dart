@@ -139,7 +139,11 @@ class SpotlightBoard extends StatefulWidget {
   final void Function(int row)? onLoadMoreRow;
 
   /// Ask the host for another batch of shelves, when DOWN runs out of them.
-  final VoidCallback? onLoadMoreShelves;
+  ///
+  /// Returns whether at least one shelf was appended. Spotlight awaits this
+  /// result so the DOWN that started the fetch can finish its move instead of
+  /// being swallowed at the old end of the board.
+  final Future<bool> Function()? onLoadMoreShelves;
 
   /// The hero has been resting on [item] long enough to be worth a trailer.
   ///
@@ -415,6 +419,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   String? _heroId;
   int _row = -1; // -1 = the hero owns the cursor
   final Map<int, int> _col = {};
+
+  /// A DOWN at the last loaded shelf owns the catalog fetch until it settles.
+  /// While true, repeated key events cannot start duplicate loads and the
+  /// board paints a visible acknowledgement instead of looking exhausted.
+  bool _loadingMoreShelves = false;
 
   /// Left-third luminance per backdrop URL. Probed once; the result decides
   /// which side the identity sits on.
@@ -746,6 +755,53 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     _restartCadence();
   }
 
+  Future<void> _loadShelvesAndFinishDown() async {
+    final load = widget.onLoadMoreShelves;
+    if (load == null || _loadingMoreShelves) return;
+
+    final origin = FocusManager.instance.primaryFocus;
+    final oldLength = widget.sections.length;
+    setState(() => _loadingMoreShelves = true);
+
+    var appended = false;
+    try {
+      appended = await load();
+    } catch (_) {
+      // A catalog failure is recoverable: leave focus where it was so another
+      // DOWN can retry, and always remove the loading acknowledgement below.
+    }
+    if (!mounted) return;
+    setState(() => _loadingMoreShelves = false);
+    if (!appended) return;
+
+    // The host's setState that appended the shelves mounts their focus nodes
+    // on the next frame. Complete the original DOWN only if the user is still
+    // on the exact card that requested it; a slow addon must never pull focus
+    // back after they moved sideways or opened the sidebar.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.sections.length <= oldLength) return;
+      // Inserting a leading shelf reuses the positional shelf elements and can
+      // briefly detach [origin], leaving primaryFocus null. That is safe to
+      // recover. A different focused node means the user deliberately moved;
+      // a different route means they opened content while the addon loaded.
+      final primary = FocusManager.instance.primaryFocus;
+      if ((primary != null && !identical(primary, origin)) ||
+          !(ModalRoute.of(context)?.isCurrent ?? true)) {
+        return;
+      }
+      // Continue Watching and favourites resolve independently and can insert
+      // shelves at the front while the catalog request is in flight. Find the
+      // origin by its stable FocusNode after the rebuild instead of assuming
+      // the old list length is still the appended shelf's index.
+      final currentRow = widget.sections.indexWhere(
+        (section) => section.nodes.contains(origin),
+      );
+      if (currentRow < 0 || currentRow + 1 >= widget.sections.length) return;
+      setState(() => _row = currentRow + 1);
+      _focusRow(_row, const Offset(0, 1));
+    });
+  }
+
   void _down() {
     if (_row < 0) {
       if (widget.sections.isEmpty) return;
@@ -756,8 +812,9 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       return;
     }
     if (_row + 1 >= widget.sections.length) {
-      // Out of shelves: ask for the next batch rather than dead-stopping.
-      widget.onLoadMoreShelves?.call();
+      // Out of shelves: retain this DOWN while the next batch loads. When it
+      // lands, focus advances into its first shelf without a second keypress.
+      unawaited(_loadShelvesAndFinishDown());
       return;
     }
     setState(() => _row = _row + 1);
@@ -1025,6 +1082,53 @@ class SpotlightBoardState extends State<SpotlightBoard> {
                   ),
                 ),
                 content,
+                if (_loadingMoreShelves)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 20,
+                    child: IgnorePointer(
+                      child: Center(
+                        child: DecoratedBox(
+                          key: const ValueKey('spotlight-loading-more-shelves'),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.72),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 9,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.8,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                SizedBox(width: 9),
+                                Text(
+                                  'Loading more',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
     );

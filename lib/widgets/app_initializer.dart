@@ -56,6 +56,7 @@ class _AppInitializerState extends State<AppInitializer>
   late LoadingSweepPainter _loadingPainter;
   Timer? _homeReadyTimeout;
   bool _finishing = false;
+  ReceiverLease? _tvReceiverLease;
 
   @override
   void initState() {
@@ -115,8 +116,10 @@ class _AppInitializerState extends State<AppInitializer>
       isTelevision: () => _isAndroidTv,
       palette: _painterPalette,
     );
-    _loadingPainter =
-        LoadingSweepPainter(_idleController, colors: _palette.sweep);
+    _loadingPainter = LoadingSweepPainter(
+      _idleController,
+      colors: _palette.sweep,
+    );
 
     _exitAnimation = Tween<double>(
       begin: 1.0,
@@ -322,9 +325,15 @@ class _AppInitializerState extends State<AppInitializer>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action: SnackBarAction(
+            label: 'OPEN SETTINGS',
+            onPressed: () => MainPageBridge.switchTab?.call(8),
+          ),
+        ),
+      );
     });
   }
 
@@ -339,7 +348,9 @@ class _AppInitializerState extends State<AppInitializer>
 
       debugPrint('AppInitializer: Starting TV listener early as "$deviceName"');
 
-      await RemoteControlState().startTvListener(deviceName);
+      _tvReceiverLease ??= await RemoteControlState().ensureReceiverMode(
+        deviceName,
+      );
 
       RemoteControlState().onCommandReceived = (action, command, data) {
         RemoteCommandRouter().dispatchCommand(action, command, data);
@@ -360,10 +371,7 @@ class _AppInitializerState extends State<AppInitializer>
   @override
   Widget build(BuildContext context) {
     if (!_onboardingComplete) {
-      return Scaffold(
-        backgroundColor: _palette.base,
-        body: _buildSplashBody(),
-      );
+      return Scaffold(backgroundColor: _palette.base, body: _buildSplashBody());
     }
     // MainPage stays child 0 of this Stack for BOTH overlay phases (splash up /
     // splash gone) so removing the overlay never reparents it — a reparent

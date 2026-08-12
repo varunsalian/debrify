@@ -100,7 +100,10 @@ class StremioService {
   // every visit. Empty pages are cached too: the board's batch loop probes
   // catalogs sequentially until one is non-empty, so uncached empty results
   // would cost a serial network round-trip per probe on every visit.
-  final Map<String, ({List<StremioMeta> metas, int rawCount, DateTime fetchedAt})>
+  final Map<
+    String,
+    ({List<StremioMeta> metas, int rawCount, DateTime fetchedAt})
+  >
   _catalogCache = {};
   static const _catalogCacheTtl = Duration(minutes: 5);
   static const _catalogCacheMax = 80;
@@ -400,10 +403,7 @@ class StremioService {
       final old = addons[i];
       try {
         final fresh = await fetchManifest(old.manifestUrl);
-        addons[i] = fresh.copyWith(
-          enabled: old.enabled,
-          addedAt: old.addedAt,
-        );
+        addons[i] = fresh.copyWith(enabled: old.enabled, addedAt: old.addedAt);
         if (fresh.version != old.version) {
           updated++;
           updatedNames.add(old.name);
@@ -495,6 +495,7 @@ class StremioService {
     int? episode,
     List<int>? availableSeasons,
     Duration? timeout,
+    bool preserveOrder = false,
   }) async {
     final Map<String, int> addonCounts = {};
     final Map<String, String> addonErrors = {};
@@ -564,6 +565,7 @@ class StremioService {
         addonCounts: addonCounts,
         addonErrors: addonErrors,
         timeout: timeout,
+        preserveOrder: preserveOrder,
       );
     }
 
@@ -601,7 +603,10 @@ class StremioService {
     }
 
     // Convert to Torrent objects and deduplicate
-    final torrents = _convertToTorrents(flatStreams);
+    final torrents = _convertToTorrents(
+      flatStreams,
+      preserveOrder: preserveOrder,
+    );
 
     return {
       'torrents': torrents,
@@ -624,6 +629,7 @@ class StremioService {
     required Map<String, String> addonErrors,
     List<int>? availableSeasons,
     Duration? timeout,
+    bool preserveOrder = false,
   }) async {
     const int minResultsThreshold = 5;
     debugPrint('StremioService: Using smart fallback for series search');
@@ -653,7 +659,10 @@ class StremioService {
     }
 
     // Convert initial streams to torrents
-    List<Torrent> allTorrents = _convertToTorrents(initialStreams);
+    List<Torrent> allTorrents = _convertToTorrents(
+      initialStreams,
+      preserveOrder: preserveOrder,
+    );
     debugPrint(
       'StremioService: Bare IMDB returned ${allTorrents.length} torrents',
     );
@@ -708,26 +717,26 @@ class StremioService {
     // requests unbounded), the largest fan-out in the app.
     final seasonProbes = <({int seasonNum, StremioAddon addon})>[
       for (final seasonNum in seasonsToProbe)
-        for (final addon in applicableAddons) (seasonNum: seasonNum, addon: addon),
+        for (final addon in applicableAddons)
+          (seasonNum: seasonNum, addon: addon),
     ];
-    final List<List<StremioStream>> seasonResults = await mapWithConcurrency(
-      seasonProbes,
-      (probe) {
-        final streamId = _buildStreamId(imdbId, probe.seasonNum, 1); // S{n}E1
-        return _fetchStreamsFromAddon(
-          probe.addon,
-          'series',
-          streamId,
-          timeout: timeout,
-        ).catchError((e) {
-          debugPrint(
-            'StremioService: ${probe.addon.name} error probing S${probe.seasonNum}E1: $e',
-          );
-          return <StremioStream>[];
-        });
-      },
-      concurrency: 16,
-    );
+    final List<List<StremioStream>>
+    seasonResults = await mapWithConcurrency(seasonProbes, (probe) {
+      final streamId = _buildStreamId(imdbId, probe.seasonNum, 1); // S{n}E1
+      return _fetchStreamsFromAddon(
+        probe.addon,
+        'series',
+        streamId,
+        timeout: timeout,
+      ).catchError((e) {
+        final sourceKey = 'stremio:${probe.addon.name}'.toLowerCase();
+        addonErrors[sourceKey] = e.toString();
+        debugPrint(
+          'StremioService: ${probe.addon.name} error probing S${probe.seasonNum}E1: $e',
+        );
+        return <StremioStream>[];
+      });
+    }, concurrency: 16);
 
     // Flatten results
     final List<StremioStream> fallbackStreams = [];
@@ -740,29 +749,25 @@ class StremioService {
     );
 
     // Convert fallback streams to torrents
-    final fallbackTorrents = _convertToTorrents(fallbackStreams);
+    final fallbackTorrents = _convertToTorrents(
+      fallbackStreams,
+      preserveOrder: preserveOrder,
+    );
     debugPrint(
       'StremioService: Season probing returned ${fallbackTorrents.length} torrents',
     );
 
-    // Step 4: Combine all torrents and filter to packs
-    final Map<String, Torrent> uniqueTorrents = {};
-
-    // Add initial torrents
-    for (final torrent in allTorrents) {
-      uniqueTorrents[torrent.infohash] = torrent;
-    }
-
-    // Add fallback torrents
-    for (final torrent in fallbackTorrents) {
-      if (!uniqueTorrents.containsKey(torrent.infohash)) {
-        uniqueTorrents[torrent.infohash] = torrent;
-      }
-    }
-
-    allTorrents = uniqueTorrents.values.toList();
+    // Step 4: Combine all torrents and filter to packs. Exact-order profiles
+    // retain every row exactly as returned, including repeated hashes from
+    // different addons; normal ranking keeps the historical hash dedupe.
+    allTorrents = mergeSmartFallbackTorrents(
+      allTorrents,
+      fallbackTorrents,
+      preserveOrder: preserveOrder,
+    );
     debugPrint(
-      'StremioService: Combined total: ${allTorrents.length} unique torrents',
+      'StremioService: Combined total: ${allTorrents.length} '
+      '${preserveOrder ? 'ordered items' : 'unique torrents'}',
     );
 
     // Filter combined results to packs only
@@ -776,7 +781,9 @@ class StremioService {
       debugPrint(
         'StremioService: Have ${filteredTorrents.length} packs after probing, returning packs only',
       );
-      filteredTorrents.sort((a, b) => b.seeders.compareTo(a.seeders));
+      if (!preserveOrder) {
+        filteredTorrents.sort((a, b) => b.seeders.compareTo(a.seeders));
+      }
       _updateAddonCounts(addonCounts, filteredTorrents);
       return {
         'torrents': filteredTorrents,
@@ -790,7 +797,9 @@ class StremioService {
       'StremioService: Only ${filteredTorrents.length} packs after probing, '
       'returning all ${allTorrents.length} torrents (including episodes)',
     );
-    allTorrents.sort((a, b) => b.seeders.compareTo(a.seeders));
+    if (!preserveOrder) {
+      allTorrents.sort((a, b) => b.seeders.compareTo(a.seeders));
+    }
     _updateAddonCounts(addonCounts, allTorrents);
 
     return {
@@ -819,10 +828,7 @@ class StremioService {
       // Scene names are dot/underscore-separated more often than not —
       // normalize once so the patterns below see "S03.E05" / "Season.3" the
       // same as their spaced forms (mirrors TorrentCoverageDetector).
-      final name = torrent.name.toLowerCase().replaceAll(
-        RegExp(r'[._]+'),
-        ' ',
-      );
+      final name = torrent.name.toLowerCase().replaceAll(RegExp(r'[._]+'), ' ');
 
       // Check for individual episode patterns (filter these OUT)
       // Matches: S01E01, S1E1, S01 E01 (formerly dotted), 1x01, etc.
@@ -905,8 +911,7 @@ class StremioService {
     String type,
     String contentId, {
     Duration? timeout,
-  }) =>
-      _fetchStreamsFromAddon(addon, type, contentId, timeout: timeout);
+  }) => _fetchStreamsFromAddon(addon, type, contentId, timeout: timeout);
 
   /// Fetch streams from a single addon
   Future<List<StremioStream>> _fetchStreamsFromAddon(
@@ -1106,28 +1111,28 @@ class StremioService {
       // up enrichment. mapWithConcurrency preserves order, so results stay in
       // addon priority.
       final results = await mapWithConcurrency(candidates, (addon) async {
-          final url =
-              '${addon.baseUrl}/meta/$type/${Uri.encodeComponent(imdbId)}.json';
-          final client = http.Client();
-          try {
-            final request = http.Request('GET', Uri.parse(url));
-            request.followRedirects = true;
-            request.maxRedirects = 5;
-            final streamed = await client
-                .send(request)
-                .timeout(const Duration(seconds: 8));
-            final response = await http.Response.fromStream(streamed);
-            if (response.statusCode != 200) return null;
-            final data =
-                await decodeJsonAsync(response.body) as Map<String, dynamic>?;
-            final metaJson = data?['meta'] as Map<String, dynamic>?;
-            if (metaJson == null) return null;
-            return StremioMeta.fromJson(metaJson);
-          } catch (_) {
-            return null; // addon-specific failure
-          } finally {
-            client.close();
-          }
+        final url =
+            '${addon.baseUrl}/meta/$type/${Uri.encodeComponent(imdbId)}.json';
+        final client = http.Client();
+        try {
+          final request = http.Request('GET', Uri.parse(url));
+          request.followRedirects = true;
+          request.maxRedirects = 5;
+          final streamed = await client
+              .send(request)
+              .timeout(const Duration(seconds: 8));
+          final response = await http.Response.fromStream(streamed);
+          if (response.statusCode != 200) return null;
+          final data =
+              await decodeJsonAsync(response.body) as Map<String, dynamic>?;
+          final metaJson = data?['meta'] as Map<String, dynamic>?;
+          if (metaJson == null) return null;
+          return StremioMeta.fromJson(metaJson);
+        } catch (_) {
+          return null; // addon-specific failure
+        } finally {
+          client.close();
+        }
       });
 
       // Prefer the first result (by addon priority) that carries real
@@ -1163,8 +1168,38 @@ class StremioService {
 
   /// Convert Stremio streams to Torrent objects
   /// Handles all stream types: torrent (infoHash), direct URL, and external URL
-  List<Torrent> _convertToTorrents(List<StremioStream> streams) {
+  @visibleForTesting
+  List<Torrent> convertStreamsForTesting(
+    List<StremioStream> streams, {
+    bool preserveOrder = false,
+  }) => _convertToTorrents(streams, preserveOrder: preserveOrder);
+
+  /// Merge the bare-series and season-probe batches. Public for focused tests
+  /// because exact-order's duplicate-preservation contract is easy to regress
+  /// when changing the smart fallback independently from normal conversion.
+  @visibleForTesting
+  List<Torrent> mergeSmartFallbackTorrents(
+    List<Torrent> initial,
+    List<Torrent> fallback, {
+    bool preserveOrder = false,
+  }) {
+    if (preserveOrder) return [...initial, ...fallback];
+    final unique = <String, Torrent>{};
+    for (final torrent in initial) {
+      unique[torrent.infohash] = torrent;
+    }
+    for (final torrent in fallback) {
+      unique.putIfAbsent(torrent.infohash, () => torrent);
+    }
+    return unique.values.toList();
+  }
+
+  List<Torrent> _convertToTorrents(
+    List<StremioStream> streams, {
+    bool preserveOrder = false,
+  }) {
     final Map<String, Torrent> uniqueTorrents = {};
+    final orderedTorrents = <Torrent>[];
     int withInfoHash = 0;
     int withDirectUrl = 0;
     int withExternalUrl = 0;
@@ -1258,8 +1293,13 @@ class StremioService {
         directUrl: directUrl,
       );
 
-      // Deduplicate by unique key, keeping highest seeder count (for torrents)
-      // For direct/external URLs, just keep first occurrence
+      // Exact addon mode preserves every returned playable entry, including
+      // intentional duplicates. The default path keeps its historic dedupe:
+      // highest-seeder duplicate for torrents, first direct/external URL.
+      if (preserveOrder) {
+        orderedTorrents.add(torrent);
+        continue;
+      }
       final existing = uniqueTorrents[uniqueKey];
       if (existing == null ||
           (streamType == StreamType.torrent &&
@@ -1268,19 +1308,25 @@ class StremioService {
       }
     }
 
-    // Sort: torrents first (by seeders), then direct URLs, then external URLs
-    final results = uniqueTorrents.values.toList();
-    results.sort((a, b) {
-      // First sort by stream type priority (torrent > direct > external)
-      final typeCompare = a.streamType.index.compareTo(b.streamType.index);
-      if (typeCompare != 0) return typeCompare;
-      // Then by seeders (descending)
-      return b.seeders.compareTo(a.seeders);
-    });
+    // The default path intentionally keeps its historic torrent-first/seeder
+    // ordering. "Follow addon order" opts out so an addon's direct links and
+    // torrents stay in the exact sequence returned by its stream endpoint.
+    final results = preserveOrder
+        ? orderedTorrents
+        : uniqueTorrents.values.toList();
+    if (!preserveOrder) {
+      results.sort((a, b) {
+        // First sort by stream type priority (torrent > direct > external)
+        final typeCompare = a.streamType.index.compareTo(b.streamType.index);
+        if (typeCompare != 0) return typeCompare;
+        // Then by seeders (descending)
+        return b.seeders.compareTo(a.seeders);
+      });
+    }
 
     debugPrint(
       'StremioService: Converted ${streams.length} streams to '
-      '${results.length} unique items',
+      '${results.length} ${preserveOrder ? 'items' : 'unique items'}',
     );
     debugPrint(
       'StremioService: Stream breakdown - torrents: $withInfoHash, '
@@ -1856,8 +1902,14 @@ class StremioService {
   }) async {
     if (query.trim().isEmpty || !catalog.supportsSearch) return [];
     final results = await _searchSingleCatalog(
-        addon, catalog, Uri.encodeComponent(query.trim()),
-        skip: skip, genre: genre, throwOnError: throwOnError, onRawCount: onRawCount);
+      addon,
+      catalog,
+      Uri.encodeComponent(query.trim()),
+      skip: skip,
+      genre: genre,
+      throwOnError: throwOnError,
+      onRawCount: onRawCount,
+    );
     // Tag with the originating addon, matching fetchCatalog — so a searched
     // title carries its source (for the "source" label + episode-meta addon
     // resolution) exactly like a browsed one. Scoped to this per-catalog path;

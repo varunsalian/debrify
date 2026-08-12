@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Debrify — Quick Play settings concept</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080a0f;
+      --panel: #11141c;
+      --panel-2: #171b25;
+      --line: #282d3a;
+      --line-strong: #3c4354;
+      --text: #f7f8fb;
+      --muted: #a6adba;
+      --faint: #747c8b;
+      --accent: #9ef01a;
+      --accent-soft: rgba(158, 240, 26, .12);
+      --accent-line: rgba(158, 240, 26, .42);
+      --violet: #a991ff;
+      --orange: #ffbd66;
+      --danger: #ff7d85;
+      --shadow: 0 24px 80px rgba(0, 0, 0, .34);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 78% -10%, rgba(158, 240, 26, .08), transparent 30rem),
+        radial-gradient(circle at 16% 30%, rgba(169, 145, 255, .06), transparent 28rem),
+        var(--bg);
+      font: 15px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, select, input { font: inherit; }
+    button, select { color: inherit; }
+    button { cursor: pointer; }
+    button, select, input, .switch { scroll-margin: 18vh 0; }
+
+    /* Focus is intentionally much stronger than selection. A selected card
+       stays green-filled; the item under the remote cursor gets a white/green
+       halo, so TV users never confuse "focused" with "saved". */
+    :where(button, select, input):focus-visible {
+      outline: 3px solid #f7f8fb;
+      outline-offset: 3px;
+      box-shadow: 0 0 0 6px rgba(158, 240, 26, .38), 0 12px 32px rgba(0,0,0,.44);
+      z-index: 3;
+    }
+    .switch:has(input:focus-visible) {
+      outline: 3px solid #f7f8fb;
+      outline-offset: 4px;
+      border-radius: 99px;
+      box-shadow: 0 0 0 7px rgba(158, 240, 26, .38);
+    }
+
+    .appbar {
+      height: 68px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 max(22px, calc((100vw - 1120px) / 2));
+      border-bottom: 1px solid rgba(255,255,255,.065);
+      background: rgba(8,10,15,.82);
+      backdrop-filter: blur(18px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .back, .icon-button {
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+      border: 1px solid transparent;
+      background: transparent;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+    }
+    .back:hover, .icon-button:hover { background: var(--panel-2); color: var(--text); }
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      color: #0b1005;
+      background: var(--accent);
+      font-weight: 950;
+      transform: rotate(-3deg);
+    }
+    .appbar-title { font-weight: 750; letter-spacing: -.01em; }
+    .appbar-path { color: var(--faint); font-weight: 500; }
+    .appbar-spacer { flex: 1; }
+    .save-state { color: var(--faint); font-size: 13px; }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 48px 22px 100px;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: .13em;
+      font-size: 11px;
+      font-weight: 850;
+      margin-bottom: 10px;
+    }
+    h1 { font-size: clamp(32px, 5vw, 50px); line-height: 1.02; letter-spacing: -.045em; margin: 0; }
+    .lede { max-width: 670px; color: var(--muted); font-size: 17px; margin: 16px 0 30px; }
+
+    .content-tabs {
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      padding: 5px;
+      background: #0d1017;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      margin-bottom: 26px;
+    }
+    .content-tab {
+      min-width: 150px;
+      padding: 10px 18px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .content-tab.active { background: var(--panel-2); color: var(--text); box-shadow: 0 3px 12px rgba(0,0,0,.2); }
+    .content-tab span { color: var(--faint); margin-left: 5px; font-weight: 600; }
+    .content-tab.active span { color: var(--accent); }
+
+    .section-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+      margin: 0 0 13px;
+    }
+    h2 { font-size: 18px; letter-spacing: -.015em; margin: 0; }
+    .hint { color: var(--faint); font-size: 13px; }
+
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+    .preset {
+      min-height: 146px;
+      text-align: left;
+      border-radius: 16px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: rgba(17,20,28,.82);
+      position: relative;
+      transition: .18s ease;
+    }
+    .preset:hover { transform: translateY(-2px); border-color: var(--line-strong); }
+    .preset.selected { border-color: var(--accent-line); background: linear-gradient(145deg, var(--accent-soft), rgba(17,20,28,.92) 56%); }
+    .preset-check {
+      width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line-strong);
+      position: absolute; right: 14px; top: 14px;
+    }
+    .selected .preset-check { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 5px #13191a; }
+    .preset-icon { font-size: 20px; margin-bottom: 18px; color: var(--muted); }
+    .preset.selected .preset-icon { color: var(--accent); }
+    .preset strong { display: block; font-size: 15px; margin-bottom: 6px; }
+    .preset p { color: var(--faint); margin: 0; font-size: 12.5px; line-height: 1.42; max-width: 20ch; }
+    .current-badge {
+      display: inline-flex; margin-top: 9px; padding: 3px 7px; border-radius: 6px;
+      color: var(--accent); background: var(--accent-soft); font-size: 10px; font-weight: 850;
+      text-transform: uppercase; letter-spacing: .08em;
+    }
+
+    .route-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, rgba(23,27,37,.94), rgba(15,18,25,.94));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+    .route-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+      padding: 20px 22px;
+      border-bottom: 1px solid var(--line);
+    }
+    .route-head p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .mode-chip { flex: none; padding: 6px 10px; color: var(--accent); border: 1px solid var(--accent-line); border-radius: 99px; background: var(--accent-soft); font-size: 11px; font-weight: 800; }
+    .route {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      padding: 22px;
+    }
+    .route-step { min-width: 0; position: relative; padding-right: 25px; }
+    .route-step:not(:last-child)::after {
+      content: ""; position: absolute; top: 15px; right: 8px; width: 17px; height: 1px; background: var(--line-strong);
+    }
+    .step-number { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 9px; color: var(--accent); font-size: 12px; font-weight: 850; margin-bottom: 11px; }
+    .route-step strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; }
+    .route-step small { display: block; color: var(--faint); line-height: 1.35; margin-top: 4px; }
+
+    .notice {
+      display: flex; gap: 12px; padding: 13px 15px; border: 1px solid rgba(169,145,255,.24);
+      background: rgba(169,145,255,.065); border-radius: 13px; color: #c8c1e5; font-size: 12.5px;
+      margin: 0 0 28px;
+    }
+    .notice b { color: #ded9f5; }
+
+    .essentials {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 17px;
+      border: 1px solid var(--line);
+      background: rgba(17,20,28,.7);
+      border-radius: 15px;
+    }
+    .setting-copy { flex: 1; min-width: 0; }
+    .setting-copy strong { font-size: 14px; display: block; }
+    .setting-copy small { color: var(--faint); display: block; margin-top: 3px; }
+    .series-only { display: none; }
+    body[data-kind="series"] .series-only { display: flex; }
+    body[data-kind="series"] .movie-only { display: none; }
+
+    .switch { position: relative; width: 44px; height: 26px; flex: none; }
+    .switch input { opacity: 0; position: absolute; }
+    .switch span { position: absolute; inset: 0; border-radius: 99px; background: #303542; transition: .18s; }
+    .switch span::after { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; border-radius: 50%; background: #d8dce4; transition: .18s; }
+    .switch input:checked + span { background: var(--accent); }
+    .switch input:checked + span::after { transform: translateX(18px); background: #10140b; }
+
+    .select {
+      border: 1px solid var(--line-strong); background: var(--panel-2); border-radius: 10px;
+      padding: 9px 34px 9px 11px; outline: none; max-width: 210px;
+    }
+
+    .advanced-toggle {
+      width: 100%; display: flex; align-items: center; gap: 13px; padding: 17px 19px;
+      background: transparent; border: 1px solid var(--line); border-radius: 15px; text-align: left;
+    }
+    .advanced-toggle:hover { background: rgba(255,255,255,.02); }
+    .advanced-toggle .chev { color: var(--faint); transition: .2s; }
+    .advanced-toggle.open .chev { transform: rotate(90deg); }
+    .advanced-toggle strong { display: block; }
+    .advanced-toggle small { color: var(--faint); }
+    .advanced-toggle .spacer { flex: 1; }
+    .count-chip { background: var(--panel-2); border: 1px solid var(--line); padding: 4px 8px; border-radius: 8px; color: var(--muted); font-size: 11px; }
+    .advanced-panel { display: none; margin-top: 12px; border: 1px solid var(--line); background: rgba(13,16,23,.76); border-radius: var(--radius); overflow: hidden; }
+    .advanced-panel.open { display: block; }
+    .advanced-section { padding: 22px; border-bottom: 1px solid var(--line); }
+    .advanced-section:last-child { border-bottom: 0; }
+    .advanced-title { display: flex; align-items: baseline; justify-content: space-between; gap: 15px; margin-bottom: 15px; }
+    .advanced-title h3 { font-size: 14px; margin: 0; }
+    .advanced-title span { color: var(--faint); font-size: 12px; }
+    .priority-list { display: grid; gap: 8px; }
+    .priority-item { display: grid; grid-template-columns: 28px 34px 1fr auto; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 11px 12px; }
+    .grip { color: var(--faint); letter-spacing: -2px; }
+    .priority-num { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 8px; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 800; }
+    .priority-item strong { font-size: 13px; }
+    .priority-item small { color: var(--faint); display: block; }
+    .priority-item .select { font-size: 12px; padding-top: 7px; padding-bottom: 7px; }
+    .option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 22px; }
+    .option-line { min-height: 44px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,.045); }
+    .option-line label:first-child { flex: 1; font-size: 13px; }
+    .mini-select { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 7px 9px; font-size: 12px; }
+    .range-wrap { display: flex; align-items: center; gap: 9px; }
+    input[type="range"] { accent-color: var(--accent); width: 110px; }
+    .range-value { min-width: 32px; color: var(--accent); font-weight: 800; font-size: 12px; }
+
+    .footer-actions { display: flex; align-items: center; gap: 12px; margin-top: 24px; }
+    .reset { border: 1px solid var(--line); background: transparent; border-radius: 11px; padding: 10px 14px; color: var(--muted); }
+    .reset:hover { border-color: var(--line-strong); color: var(--text); }
+    .saved { margin-left: auto; color: var(--faint); font-size: 12px; }
+
+    .toast {
+      position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0;
+      pointer-events: none; padding: 10px 15px; background: #eefbd8; color: #152007; border-radius: 10px;
+      font-size: 12px; font-weight: 800; box-shadow: var(--shadow); transition: .2s;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    .remote-help {
+      display: none;
+      position: fixed;
+      right: max(28px, calc((100vw - 1320px) / 2));
+      bottom: 24px;
+      z-index: 20;
+      align-items: center;
+      gap: 13px;
+      padding: 10px 13px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      color: var(--muted);
+      background: rgba(13,16,23,.94);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      font-size: 12px;
+    }
+    .remote-help kbd {
+      display: inline-grid; place-items: center; min-width: 25px; height: 25px; padding: 0 6px;
+      border: 1px solid #525a6b; border-bottom-width: 2px; border-radius: 7px;
+      background: #202530; color: var(--text); font: 750 11px/1 ui-sans-serif, system-ui;
+    }
+    body.dpad-active .remote-help { display: flex; }
+
+    /* Ten-foot mode: larger targets, title-safe margins and reduced vertical
+       density. The same information architecture remains on every device. */
+    @media (min-width: 1100px) and (min-height: 620px) {
+      body.dpad-active { font-size: 17px; }
+      body.dpad-active main { max-width: 1320px; padding: 54px 5vw 120px; }
+      body.dpad-active .appbar { padding-inline: 5vw; height: 76px; }
+      body.dpad-active .lede { font-size: 19px; }
+      body.dpad-active .content-tab { min-height: 52px; min-width: 185px; }
+      body.dpad-active .preset { min-height: 178px; padding: 20px; }
+      body.dpad-active .preset strong { font-size: 17px; }
+      body.dpad-active .preset p { font-size: 14px; }
+      body.dpad-active .route-head { padding: 23px 26px; }
+      body.dpad-active .route { padding: 26px; }
+      body.dpad-active .setting-row { min-height: 78px; padding: 19px; }
+      body.dpad-active .advanced-toggle { min-height: 72px; }
+      body.dpad-active .select, body.dpad-active .mini-select { min-height: 46px; }
+      body.dpad-active :where(button, select, input):focus-visible { transform: scale(1.018); }
+    }
+
+    @media (max-width: 850px) {
+      .preset-grid { grid-template-columns: 1fr 1fr; }
+      .route { grid-template-columns: 1fr 1fr; gap: 20px 0; }
+      .route-step:nth-child(2)::after { display: none; }
+      .essentials, .option-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .appbar-path, .save-state { display: none; }
+      main { padding-top: 32px; }
+      .content-tabs { display: grid; width: 100%; }
+      .content-tab { min-width: 0; }
+      .preset-grid { grid-template-columns: 1fr; }
+      .preset { min-height: 115px; }
+      .preset-icon { margin-bottom: 10px; }
+      .preset p { max-width: 36ch; }
+      .route-head { align-items: start; }
+      .route { grid-template-columns: 1fr; }
+      .route-step { display: grid; grid-template-columns: 34px 1fr; column-gap: 10px; padding: 0; }
+      .route-step:not(:last-child)::after { left: 14px; top: 31px; height: calc(100% - 6px); width: 1px; }
+      .route-step .step-number { grid-row: 1 / span 2; }
+      .route-step small { grid-column: 2; margin-bottom: 16px; }
+      .priority-item { grid-template-columns: 25px 28px 1fr; }
+      .priority-item .select { grid-column: 3; width: 100%; max-width: none; }
+      .setting-row { align-items: flex-start; }
+      .setting-row > .select { max-width: 130px; }
+      button, select, .setting-row { min-height: 48px; }
+      .remote-help { display: none !important; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body data-kind="movie">
+  <header class="appbar">
+    <button class="back" aria-label="Back">←</button>
+    <div class="brand-mark">D</div>
+    <div class="appbar-title">Settings</div>
+    <div class="appbar-path">/ Quick Play</div>
+    <div class="appbar-spacer"></div>
+    <div class="save-state">Changes save automatically</div>
+  </header>
+
+  <main>
+    <div class="eyebrow">Playback</div>
+    <h1>Quick Play</h1>
+    <p class="lede">Choose the result Debrify should play automatically. Start with one behavior, then fine-tune only if you want to.</p>
+
+    <div class="content-tabs" role="tablist" aria-label="Content type">
+      <button class="content-tab active" data-kind="movie" role="tab" aria-selected="true">Movies <span>rules</span></button>
+      <button class="content-tab" data-kind="series" role="tab" aria-selected="false">Series <span>rules</span></button>
+    </div>
+
+    <div class="section-heading">
+      <h2>How should Debrify choose?</h2>
+      <span class="hint">Separate choice for movies and series</span>
+    </div>
+
+    <div class="preset-grid" role="radiogroup" aria-label="Quick Play behavior">
+      <button class="preset selected" data-preset="default" role="radio" aria-checked="true">
+        <span class="preset-check"></span><div class="preset-icon">✦</div>
+        <strong>Debrify default</strong>
+        <p>Balanced quality and reliability. This is exactly how Quick Play works today.</p>
+        <span class="current-badge">Current behavior</span>
+      </button>
+      <button class="preset" data-preset="addon" role="radio" aria-checked="false">
+        <span class="preset-check"></span><div class="preset-icon">≡</div>
+        <strong>Follow addon order</strong>
+        <p>Use AIOStreams and other addon results in the exact order they return.</p>
+      </button>
+      <button class="preset" data-preset="quality" role="radio" aria-checked="false">
+        <span class="preset-check"></span><div class="preset-icon">◇</div>
+        <strong>Best quality</strong>
+        <p>Prefer your filters and higher-quality releases, even if finding one takes longer.</p>
+      </button>
+      <button class="preset" data-preset="fast" role="radio" aria-checked="false">
+        <span class="preset-check"></span><div class="preset-icon">↯</div>
+        <strong>Start fastest</strong>
+        <p>Play the first working direct or cached result with the shortest wait.</p>
+      </button>
+    </div>
+
+    <section class="route-card" aria-live="polite">
+      <div class="route-head">
+        <div><h2 id="route-title">What happens for a movie</h2><p id="route-summary">Pinned first, then filtered torrent results, with addon fallback.</p></div>
+        <span class="mode-chip" id="mode-chip">Debrify default</span>
+      </div>
+      <div class="route" id="route"></div>
+    </section>
+
+    <div class="notice" id="notice"><span>ⓘ</span><span><b>“Debrify default” is not a mystery mode.</b> The exact active order is always shown above. Selecting it restores today’s shipped behavior.</span></div>
+
+    <div class="section-heading"><h2>Useful adjustments</h2><span class="hint">The choices most people need</span></div>
+    <section class="essentials">
+      <div class="setting-row">
+        <div class="setting-copy"><strong>Use my saved filters</strong><small>Prefer matches, then relax filters if none work.</small></div>
+        <label class="switch"><input id="filters" type="checkbox" checked><span></span></label>
+      </div>
+      <div class="setting-row movie-only">
+        <div class="setting-copy"><strong>If a result fails</strong><small>Try another source instead of stopping.</small></div>
+        <select class="select" id="failure-movie"><option value="5">Try up to 5</option><option value="3">Try up to 3</option><option value="10">Try up to 10</option><option value="1">Stop immediately</option></select>
+      </div>
+      <div class="setting-row series-only">
+        <div class="setting-copy"><strong>Prefer a reusable pack</strong><small>Find one source that can keep playing later episodes.</small></div>
+        <label class="switch"><input id="packs" type="checkbox" checked><span></span></label>
+      </div>
+      <div class="setting-row series-only">
+        <div class="setting-copy"><strong>If a result fails</strong><small>Try another source instead of stopping.</small></div>
+        <select class="select" id="failure-series"><option value="5">Try up to 5</option><option value="3">Try up to 3</option><option value="10">Try up to 10</option><option value="1">Stop immediately</option></select>
+      </div>
+      <div class="setting-row">
+        <div class="setting-copy"><strong>Direct links</strong><small>Allow playable links returned by addons.</small></div>
+        <label class="switch"><input id="direct" type="checkbox" checked><span></span></label>
+      </div>
+    </section>
+
+    <button class="advanced-toggle" id="advanced-toggle" aria-expanded="false">
+      <span class="chev">›</span>
+      <span><strong>Advanced control</strong><small>Source priority, ordering, timeouts, and fallbacks</small></span>
+      <span class="spacer"></span><span class="count-chip">9 options</span>
+    </button>
+
+    <section class="advanced-panel" id="advanced-panel">
+      <div class="advanced-section">
+        <div class="advanced-title"><h3>Where to look, in order</h3><span>Drag handle is visual in this concept</span></div>
+        <div class="priority-list" id="priority-list">
+          <div class="priority-item"><span class="grip">⠿</span><span class="priority-num">1</span><span><strong>Pinned source</strong><small>Previously chosen for this title</small></span><select class="select"><option>Always first</option><option>Disabled</option></select></div>
+          <div class="priority-item"><span class="grip">⠿</span><span class="priority-num">2</span><span><strong>Torrent engines</strong><small>Curated and cache-checked results</small></span><select class="select"><option>Search normally</option><option>Disabled</option></select></div>
+          <div class="priority-item"><span class="grip">⠿</span><span class="priority-num">3</span><span><strong>Addons & direct links</strong><small>AIOStreams and Stremio addons</small></span><select class="select" id="addon-when"><option value="fallback">Only if engines find none</option><option value="together">Search alongside engines</option><option value="first">Before torrent engines</option><option value="off">Disabled</option></select></div>
+        </div>
+      </div>
+
+      <div class="advanced-section">
+        <div class="advanced-title"><h3>How to rank results</h3><span>First playable result wins</span></div>
+        <div class="option-grid">
+          <div class="option-line"><label for="ranking">Result order</label><select id="ranking" class="mini-select"><option value="curated">Filters, then Debrify relevance</option><option value="exact">Exact provider order</option><option value="quality">Highest quality first</option><option value="size">Smallest file first</option><option value="cached">Cached first</option></select></div>
+          <div class="option-line"><label>Relax filters when needed</label><label class="switch"><input id="relax" type="checkbox" checked><span></span></label></div>
+          <div class="option-line series-only"><label for="pack-order">Pack preference</label><select id="pack-order" class="mini-select"><option>Complete → multi-season → season</option><option>Season → multi-season → complete</option><option>Exact episode only</option></select></div>
+          <div class="option-line series-only"><label>Pack must contain requested episode</label><label class="switch"><input type="checkbox" checked><span></span></label></div>
+        </div>
+      </div>
+
+      <div class="advanced-section">
+        <div class="advanced-title"><h3>Waiting and recovery</h3><span>Keep playback responsive</span></div>
+        <div class="option-grid">
+          <div class="option-line"><label>Search wait</label><div class="range-wrap"><input id="search-wait" type="range" min="5" max="30" step="5" value="5"><span class="range-value" id="search-wait-value">5s</span></div></div>
+          <div class="option-line"><label>Each addon wait</label><div class="range-wrap"><input id="addon-wait" type="range" min="10" max="60" step="5" value="15"><span class="range-value" id="addon-wait-value">15s</span></div></div>
+          <div class="option-line series-only"><label>Remember failed pack search</label><select class="mini-select"><option>6 hours</option><option>1 hour</option><option>Until restart</option><option>Never</option></select></div>
+          <div class="option-line"><label>Validate direct link before play</label><label class="switch"><input type="checkbox" checked><span></span></label></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer-actions">
+      <button class="reset" id="reset">Restore today’s behavior</button>
+      <span class="saved" id="saved">Movie rules · Debrify default</span>
+    </div>
+  </main>
+
+  <div class="toast" id="toast">Restored today’s Quick Play behavior</div>
+  <div class="remote-help" aria-hidden="true"><kbd>◀ ▲ ▼ ▶</kbd> Navigate <kbd>OK</kbd> Select <kbd>↩</kbd> Back</div>
+
+  <script>
+    const state = { movie: 'default', series: 'default' };
+    const routes = {
+      movie: {
+        default: {
+          summary: 'Pinned first, then filtered torrent results, with addon fallback.',
+          steps: [['Pinned source','Use it if it still plays'],['Torrent engines','Keep their curated relevance'],['Saved filters','Strict match, then relax'],['Addon fallback','Only when engines find nothing']]
+        },
+        addon: {
+          summary: 'Pinned first, then the exact order returned by your addons.',
+          steps: [['Pinned source','Use it if it still plays'],['Ask addons','Include direct links'],['Keep exact order','No Debrify re-ranking'],['Try in sequence','Move on only if one fails']]
+        },
+        quality: {
+          summary: 'Search every enabled source and rank the strongest filter match first.',
+          steps: [['Pinned source','Use it if it still plays'],['Search all sources','Engines and addons together'],['Rank quality','Filters and release quality'],['Play best match','Try alternatives on failure']]
+        },
+        fast: {
+          summary: 'Prefer a validated direct link or cached torrent with the shortest path.',
+          steps: [['Pinned source','Use it if it still plays'],['Search together','Addons and engines'],['Cached or direct','Skip slow preparation'],['Play first ready','Minimal waiting']]
+        }
+      },
+      series: {
+        default: {
+          summary: 'Pinned first, then the widest filtered pack, then an exact episode.',
+          steps: [['Pinned source','Reuse the series source'],['Series pack','Complete → multi → season'],['Exact episode','Fallback if no pack plays'],['Addon fallback','Only when engines find nothing']]
+        },
+        addon: {
+          summary: 'Use series results in the exact order returned by your addons.',
+          steps: [['Pinned source','Reuse it when possible'],['Ask addons','For this exact episode'],['Keep exact order','Direct links included'],['Try in sequence','No Debrify re-ranking']]
+        },
+        quality: {
+          summary: 'Prefer a reusable pack with the strongest filter and quality match.',
+          steps: [['Pinned source','Reuse it when possible'],['Search packs','Must contain this episode'],['Rank quality','Filters before coverage'],['Exact episode','Fallback if packs fail']]
+        },
+        fast: {
+          summary: 'Play the first ready episode source; do not wait for a reusable pack.',
+          steps: [['Pinned source','Reuse it when possible'],['Search together','Exact episode everywhere'],['Cached or direct','Prefer ready sources'],['Play first ready','Skip pack probing']]
+        }
+      }
+    };
+    const names = { default: 'Debrify default', addon: 'Follow addon order', quality: 'Best quality', fast: 'Start fastest' };
+    const body = document.body;
+    const route = document.querySelector('#route');
+    const routeTitle = document.querySelector('#route-title');
+    const routeSummary = document.querySelector('#route-summary');
+    const modeChip = document.querySelector('#mode-chip');
+    const saved = document.querySelector('#saved');
+
+    function kind() { return body.dataset.kind; }
+    function render() {
+      const activeKind = kind();
+      const preset = state[activeKind];
+      const info = routes[activeKind][preset];
+      routeTitle.textContent = `What happens for ${activeKind === 'movie' ? 'a movie' : 'a series episode'}`;
+      routeSummary.textContent = info.summary;
+      modeChip.textContent = names[preset];
+      route.innerHTML = info.steps.map((step, i) => `<div class="route-step"><span class="step-number">${i + 1}</span><strong>${step[0]}</strong><small>${step[1]}</small></div>`).join('');
+      document.querySelectorAll('.preset').forEach(el => {
+        const on = el.dataset.preset === preset;
+        el.classList.toggle('selected', on);
+        el.setAttribute('aria-checked', String(on));
+        el.tabIndex = on ? 0 : -1;
+      });
+      document.querySelectorAll('.content-tab').forEach(el => {
+        const on = el.dataset.kind === activeKind;
+        el.classList.toggle('active', on);
+        el.setAttribute('aria-selected', String(on));
+        el.tabIndex = on ? 0 : -1;
+      });
+      saved.textContent = `${activeKind === 'movie' ? 'Movie' : 'Series'} rules · ${names[preset]}`;
+      syncControls(preset, activeKind);
+    }
+
+    function syncControls(preset, activeKind) {
+      const filters = document.querySelector('#filters');
+      const packs = document.querySelector('#packs');
+      const ranking = document.querySelector('#ranking');
+      const addonWhen = document.querySelector('#addon-when');
+      if (preset === 'default') { filters.checked = true; packs.checked = true; ranking.value = 'curated'; addonWhen.value = 'fallback'; }
+      if (preset === 'addon') { filters.checked = false; packs.checked = false; ranking.value = 'exact'; addonWhen.value = 'first'; }
+      if (preset === 'quality') { filters.checked = true; packs.checked = true; ranking.value = 'quality'; addonWhen.value = 'together'; }
+      if (preset === 'fast') { filters.checked = false; packs.checked = false; ranking.value = 'cached'; addonWhen.value = 'together'; }
+    }
+
+    document.querySelectorAll('.content-tab').forEach(tab => tab.addEventListener('click', () => { body.dataset.kind = tab.dataset.kind; render(); }));
+    document.querySelectorAll('.preset').forEach(card => card.addEventListener('click', () => { state[kind()] = card.dataset.preset; render(); }));
+
+    const advancedToggle = document.querySelector('#advanced-toggle');
+    const advancedPanel = document.querySelector('#advanced-panel');
+    advancedToggle.addEventListener('click', () => {
+      const open = advancedPanel.classList.toggle('open');
+      advancedToggle.classList.toggle('open', open);
+      advancedToggle.setAttribute('aria-expanded', String(open));
+    });
+
+    function rangeLabel(input, output) { document.querySelector(output).textContent = `${document.querySelector(input).value}s`; }
+    document.querySelector('#search-wait').addEventListener('input', () => rangeLabel('#search-wait', '#search-wait-value'));
+    document.querySelector('#addon-wait').addEventListener('input', () => rangeLabel('#addon-wait', '#addon-wait-value'));
+
+    document.querySelector('#reset').addEventListener('click', () => {
+      state.movie = 'default'; state.series = 'default';
+      document.querySelector('#failure-movie').value = '5';
+      document.querySelector('#failure-series').value = '5';
+      document.querySelector('#direct').checked = true;
+      document.querySelector('#relax').checked = true;
+      document.querySelector('#search-wait').value = 5;
+      document.querySelector('#addon-wait').value = 15;
+      rangeLabel('#search-wait', '#search-wait-value'); rangeLabel('#addon-wait', '#addon-wait-value');
+      render();
+      const toast = document.querySelector('#toast'); toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 1800);
+    });
+
+    document.querySelectorAll('select, input').forEach(control => control.addEventListener('change', () => {
+      if (!control.closest('.content-tabs')) state[kind()] = state[kind()] === 'default' ? 'default' : state[kind()];
+      saved.textContent = `${kind() === 'movie' ? 'Movie' : 'Series'} rules · Saved`;
+    }));
+
+    /* Remote / keyboard prototype
+       - Arrow keys move geometrically to the nearest visible control.
+       - Native selects and sliders retain their own arrow-key behavior.
+       - OK/Enter activates the focused control through browser semantics.
+       - Back/Escape closes Advanced first, then represents route-back.
+       Flutter should implement this with FocusTraversalGroup + explicit
+       FocusNodes rather than shipping this browser-only geometry helper. */
+    function visibleFocusable() {
+      return [...document.querySelectorAll('button:not([disabled]), select:not([disabled]), input:not([disabled])')]
+        .filter(el => {
+          const rect = el.getBoundingClientRect();
+          const style = getComputedStyle(el);
+          return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && el.tabIndex >= 0;
+        });
+    }
+
+    function moveFocus(from, key) {
+      const origin = from.getBoundingClientRect();
+      const ox = origin.left + origin.width / 2;
+      const oy = origin.top + origin.height / 2;
+      const vertical = key === 'ArrowUp' || key === 'ArrowDown';
+      const direction = key === 'ArrowUp' || key === 'ArrowLeft' ? -1 : 1;
+      const candidates = visibleFocusable().filter(el => el !== from).map(el => {
+        const rect = el.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const primary = vertical ? (y - oy) * direction : (x - ox) * direction;
+        const cross = vertical ? Math.abs(x - ox) : Math.abs(y - oy);
+        return { el, primary, cross, score: primary + cross * 1.7 };
+      }).filter(item => item.primary > 6).sort((a, b) => a.score - b.score);
+      if (!candidates.length) return false;
+      candidates[0].el.focus({ preventScroll: true });
+      candidates[0].el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      return true;
+    }
+
+    document.addEventListener('keydown', event => {
+      const arrow = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key);
+      if (arrow) body.classList.add('dpad-active');
+      if (event.key === 'Escape' || event.key === 'BrowserBack' || event.key === 'GoBack') {
+        event.preventDefault();
+        if (advancedPanel.classList.contains('open')) {
+          advancedPanel.classList.remove('open'); advancedToggle.classList.remove('open');
+          advancedToggle.setAttribute('aria-expanded', 'false'); advancedToggle.focus();
+        } else {
+          const toast = document.querySelector('#toast');
+          toast.textContent = 'Back to Settings'; toast.classList.add('show');
+          setTimeout(() => toast.classList.remove('show'), 1200);
+        }
+        return;
+      }
+      if (!arrow) return;
+      const active = document.activeElement;
+      if (active?.matches('select, input[type="range"]')) return;
+      if (!active || active === body) {
+        event.preventDefault();
+        const selectedTab = document.querySelector('.content-tab.active');
+        selectedTab?.focus();
+        return;
+      }
+      if (active.matches('.content-tab') && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault();
+        const tabs = [...document.querySelectorAll('.content-tab')];
+        const next = Math.max(0, Math.min(tabs.length - 1, tabs.indexOf(active) + (event.key === 'ArrowRight' ? 1 : -1)));
+        tabs[next].focus();
+        return;
+      }
+      if (active.matches('.preset') && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault();
+        const presets = [...document.querySelectorAll('.preset')];
+        const next = Math.max(0, Math.min(presets.length - 1, presets.indexOf(active) + (event.key === 'ArrowRight' ? 1 : -1)));
+        presets[next].focus();
+        return;
+      }
+      event.preventDefault();
+      moveFocus(active, event.key);
+    });
+
+    document.addEventListener('pointerdown', () => body.classList.remove('dpad-active'));
+
+    render();
+  </script>
+</body>
+</html>

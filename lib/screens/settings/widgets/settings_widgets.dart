@@ -224,6 +224,7 @@ abstract final class SettingsRows {
     title: 'Looks',
     subtitle: '',
   );
+
   /// Sits directly under Looks, in the same section. It was reachable only by
   /// opening Looks first, which put the entire token layer two levels down
   /// behind a row that gave no hint it was there.
@@ -501,14 +502,11 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
               ? t.accent.withValues(alpha: 0.3)
               : app.fade(app.core.tx, 0.05);
         }
-        return selected
-            ? t.accent
-            : app.fade(app.core.tx, 0.12);
+        return selected ? t.accent : app.fade(app.core.tx, 0.12);
       }),
       trackOutlineColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected)
-            ? Colors.transparent
-            : t.line,
+        (states) =>
+            states.contains(WidgetState.selected) ? Colors.transparent : t.line,
       ),
     ),
     checkboxTheme: CheckboxThemeData(
@@ -526,9 +524,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
         if (states.contains(WidgetState.disabled)) {
           return app.fade(app.core.tx, 0.18);
         }
-        return states.contains(WidgetState.selected)
-            ? t.accent2
-            : t.dim2;
+        return states.contains(WidgetState.selected) ? t.accent2 : t.dim2;
       }),
     ),
     sliderTheme: base.sliderTheme.copyWith(
@@ -567,9 +563,7 @@ ThemeData _buildSettingsPageTheme(ThemeData base, AppTheme app) {
       backgroundColor: t.panel2,
       surfaceTintColor: Colors.transparent,
     ),
-    snackBarTheme: base.snackBarTheme.copyWith(
-      backgroundColor: t.panel2,
-    ),
+    snackBarTheme: base.snackBarTheme.copyWith(backgroundColor: t.panel2),
     chipTheme: base.chipTheme.copyWith(
       backgroundColor: app.fade(app.core.tx, 0.06),
       selectedColor: t.accent.withValues(alpha: 0.25),
@@ -722,11 +716,7 @@ class SettingsPageHeader extends StatelessWidget {
               const SizedBox(height: 3),
               Text(
                 subtitle,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  height: 1.4,
-                  color: t.dim,
-                ),
+                style: TextStyle(fontSize: 12.5, height: 1.4, color: t.dim),
               ),
             ],
           ),
@@ -811,10 +801,7 @@ class SettingsBackground extends StatelessWidget {
                 gradient: RadialGradient(
                   center: const Alignment(0.85, -1.0),
                   radius: 1.2,
-                  colors: [
-                    app.fade(t.accent, 0x29 / 0xFF),
-                    Colors.transparent,
-                  ],
+                  colors: [app.fade(t.accent, 0x29 / 0xFF), Colors.transparent],
                 ),
               ),
             ),
@@ -1332,10 +1319,7 @@ class _ConnectionCardState extends State<ConnectionCard> {
           decoration: BoxDecoration(
             color: lit ? t.panel2 : t.panel,
             borderRadius: app.shape.br(14),
-            border: Border.all(
-              color: _focused ? t.accent : t.line,
-              width: 1,
-            ),
+            border: Border.all(color: _focused ? t.accent : t.line, width: 1),
             boxShadow: _focused
                 ? [
                     BoxShadow(
@@ -1401,10 +1385,7 @@ class _ConnectionCardState extends State<ConnectionCard> {
                             info.caption,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: t.dim,
-                            ),
+                            style: TextStyle(fontSize: 11.5, color: t.dim),
                           ),
                         ],
                       ),
@@ -1436,11 +1417,7 @@ class _ConnectionCardState extends State<ConnectionCard> {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 20,
-                      color: t.dim2,
-                    ),
+                    Icon(Icons.chevron_right_rounded, size: 20, color: t.dim2),
                   ],
                 ),
               ),
@@ -1485,7 +1462,8 @@ class SettingsSection extends StatelessWidget {
     // and dissolve the grouping into an undifferentiated stack — so `space`
     // and `glass` are not on offer, and a look that asks for either is
     // clamped to `rule` by `modelFor` before it reaches here.
-    final rule = app.surface.modelFor(SurfaceFamily.settingsGroup) ==
+    final rule =
+        app.surface.modelFor(SurfaceFamily.settingsGroup) ==
         SeparationModel.rule;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1514,8 +1492,7 @@ class SettingsSection extends StatelessWidget {
             child: Column(
               children: [
                 for (int i = 0; i < children.length; i++) ...[
-                  if (i != 0)
-                    Divider(height: 1, thickness: 1, color: t.line),
+                  if (i != 0) Divider(height: 1, thickness: 1, color: t.line),
                   children[i],
                 ],
               ],
@@ -1697,11 +1674,7 @@ class _SettingsTileState extends State<SettingsTile> {
                   ),
                 ),
                 widget.trailing ??
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 20,
-                      color: t.dim2,
-                    ),
+                    Icon(Icons.chevron_right_rounded, size: 20, color: t.dim2),
               ],
             ),
           ),
@@ -1924,12 +1897,14 @@ class SettingsSelectDropdown extends StatelessWidget {
   final List<SettingsSelectOption> options;
   final String value;
   final ValueChanged<String> onChanged;
+  final FocusNode? focusNode;
 
   const SettingsSelectDropdown({
     super.key,
     required this.options,
     required this.value,
     required this.onChanged,
+    this.focusNode,
   });
 
   @override
@@ -1942,6 +1917,7 @@ class SettingsSelectDropdown extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String>(
+          focusNode: focusNode,
           // A stale stored value (e.g. removed option) renders as an empty
           // field instead of tripping DropdownButton's value assert.
           value: selected?.value,
@@ -2013,11 +1989,7 @@ class SettingsSelectDropdown extends StatelessWidget {
             padding: const EdgeInsets.only(left: 2),
             child: Text(
               selected!.subtitle!,
-              style: TextStyle(
-                fontSize: 11.5,
-                height: 1.4,
-                color: t.dim,
-              ),
+              style: TextStyle(fontSize: 11.5, height: 1.4, color: t.dim),
             ),
           ),
         ],
@@ -2066,10 +2038,7 @@ class SettingsInfoTile extends StatelessWidget {
             child: Text(
               title,
               // No color: inherits onSurface (Text Brightness).
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
             ),
           ),
           Container(

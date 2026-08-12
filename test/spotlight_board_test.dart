@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -283,6 +285,79 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('DOWN at the last shelf waits for a lazy batch and enters it',
+      (tester) async {
+    final a = _meta('tt1', 'Alpha');
+    final b = _meta('tt2', 'Bravo');
+    final gate = Completer<void>();
+    var sections = <SpotlightShelf>[
+      _section('One', [a], nodes: rows[0]),
+    ];
+    late StateSetter rebuild;
+
+    await tester.pumpWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          rebuild = setState;
+          return MaterialApp(
+            home: AppThemeScope(
+              theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+              child: Scaffold(
+                body: SpotlightBoard(
+                  hero: [a],
+                  sections: sections,
+                  heroNode: hero,
+                  heroAddon: _addon,
+                  onHeroOpen: (_, __) {},
+                  onLoadMoreShelves: () async {
+                    await gate.future;
+                    rebuild(() {
+                      rows.add([FocusNode(debugLabel: 'leading-c0')]);
+                      rows.add([FocusNode(debugLabel: 'r1c0')]);
+                      sections = [
+                        // Leading content resolves independently on Home. It
+                        // can arrive during this catalog request and shift the
+                        // origin row, so the completion must not use the old
+                        // positional list length as its destination.
+                        _section('Continue Watching', [a], nodes: rows[1]),
+                        ...sections,
+                        _section('Two', [b], nodes: rows[2]),
+                      ];
+                    });
+                    return true;
+                  },
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    rows[0][0].requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('spotlight-loading-more-shelves')),
+      findsOneWidget,
+      reason: 'the consumed DOWN must visibly acknowledge the pending batch',
+    );
+    expect(rows[0][0].hasFocus, isTrue);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(rows[2][0].hasFocus, isTrue,
+        reason: 'the original DOWN must finish when the new shelf mounts');
+    expect(
+      find.byKey(const ValueKey('spotlight-loading-more-shelves')),
+      findsNothing,
+    );
   });
 
   testWidgets('a Continue Watching shelf draws progress; a catalog one does not',

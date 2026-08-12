@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.view.animation.DecelerateInterpolator
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.text.InputType
 import android.util.Log
 import android.util.TypedValue
@@ -67,7 +68,14 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
+import android.net.ConnectivityManager
+import android.net.Network
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
@@ -249,6 +257,229 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return "unknown"
     }
     private var offsetRenderersFactory: OffsetRenderersFactory? = null
+
+    // Phase 0 of the IPTV resilience plan: per-tune logcat diagnostics.
+    // Inert for non-IPTV playback (nothing calls onTuneStart there).
+    private val iptvTuneDiagnostics = IptvTuneDiagnostics()
+
+    // ── IPTV live recovery (Phases 1/3/5 of the resilience plan) ──────────
+    //
+    // The ONE owner of live re-tunes. Sources: STATE_ENDED, unclaimed fatal
+    // errors, the tune watchdog, the stall detector, lifecycle rejoin, and
+    // the user's play press on a dead stream. See IptvLiveRecovery.kt.
+
+    /** True while a machine-driven re-tune is inside setIptvMediaItem, so
+     *  onTuneStarted keeps the recovery episode instead of resetting it. */
+    private var iptvLiveRetuneInFlight = false
+
+    /** Wall time we left the foreground; a live channel resumed after more
+     *  than [IPTV_LIVE_REJOIN_AFTER_MS] away re-tunes to the live edge
+     *  instead of resuming a stale (possibly dead) connection. */
+    private var iptvStoppedAtRealtime = 0L
+
+    private val IPTV_LIVE_REJOIN_AFTER_MS = 30_000L
+
+    private var iptvNetworkCallback: ConnectivityManager.NetworkCallback? = null
+
+    /** Bottom-center "Reconnecting…" pill; created on first use, lives in
+     *  the decor content view so it floats over every player surface. */
+    private var iptvReconnectPill: TextView? = null
+
+    private val iptvLiveRecovery: IptvLiveRecovery by lazy {
+        IptvLiveRecovery(
+            Handler(Looper.getMainLooper()),
+            object : IptvLiveRecovery.Callbacks {
+                override fun isEligible(): Boolean = iptvLiveRecoveryEligible()
+
+                override fun performRetune(source: String, attempt: Int) {
+                    performIptvLiveRetune(source, attempt)
+                }
+
+                override fun onEpisodeVisible(attempt: Int) {
+                    showIptvReconnectPill("Reconnecting…")
+                }
+
+                override fun onRecovered() {
+                    hideIptvReconnectPill()
+                    // Re-arm the zap frame-hold a surrender may have cleared.
+                    if (isIptvMode) playerView.setKeepContentOnPlayerReset(true)
+                }
+
+                override fun onSurrender(source: String) {
+                    iptvTuneDiagnostics.onRecovery(source, "surrender")
+                    // The held last frame must not keep painting a dead
+                    // channel under the failure pill (plan invariant T11).
+                    playerView.setKeepContentOnPlayerReset(false)
+                    showIptvReconnectPill(
+                        if (source == "auth") {
+                            "Stream refused (expired or blocked) — press play to retry"
+                        } else {
+                            "Stream lost — press play to retry"
+                        }
+                    )
+                }
+            },
+        )
+    }
+
+    /** The machine may act only on a LIVE entry with nothing else in charge:
+     *  the Stremio candidate ladder owns recovery until its winner plays,
+     *  sleep stops outrank reconnects, and a user pause (playWhenReady
+     *  false — onStop pauses too) means nobody asked for playback. */
+    private fun iptvLiveRecoveryEligible(): Boolean {
+        if (!isIptvMode || isFinishing || isDestroyed) return false
+        val entry = iptvChannels.getOrNull(currentIptvIndex) ?: return false
+        if (!entry.isLive) return false
+        if (sleepStopLatched || sleepTimerMode == SleepTimerMode.END_OF_ITEM) return false
+        if (iptvStremioChannelKey != null && !iptvStremioWinnerReported) return false
+        if (player?.playWhenReady != true) return false
+        return true
+    }
+
+    /** Re-tune the current live channel with its full identity — the SAME
+     *  resolved URL and per-channel headers (already in
+     *  currentIptvHttpHeaders; setIptvMediaItem re-stamps both). A fresh
+     *  prepare joins the live edge, never a stale position. */
+    private fun performIptvLiveRetune(source: String, attempt: Int) {
+        val entry = iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive } ?: return
+        val url = currentIptvStreamUrl ?: entry.url
+        iptvTuneDiagnostics.onRecovery(source, "retune", "attempt=$attempt")
+        // A same-URL reopen would append a fresh TS connection — reset
+        // PCR/PTS, no discontinuity marker — into the active tee file, and
+        // setIptvMediaItem's finalize only fires on URL CHANGE. Finalize
+        // here instead: the recorded portion stays a valid file; the
+        // recovered stream simply isn't recorded further (plan invariant,
+        // codex round 2 finding 7).
+        if (iptvRecordingController.isActive) {
+            finalizeIptvRecordingIfActive()
+            updateRecordButtonState()
+        }
+        iptvLiveRetuneInFlight = true
+        try {
+            setIptvMediaItem(entry, url)
+        } finally {
+            iptvLiveRetuneInFlight = false
+        }
+    }
+
+    /** 401/403/404 repeat deterministically; decoder failures repeat unless
+     *  the hiccup was transient; everything else gets the full ladder. */
+    private fun classifyIptvError(error: PlaybackException): IptvLiveRecovery.ErrorClass {
+        val http = generateSequence<Throwable>(error) { it.cause }
+            .filterIsInstance<HttpDataSource.InvalidResponseCodeException>()
+            .firstOrNull()?.responseCode
+        if (http == 401 || http == 403 || http == 404) {
+            return IptvLiveRecovery.ErrorClass.AUTH
+        }
+        return when (error.errorCode) {
+            PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+            PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED ->
+                IptvLiveRecovery.ErrorClass.DECODER
+            else -> IptvLiveRecovery.ErrorClass.TRANSIENT
+        }
+    }
+
+    /** Phase 1, Layer 1: loader-level retry policy for live IPTV. Retries
+     *  happen UNDER an intact buffer — the player never leaves READY, so a
+     *  drop the origin repairs within the buffered lead is invisible.
+     *  Classified per the plan: 401/403/404 are deterministic (no retry —
+     *  escalate to the fatal-error path, where the machine surrenders or
+     *  re-resolves), 429/503 honor Retry-After, other transport errors get
+     *  a short flat delay and a generous (bounded) retry count. Non-live
+     *  entries keep media3 defaults untouched. */
+    private inner class IptvLiveLoadErrorPolicy : DefaultLoadErrorHandlingPolicy() {
+        private fun liveNow(): Boolean =
+            iptvChannels.getOrNull(currentIptvIndex)?.isLive == true
+
+        override fun getRetryDelayMsFor(
+            loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo,
+        ): Long {
+            if (!liveNow()) return super.getRetryDelayMsFor(loadErrorInfo)
+            val http = generateSequence(loadErrorInfo.exception as Throwable?) { it.cause }
+                .filterIsInstance<HttpDataSource.InvalidResponseCodeException>()
+                .firstOrNull()
+            when (http?.responseCode) {
+                401, 403, 404 -> return C.TIME_UNSET // fatal: same answer every time
+                429, 503 -> {
+                    // Bound the TIME this class can hide a failure, not just
+                    // the count: minimumLoadableRetryCount is a floor, and a
+                    // 5s-per-retry rate limit would otherwise sit invisible
+                    // (no pill — the player never errors) for minutes before
+                    // the machine's ladder even starts (codex r2, finding 9).
+                    if (loadErrorInfo.errorCount > 4) return C.TIME_UNSET
+                    val retryAfterSec = http.headerFields.entries
+                        .firstOrNull { it.key.equals("Retry-After", ignoreCase = true) }
+                        ?.value?.firstOrNull()?.trim()?.toLongOrNull()
+                    return (retryAfterSec?.times(1000))?.coerceIn(1_000L, 15_000L)
+                        ?: 5_000L
+                }
+            }
+            return if (loadErrorInfo.exception is HttpDataSource.HttpDataSourceException) {
+                // ~15s of 1s in-buffer retries, then escalate to the machine.
+                if (loadErrorInfo.errorCount > 15) C.TIME_UNSET else 1_000L
+            } else {
+                super.getRetryDelayMsFor(loadErrorInfo)
+            }
+        }
+
+        // A floor, not a cap — the real bound is the TIME_UNSET escalation
+        // by errorCount in getRetryDelayMsFor above. Kept above the default
+        // so transport errors actually reach the 15×1s schedule.
+        override fun getMinimumLoadableRetryCount(dataType: Int): Int =
+            if (liveNow()) 20 else super.getMinimumLoadableRetryCount(dataType)
+    }
+
+    private fun showIptvReconnectPill(text: String) {
+        val pill = iptvReconnectPill ?: TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dpToPx(20), dpToPx(10), dpToPx(20), dpToPx(10))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#CC101418"))
+                cornerRadius = dpToPx(22).toFloat()
+            }
+            val params = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                bottomMargin = dpToPx(56)
+            }
+            // addContentView reaches the decor content FrameLayout, which
+            // exists whatever the activity's own root layout is.
+            addContentView(this, params)
+            iptvReconnectPill = this
+        }
+        pill.text = text
+        pill.visibility = View.VISIBLE
+    }
+
+    private fun hideIptvReconnectPill() {
+        iptvReconnectPill?.visibility = View.GONE
+    }
+
+    private fun dpToPx(dp: Int): Int =
+        (dp * resources.displayMetrics.density).toInt()
+
+    private val iptvDiagAnalyticsListener = object : AnalyticsListener {
+        override fun onRenderedFirstFrame(
+            eventTime: AnalyticsListener.EventTime,
+            output: Any,
+            renderTimeMs: Long,
+        ) {
+            iptvTuneDiagnostics.onFirstFrame()
+        }
+
+        override fun onLoadCompleted(
+            eventTime: AnalyticsListener.EventTime,
+            loadEventInfo: androidx.media3.exoplayer.source.LoadEventInfo,
+            mediaLoadData: androidx.media3.exoplayer.source.MediaLoadData,
+        ) {
+            iptvTuneDiagnostics.onBytesLoaded(loadEventInfo.bytesLoaded)
+        }
+    }
 
     // Subtitle auto-sync: taps the decoded PCM (created with the player, in
     // setupPlayer) so the aligner has audio history the moment it's asked.
@@ -638,6 +869,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         override fun run() {
             sendProgress(completed = false)
             maybeShowUpNext()
+            player?.let {
+                iptvTuneDiagnostics.onProgress(it.currentPosition, it.isPlaying)
+                // playWhenReady, not isPlaying: a buffering wedge reports
+                // isPlaying=false but still wants playback; a user pause is
+                // exactly what must NOT read as a stall.
+                if (isIptvMode) {
+                    iptvLiveRecovery.onProgress(it.currentPosition, it.playWhenReady)
+                }
+            }
             progressHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
         }
     }
@@ -662,6 +902,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             when (playbackState) {
                 Player.STATE_READY -> {
                     hasEverBeenReady = true
+                    iptvTuneDiagnostics.onReady(player?.currentPosition ?: 0L)
+                    if (isIptvMode) iptvLiveRecovery.onReady()
                     reportIptvStremioWinnerIfNeeded()
                     hideBufferingIndicator()
                     // Furthest-watched resume (same rule as the Dart player): seek
@@ -754,12 +996,43 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     syncAudioEffectSession()
                 }
                 Player.STATE_BUFFERING -> {
+                    iptvTuneDiagnostics.onBufferingStart(player?.currentPosition ?: 0L)
                     if (hasEverBeenReady) {
                         showBufferingIndicatorDebounced()
                     }
                 }
                 Player.STATE_ENDED -> {
+                    iptvTuneDiagnostics.onPlaybackEnded(lastRealPositionMs)
                     hideBufferingIndicator()
+                    // LIVE: an ended live stream is a dropped connection, not
+                    // a finished item — the origin closed on us. NOTHING
+                    // below this block (completion progress, episode advance)
+                    // may interpret a live EOF as "watched to the end", so
+                    // live ALWAYS returns here — even when the recovery
+                    // machine declines (backgrounded, paused). Sleep's
+                    // end-of-item stop keeps its meaning: the item ended,
+                    // stop here — minus the completion side-effects that
+                    // make no sense for live. (Codex round 2, finding 4:
+                    // gating the return on onEnded()'s answer let an
+                    // ineligible live EOF fall into VOD completion.)
+                    val endedLiveEntry = if (isIptvMode) {
+                        iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive }
+                    } else null
+                    if (endedLiveEntry != null) {
+                        if (sleepTimerMode == SleepTimerMode.END_OF_ITEM) {
+                            cancelSleepTimer()
+                            sleepStopLatched = true
+                            releaseScreenForSleep()
+                            Toast.makeText(
+                                this@AndroidTvTorrentPlayerActivity,
+                                "Sleep timer — stopping here",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            iptvLiveRecovery.onEnded()
+                        }
+                        return
+                    }
                     // Ignore a spurious end: if real playback never got near the full
                     // (stable) duration, the source "ended" early — e.g. a subtitle
                     // reload re-prepared it against an incomplete timeline. Reporting
@@ -855,6 +1128,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            iptvTuneDiagnostics.onError(error)
             // Stale-delivery gate for EVERY IPTV recovery path below: a
             // queued onPlayerError whose media item was already superseded
             // (a zap's or the watchdog's prepare() cleared the error) reports
@@ -888,6 +1162,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // step down the ladder. Everything else keeps the pre-existing
             // behavior (no handler existed; playback simply stops).
             if (isLiveIptvError && tryNextIptvStremioCandidate()) return
+            // Generic live recovery — the last resort after every specific
+            // handler above declined. Classified: auth-class surrenders
+            // immediately, decoder-class gets one retry, the rest climb the
+            // 0/1/3/5s ladder. The decoder toast still shows so a codec wall
+            // stays explained even while the machine tries its one retry.
+            if (isLiveIptvError &&
+                iptvLiveRecovery.onFatalError(classifyIptvError(error))
+            ) {
+                reportDecoderFailure(error)
+                return
+            }
             android.util.Log.e("AndroidTvPlayer", "Player error: ${error.errorCodeName}")
             reportDecoderFailure(error)
         }
@@ -1463,14 +1748,44 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             finalDataSourceFactory
         }
 
-        // Create media source factory that uses the data source
-        val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(recordingDataSourceFactory)
+        // Create media source factory that uses the data source. IPTV gets
+        // two live-stream aids on top:
+        //  - TS extractor flags (Phase 3 of the resilience plan, marked
+        //    experimental there): ALLOW_NON_IDR_KEYFRAMES lets a mid-GOP
+        //    live join render before the next IDR arrives (broadcast streams
+        //    can go seconds between them), DETECT_ACCESS_UNITS lets H.264
+        //    parse when the container lies about access-unit boundaries.
+        //    Both are what dedicated IPTV players run with.
+        //  - the classified load-error policy (Phase 1): loader-level retries
+        //    UNDER an intact buffer for transient errors, so the common
+        //    connection drop heals without the player ever leaving READY.
+        val mediaSourceFactory = if (isIptvMode) {
+            val iptvExtractors = DefaultExtractorsFactory().setTsExtractorFlags(
+                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
+                    DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
+            )
+            DefaultMediaSourceFactory(this, iptvExtractors)
+                .setDataSourceFactory(recordingDataSourceFactory)
+                .setLoadErrorHandlingPolicy(IptvLiveLoadErrorPolicy())
+        } else {
+            DefaultMediaSourceFactory(this)
+                .setDataSourceFactory(recordingDataSourceFactory)
+        }
 
         val playerBuilder = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(trackSelector!!)
             .setMediaSourceFactory(mediaSourceFactory)
             .setHandleAudioBecomingNoisy(true)
+            // Hold CPU + Wi-Fi while playing over the network: TV boxes with
+            // aggressive Wi-Fi power-save can starve a live stream without
+            // this (downloads and recordings already take their own locks —
+            // playback was the only network consumer without one).
+            .setWakeMode(C.WAKE_MODE_NETWORK)
+
+        // IPTV buffering: media3 1.8.0's stock DefaultLoadControl already
+        // resumes 2s after a rebuffer (the plan's audit assumed the old 5s
+        // default — codex review round 2 corrected it against the 1.8.0
+        // constants). Stock is the right call: no override.
 
         // For YouTube (merged video-only + audio) ONLY, start after buffering
         // ~1s instead of ExoPlayer's conservative 2.5s default — otherwise the
@@ -1498,6 +1813,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         player?.addListener(playbackListener)
         player?.addAnalyticsListener(decoderAnalyticsListener)
+        player?.addAnalyticsListener(iptvDiagAnalyticsListener)
         playerView.player = player
 
         // Hide internal subtitle view, use custom one
@@ -1526,6 +1842,44 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         playerView.setControllerAutoShow(false)
         playerView.resizeMode = resizeModes[resizeModeIndex]
         playerView.requestFocus()
+
+        if (isIptvMode) {
+            // Phase 3: hold the last frame across a zap's player reset — the
+            // zap banner rides over the old channel's picture instead of a
+            // black flash. Cleared on surrender (a dead channel must not
+            // keep painting under the failure pill) and re-armed on READY.
+            playerView.setKeepContentOnPlayerReset(true)
+
+            // Phase 1: connectivity gate for the recovery ladder. While the
+            // OS reports no network there is nothing to hammer; the moment a
+            // network validates, the parked attempt fires immediately.
+            // API 24+ only (registerDefaultNetworkCallback); older boxes
+            // just keep the plain timed ladder.
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+                val callback = object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: Network) {
+                        runOnUiThread { iptvLiveRecovery.setOffline(false) }
+                    }
+
+                    override fun onLost(network: Network) {
+                        runOnUiThread { iptvLiveRecovery.setOffline(true) }
+                    }
+                }
+                try {
+                    cm.registerDefaultNetworkCallback(callback)
+                    iptvNetworkCallback = callback
+                    // Cold-start truth: registration alone reports nothing
+                    // until the network CHANGES — launched offline, the
+                    // ladder must know now, not at the first handover.
+                    iptvLiveRecovery.setOffline(cm.activeNetwork == null)
+                } catch (e: Exception) {
+                    // Some ROMs throw on registration limits; the ladder
+                    // works without the gate, just less politely offline.
+                    android.util.Log.w("AndroidTvPlayer", "network callback: $e")
+                }
+            }
+        }
     }
 
     private fun setupSeekbar() {
@@ -4515,7 +4869,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             } else {
                 // An explicit press is the one thing that clears a sleep stop.
                 sleepStopLatched = false
-                it.play()
+                // LIVE: play on a dead stream must re-tune to the live edge.
+                // A bare play() on an ENDED/errored live stream either does
+                // nothing (media3 leaves it parked) or replays stale bytes —
+                // both read as "the app is broken". The machine treats the
+                // press as a fresh user ask: budget reset, immediate attempt.
+                val deadLive = isIptvMode &&
+                    iptvChannels.getOrNull(currentIptvIndex)?.isLive == true &&
+                    (it.playbackState == Player.STATE_ENDED ||
+                        it.playerError != null ||
+                        iptvLiveRecovery.isSurrendered)
+                if (deadLive) {
+                    it.playWhenReady = true // eligibility reads this
+                    iptvLiveRecovery.userRetry("play-press")
+                } else {
+                    it.play()
+                }
             }
         }
         updatePauseButtonLabel()
@@ -10870,6 +11239,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // BEFORE the media item so the first playlist fetch already has them.
         currentIptvHttpHeaders = entry.httpHeaders
         currentIptvStreamUrl = streamUrl
+        iptvTuneDiagnostics.onTuneStart(
+            entry.name,
+            streamUrl,
+            entry.isLive,
+            forcedHls = iptvHlsForcedUrls.contains(streamUrl),
+        )
+        // A machine-driven re-tune keeps its recovery episode (attempt count,
+        // surrender budget); a real zap/launch resets the machine — and takes
+        // any reconnect pill with it (the pill described the OLD channel).
+        iptvLiveRecovery.expectRetune = iptvLiveRetuneInFlight
+        iptvLiveRecovery.onTuneStarted()
+        if (!iptvLiveRetuneInFlight) hideIptvReconnectPill()
+        // Every tune re-arms the zap frame-hold: a surrender turned it off,
+        // and without this, zapping AWAY from the surrendered channel would
+        // black-flash forever after (codex round 2, finding 17).
+        playerView.setKeepContentOnPlayerReset(true)
 
         val mediaItem = MediaItem.Builder()
             .setUri(streamUrl)
@@ -13872,7 +14257,27 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         super.onStart()
         // Never undo a sleep-timer stop — this runs every time the activity
         // comes back, including after the screen has slept.
-        if (!sleepStopLatched) player?.play()
+        if (!sleepStopLatched) {
+            // LIVE, back after a real absence: the paused stream is minutes
+            // behind the edge (or the origin dropped it while we were away).
+            // Re-tune to the live edge instead of resuming stale bytes —
+            // same "always resumes playing" contract this method has always
+            // had, just at the right point in the broadcast. Short trips
+            // keep the cheap in-buffer resume (that's legitimate timeshift).
+            val awayMs = SystemClock.elapsedRealtime() - iptvStoppedAtRealtime
+            val liveEntry = if (isIptvMode) {
+                iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive }
+            } else null
+            if (liveEntry != null &&
+                iptvStoppedAtRealtime > 0L &&
+                awayMs > IPTV_LIVE_REJOIN_AFTER_MS
+            ) {
+                player?.playWhenReady = true // eligibility reads this
+                iptvLiveRecovery.userRetry("lifecycle-rejoin")
+            } else {
+                player?.play()
+            }
+        }
         // Resume the side-rendered subtitle ticker paused in onStop.
         if (externalSubtitleActive) startExternalSubtitleTicker()
     }
@@ -13886,6 +14291,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Nothing is lost by stopping now — the pause below ends the byte flow
         // the recording tees anyway.
         finalizeIptvRecordingIfActive()
+        // A recovery in flight must not fight the pause below (its re-tunes
+        // set playWhenReady=true); onStart's rejoin re-arms recovery anyway.
+        iptvLiveRecovery.cancel()
+        hideIptvReconnectPill()
+        iptvStoppedAtRealtime = SystemClock.elapsedRealtime()
         player?.pause()
         // Stop waking the main thread 4x/second while the activity isn't visible;
         // state is preserved and onStart restarts the ticker.
@@ -13990,6 +14400,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        iptvTuneDiagnostics.onSessionEnd()
+        iptvLiveRecovery.cancel()
+        iptvNetworkCallback?.let {
+            try {
+                (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager)
+                    .unregisterNetworkCallback(it)
+            } catch (_: Exception) {
+            }
+            iptvNetworkCallback = null
+        }
         RecordingRegistry.removeListener(recordingRegistryListener)
         // The sleep timer belongs to this playback session — a pending one must
         // not outlive the player and fire against a dead surface.
