@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,6 +10,7 @@ Future<void> _pumpPage(
   WidgetTester tester, {
   List<HomeExtraRow> extraRows = const [],
   Set<String> disabled = const {},
+  List<String> rowOrder = const [],
 }) async {
   // The wide (two-pane) header needs more than the 800x600 test default —
   // match a TV/desktop canvas.
@@ -21,6 +23,7 @@ Future<void> _pumpPage(
         catalogTree: const [],
         disabled: Set.of(disabled),
         extraRows: extraRows,
+        rowOrder: rowOrder,
         isTelevision: false,
       ),
     ),
@@ -109,5 +112,73 @@ void main() {
     await _saveAndClose(tester);
 
     expect(await StorageService.getHomeExtraRows(), isEmpty);
+  });
+
+  testWidgets('Arrange moves enabled rows globally and persists stable ids', (
+    tester,
+  ) async {
+    await _pumpPage(tester);
+
+    await tester.tap(find.text('Arrange'));
+    await tester.pumpAndSettle();
+    expect(find.text('Arrange Home Rows'), findsOneWidget);
+
+    // Canonical order starts Movies then Series in local Continue Watching.
+    // Move Movies down one global slot using the touch/mouse affordance.
+    await tester.tap(find.byIcon(Icons.arrow_downward_rounded).first);
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pump();
+    await _saveAndClose(tester);
+
+    final order = await StorageService.getHomeRowOrder();
+    expect(order.take(2), ['cw:series', 'cw:movies']);
+  });
+
+  testWidgets('Arrange supports dragging a row to a new position', (
+    tester,
+  ) async {
+    await _pumpPage(tester);
+
+    await tester.tap(find.text('Arrange'));
+    await tester.pumpAndSettle();
+    final handle = find.byIcon(Icons.drag_indicator_rounded).first;
+    final gesture = await tester.startGesture(tester.getCenter(handle));
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, 40));
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.moveBy(const Offset(0, 100));
+    await tester.pump(const Duration(milliseconds: 300));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pump();
+    await _saveAndClose(tester);
+
+    expect((await StorageService.getHomeRowOrder()).take(2), [
+      'cw:series',
+      'cw:movies',
+    ]);
+  });
+
+  testWidgets('Arrange supports pick-up, DPAD move, and drop', (tester) async {
+    await _pumpPage(tester);
+
+    await tester.tap(find.text('Arrange'));
+    await tester.pumpAndSettle();
+    // Entry focus lands on the first row. OK picks it up; Down changes its
+    // order instead of merely changing focus; OK drops it again.
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pump();
+    await _saveAndClose(tester);
+
+    expect((await StorageService.getHomeRowOrder()).take(2), [
+      'cw:series',
+      'cw:movies',
+    ]);
   });
 }

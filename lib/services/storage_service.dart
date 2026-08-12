@@ -7413,6 +7413,45 @@ class StorageService {
     }
   }
 
+  static const String _homeRowOrderKey = 'home_row_order_v1';
+
+  /// The user's global Home-row order, expressed with the same stable ids used
+  /// by the Home Rows manager. Missing/unavailable ids remain in this list so
+  /// reconnecting a tracker or reinstalling an addon restores its old slot.
+  /// An empty list means the board's canonical order.
+  static Future<List<String>> getHomeRowOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_homeRowOrderKey);
+    if (json == null) return const [];
+    try {
+      final raw = jsonDecode(json);
+      if (raw is! List) return const [];
+      final seen = <String>{};
+      return [
+        for (final value in raw)
+          if (value is String && value.isNotEmpty && seen.add(value)) value,
+      ];
+    } catch (e) {
+      debugPrint('Error reading home row order: $e');
+      return const [];
+    }
+  }
+
+  /// Save the user's global Home-row order. Empty restores canonical order.
+  static Future<void> setHomeRowOrder(List<String> order) async {
+    final prefs = await SharedPreferences.getInstance();
+    final seen = <String>{};
+    final normalized = [
+      for (final id in order)
+        if (id.isNotEmpty && seen.add(id)) id,
+    ];
+    if (normalized.isEmpty) {
+      await prefs.remove(_homeRowOrderKey);
+    } else {
+      await prefs.setString(_homeRowOrderKey, jsonEncode(normalized));
+    }
+  }
+
   static const String _homeHeroSourceKey = 'home_hero_source_v1';
 
   /// Where the Spotlight home layout's hero reel comes from.

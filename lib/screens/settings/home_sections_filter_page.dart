@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
 import '../../services/home_list_rows.dart';
+import '../../services/home_row_order.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/simkl/simkl_list_source.dart';
 import '../../services/storage_service.dart';
@@ -18,12 +19,14 @@ import '../../widgets/home/home_theme.dart';
 /// IPTV Lists, Favorites, then each catalog addon); the right pane lists that
 /// group's rows as on/off toggles. Header actions: All on / All off / Invert.
 ///
-/// TWO stores back the leaves. Default-ON rows persist the same disabled-id
+/// Three stores back the leaves. Default-ON rows persist the same disabled-id
 /// set the Home board reads ([StorageService.setHomeDisabledSections]): fixed
 /// leaves like `cw:movies`, `trakt:shows`, `fav:iptv`, and catalog leaves
 /// `addonId:type:catalogId` — only OFF rows are stored. OPT-IN rows (Trakt/
 /// Simkl list rows, IPTV custom-list rows — default off) persist the enabled
 /// entries instead ([StorageService.setHomeExtraRows], id + display title).
+/// Their global position is saved separately with
+/// [StorageService.setHomeRowOrder].
 ///
 /// An enabled opt-in row whose backing data didn't load (Trakt outage, a
 /// vanished list) is still materialized as an "unavailable" leaf from its
@@ -32,11 +35,15 @@ import '../../widgets/home/home_theme.dart';
 class HomeSectionsFilterPage extends StatefulWidget {
   /// The board's catalog addons with their browsable catalogs, in board order.
   final List<({StremioAddon addon, List<StremioAddonCatalog> catalogs})>
-      catalogTree;
+  catalogTree;
   final Set<String> disabled;
 
   /// The currently opted-in extra rows (`home_extra_rows_v1`).
   final List<HomeExtraRow> extraRows;
+
+  /// The global row order (`home_row_order_v1`). Unknown ids are preserved
+  /// when this page saves so temporarily unavailable rows keep their slot.
+  final List<String> rowOrder;
 
   /// The account's Trakt custom + liked lists, pre-fetched by the opener
   /// (empty when unauthenticated or the fetch failed — enabled entries then
@@ -54,6 +61,7 @@ class HomeSectionsFilterPage extends StatefulWidget {
     required this.catalogTree,
     required this.disabled,
     this.extraRows = const [],
+    this.rowOrder = const [],
     this.traktUserLists = const [],
     this.iptvLists = const [],
     required this.isTelevision,
@@ -96,6 +104,12 @@ class _Group {
   int get total => items.length;
 }
 
+class _ArrangeEntry {
+  final _Item item;
+  final String group;
+  const _ArrangeEntry(this.item, this.group);
+}
+
 class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   static const Color _onColor = Color(0xFF34D399);
   static const Color _offColor = Color(0xFF4B465F);
@@ -106,10 +120,17 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   bool _changed = false;
   bool _saved = false;
 
-  final List<FocusNode> _headerNodes =
-      List.generate(3, (i) => FocusNode(debugLabel: 'homeHeader$i'));
+  final List<FocusNode> _headerNodes = List.generate(
+    4,
+    (i) => FocusNode(debugLabel: 'homeHeader$i'),
+  );
   List<FocusNode> _railNodes = [];
   List<FocusNode> _listNodes = [];
+  final List<FocusNode> _arrangeNodes = [];
+
+  late List<String> _orderIds;
+  bool _arranging = false;
+  String? _pickedArrangeId;
 
   /// Where a down-press from the header should land back.
   (String, int) _headerReturn = ('rail', 0);
@@ -124,11 +145,13 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     super.initState();
     AnalyticsService.screenView('home_sections_filter');
     _groups = _buildModel();
+    _orderIds = HomeRowOrder.reconcile(widget.rowOrder, _canonicalOrderIds());
     _railNodes = List.generate(
       _groups.length,
       (i) => FocusNode(debugLabel: 'homeRail$i'),
     );
     _rebuildListNodes();
+    _syncArrangeNodes();
     // Land focus on the first rail group so DPAD works the moment the page
     // opens (this post-frame fires — the first build schedules a frame).
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -152,6 +175,9 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     for (final n in _listNodes) {
       n.dispose();
     }
+    for (final n in _arrangeNodes) {
+      n.dispose();
+    }
     super.dispose();
   }
 
@@ -163,13 +189,13 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
 
     // Opt-in leaf factory: ON = present in the extras store.
     _Item opt(String id, String label, {String? badge}) => _Item(
-          id,
-          label,
-          extraOn(id),
-          badge: badge,
-          defaultOn: false,
-          extraTitle: label,
-        );
+      id,
+      label,
+      extraOn(id),
+      badge: badge,
+      defaultOn: false,
+      extraTitle: label,
+    );
 
     final customLists = [
       for (final c in widget.traktUserLists)
@@ -230,13 +256,13 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         for (final it in g.items) it.id,
     };
     _Item stray(HomeExtraRow r) => _Item(
-          r.id,
-          r.title.isNotEmpty ? r.title : r.id,
-          true,
-          defaultOn: false,
-          extraTitle: r.title,
-          unavailable: true,
-        );
+      r.id,
+      r.title.isNotEmpty ? r.title : r.id,
+      true,
+      defaultOn: false,
+      extraTitle: r.title,
+      unavailable: true,
+    );
     for (final r in widget.extraRows) {
       if (represented.contains(r.id)) continue;
       final String groupName;
@@ -250,9 +276,9 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         continue; // unknown grammar — preserved by _persist, not shown
       }
       final target = groups.cast<_Group?>().firstWhere(
-            (g) => g!.name == groupName,
-            orElse: () => null,
-          );
+        (g) => g!.name == groupName,
+        orElse: () => null,
+      );
       if (target != null) {
         target.items.add(stray(r));
       } else {
@@ -263,9 +289,8 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     for (final entry in widget.catalogTree) {
       final addon = entry.addon;
       if (entry.catalogs.isEmpty) continue;
-      groups.add(_Group(
-        addon.name,
-        [
+      groups.add(
+        _Group(addon.name, [
           for (final c in entry.catalogs)
             _Item(
               '${addon.id}:${c.type}:${c.id}',
@@ -273,10 +298,109 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
               on('${addon.id}:${c.type}:${c.id}'),
               badge: c.type,
             ),
-        ],
-      ));
+        ]),
+      );
     }
     return groups;
+  }
+
+  /// The board's pre-customization order. Keep this aligned with Home's row
+  /// assembly: Continue Watching, favourites/IPTV lists, tracker list rows,
+  /// then addon catalogs. The settings page groups rows by provider for
+  /// toggling, so simply flattening [_groups] would produce a different order.
+  List<String> _canonicalOrderIds() {
+    final items = <String, _Item>{
+      for (final group in _groups)
+        for (final item in group.items) item.id: item,
+    };
+    final out = <String>[];
+    final seen = <String>{};
+    void add(String id) {
+      if (items.containsKey(id) && seen.add(id)) out.add(id);
+    }
+
+    for (final id in const [
+      'cw:movies',
+      'cw:series',
+      'trakt:movies',
+      'trakt:shows',
+      'simkl:movies',
+      'simkl:shows',
+      'iptv:movies',
+      'iptv:series',
+      'fav:playlist',
+      'fav:debrify',
+      'fav:stremio',
+      'fav:iptv',
+    ]) {
+      add(id);
+    }
+    for (final group in _groups) {
+      for (final item in group.items) {
+        if (HomeExtraRowIds.isIptv(item.id)) add(item.id);
+      }
+    }
+    for (final group in _groups) {
+      for (final item in group.items) {
+        if (HomeExtraRowIds.isTracker(item.id)) add(item.id);
+      }
+    }
+    // Anything left is an addon catalog (or a future row family unknown to
+    // this version). Stable group/item order is the safest default for both.
+    for (final group in _groups) {
+      for (final item in group.items) {
+        add(item.id);
+      }
+    }
+    return out;
+  }
+
+  List<_ArrangeEntry> get _arrangeEntries {
+    final entries = [
+      for (final group in _groups)
+        for (final item in group.items)
+          if (item.on) _ArrangeEntry(item, group.name),
+    ];
+    return HomeRowOrder.apply(entries, _orderIds, (entry) => entry.item.id);
+  }
+
+  void _syncArrangeNodes() {
+    final count = _arrangeEntries.length;
+    while (_arrangeNodes.length < count) {
+      _arrangeNodes.add(
+        FocusNode(debugLabel: 'homeArrange${_arrangeNodes.length}'),
+      );
+    }
+    while (_arrangeNodes.length > count) {
+      _arrangeNodes.removeLast().dispose();
+    }
+  }
+
+  /// Reorder only the enabled rows while leaving disabled and unknown ids in
+  /// their saved slots. Re-enabling one later therefore restores its position.
+  void _moveArrangeEntry(int from, int to) {
+    final entries = _arrangeEntries;
+    if (from < 0 || from >= entries.length || to < 0 || to >= entries.length) {
+      return;
+    }
+    if (from == to) return;
+    final enabledIds = [for (final entry in entries) entry.item.id];
+    final moved = enabledIds.removeAt(from);
+    enabledIds.insert(to, moved);
+    final enabledSet = enabledIds.toSet();
+    var cursor = 0;
+    _mutate(() {
+      _orderIds = [
+        for (final id in _orderIds)
+          if (enabledSet.contains(id)) enabledIds[cursor++] else id,
+      ];
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _arrangeNodes.isEmpty) return;
+      final target = to.clamp(0, _arrangeNodes.length - 1);
+      _arrangeNodes[target].requestFocus();
+      _ensureVisible(_arrangeNodes[target]);
+    });
   }
 
   (int, int) get _totals {
@@ -316,6 +440,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     }
     await StorageService.setHomeDisabledSections(out);
     await StorageService.setHomeExtraRows(extras);
+    await StorageService.setHomeRowOrder(_orderIds);
   }
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -330,27 +455,44 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   // Header actions target the SELECTED group's rows (the 2nd pane), not every
   // group — scoped so "All off" clears just the group you're looking at.
   void _setCurrentGroup(bool v) => _mutate(() {
-        for (final it in _groups[_selectedGroup].items) {
-          it.on = v;
-        }
-      });
+    for (final it in _groups[_selectedGroup].items) {
+      it.on = v;
+    }
+  });
 
   void _invertCurrentGroup() => _mutate(() {
-        for (final it in _groups[_selectedGroup].items) {
-          it.on = !it.on;
-        }
-      });
+    for (final it in _groups[_selectedGroup].items) {
+      it.on = !it.on;
+    }
+  });
 
   /// Not-all-on → all on; all-on → all off (matches the TV filter).
   void _toggleGroup(int i) => _mutate(() {
-        final g = _groups[i];
-        final v = g.onCount != g.total;
-        for (final it in g.items) {
-          it.on = v;
-        }
-      });
+    final g = _groups[i];
+    final v = g.onCount != g.total;
+    for (final it in g.items) {
+      it.on = v;
+    }
+  });
 
   void _toggleItem(_Item it) => _mutate(() => it.on = !it.on);
+
+  void _setArrangeMode(bool value) {
+    if (_arranging == value) return;
+    setState(() {
+      _arranging = value;
+      _pickedArrangeId = null;
+      if (value) _syncArrangeNodes();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (value && _arrangeNodes.isNotEmpty) {
+        _arrangeNodes.first.requestFocus();
+      } else if (!value && _railNodes.isNotEmpty) {
+        _railNodes[_selectedGroup].requestFocus();
+      }
+    });
+  }
 
   // ── Focus plumbing ───────────────────────────────────────────────────────
   void _rebuildListNodes() {
@@ -408,6 +550,22 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   KeyEventResult _headerKey(int i, KeyEvent e) {
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
     final k = e.logicalKey;
+    if (_arranging) {
+      if (k == LogicalKeyboardKey.arrowDown) {
+        if (_arrangeNodes.isNotEmpty) _arrangeNodes.first.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (k == LogicalKeyboardKey.arrowUp ||
+          k == LogicalKeyboardKey.arrowLeft ||
+          k == LogicalKeyboardKey.arrowRight) {
+        return KeyEventResult.handled;
+      }
+      if (isActivateKey(k)) {
+        _setArrangeMode(false);
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
     if (k == LogicalKeyboardKey.arrowLeft) {
       if (i > 0) _headerNodes[i - 1].requestFocus();
       return KeyEventResult.handled;
@@ -443,6 +601,8 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
           _setCurrentGroup(false);
         case 2:
           _invertCurrentGroup();
+        case 3:
+          _setArrangeMode(true);
       }
       return KeyEventResult.handled;
     }
@@ -524,6 +684,51 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     return KeyEventResult.ignored;
   }
 
+  KeyEventResult _arrangeKey(int i, KeyEvent e) {
+    if (e is! KeyDownEvent && e is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final entries = _arrangeEntries;
+    if (i < 0 || i >= entries.length) return KeyEventResult.ignored;
+    final id = entries[i].item.id;
+    final picked = _pickedArrangeId == id;
+    final key = e.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (picked && i > 0) {
+        _moveArrangeEntry(i, i - 1);
+      } else if (i == 0) {
+        if (e is KeyDownEvent) _headerNodes[3].requestFocus();
+      } else {
+        _arrangeNodes[i - 1].requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      if (picked && i < entries.length - 1) {
+        _moveArrangeEntry(i, i + 1);
+      } else if (i < entries.length - 1) {
+        _arrangeNodes[i + 1].requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    if (e is! KeyDownEvent) return KeyEventResult.handled;
+    if (isActivateKey(key)) {
+      setState(() => _pickedArrangeId = picked ? null : id);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.arrowLeft) {
+      if (_pickedArrangeId != null) {
+        setState(() => _pickedArrangeId = null);
+      } else {
+        _setArrangeMode(false);
+      }
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   // ── Build ────────────────────────────────────────────────────────────────
   Future<void> _saveAndClose() async {
     await _persist();
@@ -539,7 +744,9 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        if ((_narrowList || _area == 'list') && _railNodes.isNotEmpty) {
+        if (_arranging) {
+          _setArrangeMode(false);
+        } else if ((_narrowList || _area == 'list') && _railNodes.isNotEmpty) {
           _showRailPane();
         } else {
           _saveAndClose();
@@ -565,13 +772,15 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
 
   Widget _buildHeader(int on, int total) {
     final backButton = IconButton(
-      onPressed: _saveAndClose,
-      icon: Icon(Icons.arrow_back_rounded,
-          color: Colors.white.withValues(alpha: 0.7)),
+      onPressed: _arranging ? () => _setArrangeMode(false) : _saveAndClose,
+      icon: Icon(
+        Icons.arrow_back_rounded,
+        color: Colors.white.withValues(alpha: 0.7),
+      ),
     );
-    const title = Text(
-      'Home Screen',
-      style: TextStyle(
+    final title = Text(
+      _arranging ? 'Arrange Home Rows' : 'Home Screen',
+      style: const TextStyle(
         color: Colors.white,
         fontSize: 19,
         fontWeight: FontWeight.w800,
@@ -585,16 +794,22 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         borderRadius: BorderRadius.circular(99),
       ),
       child: Text.rich(
-        TextSpan(children: [
-          TextSpan(
-            text: '$on',
-            style: const TextStyle(
-                color: _onColor, fontWeight: FontWeight.w800),
-          ),
-          TextSpan(text: _narrow ? ' / $total on' : ' / $total rows on'),
-        ]),
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '$on',
+              style: const TextStyle(
+                color: _onColor,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            TextSpan(text: _narrow ? ' / $total on' : ' / $total rows on'),
+          ],
+        ),
         style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.65), fontSize: 12.5),
+          color: Colors.white.withValues(alpha: 0.65),
+          fontSize: 12.5,
+        ),
       ),
     );
     if (_narrow) {
@@ -613,9 +828,14 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   countPill,
-                  _actionButton(0, 'All on'),
-                  _actionButton(1, 'All off'),
-                  _actionButton(2, 'Invert'),
+                  if (_arranging)
+                    _actionButton(3, 'Done')
+                  else ...[
+                    _actionButton(0, 'All on'),
+                    _actionButton(1, 'All off'),
+                    _actionButton(2, 'Invert'),
+                    _actionButton(3, 'Arrange'),
+                  ],
                 ],
               ),
             ),
@@ -633,11 +853,17 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
           const SizedBox(width: 14),
           countPill,
           const Spacer(),
-          _actionButton(0, 'All on'),
-          const SizedBox(width: 8),
-          _actionButton(1, 'All off'),
-          const SizedBox(width: 8),
-          _actionButton(2, 'Invert'),
+          if (_arranging)
+            _actionButton(3, 'Done')
+          else ...[
+            _actionButton(0, 'All on'),
+            const SizedBox(width: 8),
+            _actionButton(1, 'All off'),
+            const SizedBox(width: 8),
+            _actionButton(2, 'Invert'),
+            const SizedBox(width: 8),
+            _actionButton(3, 'Arrange'),
+          ],
         ],
       ),
     );
@@ -667,6 +893,8 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
                   _setCurrentGroup(false);
                 case 2:
                   _invertCurrentGroup();
+                case 3:
+                  _setArrangeMode(!_arranging);
               }
             },
             child: Container(
@@ -684,8 +912,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
                 boxShadow: focused && !widget.isTelevision
                     ? [
                         BoxShadow(
-                          color:
-                              HomeTheme.focusGoldDeep.withValues(alpha: 0.4),
+                          color: HomeTheme.focusGoldDeep.withValues(alpha: 0.4),
                           blurRadius: 12,
                         ),
                       ]
@@ -709,6 +936,7 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   }
 
   Widget _buildPanes() {
+    if (_arranging) return _buildArrangeList();
     if (_narrow) {
       if (!_narrowList) return _buildRail();
       return Column(
@@ -729,6 +957,189 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
     );
   }
 
+  Widget _buildArrangeList() {
+    final entries = _arrangeEntries;
+    if (entries.isEmpty) {
+      return Center(
+        child: Text(
+          'Turn on at least one row before arranging.',
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 6, 24, 10),
+          child: Text(
+            widget.isTelevision
+                ? 'Press OK to pick up a row, move it with ↑↓, then press OK to drop.'
+                : 'Drag rows into the order you want. Hidden rows keep their saved positions.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.55),
+              fontSize: 12.5,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ReorderableListView.builder(
+            buildDefaultDragHandles: false,
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+            itemCount: entries.length,
+            onReorderItem: _moveArrangeEntry,
+            itemBuilder: (context, i) {
+              final entry = entries[i];
+              final node = _arrangeNodes[i];
+              final picked = _pickedArrangeId == entry.item.id;
+              return Focus(
+                key: ValueKey('arrange:${entry.item.id}'),
+                focusNode: node,
+                onFocusChange: (focused) {
+                  if (!focused) return;
+                  _area = 'arrange';
+                  _ensureVisible(node);
+                },
+                onKeyEvent: (_, event) => _arrangeKey(i, event),
+                child: ListenableBuilder(
+                  listenable: node,
+                  builder: (context, _) {
+                    final focused = node.hasFocus;
+                    return GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        node.requestFocus();
+                        if (widget.isTelevision) {
+                          setState(
+                            () => _pickedArrangeId = picked
+                                ? null
+                                : entry.item.id,
+                          );
+                        }
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 120),
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: picked
+                              ? HomeTheme.chromeAccent.withValues(alpha: 0.16)
+                              : Colors.white.withValues(alpha: 0.025),
+                          borderRadius: BorderRadius.circular(13),
+                          border: Border.all(
+                            color: focused || picked
+                                ? HomeTheme.focusGold
+                                : Colors.white.withValues(alpha: 0.05),
+                            width: focused || picked ? 2 : 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            ReorderableDragStartListener(
+                              index: i,
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(
+                                  Icons.drag_indicator_rounded,
+                                  color: Colors.white.withValues(alpha: 0.45),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            SizedBox(
+                              width: 28,
+                              child: Text(
+                                '${i + 1}',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.42),
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    entry.item.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    entry.group,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.45,
+                                      ),
+                                      fontSize: 11.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (picked) ...[
+                              const SizedBox(width: 8),
+                              _typeBadge('MOVING'),
+                            ],
+                            const SizedBox(width: 8),
+                            _arrangeMoveButton(
+                              icon: Icons.arrow_upward_rounded,
+                              enabled: i > 0,
+                              onTap: () => _moveArrangeEntry(i, i - 1),
+                            ),
+                            _arrangeMoveButton(
+                              icon: Icons.arrow_downward_rounded,
+                              enabled: i < entries.length - 1,
+                              onTap: () => _moveArrangeEntry(i, i + 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _arrangeMoveButton({
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Icon(
+          icon,
+          size: 19,
+          color: Colors.white.withValues(alpha: enabled ? 0.72 : 0.18),
+        ),
+      ),
+    );
+  }
+
   Widget _buildNarrowBreadcrumb() {
     final g = _groups[_selectedGroup];
     return GestureDetector(
@@ -738,8 +1149,11 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         padding: const EdgeInsets.fromLTRB(14, 2, 14, 6),
         child: Row(
           children: [
-            Icon(Icons.chevron_left_rounded,
-                size: 18, color: Colors.white.withValues(alpha: 0.6)),
+            Icon(
+              Icons.chevron_left_rounded,
+              size: 18,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
             const SizedBox(width: 2),
             Flexible(
               child: Text(
@@ -791,23 +1205,25 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
                 },
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 3),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 13,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: selected
                         ? HomeTheme.chromeAccent.withValues(alpha: 0.10)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color:
-                          focused ? HomeTheme.focusGold : Colors.transparent,
+                      color: focused ? HomeTheme.focusGold : Colors.transparent,
                       width: focused ? 2 : 1.5,
                     ),
                     boxShadow: focused && !widget.isTelevision
                         ? [
                             BoxShadow(
-                              color: HomeTheme.focusGoldDeep
-                                  .withValues(alpha: 0.4),
+                              color: HomeTheme.focusGoldDeep.withValues(
+                                alpha: 0.4,
+                              ),
                               blurRadius: 12,
                             ),
                           ]
@@ -842,9 +1258,11 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
                       ),
                       if (focused || _narrow) ...[
                         const SizedBox(width: 4),
-                        Icon(Icons.chevron_right_rounded,
-                            size: 16,
-                            color: Colors.white.withValues(alpha: 0.6)),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 16,
+                          color: Colors.white.withValues(alpha: 0.6),
+                        ),
                       ],
                     ],
                   ),
@@ -886,8 +1304,10 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
                 },
                 child: Container(
                   margin: const EdgeInsets.symmetric(vertical: 4),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.025),
                     borderRadius: BorderRadius.circular(13),
@@ -900,8 +1320,9 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
                     boxShadow: focused && !widget.isTelevision
                         ? [
                             BoxShadow(
-                              color: HomeTheme.focusGoldDeep
-                                  .withValues(alpha: 0.4),
+                              color: HomeTheme.focusGoldDeep.withValues(
+                                alpha: 0.4,
+                              ),
                               blurRadius: 12,
                             ),
                           ]
@@ -970,7 +1391,10 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
       width: 9,
       height: 9,
       decoration: BoxDecoration(
-          color: color, gradient: gradient, shape: BoxShape.circle),
+        color: color,
+        gradient: gradient,
+        shape: BoxShape.circle,
+      ),
     );
   }
 
@@ -989,8 +1413,10 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
         child: Container(
           width: 16,
           height: 16,
-          decoration:
-              const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
         ),
       ),
     );
@@ -1016,18 +1442,26 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
   }
 
   Widget _buildHintBar() {
-    const hints = [
-      ('↑↓', 'move'),
-      ('←→', 'switch pane'),
-      ('OK', 'toggle'),
-      ('BACK', 'back a level · saves & closes from groups'),
-    ];
+    final hints = _arranging
+        ? const [
+            ('↑↓', 'navigate · move when picked up'),
+            ('OK', 'pick up / drop'),
+            ('BACK', 'finish arranging'),
+          ]
+        : const [
+            ('↑↓', 'move'),
+            ('←→', 'switch pane'),
+            ('OK', 'toggle'),
+            ('BACK', 'back a level · saves & closes from groups'),
+          ];
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(
-              color: Colors.white.withValues(alpha: 0.07), width: 0.5),
+            color: Colors.white.withValues(alpha: 0.07),
+            width: 0.5,
+          ),
         ),
       ),
       child: Row(
@@ -1054,7 +1488,9 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
             Text(
               label,
               style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.38), fontSize: 11),
+                color: Colors.white.withValues(alpha: 0.38),
+                fontSize: 11,
+              ),
             ),
           ],
         ],
