@@ -20,7 +20,7 @@ void main() {
       expect(prefs.getString('tv_home_style'), 'spotlight');
       expect(prefs.getString('tv_sidebar_style'), 'pill');
       expect(prefs.getString('desktop_sidebar_style'), 'pill');
-      expect(prefs.getInt('defaults_generation'), 1);
+      expect(prefs.getInt('defaults_generation'), 2);
 
       // The getters resolve the migrated values (they validate the sets).
       expect(await StorageService.getAppTheme(), 'spotlight');
@@ -43,11 +43,11 @@ void main() {
       // ...while the never-written prefs adopt.
       expect(prefs.getString('tv_home_style'), 'spotlight');
       expect(prefs.getString('desktop_sidebar_style'), 'pill');
-      expect(prefs.getInt('defaults_generation'), 1);
+      expect(prefs.getInt('defaults_generation'), 2);
     });
 
     test('an already-migrated install is a strict no-op', () async {
-      SharedPreferences.setMockInitialValues({'defaults_generation': 1});
+      SharedPreferences.setMockInitialValues({'defaults_generation': 2});
       await StorageService.migrateDefaultsGeneration();
       final prefs = await SharedPreferences.getInstance();
 
@@ -55,7 +55,48 @@ void main() {
       // and re-running must not re-impose the bundle.
       expect(prefs.getString('app_theme'), isNull);
       expect(prefs.getString('tv_sidebar_style'), isNull);
-      expect(prefs.getInt('defaults_generation'), 1);
+      expect(prefs.getBool('home_hero_trailer_enabled'), isNull);
+      expect(prefs.getInt('defaults_generation'), 2);
+    });
+
+    test('generation 2 turns both ambient trailer surfaces on', () async {
+      // A Spotlight-era install: already migrated once, and it never had an
+      // opinion about trailers — whichever surface its form factor defaulted
+      // off was simply never written.
+      SharedPreferences.setMockInitialValues({'defaults_generation': 1});
+      await StorageService.migrateDefaultsGeneration();
+      final prefs = await SharedPreferences.getInstance();
+
+      expect(prefs.getBool('home_hero_trailer_enabled'), isTrue);
+      expect(prefs.getBool('detail_trailer_autoplay_enabled'), isTrue);
+      expect(prefs.getInt('defaults_generation'), 2);
+      // Generation 1's bundle is NOT replayed onto an install that already
+      // passed it and has since changed its mind.
+      expect(prefs.getString('app_theme'), isNull);
+
+      expect(await StorageService.getHomeHeroTrailerEnabled(), isTrue);
+      expect(await StorageService.getDetailTrailerAutoplayEnabled(), isTrue);
+    });
+
+    test('an explicit trailer OFF is never overridden', () async {
+      SharedPreferences.setMockInitialValues({
+        'defaults_generation': 1,
+        'home_hero_trailer_enabled': false,
+      });
+      await StorageService.migrateDefaultsGeneration();
+      final prefs = await SharedPreferences.getInstance();
+
+      // Said no, stays no...
+      expect(prefs.getBool('home_hero_trailer_enabled'), isFalse);
+      expect(await StorageService.getHomeHeroTrailerEnabled(), isFalse);
+      // ...while the surface they never ruled on adopts.
+      expect(prefs.getBool('detail_trailer_autoplay_enabled'), isTrue);
+    });
+
+    test('a fresh install gets both trailer surfaces on', () async {
+      SharedPreferences.setMockInitialValues({});
+      expect(await StorageService.getHomeHeroTrailerEnabled(), isTrue);
+      expect(await StorageService.getDetailTrailerAutoplayEnabled(), isTrue);
     });
 
     test('an explicit Classic pick (post-pinning) is fully preserved',

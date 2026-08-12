@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:http/http.dart' as http;
@@ -55,9 +53,15 @@ class StorageService {
   // (text_brightness is deliberately absent: its unset default is already
   // the Look's value.)
   //
+  // Generation 2 (2026-08): ambient trailers on, everywhere. Both surfaces
+  // used to default by form factor — the hero off on phones and tablets,
+  // the detail backdrop off on televisions — so most installs only ever saw
+  // one of them. Both now default on for every device, and this generation
+  // carries that to installs already in the field.
+  //
   // To roll out a future flagship look: bump the generation, append its
   // bundle under a `gen < N` block below.
-  static const int _currentDefaultsGeneration = 1;
+  static const int _currentDefaultsGeneration = 2;
   static const String _defaultsGenerationKey = 'defaults_generation';
 
   /// MUST run before [TextBrightnessController.warm] / theme warms in
@@ -91,6 +95,22 @@ class StorageService {
       for (final entry in bundle.entries) {
         if (!prefs.containsKey(entry.key)) {
           await prefs.setString(entry.key, entry.value);
+        }
+      }
+    }
+    if (gen < 2) {
+      // Both ambient trailer surfaces, for installs whose form factor used to
+      // default one of them off. An explicit off — the toggles write
+      // unconditionally, so a stored `false` is always a real choice — is left
+      // alone: this turns trailers on for people who never had an opinion, not
+      // for people who said no.
+      const trailers = <String, bool>{
+        'home_hero_trailer_enabled': true,
+        'detail_trailer_autoplay_enabled': true,
+      };
+      for (final entry in trailers.entries) {
+        if (!prefs.containsKey(entry.key)) {
+          await prefs.setBool(entry.key, entry.value);
         }
       }
     }
@@ -651,37 +671,20 @@ class StorageService {
     await prefs.setBool('stremio_addon_hub_enabled', enabled);
   }
 
-  /// "Is this a television?" for the ambient-trailer split below.
-  ///
-  /// The split is by FORM FACTOR, not by OS — Apple TV renders the very same
-  /// Home hero and Discover stage that Android TV does. [PlatformUtil.isAndroidTV]
-  /// short-circuits to false whenever the platform isn't Android, so tvOS has to
-  /// be added explicitly; it stays awaited (rather than reading the cached flag)
-  /// so this keeps warming the probe exactly as it did before.
-  static Future<bool> _isTelevision() async =>
-      await PlatformUtil.isAndroidTV() || PlatformUtil.isTvOS;
-
   /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
-  /// metadata addon provides one. Exactly ONE ambient-trailer surface exists
-  /// per platform, and this is the non-TV one: OFF on any television always
-  /// (the Home hero spotlight owns ambient there — [getHomeHeroTrailerEnabled]),
-  /// default ON everywhere else. The TV case is hard-off rather than a
-  /// default, so a value stored before this split — or by a phone install
-  /// whose prefs were restored onto a TV box — can't switch the detail
-  /// backdrop back on. Settings only offers the toggle off-TV to match.
+  /// metadata addon provides one.
   ///
-  /// **No longer hard-off on TV.** The Showcase detail page is built around the
-  /// reference's behaviour, where the key art gives way to a trailer in place —
-  /// so a television now has two ambient surfaces, not one, and the "exactly
-  /// one per platform" rule above is retired. What made that rule necessary was
-  /// the process's single video output; that is now enforced directly by
-  /// [VideoOutputLease] plus a covered trailer releasing its decoder, which is
-  /// a guarantee rather than an assumption. Defaults OFF on TV so an existing
-  /// box does not start playing trailers on a page that never did.
+  /// **Defaults ON everywhere** (generation 2). Two earlier rules are retired
+  /// here, and neither should be reintroduced without the reason returning:
+  /// "exactly one ambient surface per platform" existed because the process
+  /// has a single video output, which [VideoOutputLease] plus a covered
+  /// trailer releasing its decoder now enforces directly; and the later
+  /// hold-back of OFF-on-TV existed only so an existing box wouldn't start
+  /// playing trailers on a page that never did, which the generation
+  /// migration now handles deliberately rather than by omission.
   static Future<bool> getDetailTrailerAutoplayEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('detail_trailer_autoplay_enabled') ??
-        !(await _isTelevision());
+    return prefs.getBool('detail_trailer_autoplay_enabled') ?? true;
   }
 
   static Future<void> setDetailTrailerAutoplayEnabled(bool enabled) async {
@@ -692,20 +695,15 @@ class StorageService {
   /// Ambient trailer in the hero surfaces — the Home board's spotlight and
   /// the Discover rail.
   ///
-  /// **No longer hard-off off-TV.** That rule dated from when no other
-  /// platform rendered a hero; the Spotlight home layout now runs on phones,
-  /// tablets and desktop, so the hard-off becomes a platform DEFAULT:
-  /// on for televisions (unchanged) and desktop (wall power, wifi), off for
-  /// phones and tablets — autoplaying video on a battery over cellular is an
-  /// opt-in, not a surprise. The stored value, once written, wins everywhere.
+  /// **Defaults ON everywhere** (generation 2). This was once hard-off
+  /// anywhere but a television, then a form-factor default that kept phones
+  /// and tablets opted out on battery-and-cellular grounds. The hero is the
+  /// Spotlight layout's centrepiece on every device now, so it starts on and
+  /// the toggle in Settings is where a phone user turns it off. The stored
+  /// value, once written, wins everywhere.
   static Future<bool> getHomeHeroTrailerEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getBool('home_hero_trailer_enabled');
-    if (stored != null) return stored;
-    if (await _isTelevision()) return true;
-    final desktop =
-        Platform.isMacOS || Platform.isWindows || Platform.isLinux;
-    return desktop;
+    return prefs.getBool('home_hero_trailer_enabled') ?? true;
   }
 
   static Future<void> setHomeHeroTrailerEnabled(bool enabled) async {

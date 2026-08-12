@@ -73,12 +73,11 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
     setState(() => _tvHomeStyle = style);
   }
 
-  /// Is this platform's one ambient-trailer surface on? Decides whether the
-  /// shared sound + volume rows have anything to govern. Only ever one of the
-  /// two is live (StorageService hard-offs the other), so this is a pick, not
-  /// an OR — a stale stored `true` for the wrong platform can't leak through.
-  /// The cached TV read is safe here: build() is gated on [_loading], and
-  /// clearing it awaits getters that themselves await the TV probe.
+  /// Is EITHER ambient-trailer surface on? Decides whether the shared sound +
+  /// volume rows have anything to govern. Both surfaces are live on every
+  /// platform now — the hard-offs that once made this a pick between them are
+  /// gone — so it is a genuine OR: the rows stay as long as one surface can
+  /// still play something.
   bool get _ambientTrailerEnabled =>
       _heroTrailerEnabled || _trailerAutoplayEnabled;
 
@@ -474,13 +473,13 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Ambient trailers. A television now has BOTH surfaces — the
-                // Home hero spotlight and the Showcase detail page — so both
-                // toggles are offered there; off-TV there is no hero, so only
-                // the detail one appears. What used to make "one per platform"
-                // necessary was the process's single video output, and that is
-                // now enforced directly (VideoOutputLease) rather than by
-                // arranging for only one surface to exist.
+                // Ambient trailers. Every platform has BOTH surfaces — the
+                // Home hero spotlight and the Showcase detail page — and both
+                // toggles are offered everywhere, defaulting on. What used to
+                // make "one per platform" necessary was the process's single
+                // video output, and that is now enforced directly
+                // (VideoOutputLease) rather than by arranging for only one
+                // surface to exist.
                 //
                 // The sound switch + volume below govern every surface this
                 // platform has — one control, written to both keys.
@@ -488,8 +487,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                   title: '',
                   children: [
                     // Every platform now: the Spotlight home layout renders
-                    // its hero off-TV too. Desktop defaults on, phones and
-                    // tablets opt in here (battery, cellular).
+                    // its hero off-TV too, and it starts on everywhere. This
+                    // row is where a phone user on cellular turns it off.
                     SettingsToggleTile(
                       icon: Icons.smart_display_rounded,
                       title: 'Trailer on Home Spotlight',
