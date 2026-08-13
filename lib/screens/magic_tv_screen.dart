@@ -55,6 +55,8 @@ import '../utils/series_parser.dart';
 import '../utils/tv_keys.dart';
 import '../widgets/tv_text_field.dart';
 import 'video_player_screen.dart';
+import 'debrify_tv/layouts/debrify_tv_view.dart';
+import 'debrify_tv/layouts/spotlight_layout.dart';
 import 'debrify_tv/widgets/random_start_slider.dart';
 import 'debrify_tv/widgets/switch_row.dart';
 import 'debrify_tv/widgets/tv_focusable_button.dart';
@@ -182,6 +184,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _isBusy = false;
   String _status = '';
   List<DebrifyTvChannel> _channels = <DebrifyTvChannel>[];
+
+  /// `debrify_tv_style`, read once per mount from the mirror warmed in
+  /// `main()`: tabs are keyed by index and rebuilt on switch, so a picker
+  /// change is picked up on the next entry — no bridge, like `iptv_style`.
+  final String _debrifyTvStyle = StorageService.debrifyTvStyleCached;
   final Map<String, DebrifyTvChannelCacheEntry> _channelCache = {};
   List<Torrent>? _pikpakCandidatePool;
   final Map<String, bool> _tvEngineStates = <String, bool>{};
@@ -7691,8 +7698,37 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    // Use grid layout on all devices for consistency
+    if (_debrifyTvStyle == 'spotlight') {
+      return SpotlightLayout(
+        view: _buildSpotlightView(),
+        bottomInset: bottomInset,
+        entryFocusNode: _quickPlayFocusNode,
+      );
+    }
+    // The historical layout, byte-identical under `grid` — the branch calls
+    // it unchanged, never a re-implementation.
     return _buildTvGridLayout(bottomInset);
+  }
+
+  /// The Spotlight layout's window onto this state. Paint only: every
+  /// callback is an existing method, every playback path is shared verbatim.
+  DebrifyTvView _buildSpotlightView() {
+    return DebrifyTvView(
+      channels: _channels,
+      favoriteIds: _favoriteChannelIds,
+      busy: _isBusy,
+      onQuickPlay: _showQuickPlayDialog,
+      onAdd: _handleAddChannel,
+      onImport: _handleImportChannels,
+      onSettings: _showGlobalSettingsDialog,
+      onWatch: _watchChannel,
+      onEdit: _handleEditChannel,
+      onShare: _handleShareChannelAsMagnet,
+      onDelete: _handleDeleteChannel,
+      onToggleFavorite: _toggleChannelFavorite,
+      // Phase 4 wires the per-channel stats pass here.
+      onChannelFocused: (_) {},
+    );
   }
 
   void _toggleChannelSearchBar() {
