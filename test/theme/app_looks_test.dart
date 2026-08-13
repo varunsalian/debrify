@@ -147,6 +147,26 @@ void main() {
             reason: '${look.id} did not detect as active after applying');
       }
     });
+
+    test('Spotlight and Classic both carry Debrify TV, and Classic pins grid',
+        () async {
+      // The assertion that would have caught the Custom-flip: isActive only
+      // checks keys a bundle names, so BOTH flagship bundles must name
+      // `debrify_tv_style` — Spotlight to carry the rail, Classic to pin the
+      // grid — or the picker and the screen contradict each other.
+      final spotlight = AppLooks.all.firstWhere((l) => l.id == 'spotlight');
+      final classic = AppLooks.all.firstWhere((l) => l.id == 'classic');
+      expect(spotlight.values['debrify_tv_style'], 'spotlight');
+      expect(classic.values['debrify_tv_style'], 'grid');
+
+      await LookApplier.apply(spotlight);
+      expect(AppLooks.active()?.id, 'spotlight');
+      expect(StorageService.debrifyTvStyleCached, 'spotlight');
+
+      await LookApplier.apply(classic);
+      expect(AppLooks.active()?.id, 'classic');
+      expect(StorageService.debrifyTvStyleCached, 'grid');
+    });
   });
 
   test('a failing write does not take the apply down', () async {
