@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/analytics_service.dart';
@@ -936,16 +935,13 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                           child: TextButton.icon(
                             focusNode: _resetDeviceIdButtonFocusNode,
                             onPressed: () async {
-                              final prefs =
-                                  await SharedPreferences.getInstance();
-                              final currentDeviceId = prefs.getString(
-                                'pikpak_device_id',
-                              );
+                              final currentDeviceId =
+                                  await StorageService.getPikPakDeviceId();
                               debugPrint(
                                 'PikPak: Current device ID: $currentDeviceId',
                               );
-                              await prefs.remove('pikpak_device_id');
-                              await prefs.remove('pikpak_captcha_token');
+                              await StorageService.deletePikPakDeviceId();
+                              await StorageService.clearPikPakCaptchaToken();
                               debugPrint('PikPak: Device ID cleared');
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(

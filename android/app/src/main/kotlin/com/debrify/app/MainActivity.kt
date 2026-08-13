@@ -50,6 +50,11 @@ class MainActivity : FlutterActivity() {
 	private val VOICE_CHANNEL = "debrify/tv_voice"
 	private val VOICE_EVENTS = "debrify/tv_voice_events"
 	private val PLAYER_DIAGNOSTICS_CHANNEL = "debrify/player_diagnostics"
+	// SecretVault key derivation. ANDROID_ID is per-device (scoped to our
+	// signing key + user since Android 8, stable across OTAs) — unlike the
+	// build/model fields device_info_plus exposes, which every unit of the
+	// same model shares and which therefore bind nothing.
+	private val DEVICE_ID_CHANNEL = "debrify/device"
 	private val recordAudioPermissionRequestCode = 7404
 	private var pendingVoicePermissionResult: MethodChannel.Result? = null
 	private var speechRecognizer: android.speech.SpeechRecognizer? = null
@@ -1157,6 +1162,18 @@ class MainActivity : FlutterActivity() {
 			}
 			android.util.Log.i("DEBRIFY_PLAYER_DECODER", message)
 			result.success(null)
+		}
+		MethodChannel(
+			flutterEngine.dartExecutor.binaryMessenger,
+			DEVICE_ID_CHANNEL,
+		).setMethodCallHandler { call, result ->
+			if (call.method == "id") {
+				result.success(
+					Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID),
+				)
+			} else {
+				result.notImplemented()
+			}
 		}
 		// Lets system audio-effect apps (Wavelet, OEM equalizers) attach to the
 		// phone player's audio session — see AudioEffectSession.

@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,8 +5,10 @@ import '../../models/debrify_tv_channel_record.dart';
 import '../../services/community/channel_yaml_builder.dart';
 import '../../services/community/magnet_yaml_service.dart';
 import '../../services/debrify_tv_repository.dart';
+import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
+import 'remote_pairing_dialog.dart';
 
 /// Widget for exporting Debrify TV channels to a TV via remote control
 class RemoteChannelExport extends StatefulWidget {
@@ -88,6 +88,11 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
       );
       return;
     }
+
+    // Same gate as config transfers: channels can carry cached debrid links.
+    final session = await ensureAuthorizedSession(
+        context, RemoteControlState(), connectedDevice);
+    if (session == null || !mounted) return;
 
     setState(() => _sending = true);
     HapticFeedback.mediumImpact();
@@ -187,74 +192,22 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
     }
   }
 
-  /// Send a single channel to TV, using chunked transfer if the payload is large.
+  /// Send a single channel to TV. Delegates to the shared chunked-send
+  /// protocol (this file used to carry its own duplicate copy) — which also
+  /// seals the payload when an encrypted session exists.
   Future<bool> _sendChannelToTv(
     RemoteControlState state,
     String targetIp,
     String debrifyUri,
     String channelName,
-  ) async {
-    final payloadBytes = utf8.encode(debrifyUri).length;
-
-    // Small enough for a single UDP packet — send directly
-    if (payloadBytes <= kChunkDataMaxBytes) {
-      return state.sendConfigCommandToDevice(
-        ConfigCommand.debrifyChannel,
-        targetIp,
-        configData: debrifyUri,
-      );
-    }
-
-    // Large payload — split into byte-safe base64 chunks
-    final allBytes = utf8.encode(debrifyUri);
-    final chunks = <String>[];
-    for (var offset = 0; offset < allBytes.length; offset += kChunkRawBytesPerChunk) {
-      final end = (offset + kChunkRawBytesPerChunk).clamp(0, allBytes.length);
-      // Base64-encode each byte slice so the chunk is safe ASCII in JSON
-      chunks.add(base64.encode(
-        Uint8List.sublistView(allBytes, offset, end),
-      ));
-    }
-
-    debugPrint(
-      'RemoteChannelExport: Chunking $channelName '
-      '($payloadBytes bytes, ${chunks.length} chunks)',
-    );
-
-    final transferId =
-        '${DateTime.now().microsecondsSinceEpoch}_${channelName.hashCode.abs() % 1000000000}';
-
-    // Send start packet with metadata
-    final startData = jsonEncode({
-      'transferId': transferId,
-      'channelName': channelName,
-      'totalChunks': chunks.length,
-    });
-    final startOk = await state.sendConfigCommandToDevice(
-      ConfigCommand.debrifyChannelStart,
+  ) {
+    return sendConfigPayloadToDevice(
+      state,
+      ConfigCommand.debrifyChannel,
       targetIp,
-      configData: startData,
+      debrifyUri,
+      label: channelName,
     );
-    if (!startOk) return false;
-
-    // Send each chunk with a small delay
-    for (var i = 0; i < chunks.length; i++) {
-      await Future.delayed(const Duration(milliseconds: 50));
-
-      final chunkData = jsonEncode({
-        'transferId': transferId,
-        'index': i,
-        'data': chunks[i],
-      });
-      final chunkOk = await state.sendConfigCommandToDevice(
-        ConfigCommand.debrifyChannelChunk,
-        targetIp,
-        configData: chunkData,
-      );
-      if (!chunkOk) return false;
-    }
-
-    return true;
   }
 
   @override

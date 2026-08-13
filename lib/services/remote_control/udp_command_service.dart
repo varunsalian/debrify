@@ -89,6 +89,17 @@ class RemoteCommand {
   }
 }
 
+/// The last endpoint (address + source port) a peer was actually seen on.
+/// The phone binds an EPHEMERAL port, so replying to the fixed kCommandPort
+/// silently loses every TV→phone message — replies must go to the observed
+/// source port instead (fall back to kCommandPort only for v1 peers that
+/// have never sent us anything).
+class _PeerEndpoint {
+  final int port;
+  final DateTime lastSeen;
+  const _PeerEndpoint(this.port, this.lastSeen);
+}
+
 /// Service for sending/receiving UDP commands
 class UdpCommandService {
   RawDatagramSocket? _socket;
@@ -97,12 +108,31 @@ class UdpCommandService {
   DateTime? _lastHeartbeatReceived;
   final bool _isTv;
   String? _connectedIp;
+  final Map<String, _PeerEndpoint> _peerEndpoints = {};
 
-  // Callbacks
-  void Function(RemoteCommand command)? onCommandReceived;
+  /// v2 session message types that bypass RemoteCommand handling and go to
+  /// the session layer instead.
+  static const Set<String> _sessionTypes = {
+    RemoteMessageType.hs1,
+    RemoteMessageType.hs2,
+    RemoteMessageType.hs3,
+    RemoteMessageType.hs4,
+    RemoteMessageType.ecmd,
+    RemoteMessageType.serr,
+  };
+
+  // Callbacks. The source address rides along: plaintext senders have no
+  // other identity, and the receiver's consent flow is keyed on it.
+  void Function(RemoteCommand command, String sourceIp)? onCommandReceived;
   void Function()? onConnectionLost;
   void Function()? onHeartbeatReceived;
   void Function(String error)? onError;
+
+  /// Raw tap for v2 session traffic (handshakes, encrypted envelopes,
+  /// session errors) with the sender's observed endpoint, so the session
+  /// layer can reply to where the datagram actually came from.
+  void Function(Map<String, dynamic> json, InternetAddress address, int port)?
+      onSessionMessage;
 
   UdpCommandService({
     required bool isTv,
@@ -156,6 +186,7 @@ class UdpCommandService {
     _socket = null;
     _connectedIp = null;
     _lastHeartbeatReceived = null;
+    _peerEndpoints.clear();
   }
 
   /// Send a command to the connected device
@@ -171,11 +202,44 @@ class UdpCommandService {
       _socket!.send(
         utf8.encode(message),
         InternetAddress(_connectedIp!),
-        kCommandPort,
+        portFor(_connectedIp!),
       );
       debugPrint('UdpCommandService: Sent command: $command');
     } catch (e) {
       debugPrint('UdpCommandService: Failed to send command: $e');
+    }
+  }
+
+  /// The port to reach [ip] on: its AUTHENTICATED source port when the
+  /// session layer has vouched for one, else the fixed command port (v1
+  /// compat — packets to a phone's closed temp port just vanish, which
+  /// matches today's behavior).
+  int portFor(String ip) => _peerEndpoints[ip]?.port ?? kCommandPort;
+
+  /// Record where [ip] actually talks from. Called by the session layer ONLY
+  /// after a message from that endpoint authenticated (opened ecmd, accepted
+  /// handshake) — never straight off a datagram header.
+  void notePeerEndpoint(String ip, int port) {
+    _peerEndpoints[ip] = _PeerEndpoint(port, DateTime.now());
+  }
+
+  /// Send an arbitrary JSON message on the persistent socket. This is the
+  /// session layer's transport — handshakes and encrypted envelopes must ride
+  /// a socket that stays open to receive the reply, never the self-closing
+  /// [sendCommandToIp].
+  bool sendRaw(Map<String, dynamic> json, String ip, {int? port}) {
+    final socket = _socket;
+    if (socket == null) return false;
+    try {
+      socket.send(
+        utf8.encode(jsonEncode(json)),
+        InternetAddress(ip),
+        port ?? portFor(ip),
+      );
+      return true;
+    } catch (e) {
+      debugPrint('UdpCommandService: Failed to send raw message: $e');
+      return false;
     }
   }
 
@@ -218,7 +282,7 @@ class UdpCommandService {
         _socket!.send(
           utf8.encode(message),
           InternetAddress(_connectedIp!),
-          kCommandPort,
+          portFor(_connectedIp!),
         );
       }
     } catch (e) {
@@ -265,7 +329,17 @@ class UdpCommandService {
         debugPrint('UdpCommandService: Connected to $_connectedIp');
       }
 
-      if (type == RemoteMessageType.heartbeat) {
+      // Peer endpoints are NOT learned here: any datagram can spoof a type,
+      // and caching a forged packet's source port would redirect replies and
+      // heartbeats to an attacker-chosen (or long-dead one-shot) port. The
+      // session layer calls [notePeerEndpoint] once a message actually
+      // authenticates; until then replies fall back to kCommandPort, which
+      // is correct for the TV (fixed port) and status quo for v1 phones
+      // (whose ephemeral socket never received replies anyway).
+
+      if (type != null && _sessionTypes.contains(type)) {
+        onSessionMessage?.call(json, datagram.address, datagram.port);
+      } else if (type == RemoteMessageType.heartbeat) {
         _lastHeartbeatReceived = DateTime.now();
         onHeartbeatReceived?.call();
       } else if (type == RemoteMessageType.command) {
@@ -273,7 +347,7 @@ class UdpCommandService {
         if (command.command != ConfigCommand.debrifyChannelChunk) {
           debugPrint('UdpCommandService: Received command: $command');
         }
-        onCommandReceived?.call(command);
+        onCommandReceived?.call(command, datagram.address.address);
       }
     } catch (e) {
       debugPrint('UdpCommandService: Failed to parse message: $e');

@@ -9,6 +9,7 @@ import '../../services/storage_service.dart';
 import '../../services/iptv_transfer_payload.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_control_state.dart';
+import 'remote_pairing_dialog.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/engine/local_engine_storage.dart';
 
@@ -358,6 +359,12 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       );
       return;
     }
+
+    // Credential gate: encrypted session + pairing code (or remembered
+    // pairing). Old-version TVs are refused with an "update the TV" dialog.
+    final session = await ensureAuthorizedSession(
+        context, RemoteControlState(), connectedDevice);
+    if (session == null || !mounted) return;
 
     setState(() => _sending = true);
     HapticFeedback.mediumImpact();

@@ -12,16 +12,30 @@ class DiscoveredDevice {
   final String ip;
   final DateTime discoveredAt;
 
+  /// Protocol version the device advertised. Absent field = 1 (a build that
+  /// predates encrypted sessions).
+  final int protoVersion;
+
+  /// The device's static X25519 public key (base64), advertised by v2
+  /// receivers so senders can pin identities before any handshake.
+  final String? staticKey;
+
   DiscoveredDevice({
     required this.deviceName,
     required this.ip,
     DateTime? discoveredAt,
+    this.protoVersion = 1,
+    this.staticKey,
   }) : discoveredAt = discoveredAt ?? DateTime.now();
+
+  bool get supportsEncryption => protoVersion >= 2;
 
   Map<String, dynamic> toJson() => {
         'deviceName': deviceName,
         'ip': ip,
         'discoveredAt': discoveredAt.toIso8601String(),
+        'proto': protoVersion,
+        if (staticKey != null) 'spk': staticKey,
       };
 
   factory DiscoveredDevice.fromJson(Map<String, dynamic> json) {
@@ -31,11 +45,14 @@ class DiscoveredDevice {
       discoveredAt: json['discoveredAt'] != null
           ? DateTime.tryParse(json['discoveredAt'] as String)
           : null,
+      protoVersion: (json['proto'] as num?)?.toInt() ?? 1,
+      staticKey: json['spk'] as String?,
     );
   }
 
   @override
-  String toString() => 'DiscoveredDevice($deviceName @ $ip)';
+  String toString() =>
+      'DiscoveredDevice($deviceName @ $ip, v$protoVersion)';
 }
 
 /// Service for UDP-based device discovery
@@ -71,6 +88,12 @@ class UdpDiscoveryService {
   void setTvDeviceName(String name) {
     _tvDeviceName = name;
   }
+
+  /// This device's static public key (base64), advertised in discovery
+  /// responses. Set by the wiring layer once the keypair is loaded; until
+  /// then responses carry only the protocol version, which is enough for the
+  /// sender's v2 gate (the key itself also arrives in hs2).
+  String? advertisedStaticKey;
 
   /// Start discovery (for mobile) or listening (for TV)
   Future<void> start() async {
@@ -129,6 +152,7 @@ class UdpDiscoveryService {
       'type': RemoteMessageType.discovery,
       'sender': RemoteSender.mobile,
       'deviceId': _deviceId,
+      'proto': kProtoVersion, // ignored by old TVs
     });
 
     final data = utf8.encode(message);
@@ -220,11 +244,14 @@ class UdpDiscoveryService {
   }
 
   void _handleDiscoveryRequest(InternetAddress senderAddress, Map<String, dynamic> json) {
-    // TV received discovery request from mobile - send response
+    // TV received discovery request from mobile - send response. The proto
+    // and spk fields are invisible to old phones (they read only deviceName).
     final response = jsonEncode({
       'type': RemoteMessageType.discoveryResponse,
       'deviceName': _tvDeviceName ?? 'Debrify TV',
       'ip': _getLocalIp() ?? senderAddress.address,
+      'proto': kProtoVersion,
+      if (advertisedStaticKey != null) 'spk': advertisedStaticKey,
     });
 
     try {
@@ -246,6 +273,8 @@ class UdpDiscoveryService {
     final device = DiscoveredDevice(
       deviceName: json['deviceName'] as String? ?? 'Unknown TV',
       ip: senderAddress.address,
+      protoVersion: (json['proto'] as num?)?.toInt() ?? 1,
+      staticKey: json['spk'] as String?,
     );
 
     // Check if we already have this device (by IP)

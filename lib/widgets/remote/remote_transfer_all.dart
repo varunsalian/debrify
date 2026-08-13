@@ -11,6 +11,7 @@ import '../../services/iptv_transfer_payload.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
+import 'remote_pairing_dialog.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 
@@ -312,6 +313,12 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       _toast('Not connected to a device', error: true);
       return;
     }
+
+    // Credential gate: encrypted session + pairing code (or remembered
+    // pairing). Old-version TVs are refused with an "update the TV" dialog —
+    // there is no plaintext credential path anymore.
+    final session = await ensureAuthorizedSession(context, state, target);
+    if (session == null || !mounted) return;
 
     setState(() {
       _transferring = true;

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'debrid_service.dart';
 import 'iptv_media_store.dart';
+import 'secret_vault.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/quick_play_rules.dart';
@@ -456,16 +457,14 @@ class StorageService {
   static const int _debrifyTvRandomStartPercentMin = 10;
   static const int _debrifyTvRandomStartPercentMax = 90;
 
-  // Note: Plain text storage is fine for API key since they're stored locally on user's device
-  // and can be easily regenerated if compromised
   static Future<String?> getApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_apiKeyKey);
+    return SecretVault.getString(prefs, _apiKeyKey);
   }
 
   static Future<void> saveApiKey(String apiKey) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_apiKeyKey, apiKey);
+    await SecretVault.setString(prefs, _apiKeyKey, apiKey);
   }
 
   static Future<void> deleteApiKey() async {
@@ -494,12 +493,12 @@ class StorageService {
   // Torbox API key helpers
   static Future<String?> getTorboxApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_torboxApiKey);
+    return SecretVault.getString(prefs, _torboxApiKey);
   }
 
   static Future<void> saveTorboxApiKey(String apiKey) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_torboxApiKey, apiKey);
+    await SecretVault.setString(prefs, _torboxApiKey, apiKey);
   }
 
   static Future<void> deleteTorboxApiKey() async {
@@ -1552,12 +1551,12 @@ class StorageService {
   // Premiumize API key helpers
   static Future<String?> getPremiumizeApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_premiumizeApiKey);
+    return SecretVault.getString(prefs, _premiumizeApiKey);
   }
 
   static Future<void> savePremiumizeApiKey(String apiKey) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_premiumizeApiKey, apiKey);
+    await SecretVault.setString(prefs, _premiumizeApiKey, apiKey);
   }
 
   static Future<void> deletePremiumizeApiKey() async {
@@ -1593,12 +1592,12 @@ class StorageService {
   // AllDebrid API key helpers
   static Future<String?> getAllDebridApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_allDebridApiKey);
+    return SecretVault.getString(prefs, _allDebridApiKey);
   }
 
   static Future<void> saveAllDebridApiKey(String apiKey) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_allDebridApiKey, apiKey);
+    await SecretVault.setString(prefs, _allDebridApiKey, apiKey);
   }
 
   static Future<void> deleteAllDebridApiKey() async {
@@ -1609,12 +1608,12 @@ class StorageService {
   // MDBList API key + cached username helpers
   static Future<String?> getMdblistApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_mdblistApiKeyKey);
+    return SecretVault.getString(prefs, _mdblistApiKeyKey);
   }
 
   static Future<void> saveMdblistApiKey(String apiKey) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_mdblistApiKeyKey, apiKey);
+    await SecretVault.setString(prefs, _mdblistApiKeyKey, apiKey);
   }
 
   static Future<String?> getMdblistUsername() async {
@@ -4851,22 +4850,22 @@ class StorageService {
   // Reddit Settings
   static Future<String?> getRedditAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_redditAccessTokenKey);
+    return SecretVault.getString(prefs, _redditAccessTokenKey);
   }
 
   static Future<void> setRedditAccessToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_redditAccessTokenKey, token);
+    await SecretVault.setString(prefs, _redditAccessTokenKey, token);
   }
 
   static Future<String?> getRedditRefreshToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_redditRefreshTokenKey);
+    return SecretVault.getString(prefs, _redditRefreshTokenKey);
   }
 
   static Future<void> setRedditRefreshToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_redditRefreshTokenKey, token);
+    await SecretVault.setString(prefs, _redditRefreshTokenKey, token);
   }
 
   static Future<String?> getRedditUsername() async {
@@ -4929,22 +4928,22 @@ class StorageService {
 
   static Future<String?> getTraktAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_traktAccessTokenKey);
+    return SecretVault.getString(prefs, _traktAccessTokenKey);
   }
 
   static Future<void> setTraktAccessToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_traktAccessTokenKey, token);
+    await SecretVault.setString(prefs, _traktAccessTokenKey, token);
   }
 
   static Future<String?> getTraktRefreshToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_traktRefreshTokenKey);
+    return SecretVault.getString(prefs, _traktRefreshTokenKey);
   }
 
   static Future<void> setTraktRefreshToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_traktRefreshTokenKey, token);
+    await SecretVault.setString(prefs, _traktRefreshTokenKey, token);
   }
 
   static Future<String?> getTraktUsername() async {
@@ -4987,12 +4986,12 @@ class StorageService {
 
   static Future<String?> getSimklAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_simklAccessTokenKey);
+    return SecretVault.getString(prefs, _simklAccessTokenKey);
   }
 
   static Future<void> setSimklAccessToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_simklAccessTokenKey, token);
+    await SecretVault.setString(prefs, _simklAccessTokenKey, token);
   }
 
   static Future<String?> getSimklUsername() async {
@@ -5131,42 +5130,42 @@ class StorageService {
 
   static Future<String?> getPikPakEmail() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakEmailKey);
+    return SecretVault.getString(prefs, _pikpakEmailKey);
   }
 
   static Future<void> setPikPakEmail(String email) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakEmailKey, email);
+    await SecretVault.setString(prefs, _pikpakEmailKey, email);
   }
 
   static Future<String?> getPikPakPassword() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakPasswordKey);
+    return SecretVault.getString(prefs, _pikpakPasswordKey);
   }
 
   static Future<void> setPikPakPassword(String password) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakPasswordKey, password);
+    await SecretVault.setString(prefs, _pikpakPasswordKey, password);
   }
 
   static Future<String?> getPikPakAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakAccessTokenKey);
+    return SecretVault.getString(prefs, _pikpakAccessTokenKey);
   }
 
   static Future<void> setPikPakAccessToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakAccessTokenKey, token);
+    await SecretVault.setString(prefs, _pikpakAccessTokenKey, token);
   }
 
   static Future<String?> getPikPakRefreshToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakRefreshTokenKey);
+    return SecretVault.getString(prefs, _pikpakRefreshTokenKey);
   }
 
   static Future<void> setPikPakRefreshToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakRefreshTokenKey, token);
+    await SecretVault.setString(prefs, _pikpakRefreshTokenKey, token);
   }
 
   static Future<void> clearPikPakAuth() async {
@@ -5189,22 +5188,27 @@ class StorageService {
   // PikPak Device ID and Captcha Token
   static Future<void> setPikPakDeviceId(String deviceId) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakDeviceIdKey, deviceId);
+    await SecretVault.setString(prefs, _pikpakDeviceIdKey, deviceId);
   }
 
   static Future<String?> getPikPakDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakDeviceIdKey);
+    return SecretVault.getString(prefs, _pikpakDeviceIdKey);
+  }
+
+  static Future<void> deletePikPakDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pikpakDeviceIdKey);
   }
 
   static Future<void> setPikPakCaptchaToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakCaptchaTokenKey, token);
+    await SecretVault.setString(prefs, _pikpakCaptchaTokenKey, token);
   }
 
   static Future<String?> getPikPakCaptchaToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakCaptchaTokenKey);
+    return SecretVault.getString(prefs, _pikpakCaptchaTokenKey);
   }
 
   static Future<void> clearPikPakCaptchaToken() async {
@@ -5214,12 +5218,12 @@ class StorageService {
 
   static Future<void> setPikPakUserId(String userId) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakUserIdKey, userId);
+    await SecretVault.setString(prefs, _pikpakUserIdKey, userId);
   }
 
   static Future<String?> getPikPakUserId() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakUserIdKey);
+    return SecretVault.getString(prefs, _pikpakUserIdKey);
   }
 
   // PikPak Show Videos Only
@@ -5350,34 +5354,34 @@ class StorageService {
   static Future<String?> getWebDavBaseUrl() async {
     final prefs = await SharedPreferences.getInstance();
     final selected = await getSelectedWebDavServer();
-    return selected?.baseUrl ?? prefs.getString(_webDavBaseUrlKey);
+    return selected?.baseUrl ?? await SecretVault.getString(prefs, _webDavBaseUrlKey);
   }
 
   static Future<void> setWebDavBaseUrl(String value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_webDavBaseUrlKey, value);
+    await SecretVault.setString(prefs, _webDavBaseUrlKey, value);
   }
 
   static Future<String?> getWebDavUsername() async {
     final prefs = await SharedPreferences.getInstance();
     final selected = await getSelectedWebDavServer();
-    return selected?.username ?? prefs.getString(_webDavUsernameKey);
+    return selected?.username ?? await SecretVault.getString(prefs, _webDavUsernameKey);
   }
 
   static Future<void> setWebDavUsername(String value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_webDavUsernameKey, value);
+    await SecretVault.setString(prefs, _webDavUsernameKey, value);
   }
 
   static Future<String?> getWebDavPassword() async {
     final prefs = await SharedPreferences.getInstance();
     final selected = await getSelectedWebDavServer();
-    return selected?.password ?? prefs.getString(_webDavPasswordKey);
+    return selected?.password ?? await SecretVault.getString(prefs, _webDavPasswordKey);
   }
 
   static Future<void> setWebDavPassword(String value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_webDavPasswordKey, value);
+    await SecretVault.setString(prefs, _webDavPasswordKey, value);
   }
 
   static Future<bool> getWebDavShowVideosOnly() async {
@@ -5403,7 +5407,7 @@ class StorageService {
 
   static Future<List<WebDavConfig>> getWebDavServers() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_webDavServersKey);
+    final raw = await SecretVault.getString(prefs, _webDavServersKey);
     final servers = <WebDavConfig>[];
     if (raw != null && raw.isNotEmpty) {
       try {
@@ -5422,14 +5426,14 @@ class StorageService {
     }
 
     if (servers.isEmpty) {
-      final legacyUrl = prefs.getString(_webDavBaseUrlKey);
+      final legacyUrl = await SecretVault.getString(prefs, _webDavBaseUrlKey);
       if (legacyUrl != null && legacyUrl.trim().isNotEmpty) {
         final config = WebDavConfig(
           id: 'legacy-${legacyUrl.hashCode}',
           name: Uri.tryParse(legacyUrl)?.host ?? 'WebDAV',
           baseUrl: legacyUrl,
-          username: prefs.getString(_webDavUsernameKey) ?? '',
-          password: prefs.getString(_webDavPasswordKey) ?? '',
+          username: await SecretVault.getString(prefs, _webDavUsernameKey) ?? '',
+          password: await SecretVault.getString(prefs, _webDavPasswordKey) ?? '',
         );
         servers.add(config);
         await saveWebDavServers(servers);
@@ -5442,7 +5446,8 @@ class StorageService {
 
   static Future<void> saveWebDavServers(List<WebDavConfig> servers) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
+    await SecretVault.setString(
+      prefs,
       _webDavServersKey,
       jsonEncode(servers.map((server) => server.toJson()).toList()),
     );
@@ -5953,7 +5958,8 @@ class StorageService {
 
   static Future<List<IndexerManagerConfig>> getIndexerManagerConfigs() async {
     final prefs = await SharedPreferences.getInstance();
-    final rawList = prefs.getStringList(_indexerManagerConfigsKey) ?? [];
+    final rawList =
+        await SecretVault.getStringList(prefs, _indexerManagerConfigsKey);
     return rawList
         .map((raw) {
           try {
@@ -5976,7 +5982,7 @@ class StorageService {
     final rawList = configs
         .map((config) => jsonEncode(config.toJson()))
         .toList();
-    await prefs.setStringList(_indexerManagerConfigsKey, rawList);
+    await SecretVault.setStringList(prefs, _indexerManagerConfigsKey, rawList);
   }
 
   static Future<String?> getSupportRemoteConfigCache() async {
@@ -6739,22 +6745,45 @@ class StorageService {
 
   // IPTV Playlist Settings
 
+  /// Credential-bearing fields of a stored playlist. Encrypted field-level
+  /// rather than sealing the whole element: `content` can be a multi-megabyte
+  /// raw M3U body and this getter sits on hot paths, so blob-level AES would
+  /// cost real time on TV hardware for data that arrived as a plaintext file
+  /// the user chose. Residual: URLs embedded inside a file-imported `content`
+  /// body stay plaintext — accepted.
+  static const List<String> _iptvPlaylistSecretFields = [
+    'url', 'serverUrl', 'username', 'password', 'epgUrl', //
+  ];
+
   /// Get all saved IPTV playlists
   static Future<List<IptvPlaylist>> getIptvPlaylists() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = prefs.getStringList(_iptvPlaylistsKey) ?? [];
-    return jsonList
-        .map((json) {
-          try {
-            return IptvPlaylist.fromJson(
-              Map<String, dynamic>.from(jsonDecode(json) as Map),
-            );
-          } catch (e) {
-            return null;
-          }
-        })
-        .whereType<IptvPlaylist>()
-        .toList();
+    var legacySeen = false;
+    var anyDropped = false;
+    final playlists = <IptvPlaylist>[];
+    for (final json in jsonList) {
+      try {
+        final opened = await SecretVault.openFields(
+          Map<String, dynamic>.from(jsonDecode(json) as Map),
+          _iptvPlaylistSecretFields,
+        );
+        if (opened.wasLegacy) legacySeen = true;
+        // A playlist whose url failed to decrypt throws in fromJson and is
+        // dropped here — same signed-out semantics as the standalone keys.
+        playlists.add(IptvPlaylist.fromJson(opened.map));
+      } catch (e) {
+        // Skip malformed entries FOR THIS READ only.
+        anyDropped = true;
+      }
+    }
+    // Migrate lazily, but never off a lossy read: rewriting while an entry
+    // failed (possibly a transient vault-key hiccup) would turn a one-launch
+    // read error into permanent deletion. A later clean read migrates.
+    if (legacySeen && !anyDropped) {
+      await setIptvPlaylists(playlists);
+    }
+    return playlists;
   }
 
   /// Save IPTV playlists.
@@ -6767,10 +6796,12 @@ class StorageService {
   /// makes lookups resolve the stale copy.
   static Future<void> setIptvPlaylists(List<IptvPlaylist> playlists) async {
     final prefs = await SharedPreferences.getInstance();
-    final jsonList = playlists
-        .where((p) => !p.isVirtual)
-        .map((p) => jsonEncode(p.toJson()))
-        .toList();
+    final jsonList = <String>[];
+    for (final p in playlists.where((p) => !p.isVirtual)) {
+      jsonList.add(jsonEncode(
+        await SecretVault.sealFields(p.toJson(), _iptvPlaylistSecretFields),
+      ));
+    }
     await prefs.setStringList(_iptvPlaylistsKey, jsonList);
   }
 
@@ -6857,7 +6888,9 @@ class StorageService {
       }
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
+    // Sealed whole: the stored Xtream `url` embeds the account password.
+    await SecretVault.setString(
+      prefs,
       _iptvLastLiveChannelKey,
       jsonEncode({
         'url': url,
@@ -6879,7 +6912,7 @@ class StorageService {
   /// The last live channel that reached a playing state, or null.
   static Future<Map<String, dynamic>?> getIptvLastLiveChannel() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_iptvLastLiveChannelKey);
+    final raw = await SecretVault.getString(prefs, _iptvLastLiveChannelKey);
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -6955,7 +6988,7 @@ class StorageService {
   /// so both modes resolve through one code path at launch.
   static Future<Map<String, dynamic>?> getStartupIptvChannel() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_startupIptvChannelKey);
+    final raw = await SecretVault.getString(prefs, _startupIptvChannelKey);
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -6993,7 +7026,10 @@ class StorageService {
       } catch (_) {}
     }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
+    // Sealed whole for the same reason as the last-live-channel blob: the
+    // Xtream `url` embeds the account password.
+    await SecretVault.setString(
+      prefs,
       _startupIptvChannelKey,
       jsonEncode({
         'url': url,

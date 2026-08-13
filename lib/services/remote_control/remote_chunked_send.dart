@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'remote_constants.dart';
 import 'remote_control_state.dart';
+import 'remote_session.dart';
 
 /// Whether [payload] can ride in one datagram as a plain `configData` string.
 ///
@@ -14,6 +15,18 @@ import 'remote_control_state.dart';
 /// datagram, which fragments and gets dropped with no error anywhere.
 bool fitsSinglePacket(String payload) {
   return utf8.encode(jsonEncode(payload)).length <= kChunkDataMaxBytes;
+}
+
+/// Same question for the encrypted path: the payload rides inside a command
+/// JSON that gets AES-GCM sealed and base64d into an ecmd envelope, so the
+/// budget shrinks by the 4/3 inflation plus envelope overhead. Worst-case
+/// arithmetic, pinned by a budget test.
+bool fitsSinglePacketEncrypted(String payload) {
+  // Inner command JSON: payload as an escaped JSON string + envelope fields.
+  final inner = utf8.encode(jsonEncode(payload)).length + 80;
+  // Ciphertext = inner + 16B tag, then base64 (padded up to +4).
+  final ctB64 = ((inner + 16) * 4 / 3).ceil() + 4;
+  return ctB64 + kEcmdEnvelopeOverhead <= kChunkMaxBytes;
 }
 
 /// Split a payload into base64 slices sized so the JSON packet carrying one
@@ -39,12 +52,15 @@ String decodePayloadChunks(List<String> chunks) {
 }
 
 /// The start packet's body: what the transfer is, and how many pieces to wait
-/// for.
+/// for. [encSidB64]/[encN] mark a v2 sealed-blob transfer: the reassembled
+/// bytes are AES-GCM ciphertext bound to that session and counter.
 String chunkStartBody({
   required String transferId,
   required String command,
   required String label,
   required int totalChunks,
+  String? encSidB64,
+  int? encN,
 }) {
   return jsonEncode({
     'transferId': transferId,
@@ -54,6 +70,11 @@ String chunkStartBody({
     // payload as a channel, rather than throwing on a missing key.
     'channelName': label,
     'totalChunks': totalChunks,
+    if (encSidB64 != null && encN != null) ...{
+      'enc': 1,
+      'sid': encSidB64,
+      'n': encN,
+    },
   });
 }
 
@@ -92,7 +113,11 @@ Future<bool> sendConfigPayloadToDevice(
   String payload, {
   required String label,
 }) async {
-  if (fitsSinglePacket(payload)) {
+  final session = state.sessionFor(targetIp);
+
+  if (session == null ? fitsSinglePacket(payload) : fitsSinglePacketEncrypted(payload)) {
+    // Small payloads ride the command envelope directly — which is itself
+    // sealed end-to-end when a session exists.
     return state.sendConfigCommandToDevice(
       command,
       targetIp,
@@ -100,15 +125,39 @@ Future<bool> sendConfigPayloadToDevice(
     );
   }
 
-  final chunks = encodePayloadChunks(payload);
-
-  debugPrint(
-    'RemoteChunkedSend: $label via $command '
-    '(${chunks.length} chunks)',
-  );
-
   final transferId =
       '${DateTime.now().microsecondsSinceEpoch}_${label.hashCode.abs() % 1000000000}';
+
+  if (session == null) {
+    // Same no-plaintext rule the direct path enforces: with the session gone
+    // (expired or revoked mid-transfer), a large payload must FAIL — the
+    // chunk pieces ride plaintextTransport and would otherwise carry the raw
+    // credential payload past the state-level refusal.
+    debugPrint('RemoteChunkedSend: refusing plaintext transfer of $label — '
+        'no session with $targetIp');
+    return false;
+  }
+
+  // Seal ONCE, then chunk the ciphertext. The chunk transport packets stay
+  // plaintext deliberately: they carry only ciphertext and routing
+  // metadata, and wrapping each ~1400-byte piece in a second base64-
+  // inflating ecmd envelope would blow the single-fragment UDP budget.
+  final encN = session.nextN();
+  final encSidB64 = session.sidB64;
+  final wirePayload = await RemoteSessionCrypto.sealBlob(
+    key: session.sendKey,
+    sid: session.sid,
+    n: encN,
+    transferId: transferId,
+    kind: command,
+    payload: payload,
+  );
+
+  final chunks = encodePayloadChunks(wirePayload);
+
+  debugPrint(
+    'RemoteChunkedSend: $label via $command (${chunks.length} chunks, sealed)',
+  );
 
   final startOk = await state.sendConfigCommandToDevice(
     ConfigCommand.debrifyChannelStart,
@@ -118,7 +167,10 @@ Future<bool> sendConfigPayloadToDevice(
       command: command,
       label: label,
       totalChunks: chunks.length,
+      encSidB64: encSidB64,
+      encN: encN,
     ),
+    plaintextTransport: true,
   );
   if (!startOk) return false;
 
@@ -134,6 +186,7 @@ Future<bool> sendConfigPayloadToDevice(
         index: i,
         data: chunks[i],
       ),
+      plaintextTransport: true,
     );
     if (!ok) return false;
   }

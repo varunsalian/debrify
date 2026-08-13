@@ -35,6 +35,7 @@ class AppDelegate: FlutterAppDelegate {
     private var urlChannel: FlutterMethodChannel?
     private var systemChannel: FlutterMethodChannel?
     private var topShelfChannel: FlutterMethodChannel?
+    private var deviceChannel: FlutterMethodChannel?
     private var pendingTopShelfAction: [String: String]?
 
     private static let topShelfAppGroup = "group.com.varunsalian.debrifytv"
@@ -81,6 +82,22 @@ class AppDelegate: FlutterAppDelegate {
             result(nil)
         }
         self.logChannel = logChannel
+
+        // SecretVault derives its at-rest encryption key from a stable
+        // per-install identifier; device_info_plus has no tvOS implementation,
+        // so this is the one call it would have made. nil is a valid answer —
+        // the vault falls back to pepper-only derivation.
+        let deviceChannel = FlutterMethodChannel(
+            name: "debrify/tvdevice",
+            binaryMessenger: flutterViewController.binaryMessenger)
+        deviceChannel.setMethodCallHandler { call, result in
+            if call.method == "id" {
+                result(UIDevice.current.identifierForVendor?.uuidString)
+            } else {
+                result(FlutterMethodNotImplemented)
+            }
+        }
+        self.deviceChannel = deviceChannel
 
         GeneratedPluginRegistrant.register(with: self)
 

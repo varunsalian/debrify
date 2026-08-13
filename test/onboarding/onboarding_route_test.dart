@@ -1,5 +1,6 @@
 import 'package:debrify/services/remote_control/remote_command_router.dart';
 import 'package:debrify/services/remote_control/remote_constants.dart';
+import 'package:debrify/services/remote_control/remote_session.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:debrify/utils/platform_util.dart';
 import 'package:debrify/widgets/initial_setup_flow.dart';
@@ -72,10 +73,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(InitialSetupFlow), findsOneWidget);
 
+    // `complete` is only honored after authorized config work over an
+    // authorized transport (the unsolicited-restart DoS gate). Stand in for
+    // the config packets a real transfer sends first, and dispatch with the
+    // authorized context a paired session produces.
+    RemoteCommandRouter().debugMarkAuthorizedConfigActivity();
     RemoteCommandRouter().dispatchCommand(
       RemoteAction.config,
       ConfigCommand.complete,
       null,
+      context: const RemoteCommandContext(encrypted: true, authorized: true),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1600));

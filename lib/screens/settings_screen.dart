@@ -2967,56 +2967,193 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final iptvProviders = await IptvTransferPayload.countPlaylists();
 
     if (!mounted) return;
+    var includeCredentials = true;
+    var usePassphrase = false;
+    final passphraseController = TextEditingController();
+    final confirmController = TextEditingController();
     final confirmed = await showSettingsDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create backup'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('The backup will include:'),
-            const SizedBox(height: 8),
-            ..._backupSummaryLines(summary).map((line) => Text('• $line')),
-            if (iptvProviders.fileImported > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  '${iptvProviders.fileImported} IPTV playlist'
-                  '${iptvProviders.fileImported == 1 ? '' : 's'} imported from '
-                  'a file won\'t be included — re-import the file on the other '
-                  'device. Starred channels from them still travel.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: app.fade(app.core.tx, 0x99 / 0xFF),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final passphraseOk = !usePassphrase ||
+              (passphraseController.text.isNotEmpty &&
+                  passphraseController.text == confirmController.text);
+          return AlertDialog(
+            title: const Text('Create backup'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('The backup will include:'),
+                  const SizedBox(height: 8),
+                  ..._backupSummaryLines(summary).map((line) => Text('• $line')),
+                  if (iptvProviders.fileImported > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        '${iptvProviders.fileImported} IPTV playlist'
+                        '${iptvProviders.fileImported == 1 ? '' : 's'} imported from '
+                        'a file won\'t be included — re-import the file on the other '
+                        'device. Starred channels from them still travel.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: app.fade(app.core.tx, 0x99 / 0xFF),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Include credentials'),
+                    subtitle: const Text(
+                      'Off: share your setup without your accounts. Skips '
+                      'anything that embeds them: addons, Xtream providers, '
+                      'indexers, starred channels and lists. M3U URLs are '
+                      'kept — use a passphrase to protect those.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    value: includeCredentials,
+                    onChanged: (v) =>
+                        setDialogState(() => includeCredentials = v),
                   ),
-                ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Encrypt with a passphrase'),
+                    value: usePassphrase,
+                    onChanged: (v) => setDialogState(() => usePassphrase = v),
+                  ),
+                  if (usePassphrase) ...[
+                    TextField(
+                      controller: passphraseController,
+                      obscureText: true,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Passphrase',
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: confirmController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Confirm passphrase',
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  if (usePassphrase)
+                    Text(
+                      'Encrypted with your passphrase — if you forget it, '
+                      'this backup cannot be opened.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: app.fade(app.core.tx, 0x99 / 0xFF),
+                      ),
+                    )
+                  else if (includeCredentials)
+                    const Text(
+                      'Credentials are stored in plain text. Keep this file '
+                      'private and treat it like a password.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+                    ),
+                ],
               ),
-            const SizedBox(height: 12),
-            const Text(
-              'Credentials are stored in plain text. Keep this file private '
-              'and treat it like a password.',
-              style: TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Save backup'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: passphraseOk
+                    ? () => Navigator.of(context).pop(true)
+                    : null,
+                child: const Text('Save backup'),
+              ),
+            ],
+          );
+        },
       ),
     );
 
+    final passphrase = usePassphrase ? passphraseController.text : null;
+    passphraseController.dispose();
+    confirmController.dispose();
     if (confirmed != true) return;
     if (!mounted) return;
 
-    final jsonContent = const JsonEncoder.withIndent('  ').convert(payload);
+    // The pre-dialog payload was only for the summary — rebuild honoring the
+    // include-credentials choice.
+    Map<String, dynamic> exportMap = includeCredentials
+        ? payload
+        : await BackupRestoreService.buildBackup(includeCredentials: false);
+
+    // The pre-dialog summary described the FULL payload — stripping
+    // credentials can leave nothing behind (a device configured with only
+    // accounts), and restore rejects an empty backup anyway.
+    if (!includeCredentials &&
+        BackupRestoreService.summarize(exportMap).isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Nothing left to back up without credentials — everything on '
+              'this device is account data.'),
+        ),
+      );
+      return;
+    }
+
+    if (passphrase != null && passphrase.isNotEmpty) {
+      if (!mounted) return;
+      // Captured BEFORE the await: the modal lives on the root navigator and
+      // must be popped even if this screen unmounts while Argon2id runs —
+      // a mounted-check first would strand an undismissable dialog.
+      final rootNavigator = Navigator.of(context, rootNavigator: true);
+      // Argon2id takes seconds on TV hardware — show progress.
+      showSettingsDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 16),
+                Expanded(child: Text('Encrypting backup…')),
+              ],
+            ),
+          ),
+        ),
+      );
+      try {
+        exportMap = await BackupRestoreService.encryptBackup(
+          exportMap,
+          passphrase,
+        );
+      } catch (e) {
+        rootNavigator.pop();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to encrypt backup: $e')),
+        );
+        return;
+      }
+      rootNavigator.pop();
+      if (!mounted) return;
+    }
+
+    final jsonContent = const JsonEncoder.withIndent('  ').convert(exportMap);
     final bytes = Uint8List.fromList(utf8.encode(jsonContent));
     final ts = DateTime.now();
     final fileName =
@@ -3082,6 +3219,106 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Passphrase prompt loop for an encrypted backup envelope. Returns the
+  /// decrypted inner payload, or null when the user cancels. A wrong
+  /// passphrase re-shows the prompt with an inline error instead of aborting.
+  Future<Map<String, dynamic>?> _promptAndDecryptBackup(
+    Map<String, dynamic> envelope,
+  ) async {
+    String? errorText;
+    while (true) {
+      if (!mounted) return null;
+      final controller = TextEditingController();
+      final entered = await showSettingsDialog<String>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Backup is encrypted'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (envelope['createdAt'] is String)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Created: ${envelope['createdAt']}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                TextField(
+                  controller: controller,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Passphrase',
+                    errorText: errorText,
+                  ),
+                  onSubmitted: (value) => Navigator.of(context).pop(value),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(controller.text),
+                child: const Text('Unlock'),
+              ),
+            ],
+          ),
+        ),
+      );
+      controller.dispose();
+      if (entered == null || entered.isEmpty) return null;
+      if (!mounted) return null;
+
+      // Captured BEFORE the await so the modal is popped even if this screen
+      // unmounts while the KDF runs (see _createBackup's encrypt block).
+      final rootNavigator = Navigator.of(context, rootNavigator: true);
+      showSettingsDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 16),
+                Expanded(child: Text('Unlocking backup…')),
+              ],
+            ),
+          ),
+        ),
+      );
+      try {
+        final inner =
+            await BackupRestoreService.decryptBackup(envelope, entered);
+        rootNavigator.pop();
+        if (!mounted) return null;
+        return inner;
+      } on BackupPassphraseException {
+        rootNavigator.pop();
+        if (!mounted) return null;
+        errorText = 'Wrong passphrase — try again';
+      } on FormatException catch (e) {
+        rootNavigator.pop();
+        if (!mounted) return null;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Invalid backup: ${e.message}')),
+        );
+        return null;
+      }
+    }
+  }
+
   Future<void> _restoreBackup() async {
     final app = AppThemeScope.of(context);
     final t = app.settings;
@@ -3108,8 +3345,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final file = pick.files.first;
 
     // FileType.any lets the user pick anything and withData buffers it into RAM;
-    // reject an implausibly large pick before reading so a stray huge file can't OOM.
-    if (file.size > 20 * 1024 * 1024) {
+    // reject an implausibly large pick before reading so a stray huge file can't
+    // OOM. Sized so the app always accepts what its own export can produce: a
+    // passphrase-encrypted envelope base64-inflates the payload by ~4/3, so an
+    // IPTV-heavy ~20 MiB backup arrives here at ~27 MiB.
+    if (file.size > 40 * 1024 * 1024) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -3136,7 +3376,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    final Map<String, dynamic> payload;
+    Map<String, dynamic> payload;
     try {
       payload = BackupRestoreService.parse(content);
     } on FormatException catch (e) {
@@ -3145,6 +3385,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Invalid backup: ${e.message}')));
       return;
+    }
+
+    if (BackupRestoreService.isEncrypted(payload)) {
+      final inner = await _promptAndDecryptBackup(payload);
+      if (inner == null) return; // Cancelled or unrecoverable.
+      payload = inner;
     }
 
     final summary = BackupRestoreService.summarize(payload);

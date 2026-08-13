@@ -57,6 +57,14 @@ dependencies:
   window_manager: ^0.3.8
   app_links: ^6.3.2
   crypto: ^3.0.3
+  # Pure-Dart AEAD/KDF/ECDH (AesGcm, Hkdf, Argon2id, X25519) for the
+  # credential vault, encrypted backups, and remote-control session crypto.
+  # No native code, so it works on tvOS without a federated sibling.
+  cryptography: ^2.7.0
+  # Promoted from transitive (pug_flutter) to direct: SecretVault derives its
+  # master key from per-platform hardware identifiers. No tvOS implementation —
+  # guard with PlatformUtil.isTvOS before touching it (see secret_vault.dart).
+  device_info_plus: ^12.4.0
   flutter_sharing_intent: ^2.0.4
   collection: ^1.19.1
 

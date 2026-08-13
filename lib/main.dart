@@ -35,6 +35,7 @@ import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/discover_prefs.dart';
 import 'services/iptv_catalog_db.dart';
+import 'services/secret_vault.dart';
 import 'services/storage_service.dart';
 import 'services/tv_hero_artwork_quality_controller.dart';
 import 'services/tvos_top_shelf_service.dart';
@@ -72,6 +73,7 @@ import 'services/text_brightness.dart';
 import 'services/support_remote_config_service.dart';
 import 'widgets/auto_launch_overlay.dart';
 import 'widgets/remote/addon_install_dialog.dart';
+import 'widgets/remote/remote_pairing_dialog.dart';
 import 'widgets/remote/remote_role_picker_screen.dart';
 import 'widgets/support_donation_chooser_dialog.dart';
 import 'utils/platform_util.dart';
@@ -164,6 +166,10 @@ Future<void> main() async {
   // slow on weak TV hardware. Never block first frame on analytics — it runs
   // concurrently with the rest of startup and self-guards until ready.
   unawaited(AnalyticsService.init());
+  // Fire-and-forget: derives the credential-vault key (one device-info
+  // channel round trip) so the pre-runApp startup-channel read and the first
+  // credential access don't pay for it. Never throws.
+  unawaited(SecretVault.warmUp());
 
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     await windowManager.ensureInitialized();
@@ -516,6 +522,12 @@ class _DebrifyAppState extends State<DebrifyApp> {
   Widget build(BuildContext context) {
     // Set up scaffold messenger key for remote command router (TV feedback)
     RemoteCommandRouter().setScaffoldMessengerKey(_scaffoldMessengerKey);
+
+    // The router raises real routes too: the fallback pairing-code dialog
+    // when no receive screen is mounted (TV sitting on Home), and the
+    // legacy-consent dialog for v1 senders. Without this key neither can
+    // appear — the phone would ask for a code the TV never shows.
+    RemoteCommandRouter().setNavigatorKey(_navigatorKey);
 
     // Set up restart callback for remote config (when TV receives setup from phone)
     RemoteCommandRouter().setRestartCallback(() {
@@ -1512,7 +1524,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       if (choice == null || !mounted) return; // User cancelled
 
       if (choice.target == 'tv' && choice.device != null) {
-        // Send to TV
+        // Addon URLs can embed debrid keys — same encrypted-session +
+        // pairing gate as the settings transfer flows.
+        final session = await ensureAuthorizedSession(
+            context, RemoteControlState(), choice.device!);
+        if (session == null || !mounted) return;
         final success = await RemoteControlState().sendAddonCommandToDevice(
           AddonCommand.install,
           choice.device!.ip,

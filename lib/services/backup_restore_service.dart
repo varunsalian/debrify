@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:math';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/indexer_manager_config.dart';
@@ -40,10 +42,26 @@ import 'stremio_service.dart';
 /// the user trusts their own backup, so we write the stored values directly.
 /// Search engines and addons still require network on restore.
 class BackupRestoreService {
-  static const int currentVersion = 1;
+  /// Highest envelope version this app can read. v1 = the plain payload,
+  /// v2 = the passphrase-encrypted envelope wrapping a v1 payload.
+  static const int currentVersion = 2;
+
+  /// Version stamped on plain payloads. Deliberately still 1: an unencrypted
+  /// export must stay restorable on app versions that predate encryption,
+  /// and only the v2 envelope needs the higher gate.
+  static const int payloadVersion = 1;
 
   /// Build a backup payload from the current device's configuration.
-  static Future<Map<String, dynamic>> buildBackup() async {
+  ///
+  /// With [includeCredentials] false, account secrets are omitted entirely
+  /// (debrid keys, PikPak, Trakt, Simkl) or blanked in place (WebDAV
+  /// passwords, indexer API keys, Xtream usernames/passwords) so a setup can
+  /// be shared without handing over accounts. M3U playlist URLs are kept —
+  /// the URL *is* the provider config; users who need those protected should
+  /// use a passphrase instead.
+  static Future<Map<String, dynamic>> buildBackup({
+    bool includeCredentials = true,
+  }) async {
     final realDebridKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
     final premiumizeKey = await StorageService.getPremiumizeApiKey();
@@ -61,29 +79,43 @@ class BackupRestoreService {
     final engineIds = await LocalEngineStorage.instance.getImportedEngineIds();
 
     List<String> addonUrls = const [];
-    try {
-      final addons = await StremioService.instance.getAddons();
-      addonUrls = addons.map((a) => a.manifestUrl).toList();
-    } catch (e) {
-      debugPrint('BackupRestoreService: Failed to read addons: $e');
+    if (includeCredentials) {
+      // Omitted from credential-free exports: configured manifest URLs
+      // routinely embed debrid API keys in the path (Torrentio/Comet-style
+      // configure strings), and there is no reliable way to scrub them.
+      try {
+        final addons = await StremioService.instance.getAddons();
+        addonUrls = addons.map((a) => a.manifestUrl).toList();
+      } catch (e) {
+        debugPrint('BackupRestoreService: Failed to read addons: $e');
+      }
     }
 
     List<Map<String, dynamic>> webDavServers = const [];
     try {
       final servers = await StorageService.getWebDavServers();
-      webDavServers = servers.map((s) => s.toJson()).toList();
+      webDavServers = servers.map((s) {
+        final json = s.toJson();
+        if (!includeCredentials) json['password'] = '';
+        return json;
+      }).toList();
     } catch (e) {
       debugPrint('BackupRestoreService: Failed to read WebDAV servers: $e');
     }
 
     List<Map<String, dynamic>> indexerManagers = const [];
-    try {
-      final configs = await StorageService.getIndexerManagerConfigs();
-      indexerManagers = configs.map((c) => c.toJson()).toList();
-    } catch (e) {
-      debugPrint(
-        'BackupRestoreService: Failed to read indexer manager configs: $e',
-      );
+    if (includeCredentials) {
+      // Omitted entirely from credential-free exports: an entry without its
+      // API key is rejected by the restorer, so keeping blanked ones would
+      // just advertise a category that always fails to import.
+      try {
+        final configs = await StorageService.getIndexerManagerConfigs();
+        indexerManagers = configs.map((c) => c.toJson()).toList();
+      } catch (e) {
+        debugPrint(
+          'BackupRestoreService: Failed to read indexer manager configs: $e',
+        );
+      }
     }
 
     List<Map<String, dynamic>> iptvPlaylists = const [];
@@ -91,45 +123,67 @@ class BackupRestoreService {
     List<Map<String, dynamic>> iptvLists = const [];
     try {
       iptvPlaylists = await IptvTransferPayload.buildPlaylists();
-      iptvFavorites = await IptvTransferPayload.buildFavorites();
-      iptvLists = await IptvTransferPayload.buildCustomLists();
+      if (!includeCredentials) {
+        // Xtream providers are dropped whole: every field that could travel
+        // (`url`, `epgUrl`) embeds the account, and an entry stripped of its
+        // url fails to restore. Plain-M3U providers are kept with their url
+        // intact — there the URL IS the config, which the export dialog
+        // documents.
+        iptvPlaylists.removeWhere(
+            (p) => (p['serverUrl'] as String?)?.isNotEmpty == true);
+        for (final playlist in iptvPlaylists) {
+          playlist.remove('username');
+          playlist.remove('password');
+        }
+      }
+      if (includeCredentials) {
+        // Favorite/list entries carry per-channel STREAM URLs, which for
+        // Xtream providers embed the account password in the path — they
+        // cannot be scrubbed without breaking them, so credential-free
+        // exports leave the whole category out.
+        iptvFavorites = await IptvTransferPayload.buildFavorites();
+        iptvLists = await IptvTransferPayload.buildCustomLists();
+      }
     } catch (e) {
       debugPrint('BackupRestoreService: Failed to read IPTV setup: $e');
     }
 
     return <String, dynamic>{
-      'version': currentVersion,
+      'version': payloadVersion,
       'createdAt': DateTime.now().toUtc().toIso8601String(),
-      if (realDebridKey != null && realDebridKey.isNotEmpty)
-        'realDebridApiKey': realDebridKey,
-      if (torboxKey != null && torboxKey.isNotEmpty) 'torboxApiKey': torboxKey,
-      if (premiumizeKey != null && premiumizeKey.isNotEmpty)
-        'premiumizeApiKey': premiumizeKey,
-      if (allDebridKey != null && allDebridKey.isNotEmpty)
-        'allDebridApiKey': allDebridKey,
-      if (pikpakEmail != null && pikpakEmail.isNotEmpty)
-        'pikpak': <String, dynamic>{
-          'email': pikpakEmail,
-          if (pikpakPassword != null && pikpakPassword.isNotEmpty)
-            'password': pikpakPassword,
-        },
-      if (traktAccess != null &&
-          traktAccess.isNotEmpty &&
-          traktRefresh != null &&
-          traktRefresh.isNotEmpty)
-        'trakt': <String, dynamic>{
-          'access_token': traktAccess,
-          'refresh_token': traktRefresh,
-          if (traktExpiry != null) 'expiry_ms': traktExpiry,
-          if (traktUsername != null && traktUsername.isNotEmpty)
-            'username': traktUsername,
-        },
-      if (simklAccess != null && simklAccess.isNotEmpty)
-        'simkl': <String, dynamic>{
-          'access_token': simklAccess,
-          if (simklUsername != null && simklUsername.isNotEmpty)
-            'username': simklUsername,
-        },
+      if (includeCredentials) ...{
+        if (realDebridKey != null && realDebridKey.isNotEmpty)
+          'realDebridApiKey': realDebridKey,
+        if (torboxKey != null && torboxKey.isNotEmpty)
+          'torboxApiKey': torboxKey,
+        if (premiumizeKey != null && premiumizeKey.isNotEmpty)
+          'premiumizeApiKey': premiumizeKey,
+        if (allDebridKey != null && allDebridKey.isNotEmpty)
+          'allDebridApiKey': allDebridKey,
+        if (pikpakEmail != null && pikpakEmail.isNotEmpty)
+          'pikpak': <String, dynamic>{
+            'email': pikpakEmail,
+            if (pikpakPassword != null && pikpakPassword.isNotEmpty)
+              'password': pikpakPassword,
+          },
+        if (traktAccess != null &&
+            traktAccess.isNotEmpty &&
+            traktRefresh != null &&
+            traktRefresh.isNotEmpty)
+          'trakt': <String, dynamic>{
+            'access_token': traktAccess,
+            'refresh_token': traktRefresh,
+            if (traktExpiry != null) 'expiry_ms': traktExpiry,
+            if (traktUsername != null && traktUsername.isNotEmpty)
+              'username': traktUsername,
+          },
+        if (simklAccess != null && simklAccess.isNotEmpty)
+          'simkl': <String, dynamic>{
+            'access_token': simklAccess,
+            if (simklUsername != null && simklUsername.isNotEmpty)
+              'username': simklUsername,
+          },
+      },
       if (engineIds.isNotEmpty) 'searchEngineIds': engineIds,
       if (addonUrls.isNotEmpty) 'addonManifestUrls': addonUrls,
       if (webDavServers.isNotEmpty) 'webDavServers': webDavServers,
@@ -195,6 +249,166 @@ class BackupRestoreService {
       );
     }
     return decoded;
+  }
+
+  /// Whether a parsed map is a passphrase-encrypted v2 envelope (whose inner
+  /// payload must be recovered with [decryptBackup] before use).
+  static bool isEncrypted(Map<String, dynamic> map) => map['encrypted'] == true;
+
+  /// Wrap a plain backup payload in a passphrase-encrypted v2 envelope.
+  ///
+  /// `createdAt` is duplicated outside the ciphertext so the restore dialog
+  /// can show it before asking for the passphrase. Always writes Argon2id;
+  /// [kdfParams] exists so tests can use fast parameters.
+  static Future<Map<String, dynamic>> encryptBackup(
+    Map<String, dynamic> payload,
+    String passphrase, {
+    @visibleForTesting BackupKdfParams kdfParams = const BackupKdfParams(),
+  }) async {
+    final salt = _randomBytes(16);
+    final key = await Argon2id(
+      parallelism: kdfParams.parallelism,
+      memory: kdfParams.memory,
+      iterations: kdfParams.iterations,
+      hashLength: 32,
+    ).deriveKey(secretKey: SecretKey(utf8.encode(passphrase)), nonce: salt);
+    final box = await AesGcm.with256bits().encrypt(
+      utf8.encode(jsonEncode(payload)),
+      secretKey: key,
+    );
+    return <String, dynamic>{
+      'version': 2,
+      'encrypted': true,
+      if (payload['createdAt'] is String) 'createdAt': payload['createdAt'],
+      'kdf': <String, dynamic>{
+        'algo': 'argon2id',
+        'salt': base64Encode(salt),
+        'm': kdfParams.memory,
+        't': kdfParams.iterations,
+        'p': kdfParams.parallelism,
+      },
+      'nonce': base64Encode(box.nonce),
+      'ciphertext': base64Encode(<int>[...box.cipherText, ...box.mac.bytes]),
+    };
+  }
+
+  /// Recover the inner payload of a v2 envelope.
+  ///
+  /// Throws [BackupPassphraseException] when the passphrase is wrong (GCM tag
+  /// failure) and [FormatException] when the envelope itself is malformed or
+  /// uses an unknown KDF. KDF parameters are read FROM the envelope;
+  /// `pbkdf2-hmac-sha256` is accepted on import for forward compatibility
+  /// even though this app only ever writes `argon2id`.
+  static Future<Map<String, dynamic>> decryptBackup(
+    Map<String, dynamic> envelope,
+    String passphrase,
+  ) async {
+    final kdf = envelope['kdf'];
+    final nonceB64 = envelope['nonce'];
+    final ciphertextB64 = envelope['ciphertext'];
+    if (kdf is! Map || nonceB64 is! String || ciphertextB64 is! String) {
+      throw const FormatException('Encrypted backup is missing fields');
+    }
+    final List<int> salt;
+    final List<int> nonce;
+    final List<int> packed;
+    try {
+      salt = base64Decode(kdf['salt'] as String);
+      nonce = base64Decode(nonceB64);
+      packed = base64Decode(ciphertextB64);
+    } catch (_) {
+      throw const FormatException('Encrypted backup is corrupted');
+    }
+    if (packed.length < 16) {
+      throw const FormatException('Encrypted backup is corrupted');
+    }
+
+    // The KDF cost parameters come from the FILE — cap them before deriving,
+    // or a crafted backup can request gigabytes of Argon2 memory and freeze
+    // the app the moment the user enters a passphrase.
+    int boundedParam(dynamic value, int fallback, int min, int max) {
+      if (value != null && value is! num) {
+        throw const FormatException('Encrypted backup is corrupted');
+      }
+      final parsed = value == null ? fallback : (value as num).toInt();
+      if (parsed < min || parsed > max) {
+        throw const FormatException(
+            'Encrypted backup requests unreasonable KDF cost');
+      }
+      return parsed;
+    }
+
+    if (salt.length < 8 || salt.length > 64) {
+      throw const FormatException('Encrypted backup is corrupted');
+    }
+
+    final algo = kdf['algo'];
+    final SecretKey key;
+    if (algo == 'argon2id') {
+      final parallelism = boundedParam(kdf['p'], 1, 1, 8);
+      final memory = boundedParam(kdf['m'], 19456, 8, 131072); // ≤ 128 MiB
+      // Argon2 itself requires memory ≥ 8·parallelism; values passing the
+      // independent bounds (e.g. p=8, m=8) would throw an ArgumentError out
+      // of the KDF instead of the FormatException the UI handles.
+      if (memory < 8 * parallelism) {
+        throw const FormatException(
+            'Encrypted backup requests unreasonable KDF cost');
+      }
+      key = await Argon2id(
+        parallelism: parallelism,
+        memory: memory,
+        iterations: boundedParam(kdf['t'], 2, 1, 16),
+        hashLength: 32,
+      ).deriveKey(secretKey: SecretKey(utf8.encode(passphrase)), nonce: salt);
+    } else if (algo == 'pbkdf2-hmac-sha256') {
+      key = await Pbkdf2(
+        macAlgorithm: Hmac.sha256(),
+        iterations: boundedParam(kdf['iterations'], 600000, 1000, 5000000),
+        bits: 256,
+      ).deriveKey(secretKey: SecretKey(utf8.encode(passphrase)), nonce: salt);
+    } else {
+      throw FormatException('Unknown backup KDF "$algo"');
+    }
+
+    final box = SecretBox(
+      packed.sublist(0, packed.length - 16),
+      nonce: nonce,
+      mac: Mac(packed.sublist(packed.length - 16)),
+    );
+    final List<int> plaintext;
+    try {
+      plaintext = await AesGcm.with256bits().decrypt(box, secretKey: key);
+    } catch (_) {
+      throw const BackupPassphraseException();
+    }
+    final dynamic inner;
+    try {
+      inner = jsonDecode(utf8.decode(plaintext));
+    } catch (_) {
+      throw const FormatException('Encrypted backup is corrupted');
+    }
+    if (inner is! Map<String, dynamic>) {
+      throw const FormatException('Encrypted backup is corrupted');
+    }
+    // The decrypted payload bypasses parse(), so it needs the same version
+    // gate — an envelope wrapping a future (or version-less) payload must
+    // fail here, exactly as its plaintext twin would.
+    final innerVersion = (inner['version'] as num?)?.toInt();
+    if (innerVersion == null) {
+      throw const FormatException('Missing "version" field');
+    }
+    if (innerVersion > currentVersion) {
+      throw FormatException(
+        'Backup version $innerVersion is newer than this app supports '
+        '(max $currentVersion). Update the app and try again.',
+      );
+    }
+    return inner;
+  }
+
+  static List<int> _randomBytes(int length) {
+    final random = Random.secure();
+    return List<int>.generate(length, (_) => random.nextInt(256));
   }
 
   /// Apply a parsed backup. Returns a [RestoreReport] summarizing what was
@@ -815,4 +1029,30 @@ class RestoreReport {
       (pikpakLoginFailed ? 1 : 0);
 
   bool get hasAnyFailure => totalFailed > 0;
+}
+
+/// Wrong passphrase for an encrypted backup (GCM authentication failed).
+/// Distinct from [FormatException] so the import UI can re-prompt instead of
+/// aborting.
+class BackupPassphraseException implements Exception {
+  const BackupPassphraseException();
+
+  @override
+  String toString() => 'Wrong passphrase';
+}
+
+/// Argon2id cost parameters for [BackupRestoreService.encryptBackup].
+/// Defaults are the OWASP minimum recommendation (19 MiB, t=2, p=1) — heavy
+/// enough to matter, light enough for TV hardware on a user-initiated action.
+class BackupKdfParams {
+  /// Memory in 1 KiB blocks.
+  final int memory;
+  final int iterations;
+  final int parallelism;
+
+  const BackupKdfParams({
+    this.memory = 19456,
+    this.iterations = 2,
+    this.parallelism = 1,
+  });
 }

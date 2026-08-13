@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../models/stremio_addon.dart';
 import '../../services/stremio_service.dart';
 import '../../services/remote_control/remote_control_state.dart';
+import 'remote_pairing_dialog.dart';
 import '../../services/remote_control/remote_constants.dart';
 
 /// Widget for exporting Stremio addons to connected TV
@@ -46,6 +47,14 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
 
   Future<void> _sendAddonToTv(StremioAddon addon) async {
     if (_sendingAddons.contains(addon.manifestUrl)) return;
+
+    // Addon manifest URLs routinely embed debrid API keys (Torrentio-style
+    // configure strings) — same gate as config transfers.
+    final state = RemoteControlState();
+    final target = state.connectedDevice;
+    if (target == null) return;
+    final session = await ensureAuthorizedSession(context, state, target);
+    if (session == null || !mounted) return;
 
     setState(() => _sendingAddons.add(addon.manifestUrl));
     HapticFeedback.mediumImpact();

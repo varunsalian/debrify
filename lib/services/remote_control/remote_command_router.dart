@@ -6,6 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'remote_constants.dart';
+import 'remote_control_state.dart';
+import 'remote_pairing_store.dart';
+import 'remote_session.dart';
+import 'udp_command_service.dart';
+import '../../widgets/remote/remote_pairing_dialog.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/stremio_service.dart';
 import '../../services/storage_service.dart';
@@ -243,8 +248,24 @@ class RemoteCommandRouter {
     debugPrint('RemoteCommandRouter: Handler removed');
   }
 
-  /// Dispatch a remote command to all registered handlers
-  void dispatchCommand(String action, String command, String? data) {
+  void _notifyHandlers(String action, String command, String? data) {
+    for (final handler in _handlers.toList()) {
+      try {
+        handler(action, command, data);
+      } catch (e) {
+        debugPrint('RemoteCommandRouter: Handler error: $e');
+      }
+    }
+  }
+
+  /// Dispatch a remote command to all registered handlers.
+  ///
+  /// [context] carries the transport's trust facts: whether the command came
+  /// in encrypted, and whether its session has been authorized by a pairing
+  /// code (or remembered device). Plaintext is the default so the eight
+  /// legacy call sites keep working unchanged.
+  void dispatchCommand(String action, String command, String? data,
+      {RemoteCommandContext context = RemoteCommandContext.plaintext}) {
     // Suppress per-chunk logs to avoid flooding
     final isChunk = command == ConfigCommand.debrifyChannelChunk;
     if (!isChunk) {
@@ -253,17 +274,17 @@ class RemoteCommandRouter {
       );
     }
 
-    for (final handler in _handlers.toList()) {
-      try {
-        handler(action, command, data);
-      } catch (e) {
-        debugPrint('RemoteCommandRouter: Handler error: $e');
-      }
+    // Observer handlers (onboarding progress etc.) hear about config/addon
+    // traffic only once it PASSES the authorization gates below — an
+    // unsolicited or user-denied packet must not make onboarding report
+    // "settings received".
+    if (action != RemoteAction.config && action != RemoteAction.addon) {
+      _notifyHandlers(action, command, data);
     }
 
     // Handle addon commands (TV side)
     if (action == RemoteAction.addon) {
-      _handleAddonCommand(command, data);
+      _handleAddonCommand(command, data, context: context);
       return;
     }
 
@@ -275,7 +296,7 @@ class RemoteCommandRouter {
 
     // Handle config commands (TV side)
     if (action == RemoteAction.config) {
-      _handleConfigCommand(command, data);
+      _handleConfigCommand(command, data, context: context);
       return;
     }
 
@@ -284,8 +305,22 @@ class RemoteCommandRouter {
   }
 
   /// Handle addon commands on TV
-  Future<void> _handleAddonCommand(String command, String? data) async {
+  Future<void> _handleAddonCommand(String command, String? data,
+      {RemoteCommandContext context = RemoteCommandContext.plaintext}) async {
     if (command == AddonCommand.install && data != null) {
+      // Same trust rule as config: an unauthorized encrypted send was already
+      // bounced at the session layer; plaintext (v1 phone) needs the user to
+      // approve it on this screen first.
+      if (!context.authorized) {
+        if (_legacyApprovedFor(context.sourceIp)) {
+          _markAuthorizedConfigActivity();
+        } else {
+          _enqueueLegacy(_LegacyItem.addon(command, data), context.sourceIp);
+          return;
+        }
+      }
+      _markAuthorizedConfigActivity();
+      _notifyHandlers(RemoteAction.addon, command, data);
       // Addons ride the SAME phone import as the config packets (one command
       // per addon), so they join the same collecting window — otherwise a
       // ten-addon setup still parades ten snackbars past.
@@ -343,14 +378,89 @@ class RemoteCommandRouter {
     }
   }
 
+  // ── credential-write gating ──────────────────────────────────────────────
+  //
+  // Nothing that writes credentials or config applies silently anymore. The
+  // trust ladder: an AUTHORIZED encrypted session (pairing code entered once,
+  // or a remembered phone) applies directly; encrypted-but-unauthorized was
+  // already bounced at the session layer; PLAINTEXT (a v1 phone) is buffered
+  // and needs an explicit Allow on this screen — approval then covers the
+  // rest of the burst.
+
+  static const Duration _authorizedActivityWindow = Duration(minutes: 10);
+  static const Duration _legacyBufferExpiry = Duration(seconds: 60);
+  static const int _legacyBufferCap = 200;
+
+  DateTime? _lastAuthorizedConfigAt;
+  DateTime? _legacyApprovedAt;
+
+  /// Both the pending buffer and a granted approval belong to ONE datagram
+  /// source. Anything else on the LAN that talks while a consent is pending
+  /// (or approved) is a different device and gets its own gate — approving
+  /// your old phone must never blanket every host on the network.
+  String? _legacyApprovedIp;
+  String? _legacyPeerIp;
+  final List<_LegacyItem> _legacyBuffer = [];
+  Timer? _legacyExpiryTimer;
+  bool _legacyDialogShowing = false;
+  BuildContext? _legacyDialogContext;
+
+  void _markAuthorizedConfigActivity() {
+    _lastAuthorizedConfigAt = DateTime.now();
+  }
+
+  /// Tests simulate a transfer's `complete` without the config packets that
+  /// precede it in the real flow — this stands in for those packets.
+  @visibleForTesting
+  void debugMarkAuthorizedConfigActivity() => _markAuthorizedConfigActivity();
+
+  bool _legacyApprovedFor(String? sourceIp) {
+    final approvedAt = _legacyApprovedAt;
+    return sourceIp != null &&
+        sourceIp == _legacyApprovedIp &&
+        approvedAt != null &&
+        DateTime.now().difference(approvedAt) < _authorizedActivityWindow;
+  }
+
+  /// One-time banner when a remembered phone was silently re-authorized.
+  void notifyRememberedAutoAuth(String peerName) {
+    _showSnackBar('Receiving from remembered device "$peerName"');
+  }
+
   /// Handle config commands on TV (credentials/setup from phone)
-  Future<void> _handleConfigCommand(String command, String? data) async {
+  Future<void> _handleConfigCommand(String command, String? data,
+      {RemoteCommandContext context = RemoteCommandContext.plaintext}) async {
     if (command != ConfigCommand.debrifyChannelChunk) {
       debugPrint('RemoteCommandRouter: Handling config command: $command');
     }
 
     // Handle complete signal (doesn't need data)
     if (command == ConfigCommand.complete) {
+      // `complete` can mark onboarding done and RESTART THE APP — honoring an
+      // unsolicited one is a LAN denial-of-service. It only counts after
+      // authorized config work landed recently over an approved transport.
+      final approvedTransport =
+          context.authorized || _legacyApprovedFor(context.sourceIp);
+      final lastWork = _lastAuthorizedConfigAt;
+      final recentWork = lastWork != null &&
+          DateTime.now().difference(lastWork) < _authorizedActivityWindow;
+      if (!approvedTransport || !recentWork) {
+        // A v1 phone fires its whole burst — complete included — before the
+        // user can possibly answer the consent dialog. Park the signal with
+        // the burst; Allow replays it after the items, Deny drops it. Only a
+        // complete from the SAME source as the pending burst qualifies —
+        // anything else is unsolicited.
+        if ((_legacyBuffer.isNotEmpty || _legacyDialogShowing) &&
+            context.sourceIp != null &&
+            context.sourceIp == _legacyPeerIp) {
+          _enqueueLegacy(const _LegacyItem.complete(), context.sourceIp);
+          return;
+        }
+        debugPrint(
+            'RemoteCommandRouter: Ignoring unsolicited complete signal');
+        return;
+      }
+      _notifyHandlers(RemoteAction.config, command, data);
       // Imports run as their packets arrive, and this signal restarts the app
       // moments later. A large IPTV list is hundreds of SQLite writes, so
       // restarting without waiting would leave it half-imported.
@@ -364,10 +474,168 @@ class RemoteCommandRouter {
       return;
     }
 
+    // Chunk-transport packets only file bytes into a buffer — the payload
+    // they carry hits these gates again when it replays after reassembly.
+    final isTransport = command == ConfigCommand.debrifyChannelStart ||
+        command == ConfigCommand.debrifyChannelChunk;
+    if (!isTransport && !context.authorized) {
+      if (_legacyApprovedFor(context.sourceIp)) {
+        _markAuthorizedConfigActivity();
+      } else {
+        _enqueueLegacy(_LegacyItem.config(command, data), context.sourceIp);
+        return;
+      }
+    } else if (!isTransport) {
+      _markAuthorizedConfigActivity();
+    }
+
+    // Past the gates — NOW the observers may hear about it.
+    _notifyHandlers(RemoteAction.config, command, data);
+
     // Opened BEFORE the work starts, so the snackbar that work raises when it
     // finishes is banked rather than shown.
     _beginOrExtendBatch();
-    await _trackConfigWork(_dispatchConfigCommand(command, data));
+    await _trackConfigWork(_dispatchConfigCommand(command, data, context: context));
+  }
+
+  void _enqueueLegacy(_LegacyItem item, String? sourceIp) {
+    // First packet claims the pending consent for its source; anything from
+    // a DIFFERENT host while it's pending is a separate device and must not
+    // ride this user's answer.
+    if (_legacyPeerIp == null) {
+      _legacyPeerIp = sourceIp;
+    } else if (sourceIp != _legacyPeerIp) {
+      debugPrint('RemoteCommandRouter: Dropping legacy packet from $sourceIp '
+          'while consent for $_legacyPeerIp is pending');
+      return;
+    }
+    if (_legacyBuffer.length >= _legacyBufferCap) {
+      debugPrint('RemoteCommandRouter: Legacy buffer full, dropping packet');
+      return;
+    }
+    _legacyBuffer.add(item);
+    _legacyExpiryTimer ??= Timer(_legacyBufferExpiry, () {
+      debugPrint('RemoteCommandRouter: Legacy consent expired');
+      _denyLegacy();
+    });
+    _maybeShowLegacyConsentDialog();
+  }
+
+  void _maybeShowLegacyConsentDialog() {
+    if (_legacyDialogShowing) return;
+    final navigator = _navigatorKey?.currentState;
+    if (navigator == null) {
+      // Headless (no UI mounted yet): nothing to ask — the expiry timer
+      // drops the buffer and the sender sees nothing applied.
+      debugPrint(
+          'RemoteCommandRouter: No navigator for consent dialog, will drop');
+      return;
+    }
+    _legacyDialogShowing = true;
+    final peer = _legacyPeerIp ?? 'unknown address';
+    showDialog<bool>(
+      context: navigator.context,
+      barrierDismissible: false,
+      builder: (context) {
+        // Retained so buffer expiry can dismiss the dialog — an answer given
+        // after the buffer died must not grant anything.
+        _legacyDialogContext = context;
+        return AlertDialog(
+          title: const Text('Incoming settings'),
+          content: Text(
+            'The device at $peer wants to send settings and account '
+            'credentials to this TV over an UNENCRYPTED connection (its app '
+            'version predates encryption).\n\nOnly allow this if it is your '
+            'own phone and you started the transfer yourself.',
+          ),
+          actions: [
+            FilledButton(
+              autofocus: true,
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Deny'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Allow'),
+            ),
+          ],
+        );
+      },
+    ).then((allowed) {
+      _legacyDialogShowing = false;
+      _legacyDialogContext = null;
+      if (allowed == true) {
+        _allowLegacy();
+      } else {
+        _denyLegacy(showMessage: true);
+      }
+    });
+  }
+
+  void _allowLegacy() {
+    _legacyExpiryTimer?.cancel();
+    _legacyExpiryTimer = null;
+    final approvedIp = _legacyPeerIp;
+    _legacyPeerIp = null;
+    final items = List<_LegacyItem>.from(_legacyBuffer);
+    _legacyBuffer.clear();
+    if (items.isEmpty) {
+      // The buffer expired (or was denied) while the dialog sat open — an
+      // Allow with nothing behind it must not open the approval window or
+      // count as authorized activity.
+      debugPrint('RemoteCommandRouter: Legacy approval with empty buffer, '
+          'ignoring');
+      return;
+    }
+    _legacyApprovedAt = DateTime.now();
+    _legacyApprovedIp = approvedIp;
+    _markAuthorizedConfigActivity();
+    debugPrint(
+        'RemoteCommandRouter: Legacy transfer approved (${items.length} buffered)');
+    _beginOrExtendBatch();
+    const approvedContext =
+        RemoteCommandContext(encrypted: false, authorized: true);
+    var sawComplete = false;
+    for (final item in items) {
+      if (item.isComplete) {
+        sawComplete = true;
+      } else if (item.isAddon) {
+        unawaited(
+            _handleAddonCommand(item.command, item.data, context: approvedContext));
+      } else {
+        // Through the FULL handler, not the bare dispatcher: approved items
+        // must also reach observer handlers (onboarding progress), which now
+        // fire only past the gate.
+        unawaited(_handleConfigCommand(item.command, item.data,
+            context: approvedContext));
+      }
+    }
+    if (sawComplete) {
+      // Replayed LAST: its handler waits for the just-registered in-flight
+      // work (and any live chunk buffers) before finalizing/restarting.
+      unawaited(_handleConfigCommand(ConfigCommand.complete, null,
+          context: approvedContext));
+    }
+  }
+
+  void _denyLegacy({bool showMessage = false}) {
+    _legacyExpiryTimer?.cancel();
+    _legacyExpiryTimer = null;
+    _legacyPeerIp = null;
+    final dropped = _legacyBuffer.length;
+    _legacyBuffer.clear();
+    // A consent dialog that outlived its buffer is answering a dead question
+    // — take it down with the buffer.
+    final dialogContext = _legacyDialogContext;
+    if (dialogContext != null && dialogContext.mounted) {
+      Navigator.of(dialogContext).pop(false);
+    }
+    if (dropped > 0) {
+      debugPrint('RemoteCommandRouter: Dropped $dropped unapproved packet(s)');
+      if (showMessage) {
+        _showSnackBar('Incoming settings were blocked', isError: true);
+      }
+    }
   }
 
   /// Imports still writing. Tracked so the `complete` signal can wait for them
@@ -413,7 +681,8 @@ class RemoteCommandRouter {
     }
   }
 
-  Future<void> _dispatchConfigCommand(String command, String data) async {
+  Future<void> _dispatchConfigCommand(String command, String data,
+      {RemoteCommandContext context = RemoteCommandContext.plaintext}) async {
     switch (command) {
       case ConfigCommand.realDebrid:
         await _handleRealDebridConfig(data);
@@ -458,7 +727,7 @@ class RemoteCommandRouter {
         await _handleDebrifyChannelConfig(data);
         break;
       case ConfigCommand.debrifyChannelStart:
-        _handleDebrifyChannelStart(data);
+        _handleDebrifyChannelStart(data, context);
         break;
       case ConfigCommand.debrifyChannelChunk:
         await _handleDebrifyChannelChunk(data);
@@ -1114,7 +1383,7 @@ class RemoteCommandRouter {
 
   /// Handle start of a chunked transfer. The payload can belong to any config
   /// command — the start packet names it via `kind`.
-  void _handleDebrifyChannelStart(String jsonData) {
+  void _handleDebrifyChannelStart(String jsonData, RemoteCommandContext context) {
     try {
       final data = jsonDecode(jsonData) as Map<String, dynamic>;
       final transferId = data['transferId'] as String;
@@ -1145,6 +1414,13 @@ class RemoteCommandRouter {
         totalChunks: totalChunks,
         chunks: List<String?>.filled(totalChunks, null),
         timeout: null,
+        encrypted: data['enc'] == 1,
+        sidB64: data['sid'] as String?,
+        blobN: (data['n'] as num?)?.toInt(),
+        // Plain (v1) transfers replay with the SENDER's source context —
+        // keyed to null, the reassembled payload's consent entry would never
+        // match the complete packet arriving from the real address.
+        sourceIp: context.sourceIp,
       );
       _chunkBuffers[transferId] = buffer;
       _armChunkTimeout(transferId, buffer);
@@ -1218,13 +1494,151 @@ class RemoteCommandRouter {
           'reassembled ${full.length} chars',
         );
 
+        if (buffer.encrypted) {
+          await _completeEncryptedBlob(transferId, buffer, full);
+          return;
+        }
+
         // Replay through the normal switch, exactly as if the payload had
-        // arrived in a single packet.
-        await _handleConfigCommand(buffer.kind, full);
+        // arrived in a single packet — from the same source it actually did.
+        await _handleConfigCommand(
+          buffer.kind,
+          full,
+          context: RemoteCommandContext(
+            encrypted: false,
+            authorized: false,
+            sourceIp: buffer.sourceIp,
+          ),
+        );
       }
     } catch (e) {
       debugPrint('RemoteCommandRouter: Failed to handle chunk: $e');
     }
+  }
+
+  /// Decrypt and replay a reassembled v2 blob transfer.
+  Future<void> _completeEncryptedBlob(
+      String transferId, _ChunkBuffer buffer, String ctB64) async {
+    final state = RemoteControlState();
+    final manager = state.sessionManager;
+    final sidB64 = buffer.sidB64;
+    final n = buffer.blobN;
+    if (manager == null || sidB64 == null || n == null) {
+      debugPrint('RemoteCommandRouter: Encrypted blob missing session fields');
+      return;
+    }
+    final session = manager.sessionBySid(sidB64);
+    if (session == null) {
+      // Receiver restarted mid-transfer: the session (and its keys) are gone.
+      _showSnackBar('Transfer failed: session expired — send again',
+          isError: true);
+      return;
+    }
+    if (!session.authorized) {
+      debugPrint('RemoteCommandRouter: Dropping blob on unauthorized session');
+      return;
+    }
+    final plaintext = await RemoteSessionCrypto.openBlob(
+      key: session.recvKey,
+      sid: session.sid,
+      n: n,
+      transferId: transferId,
+      kind: buffer.kind,
+      ctB64: ctB64,
+    );
+    if (plaintext == null) {
+      _showSnackBar('Transfer failed: could not decrypt ${buffer.label}',
+          isError: true);
+      return;
+    }
+    if (!session.acceptBlob(n)) {
+      debugPrint('RemoteCommandRouter: Replayed blob counter $n, dropping');
+      return;
+    }
+    await _handleConfigCommand(
+      buffer.kind,
+      plaintext,
+      context: RemoteCommandContext(
+        encrypted: true,
+        authorized: true,
+        sidB64: session.sidB64,
+        peerFingerprint: session.peerFingerprint,
+        peerName: session.peerName,
+      ),
+    );
+  }
+
+  // ── pairing (receiver side) ──────────────────────────────────────────────
+
+  /// Drive the pairing gate for pair-action traffic arriving over a session.
+  Future<void> handlePairMessage(RemoteControlState state,
+      RemoteSession session, String command, String? data) async {
+    final gate = state.pairingGate;
+    if (gate == null) return;
+
+    Future<void> reply(String cmd, [String? replyData]) =>
+        state.sendEncryptedCommand(
+          session,
+          RemoteCommand(action: RemoteAction.pair, command: cmd, data: replyData),
+        );
+
+    switch (command) {
+      case PairCommand.request:
+        switch (gate.request(session)) {
+          case PairingRequestOutcome.autoAuthorized:
+            unawaited(RemotePairingStore.touchPeer(session.peerFingerprint));
+            notifyRememberedAutoAuth(session.peerName);
+            await reply(PairCommand.ok, 'remembered');
+          case PairingRequestOutcome.shown:
+            await reply(PairCommand.challenge);
+            _ensurePairingUi(gate);
+          case PairingRequestOutcome.busy:
+            await reply(PairCommand.err, 'busy');
+        }
+      case PairCommand.confirm:
+        if (data == null) return;
+        List<int> proof;
+        try {
+          proof = base64.decode(data);
+        } catch (_) {
+          await reply(PairCommand.err, 'bad_proof');
+          return;
+        }
+        switch (await gate.confirmProof(session, proof)) {
+          case PairProofOutcome.ok:
+            // Written even when remembering is off, so flipping the flag
+            // later works retroactively.
+            unawaited(RemotePairingStore.rememberPeer(
+              fingerprint: session.peerFingerprint,
+              staticKey: session.peerStaticKey,
+              name: session.peerName,
+            ).then((_) => state.refreshRememberedPeers()));
+            _showSnackBar('Paired with "${session.peerName}"');
+            await reply(PairCommand.ok);
+          case PairProofOutcome.wrong:
+            await reply(PairCommand.err, 'wrong');
+          case PairProofOutcome.tooEarly:
+            await reply(PairCommand.err, 'too_early');
+          case PairProofOutcome.rateLimited:
+            await reply(PairCommand.err, 'rate_limited');
+          case PairProofOutcome.noRequest:
+            await reply(PairCommand.err, 'no_request');
+        }
+      default:
+        debugPrint('RemoteCommandRouter: Unknown pair command $command');
+    }
+  }
+
+  /// When no pairing presenter is mounted (TV sitting on Home with its
+  /// always-on listener), raise the fallback code dialog.
+  void _ensurePairingUi(PairingGate gate) {
+    if (gate.hasPresenter) return;
+    final navigator = _navigatorKey?.currentState;
+    if (navigator == null) {
+      debugPrint('RemoteCommandRouter: No navigator for pairing dialog');
+      return;
+    }
+    showRemotePairingDialog(navigator.context, gate);
   }
 
   /// Try to handle navigation commands via platform key injection (Android) or focus system (other platforms)
@@ -1450,6 +1864,16 @@ class _ChunkBuffer {
   final int totalChunks;
   final List<String?> chunks;
 
+  /// v2 sealed-blob transfers: the payload is AES-GCM ciphertext bound to
+  /// session [sidB64] with counter [blobN]; decrypted after reassembly.
+  final bool encrypted;
+  final String? sidB64;
+  final int? blobN;
+
+  /// Datagram source of a PLAIN (v1) transfer's start packet, so the
+  /// reassembled payload replays under the sender's consent identity.
+  final String? sourceIp;
+
   /// Restarted on every chunk that arrives: the deadline is for a *stalled*
   /// transfer, not a slow one. A large payload is paced at 50ms per chunk, so
   /// a fixed deadline would kill transfers that were arriving perfectly.
@@ -1463,5 +1887,30 @@ class _ChunkBuffer {
     required this.totalChunks,
     required this.chunks,
     required this.timeout,
+    this.encrypted = false,
+    this.sidB64,
+    this.blobN,
+    this.sourceIp,
   });
+}
+
+/// A plaintext credential packet from a v1 sender, parked until the user
+/// answers the consent dialog.
+class _LegacyItem {
+  final bool isAddon;
+  final bool isComplete;
+  final String command;
+  final String data;
+
+  const _LegacyItem.config(this.command, this.data)
+      : isAddon = false,
+        isComplete = false;
+  const _LegacyItem.addon(this.command, this.data)
+      : isAddon = true,
+        isComplete = false;
+  const _LegacyItem.complete()
+      : isAddon = false,
+        isComplete = true,
+        command = ConfigCommand.complete,
+        data = '';
 }

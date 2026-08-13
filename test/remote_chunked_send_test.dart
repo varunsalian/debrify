@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/services/remote_control/remote_chunked_send.dart';
 import 'package:debrify/services/remote_control/remote_constants.dart';
+import 'package:debrify/services/remote_control/remote_session.dart';
 
 /// The framing that carries an oversized config payload to a TV.
 ///
@@ -11,6 +12,7 @@ import 'package:debrify/services/remote_control/remote_constants.dart';
 /// The size budget in [kChunkRawBytesPerChunk] was computed by hand; these
 /// tests are what keep it honest as the envelope changes.
 void main() {
+  encryptedBudgetTests();
   String packetFor(String data) => chunkPieceBody(
         // Worst case for the id: the real one is microseconds + a hash, so
         // pad to a length no live transfer will exceed.
@@ -146,6 +148,85 @@ void main() {
       // Receivers built before `kind` existed read this key and would throw
       // on its absence.
       expect(decoded['channelName'], 'IPTV lists');
+    });
+  });
+}
+
+/// v2 additions: sealed-blob transfers and the encrypted single-packet
+/// threshold. These pin the arithmetic in [fitsSinglePacketEncrypted] against
+/// the REAL sealed size — if the envelope grows, this fails before a user's
+/// transfer silently fragments.
+void encryptedBudgetTests() {
+  group('encrypted budget', () {
+    test('start packet with enc fields still fits one datagram', () {
+      final body = chunkStartBody(
+        transferId: '9' * 40,
+        command: ConfigCommand.iptvPlaylists,
+        label: 'IPTV providers',
+        totalChunks: 99999,
+        encSidB64: 'AAAAAAAAAAA=', // 8 bytes base64
+        encN: 1 << 52,
+      );
+      expect(utf8.encode(body).length, lessThanOrEqualTo(kChunkMaxBytes));
+      // And the legacy field is still there for old receivers.
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      expect(decoded['channelName'], 'IPTV providers');
+      expect(decoded['enc'], 1);
+    });
+
+    test('worst-case sealed ecmd at the threshold fits one datagram',
+        () async {
+      // Find the largest payload the threshold accepts.
+      var lo = 0, hi = kChunkDataMaxBytes;
+      while (lo < hi) {
+        final mid = (lo + hi + 1) ~/ 2;
+        if (fitsSinglePacketEncrypted('x' * mid)) {
+          lo = mid;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      expect(lo, greaterThan(700)); // sanity: threshold isn't degenerate
+
+      // Seal a REAL worst-case command envelope around it and measure the
+      // full ecmd datagram.
+      final payload = 'x' * lo;
+      final commandJson = jsonEncode({
+        'type': 'command',
+        'action': 'config',
+        'command': ConfigCommand.indexerManagers,
+        'data': payload,
+      });
+      final ct = await RemoteSessionCrypto.sealEcmd(
+        key: List<int>.filled(32, 7),
+        sid: List<int>.filled(8, 1),
+        n: 1 << 52, // worst-case digit count for a realistic counter
+        commandJson: commandJson,
+      );
+      final envelope = jsonEncode({
+        'type': 'ecmd',
+        'sid': 'AAAAAAAAAAA=',
+        'n': 1 << 52,
+        'ct': ct,
+      });
+      expect(utf8.encode(envelope).length, lessThanOrEqualTo(kChunkMaxBytes));
+    });
+
+    test('payload over the encrypted threshold is under the plaintext one',
+        () {
+      // The encrypted path must kick in earlier than the plaintext path —
+      // if these ever cross, sealed sends fragment.
+      var lo = 0, hi = kChunkDataMaxBytes;
+      while (lo < hi) {
+        final mid = (lo + hi + 1) ~/ 2;
+        if (fitsSinglePacketEncrypted('x' * mid)) {
+          lo = mid;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      expect(fitsSinglePacket('x' * lo), isTrue);
+      expect(lo, lessThan(kChunkDataMaxBytes));
     });
   });
 }
