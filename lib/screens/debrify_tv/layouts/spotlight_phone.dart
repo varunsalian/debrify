@@ -352,7 +352,12 @@ class _ChannelSheet extends StatelessWidget {
     final app = AppThemeScope.of(context);
     final tv = app.debrifyTv;
     final pinned = view.favoriteIds.contains(channel.id);
-    final DebrifyTvChannelStats? s = view.stats;
+    // Only stats computed FOR this channel: the sheet can open while the
+    // view still carries the previously focused channel's numbers, and a
+    // sample tapped in that window would play the wrong channel's torrent.
+    final DebrifyTvChannelStats? s = view.stats?.channelId == channel.id
+        ? view.stats
+        : null;
     final media = MediaQuery.of(context);
 
     void popThen(VoidCallback action) {

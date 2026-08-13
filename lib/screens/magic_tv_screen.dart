@@ -318,12 +318,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugLabel: 'DebrifyTVChannelSearch',
     );
     _loadSettings();
-    _loadChannels();
+    _loadChannels(); // also warms the Spotlight rail health, once per reload
     _loadFavoriteChannels();
-    if (_debrifyTvStyle == 'spotlight') {
-      // The rail's pips and captions — three grouped queries, once per mount.
-      _loadSpotlightRailHealth();
-    }
 
     // Register watch channel handler for external calls (e.g., from home screen)
     MainPageBridge.watchDebrifyTvChannel = _watchChannelById;
@@ -679,6 +675,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _rdSkipBlockedTorrents = rdSkipBlocked;
         _quickProvider = defaultProvider;
         _tvFilters = tvFilters;
+        // The filter is an INPUT to the memoised stage numbers: anything
+        // computed before this load landed used the empty default.
+        _spotlightStats.clear();
 
         // Update search settings
         _tvEngineStates
@@ -698,6 +697,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _minTorrentsPerKeyword = minTorrentsPerKeyword;
         _quickPlayMaxKeywords = quickPlayMaxKeywords;
       });
+      // Outside the setState callback: recomputing the focused channel's
+      // numbers schedules its own rebuild.
+      _refreshSpotlightStatsIfFocused(_spotlightFocusedId);
     }
 
     if (await StorageService.getDebrifyTvHideSeekbar() != hideOptions) {
@@ -857,6 +859,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           .map(DebrifyTvChannel.fromRecord)
           .toList(growable: false);
     });
+    // Every path that reloads channels (create, edit, delete-all, ZIP/YAML/
+    // community imports) has fresh pools too, so the rail's pips ride along
+    // here rather than each call site remembering to refresh them.
+    if (_debrifyTvStyle == 'spotlight') {
+      await _loadSpotlightRailHealth();
+    }
   }
 
   Future<void> _loadFavoriteChannels() async {
@@ -1185,6 +1193,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       _channelCache.remove(id);
       _spotlightStats.remove(id);
       _spotlightRailHealth = Map.of(_spotlightRailHealth)..remove(id);
+      // The layout's staged-channel repair fires onChannelFocused for its
+      // replacement; a dangling id here would make that look like a no-move.
+      if (_spotlightFocusedId == id) _spotlightFocusedId = null;
     });
   }
 
@@ -1606,6 +1617,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Widget _tvFilterChips({StateSetter? dialogSetState}) {
     void applyFilters(DebrifyTvFilters next) {
       setState(() => _tvFilters = next);
+      // "At your quality" is computed WITH the filter; stale memos would
+      // keep the old filter's count while playback uses the new one.
+      _invalidateSpotlightStats();
       dialogSetState?.call(() {});
     }
 
@@ -3767,6 +3781,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             _channelCache[channel.id] = baseline;
             _spotlightStats.remove(channel.id);
           });
+          _refreshSpotlightStatsIfFocused(channel.id);
           await DebrifyTvCacheService.saveEntry(baseline);
         } else {
           setState(() {
@@ -3804,9 +3819,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       await DebrifyTvCacheService.saveEntry(entry);
       await _loadChannels();
-      if (_debrifyTvStyle == 'spotlight') {
-        await _loadSpotlightRailHealth();
-      }
+      // Memo removal alone would leave the stage on its placeholder: only a
+      // focus MOVE computes, and editing from the stage doesn't move focus.
+      _refreshSpotlightStatsIfFocused(displayChannel.id);
 
       final successMsg = isEdit
           ? 'Channel "${updatedChannel.name}" updated'
@@ -3924,6 +3939,18 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       // The chosen title to the front; behaviour after it ends is unchanged.
       playbackSelection.removeWhere((t) => t.infohash == leadWith.infohash);
       playbackSelection.insert(0, leadWith);
+      if (playbackSelection.length == 1 && cacheEntry.torrents.length > 1) {
+        // The filter narrowed the selection to the pick alone while the pool
+        // holds more: refill behind it from the wider pool (same cap the
+        // selector uses), or an uncached pick would have nothing to fall
+        // through to — the single-element queue the plan forbids.
+        final rest =
+            cacheEntry.torrents
+                .where((t) => t.infohash != leadWith.infohash)
+                .toList()
+              ..shuffle(Random());
+        playbackSelection.addAll(rest.take(_playbackTorrentThreshold));
+      }
     }
     final cachedTorrents = playbackSelection
         .map((cached) => cached.toTorrent())
@@ -7781,23 +7808,48 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// computed only for the channel that focus RESTS on, and memoised — a
   /// pool does not change while you are looking at it.
   void _onSpotlightChannelFocused(DebrifyTvChannel channel) {
-    _spotlightFocusedId = channel.id;
-    if (_spotlightStats.containsKey(channel.id)) {
-      // Memoised — just make sure the view rebuilds pointing at it.
-      setState(() {});
-      return;
-    }
+    // Cancel FIRST, unconditionally: a memo hit must still kill a pending
+    // timer for the previous channel, or gliding B→A (A memoised) classifies
+    // B off-focus.
     _spotlightStatsDebounce?.cancel();
+    _spotlightFocusedId = channel.id;
+    // Rebuild NOW either way. On a miss the view's stats go null and the
+    // stage draws placeholders — never another channel's numbers, which a
+    // plate press would turn into another channel's torrent.
+    setState(() {});
+    if (_spotlightStats.containsKey(channel.id)) return;
     _spotlightStatsDebounce = Timer(
       const Duration(milliseconds: 250),
       () => _computeSpotlightStats(channel),
     );
   }
 
+  /// Wipe every memoised stage snapshot and recompute the focused channel's.
+  /// For when the numbers' INPUTS change — the quality filter — rather than
+  /// one channel's pool.
+  void _invalidateSpotlightStats() {
+    if (_debrifyTvStyle != 'spotlight') return;
+    _spotlightStats.clear();
+    _refreshSpotlightStatsIfFocused(_spotlightFocusedId);
+  }
+
+  /// A channel's pool (or the filter over it) changed; if it is the one the
+  /// stage is showing, schedule fresh numbers — memo removal alone leaves
+  /// the stage on its placeholder forever, since only a focus MOVE computes.
+  void _refreshSpotlightStatsIfFocused(String? channelId) {
+    if (_debrifyTvStyle != 'spotlight' || channelId == null) return;
+    if (_spotlightFocusedId != channelId) return;
+    final channel = _channels.firstWhereOrNull((c) => c.id == channelId);
+    if (channel != null) _onSpotlightChannelFocused(channel);
+  }
+
   Future<void> _computeSpotlightStats(DebrifyTvChannel channel) async {
     if (!mounted || _spotlightStats.containsKey(channel.id)) return;
     final entry = await _ensureCacheEntry(channel.id);
-    if (!mounted) return;
+    // Focus may have moved during the read; bail rather than classify an
+    // off-focus pool. The entry stays in _channelCache, so a return visit
+    // pays only the classify.
+    if (!mounted || _spotlightFocusedId != channel.id) return;
     final torrents = entry?.torrents ?? const <CachedTorrent>[];
 
     // ONE pass classifies every name: the quality count and the mix buckets
@@ -7832,6 +7884,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final sample = [...torrents]..shuffle(Random());
 
     final stats = DebrifyTvChannelStats(
+      channelId: channel.id,
       pooled: torrents.length,
       atYourQuality: atQuality,
       qualityMix: [uhd, fhd, rest],
@@ -9029,6 +9082,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     // them from either one.
                     _tvFilters = const DebrifyTvFilters.empty();
                   });
+                  _invalidateSpotlightStats();
                   dialogSetState?.call(() {});
 
                   await StorageService.setDebrifyTvFilterQualities(const []);

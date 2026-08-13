@@ -31,6 +31,12 @@ class DebrifyTvRailHealth {
 /// change while you are looking at it. Never computed for all channels on
 /// page load.
 class DebrifyTvChannelStats {
+  /// The channel this snapshot was computed FOR. Consumers must check it
+  /// against the channel they are drawing: focus can move faster than the
+  /// debounced pass, and stats worn by the wrong channel are not a flicker —
+  /// a plate activated in that window would queue another channel's torrent.
+  final String channelId;
+
   final int pooled;
 
   /// How many of the pool survive the user's quality filter, counted with the
@@ -56,6 +62,7 @@ class DebrifyTvChannelStats {
   final List<CachedTorrent> sample;
 
   const DebrifyTvChannelStats({
+    required this.channelId,
     required this.pooled,
     required this.atYourQuality,
     required this.qualityMix,

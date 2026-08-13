@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../models/debrify_tv/channel.dart';
+import '../../../models/debrify_tv/channel_stats.dart';
 import '../../../models/debrify_tv_cache.dart' show DebrifyTvCacheStatus;
 import '../../../services/main_page_bridge.dart';
 import '../../../theme/app_theme_scope.dart';
@@ -111,6 +112,58 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
       if (!mounted) return;
       final staged = _staged;
       if (staged != null) widget.view.onChannelFocused(staged);
+    });
+  }
+
+  @override
+  void didUpdateWidget(_SpotlightTvArm old) {
+    super.didUpdateWidget(old);
+    final ids = {for (final c in widget.view.channels) c.id};
+    final gone = [
+      for (final k in _nodes.keys)
+        if (k.startsWith('ch:') && !ids.contains(k.substring(3))) k,
+    ];
+    final stagedGone = _stagedId != null && !ids.contains(_stagedId);
+    if (gone.isEmpty && !stagedGone) return;
+
+    // Prune nodes for channels that no longer exist — an import/delete-heavy
+    // session must not grow the map for the life of the mount. Disposal
+    // waits a frame: the OLD subtree still holds these nodes until the
+    // rebuild this didUpdateWidget precedes has landed.
+    final removed = [for (final k in gone) _nodes.remove(k)!];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        for (final n in removed) {
+          n.dispose();
+        }
+        return;
+      }
+      if (stagedGone) {
+        // The staged channel was deleted. _staged already falls back to the
+        // first remaining row visually; make it sticky and tell the state,
+        // or the new channel's stage sits on its placeholder forever.
+        final staged = _staged;
+        setState(() => _stagedId = staged?.id);
+        if (staged != null) widget.view.onChannelFocused(staged);
+      }
+      // Explicit focus repair — never left to geometric traversal. Focus is
+      // orphaned when the focused row/action unmounted with the deletion.
+      final primary = FocusManager.instance.primaryFocus;
+      final orphaned =
+          primary == null ||
+          primary is FocusScopeNode ||
+          removed.contains(primary);
+      if (orphaned) {
+        final staged = _staged;
+        if (staged != null) {
+          _focusRail('ch:${staged.id}');
+        } else {
+          widget.entryFocusNode.requestFocus();
+        }
+      }
+      for (final n in removed) {
+        n.dispose();
+      }
     });
   }
 
@@ -280,7 +333,18 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
     _kDelete,
   ];
 
-  int get _sampleCount => widget.view.stats?.sample.length ?? 0;
+  /// The view's stats, ONLY when they were computed for the staged channel.
+  /// Focus moves faster than the debounced pass; stats worn by the wrong
+  /// channel are not a flicker — a plate press in that window would queue
+  /// another channel's torrent.
+  DebrifyTvChannelStats? get _stagedStats {
+    final s = widget.view.stats;
+    final staged = _staged;
+    if (s == null || staged == null || s.channelId != staged.id) return null;
+    return s;
+  }
+
+  int get _sampleCount => _stagedStats?.sample.length ?? 0;
 
   KeyEventResult _actionKey(String key, FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
@@ -371,7 +435,7 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
 
   void _activatePlate(int index) {
     final staged = _staged;
-    final stats = widget.view.stats;
+    final stats = _stagedStats;
     if (staged == null || stats == null || index >= stats.sample.length) {
       return;
     }
@@ -508,7 +572,7 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
                     pinned:
                         staged != null &&
                         view.favoriteIds.contains(staged.id),
-                    stats: view.stats,
+                    stats: _stagedStats,
                     busy: view.busy,
                     playNode: _node(_kPlay),
                     pinNode: _node(_kPin),
