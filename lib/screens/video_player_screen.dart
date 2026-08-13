@@ -2334,9 +2334,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _armPipAutoEnter();
     if (PlatformUtil.isTelevision && _controlsVisible.value) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Never while a guide/sheet is up: on tvOS IPTV the instance becomes
+        // ready SECONDS after a zap (and again on remedy-ladder restarts), so
+        // this fired after the sheet's one-shot focus claim and silently
+        // yanked the remote off it — the guide's focus went dead at random.
         if (mounted &&
             instanceGeneration == _playerInstanceGeneration &&
             _controlsVisible.value &&
+            !_anyPlayerOverlayOpen &&
             !_tvBarScope.hasFocus) {
           _tvPlayPauseFocus.requestFocus();
         }
@@ -9152,6 +9157,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _scheduleAutoHide();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_controlsVisible.value) return;
+      // An open overlay owns the remote — the bar must not pull focus out
+      // from under it.
+      if (_anyPlayerOverlayOpen) return;
       if (!_tvBarScope.hasFocus) _tvPlayPauseFocus.requestFocus();
     });
   }
@@ -9160,7 +9168,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// half the focused control is excluded from the tree and the remote dies.
   void _tvHideBar() {
     _controlsVisible.value = false;
-    _tvRootFocus.requestFocus();
+    // With an overlay up, focus belongs to the overlay (its claim may still
+    // be a frame away) — grabbing the root here would strand its DPAD.
+    if (!_anyPlayerOverlayOpen) _tvRootFocus.requestFocus();
   }
 
   /// Cinema scrub: hold LEFT/RIGHT to pause and preview a destination, OK to
@@ -9215,7 +9225,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _traktScrobbleSeek(target);
     _simklScrobbleSeek(target);
     if (_tvScrubWasPlaying) _player.play();
-    _tvPlayPauseFocus.requestFocus();
+    if (!_anyPlayerOverlayOpen) _tvPlayPauseFocus.requestFocus();
     // Fresh interval: the countdown that was running belonged to the scrub,
     // and inheriting its remainder could drop the bar the instant OK lands.
     _scheduleAutoHide();
@@ -9235,7 +9245,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() => _tvScrubTarget = null);
     _tvScrubRepeats = 0;
     if (_tvScrubWasPlaying) _player.play();
-    _tvPlayPauseFocus.requestFocus();
+    if (!_anyPlayerOverlayOpen) _tvPlayPauseFocus.requestFocus();
     _scheduleAutoHide();
   }
 

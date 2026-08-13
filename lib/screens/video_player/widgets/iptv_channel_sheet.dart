@@ -189,6 +189,13 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _keyboardFocusNode.requestFocus();
     });
+    // …and keep it for as long as the sheet is up. The player promises to
+    // ignore every key while this overlay is open, so the sheet losing real
+    // focus to ANYTHING outside itself (a late instance-ready refocus, a bar
+    // raise) leaves the whole guide deaf — the virtual white focus freezes
+    // and the DPAD appears dead. The sheet's own legitimate holders (search
+    // field, schedule pane, filter pickers) are exempt.
+    _keyboardFocusNode.addListener(_onKeyboardFocusChanged);
 
     _channels = List.from(widget.channels);
     _filteredChannels = List.from(_channels);
@@ -278,6 +285,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _keyboardFocusNode.removeListener(_onKeyboardFocusChanged);
     _keyboardFocusNode.dispose();
     _scheduleScope.dispose();
     _scrollController.dispose();
@@ -597,6 +605,29 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   }
 
   // ─── Scrolling ───────────────────────────────────────────────────────
+
+  /// True while one of the sheet's own picker dialogs holds focus — the
+  /// re-claim below must not fight a route the sheet itself opened.
+  bool _pickerOpen = false;
+
+  void _onKeyboardFocusChanged() {
+    if (_keyboardFocusNode.hasFocus) return;
+    if (_focusHeldElsewhereLegitimately) return;
+    // Re-checked post-frame: focus hops through transient states inside one
+    // update (e.g. keyboard → schedule row), and only a loss that SETTLED
+    // outside the sheet is theft.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _keyboardFocusNode.hasFocus ||
+          _focusHeldElsewhereLegitimately) {
+        return;
+      }
+      _keyboardFocusNode.requestFocus();
+    });
+  }
+
+  bool get _focusHeldElsewhereLegitimately =>
+      _pickerOpen || _searchFocusNode.hasFocus || _scheduleScope.hasFocus;
 
   void _scrollToFocused() {
     if (_filteredChannels.isEmpty || !_scrollController.hasClients) return;
@@ -1545,15 +1576,21 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   /// unreachable. A source can carry hundreds of categories, so a picker with
   /// its own search is the only shape that fits them all on any input.
   Future<void> _openCategoryPicker() async {
-    final choice = await showDialog<_CategoryChoice>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.6),
-      builder: (_) => _CategoryPickerDialog(
-        categories: _categories,
-        selected: _favoritesOnly ? null : _selectedCategory,
-        tokens: _t,
-      ),
-    );
+    _pickerOpen = true;
+    final _CategoryChoice? choice;
+    try {
+      choice = await showDialog<_CategoryChoice>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.6),
+        builder: (_) => _CategoryPickerDialog(
+          categories: _categories,
+          selected: _favoritesOnly ? null : _selectedCategory,
+          tokens: _t,
+        ),
+      );
+    } finally {
+      _pickerOpen = false;
+    }
     if (!mounted) return;
     // The dialog route held focus — take the DPAD back either way.
     _keyboardFocusNode.requestFocus();
@@ -1574,16 +1611,22 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
         ),
     ];
     if (options.isEmpty) return;
-    final choice = await showDialog<Map<String, dynamic>>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.6),
-      builder: (_) => _GuideSelectDialog(
-        icon: Icons.dns_rounded,
-        title: _sourceName,
-        options: options,
-        tokens: _t,
-      ),
-    );
+    _pickerOpen = true;
+    final Map<String, dynamic>? choice;
+    try {
+      choice = await showDialog<Map<String, dynamic>>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.6),
+        builder: (_) => _GuideSelectDialog(
+          icon: Icons.dns_rounded,
+          title: _sourceName,
+          options: options,
+          tokens: _t,
+        ),
+      );
+    } finally {
+      _pickerOpen = false;
+    }
     if (!mounted) return;
     _keyboardFocusNode.requestFocus();
     if (choice != null) unawaited(_selectSource(choice));
