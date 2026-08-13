@@ -67,6 +67,7 @@ dependencies:
   device_info_plus: ^12.4.0
   flutter_sharing_intent: ^2.0.4
   collection: ^1.19.1
+  synchronized: ^3.4.0
 
 
   
@@ -157,6 +158,7 @@ dependency_overrides:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  path_provider_platform_interface: ^2.1.2
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

@@ -99,13 +99,13 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
     });
 
     try {
-      _addons = await _stremioService.getAddons();
+      _addons = await _stremioService.getAddons(forSettings: true);
       for (final node in _addonFocusNodes.values) {
         node.dispose();
       }
       _addonFocusNodes.clear();
       for (final addon in _addons) {
-        _addonFocusNodes[addon.manifestUrl] = FocusNode(
+        _addonFocusNodes[addon.storageKey] = FocusNode(
           debugLabel: 'addon-${addon.id}',
         );
       }
@@ -331,7 +331,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
   }
 
   Future<void> _toggleAddon(StremioAddon addon) async {
-    await _stremioService.setAddonEnabled(addon.manifestUrl, !addon.enabled);
+    await _stremioService.setAddonEnabled(addon.storageKey, !addon.enabled);
   }
 
   Future<void> _updateAddon(StremioAddon addon) async {
@@ -478,26 +478,36 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
-              SelectableText(
-                addon.manifestUrl,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+              if (addon.canRevealManifestUrl)
+                SelectableText(
+                  addon.manifestUrl,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                Text(
+                  'Hidden for this shared profile',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
-              ),
             ],
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: addon.manifestUrl));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('URL copied to clipboard')),
-              );
-            },
-            child: const Text('Copy URL'),
-          ),
+          if (addon.canRevealManifestUrl)
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: addon.manifestUrl));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('URL copied to clipboard')),
+                );
+              },
+              child: const Text('Copy URL'),
+            ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Close'),
@@ -1153,7 +1163,7 @@ class _StremioAddonsPageContentState extends State<StremioAddonsPageContent> {
               child: _AddonTile(
                 addon: addon,
                 index: index,
-                focusNode: _addonFocusNodes[addon.manifestUrl]!,
+                focusNode: _addonFocusNodes[addon.storageKey]!,
                 onTap: () => _showAddonDetails(addon),
                 onToggle: () => _toggleAddon(addon),
                 onUpdate: () => _updateAddon(addon),
@@ -1288,7 +1298,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
     });
 
     try {
-      _addons = await _stremioService.getAddons();
+      _addons = await _stremioService.getAddons(forSettings: true);
 
       // Clean up old focus nodes
       for (final node in _addonFocusNodes.values) {
@@ -1298,7 +1308,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
 
       // Create focus nodes for each addon
       for (final addon in _addons) {
-        _addonFocusNodes[addon.manifestUrl] = FocusNode(
+        _addonFocusNodes[addon.storageKey] = FocusNode(
           debugLabel: 'addon-${addon.id}',
         );
       }
@@ -1356,7 +1366,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
   }
 
   Future<void> _toggleAddon(StremioAddon addon) async {
-    await _stremioService.setAddonEnabled(addon.manifestUrl, !addon.enabled);
+    await _stremioService.setAddonEnabled(addon.storageKey, !addon.enabled);
     // Note: _loadAddons() is called automatically via the addons changed listener
   }
 
@@ -1506,26 +1516,36 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
-              SelectableText(
-                addon.manifestUrl,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+              if (addon.canRevealManifestUrl)
+                SelectableText(
+                  addon.manifestUrl,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                Text(
+                  'Hidden for this shared profile',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
-              ),
             ],
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: addon.manifestUrl));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('URL copied to clipboard')),
-              );
-            },
-            child: const Text('Copy URL'),
-          ),
+          if (addon.canRevealManifestUrl)
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: addon.manifestUrl));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('URL copied to clipboard')),
+                );
+              },
+              child: const Text('Copy URL'),
+            ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Close'),
@@ -1650,10 +1670,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
           decoration: const InputDecoration(
             hintText: 'https://addon.example.com/manifest.json',
             border: OutlineInputBorder(),
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 14,
-            ),
+            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
           ),
           keyboardType: TextInputType.url,
           textInputAction: TextInputAction.done,
@@ -1793,7 +1810,7 @@ class _StremioAddonsPageState extends State<StremioAddonsPage> {
         return _AddonTile(
           addon: addon,
           index: index - 1,
-          focusNode: _addonFocusNodes[addon.manifestUrl]!,
+          focusNode: _addonFocusNodes[addon.storageKey]!,
           onTap: () => _showAddonDetails(addon),
           onToggle: () => _toggleAddon(addon),
           onUpdate: () => _updateAddon(addon),
@@ -2246,15 +2263,17 @@ class _AddonOptionsSheetState extends State<_AddonOptionsSheet> {
                 onTap: widget.onToggle,
               ),
             ),
-            FocusTraversalOrder(
-              order: const NumericFocusOrder(1),
-              child: _OptionTile(
-                focusNode: _updateFocusNode,
-                icon: Icons.refresh,
-                label: 'Update',
-                onTap: widget.onUpdate,
+            if (widget.addon.canManage) ...[
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(1),
+                child: _OptionTile(
+                  focusNode: _updateFocusNode,
+                  icon: Icons.refresh,
+                  label: 'Update',
+                  onTap: widget.onUpdate,
+                ),
               ),
-            ),
+            ],
             FocusTraversalOrder(
               order: const NumericFocusOrder(2),
               child: _OptionTile(
@@ -2264,16 +2283,17 @@ class _AddonOptionsSheetState extends State<_AddonOptionsSheet> {
                 onTap: widget.onDetails,
               ),
             ),
-            FocusTraversalOrder(
-              order: const NumericFocusOrder(3),
-              child: _OptionTile(
-                focusNode: _deleteFocusNode,
-                icon: Icons.delete_outline,
-                label: 'Remove',
-                isDestructive: true,
-                onTap: widget.onDelete,
+            if (widget.addon.canManage)
+              FocusTraversalOrder(
+                order: const NumericFocusOrder(3),
+                child: _OptionTile(
+                  focusNode: _deleteFocusNode,
+                  icon: Icons.delete_outline,
+                  label: 'Remove',
+                  isDestructive: true,
+                  onTap: widget.onDelete,
+                ),
               ),
-            ),
             const SizedBox(height: 8),
           ],
         ),

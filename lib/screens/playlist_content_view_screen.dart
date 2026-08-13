@@ -1125,9 +1125,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 16),
-              Text(
-                'Preparing playlist…',
-              ),
+              Text('Preparing playlist…'),
             ],
           ),
         ),
@@ -1272,8 +1270,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
               // D-pad exits for Android TV (formerly a Focus/onKeyEvent wrapper)
               onUpArrow: () => _searchFocusNode.unfocus(),
               onDownArrow: () => _searchFocusNode.unfocus(),
-              onRightArrow:
-                  hasText ? () => _searchClearFocusNode.requestFocus() : null,
+              onRightArrow: hasText
+                  ? () => _searchClearFocusNode.requestFocus()
+                  : null,
               // The shared TV shell/keyboard chrome follows settings.accent,
               // as Downloads established. The panel's ground and ink are the
               // keyboard's own roles rather than this surface's, so they come
@@ -1434,9 +1433,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                       children: [
                         Text(
                           node.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: const TextStyle(fontWeight: FontWeight.w500),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1689,9 +1686,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                         children: [
                           Text(
                             node.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w500),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -1872,10 +1867,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                 'Switching to Sort (A-Z) view...',
                 // Colors.white60 at its exact alpha, off the page ink.
                 style: TextStyle(
-                  color: AppThemeScope.of(context)
-                      .core
-                      .tx
-                      .withValues(alpha: 0x99 / 255),
+                  color: AppThemeScope.of(
+                    context,
+                  ).core.tx.withValues(alpha: 0x99 / 255),
                   fontSize: 14,
                 ),
               ),
@@ -2117,7 +2111,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         : null;
     final bool isAllDebrid =
         (widget.playlistItem?['provider'] as String?)?.toLowerCase() ==
-            'alldebrid';
+        'alldebrid';
     final String? allDebridHash = isAllDebrid
         ? (widget.playlistItem?['torrent_hash'] as String?)
         : null;
@@ -2429,8 +2423,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         }
       } else if (provider.toLowerCase() == 'premiumize') {
         final premiumizeHash = widget.playlistItem['torrent_hash'] as String?;
-        final premiumizeItemId =
-            widget.playlistItem['premiumizeItemId']?.toString();
+        final premiumizeItemId = widget.playlistItem['premiumizeItemId']
+            ?.toString();
         if (premiumizeHash != null && premiumizeHash.isNotEmpty) {
           updated = await StorageService.updatePlaylistItemPoster(
             posterUrl,
@@ -2902,8 +2896,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                                       ? app.playlist.statusWatched
                                       : const Color(0xFF6366F1),
                                   isFinished
-                                      ? app.playlist.statusWatched
-                                          .withValues(alpha: 0.7)
+                                      ? app.playlist.statusWatched.withValues(
+                                          alpha: 0.7,
+                                        )
                                       : const Color(
                                           0xFF6366F1,
                                         ).withValues(alpha: 0.7),
@@ -3062,8 +3057,9 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
                                       ? app.playlist.statusWatched
                                       : const Color(0xFF6366F1),
                                   isFinished
-                                      ? app.playlist.statusWatched
-                                          .withValues(alpha: 0.7)
+                                      ? app.playlist.statusWatched.withValues(
+                                          alpha: 0.7,
+                                        )
                                       : const Color(
                                           0xFF6366F1,
                                         ).withValues(alpha: 0.7),
@@ -3219,18 +3215,12 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         if (episodeInfo?.airDate != null)
           Text(
             _formatAirDate(episodeInfo!.airDate!),
-            style: TextStyle(
-              color: app.playlist.ink3,
-              fontSize: 11,
-            ),
+            style: TextStyle(color: app.playlist.ink3, fontSize: 11),
           ),
         if (episodeInfo?.runtime != null)
           Text(
             '${episodeInfo!.runtime} min',
-            style: TextStyle(
-              color: app.playlist.ink3,
-              fontSize: 11,
-            ),
+            style: TextStyle(color: app.playlist.ink3, fontSize: 11),
           ),
         if (episodeInfo?.rating != null)
           Row(
@@ -3385,9 +3375,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 16),
-              Text(
-                'Preparing playlist…',
-              ),
+              Text('Preparing playlist…'),
             ],
           ),
         ),
@@ -3637,7 +3625,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
     }
 
     final String initialVideoUrl = entries[startIndex].url;
-    final String seriesTitle = _seriesPlaylist?.seriesTitle ??
+    final String seriesTitle =
+        _seriesPlaylist?.seriesTitle ??
         widget.playlistItem['title'] as String? ??
         'Series';
 
@@ -3911,7 +3900,8 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
         );
       }
       if (cloudEntries.isEmpty) throw Exception('No playable files found');
-      final String seriesTitleCloud = _seriesPlaylist?.seriesTitle ??
+      final String seriesTitleCloud =
+          _seriesPlaylist?.seriesTitle ??
           widget.playlistItem['title'] as String? ??
           'Series';
       if (!mounted) return;
@@ -4067,7 +4057,7 @@ class _PlaylistContentViewScreenState extends State<PlaylistContentViewScreen> {
   Future<WebDavConfig?> _resolveWebDavConfig() async {
     final serverId = (widget.playlistItem['webdavServerId'] ?? '').toString();
     final baseUrl = (widget.playlistItem['webdavBaseUrl'] ?? '').toString();
-    final servers = await StorageService.getWebDavServers();
+    final servers = await StorageService.getWebDavServers(forSettings: false);
     for (final server in servers) {
       if (serverId.isNotEmpty && server.id == serverId) return server;
     }

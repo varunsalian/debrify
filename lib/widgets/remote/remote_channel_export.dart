@@ -14,10 +14,7 @@ import 'remote_pairing_dialog.dart';
 class RemoteChannelExport extends StatefulWidget {
   final VoidCallback onBack;
 
-  const RemoteChannelExport({
-    super.key,
-    required this.onBack,
-  });
+  const RemoteChannelExport({super.key, required this.onBack});
 
   @override
   State<RemoteChannelExport> createState() => _RemoteChannelExportState();
@@ -43,9 +40,9 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
         _channels = channels;
         _loading = false;
       });
-    } catch (e) {
-      debugPrint('RemoteChannelExport: Failed to load channels: $e');
-      setState(() => _loading = false);
+    } catch (_) {
+      debugPrint('RemoteChannelExport: channel load failed');
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -91,7 +88,10 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
 
     // Same gate as config transfers: channels can carry cached debrid links.
     final session = await ensureAuthorizedSession(
-        context, RemoteControlState(), connectedDevice);
+      context,
+      RemoteControlState(),
+      connectedDevice,
+    );
     if (session == null || !mounted) return;
 
     setState(() => _sending = true);
@@ -104,8 +104,9 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
     final List<String> sentNames = [];
 
     try {
-      final selectedChannels =
-          _channels.where((c) => _selectedIds.contains(c.channelId)).toList();
+      final selectedChannels = _channels
+          .where((c) => _selectedIds.contains(c.channelId))
+          .toList();
 
       for (var i = 0; i < selectedChannels.length; i++) {
         final channel = selectedChannels[i];
@@ -122,7 +123,10 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
 
           // Send to TV — use chunked transfer if payload is large
           final success = await _sendChannelToTv(
-            state, targetIp, debrifyUri, channel.name,
+            state,
+            targetIp,
+            debrifyUri,
+            channel.name,
           );
 
           if (success) {
@@ -131,8 +135,8 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
           } else {
             failCount++;
           }
-        } catch (e) {
-          debugPrint('RemoteChannelExport: Failed to send ${channel.name}: $e');
+        } catch (_) {
+          debugPrint('RemoteChannelExport: channel send failed');
           failCount++;
         }
 
@@ -174,13 +178,13 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
           );
         }
       }
-    } catch (e) {
-      debugPrint('RemoteChannelExport: Failed to send channels: $e');
+    } catch (_) {
+      debugPrint('RemoteChannelExport: channel batch send failed');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: const Color(0xFFEF4444),
+          const SnackBar(
+            content: Text('Failed to send channels'),
+            backgroundColor: Color(0xFFEF4444),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -230,10 +234,7 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
         // Title
         const Text(
           'Debrify TV Channels',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
 
         const SizedBox(height: 8),
@@ -282,12 +283,14 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed:
-                  _selectedIds.isNotEmpty && !_sending ? _sendToTv : null,
+              onPressed: _selectedIds.isNotEmpty && !_sending
+                  ? _sendToTv
+                  : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF6366F1),
-                disabledBackgroundColor:
-                    const Color(0xFF6366F1).withValues(alpha: 0.3),
+                disabledBackgroundColor: const Color(
+                  0xFF6366F1,
+                ).withValues(alpha: 0.3),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -338,9 +341,7 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: const Color(0xFF1E293B),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.1),
-                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
               ),
               child: Icon(
                 Icons.live_tv_outlined,
@@ -382,9 +383,7 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
           decoration: BoxDecoration(
             color: const Color(0xFF1E293B).withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
-            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: [
@@ -401,9 +400,7 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
                 value: _allSelected,
                 onChanged: (_) => _toggleSelectAll(),
                 activeColor: const Color(0xFF6366F1),
-                side: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.3),
-                ),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
               ),
             ],
           ),
@@ -476,9 +473,7 @@ class _RemoteChannelExportState extends State<RemoteChannelExport> {
                 value: isSelected,
                 onChanged: (_) => _toggleChannel(channel.channelId),
                 activeColor: const Color(0xFF6366F1),
-                side: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.3),
-                ),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
               ),
             ],
           ),

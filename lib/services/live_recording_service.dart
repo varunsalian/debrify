@@ -3,7 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../models/profiles/profile_policy.dart';
+import 'profiles/device_job_store.dart';
+import 'profiles/profile_preferences.dart';
+import 'profiles/profile_runtime.dart';
+import 'profiles/profile_bootstrap.dart';
 
 /// One live/terminal engine recording, as reported by the native store.
 class LiveRecordingStatus {
@@ -16,6 +20,10 @@ class LiveRecordingStatus {
   final int startedAtMs;
   final String? uri;
   final String? errorMessage;
+  final String ownerProfileId;
+  final String? connectionResourceId;
+  final int profileAuthorizationRevision;
+  final int? resourceAuthorizationRevision;
 
   const LiveRecordingStatus({
     required this.taskId,
@@ -27,6 +35,10 @@ class LiveRecordingStatus {
     required this.startedAtMs,
     this.uri,
     this.errorMessage,
+    required this.ownerProfileId,
+    this.connectionResourceId,
+    required this.profileAuthorizationRevision,
+    this.resourceAuthorizationRevision,
   });
 
   bool get isRecording => status == 'recording';
@@ -42,6 +54,12 @@ class LiveRecordingStatus {
       startedAtMs: (map['startedAtMs'] as num?)?.toInt() ?? 0,
       uri: map['uri']?.toString(),
       errorMessage: map['errorMessage']?.toString(),
+      ownerProfileId: map['ownerProfileId']?.toString() ?? 'legacy-admin-v1',
+      connectionResourceId: map['connectionResourceId']?.toString(),
+      profileAuthorizationRevision:
+          (map['profileAuthorizationRevision'] as num?)?.toInt() ?? 1,
+      resourceAuthorizationRevision:
+          (map['resourceAuthorizationRevision'] as num?)?.toInt(),
     );
   }
 }
@@ -54,6 +72,10 @@ class ScheduledRecording {
   final String programmeTitle;
   final int startMs;
   final int endMs;
+  final String ownerProfileId;
+  final String? connectionResourceId;
+  final int profileAuthorizationRevision;
+  final int? resourceAuthorizationRevision;
 
   const ScheduledRecording({
     required this.id,
@@ -62,6 +84,10 @@ class ScheduledRecording {
     required this.programmeTitle,
     required this.startMs,
     required this.endMs,
+    required this.ownerProfileId,
+    this.connectionResourceId,
+    required this.profileAuthorizationRevision,
+    this.resourceAuthorizationRevision,
   });
 
   factory ScheduledRecording.fromMap(Map<String, dynamic> map) {
@@ -72,6 +98,12 @@ class ScheduledRecording {
       programmeTitle: map['programmeTitle']?.toString() ?? '',
       startMs: (map['startMs'] as num?)?.toInt() ?? 0,
       endMs: (map['endMs'] as num?)?.toInt() ?? 0,
+      ownerProfileId: map['ownerProfileId']?.toString() ?? 'legacy-admin-v1',
+      connectionResourceId: map['connectionResourceId']?.toString(),
+      profileAuthorizationRevision:
+          (map['profileAuthorizationRevision'] as num?)?.toInt() ?? 1,
+      resourceAuthorizationRevision:
+          (map['resourceAuthorizationRevision'] as num?)?.toInt(),
     );
   }
 }
@@ -169,12 +201,12 @@ class LiveRecordingService {
   /// key from FlutterSharedPreferences (`flutter.recording_engine_enabled`);
   /// the native TV player snapshots it at activity launch.
   static Future<bool> engineEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_engineEnabledPref) ?? true;
   }
 
   static Future<void> setEngineEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_engineEnabledPref, enabled);
   }
 
@@ -197,7 +229,7 @@ class LiveRecordingService {
   /// default 2). Kotlin reads the same key from FlutterSharedPreferences
   /// (`flutter.recording_max_concurrent`).
   static Future<int> maxConcurrent() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     final value = (prefs.getInt(_maxConcurrentPref) ?? maxConcurrentDefault)
         .clamp(1, maxConcurrentCeiling);
     maxConcurrentCached = value;
@@ -206,7 +238,7 @@ class LiveRecordingService {
 
   static Future<void> setMaxConcurrent(int value) async {
     final clamped = value.clamp(1, maxConcurrentCeiling);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     await prefs.setInt(_maxConcurrentPref, clamped);
     maxConcurrentCached = clamped;
   }
@@ -298,10 +330,10 @@ class LiveRecordingService {
     Map<String, String>? headers,
   }) {
     if (_knownPlaylistUrls.contains(url)) return Future.value(true);
-    return _probePlaylist(url, headers).timeout(
-      const Duration(seconds: 3),
-      onTimeout: () => false,
-    );
+    return _probePlaylist(
+      url,
+      headers,
+    ).timeout(const Duration(seconds: 3), onTimeout: () => false);
   }
 
   /// Affirmative answers only — a channel proven to serve a playlist stays
@@ -314,8 +346,7 @@ class LiveRecordingService {
     String url,
     Map<String, String>? headers,
   ) async {
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 3);
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 3);
     try {
       var target = Uri.parse(url);
       final startOrigin = _originOf(target);
@@ -396,19 +427,52 @@ class LiveRecordingService {
     required String channelName,
     Map<String, String>? headers,
     int? maxDurationMs,
+    String? connectionResourceId,
+    int? resourceAuthorizationRevision,
   }) async {
     if (!Platform.isAndroid) {
       return const RecordingCallResult(errorCode: 'not_android');
     }
     try {
+      final authorization = await DeviceJobStore.authorize(
+        ProfileFeature.recordings,
+      );
+      if (authorization != null &&
+          !await DeviceJobStore.validateAuthorization(
+            profileId: authorization.profileId,
+            profileAuthorizationRevision:
+                authorization.profileAuthorizationRevision,
+            feature: ProfileFeature.recordings,
+            resourceId: connectionResourceId,
+            resourceAuthorizationRevision: resourceAuthorizationRevision,
+          )) {
+        return const RecordingCallResult(errorCode: 'resource_not_authorized');
+      }
+      final owner =
+          authorization?.toNativeArguments() ?? const <String, Object?>{};
       final id = await _channel.invokeMethod<String>('startLiveRecording', {
         'url': url,
         'fileName': fileName,
         'channelName': channelName,
         'headers': headers ?? <String, String>{},
         if (maxDurationMs != null) 'maxDurationMs': maxDurationMs,
+        ...owner,
+        if (connectionResourceId != null)
+          'connectionResourceId': connectionResourceId,
+        if (resourceAuthorizationRevision != null)
+          'resourceAuthorizationRevision': resourceAuthorizationRevision,
       });
       if (id == null) return const RecordingCallResult(errorCode: 'no_task_id');
+      if (authorization != null) {
+        await DeviceJobStore.register(
+          backend: 'androidNativeRecording',
+          externalJobId: id,
+          kind: DeviceJobKind.recording,
+          authorization: authorization,
+          resourceId: connectionResourceId,
+          resourceAuthorizationRevision: resourceAuthorizationRevision,
+        );
+      }
       return RecordingCallResult(id: id);
     } on PlatformException catch (e) {
       return RecordingCallResult(errorCode: e.code, errorMessage: e.message);
@@ -425,23 +489,68 @@ class LiveRecordingService {
   /// Native truth (persisted store merged with live registry). Reconciles
   /// dead entries first, so a process death shows up as a finalized
   /// recording, never a phantom "recording".
-  static Future<List<LiveRecordingStatus>> query() async {
+  static Future<List<LiveRecordingStatus>> query({
+    bool adminAggregate = false,
+    bool failClosed = false,
+  }) async {
     if (!Platform.isAndroid) return const [];
     try {
       final raw = await _channel.invokeMethod<List<dynamic>>(
         'queryLiveRecordings',
+        <String, Object?>{
+          ..._ownerFilter(),
+          if (adminAggregate) 'adminAggregate': true,
+        },
       );
       if (raw == null) return const [];
-      return raw
+      final result = raw
           .map(
             (e) => LiveRecordingStatus.fromMap(
               Map<String, dynamic>.from(e as Map),
             ),
           )
           .toList(growable: false);
+      if (ProfileRuntime.isProfileCommitted) {
+        for (final recording in result) {
+          await DeviceJobStore.registerSnapshot(
+            backend: 'androidNativeRecording',
+            externalJobId: recording.taskId,
+            kind: DeviceJobKind.recording,
+            ownerProfileId: recording.ownerProfileId,
+            profileAuthorizationRevision:
+                recording.profileAuthorizationRevision,
+            resourceId: recording.connectionResourceId,
+            resourceAuthorizationRevision:
+                recording.resourceAuthorizationRevision,
+            terminal: !recording.isRecording,
+          );
+          if (!recording.isRecording) {
+            await DeviceJobStore.markTerminal(
+              backend: 'androidNativeSchedule',
+              externalJobId: recording.taskId,
+            );
+            if ((recording.uri ?? '').isNotEmpty) {
+              await ProfileBootstrap.registry.upsertOwnedArtifact(
+                kind: 'recording',
+                ownerProfileId: recording.ownerProfileId,
+                canonicalPath: recording.uri!,
+                sizeBytes: recording.bytes,
+              );
+            }
+          }
+        }
+        await DeviceJobStore.reconcileBackend(
+          backend: 'androidNativeRecording',
+          ownerProfileId: ProfileRuntime.capture().profileId,
+          presentExternalJobIds: result.map((recording) => recording.taskId),
+        );
+      }
+      return result;
     } on PlatformException {
+      if (failClosed) rethrow;
       return const [];
     } on MissingPluginException {
+      if (failClosed) rethrow;
       return const [];
     }
   }
@@ -458,11 +567,15 @@ class LiveRecordingService {
   static Future<List<RecordingLibraryEntry>> queryLibrary() async {
     if (!Platform.isAndroid) return const [];
     try {
-      final raw = await _channel.invokeMethod<List<dynamic>>(
-        'queryRecordingsLibrary',
-      );
+		final raw = await _channel.invokeMethod<List<dynamic>>(
+			'queryRecordingsLibrary',
+			<String, Object?>{
+				..._ownerFilter(),
+				if (!ProfileRuntime.isProfileCommitted) 'adminAggregate': true,
+			},
+		);
       if (raw == null) return const [];
-      return raw
+      final result = raw
           .map(
             (e) => RecordingLibraryEntry.fromMap(
               Map<String, dynamic>.from(e as Map),
@@ -470,6 +583,19 @@ class LiveRecordingService {
           )
           .where((e) => e.uri.isNotEmpty)
           .toList(growable: false);
+      if (ProfileRuntime.isProfileCommitted) {
+        final owner = ProfileRuntime.capture().profileId;
+        for (final artifact in result) {
+          await ProfileBootstrap.registry.upsertOwnedArtifact(
+            kind: 'recording',
+            ownerProfileId: owner,
+            canonicalPath: artifact.uri,
+            sizeBytes: artifact.bytes,
+            modifiedAtMs: artifact.recordedAtMs,
+          );
+        }
+      }
+      return result;
     } on PlatformException {
       return const [];
     } on MissingPluginException {
@@ -492,11 +618,29 @@ class LiveRecordingService {
     required int endMs,
     Map<String, String>? headers,
     bool force = false,
+    String? connectionResourceId,
+    int? resourceAuthorizationRevision,
   }) async {
     if (!Platform.isAndroid) {
       return const RecordingCallResult(errorCode: 'not_android');
     }
     try {
+      final authorization = await DeviceJobStore.authorize(
+        ProfileFeature.recordings,
+      );
+      if (authorization != null &&
+          !await DeviceJobStore.validateAuthorization(
+            profileId: authorization.profileId,
+            profileAuthorizationRevision:
+                authorization.profileAuthorizationRevision,
+            feature: ProfileFeature.recordings,
+            resourceId: connectionResourceId,
+            resourceAuthorizationRevision: resourceAuthorizationRevision,
+          )) {
+        return const RecordingCallResult(errorCode: 'resource_not_authorized');
+      }
+      final owner =
+          authorization?.toNativeArguments() ?? const <String, Object?>{};
       final raw = await _channel
           .invokeMethod<Map<dynamic, dynamic>>('scheduleRecording', {
             'url': url,
@@ -506,6 +650,11 @@ class LiveRecordingService {
             'endMs': endMs,
             'headers': headers ?? <String, String>{},
             'force': force,
+            ...owner,
+            if (connectionResourceId != null)
+              'connectionResourceId': connectionResourceId,
+            if (resourceAuthorizationRevision != null)
+              'resourceAuthorizationRevision': resourceAuthorizationRevision,
           });
       if (raw == null) return const RecordingCallResult(errorCode: 'no_result');
       final result = RecordingCallResult(
@@ -513,6 +662,16 @@ class LiveRecordingService {
         exact: raw['exact'] == true,
       );
       if (result.ok) schedulesRevision.value++;
+      if (result.id != null && authorization != null) {
+        await DeviceJobStore.register(
+          backend: 'androidNativeSchedule',
+          externalJobId: result.id!,
+          kind: DeviceJobKind.schedule,
+          authorization: authorization,
+          resourceId: connectionResourceId,
+          resourceAuthorizationRevision: resourceAuthorizationRevision,
+        );
+      }
       return result;
     } on PlatformException catch (e) {
       return RecordingCallResult(errorCode: e.code, errorMessage: e.message);
@@ -527,24 +686,62 @@ class LiveRecordingService {
     return ok;
   }
 
-  static Future<List<ScheduledRecording>> listSchedules() async {
+  static Future<List<ScheduledRecording>> listSchedules({
+    bool adminAggregate = false,
+    bool failClosed = false,
+  }) async {
     if (!Platform.isAndroid) return const [];
     try {
       final raw = await _channel.invokeMethod<List<dynamic>>(
         'listScheduledRecordings',
+        <String, Object?>{
+          ..._ownerFilter(),
+          if (adminAggregate) 'adminAggregate': true,
+        },
       );
       if (raw == null) return const [];
-      return raw
+      final result = raw
           .map(
             (e) =>
                 ScheduledRecording.fromMap(Map<String, dynamic>.from(e as Map)),
           )
           .toList(growable: false);
+      if (ProfileRuntime.isProfileCommitted) {
+        for (final schedule in result) {
+          await DeviceJobStore.registerSnapshot(
+            backend: 'androidNativeSchedule',
+            externalJobId: schedule.id,
+            kind: DeviceJobKind.schedule,
+            ownerProfileId: schedule.ownerProfileId,
+            profileAuthorizationRevision: schedule.profileAuthorizationRevision,
+            resourceId: schedule.connectionResourceId,
+            resourceAuthorizationRevision:
+                schedule.resourceAuthorizationRevision,
+          );
+        }
+        await DeviceJobStore.reconcileBackend(
+          backend: 'androidNativeSchedule',
+          ownerProfileId: ProfileRuntime.capture().profileId,
+          presentExternalJobIds: result.map((schedule) => schedule.id),
+        );
+      }
+      return result;
     } on PlatformException {
+      if (failClosed) rethrow;
       return const [];
     } on MissingPluginException {
+      if (failClosed) rethrow;
       return const [];
     }
+  }
+
+  static Map<String, Object?> _ownerFilter() {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return const <String, Object?>{};
+    }
+    return <String, Object?>{
+      'ownerProfileId': ProfileRuntime.capture().profileId,
+    };
   }
 
   /// Engine availability, three-state: 'supported' (Android 10+, or pre-Q

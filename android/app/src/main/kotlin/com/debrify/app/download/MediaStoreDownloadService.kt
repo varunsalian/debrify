@@ -46,6 +46,10 @@ class MediaStoreDownloadService : Service() {
 		const val EXTRA_MIME_TYPE = "extra_mime_type"
 		const val EXTRA_HEADERS = "extra_headers" // HashMap<String, String>
 		const val EXTRA_TREE_URI = "extra_tree_uri" // SAF custom download folder (null -> MediaStore)
+		const val EXTRA_OWNER_PROFILE_ID = "extra_owner_profile_id"
+		const val EXTRA_CONNECTION_RESOURCE_ID = "extra_connection_resource_id"
+		const val EXTRA_PROFILE_AUTH_REVISION = "extra_profile_auth_revision"
+		const val EXTRA_RESOURCE_AUTH_REVISION = "extra_resource_auth_revision"
 
 		private const val NOTIFICATION_CHANNEL_ID = "downloads_channel_v2"
 		private const val NOTIFICATION_CHANNEL_NAME = "Downloads"
@@ -69,6 +73,10 @@ class MediaStoreDownloadService : Service() {
 		val mimeType: String,
 		val headers: HashMap<String, String>,
 		val treeUri: String? = null,
+		val ownerProfileId: String = "legacy-admin-v1",
+		val connectionResourceId: String? = null,
+		val profileAuthorizationRevision: Long = 1L,
+		val resourceAuthorizationRevision: Long? = null,
 		var uri: Uri? = null,
 		@Volatile var downloaded: Long = 0L,
 		@Volatile var total: Long = -1L,
@@ -183,6 +191,12 @@ class MediaStoreDownloadService : Service() {
 						mimeType = intent.getStringExtra(EXTRA_MIME_TYPE) ?: "application/octet-stream",
 						headers = headers,
 						treeUri = intent.getStringExtra(EXTRA_TREE_URI),
+						ownerProfileId = intent.getStringExtra(EXTRA_OWNER_PROFILE_ID)
+							?: "legacy-admin-v1",
+						connectionResourceId = intent.getStringExtra(EXTRA_CONNECTION_RESOURCE_ID),
+						profileAuthorizationRevision = intent.getLongExtra(EXTRA_PROFILE_AUTH_REVISION, 1L),
+						resourceAuthorizationRevision = if (intent.hasExtra(EXTRA_RESOURCE_AUTH_REVISION))
+							intent.getLongExtra(EXTRA_RESOURCE_AUTH_REVISION, 1L) else null,
 					)
 				}
 				states[taskId] = state
@@ -213,6 +227,7 @@ class MediaStoreDownloadService : Service() {
 					ChannelBridge.emit(mapOf(
 						"type" to "paused",
 						"taskId" to taskId!!,
+						"url" to s.url,
 						"fileName" to s.fileName,
 						"subDir" to s.subDir,
 					))
@@ -228,6 +243,7 @@ class MediaStoreDownloadService : Service() {
 						ChannelBridge.emit(mapOf(
 							"type" to "paused",
 							"taskId" to taskId,
+							"url" to entry.url,
 							"fileName" to entry.fileName,
 							"subDir" to entry.subDir,
 						))
@@ -252,6 +268,7 @@ class MediaStoreDownloadService : Service() {
 						ChannelBridge.emit(mapOf(
 							"type" to "resumed",
 							"taskId" to taskId,
+							"url" to revived.url,
 							"fileName" to revived.fileName,
 							"subDir" to revived.subDir,
 						))
@@ -272,6 +289,7 @@ class MediaStoreDownloadService : Service() {
 					ChannelBridge.emit(mapOf(
 						"type" to "resumed",
 						"taskId" to taskId!!,
+						"url" to s.url,
 						"fileName" to s.fileName,
 						"subDir" to s.subDir,
 					))
@@ -304,6 +322,7 @@ class MediaStoreDownloadService : Service() {
 						ChannelBridge.emit(mapOf(
 							"type" to "canceled",
 							"taskId" to taskId,
+							"url" to entry.url,
 							"fileName" to entry.fileName,
 							"subDir" to entry.subDir,
 						))
@@ -329,6 +348,10 @@ class MediaStoreDownloadService : Service() {
 			mimeType = entry.mimeType,
 			headers = headersOverride ?: entry.headers,
 			treeUri = entry.treeUri,
+			ownerProfileId = entry.ownerProfileId,
+			connectionResourceId = entry.connectionResourceId,
+			profileAuthorizationRevision = entry.profileAuthorizationRevision,
+			resourceAuthorizationRevision = entry.resourceAuthorizationRevision,
 			uri = entry.uri?.let { Uri.parse(it) },
 			total = entry.total,
 			etag = entry.etag,
@@ -354,11 +377,23 @@ class MediaStoreDownloadService : Service() {
 				status = status,
 				errorMessage = errorMessage,
 				updatedAt = System.currentTimeMillis(),
+				ownerProfileId = state.ownerProfileId,
+				connectionResourceId = state.connectionResourceId,
+				profileAuthorizationRevision = state.profileAuthorizationRevision,
+				resourceAuthorizationRevision = state.resourceAuthorizationRevision,
 			))
 		} catch (_: Exception) {}
 	}
 
 	private fun spawnWorker(state: DownloadState) {
+		if (!jobAuthorizationValid(state)) {
+			persistState(state, status = "failed", errorMessage = "profile authorization changed")
+			states.remove(state.taskId)
+			DownloadRegistry.live.remove(state.taskId)
+			notifyTask(state, "Download stopped — profile access changed", indeterminate = false, completed = true)
+			stopIfIdle()
+			return
+		}
 		Thread {
 			try {
 				downloadLoop(state)
@@ -369,6 +404,16 @@ class MediaStoreDownloadService : Service() {
 			}
 		}.start()
 	}
+
+	private fun jobAuthorizationValid(state: DownloadState): Boolean =
+		com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
+			this,
+			state.ownerProfileId,
+			state.profileAuthorizationRevision,
+			if (state.taskId.startsWith("update-")) "appUpdates" else "downloads",
+			state.connectionResourceId,
+			state.resourceAuthorizationRevision,
+		)
 
 	// The ONLY place a task may reach a terminal state. Clears/deletes the
 	// destination as appropriate, updates the persistent store, emits exactly
@@ -385,17 +430,20 @@ class MediaStoreDownloadService : Service() {
 						contentResolver.update(uri, done, null, null)
 					} catch (_: Exception) {}
 				}
-				DownloadTaskStore.remove(this, state.taskId)
+				// Retain a bounded terminal hand-off record until Flutter reconciles
+				// ownership/artifact ledgers after a background-only completion.
+				persistState(state, status = "done")
 				notifyTask(state, "Download complete", indeterminate = false, completed = true)
 				val reportedTotal = if (state.total > 0L) state.total else state.downloaded
 				ChannelBridge.emit(mapOf(
 					"type" to "complete",
 					"taskId" to state.taskId,
+					"url" to state.url,
 					"bytes" to state.downloaded,
 					"total" to reportedTotal,
 					"fileName" to state.fileName,
 					"subDir" to state.subDir,
-					"url" to state.url,
+					"ownerProfileId" to state.ownerProfileId,
 					"contentUri" to (uri?.toString() ?: ""),
 					"mimeType" to state.mimeType,
 				))
@@ -411,13 +459,14 @@ class MediaStoreDownloadService : Service() {
 				ChannelBridge.emit(mapOf(
 					"type" to "error",
 					"taskId" to state.taskId,
+					"url" to state.url,
 					"message" to outcome.message,
 					"httpCode" to outcome.httpCode,
 					"bytes" to state.downloaded,
 					"total" to state.total,
 					"fileName" to state.fileName,
 					"subDir" to state.subDir,
-					"url" to state.url,
+					"ownerProfileId" to state.ownerProfileId,
 				))
 			}
 			is Outcome.Canceled -> {
@@ -426,6 +475,7 @@ class MediaStoreDownloadService : Service() {
 				ChannelBridge.emit(mapOf(
 					"type" to "canceled",
 					"taskId" to state.taskId,
+					"url" to state.url,
 					"fileName" to state.fileName,
 					"subDir" to state.subDir,
 				))
@@ -543,6 +593,12 @@ class MediaStoreDownloadService : Service() {
 				states.values.forEach { s ->
 					if (s.running.get() && !s.paused && !s.canceled) {
 						anyRunning = true
+						if (!jobAuthorizationValid(s)) {
+							s.canceled = true
+							try { s.input?.close() } catch (_: Exception) {}
+							try { s.connection?.disconnect() } catch (_: Exception) {}
+							return@forEach
+						}
 						if (s.lastByteAt > 0 && now - s.lastByteAt > STALL_TIMEOUT_MS) {
 							try { s.input?.close() } catch (_: Exception) {}
 							try { s.connection?.disconnect() } catch (_: Exception) {}
@@ -650,6 +706,7 @@ class MediaStoreDownloadService : Service() {
 		var outcome: Outcome? = null
 		var settled = false
 		try {
+			if (!jobAuthorizationValid(state)) return Outcome.Canceled
 			// Fresh liveness stamp for THIS attempt: with readTimeout=0 the
 			// stall watchdog is the only dead-stream detector, so it must also
 			// cover the connect/header phase — and a stale stamp from the
@@ -662,7 +719,7 @@ class MediaStoreDownloadService : Service() {
 				justCreated = true
 				state.uri = uri
 				persistState(state, status = "running")
-				ChannelBridge.emit(mapOf("type" to "started", "taskId" to state.taskId, "fileName" to state.fileName, "subDir" to state.subDir))
+					ChannelBridge.emit(mapOf("type" to "started", "taskId" to state.taskId, "url" to state.url, "fileName" to state.fileName, "subDir" to state.subDir))
 			}
 
 			// Always confirm bytes already written on disk — the on-disk size is
@@ -787,15 +844,16 @@ class MediaStoreDownloadService : Service() {
 			state.lastByteAt = System.currentTimeMillis()
 			notifyTask(state, "Downloading", indeterminate = state.total <= 0, completed = false)
 			updateSummaryNotification()
-			if (state.downloaded == 0L) {
-				ChannelBridge.emit(mapOf(
-					"type" to "progress",
-					"taskId" to state.taskId,
+				if (state.downloaded == 0L) {
+					ChannelBridge.emit(mapOf(
+						"type" to "progress",
+						"taskId" to state.taskId,
+						"url" to state.url,
 					"bytes" to state.downloaded,
 					"total" to state.total,
 					"fileName" to state.fileName,
 					"subDir" to state.subDir,
-					"url" to state.url,
+					"ownerProfileId" to state.ownerProfileId,
 				))
 			}
 
@@ -813,13 +871,14 @@ class MediaStoreDownloadService : Service() {
 					registryLive.total = state.total
 					notifyTask(state, "Downloading", indeterminate = state.total <= 0, completed = false)
 					ChannelBridge.emit(mapOf(
-						"type" to "progress",
-						"taskId" to state.taskId,
+							"type" to "progress",
+							"taskId" to state.taskId,
+							"url" to state.url,
 						"bytes" to state.downloaded,
 						"total" to state.total,
 						"fileName" to state.fileName,
 						"subDir" to state.subDir,
-						"url" to state.url,
+						"ownerProfileId" to state.ownerProfileId,
 					))
 					lastUpdate = now
 				}

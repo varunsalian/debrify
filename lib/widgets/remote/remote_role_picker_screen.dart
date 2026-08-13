@@ -221,12 +221,15 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
                       Center(
                         child: TextButton.icon(
                           onPressed: () => showPairedDevicesDialog(context),
-                          icon: const Icon(Icons.phonelink_lock_rounded,
-                              size: 18),
+                          icon: const Icon(
+                            Icons.phonelink_lock_rounded,
+                            size: 18,
+                          ),
                           label: const Text('Paired remote devices'),
                           style: TextButton.styleFrom(
-                            foregroundColor:
-                                Colors.white.withValues(alpha: 0.7),
+                            foregroundColor: Colors.white.withValues(
+                              alpha: 0.7,
+                            ),
                           ),
                         ),
                       ),

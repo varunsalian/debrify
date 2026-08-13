@@ -7,8 +7,7 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import '../utils/app_storage.dart';
+import 'profiles/profile_storage_paths.dart';
 import 'package:sqlite3/open.dart' as sqlite_open;
 import 'package:sqlite3/sqlite3.dart';
 
@@ -405,6 +404,7 @@ class IptvCatalogDb {
       )
     ''',
   ];
+
   /// Metadata-only DDL: `ALTER TABLE ... ADD COLUMN` rewrites the schema
   /// header and never touches a row, so its cost is independent of catalog
   /// size and it can stay on the connection-preparation path. Everything that
@@ -543,7 +543,7 @@ class IptvCatalogDb {
       await runExclusive(() async {
         final dir =
             debugDirectoryOverride ??
-            (await AppStorage.documents()).path;
+            await ProfileStoragePaths.documentsDirectory();
         final base = p.join(dir, _dbFileName);
         for (final suffix in const ['', '-wal', '-shm']) {
           try {
@@ -630,12 +630,11 @@ class IptvCatalogDb {
     // Counted where the run is actually created, so concurrent callers that
     // share one migration are one run, not several.
     if (_migrating == null) debugMigrationRunCount++;
-    await (_migrating ??=
-        compute(
-          _migrateCatalogDb,
-          path,
-          debugLabel: 'iptv-catalog-db-migrate',
-        ).whenComplete(() => _migrating = null));
+    await (_migrating ??= compute(
+      _migrateCatalogDb,
+      path,
+      debugLabel: 'iptv-catalog-db-migrate',
+    ).whenComplete(() => _migrating = null));
     return true;
   }
 
@@ -680,7 +679,7 @@ class IptvCatalogDb {
   static Future<void> _open() async {
     final dir =
         debugDirectoryOverride ??
-        (await AppStorage.documents()).path;
+        await ProfileStoragePaths.documentsDirectory();
     final path = p.join(dir, _dbFileName);
 
     final prepared = await compute(
@@ -725,6 +724,15 @@ class IptvCatalogDb {
     debugMaintenanceRunCount = 0;
     _maintenanceQueue = Future<void>.value();
   }
+
+  static Future<void> closeScope() => runExclusive(() async {
+    await _opening;
+    _db?.dispose();
+    _db = null;
+    _path = null;
+    _opening = null;
+    _migrating = null;
+  });
 
   /// Shared connection setup — reader (UI) and writer (worker) sides must
   /// agree on WAL and busy behavior or one of them fails under contention.
@@ -951,25 +959,16 @@ class IptvCatalogDb {
     CatalogSnapshot snap, {
     bool includeHidden = false,
   }) {
-    return compute(
-      _readGroupsJob,
-      (
-        dbPath: path,
-        catalogKey: snap.catalogKey,
-        generation: snap.generation,
-        includeHidden: includeHidden,
-      ),
-      debugLabel: 'iptv-catalog-groups',
-    );
+    return compute(_readGroupsJob, (
+      dbPath: path,
+      catalogKey: snap.catalogKey,
+      generation: snap.generation,
+      includeHidden: includeHidden,
+    ), debugLabel: 'iptv-catalog-groups');
   }
 
   static List<CatalogGroup> _readGroupsJob(
-    ({
-      String dbPath,
-      String catalogKey,
-      int generation,
-      bool includeHidden,
-    })
+    ({String dbPath, String catalogKey, int generation, bool includeHidden})
     job,
   ) {
     final db = _openConnection(job.dbPath);
@@ -1426,7 +1425,7 @@ class IptvCatalogDb {
   /// backfill membership rows migrated from the old favorites table, which
   /// predate those columns.
   static List<({String url, String? contentType, int? duration})>
-      catalogPresentationRows({
+  catalogPresentationRows({
     required String dbPath,
     required String catalogKey,
   }) {
@@ -1690,10 +1689,9 @@ class IptvCatalogDb {
   /// backoff has not expired. Synchronous single-row read — cheap enough for
   /// the page-load path.
   static bool adoptionRecentlyFailed(String sourceKey) {
-    final rows = _requireDb().select(
-      'SELECT value FROM meta WHERE key = ?',
-      [_adoptionFailureKey(sourceKey)],
-    );
+    final rows = _requireDb().select('SELECT value FROM meta WHERE key = ?', [
+      _adoptionFailureKey(sourceKey),
+    ]);
     if (rows.isEmpty) return false;
     final at = int.tryParse(rows.first['value'] as String);
     if (at == null) return false;
@@ -1725,13 +1723,11 @@ class IptvCatalogDb {
       // database is unusable enough to fail the adoption, this write can fail
       // too, and throwing from a catch block would swallow the real cause.
       try {
-        _requireDb().execute(
-          'INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)',
-          [
-            _adoptionFailureKey(sourceKey),
-            '${DateTime.now().millisecondsSinceEpoch}',
-          ],
-        );
+        _requireDb()
+            .execute('INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)', [
+              _adoptionFailureKey(sourceKey),
+              '${DateTime.now().millisecondsSinceEpoch}',
+            ]);
       } catch (_) {}
       rethrow;
     }
@@ -1753,13 +1749,11 @@ class IptvCatalogDb {
   /// therefore survives exactly one situation: the process died mid-refresh.
   /// That is the signal [revalidateInterrupted] reads.
   static void markRevalidateStarted(String catalogKey) {
-    _requireDb().execute(
-      'INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)',
-      [
-        _revalidateStartedKey(catalogKey),
-        '${DateTime.now().millisecondsSinceEpoch}',
-      ],
-    );
+    _requireDb()
+        .execute('INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)', [
+          _revalidateStartedKey(catalogKey),
+          '${DateTime.now().millisecondsSinceEpoch}',
+        ]);
   }
 
   static void markRevalidateFinished(String catalogKey) {
@@ -1778,10 +1772,9 @@ class IptvCatalogDb {
   /// completes. Backing off leaves the saved catalog on screen and working,
   /// with the refresh chip still there for anyone who wants to force it.
   static bool revalidateInterrupted(String catalogKey) {
-    final rows = _requireDb().select(
-      'SELECT value FROM meta WHERE key = ?',
-      [_revalidateStartedKey(catalogKey)],
-    );
+    final rows = _requireDb().select('SELECT value FROM meta WHERE key = ?', [
+      _revalidateStartedKey(catalogKey),
+    ]);
     if (rows.isEmpty) return false;
     final at = int.tryParse(rows.first['value'] as String);
     if (at == null) return false;
@@ -2060,12 +2053,10 @@ class CatalogSnapshot {
   /// otherwise flip it to false and put the source back into the
   /// revalidate-on-every-visit loop the flag exists to prevent.
   bool get hasLiveChannels {
-    return _db
-        .select(
-          'SELECT 1 $_base AND $_isLiveSql LIMIT 1',
-          [catalogKey, generation],
-        )
-        .isNotEmpty;
+    return _db.select('SELECT 1 $_base AND $_isLiveSql LIMIT 1', [
+      catalogKey,
+      generation,
+    ]).isNotEmpty;
   }
 
   /// Catalog position of the row matching url+name, or null. (Duplicate

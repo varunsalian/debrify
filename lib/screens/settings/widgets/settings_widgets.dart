@@ -92,6 +92,11 @@ abstract final class SettingsRows {
     title: 'Remote',
     subtitle: 'Control another device, send or receive setup',
   );
+  static const switchProfile = SettingsRowContent(
+    icon: Icons.switch_account_rounded,
+    title: 'Switch profile',
+    subtitle: 'Choose who is using Debrify',
+  );
   static const navigationStyle = SettingsRowContent(
     icon: Icons.call_to_action_rounded,
     title: 'Navigation',

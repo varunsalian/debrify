@@ -37,6 +37,8 @@ import '../utils/movie_parser.dart';
 import '../services/movie_metadata_service.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/simkl/simkl_service.dart';
+import '../models/profiles/profile_policy.dart';
+import 'profiles/profile_policy_guard.dart';
 
 /// Trakt scrobble dedup guard for Android TV player (mirrors _traktLastScrobbleAction in VideoPlayerScreen)
 String? _traktLastScrobbleAction;
@@ -1138,6 +1140,16 @@ class VideoPlayerLauncher {
     // tracker CW seed must tag the episode actually handed over.
     void Function(int season, int episode)? onSeriesEntryChosen,
   }) async {
+    if (!await ProfilePolicyGuard.allows(ProfileFeature.externalPlayers)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('External players are disabled for this profile.'),
+          ),
+        );
+      }
+      return false;
+    }
     // Determine the correct URL to play (considering resume state for series)
     String url = args.videoUrl;
     String title = args.title;
@@ -1248,6 +1260,11 @@ class VideoPlayerLauncher {
           'ExternalPlayer: Failed to determine start index, using default: $e',
         );
       }
+    }
+
+    if (_mayDiscloseCredential(url) &&
+        !await _confirmExternalDisclosure(context)) {
+      return false;
     }
 
     if (Platform.isMacOS) {
@@ -1419,6 +1436,14 @@ class VideoPlayerLauncher {
     final url = args.videoUrl;
     final title = args.title;
 
+    if (!await ProfilePolicyGuard.allows(ProfileFeature.externalPlayers)) {
+      return false;
+    }
+    if (_mayDiscloseCredential(url) &&
+        !await _confirmExternalDisclosure(context)) {
+      return false;
+    }
+
     try {
       // Load VR settings
       final vrAutoDetectFormat =
@@ -1516,6 +1541,51 @@ class VideoPlayerLauncher {
       }
       return false;
     }
+  }
+
+  static bool _mayDiscloseCredential(String source) {
+    final uri = Uri.tryParse(source);
+    if (uri == null) return true;
+    if (uri.userInfo.isNotEmpty) return true;
+    const sensitive = <String>{
+      'token',
+      'key',
+      'api_key',
+      'apikey',
+      'auth',
+      'authorization',
+      'signature',
+      'sig',
+      'expires',
+    };
+    return uri.queryParameters.keys.any(
+      (key) => sensitive.contains(key.toLowerCase()),
+    );
+  }
+
+  static Future<bool> _confirmExternalDisclosure(BuildContext context) async {
+    if (!context.mounted) return false;
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Share stream with another app?'),
+            content: const Text(
+              'This stream address may contain a short-lived account token. '
+              'The selected player will be able to read it.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Use Debrify player'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Continue'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   /// Show DeoVR format selection dialog

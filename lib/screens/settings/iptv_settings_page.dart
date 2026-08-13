@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../models/iptv_playlist.dart';
+import '../../models/profiles/profile_policy.dart';
 import '../../services/iptv_catalog_key.dart';
 import '../../services/iptv_catalog_db.dart';
 import '../../services/iptv_service.dart';
@@ -19,6 +20,7 @@ import '../../utils/tv_reveal.dart';
 import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_media_store.dart' show IptvListMeta;
 import '../../services/live_recording_service.dart';
+import '../../services/profiles/profile_async_authorization.dart';
 import '../../widgets/iptv/iptv_list_name_dialog.dart';
 import 'iptv_hidden_categories_page.dart';
 import 'iptv_style_page.dart';
@@ -174,6 +176,18 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
   // Continue watching
   bool _trackContinueWatching = true;
+
+  Future<void> _runProfileAction(Future<void> Function() body) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.iptv,
+    );
+    if (!mounted) return;
+    if (authorization == null) {
+      await body();
+    } else {
+      await authorization.runIfCurrent(body);
+    }
+  }
 
   // Cockpit appearance (`iptv_style`). Shown only where the cockpit exists —
   // Android TV and desktop; a phone or touch tablet would be picking a look
@@ -444,7 +458,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     return number is num ? 'CH $number  ·  $name' : name;
   }
 
-  Future<void> _setStartupMode(String? mode) async {
+  Future<void> _setStartupMode(String? mode) =>
+      _runProfileAction(() => _setStartupModeForProfile(mode));
+
+  Future<void> _setStartupModeForProfile(String? mode) async {
     if (mode == null) return;
     await StorageService.setStartupIptvMode(mode);
     if (mounted) setState(() => _startupMode = mode);
@@ -456,28 +473,45 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     }
   }
 
-  Future<void> _setTrackContinueWatching(bool value) async {
+  Future<void> _setStartupEnabled(bool enabled) => _runProfileAction(() async {
+    await StorageService.setStartupIptvEnabled(enabled);
+    if (mounted) setState(() => _startupEnabled = enabled);
+  });
+
+  Future<void> _setTrackContinueWatching(bool value) =>
+      _runProfileAction(() => _setTrackContinueWatchingForProfile(value));
+
+  Future<void> _setTrackContinueWatchingForProfile(bool value) async {
     await StorageService.setIptvTrackContinueWatching(value);
     if (mounted) setState(() => _trackContinueWatching = value);
   }
 
-  Future<void> _setIptvStyle(String style) async {
+  Future<void> _setIptvStyle(String style) =>
+      _runProfileAction(() => _setIptvStyleForProfile(style));
+
+  Future<void> _setIptvStyleForProfile(String style) async {
     // Persist BEFORE reflecting the choice: the IPTV page re-reads the pref
     // the moment this route pops, and an unawaited write could lose that race.
     await StorageService.setIptvStyle(style);
     if (mounted) setState(() => _iptvStyle = style);
   }
 
-  Future<void> _setPlayerGuideStyle(String style) async {
+  Future<void> _setPlayerGuideStyle(String style) =>
+      _runProfileAction(() => _setPlayerGuideStyleForProfile(style));
+
+  Future<void> _setPlayerGuideStyleForProfile(String style) async {
     // Same persist-before-setState contract as [_setIptvStyle]: the player
     // reads the pref at launch, which can happen the moment this route pops.
     await StorageService.setIptvPlayerGuideStyle(style);
     if (mounted) setState(() => _playerGuideStyle = style);
   }
 
-  Future<void> _pickStartupChannel() async {
+  Future<void> _pickStartupChannel() =>
+      _runProfileAction(_pickStartupChannelForProfile);
+
+  Future<void> _pickStartupChannelForProfile() async {
     final choice = await showIptvStartupChannelPicker(context);
-    if (choice == null) return;
+    if (choice == null || !mounted) return;
     await StorageService.setStartupIptvChannel(
       choice.url,
       name: choice.name,
@@ -500,7 +534,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     } catch (_) {
       // A catalog that won't open just means "no stats"; the page still works.
     }
-    final playlists = await StorageService.getIptvPlaylists();
+    final playlists = await StorageService.getIptvPlaylists(forSettings: true);
     final defaultId = await StorageService.getIptvDefaultPlaylist();
     final lists = await StorageService.getIptvLists();
     final startupEnabled = await StorageService.getStartupIptvEnabled();
@@ -588,7 +622,9 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     }
   }
 
-  Future<void> _addPlaylist() async {
+  Future<void> _addPlaylist() => _runProfileAction(_addPlaylistForProfile);
+
+  Future<void> _addPlaylistForProfile() async {
     // The busy button is a no-op, but the fields' onSubmitted calls this
     // directly — guard so an in-flight add can't run twice.
     if (_isAdding) return;
@@ -623,6 +659,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     final result = await IptvService.instance.fetchPlaylist(
       url,
       numberingSourceKey: playlistId,
+      allowUnbound: true,
     );
 
     if (!mounted) return;
@@ -651,6 +688,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
     final newPlaylists = [..._playlists, playlist];
     await StorageService.setIptvPlaylists(newPlaylists);
+    if (!mounted) return;
 
     setState(() {
       _playlists = newPlaylists;
@@ -670,7 +708,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     );
   }
 
-  Future<void> _importFromFile() async {
+  Future<void> _importFromFile() =>
+      _runProfileAction(_importFromFileForProfile);
+
+  Future<void> _importFromFileForProfile() async {
     try {
       // FileType.any instead of custom extensions: Android's MIME mapping for
       // .m3u/.m3u8 is unreliable and can leave valid files unselectable in the
@@ -751,7 +792,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       );
 
       // User cancelled
-      if (playlistName == null || playlistName.isEmpty) {
+      if (playlistName == null || playlistName.isEmpty || !mounted) {
         return;
       }
 
@@ -766,6 +807,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
       final newPlaylists = [..._playlists, playlist];
       await StorageService.setIptvPlaylists(newPlaylists);
+      if (!mounted) return;
 
       setState(() {
         _playlists = newPlaylists;
@@ -814,7 +856,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     return serverUrl;
   }
 
-  Future<void> _addXtreamCodes() async {
+  Future<void> _addXtreamCodes() =>
+      _runProfileAction(_addXtreamCodesForProfile);
+
+  Future<void> _addXtreamCodesForProfile() async {
     // Same double-submission guard as _addPlaylist (fields' onSubmitted).
     if (_isXcAdding) return;
     final server = _xcServerController.text.trim();
@@ -882,6 +927,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
 
     final newPlaylists = [..._playlists, playlist];
     await StorageService.setIptvPlaylists(newPlaylists);
+    if (!mounted) return;
 
     setState(() {
       _playlists = newPlaylists;
@@ -904,7 +950,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _showSnackBar(statusMsg, isError: false);
   }
 
-  Future<void> _removePlaylist(IptvPlaylist playlist) async {
+  Future<void> _removePlaylist(IptvPlaylist playlist) =>
+      _runProfileAction(() => _removePlaylistForProfile(playlist));
+
+  Future<void> _removePlaylistForProfile(IptvPlaylist playlist) async {
     final removedIndex = _playlists.indexWhere((p) => p.id == playlist.id);
     final newPlaylists = _playlists.where((p) => p.id != playlist.id).toList();
     await StorageService.setIptvPlaylists(newPlaylists);
@@ -913,7 +962,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     // If removed playlist was the default, clear default
     if (_defaultPlaylistId == playlist.id) {
       await StorageService.setIptvDefaultPlaylist(null);
-      setState(() => _defaultPlaylistId = null);
+      _defaultPlaylistId = null;
     }
 
     // Clear caches for this playlist — the in-memory fetch cache and the
@@ -946,6 +995,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     await StorageService.removeIptvListChannelsByPlaylistId(playlist.id);
     await StorageService.removeIptvWatchHistoryByPlaylistId(playlist.id);
 
+    if (!mounted) return;
     setState(() => _playlists = newPlaylists);
     // _ensureFocusNodes disposes the trailing nodes — including the one the
     // focused delete button was using — so reseed DPAD focus on the same row
@@ -969,8 +1019,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _showSnackBar('Removed "${playlist.name}"', isError: false);
   }
 
-  Future<void> _setDefaultPlaylist(IptvPlaylist? playlist) async {
+  Future<void> _setDefaultPlaylist(IptvPlaylist? playlist) =>
+      _runProfileAction(() => _setDefaultPlaylistForProfile(playlist));
+
+  Future<void> _setDefaultPlaylistForProfile(IptvPlaylist? playlist) async {
     await StorageService.setIptvDefaultPlaylist(playlist?.id);
+    if (!mounted) return;
     setState(() => _defaultPlaylistId = playlist?.id);
     _showSnackBar(
       playlist != null
@@ -983,7 +1037,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   /// Re-fetch a URL or Xtream Codes playlist from its source, clearing the
   /// cache first so updated channels are picked up. Local-file playlists are
   /// static snapshots and cannot be refreshed.
-  Future<void> _refreshPlaylist(IptvPlaylist playlist) async {
+  Future<void> _refreshPlaylist(IptvPlaylist playlist) =>
+      _runProfileAction(() => _refreshPlaylistForProfile(playlist));
+
+  Future<void> _refreshPlaylistForProfile(IptvPlaylist playlist) async {
     if (playlist.isLocalFile) return;
     if (_refreshingIds.contains(playlist.id)) return;
 
@@ -1020,6 +1077,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           playlist.username ?? '',
           playlist.password ?? '',
           numberingSourceKey: playlist.id,
+          connectionResourceId: playlist.connectionResourceId,
+          connectionResourceRevision: playlist.connectionResourceRevision,
         );
       } else {
         IptvService.instance.clearCache(playlist.url);
@@ -1032,6 +1091,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
           playlist.url,
           forceRefresh: true,
           numberingSourceKey: playlist.id,
+          connectionResourceId: playlist.connectionResourceId,
+          connectionResourceRevision: playlist.connectionResourceRevision,
         );
       }
     } catch (e) {
@@ -1056,8 +1117,8 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   }
 
   void _showSnackBar(String message, {bool isError = true}) {
-    final t = AppThemeScope.of(context).settings;
     if (!mounted) return;
+    final t = AppThemeScope.of(context).settings;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -1075,21 +1136,26 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _ensureFocusNodes();
   }
 
-  Future<void> _createList() async {
+  Future<void> _createList() => _runProfileAction(_createListForProfile);
+
+  Future<void> _createListForProfile() async {
     final name = await showIptvListNameDialog(
       context: context,
       title: 'New list',
       confirmLabel: 'Create',
       existingNames: [for (final list in _lists) list.name],
     );
-    if (name == null) return;
+    if (name == null || !mounted) return;
     await StorageService.createIptvList(name);
     await _reloadLists();
     if (!mounted) return;
     _showSnackBar('Created "$name"', isError: false);
   }
 
-  Future<void> _renameList(IptvListMeta list) async {
+  Future<void> _renameList(IptvListMeta list) =>
+      _runProfileAction(() => _renameListForProfile(list));
+
+  Future<void> _renameListForProfile(IptvListMeta list) async {
     final name = await showIptvListNameDialog(
       context: context,
       title: 'Rename list',
@@ -1097,12 +1163,15 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       initialValue: list.name,
       existingNames: [for (final entry in _lists) entry.name],
     );
-    if (name == null || name == list.name) return;
+    if (name == null || name == list.name || !mounted) return;
     await StorageService.renameIptvList(list.id, name);
     await _reloadLists();
   }
 
-  Future<void> _deleteList(IptvListMeta list) async {
+  Future<void> _deleteList(IptvListMeta list) =>
+      _runProfileAction(() => _deleteListForProfile(list));
+
+  Future<void> _deleteListForProfile(IptvListMeta list) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1125,7 +1194,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
     await StorageService.deleteIptvList(list.id);
     await _reloadLists();
     if (!mounted) return;
@@ -1144,7 +1213,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     _showSnackBar('Deleted "${list.name}"', isError: false);
   }
 
-  Future<void> _moveList(IptvListMeta list, int delta) async {
+  Future<void> _moveList(IptvListMeta list, int delta) =>
+      _runProfileAction(() => _moveListForProfile(list, delta));
+
+  Future<void> _moveListForProfile(IptvListMeta list, int delta) async {
     final order = [for (final entry in _customLists) entry.id];
     final index = order.indexOf(list.id);
     final target = index + delta;
@@ -1258,9 +1330,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             (_hiddenCounts[sources[i].id] ?? 0) > 0
                 ? Icons.visibility_off_rounded
                 : Icons.visibility_rounded,
-            color: (_hiddenCounts[sources[i].id] ?? 0) > 0
-                ? t.accent
-                : t.dim2,
+            color: (_hiddenCounts[sources[i].id] ?? 0) > 0 ? t.accent : t.dim2,
           ),
           title: Text(
             sources[i].name,
@@ -1333,7 +1403,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       final editFocusIndex = i * 4 + 2;
       final deleteFocusIndex = i * 4 + 3;
       // URL and Xtream Codes playlists can be re-fetched; local files cannot.
-      final canRefresh = !playlist.isLocalFile;
+      final canRefresh = !playlist.isLocalFile && !playlist.connectionReadOnly;
 
       items.add(
         FocusTraversalOrder(
@@ -1357,8 +1427,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             onSetDefault: () =>
                 _setDefaultPlaylist(isDefault ? null : playlist),
             onRefresh: canRefresh ? () => _refreshPlaylist(playlist) : null,
-            onEdit: () => _editPlaylist(playlist),
-            onDelete: () => _removePlaylist(playlist),
+            onEdit: playlist.connectionReadOnly
+                ? null
+                : () => _editPlaylist(playlist),
+            onDelete: playlist.connectionReadOnly
+                ? null
+                : () => _removePlaylist(playlist),
           ),
         ),
       );
@@ -1373,7 +1447,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   /// preserved so favorites and watch history stay attached. When the source
   /// actually changes, the stale fetch cache is cleared so the next load picks
   /// up the new source; the user can Refresh to re-verify.
-  Future<void> _editPlaylist(IptvPlaylist playlist) async {
+  Future<void> _editPlaylist(IptvPlaylist playlist) =>
+      _runProfileAction(() => _editPlaylistForProfile(playlist));
+
+  Future<void> _editPlaylistForProfile(IptvPlaylist playlist) async {
     final result = await showDialog<_PlaylistEdit>(
       context: context,
       builder: (context) => Theme(
@@ -1396,7 +1473,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
         ),
       ),
     );
-    if (result == null) return; // cancelled
+    if (result == null || !mounted) return; // cancelled or profile switched
 
     // Normalize an edited Xtream server URL the same way add does.
     String? newServerUrl = playlist.serverUrl;
@@ -1831,10 +1908,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
             _ => _nameInputFocusNode,
           }),
       onListActions: _showListActions,
-      onToggleStartup: (enabled) async {
-        await StorageService.setStartupIptvEnabled(enabled);
-        if (mounted) setState(() => _startupEnabled = enabled);
-      },
+      onToggleStartup: _setStartupEnabled,
       onStartupModeChanged: _setStartupMode,
       onPickStartupChannel: _pickStartupChannel,
       trackContinueWatching: _trackContinueWatching,
@@ -2174,10 +2248,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
                   'Press BACK while it is tuning to stop.',
                 ),
                 value: _startupEnabled,
-                onChanged: (enabled) async {
-                  await StorageService.setStartupIptvEnabled(enabled);
-                  if (mounted) setState(() => _startupEnabled = enabled);
-                },
+                onChanged: _setStartupEnabled,
               ),
               if (_startupEnabled) ...[
                 const Divider(height: 1),
@@ -2432,9 +2503,7 @@ class _TvFocusableButtonState extends State<_TvFocusableButton> {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: _isFocused
-              ? Border.all(color: t.accent2, width: 2)
-              : null,
+          border: _isFocused ? Border.all(color: t.accent2, width: 2) : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
@@ -2601,9 +2670,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                           boxShadow: _urlTabFocused
                               ? [
                                   BoxShadow(
-                                    color: t.accent.withValues(
-                                      alpha: 0.3,
-                                    ),
+                                    color: t.accent.withValues(alpha: 0.3),
                                     blurRadius: 4,
                                   ),
                                 ]
@@ -2615,9 +2682,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                             Icon(
                               Icons.link,
                               size: 18,
-                              color: isSelected
-                                  ? t.accent2
-                                  : t.dim,
+                              color: isSelected ? t.accent2 : t.dim,
                             ),
                             const SizedBox(width: 8),
                             Text(
@@ -2701,9 +2766,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                           boxShadow: _fileTabFocused
                               ? [
                                   BoxShadow(
-                                    color: t.accent.withValues(
-                                      alpha: 0.3,
-                                    ),
+                                    color: t.accent.withValues(alpha: 0.3),
                                     blurRadius: 4,
                                   ),
                                 ]
@@ -2715,9 +2778,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                             Icon(
                               Icons.folder_open,
                               size: 18,
-                              color: isSelected
-                                  ? t.accent2
-                                  : t.dim,
+                              color: isSelected ? t.accent2 : t.dim,
                             ),
                             const SizedBox(width: 8),
                             Text(
@@ -2796,9 +2857,7 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                             boxShadow: _xcTabFocused
                                 ? [
                                     BoxShadow(
-                                      color: t.accent.withValues(
-                                        alpha: 0.3,
-                                      ),
+                                      color: t.accent.withValues(alpha: 0.3),
                                       blurRadius: 4,
                                     ),
                                   ]
@@ -2810,18 +2869,14 @@ class _TvFocusableTabBarState extends State<_TvFocusableTabBar> {
                               Icon(
                                 Icons.login,
                                 size: 18,
-                                color: isSelected
-                                    ? t.accent2
-                                    : t.dim,
+                                color: isSelected ? t.accent2 : t.dim,
                               ),
                               const SizedBox(width: 8),
                               Flexible(
                                 child: Text(
                                   'Xtream Login',
                                   style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: isSelected
-                                        ? app.core.tx
-                                        : t.dim,
+                                    color: isSelected ? app.core.tx : t.dim,
                                     fontWeight: isSelected
                                         ? FontWeight.bold
                                         : FontWeight.normal,
@@ -2857,8 +2912,8 @@ class _FocusablePlaylistTile extends StatefulWidget {
     this.deleteFocusNode,
     required this.onSetDefault,
     this.onRefresh,
-    required this.onEdit,
-    required this.onDelete,
+    this.onEdit,
+    this.onDelete,
   });
 
   final IptvPlaylist playlist;
@@ -2871,8 +2926,8 @@ class _FocusablePlaylistTile extends StatefulWidget {
   final VoidCallback onSetDefault;
   // Null when the playlist cannot be refreshed (local-file playlists).
   final VoidCallback? onRefresh;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   State<_FocusablePlaylistTile> createState() => _FocusablePlaylistTileState();
@@ -2995,7 +3050,16 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
           children: [
             Row(
               children: [
-                if (widget.playlist.isXtreamCodes) ...[
+                if (widget.playlist.credentialsRedacted) ...[
+                  Icon(Icons.lock_outline, size: 12, color: t.dim),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Shared connection • credentials hidden',
+                      style: TextStyle(fontSize: 12, color: t.dim),
+                    ),
+                  ),
+                ] else if (widget.playlist.isXtreamCodes) ...[
                   Icon(Icons.login, size: 12, color: t.dim),
                   const SizedBox(width: 4),
                   Expanded(
@@ -3059,23 +3123,27 @@ class _FocusablePlaylistTileState extends State<_FocusablePlaylistTile> {
                 onLeftArrow: () => widget.starFocusNode?.requestFocus(),
                 onRightArrow: () => widget.editFocusNode?.requestFocus(),
               ),
-            _FocusableIconButton(
-              focusNode: widget.editFocusNode,
-              icon: Icons.edit_outlined,
-              tooltip: 'Edit playlist',
-              onPressed: widget.onEdit,
-              onLeftArrow: () =>
-                  (canRefresh ? widget.refreshFocusNode : widget.starFocusNode)
-                      ?.requestFocus(),
-              onRightArrow: () => widget.deleteFocusNode?.requestFocus(),
-            ),
-            _FocusableIconButton(
-              focusNode: widget.deleteFocusNode,
-              icon: Icons.delete_outline,
-              tooltip: 'Remove playlist',
-              onPressed: widget.onDelete,
-              onLeftArrow: () => widget.editFocusNode?.requestFocus(),
-            ),
+            if (widget.onEdit != null)
+              _FocusableIconButton(
+                focusNode: widget.editFocusNode,
+                icon: Icons.edit_outlined,
+                tooltip: 'Edit playlist',
+                onPressed: widget.onEdit,
+                onLeftArrow: () =>
+                    (canRefresh
+                            ? widget.refreshFocusNode
+                            : widget.starFocusNode)
+                        ?.requestFocus(),
+                onRightArrow: () => widget.deleteFocusNode?.requestFocus(),
+              ),
+            if (widget.onDelete != null)
+              _FocusableIconButton(
+                focusNode: widget.deleteFocusNode,
+                icon: Icons.delete_outline,
+                tooltip: 'Remove playlist',
+                onPressed: widget.onDelete,
+                onLeftArrow: () => widget.editFocusNode?.requestFocus(),
+              ),
           ],
         ),
       ),
@@ -3440,7 +3508,7 @@ class _FocusableIconButton extends StatefulWidget {
   final Color? color;
   final String? tooltip;
   final bool isBusy;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final VoidCallback? onLeftArrow;
   final VoidCallback? onRightArrow;
 
@@ -3487,7 +3555,7 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
         if (isActivateKey(event.logicalKey)) {
-          if (!widget.isBusy) widget.onPressed();
+          if (!widget.isBusy) widget.onPressed?.call();
           return KeyEventResult.handled;
         }
 
@@ -3509,9 +3577,7 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
       child: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: _isFocused
-              ? Border.all(color: t.accent, width: 2)
-              : null,
+          border: _isFocused ? Border.all(color: t.accent, width: 2) : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
@@ -3638,9 +3704,7 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: _isFocused
-              ? Border.all(color: t.accent, width: 2)
-              : null,
+          border: _isFocused ? Border.all(color: t.accent, width: 2) : null,
           boxShadow: _isFocused
               ? [
                   BoxShadow(
@@ -3654,10 +3718,7 @@ class _TvFocusableBackButtonState extends State<_TvFocusableBackButton> {
         // One DPAD stop per control — see _TvFocusableButton's ExcludeFocus.
         child: ExcludeFocus(
           child: IconButton(
-            icon: Icon(
-              Icons.arrow_back,
-              color: _isFocused ? t.accent2 : null,
-            ),
+            icon: Icon(Icons.arrow_back, color: _isFocused ? t.accent2 : null),
             tooltip: 'Go back',
             onPressed: _goBack,
             style: IconButton.styleFrom(

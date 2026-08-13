@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import '../models/alldebrid_user.dart';
 import '../services/storage_service.dart';
 import '../services/alldebrid_service.dart';
+import '../models/profiles/profile_policy.dart';
+import 'profiles/profile_async_authorization.dart';
 
 class AllDebridAccountService {
   static AllDebridUser? _currentUser;
@@ -29,25 +31,36 @@ class AllDebridAccountService {
     _isValidating = true;
     final int token = ++_validationToken;
     try {
+      final capability = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.cloud,
+      );
       debugPrint('AllDebridAccountService: Validating API key…');
-      final user = await AllDebridService.getUserInfo(apiKey);
+      final user = capability == null
+          ? await AllDebridService.getUserInfo(apiKey)
+          : await capability.run(() => AllDebridService.getUserInfo(apiKey));
       if (_validationToken != token) {
         debugPrint(
           'AllDebridAccountService: Validation result discarded (token mismatch).',
         );
         return false;
       }
-      _setCurrentUser(user);
-      if (persist) {
-        await StorageService.saveAllDebridApiKey(apiKey);
+      if (capability != null && !capability.isCurrentlyActive) return false;
+      Future<void> commit() async {
+        if (persist) await StorageService.saveAllDebridApiKey(apiKey);
+        if (capability == null || capability.isCurrentlyActive) {
+          _setCurrentUser(user);
+        }
       }
-      debugPrint(
-        'AllDebridAccountService: Validation successful for ${user.username}.',
-      );
+
+      if (capability == null) {
+        await commit();
+      } else {
+        await capability.runIfCurrent(commit);
+      }
+      debugPrint('AllDebridAccountService: Validation successful.');
       return true;
     } catch (e) {
-      debugPrint('AllDebridAccountService: Validation failed - $e');
-      _setCurrentUser(null);
+      debugPrint('AllDebridAccountService: Validation failed.');
       return false;
     } finally {
       _isValidating = false;

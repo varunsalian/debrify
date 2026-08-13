@@ -12,11 +12,7 @@ class RemoteCommand {
   final String command;
   final String? data;
 
-  RemoteCommand({
-    required this.action,
-    required this.command,
-    this.data,
-  });
+  RemoteCommand({required this.action, required this.command, this.data});
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{
@@ -40,18 +36,12 @@ class RemoteCommand {
 
   /// Create a navigation command
   factory RemoteCommand.navigate(String direction) {
-    return RemoteCommand(
-      action: RemoteAction.navigate,
-      command: direction,
-    );
+    return RemoteCommand(action: RemoteAction.navigate, command: direction);
   }
 
   /// Create a media command
   factory RemoteCommand.media(String mediaAction) {
-    return RemoteCommand(
-      action: RemoteAction.media,
-      command: mediaAction,
-    );
+    return RemoteCommand(action: RemoteAction.media, command: mediaAction);
   }
 
   /// Create an addon command
@@ -84,8 +74,7 @@ class RemoteCommand {
   @override
   String toString() {
     if (data == null) return 'RemoteCommand($action: $command)';
-    final truncated = data!.length > 80 ? '${data!.substring(0, 80)}...[${data!.length}]' : data;
-    return 'RemoteCommand($action: $command, data: $truncated)';
+    return 'RemoteCommand($action: $command, data: [redacted ${data!.length} bytes])';
   }
 }
 
@@ -132,11 +121,9 @@ class UdpCommandService {
   /// session errors) with the sender's observed endpoint, so the session
   /// layer can reply to where the datagram actually came from.
   void Function(Map<String, dynamic> json, InternetAddress address, int port)?
-      onSessionMessage;
+  onSessionMessage;
 
-  UdpCommandService({
-    required bool isTv,
-  }) : _isTv = isTv;
+  UdpCommandService({required bool isTv}) : _isTv = isTv;
 
   /// Start the command service
   Future<void> start({String? targetIp}) async {
@@ -155,7 +142,7 @@ class UdpCommandService {
       _socket!.listen(
         _handleDatagram,
         onError: (error) {
-          debugPrint('UdpCommandService: Socket error: $error');
+          debugPrint('UdpCommandService: Socket error (${error.runtimeType})');
           onError?.call(error.toString());
         },
         onDone: () {
@@ -170,9 +157,9 @@ class UdpCommandService {
       _startConnectionCheck();
 
       debugPrint('UdpCommandService: Started ${_isTv ? "TV" : "Mobile"} mode');
-    } catch (e) {
-      debugPrint('UdpCommandService: Failed to start: $e');
-      onError?.call(e.toString());
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to start');
+      onError?.call('Remote connection could not be started');
     }
   }
 
@@ -204,9 +191,9 @@ class UdpCommandService {
         InternetAddress(_connectedIp!),
         portFor(_connectedIp!),
       );
-      debugPrint('UdpCommandService: Sent command: $command');
-    } catch (e) {
-      debugPrint('UdpCommandService: Failed to send command: $e');
+      debugPrint('UdpCommandService: Sent command');
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to send command');
     }
   }
 
@@ -237,14 +224,17 @@ class UdpCommandService {
         port ?? portFor(ip),
       );
       return true;
-    } catch (e) {
-      debugPrint('UdpCommandService: Failed to send raw message: $e');
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to send raw message');
       return false;
     }
   }
 
   /// Send a command to a specific IP address (without requiring connection)
-  static Future<bool> sendCommandToIp(RemoteCommand command, String targetIp) async {
+  static Future<bool> sendCommandToIp(
+    RemoteCommand command,
+    String targetIp,
+  ) async {
     RawDatagramSocket? tempSocket;
     try {
       // Create a temporary socket if we don't have one
@@ -257,11 +247,11 @@ class UdpCommandService {
         kCommandPort,
       );
       if (command.command != ConfigCommand.debrifyChannelChunk) {
-        debugPrint('UdpCommandService: Sent command to $targetIp: $command');
+        debugPrint('UdpCommandService: Sent command to peer');
       }
       return true;
-    } catch (e) {
-      debugPrint('UdpCommandService: Failed to send command to $targetIp: $e');
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to send command to peer');
       return false;
     } finally {
       tempSocket?.close();
@@ -285,8 +275,8 @@ class UdpCommandService {
           portFor(_connectedIp!),
         );
       }
-    } catch (e) {
-      debugPrint('UdpCommandService: Failed to send heartbeat: $e');
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to send heartbeat');
     }
   }
 
@@ -305,7 +295,9 @@ class UdpCommandService {
       if (_lastHeartbeatReceived != null) {
         final elapsed = DateTime.now().difference(_lastHeartbeatReceived!);
         if (elapsed > kConnectionTimeout) {
-          debugPrint('UdpCommandService: Connection lost - no heartbeat received');
+          debugPrint(
+            'UdpCommandService: Connection lost - no heartbeat received',
+          );
           onConnectionLost?.call();
         }
       }
@@ -326,7 +318,7 @@ class UdpCommandService {
       // Update connected IP if we receive a message
       if (_connectedIp == null) {
         _connectedIp = datagram.address.address;
-        debugPrint('UdpCommandService: Connected to $_connectedIp');
+        debugPrint('UdpCommandService: Connected to peer');
       }
 
       // Peer endpoints are NOT learned here: any datagram can spoof a type,
@@ -345,12 +337,12 @@ class UdpCommandService {
       } else if (type == RemoteMessageType.command) {
         final command = RemoteCommand.fromJson(json);
         if (command.command != ConfigCommand.debrifyChannelChunk) {
-          debugPrint('UdpCommandService: Received command: $command');
+          debugPrint('UdpCommandService: Received command');
         }
         onCommandReceived?.call(command, datagram.address.address);
       }
-    } catch (e) {
-      debugPrint('UdpCommandService: Failed to parse message: $e');
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to parse message');
     }
   }
 
@@ -363,5 +355,6 @@ class UdpCommandService {
   bool get isRunning => _socket != null;
 
   /// Check if connected to a device
-  bool get isConnected => _connectedIp != null && _lastHeartbeatReceived != null;
+  bool get isConnected =>
+      _connectedIp != null && _lastHeartbeatReceived != null;
 }

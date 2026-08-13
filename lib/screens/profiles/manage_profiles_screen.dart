@@ -1,0 +1,421 @@
+import 'dart:io';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../../models/profiles/profile_policy.dart';
+import '../../models/profiles/user_profile.dart';
+import '../../services/profiles/profile_authorization.dart';
+import '../../services/profiles/profile_data_generation.dart';
+import '../../services/profiles/profile_cleanup_ledger.dart';
+import '../../services/profiles/profile_diagnostics_service.dart';
+import '../../services/profiles/profile_pin_service.dart';
+import '../../services/profiles/profile_registry.dart';
+import '../../services/profiles/native_profile_projection.dart';
+import '../../services/profiles/profile_runtime.dart';
+import '../../services/live_recording_service.dart';
+import '../../services/tvos_top_shelf_service.dart';
+import '../../utils/platform_util.dart';
+import 'edit_profile_screen.dart';
+
+class ManageProfilesScreen extends StatefulWidget {
+  final ProfileRegistry registry;
+  final ProfileAuthorizationContext authorization;
+
+  const ManageProfilesScreen({
+    super.key,
+    required this.registry,
+    required this.authorization,
+  });
+
+  @override
+  State<ManageProfilesScreen> createState() => _ManageProfilesScreenState();
+}
+
+class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
+  late final ProfilePinService _pins = ProfilePinService(
+    registry: widget.registry,
+  );
+  late ProfileAuthorizationContext _authorization = widget.authorization;
+  List<UserProfile>? _profiles;
+  bool _topShelfEnabled = false;
+  bool _initialLoadFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_initialLoad());
+  }
+
+  Future<void> _initialLoad() async {
+    try {
+      await _load();
+    } catch (_) {
+      if (mounted) setState(() => _initialLoadFailed = true);
+    }
+  }
+
+  Future<void> _load() async {
+    final actor = await _authorization.validate(widget.registry);
+    if (!actor.allows(ProfileFeature.manageProfiles)) {
+      throw StateError('Profile management is not authorized');
+    }
+    final profiles = await widget.registry.listProfiles(includeDisabled: true);
+    final topShelfEnabled = PlatformUtil.isTvOS
+        ? await TvosTopShelfService.instance
+              .multiProfilePersonalizationEnabled()
+        : false;
+    await NativeProfileProjection.publish(ProfileRuntime.capture());
+    if (mounted) {
+      setState(() {
+        _profiles = profiles;
+        _topShelfEnabled = topShelfEnabled;
+      });
+    }
+  }
+
+  Future<void> _edit([UserProfile? profile]) async {
+    try {
+      final initiatingProfileId = _authorization.profileId;
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => EditProfileScreen(
+            registry: widget.registry,
+            pins: _pins,
+            authorization: _authorization,
+            profile: profile,
+          ),
+        ),
+      );
+      final refreshed = await ProfileAuthorizationContext.capture(
+        widget.registry,
+      );
+      if (refreshed.profileId != initiatingProfileId) {
+        throw StateError('Managing profile session changed');
+      }
+      await _validateManagingAdmin(refreshed);
+      _authorization = refreshed;
+      await _load();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile editor session expired')),
+      );
+    }
+  }
+
+  Future<void> _delete(UserProfile profile) async {
+    late final ProfileDeletionDependencies dependencies;
+    late final ProfileAuthorizationContext operationActor;
+    try {
+      operationActor = _authorization;
+      await _validateManagingAdmin(operationActor);
+      dependencies = await widget.registry.deletionDependencies(profile.id);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile deletion is not authorized')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    var deleteConnections = dependencies.ownedResources == 0;
+    var retainPublicFiles = true;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Delete ${profile.name}?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Active jobs: ${dependencies.activeJobs}\n'
+                  'Owned connections: ${dependencies.ownedResources}'
+                  '${dependencies.sharedResources == 0 ? '' : ' (${dependencies.sharedResources} shared)'}\n'
+                  'Public media records: ${dependencies.publicArtifacts}',
+                ),
+                if (dependencies.activeJobs > 0)
+                  const Text('\nFinish or cancel active jobs before deletion.'),
+                if (dependencies.sharedResources > 0)
+                  const Text(
+                    '\nRevoke borrowers or transfer shared connections before deletion.',
+                  ),
+                if (dependencies.ownedResources > 0)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: deleteConnections,
+                    title: const Text('Delete unshared owned connections'),
+                    onChanged: dependencies.sharedResources > 0
+                        ? null
+                        : (value) => setDialogState(
+                            () => deleteConnections = value == true,
+                          ),
+                  ),
+                if (dependencies.publicArtifacts > 0)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: retainPublicFiles,
+                    title: const Text('Keep downloaded and recorded files'),
+                    subtitle: Text(
+                      retainPublicFiles
+                          ? 'Ownership is detached; files stay on this device.'
+                          : 'Files are permanently deleted before the profile.',
+                    ),
+                    onChanged: (value) =>
+                        setDialogState(() => retainPublicFiles = value == true),
+                  ),
+                const Text(
+                  '\nPrivate settings, history, and databases are deleted.',
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed:
+                  dependencies.activeJobs == 0 &&
+                      dependencies.sharedResources == 0 &&
+                      deleteConnections
+                  ? () => Navigator.pop(context, true)
+                  : null,
+              child: const Text('Delete profile'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _validateManagingAdmin(operationActor);
+      if (!retainPublicFiles) {
+        final artifacts = await widget.registry.listOwnedArtifacts(profile.id);
+        for (final artifact in artifacts) {
+          final path = artifact['canonical_path']! as String;
+          final deleted = Platform.isAndroid && path.contains('://')
+              ? await LiveRecordingService.deleteRecordingFile(path)
+              : await _deleteLocalArtifact(path);
+          if (!deleted) {
+            throw StateError('Could not delete a public media file');
+          }
+        }
+        await _validateManagingAdmin(operationActor);
+        await widget.registry.removeOwnedArtifactRecords(
+          ownerProfileId: profile.id,
+          actingProfileId: operationActor.profileId,
+          actingAuthorizationRevision: operationActor.authorizationRevision,
+          actingSessionEpoch: operationActor.sessionEpoch,
+        );
+      }
+      await _validateManagingAdmin(operationActor);
+      await ProfileCleanupLedger.scheduleProfile(profile.id);
+      await _validateManagingAdmin(operationActor);
+      await widget.registry.deleteProfileWithDisposition(
+        id: profile.id,
+        deleteOwnedResources: deleteConnections,
+        detachPublicArtifacts: retainPublicFiles,
+        actingProfileId: operationActor.profileId,
+        actingAuthorizationRevision: operationActor.authorizationRevision,
+        actingSessionEpoch: operationActor.sessionEpoch,
+      );
+      await ProfileDataGenerationManager.deleteAllProfileData(profile.id);
+      await ProfileCleanupLedger.completeProfile(profile.id);
+      await _load();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Profile deletion failed')));
+    }
+  }
+
+  Future<bool> _deleteLocalArtifact(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _toggleEnabled(UserProfile profile) async {
+    try {
+      final actor = _authorization;
+      await _validateManagingAdmin(actor);
+      if (profile.isEnabled) {
+        await widget.registry.disableProfile(
+          profile.id,
+          actingProfileId: actor.profileId,
+          actingAuthorizationRevision: actor.authorizationRevision,
+          actingSessionEpoch: actor.sessionEpoch,
+        );
+      } else {
+        await widget.registry.enableProfile(
+          profile.id,
+          actingProfileId: actor.profileId,
+          actingAuthorizationRevision: actor.authorizationRevision,
+          actingSessionEpoch: actor.sessionEpoch,
+        );
+      }
+      await _load();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile status could not be changed')),
+      );
+    }
+  }
+
+  Future<UserProfile> _validateManagingAdmin(
+    ProfileAuthorizationContext context,
+  ) async {
+    final actor = await context.validate(widget.registry);
+    if (actor.role != UserProfileRole.admin ||
+        !actor.allows(ProfileFeature.manageProfiles)) {
+      throw StateError('Profile management is not authorized');
+    }
+    return actor;
+  }
+
+  Future<void> _setTopShelfEnabled(bool enabled) async {
+    try {
+      await TvosTopShelfService.instance.setMultiProfilePersonalizationEnabled(
+        enabled,
+      );
+      if (mounted) setState(() => _topShelfEnabled = enabled);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Top Shelf setting could not be changed')),
+      );
+    }
+  }
+
+  Future<void> _showDiagnostics() async {
+    final report = await ProfileDiagnosticsService.collectJson(widget.registry);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Profile diagnostics'),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(child: SelectableText(report)),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: report));
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+            },
+            child: const Text('Copy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profiles = _profiles;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profiles'),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Privacy-safe diagnostics',
+            onPressed: profiles == null ? null : _showDiagnostics,
+            icon: const Icon(Icons.health_and_safety_outlined),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: profiles == null ? null : _edit,
+        icon: const Icon(Icons.person_add_rounded),
+        label: const Text('Create'),
+      ),
+      body: profiles == null
+          ? Center(
+              child: _initialLoadFailed
+                  ? const Text('Profile management authorization expired')
+                  : const CircularProgressIndicator(),
+            )
+          : Column(
+              children: <Widget>[
+                if (PlatformUtil.isTvOS && profiles.length > 1)
+                  SwitchListTile(
+                    value: _topShelfEnabled,
+                    title: const Text('Personalized Top Shelf'),
+                    subtitle: const Text(
+                      'Show the unlocked active profile on the Apple TV Home Screen. Off is the privacy default.',
+                    ),
+                    onChanged: _setTopShelfEnabled,
+                  ),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                    itemCount: profiles.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final profile = profiles[index];
+                      return ListTile(
+                        autofocus: index == 0,
+                        leading: CircleAvatar(
+                          child: Icon(
+                            profile.role == UserProfileRole.child
+                                ? Icons.child_care_rounded
+                                : Icons.person_rounded,
+                          ),
+                        ),
+                        title: Text(profile.name),
+                        subtitle: Text(
+                          profile.isEnabled
+                              ? profile.role.name
+                              : '${profile.role.name} · disabled',
+                        ),
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (action) {
+                            if (action == 'edit') _edit(profile);
+                            if (action == 'delete') _delete(profile);
+                            if (action == 'toggle') _toggleEnabled(profile);
+                          },
+                          itemBuilder: (_) => [
+                            if (profile.isEnabled)
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Text('Edit'),
+                              ),
+                            PopupMenuItem(
+                              value: 'toggle',
+                              child: Text(
+                                profile.isEnabled ? 'Disable' : 'Enable',
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Delete'),
+                            ),
+                          ],
+                        ),
+                        onTap: profile.isEnabled ? () => _edit(profile) : null,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}

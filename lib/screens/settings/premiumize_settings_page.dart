@@ -40,14 +40,14 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
   }
 
   Future<void> _load() async {
-    final apiKey = await StorageService.getPremiumizeApiKey();
+    final configured = await StorageService.hasPremiumizeCredential();
     final integrationEnabled =
         await StorageService.getPremiumizeIntegrationEnabled();
     final cachePref = await StorageService.getPremiumizeCacheCheckEnabled();
     final postAction = await StorageService.getPremiumizePostTorrentAction();
     final hiddenFromNav = await StorageService.getPremiumizeHiddenFromNav();
     setState(() {
-      _savedApiKey = apiKey;
+      _savedApiKey = configured ? '' : null;
       _integrationEnabled = integrationEnabled;
       _checkCacheBeforeSearch = cachePref;
       _postTorrentAction = postAction;
@@ -55,7 +55,7 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
       _loading = false;
     });
 
-    if (integrationEnabled && apiKey != null && apiKey.isNotEmpty) {
+    if (integrationEnabled && configured) {
       await PremiumizeAccountService.refreshUserInfo();
       if (mounted) {
         setState(() {});
@@ -114,10 +114,7 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
     if (!mounted) return;
     final t = AppThemeScope.of(context).settings;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: err ? t.danger : null,
-      ),
+      SnackBar(content: Text(message), backgroundColor: err ? t.danger : null),
     );
   }
 
@@ -144,7 +141,7 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
     }
 
     setState(() {
-      _savedApiKey = txt;
+      _savedApiKey = '';
       _isEditing = false;
       _saving = false;
       _apiKeyController.clear();
@@ -158,7 +155,15 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
   }
 
   Future<void> _deleteKey() async {
-    await StorageService.deletePremiumizeApiKey();
+    try {
+      await StorageService.deletePremiumizeApiKey();
+    } catch (_) {
+      _snack(
+        'This connection is shared. Revoke or transfer profile access before disconnecting.',
+        err: true,
+      );
+      return;
+    }
     // Reset the hide-from-nav flag so the tab reappears after re-login
     // (matches the Torbox/PikPak logout-to-unhide security model).
     await StorageService.clearPremiumizeHiddenFromNav();
@@ -260,7 +265,7 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
     await StorageService.setPremiumizeIntegrationEnabled(value);
     MainPageBridge.notifyIntegrationChanged();
     if (!mounted) return;
-    if (value && _savedApiKey != null && _savedApiKey!.isNotEmpty) {
+    if (value && _savedApiKey != null) {
       await PremiumizeAccountService.refreshUserInfo();
       if (!mounted) return;
       setState(() {});
@@ -359,8 +364,9 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
                                               borderRadius:
                                                   BorderRadius.circular(8),
                                               border: Border.all(
-                                                color: t.success
-                                                    .withValues(alpha: 0.3),
+                                                color: t.success.withValues(
+                                                  alpha: 0.3,
+                                                ),
                                               ),
                                             ),
                                             child: Row(
@@ -392,9 +398,8 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
                                         obscureText: _obscure,
                                         enabled: !_saving,
                                         textInputAction: TextInputAction.done,
-                                        onDownArrow: () => FocusScope.of(
-                                          context,
-                                        ).nextFocus(),
+                                        onDownArrow: () =>
+                                            FocusScope.of(context).nextFocus(),
                                         onUpArrow: () => FocusScope.of(
                                           context,
                                         ).previousFocus(),
@@ -406,8 +411,9 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
                                           suffixIcon: IconButton(
                                             // Default focus highlight is
                                             // invisible on TV.
-                                            focusColor: t.accent
-                                                .withValues(alpha: 0.4),
+                                            focusColor: t.accent.withValues(
+                                              alpha: 0.4,
+                                            ),
                                             icon: Icon(
                                               _obscure
                                                   ? Icons.visibility
@@ -477,9 +483,7 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
-                                            border: Border.all(
-                                              color: t.line,
-                                            ),
+                                            border: Border.all(color: t.line),
                                           ),
                                           child: Row(
                                             children: [
@@ -512,8 +516,9 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
                                               style: OutlinedButton.styleFrom(
                                                 foregroundColor: t.danger,
                                                 side: BorderSide(
-                                                  color: t.danger
-                                                      .withValues(alpha: 0.45),
+                                                  color: t.danger.withValues(
+                                                    alpha: 0.45,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -789,10 +794,7 @@ class _PremiumizeSettingsPageState extends State<PremiumizeSettingsPage> {
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodyMedium
-                                          ?.copyWith(
-                                            color: t.dim,
-                                            height: 1.5,
-                                          ),
+                                          ?.copyWith(color: t.dim, height: 1.5),
                                     ),
                                   ],
                                 ),

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'package:path/path.dart' as path;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'debrid_service.dart';
 import 'torbox_service.dart';
 import 'pikpak_api_service.dart';
@@ -16,6 +15,14 @@ import 'android_download_history.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:connectivity_plus/connectivity_plus.dart';
+import '../models/profiles/profile_policy.dart';
+import 'profiles/device_job_store.dart';
+import 'profiles/device_key_provider.dart';
+import 'profiles/profile_preferences.dart';
+import 'profiles/profile_bootstrap.dart';
+import 'profiles/profile_credential_facade.dart';
+import 'profiles/profile_runtime.dart';
+import 'package:synchronized/synchronized.dart';
 
 class DownloadEntry {
   final Task task;
@@ -79,6 +86,9 @@ class DownloadService {
 
   bool _started = false;
   bool _initializing = false;
+  bool _profileViewAttached = true;
+  bool _profileViewWasStarted = false;
+  bool _profileSwitchInProgress = false;
   StreamSubscription<Map<String, dynamic>>? _androidEventsSub;
   bool _batteryCheckShown = false;
   ConnectivityResult _net = ConnectivityResult.wifi; // default optimistic
@@ -128,9 +138,125 @@ class DownloadService {
   // Persistence for pending queue (crash-safe, survives restarts)
   static const String _pendingKey = 'pending_download_queue_v1';
   static const String _pausedKey = 'paused_download_queue_v1';
+  static const String _legacyQueueImportedKey =
+      'download_legacy_queue_imported_v2';
+  static const String _legacyPluginAuthorityKey =
+      'download_legacy_plugin_authority_v1';
   static const String _recordsFile = 'downloads_db_v1.json';
+  static final List<int> _recordsAad = utf8.encode(
+    'debrify-device-download-records-v2',
+  );
 
   Map<String, Map<String, dynamic>> _records = {}; // recordId -> record map
+  final Lock _recordsWriteLock = Lock();
+  final Map<String, int> _legacyPluginAuthorizationRevisions = <String, int>{};
+
+  String get _activeOwnerProfileId => ProfileRuntime.isProfileCommitted
+      ? ProfileRuntime.capture().profileId
+      : 'legacy-admin-v1';
+
+  String _pluginOwnerMetadata({
+    int? authorizationRevision,
+    String? connectionResourceId,
+    int? resourceAuthorizationRevision,
+  }) => jsonEncode(<String, Object?>{
+    'schema': 1,
+    'ownerProfileId': _activeOwnerProfileId,
+    if (authorizationRevision != null)
+      'profileAuthorizationRevision': authorizationRevision,
+    if (connectionResourceId != null)
+      'connectionResourceId': connectionResourceId,
+    if (resourceAuthorizationRevision != null)
+      'resourceAuthorizationRevision': resourceAuthorizationRevision,
+  });
+
+  String? _pluginOwner(Task task) {
+    if (task.metaData.isEmpty) return 'legacy-admin-v1';
+    try {
+      final decoded = jsonDecode(task.metaData);
+      if (decoded is Map) return decoded['ownerProfileId']?.toString();
+    } catch (_) {
+      // Old plugin records had arbitrary/empty metadata and belong to the
+      // migrated Admin only.
+    }
+    return 'legacy-admin-v1';
+  }
+
+  int _pluginAuthorizationRevision(Task task) {
+    if (task.metaData.isEmpty) {
+      return _legacyPluginAuthorizationRevisions[task.taskId] ?? 1;
+    }
+    try {
+      final decoded = jsonDecode(task.metaData);
+      if (decoded is Map) {
+        return (decoded['profileAuthorizationRevision'] as num?)?.toInt() ?? 1;
+      }
+    } catch (_) {
+      // Legacy plugin records are assigned to the migrated Admin at revision
+      // one, matching [_pluginOwner].
+    }
+    return _legacyPluginAuthorizationRevisions[task.taskId] ?? 1;
+  }
+
+  String? _pluginResourceId(Task task) {
+    if (task.metaData.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(task.metaData);
+      if (decoded is Map) {
+        final value = decoded['connectionResourceId']?.toString();
+        return value == null || value.isEmpty ? null : value;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  int? _pluginResourceAuthorizationRevision(Task task) {
+    if (task.metaData.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(task.metaData);
+      if (decoded is Map) {
+        return (decoded['resourceAuthorizationRevision'] as num?)?.toInt();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  bool _ownsPluginTask(Task task) =>
+      !ProfileRuntime.isProfileCommitted ||
+      _pluginOwner(task) == _activeOwnerProfileId;
+
+  Future<bool> _pluginAuthorizationValid(Task task) async {
+    if (!ProfileRuntime.isProfileCommitted) return true;
+    return DeviceJobStore.validateAuthorization(
+      profileId: _pluginOwner(task) ?? 'legacy-admin-v1',
+      profileAuthorizationRevision: _pluginAuthorizationRevision(task),
+      feature: ProfileFeature.downloads,
+      resourceId: _pluginResourceId(task),
+      resourceAuthorizationRevision: _pluginResourceAuthorizationRevision(task),
+    );
+  }
+
+  Future<bool> _pendingAuthorizationValid(_PendingRequest pending) async {
+    if (!ProfileRuntime.isProfileCommitted) return true;
+    final revision = pending.profileAuthorizationRevision;
+    if (revision == null) return false;
+    final current = ProfileRuntime.capture();
+    return DeviceJobStore.validateAuthorization(
+      profileId: current.profileId,
+      profileAuthorizationRevision: revision,
+      feature: ProfileFeature.downloads,
+      resourceId: pending.connectionResourceId,
+      resourceAuthorizationRevision: pending.resourceAuthorizationRevision,
+    );
+  }
+
+  Future<bool> _recordAuthorizationValid(String? recordId) async {
+    if (recordId == null) return false;
+    final record = _records[recordId];
+    if (record == null) return false;
+    final pending = _pendingFromRecordData(recordId, record);
+    return pending != null && await _pendingAuthorizationValid(pending);
+  }
 
   DownloadRecordDetails? recordDetailsForTaskId(String taskId) {
     final recId = _resolveRecordIdForTaskId(taskId);
@@ -380,27 +506,121 @@ class DownloadService {
     try {
       final path = await _recordsFilePath();
       final raw = await File(path).readAsString();
-      final data = jsonDecode(raw);
+      final data = await _decodeRecords(raw);
       if (data is Map<String, dynamic>) {
-        _records = data.map(
+        final all = data.map(
           (k, v) => MapEntry(k, (v as Map).cast<String, dynamic>()),
         );
+        if (ProfileRuntime.isProfileCommitted) {
+          final owner = _activeOwnerProfileId;
+          _records = Map<String, Map<String, dynamic>>.fromEntries(
+            all.entries.where((entry) {
+              final storedOwner = entry.value['ownerProfileId']?.toString();
+              return (storedOwner ?? 'legacy-admin-v1') == owner;
+            }),
+          );
+          var sanitized = false;
+          for (final record in _records.values) {
+            final rawMeta = record['meta'];
+            if (rawMeta is! String || rawMeta.isEmpty) continue;
+            try {
+              final decoded = jsonDecode(rawMeta);
+              if (decoded is Map<String, dynamic> &&
+                  decoded.remove('apiKey') != null) {
+                record['meta'] = jsonEncode(decoded);
+                sanitized = true;
+              }
+            } catch (_) {}
+          }
+          if (sanitized) await _saveRecords();
+        } else {
+          _records = all;
+        }
       }
     } catch (_) {
       _records = {};
+      if (ProfileRuntime.isProfileCommitted) rethrow;
     }
   }
 
-  Future<void> _saveRecords() async {
-    try {
-      final path = await _recordsFilePath();
-      await File(path).writeAsString(jsonEncode(_records));
-    } catch (_) {}
+  Future<Map<String, dynamic>> _decodeRecords(String source) async {
+    if (source.trim().isEmpty) return <String, dynamic>{};
+    final decoded = jsonDecode(source);
+    if (decoded is! Map<String, dynamic>) return <String, dynamic>{};
+    if (decoded['version'] == 2 && decoded['sealed'] is String) {
+      final opened = await DeviceKeyProvider.cipher.open(
+        decoded['sealed']! as String,
+        associatedData: _recordsAad,
+      );
+      final payload = jsonDecode(utf8.decode(opened));
+      if (payload is! Map<String, dynamic>) {
+        throw const FormatException('Invalid download-record payload');
+      }
+      return payload;
+    }
+    // Plain v1 is accepted once for legacy migration and sealed on next save.
+    return decoded;
+  }
+
+  Future<String> _encodeRecords(Map<String, dynamic> records) async {
+    if (!ProfileRuntime.isProfileCommitted) return jsonEncode(records);
+    final sealed = await DeviceKeyProvider.cipher.seal(
+      utf8.encode(jsonEncode(records)),
+      associatedData: _recordsAad,
+    );
+    return jsonEncode(<String, Object>{'version': 2, 'sealed': sealed});
+  }
+
+  Future<void> _saveRecords() {
+    // Capture the view before the first await. A queued write from profile A
+    // must not observe profile B's runtime or mutable in-memory map after a
+    // switch. The device file is a read/merge/write store, so serialize it.
+    final committed = ProfileRuntime.isProfileCommitted;
+    final owner = _activeOwnerProfileId;
+    final snapshot = <String, Map<String, dynamic>>{
+      for (final entry in _records.entries)
+        entry.key: Map<String, dynamic>.from(entry.value),
+    };
+    return _recordsWriteLock.synchronized(() async {
+      try {
+        final filePath = await _recordsFilePath();
+        if (!committed) {
+          await File(filePath).writeAsString(jsonEncode(snapshot), flush: true);
+          return;
+        }
+        final file = File(filePath);
+        final Map<String, dynamic> all;
+        try {
+          all = await _decodeRecords(await file.readAsString());
+        } catch (_) {
+          // Never overwrite an unreadable device queue: doing so would erase
+          // other profiles' retry metadata and could expose an ambiguous task.
+          rethrow;
+        }
+        all.removeWhere((_, value) {
+          if (value is! Map) return true;
+          return (value['ownerProfileId']?.toString() ?? 'legacy-admin-v1') ==
+              owner;
+        });
+        for (final entry in snapshot.entries) {
+          all[entry.key] = <String, dynamic>{
+            ...entry.value,
+            'ownerProfileId': owner,
+          };
+        }
+        await file.writeAsString(await _encodeRecords(all), flush: true);
+      } catch (_) {
+        if (committed) rethrow;
+      }
+    });
   }
 
   void _upsertRecord(String recordId, Map<String, dynamic> patch) {
     final existing = _records[recordId] ?? <String, dynamic>{};
     existing.addAll(patch);
+    if (ProfileRuntime.isProfileCommitted) {
+      existing['ownerProfileId'] = _activeOwnerProfileId;
+    }
     existing['updatedAt'] = DateTime.now().millisecondsSinceEpoch;
     _records[recordId] = existing;
     unawaited(_saveRecords());
@@ -426,10 +646,7 @@ class DownloadService {
           } else if (lastMod != null && lastMod.isNotEmpty) {
             headers['If-Range'] = lastMod;
           }
-          debugPrint(
-            'DL RESUME: path=$finalPath partial=$partial rangeSet=true ifRange=' +
-                (headers['If-Range'] ?? ''),
-          );
+          debugPrint('DL RESUME: partialBytes=$partial rangeSet=true');
         }
       }
     } catch (_) {}
@@ -543,7 +760,7 @@ class DownloadService {
     _linkRefreshAttempts.clear();
     // Clear persisted pending queue
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       await prefs.remove(_pendingKey);
       await prefs.remove(_pausedKey);
     } catch (_) {}
@@ -569,16 +786,73 @@ class DownloadService {
       // Best-effort clear of non-Android plugin DB
       try {
         final all = await FileDownloader().database.allRecords();
-        for (final r in all) {
+        for (final r in all.where((record) => _ownsPluginTask(record.task))) {
           await FileDownloader().database.deleteRecordWithId(r.taskId);
         }
       } catch (_) {}
     }
   }
 
+  /// Global destructive cleanup used only by the journaled device reset.
+  /// Unlike the ordinary profile-facing clear, this intentionally cancels
+  /// and removes every owner's plugin/native execution record.
+  Future<void> clearDeviceStateForReset() async {
+    _profileViewAttached = false;
+    final downloader = FileDownloader();
+    final records = await downloader.database.allRecords();
+    await downloader.cancelTasksWithIds(records.map((record) => record.taskId));
+    for (final record in records) {
+      await downloader.database.deleteRecordWithId(record.taskId);
+    }
+    if ((await downloader.database.allRecords()).isNotEmpty) {
+      throw StateError('Plugin download records survived device reset');
+    }
+    if (Platform.isAndroid) {
+      var native = await AndroidNativeDownloader.queryTasks(
+        adminAggregate: true,
+        failClosed: true,
+      );
+      for (final task in native) {
+        final id = task['taskId']?.toString();
+        if (id == null || id.isEmpty) continue;
+        if (!await AndroidNativeDownloader.cancel(id)) {
+          throw StateError('Could not cancel Android download $id');
+        }
+      }
+      for (var attempt = 0; attempt < 40 && native.isNotEmpty; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 125));
+        native = await AndroidNativeDownloader.queryTasks(
+          adminAggregate: true,
+          failClosed: true,
+        );
+      }
+      if (native.isNotEmpty) {
+        throw StateError('Android downloads did not stop during reset');
+      }
+    }
+    _records = <String, Map<String, dynamic>>{};
+    _pending.clear();
+    _pendingById.clear();
+    _pausedPending.clear();
+    _pendingResumeAndroid.clear();
+    _pendingResumeNonAndroid.clear();
+    _nonAndroidQueuedRecords.clear();
+    _nonAndroidResumeQueuedOverlay.clear();
+    _canceledDuringStart.clear();
+    _linkRefreshAttempts.clear();
+    _bytesAtLastError.clear();
+    final recordFile = File(await _recordsFilePath());
+    if (await recordFile.exists()) await recordFile.delete();
+    await AndroidDownloadHistory.instance.clearDeviceState();
+  }
+
   Future<void> _persistPending() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      if (ProfileRuntime.isProfileCommitted) {
+        await _saveRecords();
+        return;
+      }
+      final prefs = await ProfilePreferences.instance();
       final data = _pending
           .map(
             (p) => {
@@ -594,6 +868,9 @@ class DownloadService {
               'destPath': p.destPath,
               'relativeSubDir': p.relativeSubDir,
               'treeUri': p.treeUri,
+              'profileAuthorizationRevision': p.profileAuthorizationRevision,
+              'connectionResourceId': p.connectionResourceId,
+              'resourceAuthorizationRevision': p.resourceAuthorizationRevision,
             },
           )
           .toList();
@@ -603,7 +880,11 @@ class DownloadService {
 
   Future<void> _persistPaused() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      if (ProfileRuntime.isProfileCommitted) {
+        await _saveRecords();
+        return;
+      }
+      final prefs = await ProfilePreferences.instance();
       if (_pausedPending.isEmpty) {
         await prefs.remove(_pausedKey);
         return;
@@ -623,6 +904,9 @@ class DownloadService {
               'destPath': p.destPath,
               'relativeSubDir': p.relativeSubDir,
               'treeUri': p.treeUri,
+              'profileAuthorizationRevision': p.profileAuthorizationRevision,
+              'connectionResourceId': p.connectionResourceId,
+              'resourceAuthorizationRevision': p.resourceAuthorizationRevision,
             },
           )
           .toList();
@@ -657,6 +941,15 @@ class DownloadService {
       destPath: item['destPath'] as String?,
       relativeSubDir: item['relativeSubDir'] as String?,
       treeUri: item['treeUri'] as String?,
+      profileAuthorizationRevision:
+          (item['profileAuthorizationRevision'] as num?)?.toInt() ??
+          (ProfileRuntime.isProfileCommitted &&
+                  _activeOwnerProfileId == 'legacy-admin-v1'
+              ? 1
+              : null),
+      connectionResourceId: item['connectionResourceId'] as String?,
+      resourceAuthorizationRevision:
+          (item['resourceAuthorizationRevision'] as num?)?.toInt(),
     );
   }
 
@@ -689,6 +982,15 @@ class DownloadService {
       destPath: rec['destPath'] as String?,
       relativeSubDir: rec['relativeSubDir'] as String?,
       treeUri: rec['treeUri'] as String?,
+      profileAuthorizationRevision:
+          (rec['profileAuthorizationRevision'] as num?)?.toInt() ??
+          (ProfileRuntime.isProfileCommitted &&
+                  _activeOwnerProfileId == 'legacy-admin-v1'
+              ? 1
+              : null),
+      connectionResourceId: rec['connectionResourceId'] as String?,
+      resourceAuthorizationRevision:
+          (rec['resourceAuthorizationRevision'] as num?)?.toInt(),
     );
   }
 
@@ -701,6 +1003,7 @@ class DownloadService {
     if (rec == null) return false;
     final pending = _pendingFromRecordData(recordId, rec);
     if (pending == null) return false;
+    if (!await _pendingAuthorizationValid(pending)) return false;
 
     if (paused) {
       if (_pausedPending.containsKey(recordId)) return true;
@@ -774,11 +1077,21 @@ class DownloadService {
 
   Future<void> _restorePaused() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_pausedKey);
-      if (raw == null || raw.isEmpty) return;
-      final list = jsonDecode(raw);
-      if (list is! List) return;
+      final List<Object?> list;
+      if (ProfileRuntime.isProfileCommitted) {
+        list = <Object?>[
+          for (final entry in _records.entries)
+            if (entry.value['state'] == 'paused')
+              <String, dynamic>{'queuedId': entry.key, ...entry.value},
+        ];
+      } else {
+        final prefs = await ProfilePreferences.instance();
+        final raw = prefs.getString(_pausedKey);
+        if (raw == null || raw.isEmpty) return;
+        final decoded = jsonDecode(raw);
+        if (decoded is! List) return;
+        list = decoded;
+      }
       _pausedPending.clear();
       for (final item in list) {
         if (item is! Map<String, dynamic>) continue;
@@ -818,12 +1131,22 @@ class DownloadService {
 
   Future<void> _restorePending() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_pendingKey);
-      if (raw == null || raw.isEmpty) return;
+      final List<Object?> list;
+      if (ProfileRuntime.isProfileCommitted) {
+        list = <Object?>[
+          for (final entry in _records.entries)
+            if (entry.value['state'] == 'queued')
+              <String, dynamic>{'queuedId': entry.key, ...entry.value},
+        ];
+      } else {
+        final prefs = await ProfilePreferences.instance();
+        final raw = prefs.getString(_pendingKey);
+        if (raw == null || raw.isEmpty) return;
+        final decoded = jsonDecode(raw);
+        if (decoded is! List) return;
+        list = decoded;
+      }
       debugPrint('DL INIT: restoring pending queue from prefs');
-      final list = jsonDecode(raw);
-      if (list is! List) return;
       debugPrint('DL INIT: pending entries found=${list.length}');
       final Set<String> seenKeys = {};
       for (final item in list) {
@@ -841,9 +1164,7 @@ class DownloadService {
         }
         if (pending.contentKey.isNotEmpty &&
             seenKeys.contains(pending.contentKey)) {
-          debugPrint(
-            'DL INIT: skipping duplicate pending contentKey=${pending.contentKey}',
-          );
+          debugPrint('DL INIT: skipping duplicate pending item');
           continue;
         }
         final downloadTask = DownloadTask(
@@ -872,9 +1193,7 @@ class DownloadService {
         if (pending.contentKey.isNotEmpty) {
           seenKeys.add(pending.contentKey);
         }
-        debugPrint(
-          'DL INIT: restored pending queuedId=$queuedId name=${pending.providedFileName ?? 'download'}',
-        );
+        debugPrint('DL INIT: restored pending item');
       }
       await _persistPending();
     } catch (_) {}
@@ -1167,6 +1486,13 @@ class DownloadService {
     if (Platform.isAndroid) {
       await AndroidDownloadHistory.instance.initialize();
       _androidEventsSub = AndroidNativeDownloader.events.listen((event) async {
+        if (!_profileViewAttached) return;
+        final eventOwner = event['ownerProfileId']?.toString();
+        if (ProfileRuntime.isProfileCommitted &&
+            eventOwner != null &&
+            eventOwner != _activeOwnerProfileId) {
+          return;
+        }
         final type = event['type'] as String?;
         final String taskId = (event['taskId'] ?? '').toString();
         if (taskId.startsWith(AndroidNativeDownloader.updateTaskPrefix)) {
@@ -1178,6 +1504,7 @@ class DownloadService {
           filename: event['fileName'] ?? 'download',
         );
         final String? recId = _resolveRecordIdForTaskId(taskId);
+        if (ProfileRuntime.isProfileCommitted && recId == null) return;
         switch (type) {
           case 'started':
             // Never regress progress: an out-of-order 'started' (or an
@@ -1201,7 +1528,8 @@ class DownloadService {
             // Fresh progress past the last-error baseline means the refreshed
             // link genuinely works — only then reset the refresh budget.
             final baseline = _bytesAtLastError[taskId];
-            if (baseline != null && bytes > baseline + _refreshResetFreshBytes) {
+            if (baseline != null &&
+                bytes > baseline + _refreshResetFreshBytes) {
               _linkRefreshAttempts.remove(taskId);
               _bytesAtLastError.remove(taskId);
             }
@@ -1252,6 +1580,14 @@ class DownloadService {
             _statusController.add(TaskStatusUpdate(task, TaskStatus.canceled));
             _lastFileByTaskId.remove(taskId);
             if (recId != null) _upsertRecord(recId, {'state': 'canceled'});
+            if (ProfileRuntime.isProfileCommitted) {
+              unawaited(
+                DeviceJobStore.markTerminal(
+                  backend: 'androidNativeDownload',
+                  externalJobId: taskId,
+                ),
+              );
+            }
             _reevaluateQueue();
             break;
           case 'complete':
@@ -1268,6 +1604,23 @@ class DownloadService {
               _lastFileByTaskId[taskId] = (uri, mime);
             }
             if (recId != null) _upsertRecord(recId, {'state': 'complete'});
+            if (ProfileRuntime.isProfileCommitted) {
+              unawaited(() async {
+                await DeviceJobStore.markTerminal(
+                  backend: 'androidNativeDownload',
+                  externalJobId: taskId,
+                );
+                if (uri.isNotEmpty) {
+                  await ProfileBootstrap.registry.upsertOwnedArtifact(
+                    kind: 'download',
+                    ownerProfileId: _activeOwnerProfileId,
+                    canonicalPath: uri,
+                    sizeBytes: (event['bytes'] as num?)?.toInt(),
+                  );
+                }
+              }());
+            }
+            unawaited(AndroidNativeDownloader.forgetTask(taskId));
             _reevaluateQueue();
             break;
           case 'error':
@@ -1338,6 +1691,17 @@ class DownloadService {
       );
 
       FileDownloader().updates.listen((update) async {
+        if (!_profileViewAttached || !_ownsPluginTask(update.task)) return;
+        if (!await _pluginAuthorizationValid(update.task)) {
+          try {
+            await FileDownloader().cancel(update.task);
+          } catch (_) {}
+          await DeviceJobStore.markTerminal(
+            backend: 'backgroundDownloader',
+            externalJobId: update.task.taskId,
+          );
+          return;
+        }
         switch (update) {
           case TaskProgressUpdate():
             _progressController.add(update);
@@ -1349,6 +1713,12 @@ class DownloadService {
                   update.task.taskId,
                 );
               } catch (_) {}
+              unawaited(
+                DeviceJobStore.markTerminal(
+                  backend: 'backgroundDownloader',
+                  externalJobId: update.task.taskId,
+                ),
+              );
             }
             if (update.status == TaskStatus.failed) {
               // Try PikPak cold storage retry before giving up
@@ -1368,22 +1738,38 @@ class DownloadService {
             } else if (update.status == TaskStatus.complete ||
                 update.status == TaskStatus.canceled ||
                 update.status == TaskStatus.paused) {
+              if (update.status == TaskStatus.complete) {
+                final owner = _pluginOwner(update.task);
+                unawaited(() async {
+                  await DeviceJobStore.markTerminal(
+                    backend: 'backgroundDownloader',
+                    externalJobId: update.task.taskId,
+                  );
+                  if (ProfileRuntime.isProfileCommitted && owner != null) {
+                    await _registerPluginArtifact(update.task, owner);
+                  }
+                }());
+              }
               _reevaluateQueue();
             }
         }
       });
       await FileDownloader().trackTasks();
+      await _captureLegacyPluginAuthorities();
       await FileDownloader().resumeFromBackground();
     }
 
     // Restore any pending queue persisted from a previous run
     await _loadRecords();
+    await _importLegacyQueuesOnce();
     await _restorePaused();
     await _restorePending();
     debugPrint('DL INIT: loaded records count=${_records.length}');
     // On non-Android: try to resume tasks on startup
     if (!Platform.isAndroid) {
-      final records = await FileDownloader().database.allRecords();
+      final records = (await FileDownloader().database.allRecords())
+          .where((record) => _ownsPluginTask(record.task))
+          .toList(growable: false);
       debugPrint('DL INIT: plugin records count=${records.length}');
       // Build reverse map: pluginTaskId -> recordId
       final Map<String, String> recordIdByPluginId = {};
@@ -1393,8 +1779,36 @@ class DownloadService {
       }
       for (final r in records) {
         final task = r.task as DownloadTask;
+        if (!await _pluginAuthorizationValid(task)) {
+          try {
+            await FileDownloader().cancel(task);
+          } catch (_) {}
+          await DeviceJobStore.markTerminal(
+            backend: 'backgroundDownloader',
+            externalJobId: task.taskId,
+          );
+          continue;
+        }
         final recordId = recordIdByPluginId[task.taskId] ?? task.taskId;
         final rec = _records[recordId];
+        if (ProfileRuntime.isProfileCommitted) {
+          final owner = _pluginOwner(r.task) ?? 'legacy-admin-v1';
+          await DeviceJobStore.registerSnapshot(
+            backend: 'backgroundDownloader',
+            externalJobId: r.task.taskId,
+            kind: DeviceJobKind.download,
+            ownerProfileId: owner,
+            profileAuthorizationRevision: _pluginAuthorizationRevision(r.task),
+            resourceId: _pluginResourceId(r.task),
+            resourceAuthorizationRevision: _pluginResourceAuthorizationRevision(
+              r.task,
+            ),
+            terminal: r.status.isFinalState,
+          );
+          if (r.status == TaskStatus.complete) {
+            await _registerPluginArtifact(r.task, owner);
+          }
+        }
         final String? meta = rec != null ? (rec['meta'] as String?) : null;
         final String? displayName = rec != null
             ? (rec['displayName'] as String?)
@@ -1405,9 +1819,7 @@ class DownloadService {
             : null;
 
         Future<void> reenqueueFromMeta({bool insertFront = true}) async {
-          debugPrint(
-            'DL INIT: re-enqueue from meta for taskId=${task.taskId} name=$displayName',
-          );
+          debugPrint('DL INIT: re-enqueueing stored task metadata');
           if (await _queueFromRecord(
             recordId,
             paused: false,
@@ -1432,9 +1844,12 @@ class DownloadService {
                 insertAtFront: insertFront,
                 destPath: rec?['destPath'] as String?,
                 relativeSubDir: rec?['relativeSubDir'] as String?,
+                connectionResourceId: rec?['connectionResourceId'] as String?,
+                resourceAuthorizationRevision:
+                    (rec?['resourceAuthorizationRevision'] as num?)?.toInt(),
               );
             } else {
-              debugPrint('DL INIT: skip re-enqueue duplicate contentKey=$ck');
+              debugPrint('DL INIT: skip duplicate re-enqueue');
             }
           }
         }
@@ -1442,18 +1857,16 @@ class DownloadService {
         if (r.status == TaskStatus.paused || r.status == TaskStatus.enqueued) {
           final canResume = await FileDownloader().taskCanResume(task);
           debugPrint(
-            'DL INIT: taskId=${task.taskId} status=${r.status} canResume=$canResume',
+            'DL INIT: stored task status=${r.status} canResume=$canResume',
           );
           bool resumed = false;
           if (canResume) {
             try {
               await FileDownloader().resume(task);
-              debugPrint('DL INIT: resumed taskId=${task.taskId}');
+              debugPrint('DL INIT: resumed stored task');
               resumed = true;
-            } catch (e) {
-              debugPrint(
-                'DL INIT: resume failed for taskId=${task.taskId} error=$e',
-              );
+            } catch (_) {
+              debugPrint('DL INIT: stored task resume failed');
             }
           }
           if (!resumed) {
@@ -1476,19 +1889,15 @@ class DownloadService {
         } else if (r.status == TaskStatus.running) {
           // Nudge running tasks to ensure the plugin is actually progressing; if not resumable, re-enqueue
           final canResume = await FileDownloader().taskCanResume(task);
-          debugPrint(
-            'DL INIT: running taskId=${task.taskId} canResume=$canResume',
-          );
+          debugPrint('DL INIT: running task canResume=$canResume');
           bool resumed = false;
           if (canResume) {
             try {
               await FileDownloader().resume(task);
-              debugPrint('DL INIT: resumed running taskId=${task.taskId}');
+              debugPrint('DL INIT: resumed running task');
               resumed = true;
-            } catch (e) {
-              debugPrint(
-                'DL INIT: resume running failed taskId=${task.taskId} error=$e',
-              );
+            } catch (_) {
+              debugPrint('DL INIT: running task resume failed');
             }
           }
           if (!resumed) {
@@ -1536,6 +1945,116 @@ class DownloadService {
     _initializing = false;
     // Kick the scheduler once at startup in case capacity is free
     unawaited(_reevaluateQueue());
+  }
+
+  /// Moves the old preference-backed queue into the encrypted device record
+  /// store after the legacy installation has committed to profile mode. The
+  /// source values remain untouched for the documented rollback window.
+  Future<void> _importLegacyQueuesOnce() async {
+    if (!ProfileRuntime.isProfileCommitted ||
+        _activeOwnerProfileId != 'legacy-admin-v1') {
+      return;
+    }
+    final device = await DevicePreferences.instance();
+    if (device.getBool(_legacyQueueImportedKey) ?? false) return;
+    final admin = await ProfileBootstrap.registry.getProfile('legacy-admin-v1');
+    if (admin == null || !admin.isEnabled) {
+      throw StateError('Migrated Admin authority is unavailable');
+    }
+
+    Future<void> import(String key, String state) async {
+      final raw = device.getString(key);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) throw const FormatException('Invalid legacy queue');
+      for (final value in decoded) {
+        if (value is! Map) throw const FormatException('Invalid queue entry');
+        final item = Map<String, dynamic>.from(value);
+        final pending = _pendingFromStoredMap(item);
+        if (pending == null) throw const FormatException('Invalid queue item');
+        _records.putIfAbsent(
+          pending.queuedId,
+          () => <String, dynamic>{
+            ...item,
+            'id': pending.queuedId,
+            'displayName': pending.providedFileName,
+            'state': state,
+            'ownerProfileId': 'legacy-admin-v1',
+            'profileAuthorizationRevision': admin.authorizationRevision,
+            'createdAt': DateTime.now().millisecondsSinceEpoch,
+            'updatedAt': DateTime.now().millisecondsSinceEpoch,
+          },
+        );
+      }
+    }
+
+    await import(_pausedKey, 'paused');
+    await import(_pendingKey, 'queued');
+    await _saveRecords();
+    if (!await device.setBool(_legacyQueueImportedKey, true)) {
+      throw StateError('Could not commit legacy queue import marker');
+    }
+  }
+
+  @visibleForTesting
+  Future<Map<String, Map<String, dynamic>>>
+  debugImportLegacyQueuesForTesting() async {
+    _records = <String, Map<String, dynamic>>{};
+    await _loadRecords();
+    await _importLegacyQueuesOnce();
+    return <String, Map<String, dynamic>>{
+      for (final entry in _records.entries)
+        entry.key: Map<String, dynamic>.from(entry.value),
+    };
+  }
+
+  Future<void> _captureLegacyPluginAuthorities() async {
+    _legacyPluginAuthorizationRevisions.clear();
+    if (!ProfileRuntime.isProfileCommitted ||
+        _activeOwnerProfileId != 'legacy-admin-v1') {
+      return;
+    }
+    final device = await DevicePreferences.instance();
+    final stored = device.getString(_legacyPluginAuthorityKey);
+    if (stored != null && stored.isNotEmpty) {
+      final decoded = jsonDecode(stored);
+      if (decoded is! Map) {
+        throw const FormatException('Invalid legacy plugin authority map');
+      }
+      for (final entry in decoded.entries) {
+        final revision = (entry.value as num?)?.toInt();
+        if (revision == null || revision < 1) {
+          throw const FormatException('Invalid legacy plugin authority');
+        }
+        _legacyPluginAuthorizationRevisions[entry.key.toString()] = revision;
+      }
+      return;
+    }
+    final admin = await ProfileBootstrap.registry.getProfile('legacy-admin-v1');
+    if (admin == null || !admin.isEnabled) {
+      throw StateError('Migrated Admin authority is unavailable');
+    }
+    for (final record in await FileDownloader().database.allRecords()) {
+      final task = record.task;
+      var hasProfileAuthority = false;
+      if (task.metaData.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(task.metaData);
+          hasProfileAuthority =
+              decoded is Map && decoded['profileAuthorizationRevision'] is num;
+        } catch (_) {}
+      }
+      if (!hasProfileAuthority) {
+        _legacyPluginAuthorizationRevisions[task.taskId] =
+            admin.authorizationRevision;
+      }
+    }
+    if (!await device.setString(
+      _legacyPluginAuthorityKey,
+      jsonEncode(_legacyPluginAuthorizationRevisions),
+    )) {
+      throw StateError('Could not persist legacy plugin authority');
+    }
   }
 
   Future<(String directory, String filename)> _smartLocationFor(
@@ -1586,8 +2105,47 @@ class DownloadService {
     bool insertAtFront = false,
     String? destPath,
     String? relativeSubDir,
+    String? credentialKey,
+    String? connectionResourceId,
+    int? resourceAuthorizationRevision,
   }) async {
     await initialize();
+    final authorization = await DeviceJobStore.authorize(
+      ProfileFeature.downloads,
+    );
+    if ((connectionResourceId == null) !=
+        (resourceAuthorizationRevision == null)) {
+      throw ArgumentError(
+        'A connection resource id and revision must be supplied together',
+      );
+    }
+    if (credentialKey != null) {
+      final bound = await ProfileCredentialFacade.boundAuthority(credentialKey);
+      if (ProfileRuntime.isProfileCommitted && bound == null) {
+        throw StateError('Download connection is unavailable');
+      }
+      if (bound != null) {
+        if (connectionResourceId != null &&
+            (connectionResourceId != bound.resourceId ||
+                resourceAuthorizationRevision !=
+                    bound.resourceAuthorizationRevision)) {
+          throw StateError('Download connection authorization changed');
+        }
+        connectionResourceId = bound.resourceId;
+        resourceAuthorizationRevision = bound.resourceAuthorizationRevision;
+      }
+    }
+    if (authorization != null &&
+        !await DeviceJobStore.validateAuthorization(
+          profileId: authorization.profileId,
+          profileAuthorizationRevision:
+              authorization.profileAuthorizationRevision,
+          feature: ProfileFeature.downloads,
+          resourceId: connectionResourceId,
+          resourceAuthorizationRevision: resourceAuthorizationRevision,
+        )) {
+      throw StateError('Download authorization changed');
+    }
 
     // Always queue first, then start based on concurrency limit
     final providedName = (fileName?.trim().isNotEmpty ?? false)
@@ -1635,6 +2193,24 @@ class DownloadService {
           }
         })();
 
+    // Directory prompts and platform checks above can outlive the initiating
+    // profile session. Never publish its queue entry into a later session.
+    if (authorization != null) {
+      final current = ProfileRuntime.capture();
+      if (current.profileId != authorization.profileId ||
+          current.sessionEpoch != authorization.sessionEpoch ||
+          !await DeviceJobStore.validateAuthorization(
+            profileId: authorization.profileId,
+            profileAuthorizationRevision:
+                authorization.profileAuthorizationRevision,
+            feature: ProfileFeature.downloads,
+            resourceId: connectionResourceId,
+            resourceAuthorizationRevision: resourceAuthorizationRevision,
+          )) {
+        throw StateError('Download authorization session has ended');
+      }
+    }
+
     final queuedTask = DownloadTask(
       taskId: queuedId,
       url: url,
@@ -1671,6 +2247,13 @@ class DownloadService {
       'wifiOnly': wifiOnly,
       'retries': retries,
       'headers': headers,
+      if (authorization != null)
+        'profileAuthorizationRevision':
+            authorization.profileAuthorizationRevision,
+      if (connectionResourceId != null)
+        'connectionResourceId': connectionResourceId,
+      if (resourceAuthorizationRevision != null)
+        'resourceAuthorizationRevision': resourceAuthorizationRevision,
       if (destPath != null) 'destPath': destPath,
       if (relativeSubDir != null) 'relativeSubDir': relativeSubDir,
       if (treeUri != null) 'treeUri': treeUri,
@@ -1691,6 +2274,9 @@ class DownloadService {
       destPath: destPath,
       relativeSubDir: relativeSubDir,
       treeUri: treeUri,
+      profileAuthorizationRevision: authorization?.profileAuthorizationRevision,
+      connectionResourceId: connectionResourceId,
+      resourceAuthorizationRevision: resourceAuthorizationRevision,
     );
     final added = _addPendingRequest(
       _pending,
@@ -1801,7 +2387,9 @@ class DownloadService {
         final metaStr = recId != null
             ? (_records[recId]?['meta'] as String?)
             : null;
-        final fresh = await _refreshUrlFromMeta(metaStr);
+        final fresh = await _recordAuthorizationValid(recId)
+            ? await _refreshUrlFromMeta(metaStr)
+            : null;
         if (fresh != null) {
           ok = await _startAdoptAndroid(task.taskId, url: fresh.url);
         }
@@ -1818,7 +2406,9 @@ class DownloadService {
       }
       return ok;
     } else {
-      final dbList = await FileDownloader().database.allRecords();
+      final dbList = (await FileDownloader().database.allRecords())
+          .where((record) => _ownsPluginTask(record.task))
+          .toList(growable: false);
       runningCount = dbList.where((r) => r.status == TaskStatus.running).length;
       if (runningCount >= maxParallel) {
         if (task is DownloadTask) {
@@ -1951,6 +2541,9 @@ class DownloadService {
       }
       return;
     }
+    if (ProfileRuntime.isProfileCommitted && !_ownsPluginTask(task)) {
+      throw StateError('Download belongs to another profile');
+    }
     await FileDownloader().cancel(task as DownloadTask);
     try {
       await FileDownloader().database.deleteRecordWithId(task.taskId);
@@ -1963,7 +2556,9 @@ class DownloadService {
     if (Platform.isAndroid) {
       return AndroidDownloadHistory.instance.all();
     }
-    final dbRecords = await FileDownloader().database.allRecords();
+    final dbRecords = (await FileDownloader().database.allRecords())
+        .where((record) => _ownsPluginTask(record.task))
+        .toList(growable: false);
     // Overlay queued placeholders and queued-resume status
     if (_nonAndroidQueuedRecords.isEmpty &&
         _nonAndroidResumeQueuedOverlay.isEmpty)
@@ -2013,6 +2608,9 @@ class DownloadService {
     if (Platform.isAndroid) {
       AndroidDownloadHistory.instance.removeById(record.taskId);
       return;
+    }
+    if (ProfileRuntime.isProfileCommitted && !_ownsPluginTask(record.task)) {
+      throw StateError('Download belongs to another profile');
     }
     await FileDownloader().database.deleteRecordWithId(record.taskId);
   }
@@ -2123,6 +2721,7 @@ class DownloadService {
 
     final rec = _records[recId];
     if (rec == null) return false;
+    if (!await _recordAuthorizationValid(recId)) return false;
 
     final String? metaStr = rec['meta'] as String?;
     if (metaStr == null || metaStr.isEmpty) return false;
@@ -2144,9 +2743,7 @@ class DownloadService {
       final int coldAttempt = (meta['_pikpakColdAttempt'] as int?) ?? 0;
 
       if (coldAttempt >= pikpakMaxColdRetries) {
-        debugPrint(
-          'DL RETRY PIKPAK FAILED: Max cold storage retries ($pikpakMaxColdRetries) exceeded for file $fileId',
-        );
+        debugPrint('DL RETRY PIKPAK FAILED: cold retry limit reached');
         return false;
       }
 
@@ -2155,13 +2752,15 @@ class DownloadService {
           .clamp(pikpakBaseDelaySeconds, pikpakMaxDelaySeconds);
 
       debugPrint(
-        'DL RETRY PIKPAK FAILED: Cold storage attempt ${coldAttempt + 1}/$pikpakMaxColdRetries, waiting ${delaySeconds}s for file $fileId',
+        'DL RETRY PIKPAK FAILED: cold attempt ${coldAttempt + 1}/$pikpakMaxColdRetries, waiting ${delaySeconds}s',
       );
 
       // Wait for cold storage to potentially warm up
       await Future.delayed(Duration(seconds: delaySeconds));
 
-      debugPrint('DL RETRY PIKPAK FAILED: Refreshing URL for file $fileId');
+      if (!await _recordAuthorizationValid(recId)) return false;
+
+      debugPrint('DL RETRY PIKPAK FAILED: refreshing signed link');
 
       // Get fresh file details
       final freshData = await PikPakApiService.instance.getFileDetails(fileId);
@@ -2171,41 +2770,28 @@ class DownloadService {
         debugPrint('DL RETRY PIKPAK FAILED: Failed to get fresh URL');
         return false;
       }
+      if (!await _recordAuthorizationValid(recId)) return false;
 
       // Update meta with incremented cold attempt count
       final updatedMeta = Map<String, dynamic>.from(meta);
       updatedMeta['_pikpakColdAttempt'] = coldAttempt + 1;
 
-      // Re-queue the download
-      final displayName = rec['displayName'] as String?;
-      final torrentName = rec['torrentName'] as String?;
-      final destPath = rec['destPath'] as String?;
-      final wifiOnly = rec['wifiOnly'] as bool? ?? false;
-      final retries = rec['retries'] as int? ?? 3;
-
-      // Remove old record
-      _records.remove(recId);
+      // Keep the same durable record. Removing it before enqueue used to lose
+      // the only retry state if persistence or authorization failed here.
+      _upsertRecord(recId, {
+        'url': freshUrl,
+        'meta': jsonEncode(updatedMeta),
+        'state': 'queued',
+      });
       await _saveRecords();
-
-      // Enqueue with fresh URL
-      await enqueueDownload(
-        url: freshUrl,
-        fileName: displayName,
-        meta: jsonEncode(updatedMeta),
-        torrentName: torrentName,
-        destPath: destPath,
-        relativeSubDir: rec['relativeSubDir'] as String?,
-        wifiOnly: wifiOnly,
-        retries: retries,
-        insertAtFront: true,
-      );
+      if (!await _queueFromRecord(recId, paused: false)) return false;
 
       debugPrint(
         'DL RETRY PIKPAK FAILED: Re-queued with fresh URL (attempt ${coldAttempt + 1})',
       );
       return true;
-    } catch (e) {
-      debugPrint('DL RETRY PIKPAK FAILED: Error during retry: $e');
+    } catch (_) {
+      debugPrint('DL RETRY PIKPAK FAILED: retry failed');
       return false;
     }
   }
@@ -2236,8 +2822,8 @@ class DownloadService {
         return (url: freshUrl, fileName: null);
       }
 
-      final apiKey = (meta['apiKey'] ?? '').toString();
       if (meta['torboxWebDownload'] == true) {
+        final apiKey = (await StorageService.getTorboxApiKey()) ?? '';
         final webDownloadId = meta['torboxWebDownloadId'] as int?;
         final fileId = meta['torboxFileId'] as int?;
         if (apiKey.isEmpty) return null;
@@ -2262,6 +2848,7 @@ class DownloadService {
         return null;
       }
       if (meta['torboxDownload'] == true) {
+        final apiKey = (await StorageService.getTorboxApiKey()) ?? '';
         final torrentId = meta['torboxTorrentId'] as int?;
         final fileId = meta['torboxFileId'] as int?;
         if (apiKey.isEmpty) return null;
@@ -2285,14 +2872,15 @@ class DownloadService {
 
       // RealDebrid
       final restricted = (meta['restrictedLink'] ?? '').toString();
+      final apiKey = (await StorageService.getApiKey()) ?? '';
       if (restricted.isEmpty || apiKey.isEmpty) return null;
       final fresh = await DebridService.unrestrictLink(apiKey, restricted);
       final freshUrl = (fresh['download'] ?? '').toString();
       if (freshUrl.isEmpty) return null;
       final rdName = (fresh['filename'] ?? '').toString();
       return (url: freshUrl, fileName: rdName.isEmpty ? null : rdName);
-    } catch (e) {
-      debugPrint('DL REFRESH: link refresh failed: $e');
+    } catch (_) {
+      debugPrint('DL REFRESH: link refresh failed');
       return null;
     }
   }
@@ -2393,6 +2981,7 @@ class DownloadService {
   Future<bool> _startAdoptAndroid(String taskId, {required String url}) async {
     final recId = _resolveRecordIdForTaskId(taskId);
     final rec = recId != null ? _records[recId] : null;
+    if (!await _recordAuthorizationValid(recId)) return false;
     final name = (rec?['displayName'] ?? 'download').toString();
     final res = await AndroidNativeDownloader.start(
       taskId: taskId,
@@ -2404,11 +2993,12 @@ class DownloadService {
       subDir: _subDirForRecord(rec),
       headers: (rec?['headers'] as Map?)?.cast<String, String>(),
       treeUri: rec?['treeUri'] as String?,
+      connectionResourceId: rec?['connectionResourceId'] as String?,
+      resourceAuthorizationRevision:
+          (rec?['resourceAuthorizationRevision'] as num?)?.toInt(),
     );
     if (!res.ok) {
-      debugPrint(
-        'DL ADOPT: start failed for $taskId: ${res.errorCode} ${res.errorMessage}',
-      );
+      debugPrint('DL ADOPT: start failed code=${res.errorCode}');
       return false;
     }
     final task = DownloadTask(taskId: taskId, url: url, filename: name);
@@ -2443,6 +3033,7 @@ class DownloadService {
     final rec = _records[recId];
     final metaStr = rec?['meta'] as String?;
     if (metaStr == null || metaStr.isEmpty) return false;
+    if (!await _recordAuthorizationValid(recId)) return false;
     // Native already retried transient errors, so a refresh only helps when
     // the URL itself is dead: a 4xx (expired debrid link) or a non-HTTP
     // failure. A 5xx that exhausted native retries is a server problem a new
@@ -2452,7 +3043,7 @@ class DownloadService {
     }
     final attempts = _linkRefreshAttempts[taskId] ?? 0;
     if (attempts >= _maxLinkRefreshAttempts) {
-      debugPrint('DL REFRESH: attempts exhausted for $taskId');
+      debugPrint('DL REFRESH: attempts exhausted');
       return false;
     }
     _linkRefreshAttempts[taskId] = attempts + 1;
@@ -2461,8 +3052,10 @@ class DownloadService {
     _bytesAtLastError[taskId] = errorBytes;
     final fresh = await _refreshUrlFromMeta(metaStr);
     if (fresh == null) return false;
+    if (!await _recordAuthorizationValid(recId)) return false;
     debugPrint(
-      'DL REFRESH: restarting $taskId with fresh link (attempt ${attempts + 1}, httpCode=$httpCode)',
+      'DL REFRESH: restarting task with fresh link '
+      '(attempt ${attempts + 1}, httpCode=$httpCode)',
     );
     return _startAdoptAndroid(taskId, url: fresh.url);
   }
@@ -2498,6 +3091,21 @@ class DownloadService {
       );
       final prog = total > 0 ? (bytes / total).clamp(0.0, 1.0) : 0.0;
       final recId = _resolveRecordIdForTaskId(id);
+      if (ProfileRuntime.isProfileCommitted) {
+        await DeviceJobStore.registerSnapshot(
+          backend: 'androidNativeDownload',
+          externalJobId: id,
+          kind: DeviceJobKind.download,
+          ownerProfileId: (t['ownerProfileId'] ?? _activeOwnerProfileId)
+              .toString(),
+          profileAuthorizationRevision:
+              (t['profileAuthorizationRevision'] as num?)?.toInt() ?? 1,
+          resourceId: t['connectionResourceId']?.toString(),
+          resourceAuthorizationRevision:
+              (t['resourceAuthorizationRevision'] as num?)?.toInt(),
+          terminal: status == 'done',
+        );
+      }
       switch (status) {
         case 'running':
           AndroidDownloadHistory.instance.upsert(
@@ -2512,12 +3120,44 @@ class DownloadService {
           AndroidDownloadHistory.instance.upsert(task, TaskStatus.failed, -1.0);
           if (recId != null) _upsertRecord(recId, {'state': 'failed'});
           break;
+        case 'done':
+          AndroidDownloadHistory.instance.upsert(
+            task,
+            TaskStatus.complete,
+            1.0,
+            expectedFileSize: total,
+          );
+          if (recId != null) _upsertRecord(recId, {'state': 'complete'});
+          if (ProfileRuntime.isProfileCommitted) {
+            await DeviceJobStore.markTerminal(
+              backend: 'androidNativeDownload',
+              externalJobId: id,
+            );
+            final uri = (t['uri'] ?? '').toString();
+            if (uri.isNotEmpty) {
+              await ProfileBootstrap.registry.upsertOwnedArtifact(
+                kind: 'download',
+                ownerProfileId: _activeOwnerProfileId,
+                canonicalPath: uri,
+                sizeBytes: total > 0 ? total : bytes,
+              );
+            }
+          }
+          await AndroidNativeDownloader.forgetTask(id);
+          break;
         default: // paused (incl. stored-running with no live worker)
           AndroidDownloadHistory.instance.upsert(task, TaskStatus.paused, -5.0);
           if (recId != null) _upsertRecord(recId, {'state': 'paused'});
           break;
       }
       debugPrint('DL RECONCILE: adopted $id status=$status bytes=$bytes');
+    }
+    if (ProfileRuntime.isProfileCommitted) {
+      await DeviceJobStore.reconcileBackend(
+        backend: 'androidNativeDownload',
+        ownerProfileId: _activeOwnerProfileId,
+        presentExternalJobIds: byId.keys,
+      );
     }
 
     // 2) History entries claiming active work that native doesn't know about
@@ -2556,6 +3196,75 @@ class DownloadService {
     }
   }
 
+  Future<void> _reconcileWithPlugin() async {
+    if (Platform.isAndroid) return;
+    final records = (await FileDownloader().database.allRecords())
+        .where((record) => _ownsPluginTask(record.task))
+        .toList(growable: false);
+    final present = <String>[];
+    for (final pluginRecord in records) {
+      final task = pluginRecord.task;
+      final owner = _pluginOwner(task) ?? 'legacy-admin-v1';
+      present.add(task.taskId);
+      final recordId = _resolveRecordIdForTaskId(task.taskId);
+      if (recordId != null) {
+        _upsertRecord(recordId, <String, dynamic>{
+          'state': switch (pluginRecord.status) {
+            TaskStatus.complete => 'complete',
+            TaskStatus.canceled => 'canceled',
+            TaskStatus.failed || TaskStatus.notFound => 'failed',
+            TaskStatus.paused => 'paused',
+            TaskStatus.enqueued || TaskStatus.waitingToRetry => 'queued',
+            TaskStatus.running => 'running',
+          },
+          'pluginTaskId': task.taskId,
+        });
+      }
+      if (ProfileRuntime.isProfileCommitted) {
+        await DeviceJobStore.registerSnapshot(
+          backend: 'backgroundDownloader',
+          externalJobId: task.taskId,
+          kind: DeviceJobKind.download,
+          ownerProfileId: owner,
+          profileAuthorizationRevision: _pluginAuthorizationRevision(task),
+          resourceId: _pluginResourceId(task),
+          resourceAuthorizationRevision: _pluginResourceAuthorizationRevision(
+            task,
+          ),
+          terminal: pluginRecord.status.isFinalState,
+        );
+        if (pluginRecord.status == TaskStatus.complete) {
+          await _registerPluginArtifact(task, owner);
+        }
+      }
+    }
+    if (ProfileRuntime.isProfileCommitted) {
+      await DeviceJobStore.reconcileBackend(
+        backend: 'backgroundDownloader',
+        ownerProfileId: _activeOwnerProfileId,
+        presentExternalJobIds: present,
+      );
+    }
+  }
+
+  Future<void> _registerPluginArtifact(Task task, String owner) async {
+    try {
+      final file = File(await task.filePath());
+      if (!await file.exists()) return;
+      final stat = await file.stat();
+      await ProfileBootstrap.registry.upsertOwnedArtifact(
+        kind: 'download',
+        ownerProfileId: owner,
+        canonicalPath: file.absolute.path,
+        sizeBytes: stat.size,
+        modifiedAtMs: stat.modified.millisecondsSinceEpoch,
+      );
+    } catch (_) {
+      // A completed public file can be moved/deleted independently. Artifact
+      // reconciliation is best-effort and never reassigns an unknown path.
+    }
+  }
+
   Future<void> _reevaluateQueue() async {
     if (_reevaluating) {
       _reevaluateScheduled = true;
@@ -2570,7 +3279,9 @@ class DownloadService {
       final list = AndroidDownloadHistory.instance.all();
       runningCount = list.where((r) => r.status == TaskStatus.running).length;
     } else {
-      final list = await FileDownloader().database.allRecords();
+      final list = (await FileDownloader().database.allRecords())
+          .where((record) => _ownsPluginTask(record.task))
+          .toList(growable: false);
       runningCount = list.where((r) => r.status == TaskStatus.running).length;
     }
 
@@ -2610,7 +3321,9 @@ class DownloadService {
               ? (_records[recId]?['meta'] as String?)
               : null;
           try {
-            final fresh = await _refreshUrlFromMeta(metaStr);
+            final fresh = await _recordAuthorizationValid(recId)
+                ? await _refreshUrlFromMeta(metaStr)
+                : null;
             if (fresh != null) {
               ok = await _startAdoptAndroid(taskId, url: fresh.url);
             }
@@ -2622,7 +3335,7 @@ class DownloadService {
             }
           }
           if (!ok) {
-            debugPrint('DL RESUME-DRAIN: could not revive $taskId → failed');
+            debugPrint('DL RESUME-DRAIN: could not revive task');
             final failTask = DownloadTask(
               taskId: taskId,
               url: '',
@@ -2677,12 +3390,33 @@ class DownloadService {
         debugPrint('DL START: skipped canceled pending queuedId=${p.queuedId}');
         continue;
       }
+      if (!await _pendingAuthorizationValid(p)) {
+        _upsertRecord(p.queuedId, {'state': 'canceled'});
+        final deniedTask = DownloadTask(
+          taskId: p.queuedId,
+          url: p.url,
+          filename: p.providedFileName ?? 'download',
+        );
+        if (Platform.isAndroid) {
+          AndroidDownloadHistory.instance.upsert(
+            deniedTask,
+            TaskStatus.canceled,
+            0.0,
+          );
+        } else {
+          _nonAndroidQueuedRecords.remove(p.queuedId);
+        }
+        _statusController.add(
+          TaskStatusUpdate(deniedTask, TaskStatus.canceled),
+        );
+        continue;
+      }
       try {
         // On-demand unrestriction: if URL is restricted, unrestrict it first
         String finalUrl = p.url;
         String finalFileName = p.providedFileName ?? 'download';
 
-        debugPrint('DL START: url=${p.url}, meta=${p.meta}');
+        debugPrint('DL START: resolving queued item');
 
         if (p.meta != null && p.meta!.isNotEmpty) {
           try {
@@ -2705,14 +3439,12 @@ class DownloadService {
 
               if (isTorboxWebDownload) {
                 // Torbox web download path
-                final apiKey = meta['apiKey'] as String?;
+                final apiKey = await StorageService.getTorboxApiKey();
                 final webDownloadId = meta['torboxWebDownloadId'] as int?;
                 final fileId = meta['torboxFileId'] as int?;
                 final isZip = meta['torboxZip'] == true;
 
-                debugPrint(
-                  'DL TORBOX WEB: webDownloadId=$webDownloadId, fileId=$fileId, isZip=$isZip, apiKey=${apiKey?.isNotEmpty ?? false ? "present" : "missing"}',
-                );
+                debugPrint('DL TORBOX WEB: resolving download (zip=$isZip)');
 
                 if (apiKey == null || apiKey.isEmpty) {
                   debugPrint('DL ERROR: Torbox web download missing API key');
@@ -2733,9 +3465,7 @@ class DownloadService {
                     apiKey,
                     webDownloadId,
                   );
-                  debugPrint(
-                    'DL TORBOX WEB ZIP: Generated permalink: $finalUrl',
-                  );
+                  debugPrint('DL TORBOX WEB ZIP: generated signed link');
                 } else {
                   // Regular file download
                   if (webDownloadId == null || fileId == null) {
@@ -2746,17 +3476,13 @@ class DownloadService {
                       'Torbox web download missing webDownloadId or fileId',
                     );
                   }
-                  debugPrint(
-                    'DL TORBOX WEB: Requesting download link for file $fileId in web download $webDownloadId',
-                  );
+                  debugPrint('DL TORBOX WEB: requesting signed link');
                   finalUrl = await TorboxService.requestWebDownloadFileLink(
                     apiKey: apiKey,
                     webId: webDownloadId,
                     fileId: fileId,
                   );
-                  debugPrint(
-                    'DL TORBOX WEB SUCCESS: Got download URL: ${finalUrl.substring(0, finalUrl.length > 50 ? 50 : finalUrl.length)}...',
-                  );
+                  debugPrint('DL TORBOX WEB: signed link ready');
                 }
 
                 if (finalUrl.isEmpty) {
@@ -2769,14 +3495,12 @@ class DownloadService {
                 }
               } else if (isTorbox) {
                 // Torbox torrent download path
-                final apiKey = meta['apiKey'] as String?;
+                final apiKey = await StorageService.getTorboxApiKey();
                 final torrentId = meta['torboxTorrentId'] as int?;
                 final fileId = meta['torboxFileId'] as int?;
                 final isZip = meta['torboxZip'] == true;
 
-                debugPrint(
-                  'DL TORBOX: torrentId=$torrentId, fileId=$fileId, isZip=$isZip, apiKey=${apiKey?.isNotEmpty ?? false ? "present" : "missing"}',
-                );
+                debugPrint('DL TORBOX: resolving download (zip=$isZip)');
 
                 if (apiKey == null || apiKey.isEmpty) {
                   debugPrint('DL ERROR: Torbox download missing API key');
@@ -2795,7 +3519,7 @@ class DownloadService {
                     apiKey,
                     torrentId,
                   );
-                  debugPrint('DL TORBOX ZIP: Generated permalink: $finalUrl');
+                  debugPrint('DL TORBOX ZIP: generated signed link');
                 } else {
                   // Regular file download
                   if (torrentId == null || fileId == null) {
@@ -2806,17 +3530,13 @@ class DownloadService {
                       'Torbox download missing torrentId or fileId',
                     );
                   }
-                  debugPrint(
-                    'DL TORBOX: Requesting download link for file $fileId in torrent $torrentId',
-                  );
+                  debugPrint('DL TORBOX: requesting signed link');
                   finalUrl = await TorboxService.requestFileDownloadLink(
                     apiKey: apiKey,
                     torrentId: torrentId,
                     fileId: fileId,
                   );
-                  debugPrint(
-                    'DL TORBOX SUCCESS: Got download URL: ${finalUrl.substring(0, finalUrl.length > 50 ? 50 : finalUrl.length)}...',
-                  );
+                  debugPrint('DL TORBOX: signed link ready');
                 }
 
                 if (finalUrl.isEmpty) {
@@ -2826,21 +3546,14 @@ class DownloadService {
               } else {
                 // RealDebrid download path (existing logic)
                 final restrictedLink = (meta['restrictedLink'] ?? '') as String;
-                final apiKey = (meta['apiKey'] ?? '') as String;
+                final apiKey = (await StorageService.getApiKey()) ?? '';
 
-                debugPrint(
-                  'DL META: restrictedLink=$restrictedLink, apiKey=${apiKey.isNotEmpty ? "present" : "missing"}',
-                );
-                debugPrint(
-                  'DL COMPARE: p.url=${p.url} == restrictedLink=$restrictedLink ? ${p.url == restrictedLink}',
-                );
+                debugPrint('DL META: debrid link metadata present');
 
                 // If we have meta with restricted link info, always unrestrict
                 // This handles the case where we pass restricted links directly as URLs
                 if (restrictedLink.isNotEmpty && apiKey.isNotEmpty) {
-                  debugPrint(
-                    'DL UNRESTRICT: Starting unrestriction for: $finalFileName',
-                  );
+                  debugPrint('DL UNRESTRICT: requesting signed link');
                   final unrestrictResult = await DebridService.unrestrictLink(
                     apiKey,
                     restrictedLink,
@@ -2850,18 +3563,12 @@ class DownloadService {
                   final rdFileName = (unrestrictResult['filename'] ?? '')
                       .toString();
 
-                  debugPrint(
-                    'DL UNRESTRICT RESULT: url=$unrestrictedUrl, filename=$rdFileName',
-                  );
-
                   if (unrestrictedUrl.isNotEmpty) {
                     finalUrl = unrestrictedUrl;
                     if (rdFileName.isNotEmpty) {
                       finalFileName = rdFileName;
                     }
-                    debugPrint(
-                      'DL SUCCESS: Unrestricted to $finalUrl with filename $finalFileName',
-                    );
+                    debugPrint('DL UNRESTRICT: signed link ready');
                   } else {
                     debugPrint('DL ERROR: Unrestriction returned empty URL');
                     throw Exception(
@@ -2869,15 +3576,13 @@ class DownloadService {
                     );
                   }
                 } else {
-                  debugPrint(
-                    'DL SKIP: Not unrestricting - restrictedLink empty: ${restrictedLink.isEmpty}, apiKey empty: ${apiKey.isEmpty}',
-                  );
+                  debugPrint('DL SKIP: required debrid metadata is incomplete');
                 }
               }
             }
-          } catch (e) {
-            debugPrint('DL ERROR: On-demand unrestriction failed: $e');
-            throw Exception('Failed to unrestrict link: $e');
+          } catch (_) {
+            debugPrint('DL ERROR: on-demand link resolution failed');
+            throw Exception('Failed to resolve download link');
           }
         } else {
           debugPrint('DL SKIP: No meta information provided');
@@ -2893,6 +3598,9 @@ class DownloadService {
             'DL START: ${p.queuedId} paused/canceled during link refresh; skipping',
           );
           continue;
+        }
+        if (!await _pendingAuthorizationValid(p)) {
+          throw StateError('Download authorization changed');
         }
 
         // Fresh-link policy: if start fails due to expired URL, we'll refresh below in catch
@@ -2944,6 +3652,8 @@ class DownloadService {
             subDir: subDir,
             headers: p.headers,
             treeUri: p.treeUri,
+            connectionResourceId: p.connectionResourceId,
+            resourceAuthorizationRevision: p.resourceAuthorizationRevision,
           );
           if (!startRes.ok) {
             if (startRes.errorCode == 'fgs_not_allowed') {
@@ -2973,7 +3683,7 @@ class DownloadService {
               break;
             }
             throw Exception(
-              'Failed to start download: ${startRes.errorCode ?? ''} ${startRes.errorMessage ?? ''}',
+              'Failed to start download: ${startRes.errorCode ?? 'unknown'}',
             );
           }
           final taskId = startRes.taskId!;
@@ -3063,6 +3773,14 @@ class DownloadService {
               requiresWiFi: p.wifiOnly,
               retries: p.retries,
               allowPause: true,
+              metaData: _pluginOwnerMetadata(
+                authorizationRevision:
+                    (_records[p.queuedId]?["profileAuthorizationRevision"]
+                            as num?)
+                        ?.toInt(),
+                connectionResourceId: p.connectionResourceId,
+                resourceAuthorizationRevision: p.resourceAuthorizationRevision,
+              ),
             );
           } else {
             final (
@@ -3082,6 +3800,14 @@ class DownloadService {
               requiresWiFi: p.wifiOnly,
               retries: p.retries,
               allowPause: true,
+              metaData: _pluginOwnerMetadata(
+                authorizationRevision:
+                    (_records[p.queuedId]?["profileAuthorizationRevision"]
+                            as num?)
+                        ?.toInt(),
+                connectionResourceId: p.connectionResourceId,
+                resourceAuthorizationRevision: p.resourceAuthorizationRevision,
+              ),
             );
           }
           final bool ok = await FileDownloader().enqueue(task);
@@ -3094,6 +3820,19 @@ class DownloadService {
             'url': finalUrl,
             'displayName': task.filename,
           });
+          final pluginAuthorization = await DeviceJobStore.authorize(
+            ProfileFeature.downloads,
+          );
+          if (pluginAuthorization != null) {
+            await DeviceJobStore.register(
+              backend: 'backgroundDownloader',
+              externalJobId: task.taskId,
+              kind: DeviceJobKind.download,
+              authorization: pluginAuthorization,
+              resourceId: p.connectionResourceId,
+              resourceAuthorizationRevision: p.resourceAuthorizationRevision,
+            );
+          }
           // capture validators for the refreshed URL
           unawaited(_captureValidatorsAndSave(p.queuedId, finalUrl));
         }
@@ -3101,7 +3840,11 @@ class DownloadService {
       } catch (e) {
         // Attempt fresh-link refresh once if we have meta
         bool retried = false;
+        final stillAuthorized = await _pendingAuthorizationValid(p);
         try {
+          if (!stillAuthorized) {
+            throw StateError('Download authorization changed');
+          }
           if (p.meta != null && p.meta!.isNotEmpty) {
             final meta = jsonDecode(p.meta!);
 
@@ -3122,9 +3865,7 @@ class DownloadService {
                       (meta['_pikpakColdAttempt'] as int?) ?? 0;
 
                   if (coldAttempt >= pikpakMaxColdRetries) {
-                    debugPrint(
-                      'DL RETRY PIKPAK: Max cold storage retries ($pikpakMaxColdRetries) exceeded for file $fileId',
-                    );
+                    debugPrint('DL RETRY PIKPAK: cold retry limit reached');
                     // Don't retry anymore, let it fail
                   } else {
                     // Calculate delay with exponential backoff (capped)
@@ -3135,15 +3876,13 @@ class DownloadService {
                         );
 
                     debugPrint(
-                      'DL RETRY PIKPAK: Cold storage attempt ${coldAttempt + 1}/$pikpakMaxColdRetries, waiting ${delaySeconds}s before retry for file $fileId',
+                      'DL RETRY PIKPAK: cold attempt ${coldAttempt + 1}/$pikpakMaxColdRetries, waiting ${delaySeconds}s',
                     );
 
                     // Wait for cold storage to potentially warm up
                     await Future.delayed(Duration(seconds: delaySeconds));
 
-                    debugPrint(
-                      'DL RETRY PIKPAK: Refreshing URL for file $fileId',
-                    );
+                    debugPrint('DL RETRY PIKPAK: refreshing signed link');
 
                     // Get fresh file details
                     final freshData = await PikPakApiService.instance
@@ -3172,6 +3911,11 @@ class DownloadService {
                         destPath: p.destPath,
                         relativeSubDir: p.relativeSubDir,
                         treeUri: p.treeUri,
+                        profileAuthorizationRevision:
+                            p.profileAuthorizationRevision,
+                        connectionResourceId: p.connectionResourceId,
+                        resourceAuthorizationRevision:
+                            p.resourceAuthorizationRevision,
                       );
                       _pending.insert(0, refreshed);
                       _pendingById[refreshed.queuedId] = refreshed;
@@ -3185,8 +3929,8 @@ class DownloadService {
                       debugPrint('DL RETRY PIKPAK: Failed to get fresh URL');
                     }
                   }
-                } catch (e) {
-                  debugPrint('DL RETRY PIKPAK: Error refreshing URL: $e');
+                } catch (_) {
+                  debugPrint('DL RETRY PIKPAK: link refresh failed');
                 }
               }
             } else {
@@ -3196,7 +3940,7 @@ class DownloadService {
 
               if (isTorboxWebDownload) {
                 // Torbox web download retry path
-                final apiKey = meta['apiKey'] as String?;
+                final apiKey = await StorageService.getTorboxApiKey();
                 final webDownloadId = meta['torboxWebDownloadId'] as int?;
                 final fileId = meta['torboxFileId'] as int?;
                 final isZip = meta['torboxZip'] == true;
@@ -3238,6 +3982,11 @@ class DownloadService {
                       destPath: p.destPath,
                       relativeSubDir: p.relativeSubDir,
                       treeUri: p.treeUri,
+                      profileAuthorizationRevision:
+                          p.profileAuthorizationRevision,
+                      connectionResourceId: p.connectionResourceId,
+                      resourceAuthorizationRevision:
+                          p.resourceAuthorizationRevision,
                     );
                     _pending.insert(0, refreshed);
                     _pendingById[refreshed.queuedId] = refreshed;
@@ -3249,7 +3998,7 @@ class DownloadService {
                 }
               } else if (isTorbox) {
                 // Torbox torrent retry path
-                final apiKey = meta['apiKey'] as String?;
+                final apiKey = await StorageService.getTorboxApiKey();
                 final torrentId = meta['torboxTorrentId'] as int?;
                 final fileId = meta['torboxFileId'] as int?;
                 final isZip = meta['torboxZip'] == true;
@@ -3289,6 +4038,11 @@ class DownloadService {
                       destPath: p.destPath,
                       relativeSubDir: p.relativeSubDir,
                       treeUri: p.treeUri,
+                      profileAuthorizationRevision:
+                          p.profileAuthorizationRevision,
+                      connectionResourceId: p.connectionResourceId,
+                      resourceAuthorizationRevision:
+                          p.resourceAuthorizationRevision,
                     );
                     _pending.insert(0, refreshed);
                     _pendingById[refreshed.queuedId] = refreshed;
@@ -3301,7 +4055,7 @@ class DownloadService {
               } else {
                 // RealDebrid retry path (existing logic)
                 final restricted = (meta['restrictedLink'] ?? '') as String;
-                final apiKey = (meta['apiKey'] ?? '') as String;
+                final apiKey = (await StorageService.getApiKey()) ?? '';
                 if (restricted.isNotEmpty && apiKey.isNotEmpty) {
                   final fresh = await DebridService.unrestrictLink(
                     apiKey,
@@ -3326,6 +4080,11 @@ class DownloadService {
                       destPath: p.destPath,
                       relativeSubDir: p.relativeSubDir,
                       treeUri: p.treeUri,
+                      profileAuthorizationRevision:
+                          p.profileAuthorizationRevision,
+                      connectionResourceId: p.connectionResourceId,
+                      resourceAuthorizationRevision:
+                          p.resourceAuthorizationRevision,
                     );
                     _pending.insert(0, refreshed);
                     _pendingById[refreshed.queuedId] = refreshed;
@@ -3384,6 +4143,64 @@ class DownloadService {
       // Schedule a new pass
       unawaited(_reevaluateQueue());
     }
+  }
+
+  /// Detaches only the active profile's process-local projection. Platform
+  /// workers and plugin tasks continue running under their immutable owner.
+  Future<void> prepareProfileSwitch() async {
+    _profileViewWasStarted = _started;
+    _profileSwitchInProgress = true;
+    if (!_started) return;
+    _profileViewAttached = false;
+    while (_reevaluating) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    await _saveRecords();
+    _pending.clear();
+    _pendingById.clear();
+    _pausedPending.clear();
+    _nonAndroidQueuedRecords.clear();
+    _pendingResumeAndroid.clear();
+    _pendingResumeNonAndroid.clear();
+    _nonAndroidResumeQueuedOverlay.clear();
+    _canceledDuringStart.clear();
+    _lastFileByTaskId.clear();
+    _linkRefreshAttempts.clear();
+    _bytesAtLastError.clear();
+    _records = <String, Map<String, dynamic>>{};
+    await AndroidDownloadHistory.instance.prepareProfileSwitch();
+  }
+
+  /// Loads the candidate profile view inside the lifecycle coordinator's
+  /// captured scope. This does not register a second plugin/native listener.
+  Future<void> activateProfileView() async {
+    if (!_profileSwitchInProgress || !_profileViewWasStarted) return;
+    _profileViewAttached = false;
+    _pending.clear();
+    _pendingById.clear();
+    _pausedPending.clear();
+    _nonAndroidQueuedRecords.clear();
+    _pendingResumeAndroid.clear();
+    _pendingResumeNonAndroid.clear();
+    _nonAndroidResumeQueuedOverlay.clear();
+    _records = <String, Map<String, dynamic>>{};
+    await AndroidDownloadHistory.instance.prepareProfileSwitch();
+    await AndroidDownloadHistory.instance.initialize();
+    await _loadRecords();
+    await _restorePaused();
+    await _restorePending();
+    if (Platform.isAndroid) {
+      await _reconcileWithNative();
+    } else {
+      await _reconcileWithPlugin();
+    }
+    _profileViewAttached = true;
+    unawaited(_reevaluateQueue());
+  }
+
+  void finishProfileSwitch() {
+    _profileSwitchInProgress = false;
+    _profileViewWasStarted = false;
   }
 }
 
@@ -3482,6 +4299,9 @@ class _PendingRequest {
   String? destPath;
   final String? relativeSubDir;
   final String? treeUri;
+  final int? profileAuthorizationRevision;
+  final String? connectionResourceId;
+  final int? resourceAuthorizationRevision;
 
   _PendingRequest({
     required this.queuedId,
@@ -3498,6 +4318,9 @@ class _PendingRequest {
     this.destPath,
     this.relativeSubDir,
     this.treeUri,
+    this.profileAuthorizationRevision,
+    this.connectionResourceId,
+    this.resourceAuthorizationRevision,
   });
 }
 
@@ -3520,7 +4343,7 @@ bool _addPendingRequest(
       pendingList.any(
         (p) => !p.canceled && p.contentKey == request.contentKey,
       )) {
-    debugPrint('DL: skip enqueue duplicate contentKey=${request.contentKey}');
+    debugPrint('DL: skip duplicate enqueue');
     return false;
   }
   if (atFront) {

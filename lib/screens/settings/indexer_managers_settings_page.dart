@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/indexer_manager_config.dart';
 import '../../services/indexer_manager_service.dart';
+import '../../services/profiles/profile_async_authorization.dart';
 import '../../services/storage_service.dart';
 import '../../services/torrent_service.dart';
 import '../../services/analytics_service.dart';
@@ -9,6 +10,7 @@ import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
+import '../../models/profiles/profile_policy.dart';
 
 /// Focused IconButtons get the accent outline + lit fill — the stock
 /// Material focus overlay is invisible on the dark settings theme (TV DPAD).
@@ -55,7 +57,9 @@ class _IndexerManagersSettingsPageState
   }
 
   Future<void> _loadConfigs() async {
-    final configs = await StorageService.getIndexerManagerConfigs();
+    final configs = await StorageService.getIndexerManagerConfigs(
+      forSettings: true,
+    );
     if (!mounted) return;
     setState(() {
       _configs = configs;
@@ -76,26 +80,53 @@ class _IndexerManagersSettingsPageState
     }
   }
 
-  Future<void> _saveConfigs(List<IndexerManagerConfig> configs) async {
-    await StorageService.setIndexerManagerConfigs(configs);
+  Future<void> _saveConfigs(
+    List<IndexerManagerConfig> configs, {
+    ProfileAsyncAuthorization? authorization,
+  }) async {
+    Future<void> save() => StorageService.setIndexerManagerConfigs(configs);
+    if (authorization == null) {
+      await save();
+    } else {
+      await authorization.runIfCurrent(save);
+    }
     if (!mounted) return;
     setState(() => _configs = configs);
   }
 
   Future<void> _toggleEnabled(IndexerManagerConfig config, bool enabled) async {
+    if (config.connectionReadOnly) return;
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonsAndEngines,
+    );
+    if (!mounted) return;
     final updated = config.copyWith(enabled: enabled);
-    await _replaceConfig(updated);
-    await TorrentService.setEngineEnabled(updated.engineId, enabled);
+    await _replaceConfig(updated, authorization: authorization);
+    if (authorization == null) {
+      await TorrentService.setEngineEnabled(updated.engineId, enabled);
+    } else {
+      await authorization.runIfCurrent(
+        () => TorrentService.setEngineEnabled(updated.engineId, enabled),
+      );
+    }
   }
 
-  Future<void> _replaceConfig(IndexerManagerConfig updated) async {
+  Future<void> _replaceConfig(
+    IndexerManagerConfig updated, {
+    ProfileAsyncAuthorization? authorization,
+  }) async {
     final configs = _configs
         .map((config) => config.id == updated.id ? updated : config)
         .toList();
-    await _saveConfigs(configs);
+    await _saveConfigs(configs, authorization: authorization);
   }
 
   Future<void> _deleteConfig(IndexerManagerConfig config) async {
+    if (config.connectionReadOnly) return;
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonsAndEngines,
+    );
+    if (!mounted) return;
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -121,8 +152,11 @@ class _IndexerManagersSettingsPageState
         ],
       ),
     );
-    if (shouldDelete != true) return;
-    await _saveConfigs(_configs.where((item) => item.id != config.id).toList());
+    if (shouldDelete != true || !mounted) return;
+    await _saveConfigs(
+      _configs.where((item) => item.id != config.id).toList(),
+      authorization: authorization,
+    );
     // The deleted row unmounted under the focused Delete button — reseed
     // DPAD focus on a surviving row (or Add when the list empties).
     if (PlatformUtil.isTelevision) {
@@ -134,18 +168,27 @@ class _IndexerManagersSettingsPageState
   }
 
   Future<void> _openEditor([IndexerManagerConfig? config]) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonsAndEngines,
+    );
+    if (!mounted) return;
     final result = await showDialog<IndexerManagerConfig>(
       context: context,
       builder: (context) => _IndexerManagerEditorDialog(config: config),
     );
-    if (result == null) return;
+    if (result == null || !mounted) return;
 
     if (config == null) {
-      await _saveConfigs([..._configs, result]);
+      await _saveConfigs([..._configs, result], authorization: authorization);
+    } else {
+      await _replaceConfig(result, authorization: authorization);
+    }
+    if (authorization == null) {
       await TorrentService.setEngineEnabled(result.engineId, result.enabled);
     } else {
-      await _replaceConfig(result);
-      await TorrentService.setEngineEnabled(result.engineId, result.enabled);
+      await authorization.runIfCurrent(
+        () => TorrentService.setEngineEnabled(result.engineId, result.enabled),
+      );
     }
   }
 
@@ -292,7 +335,9 @@ class _IndexerManagersSettingsPageState
         ),
         const SizedBox(height: 2),
         Text(
-          '${config.type.label} • ${config.normalizedBaseUrl}',
+          config.credentialsRedacted
+              ? '${config.type.label} • Shared connection • credentials hidden'
+              : '${config.type.label} • ${config.normalizedBaseUrl}',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
@@ -310,27 +355,35 @@ class _IndexerManagersSettingsPageState
           child: Switch(
             focusNode: isFirst ? _firstRowFocus : null,
             value: config.enabled,
-            onChanged: (value) => _toggleEnabled(config, value),
+            onChanged: config.connectionReadOnly
+                ? null
+                : (value) => _toggleEnabled(config, value),
           ),
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
           style: _focusableIconStyle,
-          onPressed: () => _testConfig(config),
+          onPressed: config.connectionReadOnly
+              ? null
+              : () => _testConfig(config),
           icon: const Icon(Icons.network_check_rounded),
           tooltip: 'Test connection',
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
           style: _focusableIconStyle,
-          onPressed: () => _openEditor(config),
+          onPressed: config.connectionReadOnly
+              ? null
+              : () => _openEditor(config),
           icon: const Icon(Icons.edit_rounded),
           tooltip: 'Edit',
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
           style: _focusableIconStyle,
-          onPressed: () => _deleteConfig(config),
+          onPressed: config.connectionReadOnly
+              ? null
+              : () => _deleteConfig(config),
           icon: const Icon(Icons.delete_outline_rounded),
           tooltip: 'Delete',
         ),
@@ -719,9 +772,7 @@ InputDecoration _engineFieldDecoration(
         ),
     errorBorder:
         decoration.errorBorder ??
-        border.copyWith(
-          borderSide: BorderSide(color: theme.colorScheme.error),
-        ),
+        border.copyWith(borderSide: BorderSide(color: theme.colorScheme.error)),
     focusedErrorBorder:
         decoration.focusedErrorBorder ??
         border.copyWith(

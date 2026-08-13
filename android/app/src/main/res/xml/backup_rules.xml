@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!-- Exclude all SharedPreferences to prevent API keys and passwords from being backed up to Google Drive -->
-    <!-- This applies to Android 11 and below -->
+    <!-- Device-bound profile/resource/job state is restored only through the
+         authenticated Debrify portable-backup pipeline. A cloud copy without
+         its non-exportable Keystore key would be corrupt and could revive
+         stale native jobs on another device. -->
     <exclude domain="sharedpref" path="."/>
+    <exclude domain="database" path="."/>
+    <exclude domain="file" path="."/>
+    <exclude domain="root" path="."/>
+    <exclude domain="external" path="."/>
 </full-backup-content>

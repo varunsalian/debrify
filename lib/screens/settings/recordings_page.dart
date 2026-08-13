@@ -4,11 +4,11 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/desktop_recording_service.dart';
 import '../../services/desktop_schedule_service.dart';
 import '../../services/live_recording_service.dart';
+import '../../services/profiles/profile_preferences.dart';
 import '../../services/video_player_launcher.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
@@ -102,7 +102,7 @@ class _RecordingsPageState extends State<RecordingsPage>
     }
     unawaited(_loadAll());
     unawaited(
-      SharedPreferences.getInstance().then((prefs) {
+      DevicePreferences.instance().then((prefs) {
         if (!mounted) return;
         final at = prefs.getInt(_batteryNudgeDismissedPref) ?? 0;
         if (at != 0) setState(() => _batteryNudgeDismissedAtMs = at);
@@ -161,7 +161,7 @@ class _RecordingsPageState extends State<RecordingsPage>
     final now = DateTime.now().millisecondsSinceEpoch;
     setState(() => _batteryNudgeDismissedAtMs = now);
     unawaited(
-      SharedPreferences.getInstance().then(
+      DevicePreferences.instance().then(
         (prefs) => prefs.setInt(_batteryNudgeDismissedPref, now),
       ),
     );
@@ -488,6 +488,8 @@ class _RecordingsPageState extends State<RecordingsPage>
             startMs: start.millisecondsSinceEpoch,
             endMs: end.millisecondsSinceEpoch,
             headers: choice.httpHeaders,
+            connectionResourceId: choice.connectionResourceId,
+            resourceAuthorizationRevision: choice.connectionResourceRevision,
           )
         : await LiveRecordingService.schedule(
             url: recordUrl,
@@ -496,6 +498,8 @@ class _RecordingsPageState extends State<RecordingsPage>
             startMs: start.millisecondsSinceEpoch,
             endMs: end.millisecondsSinceEpoch,
             headers: choice.httpHeaders,
+            connectionResourceId: choice.connectionResourceId,
+            resourceAuthorizationRevision: choice.connectionResourceRevision,
           );
     if (!mounted) return;
     if (result.errorCode == 'exact_alarms_required') {
@@ -831,8 +835,7 @@ class _RecordingsPageState extends State<RecordingsPage>
                               bytesOf: () => capture.bytes,
                               fmtBytes: _fmtBytes,
                               fmtElapsed: _fmtElapsed,
-                              autofocus:
-                                  PlatformUtil.isTelevision && i == 0,
+                              autofocus: PlatformUtil.isTelevision && i == 0,
                               onStop: () => unawaited(_stopDesktop(capture)),
                             ),
                           for (final (i, rec) in _live.indexed)

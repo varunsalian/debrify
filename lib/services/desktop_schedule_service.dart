@@ -8,6 +8,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'desktop_recording_service.dart';
 import 'live_recording_service.dart';
 import 'recording_capacity.dart' show peakOverlap;
+import '../models/profiles/profile_policy.dart';
+import 'profiles/device_job_store.dart';
+import 'profiles/device_key_provider.dart';
+import 'profiles/profile_runtime.dart';
+import 'profiles/profile_policy_guard.dart';
+import 'profiles/profile_bootstrap.dart';
 
 /// One desktop schedule. Same shape as the Android native store's entries,
 /// plus headers (which desktop must persist itself — there is no native side
@@ -20,6 +26,11 @@ class DesktopSchedule {
   final int startMs;
   final int endMs;
   final String programmeTitle;
+  final String ownerProfileId;
+  final int profileAuthorizationRevision;
+  final String? connectionResourceId;
+  final int? resourceAuthorizationRevision;
+  final String? sealedExecutionPayload;
 
   const DesktopSchedule({
     required this.id,
@@ -29,50 +40,111 @@ class DesktopSchedule {
     required this.startMs,
     required this.endMs,
     required this.programmeTitle,
+    this.ownerProfileId = 'legacy-admin-v1',
+    this.profileAuthorizationRevision = 1,
+    this.connectionResourceId,
+    this.resourceAuthorizationRevision,
+    this.sealedExecutionPayload,
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'channelName': channelName,
-        'url': url,
-        'headers': headers,
-        'startMs': startMs,
-        'endMs': endMs,
-        'programmeTitle': programmeTitle,
-      };
+    'id': id,
+    'channelName': channelName,
+    if (sealedExecutionPayload == null) 'url': url,
+    if (sealedExecutionPayload == null) 'headers': headers,
+    if (sealedExecutionPayload != null)
+      'sealedExecutionPayload': sealedExecutionPayload,
+    'startMs': startMs,
+    'endMs': endMs,
+    'programmeTitle': programmeTitle,
+    'ownerProfileId': ownerProfileId,
+    'profileAuthorizationRevision': profileAuthorizationRevision,
+    if (connectionResourceId != null)
+      'connectionResourceId': connectionResourceId,
+    if (resourceAuthorizationRevision != null)
+      'resourceAuthorizationRevision': resourceAuthorizationRevision,
+  };
 
-  static DesktopSchedule? fromJson(dynamic raw) {
+  static Future<DesktopSchedule?> fromJson(dynamic raw) async {
     if (raw is! Map) return null;
     final map = Map<String, dynamic>.from(raw);
     final id = map['id']?.toString();
-    final url = map['url']?.toString();
-    if (id == null || id.isEmpty || url == null || url.isEmpty) return null;
+    if (id == null || id.isEmpty) return null;
+    final ownerProfileId =
+        map['ownerProfileId']?.toString() ?? 'legacy-admin-v1';
+    final profileAuthorizationRevision =
+        (map['profileAuthorizationRevision'] as num?)?.toInt() ?? 1;
+    var url = map['url']?.toString() ?? '';
+    var headers = map['headers'] is Map
+        ? Map<String, String>.from(
+            (map['headers'] as Map).map(
+              (k, v) => MapEntry(k.toString(), v.toString()),
+            ),
+          )
+        : const <String, String>{};
+    final sealed = map['sealedExecutionPayload'] as String?;
+    if (sealed != null) {
+      if (!DeviceKeyProvider.isUnlocked) return null;
+      try {
+        final clear = await DeviceKeyProvider.cipher.open(
+          sealed,
+          associatedData: utf8.encode(
+            _executionAad(id, ownerProfileId, profileAuthorizationRevision),
+          ),
+        );
+        final execution = jsonDecode(utf8.decode(clear));
+        if (execution is! Map) return null;
+        url = execution['url']?.toString() ?? '';
+        headers = execution['headers'] is Map
+            ? Map<String, String>.from(
+                (execution['headers'] as Map).map(
+                  (k, v) => MapEntry(k.toString(), v.toString()),
+                ),
+              )
+            : const <String, String>{};
+      } catch (_) {
+        rethrow;
+      }
+    }
+    if (url.isEmpty) return null;
     return DesktopSchedule(
       id: id,
       channelName: map['channelName']?.toString() ?? '',
       url: url,
-      headers: map['headers'] is Map
-          ? Map<String, String>.from(
-              (map['headers'] as Map)
-                  .map((k, v) => MapEntry(k.toString(), v.toString())),
-            )
-          : const {},
+      headers: headers,
       startMs: (map['startMs'] as num?)?.toInt() ?? 0,
       endMs: (map['endMs'] as num?)?.toInt() ?? 0,
       programmeTitle: map['programmeTitle']?.toString() ?? '',
+      ownerProfileId: ownerProfileId,
+      profileAuthorizationRevision: profileAuthorizationRevision,
+      connectionResourceId: map['connectionResourceId']?.toString(),
+      resourceAuthorizationRevision:
+          (map['resourceAuthorizationRevision'] as num?)?.toInt(),
+      sealedExecutionPayload: sealed,
     );
   }
 
   /// The management page renders [ScheduledRecording]s; desktop entries wear
   /// the same face so the page needs no per-platform rows.
   ScheduledRecording toScheduledRecording() => ScheduledRecording(
-        id: id,
-        channelName: channelName,
-        url: url,
-        programmeTitle: programmeTitle,
-        startMs: startMs,
-        endMs: endMs,
-      );
+    id: id,
+    channelName: channelName,
+    url: url,
+    programmeTitle: programmeTitle,
+    startMs: startMs,
+    endMs: endMs,
+    ownerProfileId: ownerProfileId,
+    profileAuthorizationRevision: profileAuthorizationRevision,
+    connectionResourceId: connectionResourceId,
+    resourceAuthorizationRevision: resourceAuthorizationRevision,
+  );
+
+  static String _executionAad(
+    String id,
+    String ownerProfileId,
+    int profileAuthorizationRevision,
+  ) =>
+      'debrify-desktop-schedule-v1|id=$id|owner=$ownerProfileId|revision=$profileAuthorizationRevision';
 }
 
 /// Tier-1 desktop scheduling: recordings fire WHILE DEBRIFY IS RUNNING (and
@@ -115,6 +187,7 @@ class DesktopScheduleService {
     // Primes LiveRecordingService.maxConcurrentCached for the recording
     // service's synchronous start path.
     await LiveRecordingService.maxConcurrent();
+    await _migrateLegacySchedules();
     await _armAll();
     _tick = Timer.periodic(const Duration(seconds: 30), (_) {
       // Wall-clock safety net for sleep/wake drift.
@@ -133,16 +206,26 @@ class DesktopScheduleService {
     _initialized = false;
   }
 
-  Future<List<DesktopSchedule>> list() async {
+  Future<List<DesktopSchedule>> list({bool allOwners = false}) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
     if (raw == null || raw.isEmpty) return const [];
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! List) return const [];
-      return decoded
-          .map(DesktopSchedule.fromJson)
-          .whereType<DesktopSchedule>()
+      final schedules = <DesktopSchedule>[];
+      for (final item in decoded) {
+        final schedule = await DesktopSchedule.fromJson(item);
+        if (schedule != null) schedules.add(schedule);
+      }
+      if (allOwners ||
+          !ProfileRuntime.isInitialized ||
+          !ProfileRuntime.isProfileCommitted) {
+        return schedules;
+      }
+      final owner = ProfileRuntime.capture().profileId;
+      return schedules
+          .where((schedule) => schedule.ownerProfileId == owner)
           .toList(growable: false);
     } catch (_) {
       return const [];
@@ -151,10 +234,66 @@ class DesktopScheduleService {
 
   Future<void> _save(List<DesktopSchedule> schedules) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
+    if (!await prefs.setString(
       _prefsKey,
       jsonEncode([for (final s in schedules) s.toJson()]),
-    );
+    )) {
+      throw StateError('Could not persist desktop schedules');
+    }
+  }
+
+  Future<void> _migrateLegacySchedules() async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return;
+    }
+    final scope = ProfileRuntime.capture();
+    if (scope.profileId != 'legacy-admin-v1') return;
+    final admin = await ProfileBootstrap.registry.getProfile(scope.profileId);
+    if (admin == null || !admin.isEnabled) {
+      throw StateError('Migrated Admin authority is unavailable');
+    }
+    final schedules = await list(allOwners: true);
+    var changed = false;
+    final migrated = <DesktopSchedule>[];
+    for (final schedule in schedules) {
+      if (schedule.sealedExecutionPayload != null) {
+        migrated.add(schedule);
+        continue;
+      }
+      final sealed = await DeviceKeyProvider.cipher.seal(
+        utf8.encode(
+          jsonEncode(<String, Object?>{
+            'url': schedule.url,
+            'headers': schedule.headers,
+          }),
+        ),
+        associatedData: utf8.encode(
+          DesktopSchedule._executionAad(
+            schedule.id,
+            admin.id,
+            admin.authorizationRevision,
+          ),
+        ),
+      );
+      migrated.add(
+        DesktopSchedule(
+          id: schedule.id,
+          channelName: schedule.channelName,
+          url: schedule.url,
+          headers: schedule.headers,
+          startMs: schedule.startMs,
+          endMs: schedule.endMs,
+          programmeTitle: schedule.programmeTitle,
+          ownerProfileId: admin.id,
+          profileAuthorizationRevision: admin.authorizationRevision,
+          connectionResourceId: schedule.connectionResourceId,
+          resourceAuthorizationRevision: schedule.resourceAuthorizationRevision,
+          sealedExecutionPayload: sealed,
+        ),
+      );
+      changed = true;
+    }
+    if (changed) await _save(migrated);
   }
 
   /// Returns the new schedule id, or an error code mirroring the Android
@@ -166,9 +305,25 @@ class DesktopScheduleService {
     required int startMs,
     required int endMs,
     required Map<String, String> headers,
+    String? connectionResourceId,
+    int? resourceAuthorizationRevision,
   }) async {
     if (!isSupported) {
       return const RecordingCallResult(errorCode: 'not_desktop');
+    }
+    final authorization = await DeviceJobStore.authorize(
+      ProfileFeature.recordings,
+    );
+    if (authorization != null &&
+        !await DeviceJobStore.validateAuthorization(
+          profileId: authorization.profileId,
+          profileAuthorizationRevision:
+              authorization.profileAuthorizationRevision,
+          feature: ProfileFeature.recordings,
+          resourceId: connectionResourceId,
+          resourceAuthorizationRevision: resourceAuthorizationRevision,
+        )) {
+      return const RecordingCallResult(errorCode: 'resource_not_authorized');
     }
     final recordUrl = LiveRecordingService.engineRecordableUrl(url);
     if (recordUrl == null) {
@@ -178,7 +333,7 @@ class DesktopScheduleService {
     if (endMs <= now + _minRemaining.inMilliseconds || endMs <= startMs) {
       return const RecordingCallResult(errorCode: 'bad_time');
     }
-    final schedules = (await list()).toList();
+    final schedules = (await list(allOwners: true)).toList();
     if (schedules.any((s) => s.url == recordUrl && s.startMs == startMs)) {
       return const RecordingCallResult(errorCode: 'duplicate');
     }
@@ -189,9 +344,7 @@ class DesktopScheduleService {
     // losing a recording later. (The UI pre-checks with the same math and a
     // richer dialog; this is the backstop.)
     final limit = await LiveRecordingService.maxConcurrent();
-    final intervals = [
-      for (final s in schedules) (s.startMs, s.endMs),
-    ];
+    final intervals = [for (final s in schedules) (s.startMs, s.endMs)];
     if (peakOverlap(intervals, startMs, endMs) + 1 > limit) {
       return const RecordingCallResult(errorCode: 'overlap');
     }
@@ -203,18 +356,81 @@ class DesktopScheduleService {
       startMs: startMs,
       endMs: endMs,
       programmeTitle: programmeTitle,
+      ownerProfileId: authorization?.profileId ?? 'legacy-admin-v1',
+      profileAuthorizationRevision:
+          authorization?.profileAuthorizationRevision ?? 1,
+      connectionResourceId: connectionResourceId,
+      resourceAuthorizationRevision: resourceAuthorizationRevision,
+      sealedExecutionPayload: authorization == null
+          ? null
+          : await DeviceKeyProvider.cipher.seal(
+              utf8.encode(
+                jsonEncode(<String, Object?>{
+                  'url': recordUrl,
+                  'headers': headers,
+                }),
+              ),
+              associatedData: utf8.encode(
+                DesktopSchedule._executionAad(
+                  'dsched-$now',
+                  authorization.profileId,
+                  authorization.profileAuthorizationRevision,
+                ),
+              ),
+            ),
     );
     schedules.add(schedule);
     await _save(schedules);
     await _armAll();
     LiveRecordingService.schedulesRevision.value++;
+    if (authorization != null) {
+      await DeviceJobStore.register(
+        backend: 'desktopSchedule',
+        externalJobId: schedule.id,
+        kind: DeviceJobKind.schedule,
+        authorization: authorization,
+        resourceId: connectionResourceId,
+        resourceAuthorizationRevision: resourceAuthorizationRevision,
+      );
+    }
     return RecordingCallResult(id: schedule.id);
   }
 
   Future<void> cancel(String id) async {
-    final schedules = (await list()).where((s) => s.id != id).toList();
+    final all = await list(allOwners: true);
+    DesktopSchedule? target;
+    for (final schedule in all) {
+      if (schedule.id == id) {
+        target = schedule;
+        break;
+      }
+    }
+    if (target != null &&
+        ProfileRuntime.isProfileCommitted &&
+        target.ownerProfileId != ProfileRuntime.capture().profileId &&
+        !await ProfilePolicyGuard.allows(ProfileFeature.manageProfiles)) {
+      throw StateError('Schedule belongs to another profile');
+    }
+    final schedules = all.where((s) => s.id != id).toList();
     await _save(schedules);
     _timers.remove(id)?.cancel();
+    await DeviceJobStore.markTerminal(
+      backend: 'desktopSchedule',
+      externalJobId: id,
+    );
+    LiveRecordingService.schedulesRevision.value++;
+  }
+
+  Future<void> clearForDeviceReset() async {
+    shutdown();
+    final schedules = await list(allOwners: true);
+    await _save(const <DesktopSchedule>[]);
+    for (final schedule in schedules) {
+      await DeviceJobStore.markTerminal(
+        backend: 'desktopSchedule',
+        externalJobId: schedule.id,
+      );
+    }
     LiveRecordingService.schedulesRevision.value++;
   }
 
@@ -224,10 +440,14 @@ class DesktopScheduleService {
     }
     _timers.clear();
     final now = DateTime.now().millisecondsSinceEpoch;
-    final schedules = await list();
+    final schedules = await list(allOwners: true);
     final keep = <DesktopSchedule>[];
     for (final schedule in schedules) {
       if (schedule.endMs - _minRemaining.inMilliseconds <= now) {
+        await DeviceJobStore.markTerminal(
+          backend: 'desktopSchedule',
+          externalJobId: schedule.id,
+        );
         continue; // fully missed — drop
       }
       keep.add(schedule);
@@ -247,7 +467,7 @@ class DesktopScheduleService {
   /// Fire anything whose wall-clock start has arrived (safety tick).
   Future<void> _fireDue() async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    for (final schedule in await list()) {
+    for (final schedule in await list(allOwners: true)) {
       if (schedule.startMs <= now) {
         await _fire(schedule);
       }
@@ -255,8 +475,23 @@ class DesktopScheduleService {
   }
 
   Future<void> _fire(DesktopSchedule schedule) async {
-    final schedules = await list();
+    final schedules = await list(allOwners: true);
     if (!schedules.any((s) => s.id == schedule.id)) return;
+    if (!await DeviceJobStore.validateAuthorization(
+      profileId: schedule.ownerProfileId,
+      profileAuthorizationRevision: schedule.profileAuthorizationRevision,
+      feature: ProfileFeature.recordings,
+      resourceId: schedule.connectionResourceId,
+      resourceAuthorizationRevision: schedule.resourceAuthorizationRevision,
+    )) {
+      await _save(schedules.where((s) => s.id != schedule.id).toList());
+      _timers.remove(schedule.id)?.cancel();
+      await DeviceJobStore.markTerminal(
+        backend: 'desktopSchedule',
+        externalJobId: schedule.id,
+      );
+      return;
+    }
 
     final now = DateTime.now();
     if (schedule.endMs - _minRemaining.inMilliseconds <=
@@ -264,10 +499,18 @@ class DesktopScheduleService {
       // Fully missed: nothing recordable remains.
       await _save(schedules.where((s) => s.id != schedule.id).toList());
       _timers.remove(schedule.id)?.cancel();
+      await DeviceJobStore.markTerminal(
+        backend: 'desktopSchedule',
+        externalJobId: schedule.id,
+      );
       debugPrint('DesktopSchedule: ${schedule.id} fully missed, dropping');
       return;
     }
-    if (DesktopRecordingService.instance.captureForUrl(schedule.url) != null) {
+    if (DesktopRecordingService.instance.captureForUrl(
+          schedule.url,
+          ownerProfileId: schedule.ownerProfileId,
+        ) !=
+        null) {
       // This channel is ALREADY being captured — a manual record-now, or the
       // previous back-to-back programme still flushing its file. Consuming
       // the entry now would glue it to that other capture: start() answers
@@ -309,13 +552,18 @@ class DesktopScheduleService {
       'DesktopSchedule: starting ${schedule.channelName} for '
       '${remaining.inMinutes} min → $path',
     );
-    final capture = DesktopRecordingService.instance.start(
+    final capture = await DesktopRecordingService.instance.start(
       url: schedule.url,
       path: path,
       channelName: schedule.channelName,
       headers: schedule.headers,
-      onFinished: (end, bytes) =>
-          debugPrint('DesktopSchedule: ${schedule.id} ended ($end, $bytes B)'),
+      ownerProfileId: schedule.ownerProfileId,
+      profileAuthorizationRevision: schedule.profileAuthorizationRevision,
+      connectionResourceId: schedule.connectionResourceId,
+      resourceAuthorizationRevision: schedule.resourceAuthorizationRevision,
+      onFinished: (end, bytes) {
+        debugPrint('DesktopSchedule: ${schedule.id} ended ($end, $bytes B)');
+      },
     );
     if (capture == null) {
       // Lost a same-instant race for the last slot (two fires straddling
@@ -323,7 +571,7 @@ class DesktopScheduleService {
       // recorder refused. The entry was already consumed above — put it
       // back so the 30s tick retries while its window lasts, instead of
       // silently losing the recording.
-      final restored = await list();
+      final restored = await list(allOwners: true);
       if (!restored.any((s) => s.id == schedule.id)) {
         await _save([...restored, schedule]);
         // The consume above already bumped the revision — bump again so the
@@ -334,6 +582,10 @@ class DesktopScheduleService {
       debugPrint('DesktopSchedule: ${schedule.id} could not start — re-queued');
       return;
     }
+    await DeviceJobStore.markTerminal(
+      backend: 'desktopSchedule',
+      externalJobId: schedule.id,
+    );
     // Auto-stop at the scheduled end. The capture's own 6h cap remains the
     // backstop; this timer is the scheduled end, taken literally (no pad).
     Timer(remaining, () {

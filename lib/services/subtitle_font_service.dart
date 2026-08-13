@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import '../utils/app_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'profiles/profile_preferences.dart';
 
 /// Represents a subtitle font option (built-in or custom)
 class SubtitleFont {
@@ -47,8 +47,16 @@ class SubtitleFont {
     SubtitleFont(id: 'lato', label: 'Lato', fontFamily: 'Lato'),
     SubtitleFont(id: 'poppins', label: 'Poppins', fontFamily: 'Poppins'),
     SubtitleFont(id: 'nunito', label: 'Nunito', fontFamily: 'Nunito'),
-    SubtitleFont(id: 'merriweather', label: 'Merriweather', fontFamily: 'Merriweather'),
-    SubtitleFont(id: 'sourceserif', label: 'Source Serif', fontFamily: 'SourceSerifPro'),
+    SubtitleFont(
+      id: 'merriweather',
+      label: 'Merriweather',
+      fontFamily: 'Merriweather',
+    ),
+    SubtitleFont(
+      id: 'sourceserif',
+      label: 'Source Serif',
+      fontFamily: 'SourceSerifPro',
+    ),
     SubtitleFont(id: 'firamono', label: 'Fira Mono', fontFamily: 'FiraMono'),
     SubtitleFont(id: 'notosans', label: 'Noto Sans', fontFamily: 'NotoSans'),
   ];
@@ -70,12 +78,18 @@ class SubtitleFontService {
 
   SubtitleFontService._();
 
-  SharedPreferences? _prefs;
+  SharedPreferences? _profilePrefs;
+  DevicePreferences? _devicePrefs;
   final Set<String> _loadedFontFamilies = {};
   List<SubtitleFont>? _cachedCustomFonts;
 
   Future<void> _ensurePrefs() async {
-    _prefs ??= await SharedPreferences.getInstance();
+    _profilePrefs ??= await ProfilePreferences.instance();
+    _devicePrefs ??= await DevicePreferences.instance();
+  }
+
+  void resetProfileScope() {
+    _profilePrefs = null;
   }
 
   /// Get all available fonts (built-in + custom)
@@ -89,7 +103,7 @@ class SubtitleFontService {
     if (_cachedCustomFonts != null) return _cachedCustomFonts!;
 
     await _ensurePrefs();
-    final jsonStr = _prefs!.getString(_keyCustomFonts);
+    final jsonStr = _devicePrefs!.getString(_keyCustomFonts);
     if (jsonStr == null || jsonStr.isEmpty) {
       _cachedCustomFonts = [];
       return [];
@@ -111,20 +125,20 @@ class SubtitleFontService {
   Future<void> _saveCustomFonts(List<SubtitleFont> fonts) async {
     await _ensurePrefs();
     final jsonList = fonts.map((f) => f.toJson()).toList();
-    await _prefs!.setString(_keyCustomFonts, jsonEncode(jsonList));
+    await _devicePrefs!.setString(_keyCustomFonts, jsonEncode(jsonList));
     _cachedCustomFonts = fonts;
   }
 
   /// Get selected font ID
   Future<String> getSelectedFontId() async {
     await _ensurePrefs();
-    return _prefs!.getString(_keySelectedFontId) ?? 'default';
+    return _profilePrefs!.getString(_keySelectedFontId) ?? 'default';
   }
 
   /// Set selected font ID
   Future<void> setSelectedFontId(String fontId) async {
     await _ensurePrefs();
-    await _prefs!.setString(_keySelectedFontId, fontId);
+    await _profilePrefs!.setString(_keySelectedFontId, fontId);
   }
 
   /// Get selected font index in the combined list
@@ -169,7 +183,10 @@ class SubtitleFontService {
 
   /// Import a custom font file
   /// Returns the new font if successful, null otherwise
-  Future<SubtitleFont?> importCustomFont(String sourcePath, String fileName) async {
+  Future<SubtitleFont?> importCustomFont(
+    String sourcePath,
+    String fileName,
+  ) async {
     try {
       await _ensurePrefs();
 
@@ -313,10 +330,13 @@ class SubtitleFontService {
     name = name.replaceAll(RegExp(r'[-_]'), ' ');
 
     // Capitalize first letter of each word
-    return name.split(' ').map((word) {
-      if (word.isEmpty) return word;
-      return word[0].toUpperCase() + word.substring(1).toLowerCase();
-    }).join(' ');
+    return name
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return word;
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
   }
 
   /// Initialize - call on app startup to preload selected custom font

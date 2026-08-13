@@ -8,7 +8,10 @@ import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
 import '../models/indexer_manager_config.dart';
+import '../models/profiles/connection_resource.dart';
+import '../models/profiles/profile_policy.dart';
 import '../models/torrent.dart';
+import 'profiles/profile_collection_resource_facade.dart';
 import 'storage_service.dart';
 
 class IndexerManagerTestResult {
@@ -37,7 +40,7 @@ class IndexerManagerService {
       {};
 
   static Future<List<IndexerManagerConfig>> getConfigs() {
-    return StorageService.getIndexerManagerConfigs();
+    return StorageService.getIndexerManagerConfigs(forSettings: false);
   }
 
   static Future<List<IndexerManagerConfig>> getEnabledConfigs() async {
@@ -69,20 +72,24 @@ class IndexerManagerService {
     int? maxResults,
   }) async {
     if (query.trim().isEmpty) return [];
+    await _authorize(config);
 
+    final List<Torrent> result;
     switch (config.type) {
       case IndexerManagerType.jackett:
-        return _searchJackett(config, {
+        result = await _searchJackett(config, {
           't': 'search',
           'q': query.trim(),
         }, maxResults: maxResults);
       case IndexerManagerType.prowlarr:
-        return _searchProwlarr(
+        result = await _searchProwlarr(
           config,
           query: query.trim(),
           maxResults: maxResults,
         );
     }
+    await _authorize(config);
+    return result;
   }
 
   static Future<List<Torrent>> searchByImdb(
@@ -95,17 +102,19 @@ class IndexerManagerService {
   }) async {
     final normalizedImdb = _normalizeImdbId(imdbId);
     if (normalizedImdb.isEmpty) return [];
+    await _authorize(config);
 
+    final List<Torrent> result;
     switch (config.type) {
       case IndexerManagerType.jackett:
-        return _searchJackett(config, {
+        result = await _searchJackett(config, {
           't': isMovie ? 'movie' : 'tvsearch',
           'imdbid': normalizedImdb.replaceFirst('tt', ''),
           if (!isMovie && season != null) 'season': '$season',
           if (!isMovie && episode != null) 'ep': '$episode',
         }, maxResults: maxResults);
       case IndexerManagerType.prowlarr:
-        return _searchProwlarr(
+        result = await _searchProwlarr(
           config,
           imdbId: normalizedImdb,
           isMovie: isMovie,
@@ -114,12 +123,15 @@ class IndexerManagerService {
           maxResults: maxResults,
         );
     }
+    await _authorize(config);
+    return result;
   }
 
   static Future<IndexerManagerTestResult> testConnection(
     IndexerManagerConfig config,
   ) async {
     try {
+      await _authorize(config, allowUnbound: true);
       switch (config.type) {
         case IndexerManagerType.jackett:
           final uri = _jackettUri(config, {'t': 'caps'});
@@ -148,10 +160,27 @@ class IndexerManagerService {
                 : 'Prowlarr connected.',
           );
       }
-    } catch (e) {
-      return IndexerManagerTestResult(success: false, message: e.toString());
+    } catch (_) {
+      return const IndexerManagerTestResult(
+        success: false,
+        message: 'Could not connect to this indexer manager.',
+      );
     }
   }
+
+  static Future<void> _authorize(
+    IndexerManagerConfig config, {
+    bool allowUnbound = false,
+  }) => ProfileCollectionResourceFacade.authorizeExecution(
+    resourceId: config.connectionResourceId,
+    resourceRevision: config.connectionResourceRevision,
+    acceptedTypes: const <ConnectionResourceType>{
+      ConnectionResourceType.jackett,
+      ConnectionResourceType.prowlarr,
+    },
+    feature: ProfileFeature.torrentSearch,
+    allowUnbound: allowUnbound,
+  );
 
   static Future<List<Torrent>> _searchJackett(
     IndexerManagerConfig config,
@@ -159,9 +188,7 @@ class IndexerManagerService {
     int? maxResults,
   }) async {
     final uri = _jackettUri(config, queryParams);
-    debugPrint(
-      'IndexerManagerService: Jackett search ${uri.replace(queryParameters: {...uri.queryParameters, 'apikey': '***'})}',
-    );
+    debugPrint('IndexerManagerService: Jackett search started');
 
     final response = await http
         .get(uri)
@@ -219,7 +246,7 @@ class IndexerManagerService {
       config.normalizedBaseUrl,
       '/api/v1/search',
     ).replace(queryParameters: params);
-    debugPrint('IndexerManagerService: Prowlarr search $uri');
+    debugPrint('IndexerManagerService: Prowlarr search started');
 
     final response = await http
         .get(uri, headers: _prowlarrHeaders(config))
@@ -289,7 +316,8 @@ class IndexerManagerService {
         } catch (e) {
           lastError = e;
           debugPrint(
-            'IndexerManagerService: Prowlarr indexer $id Torznab search failed: $e',
+            'IndexerManagerService: Prowlarr Torznab search failed '
+            '(${e.runtimeType})',
           );
           return const <Torrent>[];
         }
@@ -331,9 +359,7 @@ class IndexerManagerService {
       if (id is! int) continue;
 
       final capabilities = map['capabilities'];
-      final searchParams = capabilities is Map
-          ? capabilities[paramsKey]
-          : null;
+      final searchParams = capabilities is Map ? capabilities[paramsKey] : null;
       final knownUnsupported =
           searchParams is List &&
           !searchParams.any(
@@ -393,9 +419,7 @@ class IndexerManagerService {
       config.normalizedBaseUrl,
       '/$indexerId/api',
     ).replace(queryParameters: params);
-    debugPrint(
-      'IndexerManagerService: Prowlarr Torznab search ${uri.replace(queryParameters: {...uri.queryParameters, 'apikey': '***'})}',
-    );
+    debugPrint('IndexerManagerService: Prowlarr Torznab search started');
 
     final response = await http
         .get(uri)

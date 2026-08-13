@@ -41,18 +41,48 @@ class _CloudProviderInfo {
 class _CloudScreenState extends State<CloudScreen> {
   /// Canonical provider order (mirrors the old per-provider nav order).
   static const List<_CloudProviderInfo> _allProviders = [
-    _CloudProviderInfo('realdebrid', 'Real Debrid', 'Debrid service',
-        Icons.cloud_download_rounded, Color(0xFF60A5FA)),
-    _CloudProviderInfo('torbox', 'Torbox', 'Debrid service',
-        Icons.flash_on_rounded, Color(0xFFFBBF24)),
-    _CloudProviderInfo('pikpak', 'PikPak', 'Cloud storage',
-        Icons.cloud_circle_rounded, Color(0xFF34D399)),
-    _CloudProviderInfo('premiumize', 'Premiumize', 'Debrid service',
-        Icons.workspace_premium_rounded, Color(0xFFFB923C)),
-    _CloudProviderInfo('alldebrid', 'AllDebrid', 'Debrid service',
-        Icons.all_inclusive_rounded, Color(0xFFEF4444)),
-    _CloudProviderInfo('webdav', 'WebDAV', 'File server',
-        Icons.cloud_sync_rounded, Color(0xFF22D3EE)),
+    _CloudProviderInfo(
+      'realdebrid',
+      'Real Debrid',
+      'Debrid service',
+      Icons.cloud_download_rounded,
+      Color(0xFF60A5FA),
+    ),
+    _CloudProviderInfo(
+      'torbox',
+      'Torbox',
+      'Debrid service',
+      Icons.flash_on_rounded,
+      Color(0xFFFBBF24),
+    ),
+    _CloudProviderInfo(
+      'pikpak',
+      'PikPak',
+      'Cloud storage',
+      Icons.cloud_circle_rounded,
+      Color(0xFF34D399),
+    ),
+    _CloudProviderInfo(
+      'premiumize',
+      'Premiumize',
+      'Debrid service',
+      Icons.workspace_premium_rounded,
+      Color(0xFFFB923C),
+    ),
+    _CloudProviderInfo(
+      'alldebrid',
+      'AllDebrid',
+      'Debrid service',
+      Icons.all_inclusive_rounded,
+      Color(0xFFEF4444),
+    ),
+    _CloudProviderInfo(
+      'webdav',
+      'WebDAV',
+      'File server',
+      Icons.cloud_sync_rounded,
+      Color(0xFF22D3EE),
+    ),
   ];
 
   /// Provider keys currently available (enabled & not hidden). Recomputed on
@@ -85,7 +115,9 @@ class _CloudScreenState extends State<CloudScreen> {
     MainPageBridge.removeIntegrationListener(_onIntegrationsChanged);
     if (widget.isTelevision) {
       MainPageBridge.unregisterTvContentFocusHandler(
-          _tabIndex, _focusFirstTile);
+        _tabIndex,
+        _focusFirstTile,
+      );
     }
     _disposeNodes();
     super.dispose();
@@ -161,7 +193,9 @@ class _CloudScreenState extends State<CloudScreen> {
     }
 
     final webDavEnabled = await StorageService.getWebDavEnabled();
-    final webDavServers = await StorageService.getWebDavServers();
+    final webDavServers = await StorageService.getWebDavServers(
+      forSettings: false,
+    );
     final wdHidden = await StorageService.getWebDavHiddenFromNav();
     if (webDavEnabled && webDavServers.isNotEmpty && !wdHidden) {
       keys.add('webdav');
@@ -233,10 +267,11 @@ class _CloudScreenState extends State<CloudScreen> {
         child: SafeArea(
           child: _loading
               ? Center(
-                  child: CircularProgressIndicator(color: app.cloud.accent))
+                  child: CircularProgressIndicator(color: app.cloud.accent),
+                )
               : _providers.isEmpty
-                  ? _emptyState(app)
-                  : _providerList(app),
+              ? _emptyState(app)
+              : _providerList(app),
         ),
       ),
     );
@@ -264,17 +299,17 @@ class _CloudScreenState extends State<CloudScreen> {
                 shape: BoxShape.circle,
                 border: Border.all(color: app.fade(app.cloud.accent, 0.35)),
               ),
-              child: Icon(Icons.cloud_off_rounded,
-                  size: 40, color: app.cloud.accent),
+              child: Icon(
+                Icons.cloud_off_rounded,
+                size: 40,
+                color: app.cloud.accent,
+              ),
             ),
             const SizedBox(height: 20),
             const Text(
               'No cloud providers connected',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(
@@ -355,8 +390,10 @@ class _CloudScreenState extends State<CloudScreen> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 140),
                 curve: Curves.easeOut,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 15,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: focused
@@ -405,7 +442,8 @@ class _CloudScreenState extends State<CloudScreen> {
                         ),
                         borderRadius: app.shape.br(14),
                         border: Border.all(
-                            color: p.color.withValues(alpha: 0.35)),
+                          color: p.color.withValues(alpha: 0.35),
+                        ),
                       ),
                       child: Icon(
                         p.icon,

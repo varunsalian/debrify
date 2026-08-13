@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/iptv_playlist.dart';
@@ -20,6 +22,22 @@ import 'storage_service.dart';
 /// command. They do have an ordering dependency though — memberships name the
 /// playlist they came from, so senders must apply providers first.
 abstract final class IptvTransferPayload {
+  static final Object _providerIdOverridesKey = Object();
+
+  static Future<T> withProviderIdOverrides<T>(
+    Map<String, String> providerIdsByFingerprint,
+    Future<T> Function() body,
+  ) => runZoned(
+    body,
+    zoneValues: <Object, Object>{
+      _providerIdOverridesKey: Map<String, String>.unmodifiable(
+        providerIdsByFingerprint,
+      ),
+    },
+  );
+
+  static String providerFingerprintFromJson(Map<String, dynamic> json) =>
+      _fingerprint(IptvPlaylist.fromJson(json));
   // ── Providers ────────────────────────────────────────────────────────────
 
   /// The user's transferable IPTV providers, as `IptvPlaylist.toJson()` maps.
@@ -34,8 +52,13 @@ abstract final class IptvTransferPayload {
   ///   enough in a backup file to push it past the size a restore will read.
   ///   Re-import the file on the other device instead. Their starred channels
   ///   still travel: a membership carries its own playable URL and headers.
-  static Future<List<Map<String, dynamic>>> buildPlaylists() async {
-    final playlists = await StorageService.getIptvPlaylists();
+  static Future<List<Map<String, dynamic>>> buildPlaylists({
+    bool forRemoteTransfer = false,
+  }) async {
+    final playlists = await StorageService.getIptvPlaylists(
+      forSettings: !forRemoteTransfer,
+      forRemoteTransfer: forRemoteTransfer,
+    );
     return [
       for (final playlist in playlists)
         if (!playlist.isVirtual && !playlist.isLocalFile) playlist.toJson(),
@@ -106,8 +129,8 @@ abstract final class IptvTransferPayload {
           existingKeys.add(_fingerprint(playlist));
           existingIds.add(playlist.id);
           counts.imported++;
-        } catch (e) {
-          debugPrint('IptvTransferPayload: playlist entry failed: $e');
+        } catch (_) {
+          debugPrint('IptvTransferPayload: playlist entry failed');
           counts.failed++;
         }
       }
@@ -115,8 +138,8 @@ abstract final class IptvTransferPayload {
       if (counts.imported > 0) {
         await StorageService.setIptvPlaylists(merged);
       }
-    } catch (e) {
-      counts.error = '$e';
+    } catch (_) {
+      counts.error = 'IPTV playlist import failed';
     }
     return counts;
   }
@@ -141,18 +164,27 @@ abstract final class IptvTransferPayload {
   // ── Favorites and custom lists ───────────────────────────────────────────
 
   /// The starred channels of the built-in Favorites list.
-  static Future<List<Map<String, dynamic>>> buildFavorites() async {
-    final fingerprints = await _fingerprintsById();
+  static Future<List<Map<String, dynamic>>> buildFavorites({
+    bool forRemoteTransfer = false,
+  }) async {
+    final fingerprints = await _fingerprintsById(
+      forRemoteTransfer: forRemoteTransfer,
+    );
     return _channelEntries(
       await IptvMediaStore.listChannels(IptvMediaStore.favoritesListId),
       fingerprints,
+      restrictToKnownOrigins: forRemoteTransfer,
     );
   }
 
   /// Every user-created list with its channels. Favorites is excluded — it
   /// travels as its own category so it can be selected independently.
-  static Future<List<Map<String, dynamic>>> buildCustomLists() async {
-    final fingerprints = await _fingerprintsById();
+  static Future<List<Map<String, dynamic>>> buildCustomLists({
+    bool forRemoteTransfer = false,
+  }) async {
+    final fingerprints = await _fingerprintsById(
+      forRemoteTransfer: forRemoteTransfer,
+    );
     final metas = await IptvMediaStore.lists();
     final out = <Map<String, dynamic>>[];
     for (final meta in metas) {
@@ -163,6 +195,7 @@ abstract final class IptvTransferPayload {
         'channels': _channelEntries(
           await IptvMediaStore.listChannels(meta.id),
           fingerprints,
+          restrictToKnownOrigins: forRemoteTransfer,
         ),
       });
     }
@@ -170,8 +203,13 @@ abstract final class IptvTransferPayload {
   }
 
   /// Local playlist id → the fingerprint that identifies it to its panel.
-  static Future<Map<String, String>> _fingerprintsById() async {
-    final playlists = await StorageService.getIptvPlaylists();
+  static Future<Map<String, String>> _fingerprintsById({
+    required bool forRemoteTransfer,
+  }) async {
+    final playlists = await StorageService.getIptvPlaylists(
+      forSettings: !forRemoteTransfer,
+      forRemoteTransfer: forRemoteTransfer,
+    );
     return {
       for (final playlist in playlists)
         if (!playlist.isVirtual) playlist.id: _fingerprint(playlist),
@@ -197,23 +235,25 @@ abstract final class IptvTransferPayload {
   /// behind when that provider is later deleted.
   static List<Map<String, dynamic>> _channelEntries(
     Map<String, Map<String, dynamic>> channels,
-    Map<String, String> fingerprintsById,
-  ) {
+    Map<String, String> fingerprintsById, {
+    bool restrictToKnownOrigins = false,
+  }) {
     return [
       for (final entry in channels.entries)
-        <String, dynamic>{
-          'url': entry.key,
-          ...entry.value,
-          if (fingerprintsById[entry.value['playlistId']] != null)
-            _originKey: fingerprintsById[entry.value['playlistId']],
-        },
+        if (!restrictToKnownOrigins ||
+            entry.value['playlistId'] == null ||
+            fingerprintsById.containsKey(entry.value['playlistId']))
+          <String, dynamic>{
+            'url': entry.key,
+            ...entry.value,
+            if (fingerprintsById[entry.value['playlistId']] != null)
+              _originKey: fingerprintsById[entry.value['playlistId']],
+          },
     ];
   }
 
   /// Merge starred channels into the built-in Favorites list.
-  static Future<IptvImportCounts> applyFavorites(
-    List<dynamic> entries,
-  ) async {
+  static Future<IptvImportCounts> applyFavorites(List<dynamic> entries) async {
     return _applyChannels(IptvMediaStore.favoritesListId, entries);
   }
 
@@ -260,13 +300,13 @@ abstract final class IptvTransferPayload {
                 channelCounts.channelsAlreadyPresent;
             counts.failed += channelCounts.failed;
           }
-        } catch (e) {
-          debugPrint('IptvTransferPayload: list "$name" failed: $e');
+        } catch (_) {
+          debugPrint('IptvTransferPayload: list import failed');
           counts.failed++;
         }
       }
-    } catch (e) {
-      counts.error = '$e';
+    } catch (_) {
+      counts.error = 'IPTV list import failed';
     }
     return counts;
   }
@@ -284,13 +324,15 @@ abstract final class IptvTransferPayload {
     try {
       final existing = await IptvMediaStore.listChannels(listId);
       final existingKeys = <String>{
-        for (final url in existing.keys) IptvMediaStore.canonicalChannelKey(url),
+        for (final url in existing.keys)
+          IptvMediaStore.canonicalChannelKey(url),
       };
       // The sender's provider ids mean nothing here. Anything whose panel this
       // device already knows is re-pointed at the local id for it.
       final localIdByFingerprint = <String, String>{
         for (final playlist in await StorageService.getIptvPlaylists())
           if (!playlist.isVirtual) _fingerprint(playlist): playlist.id,
+        ...?Zone.current[_providerIdOverridesKey] as Map<String, String>?,
       };
 
       for (final raw in entries) {
@@ -316,22 +358,28 @@ abstract final class IptvTransferPayload {
             channelName: raw['name'] as String?,
             logoUrl: raw['logoUrl'] as String?,
             group: raw['group'] as String?,
-            playlistId: localIdByFingerprint[raw[_originKey]] ??
-                raw['playlistId'] as String?,
             channelNumber: (raw['channelNumber'] as num?)?.toInt(),
             contentType: raw['contentType'] as String?,
             duration: (raw['duration'] as num?)?.toInt(),
             httpHeaders: _headers(raw['httpHeaders']),
+            // Modern payloads carry playlistKey (a stable fingerprint); old
+            // v1/v2 payloads carried only the sender-local playlistId. The
+            // restore coordinator supplies overrides for both forms while
+            // staged providers are still outside the visible resource graph.
+            playlistId:
+                localIdByFingerprint[raw[_originKey]] ??
+                localIdByFingerprint[raw['playlistId']] ??
+                raw['playlistId'] as String?,
           );
           existingKeys.add(key);
           counts.channelsImported++;
-        } catch (e) {
-          debugPrint('IptvTransferPayload: channel $url failed: $e');
+        } catch (_) {
+          debugPrint('IptvTransferPayload: channel import failed');
           counts.failed++;
         }
       }
-    } catch (e) {
-      counts.error = '$e';
+    } catch (_) {
+      counts.error = 'IPTV channel import failed';
     }
     return counts;
   }

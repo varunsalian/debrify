@@ -30,15 +30,17 @@ class EngineExecutor {
 
     try {
       // Initialize pagination handler with config directly
-      final PaginationHandler paginationHandler =
-          PaginationHandler(config.pagination);
+      final PaginationHandler paginationHandler = PaginationHandler(
+        config.pagination,
+      );
 
       // Determine search type for response parsing
       final String searchType = _determineSearchType(params);
 
       // Get effective max results
-      final int? effectiveMaxResults =
-          paginationHandler.getMaxResults(maxResults);
+      final int? effectiveMaxResults = paginationHandler.getMaxResults(
+        maxResults,
+      );
 
       // Pagination loop
       bool shouldContinue = true;
@@ -48,16 +50,19 @@ class EngineExecutor {
         pageNumber++;
 
         // Get pagination params for this request
-        final Map<String, String> paginationParams =
-            paginationHandler.getPaginationParams();
+        final Map<String, String> paginationParams = paginationHandler
+            .getPaginationParams();
 
         // Determine pagination location
         String paginationLocation = 'query'; // Default to query
-        if (config.pagination.type == 'page' && config.pagination.page != null) {
+        if (config.pagination.type == 'page' &&
+            config.pagination.page != null) {
           paginationLocation = config.pagination.page!.location;
-        } else if (config.pagination.type == 'cursor' && config.pagination.cursor != null) {
+        } else if (config.pagination.type == 'cursor' &&
+            config.pagination.cursor != null) {
           paginationLocation = config.pagination.cursor!.location;
-        } else if (config.pagination.type == 'offset' && config.pagination.offset != null) {
+        } else if (config.pagination.type == 'offset' &&
+            config.pagination.offset != null) {
           paginationLocation = config.pagination.offset!.location;
         }
 
@@ -65,37 +70,45 @@ class EngineExecutor {
         // search params so that {page}/{offset}/{after} placeholders in URL
         // templates get substituted by replacePathParams. Skip for the other
         // locations to keep existing engines bit-identical.
-        final Map<String, dynamic> effectiveParams = paginationLocation == 'path'
+        final Map<String, dynamic> effectiveParams =
+            paginationLocation == 'path'
             ? <String, dynamic>{...params, ...paginationParams}
             : params;
 
         // Build parameters separated by location (query vs body)
         final Map<String, Map<String, dynamic>> separatedParams =
-            buildParameters(config.request, effectiveParams, paginationParams, paginationLocation);
+            buildParameters(
+              config.request,
+              effectiveParams,
+              paginationParams,
+              paginationLocation,
+            );
 
         final Map<String, String> queryParams =
-            (separatedParams['query'] as Map<String, dynamic>).cast<String, String>();
+            (separatedParams['query'] as Map<String, dynamic>)
+                .cast<String, String>();
         final Map<String, dynamic> bodyParams =
             separatedParams['body'] as Map<String, dynamic>;
 
         // Build the URL with query params only
-        final String url = buildUrl(config.request, effectiveParams, queryParams);
+        final String url = buildUrl(
+          config.request,
+          effectiveParams,
+          queryParams,
+        );
 
-        debugPrint('EngineExecutor: Fetching page $pageNumber from: $url');
-        if (bodyParams.isNotEmpty) {
-          debugPrint('EngineExecutor: Body params: $bodyParams');
-        }
+        debugPrint('EngineExecutor: Fetching search page');
 
         try {
           // Make the HTTP request with optional body params
-          final http.Response response =
-              await makeRequest(url, config.request, bodyParams: bodyParams);
+          final http.Response response = await makeRequest(
+            url,
+            config.request,
+            bodyParams: bodyParams,
+          );
 
           if (response.statusCode != 200) {
-            debugPrint(
-                'EngineExecutor: HTTP ${response.statusCode} for $url');
-            debugPrint(
-                'EngineExecutor: Response body preview: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
+            debugPrint('EngineExecutor: Search endpoint returned an error');
             // Continue to next page on failure, but may break if critical
             if (pageNumber == 1) {
               // First page failed, return empty
@@ -118,9 +131,12 @@ class EngineExecutor {
             dynamic responseJson;
             try {
               responseJson = json.decode(response.body);
-              unwrappedJson = _unwrapJinaIfNeeded(responseJson, config.response.format);
-            } catch (e) {
-              debugPrint('EngineExecutor: Error parsing response JSON: $e');
+              unwrappedJson = _unwrapJinaIfNeeded(
+                responseJson,
+                config.response.format,
+              );
+            } catch (_) {
+              debugPrint('EngineExecutor: Could not parse search response');
               responseJson = null;
               unwrappedJson = null;
             }
@@ -150,27 +166,34 @@ class EngineExecutor {
               if (_isValidInfohash(torrent.infohash)) {
                 pageTorrents.add(torrent);
               }
-            } catch (e) {
-              debugPrint('EngineExecutor: Error mapping torrent: $e');
+            } catch (_) {
+              debugPrint('EngineExecutor: Could not map search result');
               // Continue with other results
             }
           }
 
           allResults.addAll(pageTorrents);
           debugPrint(
-              'EngineExecutor: Got ${pageTorrents.length} torrents from page $pageNumber (total: ${allResults.length})');
+            'EngineExecutor: Got ${pageTorrents.length} torrents from page $pageNumber (total: ${allResults.length})',
+          );
 
           // Update pagination state with UNWRAPPED JSON (so pagination fields can be found)
-          paginationHandler.updateFromResponse(unwrappedJson, rawResults.length);
+          paginationHandler.updateFromResponse(
+            unwrappedJson,
+            rawResults.length,
+          );
 
           // Check if we should continue
-          shouldContinue = paginationHandler.shouldFetchMore(effectiveMaxResults);
+          shouldContinue = paginationHandler.shouldFetchMore(
+            effectiveMaxResults,
+          );
 
           // Check if we've reached max results
           if (effectiveMaxResults != null &&
               allResults.length >= effectiveMaxResults) {
             debugPrint(
-                'EngineExecutor: Reached max results ($effectiveMaxResults)');
+              'EngineExecutor: Reached max results ($effectiveMaxResults)',
+            );
             shouldContinue = false;
           }
 
@@ -178,8 +201,8 @@ class EngineExecutor {
           if (shouldContinue && betweenPageRequests != null) {
             await Future.delayed(betweenPageRequests);
           }
-        } catch (e) {
-          debugPrint('EngineExecutor: Error fetching page $pageNumber: $e');
+        } catch (_) {
+          debugPrint('EngineExecutor: Search page request failed');
           // Return partial results on error
           if (allResults.isNotEmpty) {
             break;
@@ -195,8 +218,8 @@ class EngineExecutor {
       }
 
       return allResults;
-    } catch (e) {
-      debugPrint('EngineExecutor: Execute error: $e');
+    } catch (_) {
+      debugPrint('EngineExecutor: Search execution failed');
       // Return partial results or empty list
       return allResults.isNotEmpty ? allResults : [];
     }
@@ -224,10 +247,7 @@ class EngineExecutor {
       if (queryParamsOnly.isNotEmpty) {
         final Uri uri = Uri.parse(baseUrl);
         final Uri finalUri = uri.replace(
-          queryParameters: {
-            ...uri.queryParameters,
-            ...queryParamsOnly,
-          },
+          queryParameters: {...uri.queryParameters, ...queryParamsOnly},
         );
         return finalUri.toString();
       }
@@ -249,10 +269,7 @@ class EngineExecutor {
       if (queryParamsOnly.isNotEmpty) {
         final Uri uri = Uri.parse(baseUrl);
         final Uri finalUri = uri.replace(
-          queryParameters: {
-            ...uri.queryParameters,
-            ...queryParamsOnly,
-          },
+          queryParameters: {...uri.queryParameters, ...queryParamsOnly},
         );
         return finalUri.toString();
       }
@@ -396,12 +413,15 @@ class EngineExecutor {
         }
       } else if (param.required) {
         debugPrint(
-            'EngineExecutor: Required param "${param.name}" has no value');
+          'EngineExecutor: Required param "${param.name}" has no value',
+        );
       }
     }
 
     // Handle the main query param from url_builder
-    final String? queryParamName = config.urlBuilder.getQueryParamForType(requestType);
+    final String? queryParamName = config.urlBuilder.getQueryParamForType(
+      requestType,
+    );
     if (queryParamName != null) {
       final String? query = params['query'] as String?;
       final String? imdbId = params['imdbId'] as String?;
@@ -416,7 +436,8 @@ class EngineExecutor {
 
       if (valueToUse != null && valueToUse.isNotEmpty) {
         // Main query always goes to body for POST if url_builder type is query_params
-        if (config.method.toUpperCase() == 'POST' && config.urlBuilder.type == 'query_params') {
+        if (config.method.toUpperCase() == 'POST' &&
+            config.urlBuilder.type == 'query_params') {
           bodyParams[queryParamName] = valueToUse;
         } else {
           queryParams[queryParamName] = valueToUse;
@@ -438,10 +459,7 @@ class EngineExecutor {
       queryParams.addAll(paginationParams);
     }
 
-    return {
-      'query': queryParams,
-      'body': bodyParams,
-    };
+    return {'query': queryParams, 'body': bodyParams};
   }
 
   Map<String, String> buildQueryParams(
@@ -480,13 +498,16 @@ class EngineExecutor {
         queryParams[param.name] = value;
       } else if (param.required) {
         debugPrint(
-            'EngineExecutor: Required param "${param.name}" has no value');
+          'EngineExecutor: Required param "${param.name}" has no value',
+        );
       }
     }
 
     // Handle the main query param from url_builder
     // Use getQueryParamForType to support per-search-type param names
-    final String? queryParamName = config.urlBuilder.getQueryParamForType(requestType);
+    final String? queryParamName = config.urlBuilder.getQueryParamForType(
+      requestType,
+    );
     if (queryParamName != null) {
       final String? query = params['query'] as String?;
       final String? imdbId = params['imdbId'] as String?;
@@ -535,8 +556,7 @@ class EngineExecutor {
         return value.toString();
       }
 
-      debugPrint(
-          'EngineExecutor: Path param "$paramName" not found in params');
+      debugPrint('EngineExecutor: Path param "$paramName" not found in params');
       return match.group(0)!; // Keep original if not found
     });
 
@@ -549,18 +569,15 @@ class EngineExecutor {
     RequestConfig config, {
     Map<String, dynamic>? bodyParams,
   }) async {
-    final Duration timeout = Duration(
-      seconds: config.timeoutSeconds ?? 30,
-    );
+    final Duration timeout = Duration(seconds: config.timeoutSeconds ?? 30);
 
     try {
       final Uri uri = Uri.parse(url);
 
       if (config.method.toUpperCase() == 'GET') {
-        return await http.get(
-          uri,
-          headers: _getDefaultHeaders(),
-        ).timeout(timeout);
+        return await http
+            .get(uri, headers: _getDefaultHeaders())
+            .timeout(timeout);
       } else if (config.method.toUpperCase() == 'POST') {
         final headers = _getDefaultHeaders();
         String? body;
@@ -569,29 +586,23 @@ class EngineExecutor {
         if (bodyParams != null && bodyParams.isNotEmpty) {
           headers['Content-Type'] = 'application/json';
           body = json.encode(bodyParams);
-          debugPrint('EngineExecutor: POST body: $body');
         }
 
-        return await http.post(
-          uri,
-          headers: headers,
-          body: body,
-        ).timeout(timeout);
+        return await http
+            .post(uri, headers: headers, body: body)
+            .timeout(timeout);
       } else {
         throw UnsupportedError('Unsupported HTTP method: ${config.method}');
       }
-    } catch (e) {
-      debugPrint('EngineExecutor: HTTP request error: $e');
+    } catch (_) {
+      debugPrint('EngineExecutor: HTTP request failed');
       rethrow;
     }
   }
 
   /// Get default HTTP headers.
   Map<String, String> _getDefaultHeaders() {
-    return {
-      'Accept': 'application/json',
-      'User-Agent': 'Debrify/1.0',
-    };
+    return {'Accept': 'application/json', 'User-Agent': 'Debrify/1.0'};
   }
 
   /// Determine search type based on params.
@@ -637,12 +648,14 @@ class EngineExecutor {
       final data = responseJson['data'];
       if (data is Map<String, dynamic> && data['content'] is String) {
         final contentStr = data['content'] as String;
-        debugPrint('EngineExecutor: Unwrapping Jina response (content length: ${contentStr.length})');
+        debugPrint(
+          'EngineExecutor: Unwrapping Jina response (content length: ${contentStr.length})',
+        );
         final unwrapped = json.decode(contentStr);
         return unwrapped;
       }
-    } catch (e) {
-      debugPrint('EngineExecutor: Error unwrapping Jina response: $e');
+    } catch (_) {
+      debugPrint('EngineExecutor: Could not unwrap search response');
     }
 
     // Fallback to original if unwrapping fails

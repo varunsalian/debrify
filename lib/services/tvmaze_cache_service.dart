@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'profiles/profile_preferences.dart';
 
 /// Service for managing persistent cache of TVMaze API responses
 /// Caches data for 30 days to reduce API calls
@@ -13,7 +13,7 @@ class TVMazeCacheService {
   /// Returns null if data doesn't exist or has expired
   static Future<Map<String, dynamic>?> get(String key) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       final cacheKey = _cachePrefix + key;
       final timestampKey = _timestampPrefix + key;
 
@@ -42,8 +42,8 @@ class TVMazeCacheService {
 
       // Parse and return data
       return json.decode(jsonString) as Map<String, dynamic>;
-    } catch (e) {
-      print('⚠️ TVMaze Cache: Error reading cache for key "$key": $e');
+    } catch (_) {
+      debugPrint('TVMaze cache read failed');
       return null;
     }
   }
@@ -52,7 +52,7 @@ class TVMazeCacheService {
   /// Returns null if data doesn't exist or has expired
   static Future<List<Map<String, dynamic>>?> getList(String key) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       final cacheKey = _cachePrefix + key;
       final timestampKey = _timestampPrefix + key;
 
@@ -82,8 +82,8 @@ class TVMazeCacheService {
       // Parse and return data
       final List<dynamic> decoded = json.decode(jsonString);
       return decoded.map((item) => item as Map<String, dynamic>).toList();
-    } catch (e) {
-      print('⚠️ TVMaze Cache: Error reading list cache for key "$key": $e');
+    } catch (_) {
+      debugPrint('TVMaze list cache read failed');
       return null;
     }
   }
@@ -91,7 +91,7 @@ class TVMazeCacheService {
   /// Store data in cache with current timestamp
   static Future<void> set(String key, Map<String, dynamic> data) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       final cacheKey = _cachePrefix + key;
       final timestampKey = _timestampPrefix + key;
 
@@ -102,15 +102,18 @@ class TVMazeCacheService {
       // Store timestamp
       final now = DateTime.now().millisecondsSinceEpoch;
       await prefs.setInt(timestampKey, now);
-    } catch (e) {
-      print('⚠️ TVMaze Cache: Error writing cache for key "$key": $e');
+    } catch (_) {
+      debugPrint('TVMaze cache write failed');
     }
   }
 
   /// Store list data in cache with current timestamp
-  static Future<void> setList(String key, List<Map<String, dynamic>> data) async {
+  static Future<void> setList(
+    String key,
+    List<Map<String, dynamic>> data,
+  ) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       final cacheKey = _cachePrefix + key;
       final timestampKey = _timestampPrefix + key;
 
@@ -121,29 +124,29 @@ class TVMazeCacheService {
       // Store timestamp
       final now = DateTime.now().millisecondsSinceEpoch;
       await prefs.setInt(timestampKey, now);
-    } catch (e) {
-      print('⚠️ TVMaze Cache: Error writing list cache for key "$key": $e');
+    } catch (_) {
+      debugPrint('TVMaze list cache write failed');
     }
   }
 
   /// Remove a specific cache entry
   static Future<void> _remove(String key) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       final cacheKey = _cachePrefix + key;
       final timestampKey = _timestampPrefix + key;
 
       await prefs.remove(cacheKey);
       await prefs.remove(timestampKey);
-    } catch (e) {
-      print('⚠️ TVMaze Cache: Error removing cache for key "$key": $e');
+    } catch (_) {
+      debugPrint('TVMaze cache remove failed');
     }
   }
 
   /// Clean up all expired cache entries
   static Future<void> cleanupExpired() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       final keys = prefs.getKeys();
 
       int removedCount = 0;
@@ -167,17 +170,17 @@ class TVMazeCacheService {
       }
 
       if (removedCount > 0) {
-        print('🧹 TVMaze Cache: Cleaned up $removedCount expired entries');
+        debugPrint('TVMaze cache cleanup removed $removedCount entries');
       }
-    } catch (e) {
-      print('⚠️ TVMaze Cache: Error during cleanup: $e');
+    } catch (_) {
+      debugPrint('TVMaze cache cleanup failed');
     }
   }
 
   /// Clear all TVMaze cache
   static Future<void> clearAll() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       final keys = prefs.getKeys();
 
       int removedCount = 0;
@@ -190,16 +193,16 @@ class TVMazeCacheService {
         }
       }
 
-      print('🧹 TVMaze Cache: Cleared all cache ($removedCount entries)');
-    } catch (e) {
-      print('⚠️ TVMaze Cache: Error clearing all cache: $e');
+      debugPrint('TVMaze cache cleared $removedCount entries');
+    } catch (_) {
+      debugPrint('TVMaze cache clear failed');
     }
   }
 
   /// Clear cache for a specific series
   static Future<void> clearSeriesCache(String seriesTitle) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       final keys = prefs.getKeys();
 
       // Clean the series title the same way TVMazeService does
@@ -217,10 +220,10 @@ class TVMazeCacheService {
       }
 
       if (removedCount > 0) {
-        print('🧹 TVMaze Cache: Cleared cache for "$seriesTitle" ($removedCount entries)');
+        debugPrint('TVMaze series cache cleared $removedCount entries');
       }
-    } catch (e) {
-      print('⚠️ TVMaze Cache: Error clearing series cache: $e');
+    } catch (_) {
+      debugPrint('TVMaze series cache clear failed');
     }
   }
 
@@ -228,7 +231,7 @@ class TVMazeCacheService {
   static Future<void> clearShowCache(int showId) async {
     await _remove('show_$showId');
     await _remove('episodes_$showId');
-    debugPrint('🧹 TVMazeCacheService: Cleared persistent cache for show ID $showId');
+    debugPrint('TVMaze show cache cleared');
   }
 
   /// Clean show name for consistency (mirrors TVMazeService._cleanShowName)
@@ -241,18 +244,39 @@ class TVMazeCacheService {
     cleaned = cleaned.replaceAll(RegExp(r'\s+(\d{4})\s+'), ' ');
     cleaned = cleaned.replaceAll(RegExp(r'^\d{4}\s+'), '');
     cleaned = cleaned.replaceAll(RegExp(r'\s+\d{4}$'), '');
-    cleaned = cleaned.replaceAll(RegExp(r'\b(1080p|720p|480p|2160p|4K|HDRip|BRRip|WEBRip|BluRay|HDTV|DVDRip)\b', caseSensitive: false), '');
-    cleaned = cleaned.replaceAll(RegExp(r'\b(AAC|AC3|DTS|FLAC|MP3|OGG)\b', caseSensitive: false), '');
-    cleaned = cleaned.replaceAll(RegExp(r'\b(H\.264|H\.265|HEVC|AVC|XVID|DIVX)\b', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(
+      RegExp(
+        r'\b(1080p|720p|480p|2160p|4K|HDRip|BRRip|WEBRip|BluRay|HDTV|DVDRip)\b',
+        caseSensitive: false,
+      ),
+      '',
+    );
+    cleaned = cleaned.replaceAll(
+      RegExp(r'\b(AAC|AC3|DTS|FLAC|MP3|OGG)\b', caseSensitive: false),
+      '',
+    );
+    cleaned = cleaned.replaceAll(
+      RegExp(r'\b(H\.264|H\.265|HEVC|AVC|XVID|DIVX)\b', caseSensitive: false),
+      '',
+    );
     cleaned = cleaned.replaceAll(RegExp(r'-[A-Za-z0-9]+$'), '');
     cleaned = cleaned.replaceAll(RegExp(r'\b[Ss](\d{1,2})[Ee](\d{1,2})\b'), '');
     cleaned = cleaned.replaceAll(RegExp(r'\b(\d{1,2})[xX](\d{1,2})\b'), '');
     cleaned = cleaned.replaceAll(RegExp(r'\b(\d{1,2})\.(\d{1,2})\b'), '');
-    cleaned = cleaned.replaceAll(RegExp(r'\b[Ss]eason\s*(\d{1,2})\s*[Ee]pisode\s*(\d{1,2})\b'), '');
+    cleaned = cleaned.replaceAll(
+      RegExp(r'\b[Ss]eason\s*(\d{1,2})\s*[Ee]pisode\s*(\d{1,2})\b'),
+      '',
+    );
     cleaned = cleaned.replaceAll(RegExp(r'\b[Ee]pisode\s*(\d{1,2})\b'), '');
     cleaned = cleaned.replaceAll(RegExp(r'\b[Ee]p\s*(\d{1,2})\b'), '');
     cleaned = cleaned.replaceAll(RegExp(r'\b[Ee](\d{1,2})\b'), '');
-    cleaned = cleaned.replaceAll(RegExp(r'\b(REPACK|PROPER|INTERNAL|EXTENDED|DIRFIX|NFOFIX|SUBFIX)\b', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(
+      RegExp(
+        r'\b(REPACK|PROPER|INTERNAL|EXTENDED|DIRFIX|NFOFIX|SUBFIX)\b',
+        caseSensitive: false,
+      ),
+      '',
+    );
     cleaned = cleaned.replaceAll(RegExp(r'\.[a-zA-Z0-9]{3,4}$'), '');
     cleaned = cleaned.replaceAll(RegExp(r'\s+'), ' ').trim();
     return cleaned;
@@ -261,7 +285,7 @@ class TVMazeCacheService {
   /// Get cache statistics (for debugging/monitoring)
   static Future<Map<String, dynamic>> getStats() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       final keys = prefs.getKeys();
 
       int totalEntries = 0;
@@ -288,9 +312,7 @@ class TVMazeCacheService {
         'cache_duration_days': _cacheDuration.inDays,
       };
     } catch (e) {
-      return {
-        'error': e.toString(),
-      };
+      return {'error': e.toString()};
     }
   }
 }

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File, Platform;
+import 'dart:io' show File, Platform, exit;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -16,7 +16,23 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/webdav_item.dart';
+import '../models/profiles/profile_policy.dart';
+import '../models/profiles/user_profile.dart';
 import '../services/main_page_bridge.dart';
+import '../services/profiles/profile_runtime.dart';
+import '../services/profiles/connection_resource_service.dart';
+import '../services/profiles/device_key_provider.dart';
+import '../services/profiles/legacy_backup_adapter.dart';
+import '../services/profiles/portable_profile_package.dart';
+import '../services/profiles/profile_app_lifecycle_participant.dart';
+import '../services/profiles/profile_lifecycle.dart';
+import '../services/profiles/profile_authorization.dart';
+import '../services/profiles/profile_bootstrap.dart';
+import '../services/profiles/profile_package_service.dart';
+import '../services/profiles/profile_pin_service.dart';
+import '../services/profiles/profile_device_reset_service.dart';
+import '../services/profiles/profile_restore_coordinator.dart';
+import '../services/profiles/profile_reset_service.dart';
 import '../utils/platform_util.dart';
 
 import '../services/analytics_service.dart';
@@ -263,23 +279,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSummaries() async {
     // Phase 1: Load cached/local state instantly (no network)
     final results = await Future.wait([
-      StorageService.getApiKey(),
-      StorageService.getTorboxApiKey(),
+      StorageService.hasRealDebridCredential(),
+      StorageService.hasTorboxCredential(),
       PikPakApiService.instance.isAuthenticated(),
       StorageService.getWebDavEnabled(),
-      StorageService.getWebDavServers(),
-      StorageService.getTraktAccessToken(),
+      StorageService.getWebDavServers(forSettings: true),
+      StorageService.hasTraktCredential(),
       StorageService.getTraktTokenExpiry(),
       StorageService.getTraktUsername(),
       AppVersionInfo.get(),
       AndroidNativeDownloader.isTelevision(),
       StorageService.getUpdateAutoCheckEnabled(),
-      StorageService.getIndexerManagerConfigs(),
-      StorageService.getPremiumizeApiKey(),
-      StorageService.getAllDebridApiKey(),
-      StorageService.getSimklAccessToken(),
+      StorageService.getIndexerManagerConfigs(forSettings: true),
+      StorageService.hasPremiumizeCredential(),
+      StorageService.hasAllDebridCredential(),
+      StorageService.hasSimklCredential(),
       StorageService.getSimklUsername(),
-      StorageService.getMdblistApiKey(),
+      StorageService.hasMdblistCredential(),
       StorageService.getMdblistUsername(),
       StorageService.getTvKeyboardEnabled(),
       StorageService.getTvUiScalePercent(),
@@ -305,23 +321,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (!mounted) return;
 
-    final rdKey = results[0] as String?;
-    final torboxKey = results[1] as String?;
+    final rdConnected = results[0] as bool;
+    final torConnected = results[1] as bool;
     final pikpakAuth = results[2] as bool;
     final webDavEnabled = results[3] as bool;
     final webDavServers = results[4] as List<WebDavConfig>;
-    final traktToken = results[5] as String?;
+    final traktConnected = results[5] as bool;
     final traktExpiry = results[6] as int?;
     final traktUsername = results[7] as String?;
     final packageInfo = results[8] as PackageInfo;
     final isAndroidTv = results[9] as bool;
     final autoCheckEnabled = results[10] as bool;
     final indexerManagers = results[11] as List;
-    final premiumizeKey = results[12] as String?;
-    final allDebridKey = results[13] as String?;
-    final simklToken = results[14] as String?;
+    final premiumizeConnected = results[12] as bool;
+    final allDebridConnected = results[13] as bool;
+    final simklConnected = results[14] as bool;
     final simklUsername = results[15] as String?;
-    final mdblistKey = results[16] as String?;
+    final mdblistConnected = results[16] as bool;
     final mdblistUsername = results[17] as String?;
     final tvKeyboardEnabled = results[18] as bool;
     final tvUiScalePercent = results[19] as int;
@@ -347,12 +363,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final debrifyTvStyle = results[37] as String;
 
     // Set initial state from cached data
-    final rdConnected = rdKey != null && rdKey.isNotEmpty;
-    final torConnected = torboxKey != null && torboxKey.isNotEmpty;
-    final premiumizeConnected =
-        premiumizeKey != null && premiumizeKey.isNotEmpty;
-    final allDebridConnected = allDebridKey != null && allDebridKey.isNotEmpty;
-
     // Use cached account info if available
     if (rdConnected) {
       final user = AccountService.currentUser;
@@ -419,7 +429,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _webDavCaption = 'Tap to connect';
     }
 
-    if (traktToken != null && traktToken.isNotEmpty) {
+    if (traktConnected) {
       final traktExpired =
           traktExpiry != null &&
           DateTime.now().millisecondsSinceEpoch >= traktExpiry;
@@ -437,7 +447,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // Simkl's PIN-issued tokens don't expire, so unlike Trakt there's no
     // "Expired" branch here — a stored token means connected.
-    if (simklToken != null && simklToken.isNotEmpty) {
+    if (simklConnected) {
       _simklConnected = true;
       _simklStatus = 'Active';
       _simklCaption = simklUsername != null
@@ -452,7 +462,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // MDBList uses a plain API key (no expiry) — a stored key means connected.
     // Reset on the empty branch (like WebDAV above) so the card clears after a
     // logout, since this method re-runs when returning from the settings page.
-    if (mdblistKey != null && mdblistKey.isNotEmpty) {
+    if (mdblistConnected) {
       _mdblistConnected = true;
       _mdblistStatus = 'Active';
       _mdblistCaption = mdblistUsername != null
@@ -759,6 +769,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenHomePageSettings: _openHomePageSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
+      showSwitchProfile:
+          ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted,
+      onSwitchProfile: _switchProfile,
       onOpenTorrentSettings: _openTorrentSettings,
       onOpenFilterSettings: _openFilterSettings,
       onOpenProviderSettings: _openProviderSettings,
@@ -854,6 +867,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenHomePageSettings: _openHomePageSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
+      showSwitchProfile:
+          ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted,
+      onSwitchProfile: _switchProfile,
       onOpenNavigationSettings: _openNavigationSettings,
       isAndroidTv: _isAndroidTv,
       onClearDownloads: _clearDownloadData,
@@ -2701,16 +2717,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openTorrentSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.torrentSearch)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const TorrentSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openIndexerManagersSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.torrentSearch)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const IndexerManagersSettingsPage());
     if (!mounted) return;
 
-    final configs = await StorageService.getIndexerManagerConfigs();
+    final configs = await StorageService.getIndexerManagerConfigs(
+      forSettings: true,
+    );
     if (!mounted) return;
     setState(() {
       _indexerManagersConfigured = configs.isNotEmpty;
@@ -2737,6 +2759,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openPikPakSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     final loggedOut = await pushSettingsPage<bool>(
       context,
       const PikPakSettingsPage(),
@@ -2749,24 +2773,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openWebDavSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const WebDavSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
   }
 
   Future<void> _openTraktSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.trackersAndDiscovery)) {
+      return;
+    }
+    if (!mounted) return;
     await pushSettingsPage(context, const TraktSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
   }
 
   Future<void> _openSimklSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.trackersAndDiscovery)) {
+      return;
+    }
+    if (!mounted) return;
     await pushSettingsPage(context, const SimklSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
   }
 
   Future<void> _openMdblistSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.trackersAndDiscovery)) {
+      return;
+    }
+    if (!mounted) return;
     await pushSettingsPage(context, const MdblistSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
@@ -2843,6 +2881,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openIptvSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.iptv)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const IptvSettingsPage());
     if (!mounted) return;
     // IPTV settings hosts its own Appearance/Player guide sections — keep
@@ -2854,6 +2894,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// playlist" is actually after. Without the flag the wide (TV/desktop)
   /// layout opens its source rail instead, and the form is another hop away.
   Future<void> _openIptvAddSource() async {
+    if (!await _ensureProfileFeature(ProfileFeature.iptv)) return;
+    if (!mounted) return;
     await pushSettingsPage(
       context,
       const IptvSettingsPage(openAddSource: true),
@@ -2867,6 +2909,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Live TV & DVR › Recordings — the same page IPTV settings and the
   /// recording dialogs open, promoted to a first-class settings row.
   Future<void> _openRecordings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.recordings)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const RecordingsPage());
   }
 
@@ -2879,18 +2923,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openExternalPlayerSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.externalPlayers)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const ExternalPlayerSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openRemoteControl() async {
+    if (!await _ensureProfileFeature(ProfileFeature.remoteControl)) return;
+    if (!mounted) return;
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const RemoteRolePickerScreen()));
     if (!mounted) return;
     setState(() {});
   }
+
+  Future<void> _switchProfile() async =>
+      MainPageBridge.showProfilePicker?.call();
 
   Future<void> _openFilterSettings() async {
     await pushSettingsPage(context, const FilterSettingsPage());
@@ -2899,6 +2950,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openProviderSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const ProviderSettingsPage());
     if (!mounted) return;
     setState(() {});
@@ -2911,6 +2964,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openRealDebridSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     final loggedOut = await pushSettingsPage<bool>(
       context,
       const RealDebridSettingsPage(),
@@ -2923,6 +2978,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openTorboxSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     final loggedOut = await pushSettingsPage<bool>(
       context,
       const TorboxSettingsPage(),
@@ -2935,6 +2992,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openPremiumizeSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     final loggedOut = await pushSettingsPage<bool>(
       context,
       const PremiumizeSettingsPage(),
@@ -2947,6 +3006,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openAllDebridSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     final loggedOut = await pushSettingsPage<bool>(
       context,
       const AllDebridSettingsPage(),
@@ -2966,17 +3027,470 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Route checks are defense in depth; services still validate their own
+  /// capabilities. Keeping this helper fail-closed also protects search/deep
+  /// links that call an opener while a policy edit is propagating.
+  Future<bool> _ensureProfileFeature(ProfileFeature feature) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return true;
+    }
+    var allowed = false;
+    try {
+      final registry = ProfileBootstrap.registry;
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final actor = await authorization.validate(registry);
+      allowed = actor.allows(feature);
+    } catch (_) {
+      allowed = false;
+    }
+    if (!allowed && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This feature is disabled for this profile.'),
+        ),
+      );
+    }
+    return allowed;
+  }
+
+  Future<void> _createProfileBackup() async {
+    try {
+      await _createProfileBackupUnchecked();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_profileBackupError(error, creating: true))),
+      );
+    }
+  }
+
+  Future<void> _createProfileBackupUnchecked() async {
+    if (PlatformUtil.isTvOS) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Apple TV profile backups use the authenticated Remote transfer flow.',
+          ),
+        ),
+      );
+      return;
+    }
+    final registry = ProfileBootstrap.registry;
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final actor = await authorization.validate(registry);
+    if (!actor.allows(ProfileFeature.backupRestore)) {
+      throw StateError('This profile is not allowed to create backups');
+    }
+    final canExportAll =
+        actor.role == UserProfileRole.admin &&
+        actor.allows(ProfileFeature.manageProfiles);
+    final passphrase = TextEditingController();
+    var sanitized = false;
+    var allProfiles = false;
+    final confirmed = await showSettingsDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(allProfiles ? 'Back up all profiles' : 'Back up profile'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Creates a portable profile package. Downloads, recordings, active jobs, device paths, PINs, and remote pairings are not included.',
+              ),
+              const SizedBox(height: 12),
+              if (canExportAll)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('All profiles and shared connections'),
+                  subtitle: const Text(
+                    'Admin-only graph backup. Imported profile and resource IDs are remapped on restore.',
+                  ),
+                  value: allProfiles,
+                  onChanged: (value) => setDialogState(() {
+                    allProfiles = value;
+                    if (value) sanitized = false;
+                  }),
+                ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Sanitized settings only'),
+                subtitle: const Text(
+                  'Allows an unencrypted export but omits identity, accounts, URLs, activity, and content-sensitive settings.',
+                ),
+                value: sanitized,
+                onChanged: allProfiles
+                    ? null
+                    : (value) => setDialogState(() => sanitized = value),
+              ),
+              if (!sanitized)
+                TextField(
+                  controller: passphrase,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Backup passphrase (minimum 8 characters)',
+                  ),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: sanitized || passphrase.text.length >= 8
+                  ? () => Navigator.of(dialogContext).pop(true)
+                  : null,
+              child: const Text('Create backup'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final password = passphrase.text;
+    passphrase
+      ..clear()
+      ..dispose();
+    if (confirmed != true) return;
+    if (allProfiles && !await _reauthenticateSensitiveProfile(actor)) return;
+
+    final resourceService = ConnectionResourceService(
+      registry: registry,
+      cipher: DeviceKeyProvider.cipher,
+    );
+    final service = ProfilePackageService(
+      registry: registry,
+      resources: resourceService,
+    );
+    final package = allProfiles
+        ? await service.exportAllProfiles(
+            context: authorization,
+            includeSecrets: true,
+          )
+        : await service.exportProfile(
+            context: authorization,
+            scope: ProfileRuntime.capture(),
+            includeSecrets: !sanitized,
+            sanitized: sanitized,
+          );
+    final map = sanitized
+        ? await PortableProfilePackage.withIntegrity(package)
+        : await PortableProfilePackage.encrypt(package, password);
+    final bytes = Uint8List.fromList(
+      utf8.encode(const JsonEncoder.withIndent('  ').convert(map)),
+    );
+    final stamp = DateTime.now().toUtc().toIso8601String().substring(0, 10);
+    final saved = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save Debrify profile backup',
+      fileName: allProfiles
+          ? 'debrify-profiles-$stamp.json'
+          : 'debrify-profile-$stamp.json',
+      type: FileType.custom,
+      allowedExtensions: const <String>['json'],
+      bytes: bytes,
+    );
+    if (!mounted || saved == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          allProfiles ? 'All-profile backup saved' : 'Profile backup saved',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _restoreProfileBackup() async {
+    try {
+      await _restoreProfileBackupUnchecked();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_profileBackupError(error, creating: false))),
+      );
+    }
+  }
+
+  String _profileBackupError(Object error, {required bool creating}) {
+    if (error is FormatException) {
+      return error.message;
+    }
+    if (error is StateError) return error.message;
+    return creating
+        ? 'Could not create the profile backup'
+        : 'Profile restore failed; existing data is unchanged';
+  }
+
+  Future<void> _restoreProfileBackupUnchecked() async {
+    if (PlatformUtil.isTvOS) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Apple TV restores profile packages through authenticated Remote transfer.',
+          ),
+        ),
+      );
+      return;
+    }
+    final pick = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Choose a Debrify backup',
+      type: FileType.any,
+      withData: false,
+    );
+    if (pick == null || pick.files.isEmpty) return;
+    final file = pick.files.single;
+    if (file.size > PortableProfilePackage.maxEnvelopeBytes) {
+      throw const FormatException('Backup exceeds the supported size limit');
+    }
+    final path = file.path;
+    if (path == null) {
+      throw const FormatException('Selected backup is not locally readable');
+    }
+    final selected = File(path);
+    final source = await PortableProfilePackage.readBoundedUtf8(
+      selected.openRead(),
+    );
+    final decoded = jsonDecode(source);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Backup must be a JSON object');
+    }
+
+    PortableProfilePackage package;
+    if (decoded['format'] == 'debrify-profile-package') {
+      if (decoded['encrypted'] == true) {
+        final unlocked = await _promptAndDecryptProfilePackage(decoded);
+        if (unlocked == null) return;
+        package = unlocked;
+      } else {
+        package = await PortableProfilePackage.decodeMap(decoded);
+      }
+    } else {
+      var legacy = BackupRestoreService.parse(source);
+      if (BackupRestoreService.isEncrypted(legacy)) {
+        final unlocked = await _promptAndDecryptBackup(legacy);
+        if (unlocked == null) return;
+        legacy = unlocked;
+      }
+      package = LegacyBackupAdapter.adapt(legacy);
+    }
+
+    final registry = ProfileBootstrap.registry;
+    final profile = await registry.getProfile(
+      ProfileRuntime.capture().profileId,
+    );
+    if (profile == null || !mounted) return;
+    final graphRestore = package.mode == 'deviceGraph';
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final actor = await authorization.validate(registry);
+    if (graphRestore &&
+        (actor.role != UserProfileRole.admin ||
+            !actor.allows(ProfileFeature.manageProfiles))) {
+      throw StateError('Only an Admin can restore an all-profile backup');
+    }
+    final confirmed = await showSettingsDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          graphRestore
+              ? 'Import ${package.profiles.length} profiles?'
+              : 'Restore profile backup?',
+        ),
+        content: Text(
+          graphRestore
+              ? 'The profiles and their shared connection graph are staged under new IDs, then made visible together. Your current Admin remains the recovery profile. Existing profiles are not overwritten. Protected profiles require new PINs. Media, jobs, paths, and remote pairings are not restored.'
+              : 'Destination: ${profile.name}\n\nA complete shadow generation will be verified first. Existing data remains visible if staging fails. Imported accounts become new resources; downloads, recordings, jobs, PINs, paths, and pairings are not restored.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              graphRestore ? 'Import profiles' : 'Restore to ${profile.name}',
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (graphRestore && !await _reauthenticateSensitiveProfile(actor)) return;
+
+    final coordinator = ProfileRestoreCoordinator(
+      registry: registry,
+      cipher: DeviceKeyProvider.cipher,
+      lifecycleParticipants: <ProfileLifecycleParticipant>[
+        ProfileAppLifecycleParticipant(),
+      ],
+    );
+    if (graphRestore) {
+      final report = await coordinator.restoreDeviceGraph(
+        package: package,
+        authorization: authorization,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Imported ${report.profilesImported} profiles, '
+            '${report.resourcesImported} connections and '
+            '${report.grantsImported} grants. '
+            '${report.pinResetsRequired} profile(s) require a new PIN.',
+          ),
+          duration: const Duration(seconds: 7),
+        ),
+      );
+      return;
+    }
+    final report = await coordinator.restore(
+      package: package,
+      destinationProfileId: profile.id,
+      authorization: authorization,
+    );
+    if (!mounted) return;
+    await _loadSummaries();
+    MainPageBridge.notifyIntegrationChanged();
+    final omitted = report.omissions.entries
+        .where((entry) => entry.value != null && entry.value != 0)
+        .map((entry) => '${entry.key}: ${entry.value}')
+        .join(', ');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Restored generation ${report.publishedGeneration}: '
+          '${report.preferencesApplied} settings and '
+          '${report.resourcesImported} connections. '
+          '${omitted.isEmpty ? '' : 'Skipped: $omitted. '}'
+          'Media/jobs were not restored.',
+        ),
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
+  Future<PortableProfilePackage?> _promptAndDecryptProfilePackage(
+    Map<String, dynamic> envelope,
+  ) async {
+    String? errorText;
+    while (true) {
+      final password = await _promptProfileBackupPassphrase(
+        errorText: errorText,
+      );
+      if (password == null) return null;
+      try {
+        return await PortableProfilePackage.decrypt(envelope, password);
+      } on FormatException catch (error) {
+        if (error.message == 'Wrong passphrase or tampered backup') {
+          errorText = 'Wrong passphrase or damaged backup — try again';
+          continue;
+        }
+        rethrow;
+      }
+    }
+  }
+
+  Future<String?> _promptProfileBackupPassphrase({String? errorText}) async {
+    final controller = TextEditingController();
+    final result = await showSettingsDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Unlock backup'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Passphrase',
+            errorText: errorText,
+          ),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Unlock'),
+          ),
+        ],
+      ),
+    );
+    controller
+      ..clear()
+      ..dispose();
+    return result?.isEmpty == true ? null : result;
+  }
+
+  Future<bool> _reauthenticateSensitiveProfile(UserProfile profile) async {
+    if (!profile.hasPin) return true;
+    final controller = TextEditingController();
+    final pin = await showSettingsDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirm Admin PIN'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'PIN'),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    controller
+      ..clear()
+      ..dispose();
+    if (pin == null) return false;
+    final result = await ProfilePinService(
+      registry: ProfileBootstrap.registry,
+    ).verify(profile.id, pin);
+    if (result.result == ProfilePinResult.verified) return true;
+    if (mounted) {
+      final message = switch (result.result) {
+        ProfilePinResult.locked => 'PIN is temporarily locked',
+        ProfilePinResult.resetRequired => 'This PIN requires an Admin reset',
+        ProfilePinResult.notConfigured => 'PIN is not configured',
+        _ => 'PIN confirmation failed',
+      };
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+    return false;
+  }
+
   Future<void> _createBackup() async {
+    if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) {
+      await _createProfileBackup();
+      return;
+    }
     final app = AppThemeScope.of(context);
     // Build the payload first so we can warn if it's empty.
     final Map<String, dynamic> payload;
     try {
       payload = await BackupRestoreService.buildBackup();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to build backup: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to build the backup')),
+      );
       return;
     }
 
@@ -3004,7 +3518,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          final passphraseOk = !usePassphrase ||
+          final passphraseOk =
+              !usePassphrase ||
               (passphraseController.text.isNotEmpty &&
                   passphraseController.text == confirmController.text);
           return AlertDialog(
@@ -3016,7 +3531,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const Text('The backup will include:'),
                   const SizedBox(height: 8),
-                  ..._backupSummaryLines(summary).map((line) => Text('• $line')),
+                  ..._backupSummaryLines(
+                    summary,
+                  ).map((line) => Text('• $line')),
                   if (iptvProviders.fileImported > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
@@ -3131,8 +3648,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-              'Nothing left to back up without credentials — everything on '
-              'this device is account data.'),
+            'Nothing left to back up without credentials — everything on '
+            'this device is account data.',
+          ),
         ),
       );
       return;
@@ -3170,11 +3688,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           exportMap,
           passphrase,
         );
-      } catch (e) {
+      } catch (_) {
         rootNavigator.pop();
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to encrypt backup: $e')),
+          const SnackBar(content: Text('Failed to encrypt the backup')),
         );
         return;
       }
@@ -3239,11 +3757,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             duration: const Duration(seconds: 5),
           ),
         );
-      } catch (e2) {
+      } catch (_) {
         if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save backup: $e2')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to save the backup')),
+        );
       }
     }
   }
@@ -3328,8 +3846,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       );
       try {
-        final inner =
-            await BackupRestoreService.decryptBackup(envelope, entered);
+        final inner = await BackupRestoreService.decryptBackup(
+          envelope,
+          entered,
+        );
         rootNavigator.pop();
         if (!mounted) return null;
         return inner;
@@ -3337,11 +3857,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         rootNavigator.pop();
         if (!mounted) return null;
         errorText = 'Wrong passphrase — try again';
-      } on FormatException catch (e) {
+      } on FormatException {
         rootNavigator.pop();
         if (!mounted) return null;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invalid backup: ${e.message}')),
+          const SnackBar(content: Text('The backup format is invalid')),
         );
         return null;
       }
@@ -3349,6 +3869,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _restoreBackup() async {
+    if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) {
+      await _restoreProfileBackup();
+      return;
+    }
     final app = AppThemeScope.of(context);
     final t = app.settings;
     final FilePickerResult? pick;
@@ -3360,22 +3884,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       pick = await FilePicker.platform.pickFiles(
         dialogTitle: 'Choose Debrify backup file',
         type: FileType.any,
-        withData: true,
+        withData: false,
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not open file picker: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the file picker')),
+      );
       return;
     }
 
     if (pick == null || pick.files.isEmpty) return;
     final file = pick.files.first;
 
-    // FileType.any lets the user pick anything and withData buffers it into RAM;
-    // reject an implausibly large pick before reading so a stray huge file can't
-    // OOM. Sized so the app always accepts what its own export can produce: a
+    // FileType.any lets the user pick anything. Reject an implausibly large
+    // file before opening it so a stray huge selection cannot be allocated.
+    // Sized so the app always accepts what its own export can produce: a
     // passphrase-encrypted envelope base64-inflates the payload by ~4/3, so an
     // IPTV-heavy ~20 MiB backup arrives here at ~27 MiB.
     if (file.size > 40 * 1024 * 1024) {
@@ -3390,29 +3914,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final String content;
     try {
-      if (file.bytes != null) {
-        content = utf8.decode(file.bytes!);
-      } else if (file.path != null) {
-        content = await File(file.path!).readAsString();
-      } else {
+      if (file.path == null) {
         throw Exception('Could not read backup file contents');
       }
-    } catch (e) {
+      final selected = File(file.path!);
+      content = await PortableProfilePackage.readBoundedUtf8(
+        selected.openRead(),
+        maxBytes: 40 * 1024 * 1024,
+      );
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to read backup file: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to read the backup file')),
+      );
       return;
     }
 
     Map<String, dynamic> payload;
     try {
       payload = BackupRestoreService.parse(content);
-    } on FormatException catch (e) {
+    } on FormatException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Invalid backup: ${e.message}')));
+      final looksLikeProfilePackage =
+          content.contains('"format":"debrify-profile-package"') ||
+          content.contains('"format": "debrify-profile-package"');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            looksLikeProfilePackage
+                ? 'This is a profile backup. Enable profiles or update to a build that supports profile restore.'
+                : error.message,
+          ),
+        ),
+      );
       return;
     }
 
@@ -3532,12 +4066,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     RestoreReport report;
     try {
       report = await BackupRestoreService.applyBackup(payload);
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Restore failed: $e')));
+      ).showSnackBar(const SnackBar(content: Text('Restore failed')));
       return;
     }
 
@@ -3980,27 +4514,121 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _resetAppData() async {
-    final confirmed = await showSettingsDialog<bool>(
+    final profileMode =
+        ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted;
+    ProfileAuthorizationContext? authorization;
+    UserProfile? actor;
+    if (profileMode) {
+      authorization = await ProfileAuthorizationContext.capture(
+        ProfileBootstrap.registry,
+      );
+      actor = await authorization.validate(ProfileBootstrap.registry);
+    }
+    final mayResetDevice =
+        actor?.role == UserProfileRole.admin &&
+        actor!.allows(ProfileFeature.manageProfiles) &&
+        actor.allows(ProfileFeature.backupRestore);
+    final action = await showSettingsDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reset Debrify?'),
-        content: const Text(
-          'This removes saved connections, playback history, download queue, and onboarding completion. Files already saved to disk remain untouched.',
+        title: Text(profileMode ? 'Reset this profile?' : 'Reset Debrify?'),
+        content: Text(
+          profileMode
+              ? 'This clears this profile\'s settings, history, playlists, and private app data. The profile, PIN, shared connections, active jobs, downloads, and recordings remain untouched.'
+              : 'This removes saved connections, playback history, download queue, and onboarding completion. Files already saved to disk remain untouched.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
+          if (mayResetDevice)
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('device'),
+              child: const Text('Reset device…'),
+            ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Reset app'),
+            onPressed: () => Navigator.of(context).pop('profile'),
+            child: Text(profileMode ? 'Reset profile' : 'Reset app'),
           ),
         ],
       ),
     );
 
-    if (confirmed != true) return;
+    if (action == null) return;
+
+    if (profileMode && action == 'device') {
+      if (!await _reauthenticateSensitiveProfile(actor!)) return;
+      final typed = TextEditingController();
+      final confirmed = await showSettingsDialog<bool>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Reset this Debrify installation?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'All profiles, connections, jobs, schedules, private data, remote pairings, and device keys will be removed. Downloaded and recorded files remain on disk. The app will close and start fresh next launch.',
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: typed,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Type RESET to continue',
+                  ),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: typed.text == 'RESET'
+                    ? () => Navigator.of(dialogContext).pop(true)
+                    : null,
+                child: const Text('Reset device'),
+              ),
+            ],
+          ),
+        ),
+      );
+      typed
+        ..clear()
+        ..dispose();
+      if (confirmed != true) return;
+      await ProfileDeviceResetService.reset(
+        registry: ProfileBootstrap.registry,
+        authorization: authorization!,
+      );
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+        exit(0);
+      }
+      await SystemNavigator.pop();
+      return;
+    }
+
+    if (profileMode && action == 'profile') {
+      await ProfileResetService(
+        registry: ProfileBootstrap.registry,
+        lifecycleParticipants: <ProfileLifecycleParticipant>[
+          ProfileAppLifecycleParticipant(),
+        ],
+      ).resetActiveProfile();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile data reset. Connections and files were kept.'),
+        ),
+      );
+      await _loadSummaries();
+      return;
+    }
 
     await StorageService.deleteApiKey();
     AccountService.clearUserInfo();
@@ -4785,6 +5413,8 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenHomePageSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
   final VoidCallback onOpenRemoteControl;
+  final bool showSwitchProfile;
+  final Future<void> Function() onSwitchProfile;
   final Future<void> Function() onOpenNavigationSettings;
   final bool isAndroidTv;
   final Future<void> Function() onClearDownloads;
@@ -4866,6 +5496,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenHomePageSettings,
     required this.onOpenExternalPlayerSettings,
     required this.onOpenRemoteControl,
+    required this.showSwitchProfile,
+    required this.onSwitchProfile,
     required this.onOpenNavigationSettings,
     required this.isAndroidTv,
     required this.onClearDownloads,
@@ -5167,6 +5799,11 @@ class _SettingsLayout extends StatelessWidget {
               SettingsRows.remote,
               onTap: () async => onOpenRemoteControl(),
             ),
+            if (showSwitchProfile)
+              SettingsTile.spec(
+                SettingsRows.switchProfile,
+                onTap: onSwitchProfile,
+              ),
           ],
         );
       case 8:
@@ -5492,6 +6129,11 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.remote,
                       onTap: () async => onOpenRemoteControl(),
                     ),
+                    if (showSwitchProfile)
+                      SettingsTile.spec(
+                        SettingsRows.switchProfile,
+                        onTap: onSwitchProfile,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 24),

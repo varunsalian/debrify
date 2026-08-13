@@ -1,5 +1,6 @@
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/engine_config/engine_config.dart';
+import '../profiles/profile_preferences.dart';
+import '../storage_service.dart';
 
 /// Manages dynamic storage keys for engine settings.
 ///
@@ -54,14 +55,14 @@ class SettingsManager {
   /// Get the enabled state for an engine
   Future<bool> getEnabled(String engineId, bool defaultValue) async {
     final key = generateKey(engineId, 'enabled');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(key) ?? defaultValue;
   }
 
   /// Set the enabled state for an engine
   Future<void> setEnabled(String engineId, bool value) async {
     final key = generateKey(engineId, 'enabled');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(key, value);
   }
 
@@ -72,14 +73,14 @@ class SettingsManager {
   /// Get the max results for an engine
   Future<int> getMaxResults(String engineId, int defaultValue) async {
     final key = generateKey(engineId, 'max_results');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(key) ?? defaultValue;
   }
 
   /// Set the max results for an engine
   Future<void> setMaxResults(String engineId, int value) async {
     final key = generateKey(engineId, 'max_results');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(key, value);
   }
 
@@ -89,9 +90,12 @@ class SettingsManager {
 
   /// Generic get value for any engine setting
   Future<T?> getValue<T>(
-      String engineId, String settingId, T defaultValue) async {
+    String engineId,
+    String settingId,
+    T defaultValue,
+  ) async {
     final key = generateKey(engineId, settingId);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
 
     try {
       if (T == bool) {
@@ -112,7 +116,7 @@ class SettingsManager {
   /// Generic set value for any engine setting
   Future<void> setValue<T>(String engineId, String settingId, T value) async {
     final key = generateKey(engineId, settingId);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
 
     if (value is bool) {
       await prefs.setBool(key, value);
@@ -132,14 +136,14 @@ class SettingsManager {
   /// Get TV mode enabled state for an engine
   Future<bool> getTvEnabled(String engineId, bool defaultValue) async {
     final key = generateTvKey(engineId, 'enabled', 'enabled');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(key) ?? defaultValue;
   }
 
   /// Set TV mode enabled state for an engine
   Future<void> setTvEnabled(String engineId, bool value) async {
     final key = generateTvKey(engineId, 'enabled', 'enabled');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(key, value);
   }
 
@@ -150,14 +154,14 @@ class SettingsManager {
   /// Get TV small channel max results for an engine
   Future<int> getTvSmallChannelMax(String engineId, int defaultValue) async {
     final key = generateTvKey(engineId, 'small_channel', 'max_results');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(key) ?? defaultValue;
   }
 
   /// Set TV small channel max results for an engine
   Future<void> setTvSmallChannelMax(String engineId, int value) async {
     final key = generateTvKey(engineId, 'small_channel', 'max_results');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(key, value);
   }
 
@@ -168,14 +172,14 @@ class SettingsManager {
   /// Get TV large channel max results for an engine
   Future<int> getTvLargeChannelMax(String engineId, int defaultValue) async {
     final key = generateTvKey(engineId, 'large_channel', 'max_results');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(key) ?? defaultValue;
   }
 
   /// Set TV large channel max results for an engine
   Future<void> setTvLargeChannelMax(String engineId, int value) async {
     final key = generateTvKey(engineId, 'large_channel', 'max_results');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(key, value);
   }
 
@@ -186,14 +190,14 @@ class SettingsManager {
   /// Get TV quick play max results for an engine
   Future<int> getTvQuickPlayMax(String engineId, int defaultValue) async {
     final key = generateTvKey(engineId, 'quick_play', 'max_results');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(key) ?? defaultValue;
   }
 
   /// Set TV quick play max results for an engine
   Future<void> setTvQuickPlayMax(String engineId, int value) async {
     final key = generateTvKey(engineId, 'quick_play', 'max_results');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(key, value);
   }
 
@@ -204,14 +208,14 @@ class SettingsManager {
   /// Get global keyword threshold for TV mode
   Future<int> getGlobalKeywordThreshold(int defaultValue) async {
     final key = generateGlobalTvKey('keyword_threshold');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(key) ?? defaultValue;
   }
 
   /// Set global keyword threshold for TV mode
   Future<void> setGlobalKeywordThreshold(int value) async {
     final key = generateGlobalTvKey('keyword_threshold');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(key, value.clamp(1, 50));
   }
 
@@ -222,14 +226,14 @@ class SettingsManager {
   /// Get global batch size for TV mode
   Future<int> getGlobalBatchSize(int defaultValue) async {
     final key = generateGlobalTvKey('batch_size');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(key) ?? defaultValue;
   }
 
   /// Set global batch size for TV mode
   Future<void> setGlobalBatchSize(int value) async {
     final key = generateGlobalTvKey('batch_size');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(key, value.clamp(1, 10));
   }
 
@@ -240,14 +244,14 @@ class SettingsManager {
   /// Get global min torrents per keyword for TV mode
   Future<int> getGlobalMinTorrentsPerKeyword(int defaultValue) async {
     final key = generateGlobalTvKey('min_torrents_per_keyword');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(key) ?? defaultValue;
   }
 
   /// Set global min torrents per keyword for TV mode
   Future<void> setGlobalMinTorrentsPerKeyword(int value) async {
     final key = generateGlobalTvKey('min_torrents_per_keyword');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(key, value.clamp(1, 50));
   }
 
@@ -258,14 +262,14 @@ class SettingsManager {
   /// Get global max keywords for quick play TV mode
   Future<int> getGlobalMaxKeywords(int defaultValue) async {
     final key = generateGlobalTvKey('max_keywords');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(key) ?? defaultValue;
   }
 
   /// Set global max keywords for quick play TV mode
   Future<void> setGlobalMaxKeywords(int value) async {
     final key = generateGlobalTvKey('max_keywords');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(key, value.clamp(1, 20));
   }
 
@@ -275,16 +279,20 @@ class SettingsManager {
 
   /// Get global avoid NSFW setting for TV mode
   Future<bool> getGlobalAvoidNsfw(bool defaultValue) async {
+    if (!await StorageService.profileAllowsAdultContent()) return true;
     final key = generateGlobalTvKey('avoid_nsfw');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(key) ?? defaultValue;
   }
 
   /// Set global avoid NSFW setting for TV mode
   Future<void> setGlobalAvoidNsfw(bool value) async {
     final key = generateGlobalTvKey('avoid_nsfw');
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, value);
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(
+      key,
+      await StorageService.profileAllowsAdultContent() ? value : true,
+    );
   }
 
   // ============================================================
@@ -299,13 +307,13 @@ class SettingsManager {
   /// users who have not made an explicit choice.
   Future<bool> getGlobalBackgroundPrefetchEnabled() async {
     final key = generateGlobalTvKey('background_prefetch');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(key) ?? true;
   }
 
   Future<void> setGlobalBackgroundPrefetchEnabled(bool value) async {
     final key = generateGlobalTvKey('background_prefetch');
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(key, value);
   }
 
@@ -315,9 +323,11 @@ class SettingsManager {
 
   /// Get all settings for an engine based on its config
   Future<Map<String, dynamic>> getAllSettingsForEngine(
-      String engineId, SettingsConfig config) async {
+    String engineId,
+    SettingsConfig config,
+  ) async {
     final result = <String, dynamic>{};
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
 
     for (final key in config.keys) {
       final setting = config.getSetting(key);
@@ -341,8 +351,10 @@ class SettingsManager {
 
   /// Reset all settings for an engine to their default values
   Future<void> resetEngineToDefaults(
-      String engineId, SettingsConfig config) async {
-    final prefs = await SharedPreferences.getInstance();
+    String engineId,
+    SettingsConfig config,
+  ) async {
+    final prefs = await ProfilePreferences.instance();
 
     for (final key in config.keys) {
       final setting = config.getSetting(key);
@@ -411,9 +423,13 @@ class SettingsManager {
 
   /// Generic get value for TV mode setting
   Future<T?> getTvValue<T>(
-      String engineId, String context, String settingId, T defaultValue) async {
+    String engineId,
+    String context,
+    String settingId,
+    T defaultValue,
+  ) async {
     final key = generateTvKey(engineId, context, settingId);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
 
     try {
       if (T == bool) {
@@ -433,9 +449,13 @@ class SettingsManager {
 
   /// Generic set value for TV mode setting
   Future<void> setTvValue<T>(
-      String engineId, String context, String settingId, T value) async {
+    String engineId,
+    String context,
+    String settingId,
+    T value,
+  ) async {
     final key = generateTvKey(engineId, context, settingId);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
 
     if (value is bool) {
       await prefs.setBool(key, value);
@@ -451,7 +471,7 @@ class SettingsManager {
   /// Generic get value for global TV setting
   Future<T?> getGlobalTvValue<T>(String settingId, T defaultValue) async {
     final key = generateGlobalTvKey(settingId);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
 
     try {
       if (T == bool) {
@@ -472,7 +492,7 @@ class SettingsManager {
   /// Generic set value for global TV setting
   Future<void> setGlobalTvValue<T>(String settingId, T value) async {
     final key = generateGlobalTvKey(settingId);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
 
     if (value is bool) {
       await prefs.setBool(key, value);
@@ -492,20 +512,20 @@ class SettingsManager {
   /// Check if a setting exists in storage
   Future<bool> hasValue(String engineId, String settingId) async {
     final key = generateKey(engineId, settingId);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.containsKey(key);
   }
 
   /// Remove a specific setting
   Future<void> removeValue(String engineId, String settingId) async {
     final key = generateKey(engineId, settingId);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(key);
   }
 
   /// Remove all settings for an engine
   Future<void> clearEngineSettings(String engineId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final allKeys = prefs.getKeys();
     final prefix = 'engine_${_normalizeId(engineId)}_';
 
@@ -518,7 +538,7 @@ class SettingsManager {
 
   /// Remove all TV mode settings for an engine
   Future<void> clearEngineTvSettings(String engineId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final allKeys = prefs.getKeys();
     final prefix = 'engine_tv_${_normalizeId(engineId)}_';
 

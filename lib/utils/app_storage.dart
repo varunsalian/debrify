@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'platform_util.dart';
@@ -24,16 +25,37 @@ class AppStorage {
 
   static Directory? _documents;
   static Directory? _support;
+  static Directory? _cache;
+
+  @visibleForTesting
+  static void debugOverride({
+    Directory? documents,
+    Directory? support,
+    Directory? cache,
+  }) {
+    _documents = documents;
+    _support = support;
+    _cache = cache;
+  }
+
+  @visibleForTesting
+  static void debugReset() {
+    _documents = null;
+    _support = null;
+    _cache = null;
+  }
 
   /// Replaces `getApplicationDocumentsDirectory()`.
   static Future<Directory> documents() async =>
       _documents ??= PlatformUtil.isTvOS
-          ? await getApplicationCacheDirectory()
-          : await getApplicationDocumentsDirectory();
+      ? await getApplicationCacheDirectory()
+      : await getApplicationDocumentsDirectory();
 
   /// Replaces `getApplicationSupportDirectory()`.
-  static Future<Directory> support() async =>
-      _support ??= PlatformUtil.isTvOS
-          ? await getApplicationCacheDirectory()
-          : await getApplicationSupportDirectory();
+  static Future<Directory> support() async => _support ??= PlatformUtil.isTvOS
+      ? await getApplicationCacheDirectory()
+      : await getApplicationSupportDirectory();
+
+  static Future<Directory> cache() async =>
+      _cache ??= await getApplicationCacheDirectory();
 }

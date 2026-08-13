@@ -35,7 +35,11 @@ bool fitsSinglePacketEncrypted(String payload) {
 List<String> encodePayloadChunks(String payload) {
   final bytes = utf8.encode(payload);
   final chunks = <String>[];
-  for (var offset = 0; offset < bytes.length; offset += kChunkRawBytesPerChunk) {
+  for (
+    var offset = 0;
+    offset < bytes.length;
+    offset += kChunkRawBytesPerChunk
+  ) {
     final end = (offset + kChunkRawBytesPerChunk).clamp(0, bytes.length);
     chunks.add(base64.encode(Uint8List.sublistView(bytes, offset, end)));
   }
@@ -46,9 +50,7 @@ List<String> encodePayloadChunks(String payload) {
 /// and joined *before* the UTF-8 decode — a multi-byte character straddling a
 /// slice boundary would be mangled by decoding each one separately.
 String decodePayloadChunks(List<String> chunks) {
-  return utf8.decode([
-    for (final chunk in chunks) ...base64.decode(chunk),
-  ]);
+  return utf8.decode([for (final chunk in chunks) ...base64.decode(chunk)]);
 }
 
 /// The start packet's body: what the transfer is, and how many pieces to wait
@@ -84,11 +86,7 @@ String chunkPieceBody({
   required int index,
   required String data,
 }) {
-  return jsonEncode({
-    'transferId': transferId,
-    'index': index,
-    'data': data,
-  });
+  return jsonEncode({'transferId': transferId, 'index': index, 'data': data});
 }
 
 /// Send a config payload to a TV, splitting it across packets when it doesn't
@@ -115,7 +113,9 @@ Future<bool> sendConfigPayloadToDevice(
 }) async {
   final session = state.sessionFor(targetIp);
 
-  if (session == null ? fitsSinglePacket(payload) : fitsSinglePacketEncrypted(payload)) {
+  if (session == null
+      ? fitsSinglePacket(payload)
+      : fitsSinglePacketEncrypted(payload)) {
     // Small payloads ride the command envelope directly — which is itself
     // sealed end-to-end when a session exists.
     return state.sendConfigCommandToDevice(
@@ -133,8 +133,7 @@ Future<bool> sendConfigPayloadToDevice(
     // (expired or revoked mid-transfer), a large payload must FAIL — the
     // chunk pieces ride plaintextTransport and would otherwise carry the raw
     // credential payload past the state-level refusal.
-    debugPrint('RemoteChunkedSend: refusing plaintext transfer of $label — '
-        'no session with $targetIp');
+    debugPrint('RemoteChunkedSend: refusing transfer without a session');
     return false;
   }
 
@@ -155,9 +154,7 @@ Future<bool> sendConfigPayloadToDevice(
 
   final chunks = encodePayloadChunks(wirePayload);
 
-  debugPrint(
-    'RemoteChunkedSend: $label via $command (${chunks.length} chunks, sealed)',
-  );
+  debugPrint('RemoteChunkedSend: sending sealed chunked transfer');
 
   final startOk = await state.sendConfigCommandToDevice(
     ConfigCommand.debrifyChannelStart,

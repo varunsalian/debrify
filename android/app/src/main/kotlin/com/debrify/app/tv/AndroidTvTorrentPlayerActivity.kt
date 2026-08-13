@@ -6273,6 +6273,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 isXtream = source.optBoolean("isXtream"),
                 isList = source.optBoolean("isList"),
                 listId = source.optString("listId").takeIf { it.isNotEmpty() },
+                connectionResourceId = source.optString("connectionResourceId")
+                    .takeIf { it.isNotEmpty() },
+                connectionResourceRevision = if (source.has("connectionResourceRevision"))
+                    source.optLong("connectionResourceRevision") else null,
             )
         }.filterTo(mutableListOf()) { it.id.isNotEmpty() && !it.isContinue }
     }
@@ -6569,8 +6573,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * defaults loaded in onCreate).
      */
     private val recordingEngineEnabled: Boolean by lazy {
-        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-            .getBoolean("flutter.recording_engine_enabled", true)
+        com.debrify.app.profiles.ProfilePreferenceProjection.isCommitted(this) ||
+            com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
+                this,
+                "recording_engine_enabled",
+                true,
+            )
     }
 
     /** Repaints the Record button whenever an engine capture starts or ends —
@@ -6654,6 +6662,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val url = currentIptvStreamUrl ?: return null
         RecordingRegistry.taskIdForUrl(url)?.let { return it }
         return engineRecordableUrl(url)?.let { RecordingRegistry.taskIdForUrl(it) }
+    }
+
+    private fun recordingResourceFor(entry: IptvChannelEntry?): IptvSourceEntry? {
+        val sourceId = entry?.sourceId ?: iptvSourceId
+        return iptvSources.firstOrNull { it.id == sourceId }
     }
 
     /** Record is offered only when the stream AND the OS can support it.
@@ -6809,6 +6822,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         maybeAskNotificationPermission()
         val entry = iptvChannels.getOrNull(currentIptvIndex)
+        val resource = recordingResourceFor(entry)
+        val owner = com.debrify.app.profiles.ProfilePreferenceProjection
+            .activeJobContext(this)
+        if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
+                this, owner.profileId, owner.authorizationRevision, "recordings",
+                resource?.connectionResourceId, resource?.connectionResourceRevision,
+            )
+        ) {
+            Toast.makeText(this, "Recording is disabled for this profile", Toast.LENGTH_SHORT).show()
+            return
+        }
         val fileName = "${sanitizeRecordingName(entry?.name ?: "recording")}_${recordingTimestamp()}.ts"
         try {
             ContextCompat.startForegroundService(
@@ -6821,6 +6845,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     channelName = entry?.name ?: "Live channel",
                     headers = HashMap(currentIptvHttpHeaders),
                     maxDurationMs = LiveRecordingService.MAX_DURATION_DEFAULT_MS,
+                    ownerProfileId = owner.profileId,
+                    connectionResourceId = resource?.connectionResourceId,
+                    profileAuthorizationRevision = owner.authorizationRevision,
+                    resourceAuthorizationRevision = resource?.connectionResourceRevision,
                 ),
             )
             Toast.makeText(
@@ -6904,10 +6932,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setMessage("${program.title}\n${entry.name} · $range$conflictNote")
             .setPositiveButton("Record") { _, _ ->
                 maybeAskNotificationPermission()
-                RecordingScheduleStore.put(
-                    this,
+                val owner = com.debrify.app.profiles.ProfilePreferenceProjection
+                    .activeJobContext(this)
+                val resource = recordingResourceFor(entry)
+                if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
+                        this, owner.profileId, owner.authorizationRevision, "recordings",
+                        resource?.connectionResourceId, resource?.connectionResourceRevision,
+                    )
+                ) {
+                    Toast.makeText(this, "Recording is disabled for this profile", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val scheduleId = "sched-${System.currentTimeMillis()}"
+				try {
+				RecordingScheduleStore.put(
+					this,
                     RecordingSchedule(
-                        id = "sched-${System.currentTimeMillis()}",
+                        id = scheduleId,
                         channelName = entry.name,
                         url = recordUrl,
                         headers = HashMap(entry.httpHeaders),
@@ -6915,10 +6956,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         endMs = program.stopMs,
                         programmeTitle = program.title,
                         createdAt = System.currentTimeMillis(),
-                    ),
-                )
-                RecordingAlarmReceiver.registerAll(this)
-                Toast.makeText(this, "Recording scheduled", Toast.LENGTH_SHORT).show()
+                        ownerProfileId = owner.profileId,
+                        connectionResourceId = resource?.connectionResourceId,
+                        profileAuthorizationRevision = owner.authorizationRevision,
+                        resourceAuthorizationRevision = resource?.connectionResourceRevision,
+						sealedExecutionPayload = null,
+					),
+				)
+				RecordingAlarmReceiver.registerAll(this)
+				Toast.makeText(this, "Recording scheduled", Toast.LENGTH_SHORT).show()
+				} catch (_: Exception) {
+					Toast.makeText(this, "Could not save the recording schedule", Toast.LENGTH_SHORT).show()
+				}
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -9741,8 +9790,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // (null tokens) keeps every legacy paint path verbatim.
     private val guideStyle: GuideStyle by lazy {
         GuideStyle.fromPref(
-            getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-                .getString("flutter.iptv_player_guide_style", "classic"),
+            com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+                this,
+                "iptv_player_guide_style",
+                "classic",
+            ),
         )
     }
     private val guideTokens: GuideTokens? by lazy { GuideTokens.of(guideStyle) }
@@ -12279,8 +12331,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * mean different things on the two sides.
      */
     private fun isAutoSyncPrefEnabled(): Boolean =
-        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-            .getBoolean("flutter.subtitle_auto_sync_enabled", false)
+        com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
+            this,
+            "subtitle_auto_sync_enabled",
+            false,
+        )
 
     private fun umSearchRows(): List<UnifiedMenuController.Row> {
         if (pendingSeriesResult != null) {
@@ -13295,25 +13350,28 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      */
     private fun loadPlayerDefaults() {
         try {
-            val prefs = getSharedPreferences("FlutterSharedPreferences", android.content.Context.MODE_PRIVATE)
-
             // Load aspect index for TV (separate from mobile)
             // TV only: 0=Fit, 1=Fill, 2=Zoom (default: 0=Fit)
-            resizeModeIndex = prefs.getLong("flutter.player_default_aspect_index_tv", 0L).toInt()
+            resizeModeIndex = com.debrify.app.profiles.ProfilePreferenceProjection
+                .getLong(this, "player_default_aspect_index_tv", 0L).toInt()
                 .coerceIn(0, resizeModes.lastIndex)
 
             // Load night mode index (default: 0 = Off)
-            nightModeIndex = prefs.getLong("flutter.player_night_mode_index", 0L).toInt()
+            nightModeIndex = com.debrify.app.profiles.ProfilePreferenceProjection
+                .getLong(this, "player_night_mode_index", 0L).toInt()
                 .coerceIn(0, nightModeGains.lastIndex)
 
             // Announce our audio session to system effect apps (default: off)
-            systemAudioEffectsEnabled = prefs.getBoolean("flutter.player_system_audio_effects", false)
+            systemAudioEffectsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
+                .getBoolean(this, "player_system_audio_effects", false)
 
             // Manual community intro/outro buttons. These are the same keys the
             // Flutter Playback settings page writes; enabled never means auto-seek.
-            skipSegmentsEnabled = prefs.getBoolean("flutter.skip_segments_enabled", true)
-            val storedSkipSegmentProvider = prefs.getString(
-                "flutter.skip_segment_provider",
+            skipSegmentsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
+                .getBoolean(this, "skip_segments_enabled", true)
+            val storedSkipSegmentProvider = com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+                this,
+                "skip_segment_provider",
                 TvSkipSegmentClients.AUTO,
             ) ?: TvSkipSegmentClients.AUTO
             skipSegmentProviderId = if (TvSkipSegmentClients.supports(storedSkipSegmentProvider)) {
@@ -16619,6 +16677,8 @@ private data class IptvSourceEntry(
     // nav button resolves the source by it) and is NOT flagged as a list.
     val isList: Boolean = false,
     val listId: String? = null,
+    val connectionResourceId: String? = null,
+    val connectionResourceRevision: Long? = null,
 )
 
 /// One of the user's channel lists, for the "add to list" picker.

@@ -48,7 +48,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   }
 
   Future<void> _load() async {
-    final apiKey = await StorageService.getApiKey();
+    final configured = await StorageService.hasRealDebridCredential();
     final selection = await StorageService.getFileSelection();
     final postAction = await StorageService.getPostTorrentAction();
     final integrationEnabled =
@@ -56,7 +56,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
     final hiddenFromNav = await StorageService.getRealDebridHiddenFromNav();
     final skipBlocked = await StorageService.getRdSkipBlockedTorrents();
     setState(() {
-      _savedApiKey = apiKey;
+      _savedApiKey = configured ? '' : null;
       _fileSelection = selection;
       _postTorrentAction = postAction;
       _loading = false;
@@ -66,7 +66,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
     });
 
     // Refresh user info if API key exists and integration is enabled
-    if (integrationEnabled && apiKey != null && apiKey.isNotEmpty) {
+    if (integrationEnabled && configured) {
       await AccountService.refreshUserInfo();
       if (mounted) {
         setState(() {});
@@ -167,7 +167,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
     if (!mounted) return;
 
     setState(() {
-      _savedApiKey = txt;
+      _savedApiKey = '';
       _isEditing = false;
       _apiKeyController.clear();
       if (hideNavOnSave) {
@@ -183,7 +183,15 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
   }
 
   Future<void> _deleteKey() async {
-    await StorageService.deleteApiKey();
+    try {
+      await StorageService.deleteApiKey();
+    } catch (_) {
+      _snack(
+        'This connection is shared. Revoke or transfer profile access before disconnecting.',
+        err: true,
+      );
+      return;
+    }
     AccountService.clearUserInfo();
     // Clear the hidden from nav flag on logout
     await StorageService.clearRealDebridHiddenFromNav();
@@ -217,7 +225,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
     await StorageService.setRealDebridIntegrationEnabled(value);
     MainPageBridge.notifyIntegrationChanged();
     if (!mounted) return;
-    if (value && _savedApiKey != null && _savedApiKey!.isNotEmpty) {
+    if (value && _savedApiKey != null) {
       await AccountService.refreshUserInfo();
       if (!mounted) return;
       setState(() {});
@@ -388,9 +396,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                       _hiddenFromNav
                                           ? Icons.visibility_off
                                           : Icons.visibility,
-                                      color: _hiddenFromNav
-                                          ? t.warning
-                                          : null,
+                                      color: _hiddenFromNav ? t.warning : null,
                                     ),
                                     contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 20,
@@ -481,9 +487,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                     // decorations jank weak TV GPUs.
                                     Container(
                                       decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(
-                                          14,
-                                        ),
+                                        borderRadius: BorderRadius.circular(14),
                                         border: _apiKeyFocused
                                             ? Border.all(
                                                 color: t.accent,
@@ -493,15 +497,11 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                         boxShadow: _apiKeyFocused
                                             ? [
                                                 BoxShadow(
-                                                  color: t.accent
-                                                      .withValues(
-                                                        alpha: 0.25,
-                                                      ),
-                                                  blurRadius: 18,
-                                                  offset: const Offset(
-                                                    0,
-                                                    8,
+                                                  color: t.accent.withValues(
+                                                    alpha: 0.25,
                                                   ),
+                                                  blurRadius: 18,
+                                                  offset: const Offset(0, 8),
                                                 ),
                                               ]
                                             : null,
@@ -513,9 +513,8 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                         shellRing: false,
                                         focusNode: _apiKeyFocusNode,
                                         obscureText: _obscure,
-                                        onDownArrow: () => FocusScope.of(
-                                          context,
-                                        ).nextFocus(),
+                                        onDownArrow: () =>
+                                            FocusScope.of(context).nextFocus(),
                                         onUpArrow: () => FocusScope.of(
                                           context,
                                         ).previousFocus(),
@@ -527,8 +526,9 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                           suffixIcon: IconButton(
                                             // Default focus highlight is
                                             // invisible on TV.
-                                            focusColor: t.accent
-                                                .withValues(alpha: 0.4),
+                                            focusColor: t.accent.withValues(
+                                              alpha: 0.4,
+                                            ),
                                             icon: Icon(
                                               _obscure
                                                   ? Icons.visibility
@@ -589,18 +589,14 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
-                                          border: Border.all(
-                                            color: t.line,
-                                          ),
+                                          border: Border.all(color: t.line),
                                         ),
                                         child: Row(
                                           children: [
                                             Expanded(
                                               child: Text(
                                                 '••••••••••••••••••••••••••••••••',
-                                                style: TextStyle(
-                                                  color: t.dim,
-                                                ),
+                                                style: TextStyle(color: t.dim),
                                               ),
                                             ),
                                             Icon(
@@ -917,10 +913,7 @@ class _RealDebridSettingsPageState extends State<RealDebridSettingsPage> {
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodyMedium
-                                        ?.copyWith(
-                                          color: t.dim,
-                                          height: 1.5,
-                                        ),
+                                        ?.copyWith(color: t.dim, height: 1.5),
                                   ),
                                 ],
                               ),

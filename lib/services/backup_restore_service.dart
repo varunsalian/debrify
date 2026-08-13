@@ -86,8 +86,8 @@ class BackupRestoreService {
       try {
         final addons = await StremioService.instance.getAddons();
         addonUrls = addons.map((a) => a.manifestUrl).toList();
-      } catch (e) {
-        debugPrint('BackupRestoreService: Failed to read addons: $e');
+      } catch (_) {
+        throw StateError('Could not read Stremio addons for backup');
       }
     }
 
@@ -99,8 +99,8 @@ class BackupRestoreService {
         if (!includeCredentials) json['password'] = '';
         return json;
       }).toList();
-    } catch (e) {
-      debugPrint('BackupRestoreService: Failed to read WebDAV servers: $e');
+    } catch (_) {
+      throw StateError('Could not read WebDAV servers for backup');
     }
 
     List<Map<String, dynamic>> indexerManagers = const [];
@@ -111,10 +111,8 @@ class BackupRestoreService {
       try {
         final configs = await StorageService.getIndexerManagerConfigs();
         indexerManagers = configs.map((c) => c.toJson()).toList();
-      } catch (e) {
-        debugPrint(
-          'BackupRestoreService: Failed to read indexer manager configs: $e',
-        );
+      } catch (_) {
+        throw StateError('Could not read indexer managers for backup');
       }
     }
 
@@ -130,7 +128,8 @@ class BackupRestoreService {
         // intact — there the URL IS the config, which the export dialog
         // documents.
         iptvPlaylists.removeWhere(
-            (p) => (p['serverUrl'] as String?)?.isNotEmpty == true);
+          (p) => (p['serverUrl'] as String?)?.isNotEmpty == true,
+        );
         for (final playlist in iptvPlaylists) {
           playlist.remove('username');
           playlist.remove('password');
@@ -144,8 +143,8 @@ class BackupRestoreService {
         iptvFavorites = await IptvTransferPayload.buildFavorites();
         iptvLists = await IptvTransferPayload.buildCustomLists();
       }
-    } catch (e) {
-      debugPrint('BackupRestoreService: Failed to read IPTV setup: $e');
+    } catch (_) {
+      throw StateError('Could not read IPTV setup for backup');
     }
 
     return <String, dynamic>{
@@ -199,21 +198,22 @@ class BackupRestoreService {
     return BackupSummary(
       version: (map['version'] as num?)?.toInt(),
       createdAt: map['createdAt'] as String?,
-      hasRealDebrid:
-          (map['realDebridApiKey'] as String?)?.isNotEmpty ?? false,
+      hasRealDebrid: (map['realDebridApiKey'] as String?)?.isNotEmpty ?? false,
       hasTorbox: (map['torboxApiKey'] as String?)?.isNotEmpty ?? false,
       hasPremiumize: (map['premiumizeApiKey'] as String?)?.isNotEmpty ?? false,
       hasAllDebrid: (map['allDebridApiKey'] as String?)?.isNotEmpty ?? false,
-      hasPikpak: (map['pikpak'] is Map) &&
+      hasPikpak:
+          (map['pikpak'] is Map) &&
           ((map['pikpak'] as Map)['email'] as String?)?.isNotEmpty == true,
-      hasTrakt: (map['trakt'] is Map) &&
+      hasTrakt:
+          (map['trakt'] is Map) &&
           ((map['trakt'] as Map)['access_token'] as String?)?.isNotEmpty ==
               true,
-      hasSimkl: (map['simkl'] is Map) &&
+      hasSimkl:
+          (map['simkl'] is Map) &&
           ((map['simkl'] as Map)['access_token'] as String?)?.isNotEmpty ==
               true,
-      searchEngineCount:
-          (map['searchEngineIds'] as List?)?.length ?? 0,
+      searchEngineCount: (map['searchEngineIds'] as List?)?.length ?? 0,
       addonCount: (map['addonManifestUrls'] as List?)?.length ?? 0,
       webDavServerCount: (map['webDavServers'] as List?)?.length ?? 0,
       indexerManagerCount: (map['indexerManagers'] as List?)?.length ?? 0,
@@ -333,7 +333,8 @@ class BackupRestoreService {
       final parsed = value == null ? fallback : (value as num).toInt();
       if (parsed < min || parsed > max) {
         throw const FormatException(
-            'Encrypted backup requests unreasonable KDF cost');
+          'Encrypted backup requests unreasonable KDF cost',
+        );
       }
       return parsed;
     }
@@ -352,7 +353,8 @@ class BackupRestoreService {
       // of the KDF instead of the FormatException the UI handles.
       if (memory < 8 * parallelism) {
         throw const FormatException(
-            'Encrypted backup requests unreasonable KDF cost');
+          'Encrypted backup requests unreasonable KDF cost',
+        );
       }
       key = await Argon2id(
         parallelism: parallelism,
@@ -417,6 +419,7 @@ class BackupRestoreService {
   static Future<RestoreReport> applyBackup(
     Map<String, dynamic> map, {
     BackupSelection selection = const BackupSelection.all(),
+    bool refreshEngineRuntime = true,
   }) async {
     final report = RestoreReport();
 
@@ -427,8 +430,8 @@ class BackupRestoreService {
           await StorageService.saveApiKey(key);
           await StorageService.setRealDebridIntegrationEnabled(true);
           report.realDebrid = true;
-        } catch (e) {
-          report.errors.add('Real-Debrid: $e');
+        } catch (_) {
+          report.errors.add('Real-Debrid: restore failed');
         }
       }
     }
@@ -440,8 +443,8 @@ class BackupRestoreService {
           await StorageService.saveTorboxApiKey(key);
           await StorageService.setTorboxIntegrationEnabled(true);
           report.torbox = true;
-        } catch (e) {
-          report.errors.add('Torbox: $e');
+        } catch (_) {
+          report.errors.add('Torbox: restore failed');
         }
       }
     }
@@ -453,8 +456,8 @@ class BackupRestoreService {
           await StorageService.savePremiumizeApiKey(key);
           await StorageService.setPremiumizeIntegrationEnabled(true);
           report.premiumize = true;
-        } catch (e) {
-          report.errors.add('Premiumize: $e');
+        } catch (_) {
+          report.errors.add('Premiumize: restore failed');
         }
       }
     }
@@ -466,8 +469,8 @@ class BackupRestoreService {
           await StorageService.saveAllDebridApiKey(key);
           await StorageService.setAllDebridIntegrationEnabled(true);
           report.allDebrid = true;
-        } catch (e) {
-          report.errors.add('AllDebrid: $e');
+        } catch (_) {
+          report.errors.add('AllDebrid: restore failed');
         }
       }
     }
@@ -490,23 +493,25 @@ class BackupRestoreService {
             // saved so the user can retry from PikPak settings.
             if (password != null && password.isNotEmpty) {
               try {
-                final loggedIn =
-                    await PikPakApiService.instance.login(email, password);
+                final loggedIn = await PikPakApiService.instance.login(
+                  email,
+                  password,
+                );
                 report.pikpak = loggedIn;
                 if (!loggedIn) {
                   report.pikpakLoginFailed = true;
                 }
-              } catch (e) {
+              } catch (_) {
                 report.pikpakLoginFailed = true;
-                debugPrint('BackupRestoreService: PikPak login failed: $e');
+                debugPrint('BackupRestoreService: PikPak login failed');
               }
             } else {
               // No password in backup — credentials saved but can't log in.
               report.pikpak = true;
               report.pikpakLoginFailed = true;
             }
-          } catch (e) {
-            report.errors.add('PikPak: $e');
+          } catch (_) {
+            report.errors.add('PikPak: restore failed');
           }
         }
       }
@@ -536,8 +541,8 @@ class BackupRestoreService {
             // starts with catalog scrobbling on.
             await StorageService.setTraktSyncCatalogItems(true);
             report.trakt = true;
-          } catch (e) {
-            report.errors.add('Trakt: $e');
+          } catch (_) {
+            report.errors.add('Trakt: restore failed');
           }
         }
       }
@@ -558,8 +563,8 @@ class BackupRestoreService {
             // starts with catalog scrobbling on.
             await StorageService.setSimklSyncCatalogItems(true);
             report.simkl = true;
-          } catch (e) {
-            report.errors.add('Simkl: $e');
+          } catch (_) {
+            report.errors.add('Simkl: restore failed');
           }
         }
       }
@@ -568,7 +573,11 @@ class BackupRestoreService {
     if (selection.searchEngines) {
       final ids = (map['searchEngineIds'] as List?)?.cast<String>() ?? const [];
       if (ids.isNotEmpty) {
-        await _restoreSearchEngines(ids, report);
+        await _restoreSearchEngines(
+          ids,
+          report,
+          refreshRuntime: refreshEngineRuntime,
+        );
       }
     }
 
@@ -630,6 +639,7 @@ class BackupRestoreService {
         report.iptvListsCreated = counts.imported;
         report.iptvListsMerged = counts.alreadyPresent;
         report.iptvListChannelsImported = counts.channelsImported;
+        report.iptvListChannelsAlreadyPresent = counts.channelsAlreadyPresent;
         report.iptvListsFailed = counts.failed;
         if (counts.error != null) {
           report.errors.add('IPTV lists: ${counts.error}');
@@ -659,9 +669,7 @@ class BackupRestoreService {
           continue;
         }
         try {
-          final config = WebDavConfig.fromJson(
-            Map<String, dynamic>.from(raw),
-          );
+          final config = WebDavConfig.fromJson(Map<String, dynamic>.from(raw));
           if (config.baseUrl.trim().isEmpty) {
             report.webDavServersFailed++;
             continue;
@@ -674,8 +682,8 @@ class BackupRestoreService {
           merged.add(config);
           existingUrls.add(key);
           report.webDavServersImported++;
-        } catch (e) {
-          debugPrint('BackupRestoreService: WebDAV entry failed: $e');
+        } catch (_) {
+          debugPrint('BackupRestoreService: WebDAV entry failed');
           report.webDavServersFailed++;
         }
       }
@@ -683,8 +691,8 @@ class BackupRestoreService {
         await StorageService.saveWebDavServers(merged);
         // setWebDavEnabled is handled inside saveWebDavServers.
       }
-    } catch (e) {
-      report.errors.add('WebDAV: $e');
+    } catch (_) {
+      report.errors.add('WebDAV: restore failed');
     }
   }
 
@@ -699,9 +707,7 @@ class BackupRestoreService {
       final existing = await StorageService.getIndexerManagerConfigs();
       String fingerprint(IndexerManagerConfig c) =>
           '${c.type.value}|${_normalizeUrl(c.baseUrl)}';
-      final existingKeys = <String>{
-        for (final c in existing) fingerprint(c),
-      };
+      final existingKeys = <String>{for (final c in existing) fingerprint(c)};
       final merged = List<IndexerManagerConfig>.from(existing);
       for (final raw in entries) {
         if (raw is! Map) {
@@ -724,18 +730,16 @@ class BackupRestoreService {
           merged.add(config);
           existingKeys.add(key);
           report.indexerManagersImported++;
-        } catch (e) {
-          debugPrint(
-            'BackupRestoreService: indexer manager entry failed: $e',
-          );
+        } catch (_) {
+          debugPrint('BackupRestoreService: indexer manager entry failed');
           report.indexerManagersFailed++;
         }
       }
       if (report.indexerManagersImported > 0) {
         await StorageService.setIndexerManagerConfigs(merged);
       }
-    } catch (e) {
-      report.errors.add('Indexer managers: $e');
+    } catch (_) {
+      report.errors.add('Indexer managers: restore failed');
     }
   }
 
@@ -745,8 +749,9 @@ class BackupRestoreService {
 
   static Future<void> _restoreSearchEngines(
     List<String> engineIds,
-    RestoreReport report,
-  ) async {
+    RestoreReport report, {
+    required bool refreshRuntime,
+  }) async {
     try {
       final remoteManager = RemoteEngineManager();
       final localStorage = LocalEngineStorage.instance;
@@ -777,8 +782,8 @@ class BackupRestoreService {
             icon: info.icon,
           );
           report.searchEnginesImported++;
-        } catch (e) {
-          debugPrint('BackupRestoreService: engine $id failed: $e');
+        } catch (_) {
+          debugPrint('BackupRestoreService: engine import failed');
           report.searchEnginesFailed++;
         }
       }
@@ -786,12 +791,12 @@ class BackupRestoreService {
       // Refresh the in-memory engine registry so newly-imported engines are
       // visible to keyword search without an app restart. Skip when nothing
       // was actually written to disk — the registry already matches.
-      if (report.searchEnginesImported > 0) {
+      if (refreshRuntime && report.searchEnginesImported > 0) {
         ConfigLoader().clearCache();
         await EngineRegistry.instance.reload();
       }
-    } catch (e) {
-      report.errors.add('Search engines: $e');
+    } catch (_) {
+      report.errors.add('Search engines: restore failed');
     }
   }
 
@@ -810,13 +815,13 @@ class BackupRestoreService {
         try {
           await StremioService.instance.addAddon(url);
           report.addonsImported++;
-        } catch (e) {
-          debugPrint('BackupRestoreService: addon $url failed: $e');
+        } catch (_) {
+          debugPrint('BackupRestoreService: addon import failed');
           report.addonsFailed++;
         }
       }
-    } catch (e) {
-      report.errors.add('Addons: $e');
+    } catch (_) {
+      report.errors.add('Addons: restore failed');
     }
   }
 }
@@ -913,20 +918,20 @@ class BackupSelection {
   });
 
   const BackupSelection.all()
-      : realDebrid = true,
-        torbox = true,
-        premiumize = true,
-        allDebrid = true,
-        pikpak = true,
-        trakt = true,
-        simkl = true,
-        searchEngines = true,
-        addons = true,
-        webDav = true,
-        indexerManagers = true,
-        iptvPlaylists = true,
-        iptvFavorites = true,
-        iptvLists = true;
+    : realDebrid = true,
+      torbox = true,
+      premiumize = true,
+      allDebrid = true,
+      pikpak = true,
+      trakt = true,
+      simkl = true,
+      searchEngines = true,
+      addons = true,
+      webDav = true,
+      indexerManagers = true,
+      iptvPlaylists = true,
+      iptvFavorites = true,
+      iptvLists = true;
 
   BackupSelection copyWith({
     bool? realDebrid,
@@ -997,6 +1002,7 @@ class RestoreReport {
   // Lists that already existed by name and were topped up rather than added.
   int iptvListsMerged = 0;
   int iptvListChannelsImported = 0;
+  int iptvListChannelsAlreadyPresent = 0;
   int iptvListsFailed = 0;
   final List<String> errors = [];
 

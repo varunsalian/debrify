@@ -61,7 +61,14 @@ Future<void> openXtreamSeries(
   Future<XtreamSeriesInfo?>? infoFuture;
   Future<XtreamSeriesInfo?> info() {
     return infoFuture ??= XtreamCodesService.instance
-        .fetchSeriesInfo(serverUrl, username, password, seriesId)
+        .fetchSeriesInfo(
+          serverUrl,
+          username,
+          password,
+          seriesId,
+          connectionResourceId: playlist.connectionResourceId,
+          connectionResourceRevision: playlist.connectionResourceRevision,
+        )
         .then((result) {
           if (result == null || result.episodes.isEmpty) infoFuture = null;
           return result;

@@ -68,6 +68,10 @@ class LiveRecordingService : Service() {
 		const val EXTRA_HEADERS = "extra_headers" // HashMap<String, String>
 		const val EXTRA_MAX_DURATION_MS = "extra_max_duration_ms"
 		const val EXTRA_FROM_SCHEDULE = "extra_from_schedule"
+		const val EXTRA_OWNER_PROFILE_ID = "extra_owner_profile_id"
+		const val EXTRA_CONNECTION_RESOURCE_ID = "extra_connection_resource_id"
+		const val EXTRA_PROFILE_AUTH_REVISION = "extra_profile_auth_revision"
+		const val EXTRA_RESOURCE_AUTH_REVISION = "extra_resource_auth_revision"
 
 		const val RELATIVE_PATH = "Download/Debrify/Recordings"
 		const val MIME_TYPE = "video/mp2t"
@@ -80,23 +84,11 @@ class LiveRecordingService : Service() {
 		 *  fresh at every start decision. shared_preferences stores Dart ints
 		 *  as longs; the getInt fallback covers any legacy write. */
 		fun maxConcurrent(context: Context): Int {
-			val prefs = context.getSharedPreferences(
-				"FlutterSharedPreferences",
-				Context.MODE_PRIVATE,
+			val raw = com.debrify.app.profiles.ProfilePreferenceProjection.getLong(
+				context,
+				"recording_max_concurrent",
+				DEFAULT_MAX_CONCURRENT.toLong(),
 			)
-			val raw = try {
-				prefs.getLong(
-					"flutter.recording_max_concurrent",
-					DEFAULT_MAX_CONCURRENT.toLong(),
-				)
-			} catch (_: ClassCastException) {
-				runCatching {
-					prefs.getInt(
-						"flutter.recording_max_concurrent",
-						DEFAULT_MAX_CONCURRENT,
-					).toLong()
-				}.getOrDefault(DEFAULT_MAX_CONCURRENT.toLong())
-			}
 			return raw.toInt().coerceIn(1, 6)
 		}
 
@@ -275,7 +267,13 @@ class LiveRecordingService : Service() {
 			headers: HashMap<String, String>,
 			maxDurationMs: Long,
 			fromSchedule: Boolean = false,
+			ownerProfileId: String? = null,
+			connectionResourceId: String? = null,
+			profileAuthorizationRevision: Long? = null,
+			resourceAuthorizationRevision: Long? = null,
 		): Intent = Intent(context, LiveRecordingService::class.java).apply {
+			val active = com.debrify.app.profiles.ProfilePreferenceProjection
+				.activeJobContext(context)
 			action = ACTION_START
 			putExtra(EXTRA_TASK_ID, taskId)
 			putExtra(EXTRA_URL, url)
@@ -284,6 +282,10 @@ class LiveRecordingService : Service() {
 			putExtra(EXTRA_HEADERS, headers)
 			putExtra(EXTRA_MAX_DURATION_MS, maxDurationMs)
 			putExtra(EXTRA_FROM_SCHEDULE, fromSchedule)
+			putExtra(EXTRA_OWNER_PROFILE_ID, ownerProfileId ?: active.profileId)
+			putExtra(EXTRA_PROFILE_AUTH_REVISION, profileAuthorizationRevision ?: active.authorizationRevision)
+			connectionResourceId?.let { putExtra(EXTRA_CONNECTION_RESOURCE_ID, it) }
+			resourceAuthorizationRevision?.let { putExtra(EXTRA_RESOURCE_AUTH_REVISION, it) }
 		}
 	}
 
@@ -295,6 +297,10 @@ class LiveRecordingService : Service() {
 		val headers: HashMap<String, String>,
 		val startedAtMs: Long,
 		val endAtMs: Long,
+		val ownerProfileId: String,
+		val connectionResourceId: String?,
+		val profileAuthorizationRevision: Long,
+		val resourceAuthorizationRevision: Long?,
 	) {
 		var uri: Uri? = null
 		@Volatile var bytes: Long = 0L
@@ -371,7 +377,10 @@ class LiveRecordingService : Service() {
 				stopIfIdle()
 			}
 			ACTION_STOP_ALL -> {
-				states.values.forEach { requestStop(it) }
+				val owner = intent.getStringExtra(EXTRA_OWNER_PROFILE_ID)
+				states.values
+					.filter { owner == null || it.ownerProfileId == owner }
+					.forEach { requestStop(it) }
 				stopIfIdle()
 			}
 			else -> stopIfIdle()
@@ -418,6 +427,26 @@ class LiveRecordingService : Service() {
 			return
 		}
 		val fromSchedule = intent.getBooleanExtra(EXTRA_FROM_SCHEDULE, false)
+		val ownerProfileId = intent.getStringExtra(EXTRA_OWNER_PROFILE_ID)
+			?: "legacy-admin-v1"
+		val profileAuthRevision = intent.getLongExtra(EXTRA_PROFILE_AUTH_REVISION, 1L)
+		val connectionResourceId = intent.getStringExtra(EXTRA_CONNECTION_RESOURCE_ID)
+		val resourceAuthRevision = if (intent.hasExtra(EXTRA_RESOURCE_AUTH_REVISION))
+			intent.getLongExtra(EXTRA_RESOURCE_AUTH_REVISION, 1L) else null
+		if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
+				this, ownerProfileId, profileAuthRevision, "recordings",
+				connectionResourceId, resourceAuthRevision,
+			)
+		) {
+			RecordingRegistry.resolvePendingStart(url, taskId)
+			postEventNotification(
+				id = ("authorization-$taskId").hashCode(),
+				title = "Recording not started",
+				text = "Profile authorization changed",
+			)
+			stopIfIdle()
+			return
+		}
 		val limit = maxConcurrent(this)
 		if (states.values.count { !it.finished.get() } >= limit) {
 			// The manual path pre-checks in MainActivity, so this is mostly the
@@ -446,6 +475,10 @@ class LiveRecordingService : Service() {
 			headers = headers,
 			startedAtMs = now,
 			endAtMs = now + maxDuration,
+			ownerProfileId = ownerProfileId,
+			connectionResourceId = connectionResourceId,
+			profileAuthorizationRevision = profileAuthRevision,
+			resourceAuthorizationRevision = resourceAuthRevision,
 		)
 		states[taskId] = state
 		updateSummaryNotification()
@@ -466,6 +499,16 @@ class LiveRecordingService : Service() {
 		try { state.connection?.disconnect() } catch (_: Exception) {}
 		try { state.input?.close() } catch (_: Exception) {}
 	}
+
+	private fun jobAuthorizationValid(state: RecordingState): Boolean =
+		com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
+			this,
+			state.ownerProfileId,
+			state.profileAuthorizationRevision,
+			"recordings",
+			state.connectionResourceId,
+			state.resourceAuthorizationRevision,
+		)
 
 	// ---- Capture ------------------------------------------------------------
 
@@ -575,6 +618,10 @@ class LiveRecordingService : Service() {
 			notifyTask(state, "Recording", completed = false)
 
 			capture@ while (!state.stopRequested && !state.timeUp) {
+				if (!jobAuthorizationValid(state)) {
+					state.stopRequested = true
+					break
+				}
 				var connection: HttpURLConnection? = null
 				var input: InputStream? = null
 				var gotBytesThisAttempt = false
@@ -848,6 +895,10 @@ class LiveRecordingService : Service() {
 				errorMessage = errorMessage,
 				updatedAt = System.currentTimeMillis(),
 				published = published,
+				ownerProfileId = state.ownerProfileId,
+				connectionResourceId = state.connectionResourceId,
+				profileAuthorizationRevision = state.profileAuthorizationRevision,
+				resourceAuthorizationRevision = state.resourceAuthorizationRevision,
 			))
 		} catch (_: Exception) {}
 	}
@@ -912,6 +963,10 @@ class LiveRecordingService : Service() {
 				states.values.forEach { s ->
 					if (s.running.get() && !s.stopRequested) {
 						anyRunning = true
+						if (!jobAuthorizationValid(s)) {
+							requestStop(s)
+							return@forEach
+						}
 						val stalled = s.lastByteAt > 0 && now - s.lastByteAt > STALL_TIMEOUT_MS
 						if (stalled || s.timeUp) {
 							try { s.input?.close() } catch (_: Exception) {}

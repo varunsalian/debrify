@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import '../../models/engine_config/engine_config.dart';
 import '../../models/torrent.dart';
+import '../../models/profiles/profile_policy.dart';
+import '../profiles/profile_async_authorization.dart';
 import '../search_engine.dart';
 import 'engine_executor.dart';
 
@@ -21,11 +23,11 @@ class DynamicEngine extends SearchEngine {
 
   /// Create a DynamicEngine from an EngineConfig.
   DynamicEngine(this.config)
-      : super(
-          name: config.metadata.id,
-          displayName: config.metadata.displayName,
-          baseUrl: config.request.baseUrl ?? '',
-        );
+    : super(
+        name: config.metadata.id,
+        displayName: config.metadata.displayName,
+        baseUrl: config.request.baseUrl ?? '',
+      );
 
   // ============================================================
   // SearchEngine Interface Implementation
@@ -33,15 +35,17 @@ class DynamicEngine extends SearchEngine {
 
   /// Standard keyword search.
   @override
-  Future<List<Torrent>> search(String query) async {
+  Future<List<Torrent>> search(String query) =>
+      _guardSearch(() => _search(query));
+
+  Future<List<Torrent>> _search(String query) async {
     if (!supportsKeywordSearch) {
-      debugPrint(
-          'DynamicEngine[$name]: Keyword search not supported');
+      debugPrint('DynamicEngine: Keyword search not supported');
       return [];
     }
 
     if (query.trim().isEmpty) {
-      debugPrint('DynamicEngine[$name]: Empty query');
+      debugPrint('DynamicEngine: Empty query');
       return [];
     }
 
@@ -51,8 +55,8 @@ class DynamicEngine extends SearchEngine {
         params: {'query': query.trim()},
         betweenPageRequests: _defaultPageDelay,
       );
-    } catch (e) {
-      debugPrint('DynamicEngine[$name]: Search error: $e');
+    } catch (_) {
+      debugPrint('DynamicEngine: Search failed');
       return [];
     }
   }
@@ -93,15 +97,17 @@ class DynamicEngine extends SearchEngine {
   /// Search by IMDB ID.
   ///
   /// Returns empty list if IMDB search is not supported.
-  Future<List<Torrent>> searchByImdb(String imdbId) async {
+  Future<List<Torrent>> searchByImdb(String imdbId) =>
+      _guardSearch(() => _searchByImdb(imdbId));
+
+  Future<List<Torrent>> _searchByImdb(String imdbId) async {
     if (!supportsImdbSearch) {
-      debugPrint(
-          'DynamicEngine[$name]: IMDB search not supported');
+      debugPrint('DynamicEngine: IMDB search not supported');
       return [];
     }
 
     if (imdbId.trim().isEmpty) {
-      debugPrint('DynamicEngine[$name]: Empty IMDB ID');
+      debugPrint('DynamicEngine: Empty IMDB ID');
       return [];
     }
 
@@ -117,8 +123,8 @@ class DynamicEngine extends SearchEngine {
         params: {'imdbId': normalizedId},
         betweenPageRequests: _defaultPageDelay,
       );
-    } catch (e) {
-      debugPrint('DynamicEngine[$name]: IMDB search error: $e');
+    } catch (_) {
+      debugPrint('DynamicEngine: IMDB search failed');
       return [];
     }
   }
@@ -133,15 +139,20 @@ class DynamicEngine extends SearchEngine {
     String imdbId,
     int? season,
     int? episode,
+  ) => _guardSearch(() => _searchSeries(imdbId, season, episode));
+
+  Future<List<Torrent>> _searchSeries(
+    String imdbId,
+    int? season,
+    int? episode,
   ) async {
     if (!supportsSeriesSearch) {
-      debugPrint(
-          'DynamicEngine[$name]: Series search not supported');
+      debugPrint('DynamicEngine: Series search not supported');
       return [];
     }
 
     if (imdbId.trim().isEmpty) {
-      debugPrint('DynamicEngine[$name]: Empty IMDB ID for series');
+      debugPrint('DynamicEngine: Empty IMDB ID for series');
       return [];
     }
 
@@ -172,8 +183,8 @@ class DynamicEngine extends SearchEngine {
         },
         betweenPageRequests: _defaultPageDelay,
       );
-    } catch (e) {
-      debugPrint('DynamicEngine[$name]: Series search error: $e');
+    } catch (_) {
+      debugPrint('DynamicEngine: Series search failed');
       return [];
     }
   }
@@ -213,26 +224,28 @@ class DynamicEngine extends SearchEngine {
     List<int>? availableSeasons,
   }) async {
     final int defaultEpisode = seriesConfig.defaultEpisode;
-    const int maxSeasonsToProbeCap = 10; // Cap at 10 seasons like StremioService
+    const int maxSeasonsToProbeCap =
+        10; // Cap at 10 seasons like StremioService
 
     // Use available seasons if provided and non-empty, otherwise fallback to 1..maxProbes
-    final bool hasSeasonData = availableSeasons != null && availableSeasons.isNotEmpty;
+    final bool hasSeasonData =
+        availableSeasons != null && availableSeasons.isNotEmpty;
     List<int> seasonsToProbe = hasSeasonData
         ? availableSeasons
         : List.generate(seriesConfig.maxSeasonProbes, (i) => i + 1);
 
     // Cap at 10 seasons to avoid excessive requests
     if (seasonsToProbe.length > maxSeasonsToProbeCap) {
-      debugPrint(
-          'DynamicEngine[$name]: Capping seasons from ${seasonsToProbe.length} to $maxSeasonsToProbeCap');
+      debugPrint('DynamicEngine: Capping season probes');
       seasonsToProbe = seasonsToProbe.take(maxSeasonsToProbeCap).toList();
     }
 
-    debugPrint(
-        'DynamicEngine[$name]: Probing ${seasonsToProbe.length} seasons IN PARALLEL: $seasonsToProbe');
+    debugPrint('DynamicEngine: Probing seasons in parallel');
 
     // Probe all seasons in parallel for faster results
-    final List<Future<List<Torrent>>> futures = seasonsToProbe.map((seasonNum) async {
+    final List<Future<List<Torrent>>> futures = seasonsToProbe.map((
+      seasonNum,
+    ) async {
       try {
         final List<Torrent> seasonResults = await _executor.execute(
           config: config,
@@ -246,17 +259,10 @@ class DynamicEngine extends SearchEngine {
           betweenPageRequests: _defaultPageDelay,
         );
 
-        if (seasonResults.isEmpty) {
-          debugPrint(
-              'DynamicEngine[$name]: Season $seasonNum returned 0 results');
-        } else {
-          debugPrint(
-              'DynamicEngine[$name]: Season $seasonNum returned ${seasonResults.length} results');
-        }
+        debugPrint('DynamicEngine: Season probe completed');
         return seasonResults;
-      } catch (e) {
-        debugPrint(
-            'DynamicEngine[$name]: Error probing season $seasonNum: $e');
+      } catch (_) {
+        debugPrint('DynamicEngine: Season probe failed');
         return <Torrent>[];
       }
     }).toList();
@@ -266,8 +272,7 @@ class DynamicEngine extends SearchEngine {
 
     // Flatten results
     final List<Torrent> allResults = results.expand((list) => list).toList();
-    debugPrint(
-        'DynamicEngine[$name]: Parallel probe returned ${allResults.length} total results');
+    debugPrint('DynamicEngine: Parallel probe completed');
 
     return allResults;
   }
@@ -340,6 +345,28 @@ class DynamicEngine extends SearchEngine {
     int? maxResults,
     Duration? betweenPageRequests,
     List<int>? availableSeasons,
+  }) => _guardSearch(
+    () => _executeSearch(
+      query: query,
+      imdbId: imdbId,
+      isSeries: isSeries,
+      season: season,
+      episode: episode,
+      maxResults: maxResults,
+      betweenPageRequests: betweenPageRequests,
+      availableSeasons: availableSeasons,
+    ),
+  );
+
+  Future<List<Torrent>> _executeSearch({
+    String? query,
+    String? imdbId,
+    bool? isSeries,
+    int? season,
+    int? episode,
+    int? maxResults,
+    Duration? betweenPageRequests,
+    List<int>? availableSeasons,
   }) async {
     // Normalize IMDB ID if provided
     String? normalizedImdbId;
@@ -357,7 +384,7 @@ class DynamicEngine extends SearchEngine {
         isSeries == true &&
         supportsSeriesSearch &&
         config.request.seriesConfig != null) {
-      debugPrint('DynamicEngine[$name]: Using season probing for series search');
+      debugPrint('DynamicEngine: Using season probing for series search');
       return await _probeSeasons(
         normalizedImdbId,
         config.request.seriesConfig!,
@@ -386,12 +413,13 @@ class DynamicEngine extends SearchEngine {
       params['episode'] = episode;
     } else if (isSeries == true && season != null) {
       // Use default episode from series config, or fallback to 1
-      final int defaultEpisode = config.request.seriesConfig?.defaultEpisode ?? 1;
+      final int defaultEpisode =
+          config.request.seriesConfig?.defaultEpisode ?? 1;
       params['episode'] = defaultEpisode;
     }
 
     if (params.isEmpty) {
-      debugPrint('DynamicEngine[$name]: No search parameters provided');
+      debugPrint('DynamicEngine: No search parameters provided');
       return [];
     }
 
@@ -402,10 +430,25 @@ class DynamicEngine extends SearchEngine {
         maxResults: maxResults,
         betweenPageRequests: betweenPageRequests ?? _defaultPageDelay,
       );
-    } catch (e) {
-      debugPrint('DynamicEngine[$name]: Execute search error: $e');
+    } catch (_) {
+      debugPrint('DynamicEngine: Execute search failed');
       return [];
     }
+  }
+
+  Future<List<Torrent>> _guardSearch(
+    Future<List<Torrent>> Function() operation,
+  ) async {
+    final capability = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
+    final results = capability == null
+        ? await operation()
+        : await capability.runIfCurrent(operation);
+    if (capability != null) {
+      await capability.runIfCurrent(() async {});
+    }
+    return results;
   }
 
   // ============================================================

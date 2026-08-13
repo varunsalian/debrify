@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../models/profiles/profile_policy.dart';
+import '../profiles/profile_async_authorization.dart';
+import '../profiles/profile_runtime.dart';
 import '../storage_service.dart';
 import 'trakt_calendar_service.dart';
 import 'trakt_constants.dart';
@@ -31,6 +34,16 @@ class TraktTitleStatus {
   });
 }
 
+class _TraktDeviceAuthorization {
+  final ProfileAsyncAuthorization authorization;
+  final DateTime expiresAt;
+
+  const _TraktDeviceAuthorization({
+    required this.authorization,
+    required this.expiresAt,
+  });
+}
+
 /// Service for Trakt OAuth authentication and API calls.
 class TraktService {
   static final TraktService _instance = TraktService._internal();
@@ -48,19 +61,34 @@ class TraktService {
   // fresh.
   final Map<String, ({DateTime at, Object data})> _libCache = {};
   static const Duration _libTtl = Duration(seconds: 45);
+  int _libCacheGeneration = 0;
+  final Map<String, _TraktDeviceAuthorization> _deviceAuthorizations = {};
 
-  void _invalidateLibraryCache() => _libCache.clear();
+  void _invalidateLibraryCache() {
+    _libCache.clear();
+    _libCacheGeneration++;
+  }
+
+  /// Clears every account-scoped process cache at a profile boundary.
+  void resetProfileScope() {
+    _invalidateLibraryCache();
+    _deviceAuthorizations.clear();
+    TraktCalendarService.instance.invalidate();
+  }
 
   Future<T?> _cachedLib<T>(String key, Future<T?> Function() load) async {
     final hit = _libCache[key];
     if (hit != null && DateTime.now().difference(hit.at) < _libTtl) {
       return hit.data as T;
     }
+    final generation = _libCacheGeneration;
     final data = await load();
     // Only cache authoritative results — never poison the cache with the empty
     // set a transient failure produces, which would otherwise flip every
     // affected title's badge/menu to "not in library" for the whole TTL.
-    if (data != null) _libCache[key] = (at: DateTime.now(), data: data as Object);
+    if (data != null && generation == _libCacheGeneration) {
+      _libCache[key] = (at: DateTime.now(), data: data as Object);
+    }
     return data;
   }
 
@@ -70,10 +98,9 @@ class TraktService {
     final out = <String>{};
     for (final it in items) {
       if (it is! Map<String, dynamic>) continue;
-      final container =
-          (it['movie'] ?? it['show']) as Map<String, dynamic>?;
-      final imdb = (container?['ids'] as Map<String, dynamic>?)?['imdb']
-          as String?;
+      final container = (it['movie'] ?? it['show']) as Map<String, dynamic>?;
+      final imdb =
+          (container?['ids'] as Map<String, dynamic>?)?['imdb'] as String?;
       if (imdb != null) out.add(imdb);
     }
     return out;
@@ -84,10 +111,9 @@ class TraktService {
     final out = <String, int>{};
     for (final it in items) {
       if (it is! Map<String, dynamic>) continue;
-      final container =
-          (it['movie'] ?? it['show']) as Map<String, dynamic>?;
-      final imdb = (container?['ids'] as Map<String, dynamic>?)?['imdb']
-          as String?;
+      final container = (it['movie'] ?? it['show']) as Map<String, dynamic>?;
+      final imdb =
+          (container?['ids'] as Map<String, dynamic>?)?['imdb'] as String?;
       final rating = it['rating'] as int?;
       if (imdb != null && rating != null) out[imdb] = rating;
     }
@@ -110,18 +136,27 @@ class TraktService {
     try {
       // Kick all list fetches off together, then await — they run concurrently.
       // Each returns null (not []) on a transient failure so it isn't cached.
-      final watchlistF = _cachedLib<Set<String>>('watchlist:$contentType', () async {
-        final l = await fetchListOrNull('watchlist', contentType);
-        return l == null ? null : _extractListImdbIds(l);
-      });
-      final collectionF = _cachedLib<Set<String>>('collection:$contentType', () async {
-        final l = await fetchListOrNull('collection', contentType);
-        return l == null ? null : _extractListImdbIds(l);
-      });
-      final ratingsF = _cachedLib<Map<String, int>>('ratings:$contentType', () async {
-        final l = await fetchListOrNull('ratings', contentType);
-        return l == null ? null : _extractRatings(l);
-      });
+      final watchlistF = _cachedLib<Set<String>>(
+        'watchlist:$contentType',
+        () async {
+          final l = await fetchListOrNull('watchlist', contentType);
+          return l == null ? null : _extractListImdbIds(l);
+        },
+      );
+      final collectionF = _cachedLib<Set<String>>(
+        'collection:$contentType',
+        () async {
+          final l = await fetchListOrNull('collection', contentType);
+          return l == null ? null : _extractListImdbIds(l);
+        },
+      );
+      final ratingsF = _cachedLib<Map<String, int>>(
+        'ratings:$contentType',
+        () async {
+          final l = await fetchListOrNull('ratings', contentType);
+          return l == null ? null : _extractRatings(l);
+        },
+      );
       // Watched (movies only) via the failure-aware list endpoint, so a
       // transient failure returns null (not cached, treated as "unknown
       // watched") instead of poisoning the cache with an empty set that would
@@ -139,7 +174,9 @@ class TraktService {
       final ratings = await ratingsF;
       // A core list unavailable → signal unknown (null) rather than fabricate an
       // all-false status the UI would read as "not in library".
-      if (watchlist == null || collection == null || ratings == null) return null;
+      if (watchlist == null || collection == null || ratings == null) {
+        return null;
+      }
       // Null (watched fetch failed) → watched unknown, not "unwatched".
       final watchedMovies = watchedF == null ? null : await watchedF;
 
@@ -149,8 +186,8 @@ class TraktService {
         watched: watchedMovies?.contains(imdbId),
         rating: ratings[imdbId],
       );
-    } catch (e) {
-      debugPrint('Trakt: fetchTitleStatus failed: $e');
+    } catch (error) {
+      debugPrint('Trakt: fetchTitleStatus failed (${error.runtimeType})');
       return null;
     }
   }
@@ -162,13 +199,6 @@ class TraktService {
     'trakt-api-key': kTraktClientId,
     if (accessToken != null) 'Authorization': 'Bearer $accessToken',
   };
-
-  String _bodySnippet(String body) {
-    const maxLength = 300;
-    final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (compact.length <= maxLength) return compact;
-    return '${compact.substring(0, maxLength)}...';
-  }
 
   String _userListItemTypeSegment(String contentType) {
     switch (contentType) {
@@ -204,13 +234,10 @@ class TraktService {
     do {
       final separator = _withQuerySeparator(basePath);
       final path = '$basePath${separator}page=$page&limit=100';
-      debugPrint('Trakt: $logLabel GET $path');
+      debugPrint('Trakt: $logLabel request page $page');
       final response = await _authenticatedGet(path);
       if (response == null || response.statusCode != 200) {
-        debugPrint(
-          'Trakt: $logLabel failed for $path '
-          '(${response?.statusCode}) body="${_bodySnippet(response?.body ?? '')}"',
-        );
+        debugPrint('Trakt: $logLabel failed (${response?.statusCode})');
         return [];
       }
 
@@ -222,11 +249,8 @@ class TraktService {
           'Trakt: $logLabel OK $contentType page=$page/$pageCount '
           'pageCount=${decoded.length} total=${items.length}',
         );
-      } catch (e) {
-        debugPrint(
-          'Trakt: $logLabel parse error for $path: $e '
-          'body="${_bodySnippet(response.body)}"',
-        );
+      } catch (error) {
+        debugPrint('Trakt: $logLabel parse error (${error.runtimeType})');
         return [];
       }
 
@@ -255,6 +279,18 @@ class TraktService {
   /// Refresh the access token using the stored refresh token.
   Future<bool> refreshAccessToken() async {
     try {
+      final authorization = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.trackersAndDiscovery,
+      );
+      if (authorization == null) return _refreshAccessTokenScoped();
+      return await authorization.run(_refreshAccessTokenScoped);
+    } on StateError {
+      return false;
+    }
+  }
+
+  Future<bool> _refreshAccessTokenScoped() async {
+    try {
       final refreshToken = await StorageService.getTraktRefreshToken();
       if (refreshToken == null || refreshToken.isEmpty) return false;
 
@@ -279,17 +315,21 @@ class TraktService {
 
       debugPrint('Trakt: Token refresh failed (${response.statusCode})');
       return false;
-    } catch (e) {
-      debugPrint('Trakt: Token refresh error: $e');
+    } catch (error) {
+      debugPrint('Trakt: Token refresh error (${error.runtimeType})');
       return false;
     }
   }
 
   /// Revoke the current token and clear stored auth data.
   Future<void> logout() async {
+    final accessToken = await StorageService.getTraktAccessToken();
+    // Local disposition happens before the upstream side effect. A shared
+    // owner fails closed here, while a borrower detaches without revoking the
+    // account used by its owner and other grantees.
+    final shouldRevokeRemote = await StorageService.clearTraktAuth();
     try {
-      final accessToken = await StorageService.getTraktAccessToken();
-      if (accessToken != null) {
+      if (shouldRevokeRemote && accessToken != null) {
         await http.post(
           Uri.parse('$kTraktApiBaseUrl/oauth/revoke'),
           headers: {'Content-Type': 'application/json'},
@@ -300,11 +340,9 @@ class TraktService {
           }),
         );
       }
-    } catch (e) {
-      debugPrint('Trakt: Revoke token error: $e');
+    } catch (error) {
+      debugPrint('Trakt: Revoke token error (${error.runtimeType})');
     }
-
-    await StorageService.clearTraktAuth();
     TraktCalendarService.instance.invalidate();
     // Drop cached library state so a later sign-in (possibly a different
     // account) never reads the previous user's watchlist/collection/ratings.
@@ -343,6 +381,9 @@ class TraktService {
   /// Returns the parsed JSON response on success, null on failure.
   Future<Map<String, dynamic>?> requestDeviceCode() async {
     try {
+      final authorization = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.trackersAndDiscovery,
+      );
       final response = await http.post(
         Uri.parse(kTraktDeviceCodeUrl),
         headers: {'Content-Type': 'application/json'},
@@ -350,15 +391,25 @@ class TraktService {
       );
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final deviceCode = data['device_code'] as String?;
+        if (authorization != null &&
+            deviceCode != null &&
+            deviceCode.isNotEmpty) {
+          _pruneDeviceAuthorizations();
+          final seconds = (data['expires_in'] as int? ?? 600).clamp(1, 1800);
+          _deviceAuthorizations[deviceCode] = _TraktDeviceAuthorization(
+            authorization: authorization,
+            expiresAt: DateTime.now().add(Duration(seconds: seconds)),
+          );
+        }
+        return data;
       }
 
-      debugPrint(
-        'Trakt: Device code request failed (${response.statusCode}): ${response.body}',
-      );
+      debugPrint('Trakt: Device code request failed (${response.statusCode})');
       return null;
-    } catch (e) {
-      debugPrint('Trakt: Device code request error: $e');
+    } catch (error) {
+      debugPrint('Trakt: Device code request error (${error.runtimeType})');
       return null;
     }
   }
@@ -369,6 +420,13 @@ class TraktService {
   /// "network_error" (transient — safe to retry), or "error" (fatal).
   Future<String?> pollDeviceToken(String deviceCode) async {
     try {
+      final attempt = _deviceAuthorizations[deviceCode];
+      if (ProfileRuntime.isInitialized &&
+          ProfileRuntime.isProfileCommitted &&
+          (attempt == null || attempt.expiresAt.isBefore(DateTime.now()))) {
+        _deviceAuthorizations.remove(deviceCode);
+        return 'access_denied';
+      }
       final response = await http
           .post(
             Uri.parse(kTraktDeviceTokenUrl),
@@ -383,9 +441,22 @@ class TraktService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        await _storeTokens(data);
-        final accessToken = data['access_token'] as String;
-        await _fetchAndStoreUsername(accessToken);
+        _deviceAuthorizations.remove(deviceCode);
+        Future<void> commit() async {
+          await _storeTokens(data);
+          final accessToken = data['access_token'] as String;
+          await _fetchAndStoreUsername(accessToken);
+        }
+
+        try {
+          if (attempt == null) {
+            await commit();
+          } else {
+            await attempt.authorization.run(commit);
+          }
+        } on StateError {
+          return 'access_denied';
+        }
         return null; // Success
       }
 
@@ -401,14 +472,24 @@ class TraktService {
         return 'slow_down';
       }
 
-      debugPrint(
-        'Trakt: Device token poll failed (${response.statusCode}): ${response.body}',
-      );
+      debugPrint('Trakt: Device token poll failed (${response.statusCode})');
       return 'error';
-    } catch (e) {
+    } catch (error) {
       // Network timeout, socket exception, etc. — transient, safe to retry
-      debugPrint('Trakt: Device token poll network error: $e');
+      debugPrint(
+        'Trakt: Device token poll network error (${error.runtimeType})',
+      );
       return 'network_error';
+    }
+  }
+
+  void _pruneDeviceAuthorizations() {
+    final now = DateTime.now();
+    _deviceAuthorizations.removeWhere(
+      (_, value) => value.expiresAt.isBefore(now),
+    );
+    while (_deviceAuthorizations.length >= 8) {
+      _deviceAuthorizations.remove(_deviceAuthorizations.keys.first);
     }
   }
 
@@ -451,8 +532,8 @@ class TraktService {
       }
 
       return response;
-    } catch (e) {
-      debugPrint('Trakt: POST $path error: $e');
+    } catch (error) {
+      debugPrint('Trakt: Authenticated POST error (${error.runtimeType})');
       return null;
     }
   }
@@ -518,9 +599,7 @@ class TraktService {
     // Refuse to scrobble if only one of season/episode is set — would send
     // a movie body with a show IMDB ID, corrupting Trakt history.
     if ((season == null) != (episode == null)) {
-      debugPrint(
-        'Trakt: Skipping scrobble — incomplete episode data (season: $season, episode: $episode)',
-      );
+      debugPrint('Trakt: Skipping scrobble with incomplete episode data');
       return false;
     }
     final Map<String, dynamic> body;
@@ -543,12 +622,10 @@ class TraktService {
     final response = await _authenticatedPost(path, body);
     if (response == null) return false;
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      debugPrint('Trakt: Scrobble $path OK (progress: $progress)');
+      debugPrint('Trakt: Scrobble completed');
       return true;
     }
-    debugPrint(
-      'Trakt: Scrobble $path failed (${response.statusCode}): ${response.body}',
-    );
+    debugPrint('Trakt: Scrobble failed (${response.statusCode})');
     return false;
   }
 
@@ -579,9 +656,7 @@ class TraktService {
     if (response == null) return false;
     final ok = response.statusCode >= 200 && response.statusCode < 300;
     if (!ok) {
-      debugPrint(
-        'Trakt: $path failed (${response.statusCode}): ${response.body}',
-      );
+      debugPrint('Trakt: Sync action failed (${response.statusCode})');
     } else {
       // A watchlist/collection/history/ratings change makes the cached lists
       // stale — drop them so the next title-status lookup reflects it.
@@ -657,9 +732,7 @@ class TraktService {
     if (response == null) return false;
     final ok = response.statusCode >= 200 && response.statusCode < 300;
     if (!ok) {
-      debugPrint(
-        'Trakt: $path S${season}E$episode failed (${response.statusCode}): ${response.body}',
-      );
+      debugPrint('Trakt: Episode sync failed (${response.statusCode})');
     }
     return ok;
   }
@@ -697,13 +770,10 @@ class TraktService {
   Future<http.Response?> _publicGet(String path) async {
     try {
       return await http
-          .get(
-            Uri.parse('$kTraktApiBaseUrl$path'),
-            headers: _apiHeaders(),
-          )
+          .get(Uri.parse('$kTraktApiBaseUrl$path'), headers: _apiHeaders())
           .timeout(const Duration(seconds: 15));
-    } catch (e) {
-      debugPrint('Trakt: public GET $path error: $e');
+    } catch (error) {
+      debugPrint('Trakt: Public GET error (${error.runtimeType})');
       return null;
     }
   }
@@ -737,8 +807,8 @@ class TraktService {
       }
 
       return response;
-    } catch (e) {
-      debugPrint('Trakt: GET $path error: $e');
+    } catch (error) {
+      debugPrint('Trakt: Authenticated GET error (${error.runtimeType})');
       return null;
     }
   }
@@ -771,8 +841,8 @@ class TraktService {
       }
 
       return response;
-    } catch (e) {
-      debugPrint('Trakt: DELETE $path error: $e');
+    } catch (error) {
+      debugPrint('Trakt: Authenticated DELETE error (${error.runtimeType})');
       return null;
     }
   }
@@ -801,11 +871,14 @@ class TraktService {
   /// parse error) so callers can distinguish a fetch that failed from a list
   /// that is genuinely empty — the two are visually different states.
   Future<List<dynamic>?> fetchListOrNull(
-      String listType, String contentType) async {
+    String listType,
+    String contentType,
+  ) async {
     final String path;
     // trending/popular/anticipated are public Trakt endpoints — no OAuth token
     // required — so serve them without auth to survive a missing/expired token.
-    final bool isPublic = listType == 'trending' ||
+    final bool isPublic =
+        listType == 'trending' ||
         listType == 'popular' ||
         listType == 'anticipated';
     if (listType == 'recommendations') {
@@ -820,17 +893,18 @@ class TraktService {
       path = '/sync/$listType/$contentType?extended=full';
     }
 
-    final response =
-        isPublic ? await _publicGet(path) : await _authenticatedGet(path);
+    final response = isPublic
+        ? await _publicGet(path)
+        : await _authenticatedGet(path);
     if (response == null || response.statusCode != 200) {
-      debugPrint('Trakt: fetchList failed for $path (${response?.statusCode})');
+      debugPrint('Trakt: fetchList failed (${response?.statusCode})');
       return null;
     }
 
     try {
       return jsonDecode(response.body) as List<dynamic>;
-    } catch (e) {
-      debugPrint('Trakt: fetchList parse error: $e');
+    } catch (error) {
+      debugPrint('Trakt: fetchList parse error (${error.runtimeType})');
       return null;
     }
   }
@@ -846,8 +920,8 @@ class TraktService {
     try {
       final list = jsonDecode(response.body) as List<dynamic>;
       return list.cast<Map<String, dynamic>>();
-    } catch (e) {
-      debugPrint('Trakt: fetchCustomLists parse error: $e');
+    } catch (error) {
+      debugPrint('Trakt: fetchCustomLists parse error (${error.runtimeType})');
       return [];
     }
   }
@@ -868,8 +942,8 @@ class TraktService {
           .map((e) => e['list'] as Map<String, dynamic>?)
           .whereType<Map<String, dynamic>>()
           .toList();
-    } catch (e) {
-      debugPrint('Trakt: fetchLikedLists parse error: $e');
+    } catch (error) {
+      debugPrint('Trakt: fetchLikedLists parse error (${error.runtimeType})');
       return [];
     }
   }
@@ -958,9 +1032,7 @@ class TraktService {
           '$basePath/items/movie,show?extended=full&page=$page&limit=100';
       final response = await _authenticatedGet(path);
       if (response == null || response.statusCode != 200) {
-        debugPrint(
-          'Trakt: $logLabel failed for $path (${response?.statusCode})',
-        );
+        debugPrint('Trakt: $logLabel failed (${response?.statusCode})');
         // Fail hard only if nothing loaded; a later page failing keeps the pages
         // already fetched (partial success) rather than blanking the whole list.
         return items.isEmpty ? null : items;
@@ -969,8 +1041,8 @@ class TraktService {
         final decoded = jsonDecode(response.body) as List<dynamic>;
         items.addAll(decoded);
         pageCount = _paginationPageCount(response);
-      } catch (e) {
-        debugPrint('Trakt: $logLabel parse error: $e');
+      } catch (error) {
+        debugPrint('Trakt: $logLabel parse error (${error.runtimeType})');
         return items.isEmpty ? null : items;
       }
       page += 1;
@@ -1016,8 +1088,8 @@ class TraktService {
         return [];
       }
       return jsonDecode(response.body) as List<dynamic>;
-    } catch (e) {
-      debugPrint('Trakt: search error: $e');
+    } catch (error) {
+      debugPrint('Trakt: search error (${error.runtimeType})');
       return [];
     }
   }
@@ -1042,8 +1114,8 @@ class TraktService {
 
       final list = jsonDecode(response.body) as List<dynamic>;
       return list.cast<Map<String, dynamic>>();
-    } catch (e) {
-      debugPrint('Trakt: fetchShowSeasons error: $e');
+    } catch (error) {
+      debugPrint('Trakt: fetchShowSeasons error (${error.runtimeType})');
       return [];
     }
   }
@@ -1067,8 +1139,8 @@ class TraktService {
       }
 
       return false;
-    } catch (e) {
-      debugPrint('Trakt: Failed to fetch username: $e');
+    } catch (error) {
+      debugPrint('Trakt: Failed to fetch username (${error.runtimeType})');
       return false;
     }
   }
@@ -1089,8 +1161,8 @@ class TraktService {
     }
     try {
       return jsonDecode(response.body) as Map<String, dynamic>;
-    } catch (e) {
-      debugPrint('Trakt: fetchNowWatching parse error: $e');
+    } catch (error) {
+      debugPrint('Trakt: fetchNowWatching parse error (${error.runtimeType})');
       return null;
     }
   }
@@ -1109,8 +1181,10 @@ class TraktService {
 
     try {
       return jsonDecode(response.body) as List<dynamic>;
-    } catch (e) {
-      debugPrint('Trakt: fetchPlaybackItems parse error: $e');
+    } catch (error) {
+      debugPrint(
+        'Trakt: fetchPlaybackItems parse error (${error.runtimeType})',
+      );
       return [];
     }
   }
@@ -1144,8 +1218,10 @@ class TraktService {
     }
     try {
       return jsonDecode(response.body) as List<dynamic>;
-    } catch (e) {
-      debugPrint('Trakt: fetchCalendarMyShows parse error: $e');
+    } catch (error) {
+      debugPrint(
+        'Trakt: fetchCalendarMyShows parse error (${error.runtimeType})',
+      );
       return [];
     }
   }
@@ -1170,8 +1246,10 @@ class TraktService {
     List<dynamic> history;
     try {
       history = jsonDecode(response.body) as List<dynamic>;
-    } catch (e) {
-      debugPrint('Trakt: fetchRecentHistory parse error: $e');
+    } catch (error) {
+      debugPrint(
+        'Trakt: fetchRecentHistory parse error (${error.runtimeType})',
+      );
       return [];
     }
 
@@ -1230,8 +1308,8 @@ class TraktService {
                   },
                 }
               : null;
-        } catch (e) {
-          debugPrint('Trakt: fetchNextEpisode error for $traktId: $e');
+        } catch (error) {
+          debugPrint('Trakt: fetchNextEpisode error (${error.runtimeType})');
           return null;
         }
       }),
@@ -1271,8 +1349,10 @@ class TraktService {
         }
       }
       return result;
-    } catch (e) {
-      debugPrint('Trakt: fetchPlaybackProgress parse error: $e');
+    } catch (error) {
+      debugPrint(
+        'Trakt: fetchPlaybackProgress parse error (${error.runtimeType})',
+      );
       return {};
     }
   }
@@ -1299,8 +1379,10 @@ class TraktService {
         }
       }
       return result;
-    } catch (e) {
-      debugPrint('Trakt: fetchWatchedMovies parse error: $e');
+    } catch (error) {
+      debugPrint(
+        'Trakt: fetchWatchedMovies parse error (${error.runtimeType})',
+      );
       return {};
     }
   }
@@ -1336,8 +1418,11 @@ class TraktService {
         }
       }
       return result;
-    } catch (e) {
-      debugPrint('Trakt: fetchWatchedShowEpisodes parse error: $e');
+    } catch (error) {
+      debugPrint(
+        'Trakt: fetchWatchedShowEpisodes parse error '
+        '(${error.runtimeType})',
+      );
       return {};
     }
   }
@@ -1362,8 +1447,8 @@ class TraktService {
       if (season == null || number == null) return null;
 
       return (season: season, episode: number);
-    } catch (e) {
-      debugPrint('Trakt: _parseNextEpisode error: $e');
+    } catch (error) {
+      debugPrint('Trakt: next episode parse error (${error.runtimeType})');
       return null;
     }
   }
@@ -1401,8 +1486,8 @@ class TraktService {
         }
       }
       return result;
-    } catch (e) {
-      debugPrint('Trakt: fetchEpisodePlaybackProgress parse error: $e');
+    } catch (error) {
+      debugPrint('Trakt: episode playback parse error (${error.runtimeType})');
       return {};
     }
   }

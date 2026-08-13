@@ -244,7 +244,8 @@ Future<void> showLegacyBlockedDialog(BuildContext context, String tvName) {
       content: Text(
         '"$tvName" is running a Debrify version that can\'t receive '
         'credentials securely. Update Debrify on the TV, then try again.\n\n'
-        'The D-pad remote keeps working with older versions.',
+        'The D-pad remote remains available, but setup and credentials '
+        'require both devices to be updated.',
       ),
       actions: [
         FilledButton(
@@ -262,7 +263,9 @@ Future<void> showLegacyBlockedDialog(BuildContext context, String tvName) {
 /// The user may proceed to a FRESH code pairing (the SAS is the real gate);
 /// the remembered-device shortcut is disabled for this session by the caller.
 Future<bool?> showTvIdentityMismatchDialog(
-    BuildContext context, String tvName) {
+  BuildContext context,
+  String tvName,
+) {
   return showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
@@ -341,10 +344,13 @@ class _PairResponseQueue {
     _waiting.add(completer);
     // The waiter MUST leave the queue on timeout — a stale completer would
     // swallow the next real response and starve every retry after it.
-    return completer.future.timeout(timeout, onTimeout: () {
-      _waiting.remove(completer);
-      throw TimeoutException('No pairing response');
-    });
+    return completer.future.timeout(
+      timeout,
+      onTimeout: () {
+        _waiting.remove(completer);
+        throw TimeoutException('No pairing response');
+      },
+    );
   }
 }
 
@@ -360,8 +366,9 @@ Future<RemoteSession?> ensureAuthorizedSession(
   RemoteControlState state,
   DiscoveredDevice device,
 ) async {
-  final sameNamePins =
-      await RemotePairingStore.knownReceiversNamed(device.deviceName);
+  final sameNamePins = await RemotePairingStore.knownReceiversNamed(
+    device.deviceName,
+  );
   if (!context.mounted) return null;
 
   // The handshake itself is the version detector: manually entered IPs (and
@@ -393,6 +400,57 @@ Future<RemoteSession?> ensureAuthorizedSession(
     return null;
   }
 
+  return _authorizeEstablishedSession(
+    context,
+    state,
+    device,
+    session,
+    sameNamePins,
+  );
+}
+
+/// Prepare the ordinary remote without breaking v1 interoperability. A v2
+/// receiver must pair; a peer that genuinely cannot handshake receives only
+/// the non-secret navigation/media/text protocol.
+Future<bool> ensureNavigationSession(
+  BuildContext context,
+  RemoteControlState state,
+  DiscoveredDevice device,
+) async {
+  final sameNamePins = await RemotePairingStore.knownReceiversNamed(
+    device.deviceName,
+  );
+  if (!context.mounted) return false;
+  final session = await state.ensureEncryptedSession(device.ip);
+  if (!context.mounted) return false;
+  if (session == null) {
+    if (device.supportsEncryption || sameNamePins.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not establish a secure connection to the TV'),
+        ),
+      );
+      return false;
+    }
+    return true;
+  }
+  return await _authorizeEstablishedSession(
+        context,
+        state,
+        device,
+        session,
+        sameNamePins,
+      ) !=
+      null;
+}
+
+Future<RemoteSession?> _authorizeEstablishedSession(
+  BuildContext context,
+  RemoteControlState state,
+  DiscoveredDevice device,
+  RemoteSession session,
+  List<KnownReceiver> sameNamePins,
+) async {
   // Identity check against the HANDSHAKE key, not the (optional, spoofable)
   // discovery advertisement: pins under this name exist but none matches the
   // key that just proved itself. Either the TV was reinstalled, it's a second
@@ -400,31 +458,41 @@ Future<RemoteSession?> ensureAuthorizedSession(
   // code is the real gate either way, so the user may proceed to a fresh
   // pairing; the remembered-device shortcut is disabled below for exactly
   // this case.
-  final identityMismatch = sameNamePins.isNotEmpty &&
+  final identityMismatch =
+      sameNamePins.isNotEmpty &&
       !sameNamePins.any((p) => p.fingerprint == session.peerFingerprint);
   if (identityMismatch) {
     if (!context.mounted) return null;
-    final proceed =
-        await showTvIdentityMismatchDialog(context, device.deviceName);
+    final proceed = await showTvIdentityMismatchDialog(
+      context,
+      device.deviceName,
+    );
     if (proceed != true) return null;
   }
 
   var authorized = session.authorized;
   if (!authorized) {
     if (!context.mounted) return null;
-    final paired = await _runPairingFlow(context, state, session, device,
-        requireSas: identityMismatch);
+    final paired = await _runPairingFlow(
+      context,
+      state,
+      session,
+      device,
+      requireSas: identityMismatch,
+    );
     if (!paired) return null;
     authorized = true;
   }
 
   // Pin only an identity that reached authorization — a failed pairing must
   // not overwrite (or seed) the stored pin.
-  unawaited(RemotePairingStore.pinReceiver(
-    fingerprint: session.peerFingerprint,
-    staticKey: session.peerStaticKey,
-    name: device.deviceName,
-  ));
+  unawaited(
+    RemotePairingStore.pinReceiver(
+      fingerprint: session.peerFingerprint,
+      staticKey: session.peerStaticKey,
+      name: device.deviceName,
+    ),
+  );
   return session;
 }
 
@@ -467,9 +535,11 @@ Future<bool> _runPairingFlow(
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text(
-                    'This TV skipped code verification but its identity '
-                    'changed — transfer refused')),
+              content: Text(
+                'This TV skipped code verification but its identity '
+                'changed — transfer refused',
+              ),
+            ),
           );
         }
         return false;
@@ -481,9 +551,12 @@ Future<bool> _runPairingFlow(
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(reply.$2 == 'busy'
+            content: Text(
+              reply.$2 == 'busy'
                   ? 'The TV is busy pairing with another device'
-                  : 'The TV declined pairing (${reply.$2 ?? 'unknown'})')),
+                  : 'The TV declined pairing (${reply.$2 ?? 'unknown'})',
+            ),
+          ),
         );
       }
       return false;
@@ -508,8 +581,10 @@ Future<bool> _runPairingFlow(
         continue;
       }
 
-      final proof =
-          await RemoteSessionCrypto.pairProof(session.keys.conf, code);
+      final proof = await RemoteSessionCrypto.pairProof(
+        session.keys.conf,
+        code,
+      );
 
       Future<(String, String?)> sendProofAwaitVerdict() async {
         final confirmed = await state.sendEncryptedCommand(
@@ -551,8 +626,10 @@ Future<bool> _runPairingFlow(
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                  content: Text(
-                      'Too many attempts — wait a few minutes and try again')),
+                content: Text(
+                  'Too many attempts — wait a few minutes and try again',
+                ),
+              ),
             );
           }
           return false;
@@ -630,40 +707,37 @@ class _PairedDevicesDialogState extends State<_PairedDevicesDialog> {
                 child: Center(child: CircularProgressIndicator()),
               )
             : devices.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Text(
-                      'No devices have paired with this one yet. A device is '
-                      'remembered after you enter its code once, so later '
-                      'transfers skip the code.',
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  'No devices have paired with this one yet. A device is '
+                  'remembered after you enter its code once, so later '
+                  'transfers skip the code.',
+                ),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final device in devices)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.smartphone_rounded),
+                      title: Text(device.name),
+                      subtitle: Text(
+                        'Paired ${device.pairedAt.toLocal().toString().split(' ').first}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      trailing: TextButton(
+                        onPressed: () => _forget(device),
+                        child: const Text('Forget'),
+                      ),
                     ),
-                  )
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final device in devices)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.smartphone_rounded),
-                          title: Text(device.name),
-                          subtitle: Text(
-                            'Paired ${device.pairedAt.toLocal().toString().split(' ').first}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          trailing: TextButton(
-                            onPressed: () => _forget(device),
-                            child: const Text('Forget'),
-                          ),
-                        ),
-                    ],
-                  ),
+                ],
+              ),
       ),
       actions: [
         if (devices != null && devices.isNotEmpty)
-          TextButton(
-            onPressed: _forgetAll,
-            child: const Text('Forget all'),
-          ),
+          TextButton(onPressed: _forgetAll, child: const Text('Forget all')),
         FilledButton(
           autofocus: true,
           onPressed: () => Navigator.of(context).pop(),

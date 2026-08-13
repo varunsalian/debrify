@@ -8,10 +8,7 @@ import '../../services/remote_control/remote_constants.dart';
 class RemoteKeyboardInput extends StatefulWidget {
   final VoidCallback? onClose;
 
-  const RemoteKeyboardInput({
-    super.key,
-    this.onClose,
-  });
+  const RemoteKeyboardInput({super.key, this.onClose});
 
   @override
   State<RemoteKeyboardInput> createState() => _RemoteKeyboardInputState();
@@ -80,9 +77,7 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
       decoration: BoxDecoration(
         color: const Color(0xFF1E293B),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -112,10 +107,7 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
               const Expanded(
                 child: Text(
                   'TV Keyboard',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
               if (widget.onClose != null)
@@ -155,9 +147,7 @@ class _RemoteKeyboardInputState extends State<RemoteKeyboardInput> {
             style: const TextStyle(fontSize: 16),
             decoration: InputDecoration(
               hintText: 'Start typing...',
-              hintStyle: TextStyle(
-                color: Colors.white.withValues(alpha: 0.3),
-              ),
+              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
               filled: true,
               fillColor: const Color(0xFF0F172A),
               border: OutlineInputBorder(

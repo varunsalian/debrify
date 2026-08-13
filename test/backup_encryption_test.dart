@@ -3,10 +3,13 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/services/backup_restore_service.dart';
+import 'package:debrify/services/debrify_tv_database.dart';
+import 'package:debrify/services/iptv_media_store.dart';
 import 'package:debrify/services/secret_vault.dart';
 // ignore: depend_on_referenced_packages
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class _FakePathProvider extends PathProviderPlatform {
   _FakePathProvider(this.root);
@@ -32,27 +35,32 @@ class _FakePathProvider extends PathProviderPlatform {
 const _fastKdf = BackupKdfParams(memory: 64, iterations: 1, parallelism: 1);
 
 Map<String, dynamic> _samplePayload() => {
-      'version': 1,
-      'createdAt': '2026-08-13T00:00:00.000Z',
-      'realDebridApiKey': 'rdKeyABC',
-      'trakt': {'access_token': 'ta', 'refresh_token': 'tr'},
-      'iptvPlaylists': [
-        {'id': 'p1', 'name': 'Prov', 'url': 'http://x/get.php?username=u'},
-      ],
-    };
+  'version': 1,
+  'createdAt': '2026-08-13T00:00:00.000Z',
+  'realDebridApiKey': 'rdKeyABC',
+  'trakt': {'access_token': 'ta', 'refresh_token': 'tr'},
+  'iptvPlaylists': [
+    {'id': 'p1', 'name': 'Prov', 'url': 'http://x/get.php?username=u'},
+  ],
+};
 
 void main() {
   group('encryptBackup/decryptBackup', () {
     test('round-trips the payload', () async {
       final envelope = await BackupRestoreService.encryptBackup(
-          _samplePayload(), 'correct horse', kdfParams: _fastKdf);
+        _samplePayload(),
+        'correct horse',
+        kdfParams: _fastKdf,
+      );
       expect(envelope['version'], 2);
       expect(envelope['encrypted'], isTrue);
       expect(envelope['createdAt'], '2026-08-13T00:00:00.000Z');
       expect(envelope['ciphertext'], isNot(contains('rdKeyABC')));
 
       final inner = await BackupRestoreService.decryptBackup(
-          envelope, 'correct horse');
+        envelope,
+        'correct horse',
+      );
       expect(inner, _samplePayload());
       // Inner payload flows through the normal v1 machinery.
       expect(BackupRestoreService.summarize(inner).hasRealDebrid, isTrue);
@@ -60,7 +68,10 @@ void main() {
 
     test('wrong passphrase throws BackupPassphraseException', () async {
       final envelope = await BackupRestoreService.encryptBackup(
-          _samplePayload(), 'right', kdfParams: _fastKdf);
+        _samplePayload(),
+        'right',
+        kdfParams: _fastKdf,
+      );
       expect(
         () => BackupRestoreService.decryptBackup(envelope, 'wrong'),
         throwsA(isA<BackupPassphraseException>()),
@@ -69,33 +80,47 @@ void main() {
 
     test('malformed envelope throws FormatException', () async {
       expect(
-        () => BackupRestoreService.decryptBackup(
-            {'version': 2, 'encrypted': true}, 'x'),
+        () => BackupRestoreService.decryptBackup({
+          'version': 2,
+          'encrypted': true,
+        }, 'x'),
         throwsFormatException,
       );
       final envelope = await BackupRestoreService.encryptBackup(
-          _samplePayload(), 'x', kdfParams: _fastKdf);
+        _samplePayload(),
+        'x',
+        kdfParams: _fastKdf,
+      );
       expect(
-        () => BackupRestoreService.decryptBackup(
-            {...envelope, 'ciphertext': '@@not-base64@@'}, 'x'),
+        () => BackupRestoreService.decryptBackup({
+          ...envelope,
+          'ciphertext': '@@not-base64@@',
+        }, 'x'),
         throwsFormatException,
       );
     });
 
     test('unknown KDF algo throws FormatException', () async {
       final envelope = await BackupRestoreService.encryptBackup(
-          _samplePayload(), 'x', kdfParams: _fastKdf);
+        _samplePayload(),
+        'x',
+        kdfParams: _fastKdf,
+      );
       final kdf = Map<String, dynamic>.from(envelope['kdf'] as Map);
       kdf['algo'] = 'scrypt';
       expect(
-        () => BackupRestoreService.decryptBackup({...envelope, 'kdf': kdf}, 'x'),
+        () =>
+            BackupRestoreService.decryptBackup({...envelope, 'kdf': kdf}, 'x'),
         throwsFormatException,
       );
     });
 
     test('crafted KDF costs are rejected before any derivation', () async {
       final envelope = await BackupRestoreService.encryptBackup(
-          _samplePayload(), 'x', kdfParams: _fastKdf);
+        _samplePayload(),
+        'x',
+        kdfParams: _fastKdf,
+      );
       Future<void> expectRejected(Map<String, dynamic> kdfOverride) {
         final kdf = {
           ...Map<String, dynamic>.from(envelope['kdf'] as Map),
@@ -120,39 +145,52 @@ void main() {
       await expectRejected({'p': 8, 'm': 8});
     });
 
-    test('decrypted inner payload passes the same version gate as parse',
-        () async {
-      // An envelope wrapping a future or version-less payload must fail the
-      // way its plaintext twin would — decryptBackup bypasses parse().
-      final futuristic = {..._samplePayload(), 'version': 99};
-      final envelope = await BackupRestoreService.encryptBackup(
-          futuristic, 'pw', kdfParams: _fastKdf);
-      expect(
-        () => BackupRestoreService.decryptBackup(envelope, 'pw'),
-        throwsFormatException,
-      );
+    test(
+      'decrypted inner payload passes the same version gate as parse',
+      () async {
+        // An envelope wrapping a future or version-less payload must fail the
+        // way its plaintext twin would — decryptBackup bypasses parse().
+        final futuristic = {..._samplePayload(), 'version': 99};
+        final envelope = await BackupRestoreService.encryptBackup(
+          futuristic,
+          'pw',
+          kdfParams: _fastKdf,
+        );
+        expect(
+          () => BackupRestoreService.decryptBackup(envelope, 'pw'),
+          throwsFormatException,
+        );
 
-      final versionless = Map<String, dynamic>.from(_samplePayload())
-        ..remove('version');
-      final envelope2 = await BackupRestoreService.encryptBackup(
-          versionless, 'pw', kdfParams: _fastKdf);
-      expect(
-        () => BackupRestoreService.decryptBackup(envelope2, 'pw'),
-        throwsFormatException,
-      );
-    });
+        final versionless = Map<String, dynamic>.from(_samplePayload())
+          ..remove('version');
+        final envelope2 = await BackupRestoreService.encryptBackup(
+          versionless,
+          'pw',
+          kdfParams: _fastKdf,
+        );
+        expect(
+          () => BackupRestoreService.decryptBackup(envelope2, 'pw'),
+          throwsFormatException,
+        );
+      },
+    );
   });
 
   group('parse version gates', () {
     test('v1 plain payload still parses', () {
-      final map = BackupRestoreService.parse('{"version":1,"torboxApiKey":"t"}');
+      final map = BackupRestoreService.parse(
+        '{"version":1,"torboxApiKey":"t"}',
+      );
       expect(BackupRestoreService.isEncrypted(map), isFalse);
       expect(map['torboxApiKey'], 't');
     });
 
     test('v2 envelope parses and is flagged encrypted', () async {
       final envelope = await BackupRestoreService.encryptBackup(
-          _samplePayload(), 'p', kdfParams: _fastKdf);
+        _samplePayload(),
+        'p',
+        kdfParams: _fastKdf,
+      );
       final reparsed = BackupRestoreService.parse(jsonEncode(envelope));
       expect(BackupRestoreService.isEncrypted(reparsed), isTrue);
     });
@@ -170,11 +208,16 @@ void main() {
 
     setUpAll(() async {
       TestWidgetsFlutterBinding.ensureInitialized();
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
       storageRoot = await Directory.systemTemp.createTemp('backup_strip');
       PathProviderPlatform.instance = _FakePathProvider(storageRoot.path);
+      IptvMediaStore.debugResetMigration();
     });
 
     tearDownAll(() async {
+      await DebrifyTvDatabase.instance.closeScope();
+      IptvMediaStore.debugResetMigration();
       await storageRoot.delete(recursive: true);
     });
 
@@ -191,7 +234,7 @@ void main() {
             'baseUrl': 'http://nas.local/dav',
             'username': 'admin',
             'password': 'hunter2',
-          }
+          },
         ]),
         'indexer_manager_configs_v1': [
           jsonEncode({
@@ -221,8 +264,9 @@ void main() {
         ],
       });
 
-      final stripped =
-          await BackupRestoreService.buildBackup(includeCredentials: false);
+      final stripped = await BackupRestoreService.buildBackup(
+        includeCredentials: false,
+      );
       final json = jsonEncode(stripped);
       expect(json, isNot(contains('rdSecret')));
       expect(json, isNot(contains('traktAccess')));
@@ -241,8 +285,10 @@ void main() {
       expect(stripped.containsKey('iptvLists'), isFalse);
       // Sharable structure survives.
       expect((stripped['webDavServers'] as List), hasLength(1));
-      expect((stripped['webDavServers'] as List).first['baseUrl'],
-          'http://nas.local/dav');
+      expect(
+        (stripped['webDavServers'] as List).first['baseUrl'],
+        'http://nas.local/dav',
+      );
       final playlists = (stripped['iptvPlaylists'] as List).cast<Map>();
       expect(playlists, hasLength(1));
       expect(playlists.single['name'], 'M3U provider');
@@ -252,8 +298,10 @@ void main() {
       final full = await BackupRestoreService.buildBackup();
       expect(full['realDebridApiKey'], 'rdSecret');
       expect((full['webDavServers'] as List).first['password'], 'hunter2');
-      expect((full['indexerManagers'] as List).first['api_key'],
-          'indexerSecret');
+      expect(
+        (full['indexerManagers'] as List).first['api_key'],
+        'indexerSecret',
+      );
       expect((full['iptvPlaylists'] as List), hasLength(2));
     });
   });

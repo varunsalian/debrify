@@ -231,7 +231,14 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   }
 
   Future<void> _logout() async {
-    await TraktService.instance.logout();
+    try {
+      await TraktService.instance.logout();
+    } catch (_) {
+      _showSnackBar(
+        'This connection is shared. Revoke or transfer profile access before disconnecting.',
+      );
+      return;
+    }
 
     if (!mounted) return;
 
@@ -306,9 +313,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                                 _isConnected
                                     ? Icons.check_circle
                                     : Icons.circle_outlined,
-                                color: _isConnected
-                                    ? t.success
-                                    : t.dim2,
+                                color: _isConnected ? t.success : t.dim2,
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -353,9 +358,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: t.danger,
                                     side: BorderSide(
-                                      color: t.danger.withValues(
-                                        alpha: 0.4,
-                                      ),
+                                      color: t.danger.withValues(alpha: 0.4),
                                     ),
                                   ),
                                 ),

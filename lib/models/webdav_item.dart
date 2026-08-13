@@ -4,6 +4,10 @@ class WebDavConfig {
   final String baseUrl;
   final String username;
   final String password;
+  final String? connectionResourceId;
+  final int? connectionResourceRevision;
+  final bool connectionReadOnly;
+  final bool credentialsRedacted;
 
   const WebDavConfig({
     required this.id,
@@ -11,6 +15,10 @@ class WebDavConfig {
     required this.baseUrl,
     required this.username,
     required this.password,
+    this.connectionResourceId,
+    this.connectionResourceRevision,
+    this.connectionReadOnly = false,
+    this.credentialsRedacted = false,
   });
 
   bool get isComplete => baseUrl.trim().isNotEmpty;
@@ -21,6 +29,12 @@ class WebDavConfig {
     'baseUrl': baseUrl,
     'username': username,
     'password': password,
+    if (connectionResourceId != null)
+      '_connectionResourceId': connectionResourceId,
+    if (connectionResourceRevision != null)
+      '_connectionResourceRevision': connectionResourceRevision,
+    if (connectionReadOnly) '_connectionResourceReadOnly': true,
+    if (credentialsRedacted) '_connectionResourceCredentialsRedacted': true,
   };
 
   factory WebDavConfig.fromJson(Map<String, dynamic> json) {
@@ -34,6 +48,12 @@ class WebDavConfig {
       baseUrl: baseUrl,
       username: (json['username'] ?? '').toString(),
       password: (json['password'] ?? '').toString(),
+      connectionResourceId: json['_connectionResourceId']?.toString(),
+      connectionResourceRevision: (json['_connectionResourceRevision'] as num?)
+          ?.toInt(),
+      connectionReadOnly: json['_connectionResourceReadOnly'] as bool? ?? false,
+      credentialsRedacted:
+          json['_connectionResourceCredentialsRedacted'] as bool? ?? false,
     );
   }
 

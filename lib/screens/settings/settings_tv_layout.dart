@@ -42,6 +42,8 @@ class SettingsTvLayout extends StatefulWidget {
   final Future<void> Function() onOpenHomePageSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
   final VoidCallback onOpenRemoteControl;
+  final bool showSwitchProfile;
+  final Future<void> Function()? onSwitchProfile;
   final Future<void> Function() onOpenTorrentSettings;
   final Future<void> Function() onOpenFilterSettings;
   final Future<void> Function() onOpenProviderSettings;
@@ -131,6 +133,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenHomePageSettings,
     required this.onOpenExternalPlayerSettings,
     required this.onOpenRemoteControl,
+    this.showSwitchProfile = false,
+    this.onSwitchProfile,
     required this.onOpenTorrentSettings,
     required this.onOpenFilterSettings,
     required this.onOpenProviderSettings,
@@ -1007,6 +1011,12 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: () async => widget.onOpenRemoteControl(),
                 focusNode: _paneNodes[0],
               ),
+              if (widget.showSwitchProfile)
+                SettingsTile.spec(
+                  SettingsRows.switchProfile,
+                  onTap: widget.onSwitchProfile ?? () async {},
+                  focusNode: _paneNodes[1],
+                ),
             ],
           ),
         ];

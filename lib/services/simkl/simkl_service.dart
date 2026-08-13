@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../../models/profiles/profile_policy.dart';
+import '../profiles/profile_async_authorization.dart';
+import '../profiles/profile_runtime.dart';
 import '../storage_service.dart';
 import 'simkl_calendar_service.dart';
 import 'simkl_constants.dart';
@@ -21,6 +24,16 @@ class SimklTitleStatus {
   final int? rating;
 
   const SimklTitleStatus({this.currentStatus, this.rating});
+}
+
+class _SimklPinAuthorization {
+  final ProfileAsyncAuthorization authorization;
+  final DateTime expiresAt;
+
+  const _SimklPinAuthorization({
+    required this.authorization,
+    required this.expiresAt,
+  });
 }
 
 /// Service for Simkl OAuth (PIN flow) authentication.
@@ -56,6 +69,7 @@ class SimklService {
   // already in flight when a write lands can't clobber the fresher cache
   // entry with its own stale, pre-write result.
   int _libCacheGeneration = 0;
+  final Map<String, _SimklPinAuthorization> _pinAuthorizations = {};
 
   void _invalidateLibraryCache() {
     _libCacheData = null;
@@ -94,6 +108,14 @@ class SimklService {
     _moviePlaybackCacheData = null;
     _moviePlaybackCacheAt = null;
     _playbackCacheGeneration++;
+  }
+
+  /// Clears every account-scoped process cache at a profile boundary.
+  void resetProfileScope() {
+    _invalidateLibraryCache();
+    _invalidatePlaybackCache();
+    _pinAuthorizations.clear();
+    SimklCalendarService.instance.invalidate();
   }
 
   Future<Map<String, dynamic>?> _cachedLibAllAll() async {
@@ -157,8 +179,8 @@ class SimklService {
         }
       }
       return const SimklTitleStatus(); // Not in any list — genuine, cacheable.
-    } catch (e) {
-      debugPrint('Simkl: fetchTitleStatus failed: $e');
+    } catch (error) {
+      debugPrint('Simkl: fetchTitleStatus failed (${error.runtimeType})');
       return null;
     }
   }
@@ -229,21 +251,32 @@ class SimklService {
   /// Returns the parsed JSON response on success, null on failure.
   Future<Map<String, dynamic>?> requestPin() async {
     try {
+      final authorization = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.trackersAndDiscovery,
+      );
       final uri = Uri.parse(
         kSimklPinUrl,
       ).replace(queryParameters: {'client_id': kSimklClientId});
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body) as Map<String, dynamic>;
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final userCode = data['user_code'] as String?;
+        if (authorization != null && userCode != null && userCode.isNotEmpty) {
+          _prunePinAuthorizations();
+          final seconds = (data['expires_in'] as int? ?? 900).clamp(1, 1800);
+          _pinAuthorizations[userCode] = _SimklPinAuthorization(
+            authorization: authorization,
+            expiresAt: DateTime.now().add(Duration(seconds: seconds)),
+          );
+        }
+        return data;
       }
 
-      debugPrint(
-        'Simkl: PIN request failed (${response.statusCode}): ${response.body}',
-      );
+      debugPrint('Simkl: PIN request failed (${response.statusCode})');
       return null;
-    } catch (e) {
-      debugPrint('Simkl: PIN request error: $e');
+    } catch (error) {
+      debugPrint('Simkl: PIN request error (${error.runtimeType})');
       return null;
     }
   }
@@ -254,6 +287,13 @@ class SimklService {
   /// to retry), or "error" (fatal).
   Future<String?> pollPin(String userCode) async {
     try {
+      final attempt = _pinAuthorizations[userCode];
+      if (ProfileRuntime.isInitialized &&
+          ProfileRuntime.isProfileCommitted &&
+          (attempt == null || attempt.expiresAt.isBefore(DateTime.now()))) {
+        _pinAuthorizations.remove(userCode);
+        return 'access_denied';
+      }
       final uri = Uri.parse(
         simklPinPollUrl(userCode),
       ).replace(queryParameters: {'client_id': kSimklClientId});
@@ -266,8 +306,21 @@ class SimklService {
         if (result == 'OK') {
           final accessToken = data['access_token'] as String?;
           if (accessToken == null || accessToken.isEmpty) return 'error';
-          await StorageService.setSimklAccessToken(accessToken);
-          await _fetchAndStoreUsername(accessToken);
+          _pinAuthorizations.remove(userCode);
+          Future<void> commit() async {
+            await StorageService.setSimklAccessToken(accessToken);
+            await _fetchAndStoreUsername(accessToken);
+          }
+
+          try {
+            if (attempt == null) {
+              await commit();
+            } else {
+              await attempt.authorization.run(commit);
+            }
+          } on StateError {
+            return 'access_denied';
+          }
           return null; // Success
         }
 
@@ -276,14 +329,20 @@ class SimklService {
         return 'authorization_pending';
       }
 
-      debugPrint(
-        'Simkl: PIN poll failed (${response.statusCode}): ${response.body}',
-      );
+      debugPrint('Simkl: PIN poll failed (${response.statusCode})');
       return 'error';
-    } catch (e) {
+    } catch (error) {
       // Network timeout, socket exception, etc. — transient, safe to retry
-      debugPrint('Simkl: PIN poll network error: $e');
+      debugPrint('Simkl: PIN poll network error (${error.runtimeType})');
       return 'network_error';
+    }
+  }
+
+  void _prunePinAuthorizations() {
+    final now = DateTime.now();
+    _pinAuthorizations.removeWhere((_, value) => value.expiresAt.isBefore(now));
+    while (_pinAuthorizations.length >= 8) {
+      _pinAuthorizations.remove(_pinAuthorizations.keys.first);
     }
   }
 
@@ -303,13 +362,12 @@ class SimklService {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final user = data['user'] as Map<String, dynamic>?;
       final account = data['account'] as Map<String, dynamic>?;
-      final name =
-          (user?['name'] as String?) ?? (account?['name'] as String?);
+      final name = (user?['name'] as String?) ?? (account?['name'] as String?);
       if (name != null && name.isNotEmpty) {
         await StorageService.setSimklUsername(name);
       }
-    } catch (e) {
-      debugPrint('Simkl: username lookup failed: $e');
+    } catch (error) {
+      debugPrint('Simkl: username lookup failed (${error.runtimeType})');
     }
   }
 
@@ -346,8 +404,8 @@ class SimklService {
         return null;
       }
       return jsonDecode(response.body);
-    } catch (e) {
-      debugPrint('Simkl: $label error: $e');
+    } catch (error) {
+      debugPrint('Simkl: $label error (${error.runtimeType})');
       return null;
     }
   }
@@ -455,15 +513,13 @@ class SimklService {
           )
           .timeout(const Duration(seconds: 15));
       if (response.statusCode != 200 && response.statusCode != 201) {
-        debugPrint(
-          'Simkl: $label failed (${response.statusCode}): ${response.body}',
-        );
+        debugPrint('Simkl: $label failed (${response.statusCode})');
         return null;
       }
       if (response.body.isEmpty) return <String, dynamic>{};
       return jsonDecode(response.body);
-    } catch (e) {
-      debugPrint('Simkl: $label error: $e');
+    } catch (error) {
+      debugPrint('Simkl: $label error (${error.runtimeType})');
       return null;
     }
   }
@@ -549,7 +605,9 @@ class SimklService {
       '/sync/history',
       {
         typeKey: [
-          {'ids': {'imdb': imdbId}},
+          {
+            'ids': {'imdb': imdbId},
+          },
         ],
       },
       token: token,
@@ -569,7 +627,9 @@ class SimklService {
       '/sync/history/remove',
       {
         typeKey: [
-          {'ids': {'imdb': imdbId}},
+          {
+            'ids': {'imdb': imdbId},
+          },
         ],
       },
       token: token,
@@ -959,7 +1019,8 @@ class SimklService {
     try {
       return await future;
     } finally {
-      if (identical(_moviePlaybackInFlight, future)) _moviePlaybackInFlight = null;
+      if (identical(_moviePlaybackInFlight, future))
+        _moviePlaybackInFlight = null;
     }
   }
 
@@ -1007,12 +1068,10 @@ class SimklService {
           response.statusCode == 404) {
         return true;
       }
-      debugPrint(
-        'Simkl: $label failed (${response.statusCode}): ${response.body}',
-      );
+      debugPrint('Simkl: $label failed (${response.statusCode})');
       return false;
-    } catch (e) {
-      debugPrint('Simkl: $label error: $e');
+    } catch (error) {
+      debugPrint('Simkl: $label error (${error.runtimeType})');
       return false;
     }
   }

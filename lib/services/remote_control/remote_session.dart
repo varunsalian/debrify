@@ -72,17 +72,16 @@ class RemoteSessionCrypto {
     required List<int> epkR,
     required List<int> spkR,
     required List<int> nc,
-  }) =>
-      sha256Of([
-        ...utf8.encode(_transcriptLabel),
-        ...sid,
-        ...com,
-        ...epkS,
-        ...spkS,
-        ...epkR,
-        ...spkR,
-        ...nc,
-      ]);
+  }) => sha256Of([
+    ...utf8.encode(_transcriptLabel),
+    ...sid,
+    ...com,
+    ...epkS,
+    ...spkS,
+    ...epkR,
+    ...spkR,
+    ...nc,
+  ]);
 
   /// HKDF-SHA256(salt = transcript, ikm = ee ∥ es ∥ se) → the four session
   /// keys, separated by info label.
@@ -126,7 +125,10 @@ class RemoteSessionCrypto {
 
   /// Proof the phone-side user typed the code the TV displayed, 16 bytes.
   static Future<Uint8List> pairProof(List<int> kConf, String code) async {
-    final mac = await hmacOf(kConf, [...utf8.encode('pair-proof'), ...utf8.encode(code)]);
+    final mac = await hmacOf(kConf, [
+      ...utf8.encode('pair-proof'),
+      ...utf8.encode(code),
+    ]);
     return Uint8List.sublistView(mac, 0, 16);
   }
 
@@ -152,23 +154,33 @@ class RemoteSessionCrypto {
     return bytes;
   }
 
-  static List<int> _ecmdAad(List<int> sid, int n) =>
-      [...utf8.encode('drc2 ecmd'), ...sid, ..._nBytes(n)];
+  static List<int> _ecmdAad(List<int> sid, int n) => [
+    ...utf8.encode('drc2 ecmd'),
+    ...sid,
+    ..._nBytes(n),
+  ];
 
   /// Binding transferId+kind stops a MITM re-labeling a blob to a different
   /// config handler.
   static List<int> _blobAad(
-          List<int> sid, int n, String transferId, String kind) =>
-      [
-        ...utf8.encode('drc2 blob'),
-        ...sid,
-        ..._nBytes(n),
-        ...utf8.encode(transferId),
-        ...utf8.encode(kind),
-      ];
+    List<int> sid,
+    int n,
+    String transferId,
+    String kind,
+  ) => [
+    ...utf8.encode('drc2 blob'),
+    ...sid,
+    ..._nBytes(n),
+    ...utf8.encode(transferId),
+    ...utf8.encode(kind),
+  ];
 
   static Future<String> _seal(
-      List<int> key, int n, List<int> aad, List<int> plaintext) async {
+    List<int> key,
+    int n,
+    List<int> aad,
+    List<int> plaintext,
+  ) async {
     final box = await _aes.encrypt(
       plaintext,
       secretKey: SecretKey(key),
@@ -179,7 +191,11 @@ class RemoteSessionCrypto {
   }
 
   static Future<List<int>?> _open(
-      List<int> key, int n, List<int> aad, String ctB64) async {
+    List<int> key,
+    int n,
+    List<int> aad,
+    String ctB64,
+  ) async {
     try {
       final packed = base64Decode(ctB64);
       if (packed.length < 16) return null;
@@ -199,8 +215,7 @@ class RemoteSessionCrypto {
     required List<int> sid,
     required int n,
     required String commandJson,
-  }) =>
-      _seal(key, n, _ecmdAad(sid, n), utf8.encode(commandJson));
+  }) => _seal(key, n, _ecmdAad(sid, n), utf8.encode(commandJson));
 
   static Future<String?> openEcmd({
     required List<int> key,
@@ -219,8 +234,7 @@ class RemoteSessionCrypto {
     required String transferId,
     required String kind,
     required String payload,
-  }) =>
-      _seal(key, n, _blobAad(sid, n, transferId, kind), utf8.encode(payload));
+  }) => _seal(key, n, _blobAad(sid, n, transferId, kind), utf8.encode(payload));
 
   static Future<String?> openBlob({
     required List<int> key,
@@ -230,8 +244,12 @@ class RemoteSessionCrypto {
     required String kind,
     required String ctB64,
   }) async {
-    final plaintext =
-        await _open(key, n, _blobAad(sid, n, transferId, kind), ctB64);
+    final plaintext = await _open(
+      key,
+      n,
+      _blobAad(sid, n, transferId, kind),
+      ctB64,
+    );
     return plaintext == null ? null : utf8.decode(plaintext);
   }
 
@@ -312,8 +330,8 @@ class RemoteSession {
     required this.peerName,
     required this.sasCode,
     required this.establishedAt,
-  })  : sidB64 = base64Encode(sid),
-        lastUsed = establishedAt;
+  }) : sidB64 = base64Encode(sid),
+       lastUsed = establishedAt;
 
   List<int> get sendKey =>
       role == RemoteSessionRole.sender ? keys.c2s : keys.s2c;
@@ -353,6 +371,11 @@ class RemoteCommandContext {
   /// window on this, so approving one phone never blankets other LAN hosts.
   final String? sourceIp;
 
+  /// Sends a privacy-safe rejection over the already-authenticated session.
+  /// Routers never receive the socket or keys themselves; this capability is
+  /// deliberately absent for plaintext traffic.
+  final Future<void> Function(String code)? reject;
+
   const RemoteCommandContext({
     required this.encrypted,
     required this.authorized,
@@ -360,6 +383,7 @@ class RemoteCommandContext {
     this.peerFingerprint,
     this.peerName,
     this.sourceIp,
+    this.reject,
   });
 
   static const plaintext = RemoteCommandContext(
@@ -400,8 +424,8 @@ class _SenderHandshake {
     required this.nc,
     required this.com,
     required this.startedAt,
-  })  : sidB64 = base64Encode(sid),
-        lastSentAt = startedAt;
+  }) : sidB64 = base64Encode(sid),
+       lastSentAt = startedAt;
 }
 
 class _ReceiverPending {
@@ -446,8 +470,8 @@ class RemoteSessionManager {
     required this.deviceName,
     DateTime Function()? now,
     List<int> Function(int)? randomBytes,
-  })  : now = now ?? DateTime.now,
-        randomBytes = randomBytes ?? _secureRandomBytes;
+  }) : now = now ?? DateTime.now,
+       randomBytes = randomBytes ?? _secureRandomBytes;
 
   static List<int> _secureRandomBytes(int length) {
     final random = Random.secure();
@@ -476,12 +500,12 @@ class RemoteSessionManager {
   }
 
   Map<String, dynamic> _hs1For(_SenderHandshake handshake) => {
-        'type': RemoteMessageType.hs1,
-        'v': kProtoVersion,
-        'sid': handshake.sidB64,
-        'com': base64Encode(handshake.com),
-        'name': deviceName(),
-      };
+    'type': RemoteMessageType.hs1,
+    'v': kProtoVersion,
+    'sid': handshake.sidB64,
+    'com': base64Encode(handshake.com),
+    'name': deviceName(),
+  };
 
   /// Handshake messages that need retransmitting (call on a timer; addressing
   /// is the caller's). Expired attempts are dropped.
@@ -501,16 +525,20 @@ class RemoteSessionManager {
       }
       return false;
     });
-    _receiverPending.removeWhere((_, pending) =>
-        current.difference(pending.createdAt) > kPendingHandshakeExpiry);
+    _receiverPending.removeWhere(
+      (_, pending) =>
+          current.difference(pending.createdAt) > kPendingHandshakeExpiry,
+    );
     _expireSessions(current);
     return out;
   }
 
   void _expireSessions(DateTime current) {
-    sessions.removeWhere((_, session) =>
-        current.difference(session.lastUsed) > kSessionIdleTimeout ||
-        current.difference(session.establishedAt) > kSessionMaxAge);
+    sessions.removeWhere(
+      (_, session) =>
+          current.difference(session.lastUsed) > kSessionIdleTimeout ||
+          current.difference(session.establishedAt) > kSessionMaxAge,
+    );
     while (sessions.length > kMaxSessions) {
       String? oldest;
       DateTime? oldestUsed;
@@ -543,14 +571,16 @@ class RemoteSessionManager {
           await _onHs4(json, result);
           break;
       }
-    } catch (e) {
-      debugPrint('RemoteSessionManager: dropped malformed message: $e');
+    } catch (_) {
+      debugPrint('RemoteSessionManager: dropped malformed message');
     }
     return result;
   }
 
   Future<void> _onHs2(
-      Map<String, dynamic> json, SessionHandleResult result) async {
+    Map<String, dynamic> json,
+    SessionHandleResult result,
+  ) async {
     final sidB64 = json['sid'] as String?;
     final handshake = _senderHandshakes[sidB64];
     if (handshake == null || handshake.hs3 != null) {
@@ -583,8 +613,10 @@ class RemoteSessionManager {
       ikm: [...ee, ...es, ...se],
       transcript: transcript,
     );
-    final tagS =
-        await RemoteSessionCrypto.confirmTag(keys.conf, 'drc2 hs3 sender');
+    final tagS = await RemoteSessionCrypto.confirmTag(
+      keys.conf,
+      'drc2 hs3 sender',
+    );
 
     handshake.hs3 = {
       'type': RemoteMessageType.hs3,
@@ -605,16 +637,20 @@ class RemoteSessionManager {
   }
 
   final Map<String, ({SessionKeys keys, List<int> peerSpk, String peerName})>
-      _senderDerived = {};
+  _senderDerived = {};
 
   Future<void> _onHs4(
-      Map<String, dynamic> json, SessionHandleResult result) async {
+    Map<String, dynamic> json,
+    SessionHandleResult result,
+  ) async {
     final sidB64 = json['sid'] as String?;
     final handshake = _senderHandshakes[sidB64];
     final derived = _senderDerived[sidB64];
     if (handshake == null || derived == null) return;
     final expected = await RemoteSessionCrypto.confirmTag(
-        derived.keys.conf, 'drc2 hs4 receiver');
+      derived.keys.conf,
+      'drc2 hs4 receiver',
+    );
     final tag = base64Decode(json['tag'] as String);
     if (!RemoteSessionCrypto.constantTimeEquals(expected, tag)) {
       debugPrint('RemoteSessionManager: hs4 tag mismatch, dropping');
@@ -625,8 +661,7 @@ class RemoteSessionManager {
       role: RemoteSessionRole.sender,
       keys: derived.keys,
       peerStaticKey: derived.peerSpk,
-      peerFingerprint:
-          await RemoteSessionCrypto.fingerprint(derived.peerSpk),
+      peerFingerprint: await RemoteSessionCrypto.fingerprint(derived.peerSpk),
       peerName: derived.peerName,
       sasCode: await RemoteSessionCrypto.sasCode(derived.keys.sas),
       establishedAt: now(),
@@ -641,7 +676,9 @@ class RemoteSessionManager {
   // ----------------------------------------------------------- receiver ---
 
   Future<void> _onHs1(
-      Map<String, dynamic> json, SessionHandleResult result) async {
+    Map<String, dynamic> json,
+    SessionHandleResult result,
+  ) async {
     final sidB64 = json['sid'] as String?;
     if (sidB64 == null) return;
     final com = base64Decode(json['com'] as String);
@@ -687,7 +724,9 @@ class RemoteSessionManager {
   }
 
   Future<void> _onHs3(
-      Map<String, dynamic> json, SessionHandleResult result) async {
+    Map<String, dynamic> json,
+    SessionHandleResult result,
+  ) async {
     final sidB64 = json['sid'] as String?;
     final pending = _receiverPending[sidB64];
     if (pending == null) return;
@@ -727,15 +766,19 @@ class RemoteSessionManager {
       ikm: [...ee, ...es, ...se],
       transcript: transcript,
     );
-    final expectedTag =
-        await RemoteSessionCrypto.confirmTag(keys.conf, 'drc2 hs3 sender');
+    final expectedTag = await RemoteSessionCrypto.confirmTag(
+      keys.conf,
+      'drc2 hs3 sender',
+    );
     if (!RemoteSessionCrypto.constantTimeEquals(expectedTag, tagS)) {
       debugPrint('RemoteSessionManager: hs3 tag mismatch, dropping');
       return;
     }
 
-    final tagR =
-        await RemoteSessionCrypto.confirmTag(keys.conf, 'drc2 hs4 receiver');
+    final tagR = await RemoteSessionCrypto.confirmTag(
+      keys.conf,
+      'drc2 hs4 receiver',
+    );
     pending.hs4 = {
       'type': RemoteMessageType.hs4,
       'sid': sidB64,
@@ -760,11 +803,15 @@ class RemoteSessionManager {
   }
 
   static Future<List<int>> _dh(
-      SimpleKeyPair keyPair, List<int> remotePublicKey) async {
+    SimpleKeyPair keyPair,
+    List<int> remotePublicKey,
+  ) async {
     final shared = await RemoteSessionCrypto.x25519.sharedSecretKey(
       keyPair: keyPair,
-      remotePublicKey:
-          SimplePublicKey(remotePublicKey, type: KeyPairType.x25519),
+      remotePublicKey: SimplePublicKey(
+        remotePublicKey,
+        type: KeyPairType.x25519,
+      ),
     );
     return shared.extractBytes();
   }
@@ -784,7 +831,9 @@ class RemoteSessionManager {
 
   /// Seal a command JSON into an ecmd envelope on [session].
   Future<Map<String, dynamic>> sealCommand(
-      RemoteSession session, Map<String, dynamic> commandJson) async {
+    RemoteSession session,
+    Map<String, dynamic> commandJson,
+  ) async {
     final n = session.nextN();
     session.lastUsed = now();
     return {
@@ -803,11 +852,13 @@ class RemoteSessionManager {
   /// Open an inbound ecmd. Returns the decoded inner command and its session,
   /// or a serr reply for an unknown sid, or nothing for replays/tampering.
   Future<
-      ({
-        Map<String, dynamic>? command,
-        RemoteSession? session,
-        Map<String, dynamic>? serr,
-      })> openCommand(Map<String, dynamic> json) async {
+    ({
+      Map<String, dynamic>? command,
+      RemoteSession? session,
+      Map<String, dynamic>? serr,
+    })
+  >
+  openCommand(Map<String, dynamic> json) async {
     final sidB64 = json['sid'] as String?;
     final n = (json['n'] as num?)?.toInt();
     final ct = json['ct'] as String?;
@@ -871,7 +922,7 @@ class PairingGate extends ChangeNotifier {
   final bool Function(String fingerprint) isRemembered;
 
   PairingGate({required this.isRemembered, DateTime Function()? now})
-      : now = now ?? DateTime.now;
+    : now = now ?? DateTime.now;
 
   PairingDisplay? _current;
   PairingDisplay? get current => _current;
@@ -905,7 +956,9 @@ class PairingGate extends ChangeNotifier {
   }
 
   Future<PairProofOutcome> confirmProof(
-      RemoteSession session, List<int> proof) async {
+    RemoteSession session,
+    List<int> proof,
+  ) async {
     final display = _current;
     if (display == null || display.session.sidB64 != session.sidB64) {
       return PairProofOutcome.noRequest;
@@ -915,13 +968,14 @@ class PairingGate extends ChangeNotifier {
     }
     final fp = session.peerFingerprint;
     final window = _attempts[fp] ?? <DateTime>[];
-    window.removeWhere(
-        (t) => now().difference(t) > kPairingAttemptWindow);
+    window.removeWhere((t) => now().difference(t) > kPairingAttemptWindow);
     if (window.length >= kPairingMaxAttempts) {
       return PairProofOutcome.rateLimited;
     }
     final expected = await RemoteSessionCrypto.pairProof(
-        session.keys.conf, display.code);
+      session.keys.conf,
+      display.code,
+    );
     if (RemoteSessionCrypto.constantTimeEquals(expected, proof)) {
       session.authorized = true;
       _attempts.remove(fp);

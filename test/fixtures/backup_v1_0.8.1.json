@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "createdAt": "2026-08-01T12:34:56.000Z",
+  "realDebridApiKey": "fixture-rd-key",
+  "searchEngineIds": ["torrentio"],
+  "addonManifestUrls": [
+    "https://example.invalid/fixture/manifest.json"
+  ],
+  "iptvPlaylists": [
+    {
+      "id": "fixture-m3u",
+      "name": "Fixture channels",
+      "url": "https://example.invalid/fixture.m3u",
+      "addedAt": "2026-08-01T12:00:00.000Z"
+    },
+    {
+      "id": "fixture-xtream",
+      "name": "",
+      "url": "",
+      "serverUrl": "https://xtream.example.invalid",
+      "username": "fixture-user",
+      "password": "",
+      "addedAt": "2026-08-01T12:01:00.000Z"
+    }
+  ],
+  "iptvFavorites": [
+    {
+      "name": "Fixture News",
+      "url": "https://example.invalid/live/news",
+      "playlistId": "fixture-m3u"
+    }
+  ],
+  "iptvLists": [
+    {
+      "name": "",
+      "channels": [
+        {
+          "name": "Fixture News",
+          "url": "https://example.invalid/live/news",
+          "playlistId": "fixture-m3u"
+        }
+      ]
+    }
+  ]
+}

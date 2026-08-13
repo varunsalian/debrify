@@ -40,14 +40,14 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
   }
 
   Future<void> _load() async {
-    final apiKey = await StorageService.getTorboxApiKey();
+    final configured = await StorageService.hasTorboxCredential();
     final cachePref = await StorageService.getTorboxCacheCheckEnabled();
     final integrationEnabled =
         await StorageService.getTorboxIntegrationEnabled();
     final hiddenFromNav = await StorageService.getTorboxHiddenFromNav();
     final postAction = await StorageService.getTorboxPostTorrentAction();
     setState(() {
-      _savedApiKey = apiKey;
+      _savedApiKey = configured ? '' : null;
       _checkCacheBeforeSearch = cachePref;
       _loading = false;
       _integrationEnabled = integrationEnabled;
@@ -55,7 +55,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
       _postTorrentAction = postAction;
     });
 
-    if (integrationEnabled && apiKey != null && apiKey.isNotEmpty) {
+    if (integrationEnabled && configured) {
       await TorboxAccountService.refreshUserInfo();
       if (mounted) {
         setState(() {});
@@ -103,10 +103,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     if (!mounted) return;
     final t = AppThemeScope.of(context).settings;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: err ? t.danger : null,
-      ),
+      SnackBar(content: Text(message), backgroundColor: err ? t.danger : null),
     );
   }
 
@@ -144,7 +141,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     }
 
     setState(() {
-      _savedApiKey = txt;
+      _savedApiKey = '';
       _isEditing = false;
       _saving = false;
       _apiKeyController.clear();
@@ -160,16 +157,22 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
       }
     }
     debugPrint('TorboxSettingsPage: API key saved successfully.');
-    AnalyticsService.integrationConnected('torbox', {
-      'surface': 'settings',
-    });
+    AnalyticsService.integrationConnected('torbox', {'surface': 'settings'});
     _snack('Torbox connected successfully');
     MainPageBridge.notifyIntegrationChanged();
   }
 
   Future<void> _deleteKey() async {
     debugPrint('TorboxSettingsPage: Deleting stored API key.');
-    await StorageService.deleteTorboxApiKey();
+    try {
+      await StorageService.deleteTorboxApiKey();
+    } catch (_) {
+      _snack(
+        'This connection is shared. Revoke or transfer profile access before disconnecting.',
+        err: true,
+      );
+      return;
+    }
     TorboxAccountService.clearUserInfo();
     // Clear the hidden from nav flag on logout
     await StorageService.clearTorboxHiddenFromNav();
@@ -202,7 +205,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
     await StorageService.setTorboxIntegrationEnabled(value);
     MainPageBridge.notifyIntegrationChanged();
     if (!mounted) return;
-    if (value && _savedApiKey != null && _savedApiKey!.isNotEmpty) {
+    if (value && _savedApiKey != null) {
       await TorboxAccountService.refreshUserInfo();
       if (!mounted) return;
       setState(() {});
@@ -443,8 +446,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                               borderRadius:
                                                   BorderRadius.circular(8),
                                               border: Border.all(
-                                                color: t.success
-                                                    .withValues(alpha: 0.3),
+                                                color: t.success.withValues(
+                                                  alpha: 0.3,
+                                                ),
                                               ),
                                             ),
                                             child: Row(
@@ -476,9 +480,8 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                         obscureText: _obscure,
                                         enabled: !_saving,
                                         textInputAction: TextInputAction.done,
-                                        onDownArrow: () => FocusScope.of(
-                                          context,
-                                        ).nextFocus(),
+                                        onDownArrow: () =>
+                                            FocusScope.of(context).nextFocus(),
                                         onUpArrow: () => FocusScope.of(
                                           context,
                                         ).previousFocus(),
@@ -490,8 +493,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                           suffixIcon: IconButton(
                                             // Default focus highlight is
                                             // invisible on TV.
-                                            focusColor: t.accent
-                                                .withValues(alpha: 0.4),
+                                            focusColor: t.accent.withValues(
+                                              alpha: 0.4,
+                                            ),
                                             icon: Icon(
                                               _obscure
                                                   ? Icons.visibility
@@ -561,9 +565,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
-                                            border: Border.all(
-                                              color: t.line,
-                                            ),
+                                            border: Border.all(color: t.line),
                                           ),
                                           child: Row(
                                             children: [
@@ -596,8 +598,9 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                               style: OutlinedButton.styleFrom(
                                                 foregroundColor: t.danger,
                                                 side: BorderSide(
-                                                  color: t.danger
-                                                      .withValues(alpha: 0.45),
+                                                  color: t.danger.withValues(
+                                                    alpha: 0.45,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -816,10 +819,7 @@ class _TorboxSettingsPageState extends State<TorboxSettingsPage> {
                                       style: Theme.of(context)
                                           .textTheme
                                           .bodyMedium
-                                          ?.copyWith(
-                                            color: t.dim,
-                                            height: 1.5,
-                                          ),
+                                          ?.copyWith(color: t.dim, height: 1.5),
                                     ),
                                   ],
                                 ),

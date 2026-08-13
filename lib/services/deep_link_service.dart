@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_sharing_intent/flutter_sharing_intent.dart';
 import 'package:flutter_sharing_intent/model/sharing_file.dart';
 import 'storage_service.dart';
+import 'profiles/desktop_single_instance.dart';
+import 'profiles/profile_lock_controller.dart';
+import 'profiles/profile_runtime.dart';
+import 'profiles/pending_external_action_store.dart';
 
 class DeepLinkService {
   static final DeepLinkService _instance = DeepLinkService._internal();
@@ -28,6 +32,8 @@ class DeepLinkService {
   final Map<String, DateTime> _recentlyProcessedMagnets = {};
   final Map<String, DateTime> _recentlyProcessedUrls = {};
   static const _deduplicationWindow = Duration(seconds: 30);
+  final List<String> _pendingProfileActions = <String>[];
+  StreamSubscription<List<String>>? _desktopArgumentsSubscription;
 
   // ==========================================================================
   // Launch-intent preflight
@@ -63,20 +69,61 @@ class DeepLinkService {
     _preflightRan = true;
     try {
       _preflightUri = await DeepLinkService()._appLinks.getInitialLink();
-    } catch (e) {
-      debugPrint('Deep link preflight (link) failed: $e');
+    } catch (_) {
+      debugPrint('Deep link preflight (link) failed');
     }
     try {
-      _preflightShared = await FlutterSharingIntent.instance.getInitialSharing();
-    } catch (e) {
-      debugPrint('Deep link preflight (share) failed: $e');
+      _preflightShared = await FlutterSharingIntent.instance
+          .getInitialSharing();
+    } catch (_) {
+      debugPrint('Deep link preflight (share) failed');
     }
     _launchedByIntent =
         _preflightUri != null || (_preflightShared?.isNotEmpty ?? false);
   }
 
+  /// Once profile bootstrap has installed the device vault, move cold-launch
+  /// links and pre-profile desktop arguments out of process memory. They are
+  /// still not assigned to a profile until the user unlocks one locally.
+  static Future<void> persistPreflightActions() async {
+    if (!ProfileRuntime.isProfileCommitted) return;
+    final values = <String>[];
+    final uri = _preflightUri;
+    if (uri != null && _isSupportedExternalValue(uri.toString())) {
+      values.add(uri.toString());
+      _preflightUri = null;
+    }
+    final shared = _preflightShared;
+    if (shared != null) {
+      for (final file in shared.take(32)) {
+        final value = file.value?.trim();
+        if (value != null && _isSupportedExternalValue(value)) {
+          values.add(value);
+        }
+      }
+      _preflightShared = null;
+    }
+    for (final arguments in DesktopSingleInstance.takePendingArguments()) {
+      values.addAll(
+        arguments.where(
+          (value) =>
+              value.length <= 16 * 1024 &&
+              _isSupportedExternalValue(value.trim()),
+        ),
+      );
+    }
+    if (values.isNotEmpty) {
+      await PendingExternalActionStore.enqueueAll(values);
+    }
+  }
+
   /// Initialize deep link listening
   Future<void> initialize() async {
+    _desktopArgumentsSubscription ??= DesktopSingleInstance.forwardedArguments
+        .listen(enqueueExternalArguments);
+    for (final arguments in DesktopSingleInstance.takePendingArguments()) {
+      enqueueExternalArguments(arguments);
+    }
     // Handle initial link if app was opened via magnet link
     try {
       // Consume the preflight's read when there was one — getInitialLink is
@@ -91,8 +138,8 @@ class DeepLinkService {
       if (initialUri != null) {
         _handleUri(initialUri);
       }
-    } catch (e) {
-      debugPrint('Failed to get initial app link: $e');
+    } catch (_) {
+      debugPrint('Failed to get initial app link');
     }
 
     // Listen for incoming links while app is running
@@ -100,8 +147,8 @@ class DeepLinkService {
       (uri) {
         _handleUri(uri);
       },
-      onError: (err) {
-        debugPrint('Deep link error: $err');
+      onError: (_) {
+        debugPrint('Deep link stream error');
       },
     );
 
@@ -117,19 +164,88 @@ class DeepLinkService {
       if (initialShared.isNotEmpty) {
         _processSharedFiles(initialShared);
       }
-    } catch (e) {
-      debugPrint('Failed to get initial shared content: $e');
+    } catch (_) {
+      debugPrint('Failed to get initial shared content');
     }
 
     // Listen for incoming shared content while app is running
-    _sharedMediaSubscription = FlutterSharingIntent.instance.getMediaStream().listen(
-      (List<SharedFile> files) {
-        _processSharedFiles(files);
-      },
-      onError: (err) {
-        debugPrint('Share intent error: $err');
-      },
-    );
+    _sharedMediaSubscription = FlutterSharingIntent.instance
+        .getMediaStream()
+        .listen(
+          (List<SharedFile> files) {
+            _processSharedFiles(files);
+          },
+          onError: (_) {
+            debugPrint('Share intent stream error');
+          },
+        );
+    await _drainPendingProfileActions();
+  }
+
+  /// Desktop secondary launches and platform callbacks share this bounded
+  /// queue. ProfileGate drains it only after local profile authorization.
+  void enqueueExternalArguments(List<String> arguments) {
+    final accepted = <String>[];
+    for (final argument in arguments.take(32)) {
+      final value = argument.trim();
+      if (value.length > 16 * 1024 || !_isSupportedExternalValue(value)) {
+        continue;
+      }
+      accepted.add(value);
+    }
+    if (!_profileMayDispatch && ProfileRuntime.isProfileCommitted) {
+      unawaited(PendingExternalActionStore.enqueueAll(accepted));
+      return;
+    }
+    for (final value in accepted) {
+      if (_pendingProfileActions.length == 32) {
+        _pendingProfileActions.removeAt(0);
+      }
+      _pendingProfileActions.add(value);
+    }
+    unawaited(_drainPendingProfileActions());
+  }
+
+  void onProfileUnlocked() => unawaited(_drainPendingProfileActions());
+
+  bool get _profileMayDispatch =>
+      !ProfileRuntime.isProfileCommitted ||
+      ProfileLockController.instance.lockedProfileId.value == null;
+
+  Future<void> _drainPendingProfileActions() async {
+    if (!_profileMayDispatch ||
+        (onMagnetLinkReceived == null &&
+            onUrlShared == null &&
+            onStremioAddonReceived == null)) {
+      return;
+    }
+    if (ProfileRuntime.isProfileCommitted) {
+      try {
+        _pendingProfileActions.addAll(await PendingExternalActionStore.take());
+        while (_pendingProfileActions.length > 32) {
+          _pendingProfileActions.removeAt(0);
+        }
+      } catch (_) {
+        debugPrint('Pending external actions could not be opened');
+      }
+    }
+    final pending = List<String>.from(_pendingProfileActions);
+    _pendingProfileActions.clear();
+    for (final value in pending) {
+      final uri = Uri.tryParse(value);
+      if (uri != null) _handleUri(uri);
+    }
+  }
+
+  static bool _isSupportedExternalValue(String value) {
+    final uri = Uri.tryParse(value);
+    return uri != null &&
+        const <String>{
+          'magnet',
+          'stremio',
+          'http',
+          'https',
+        }.contains(uri.scheme);
   }
 
   /// Process shared files and extract text/URLs
@@ -153,7 +269,11 @@ class DeepLinkService {
 
   /// Handle incoming URI (magnet links, stremio addons)
   void _handleUri(Uri uri) {
-    debugPrint('Received deep link: $uri');
+    if (!_profileMayDispatch) {
+      enqueueExternalArguments(<String>[uri.toString()]);
+      return;
+    }
+    debugPrint('Received deep link scheme=${uri.scheme}');
 
     if (uri.scheme == 'magnet') {
       _handleMagnetUri(uri);
@@ -170,7 +290,7 @@ class DeepLinkService {
   /// Handle magnet URI
   void _handleMagnetUri(Uri uri) {
     final magnetUri = uri.toString();
-    debugPrint('Magnet link detected: $magnetUri');
+    debugPrint('Magnet link detected');
 
     // Extract infohash for deduplication (same torrent can have different magnet URIs)
     final infohash = extractInfohash(magnetUri);
@@ -186,7 +306,7 @@ class DeepLinkService {
     if (lastProcessed != null) {
       final timeSinceProcessed = now.difference(lastProcessed);
       if (timeSinceProcessed < _deduplicationWindow) {
-        debugPrint('Ignoring duplicate magnet link (infohash: $infohash, processed ${timeSinceProcessed.inSeconds}s ago)');
+        debugPrint('Ignoring recently processed duplicate magnet link');
         return;
       }
     }
@@ -208,7 +328,7 @@ class DeepLinkService {
 
   /// Handle Stremio addon URI (stremio://...)
   void _handleStremioUri(Uri uri) {
-    debugPrint('Stremio addon link detected: $uri');
+    debugPrint('Stremio addon link detected');
 
     // Extract manifest URL from stremio:// URI
     // Format can be:
@@ -252,13 +372,17 @@ class DeepLinkService {
     if (manifestUrl != null && manifestUrl.isNotEmpty) {
       _handleStremioManifestUrl(manifestUrl);
     } else {
-      debugPrint('Could not extract manifest URL from Stremio link: $uri');
+      debugPrint('Could not extract a Stremio manifest URL');
     }
   }
 
   /// Handle Stremio manifest URL
   void _handleStremioManifestUrl(String manifestUrl) {
-    debugPrint('Processing Stremio manifest URL: $manifestUrl');
+    if (!_profileMayDispatch) {
+      enqueueExternalArguments(<String>[manifestUrl]);
+      return;
+    }
+    debugPrint('Processing Stremio manifest URL');
 
     // Deduplication check
     final now = DateTime.now();
@@ -267,7 +391,9 @@ class DeepLinkService {
     if (lastProcessed != null) {
       final timeSinceProcessed = now.difference(lastProcessed);
       if (timeSinceProcessed < _deduplicationWindow) {
-        debugPrint('Ignoring duplicate Stremio manifest (processed ${timeSinceProcessed.inSeconds}s ago)');
+        debugPrint(
+          'Ignoring duplicate Stremio manifest (processed ${timeSinceProcessed.inSeconds}s ago)',
+        );
         return;
       }
     }
@@ -289,7 +415,7 @@ class DeepLinkService {
 
   /// Handle shared text (can contain URLs or magnet links)
   void _handleSharedText(String text) {
-    debugPrint('Received shared text: $text');
+    debugPrint('Received shared text');
 
     // Extract URL from the shared text
     final url = extractUrl(text);
@@ -298,7 +424,11 @@ class DeepLinkService {
       return;
     }
 
-    debugPrint('Extracted URL: $url');
+    debugPrint('Extracted supported URL');
+    if (!_profileMayDispatch) {
+      enqueueExternalArguments(<String>[url]);
+      return;
+    }
 
     // Check if it's a magnet link
     if (url.startsWith('magnet:')) {
@@ -327,7 +457,9 @@ class DeepLinkService {
       if (lastProcessed != null) {
         final timeSinceProcessed = now.difference(lastProcessed);
         if (timeSinceProcessed < _deduplicationWindow) {
-          debugPrint('Ignoring duplicate URL (processed ${timeSinceProcessed.inSeconds}s ago)');
+          debugPrint(
+            'Ignoring duplicate URL (processed ${timeSinceProcessed.inSeconds}s ago)',
+          );
           return;
         }
       }
@@ -354,8 +486,10 @@ class DeepLinkService {
     text = text.trim();
 
     // If the entire text is a URL, return it
-    if (text.startsWith('http://') || text.startsWith('https://') ||
-        text.startsWith('magnet:') || text.startsWith('stremio://')) {
+    if (text.startsWith('http://') ||
+        text.startsWith('https://') ||
+        text.startsWith('magnet:') ||
+        text.startsWith('stremio://')) {
       // Find the end of the URL (first whitespace or end of string)
       final endIndex = text.indexOf(RegExp(r'\s'));
       return endIndex == -1 ? text : text.substring(0, endIndex);
@@ -386,8 +520,8 @@ class DeepLinkService {
       }
 
       return null;
-    } catch (e) {
-      debugPrint('Failed to extract infohash from magnet URI: $e');
+    } catch (_) {
+      debugPrint('Failed to parse magnet identifier');
       return null;
     }
   }
@@ -397,8 +531,8 @@ class DeepLinkService {
     try {
       final uri = Uri.parse(magnetUri);
       return uri.queryParameters['dn']; // 'dn' = display name
-    } catch (e) {
-      debugPrint('Failed to extract torrent name: $e');
+    } catch (_) {
+      debugPrint('Failed to parse torrent display name');
       return null;
     }
   }
@@ -411,19 +545,19 @@ class DeepLinkService {
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
     final pikpakEnabled = await StorageService.getPikPakEnabled();
-    final premiumizeEnabled = await StorageService.getPremiumizeIntegrationEnabled();
+    final premiumizeEnabled =
+        await StorageService.getPremiumizeIntegrationEnabled();
     final allDebridKey = await StorageService.getAllDebridApiKey();
     final allDebridEnabled =
         await StorageService.getAllDebridIntegrationEnabled();
 
     final hasRealDebrid = rdKey != null && rdKey.isNotEmpty && rdEnabled;
-    final hasTorbox = torboxKey != null && torboxKey.isNotEmpty && torboxEnabled;
-    final hasPremiumize = premiumizeKey != null &&
-        premiumizeKey.isNotEmpty &&
-        premiumizeEnabled;
-    final hasAllDebrid = allDebridKey != null &&
-        allDebridKey.isNotEmpty &&
-        allDebridEnabled;
+    final hasTorbox =
+        torboxKey != null && torboxKey.isNotEmpty && torboxEnabled;
+    final hasPremiumize =
+        premiumizeKey != null && premiumizeKey.isNotEmpty && premiumizeEnabled;
+    final hasAllDebrid =
+        allDebridKey != null && allDebridKey.isNotEmpty && allDebridEnabled;
 
     return ConfiguredServices(
       hasRealDebrid: hasRealDebrid,
@@ -440,6 +574,8 @@ class DeepLinkService {
     _linkSubscription = null;
     _sharedMediaSubscription?.cancel();
     _sharedMediaSubscription = null;
+    _desktopArgumentsSubscription?.cancel();
+    _desktopArgumentsSubscription = null;
     _recentlyProcessedMagnets.clear();
     _recentlyProcessedUrls.clear();
   }
@@ -464,20 +600,44 @@ class ConfiguredServices {
   bool get hasAny =>
       hasRealDebrid || hasTorbox || hasPikPak || hasPremiumize || hasAllDebrid;
   bool get hasMultiple =>
-      [hasRealDebrid, hasTorbox, hasPikPak, hasPremiumize, hasAllDebrid]
-          .where((e) => e)
-          .length >
+      [
+        hasRealDebrid,
+        hasTorbox,
+        hasPikPak,
+        hasPremiumize,
+        hasAllDebrid,
+      ].where((e) => e).length >
       1;
   bool get hasOnlyRealDebrid =>
-      hasRealDebrid && !hasTorbox && !hasPikPak && !hasPremiumize && !hasAllDebrid;
+      hasRealDebrid &&
+      !hasTorbox &&
+      !hasPikPak &&
+      !hasPremiumize &&
+      !hasAllDebrid;
   bool get hasOnlyTorbox =>
-      !hasRealDebrid && hasTorbox && !hasPikPak && !hasPremiumize && !hasAllDebrid;
+      !hasRealDebrid &&
+      hasTorbox &&
+      !hasPikPak &&
+      !hasPremiumize &&
+      !hasAllDebrid;
   bool get hasOnlyPikPak =>
-      !hasRealDebrid && !hasTorbox && hasPikPak && !hasPremiumize && !hasAllDebrid;
+      !hasRealDebrid &&
+      !hasTorbox &&
+      hasPikPak &&
+      !hasPremiumize &&
+      !hasAllDebrid;
   bool get hasOnlyPremiumize =>
-      !hasRealDebrid && !hasTorbox && !hasPikPak && hasPremiumize && !hasAllDebrid;
+      !hasRealDebrid &&
+      !hasTorbox &&
+      !hasPikPak &&
+      hasPremiumize &&
+      !hasAllDebrid;
   bool get hasOnlyAllDebrid =>
-      !hasRealDebrid && !hasTorbox && !hasPikPak && !hasPremiumize && hasAllDebrid;
+      !hasRealDebrid &&
+      !hasTorbox &&
+      !hasPikPak &&
+      !hasPremiumize &&
+      hasAllDebrid;
 
   // Legacy getter for backward compatibility
   bool get hasBoth => hasRealDebrid && hasTorbox;

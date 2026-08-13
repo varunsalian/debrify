@@ -6,15 +6,14 @@ import '../../services/stremio_service.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import 'remote_pairing_dialog.dart';
 import '../../services/remote_control/remote_constants.dart';
+import '../../services/profiles/profile_async_authorization.dart';
+import '../../models/profiles/profile_policy.dart';
 
 /// Widget for exporting Stremio addons to connected TV
 class RemoteAddonExport extends StatefulWidget {
   final VoidCallback onBack;
 
-  const RemoteAddonExport({
-    super.key,
-    required this.onBack,
-  });
+  const RemoteAddonExport({super.key, required this.onBack});
 
   @override
   State<RemoteAddonExport> createState() => _RemoteAddonExportState();
@@ -34,14 +33,16 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
   Future<void> _loadAddons() async {
     setState(() => _loading = true);
     try {
-      final addons = await StremioService.instance.getAddons();
+      final addons = await StremioService.instance.getAddons(
+        forRemoteTransfer: true,
+      );
       setState(() {
         _addons = addons;
         _loading = false;
       });
-    } catch (e) {
-      debugPrint('RemoteAddonExport: Failed to load addons: $e');
-      setState(() => _loading = false);
+    } catch (_) {
+      debugPrint('RemoteAddonExport: addon load failed');
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -60,10 +61,37 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
     HapticFeedback.mediumImpact();
 
     try {
-      RemoteControlState().sendAddonCommand(
-        AddonCommand.install,
-        manifestUrl: addon.manifestUrl,
+      final authorization = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.remoteTransfer,
       );
+      Future<bool> sendCurrent() async {
+        final current = await StremioService.instance.getAddons(
+          forRemoteTransfer: true,
+        );
+        StremioAddon? authorizedAddon;
+        for (final candidate in current) {
+          if (candidate.connectionResourceId == addon.connectionResourceId &&
+              candidate.connectionResourceRevision ==
+                  addon.connectionResourceRevision) {
+            authorizedAddon = candidate;
+            break;
+          }
+        }
+        if (authorizedAddon == null) return false;
+        return state.sendAddonCommandToDevice(
+          AddonCommand.install,
+          target.ip,
+          manifestUrl: authorizedAddon.manifestUrl,
+          authorizationBarrier: authorization == null
+              ? null
+              : () => authorization.runIfCurrent(() async {}),
+        );
+      }
+
+      final sent = authorization == null
+          ? await sendCurrent()
+          : await authorization.runIfCurrent(sendCurrent);
+      if (!sent) throw StateError('Remote addon send was refused');
 
       // Show success feedback
       if (mounted) {
@@ -76,13 +104,13 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
           ),
         );
       }
-    } catch (e) {
-      debugPrint('RemoteAddonExport: Failed to send addon: $e');
+    } catch (_) {
+      debugPrint('RemoteAddonExport: addon send failed');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send addon: $e'),
-            backgroundColor: const Color(0xFFEF4444),
+          const SnackBar(
+            content: Text('Failed to send addon'),
+            backgroundColor: Color(0xFFEF4444),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -114,10 +142,7 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
         // Title
         Text(
           'Stremio Addons',
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
 
         const SizedBox(height: 8),
@@ -162,9 +187,7 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: const Color(0xFF1E293B),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.1),
-                ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
               ),
               child: Icon(
                 Icons.extension_off,
@@ -209,9 +232,7 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
             decoration: BoxDecoration(
               color: const Color(0xFF1E293B),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1),
-              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: Row(
               children: [
@@ -270,12 +291,17 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
                     height: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF6366F1),
+                      ),
                     ),
                   )
                 else
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(16),

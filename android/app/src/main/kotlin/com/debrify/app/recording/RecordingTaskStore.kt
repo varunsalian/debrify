@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import org.json.JSONObject
+import com.debrify.app.security.DeviceSecretCipherPlugin
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -39,12 +40,20 @@ data class RecordingEntry(
 	 *  file exists but is invisible. Kept recoverable: [RecordingTaskStore
 	 *  .reconcileDeadEntries] retries publication on every pass. */
 	val published: Boolean = true,
+	val ownerProfileId: String = "legacy-admin-v1",
+	val connectionResourceId: String? = null,
+	val profileAuthorizationRevision: Long = 1L,
+	val resourceAuthorizationRevision: Long? = null,
+	val sealedExecutionPayload: String? = null,
 )
 
 object RecordingTaskStore {
 	private const val PREFS = "debrify_recording_service"
 	private const val KEY = "tasks_v1"
-	private val lock = Any()
+	private val lock = com.debrify.app.profiles.NativeProfileMigrationGate.lock
+
+	fun hasStoredState(context: Context): Boolean =
+		!prefs(context).getString(KEY, null).isNullOrBlank()
 
 	/** Prune age for terminal entries with NO surviving file to index —
 	 *  `failed` rows and `done` rows without a uri. `done` entries WITH a
@@ -68,8 +77,24 @@ object RecordingTaskStore {
 
 	fun put(context: Context, entry: RecordingEntry) {
 		synchronized(lock) {
+			val committed = com.debrify.app.profiles.ProfilePreferenceProjection.isCommitted(context)
+			if (committed &&
+				!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
+					context,
+					entry.ownerProfileId,
+					entry.profileAuthorizationRevision,
+					"recordings",
+					entry.connectionResourceId,
+					entry.resourceAuthorizationRevision,
+				)
+			) throw SecurityException("Recording profile authorization changed")
 			val map = loadJson(context)
-			map.put(entry.taskId, toJson(entry))
+			val secured = if (!committed) {
+				entry.copy(sealedExecutionPayload = null)
+			} else if (entry.sealedExecutionPayload == null) {
+				entry.copy(sealedExecutionPayload = sealExecutionPayload(entry))
+			} else entry
+			map.put(entry.taskId, toJson(secured))
 			save(context, map)
 		}
 	}
@@ -89,13 +114,37 @@ object RecordingTaskStore {
 			val map = loadJson(context)
 			val out = HashMap<String, RecordingEntry>()
 			map.keys().forEach { id ->
-				try {
-					out[id] = fromJson(id, map.getJSONObject(id))
+				val source = runCatching { map.getJSONObject(id) }.getOrNull() ?: return@forEach
+				out[id] = try {
+					fromJson(id, source)
 				} catch (_: Exception) {
-					// Corrupt entry: drop rather than poison every query.
+					fromJsonWithoutExecution(id, source)
 				}
 			}
 			return out
+		}
+	}
+
+	/** Rebind and re-seal pre-profile capture records. Terminal file indexes
+	 * remain intact; interrupted captures are finalized by reconciliation. */
+	fun migrateLegacyAuthority(context: Context, ownerProfileId: String, revision: Long) {
+		synchronized(lock) {
+			val source = loadJsonStrict(context)
+			val entries = ArrayList<Pair<String, RecordingEntry>>()
+			source.keys().forEach { taskId ->
+				entries.add(taskId to fromJson(taskId, source.getJSONObject(taskId)))
+			}
+			val migrated = JSONObject()
+			for ((taskId, entry) in entries) {
+				val rebound = entry.copy(
+					ownerProfileId = ownerProfileId,
+					profileAuthorizationRevision = revision,
+					sealedExecutionPayload = null,
+				)
+				val secured = rebound.copy(sealedExecutionPayload = sealExecutionPayload(rebound))
+				migrated.put(taskId, toJson(secured))
+			}
+			saveDurably(context, migrated)
 		}
 	}
 
@@ -274,15 +323,19 @@ object RecordingTaskStore {
 	}
 
 	/** Remove a recording destination, whichever kind it is. */
-	fun deleteDestination(context: Context, uri: Uri) {
+	fun deleteDestination(context: Context, uri: Uri): Boolean {
 		if (uri.scheme == "file") {
-			runCatching {
+			return runCatching {
 				val file = java.io.File(uri.path!!)
-				if (file.exists()) file.delete()
-			}
-			return
+				!file.exists() || file.delete()
+			}.getOrDefault(false)
 		}
-		runCatching { context.contentResolver.delete(uri, null, null) }
+		return runCatching {
+			// A provider returning zero means the row was already absent, which
+			// satisfies an idempotent delete. Exceptions remain failures.
+			context.contentResolver.delete(uri, null, null)
+			true
+		}.getOrDefault(false)
 	}
 
 	private fun prefs(context: Context) =
@@ -296,15 +349,28 @@ object RecordingTaskStore {
 		}
 	}
 
+	private fun loadJsonStrict(context: Context): JSONObject =
+		JSONObject(prefs(context).getString(KEY, null) ?: "{}")
+
 	private fun save(context: Context, map: JSONObject) {
 		prefs(context).edit().putString(KEY, map.toString()).apply()
+	}
+
+	private fun saveDurably(context: Context, map: JSONObject) {
+		if (!prefs(context).edit().putString(KEY, map.toString()).commit()) {
+			throw IllegalStateException("Could not commit migrated recording tasks")
+		}
 	}
 
 	// Absent optionals are OMITTED, never JSONObject.NULL (see DownloadTaskStore
 	// for the optString("null") trap this avoids).
 	private fun toJson(e: RecordingEntry): JSONObject = JSONObject().apply {
-		put("url", e.url)
-		put("headers", JSONObject(e.headers as Map<String, Any?>))
+		if (e.sealedExecutionPayload == null) {
+			put("url", e.url)
+			put("headers", JSONObject(e.headers as Map<String, Any?>))
+		} else {
+			put("sealedExecutionPayload", e.sealedExecutionPayload)
+		}
 		put("fileName", e.fileName)
 		put("channelName", e.channelName)
 		e.uri?.let { put("uri", it) }
@@ -315,19 +381,32 @@ object RecordingTaskStore {
 		e.errorMessage?.let { put("errorMessage", it) }
 		put("updatedAt", e.updatedAt)
 		put("published", e.published)
+		put("ownerProfileId", e.ownerProfileId)
+		e.connectionResourceId?.let { put("connectionResourceId", it) }
+		put("profileAuthorizationRevision", e.profileAuthorizationRevision)
+		e.resourceAuthorizationRevision?.let { put("resourceAuthorizationRevision", it) }
 	}
 
 	private fun optNullable(o: JSONObject, key: String): String? =
 		o.optString(key, "").takeIf { it.isNotEmpty() && it != "null" }
 
 	private fun fromJson(taskId: String, o: JSONObject): RecordingEntry {
+		val owner = o.optString("ownerProfileId", "legacy-admin-v1")
+		val revision = o.optLong("profileAuthorizationRevision", 1L)
+		val sealed = optNullable(o, "sealedExecutionPayload")
+		val execution = if (sealed == null) o else JSONObject(
+			DeviceSecretCipherPlugin.openForNative(
+				sealed,
+				executionAad(taskId, owner, revision).toByteArray(Charsets.UTF_8),
+			).toString(Charsets.UTF_8),
+		)
 		val headers = HashMap<String, String>()
-		o.optJSONObject("headers")?.let { h ->
+		execution.optJSONObject("headers")?.let { h ->
 			h.keys().forEach { k -> headers[k] = h.optString(k, "") }
 		}
 		return RecordingEntry(
 			taskId = taskId,
-			url = o.optString("url", ""),
+			url = execution.optString("url", ""),
 			headers = headers,
 			fileName = o.optString("fileName", "recording.ts"),
 			channelName = o.optString("channelName", ""),
@@ -339,8 +418,56 @@ object RecordingTaskStore {
 			errorMessage = optNullable(o, "errorMessage"),
 			updatedAt = o.optLong("updatedAt", 0L),
 			published = o.optBoolean("published", true),
+			ownerProfileId = owner,
+			connectionResourceId = optNullable(o, "connectionResourceId"),
+			profileAuthorizationRevision = revision,
+			resourceAuthorizationRevision = if (o.has("resourceAuthorizationRevision"))
+				o.optLong("resourceAuthorizationRevision") else null,
+			sealedExecutionPayload = sealed,
 		)
 	}
+
+	private fun fromJsonWithoutExecution(taskId: String, o: JSONObject): RecordingEntry {
+		val owner = o.optString("ownerProfileId", "legacy-admin-v1")
+		val revision = o.optLong("profileAuthorizationRevision", 1L)
+		return RecordingEntry(
+			taskId = taskId,
+			url = "",
+			headers = hashMapOf(),
+			fileName = o.optString("fileName", "recording.ts"),
+			channelName = o.optString("channelName", ""),
+			uri = optNullable(o, "uri"),
+			status = if (o.optString("status") == "done") "done" else "failed",
+			bytes = o.optLong("bytes", 0L),
+			startedAtMs = o.optLong("startedAtMs", 0L),
+			endAtMs = o.optLong("endAtMs", 0L),
+			errorMessage = "saved recording credentials are unavailable",
+			updatedAt = o.optLong("updatedAt", 0L),
+			published = o.optBoolean("published", true),
+			ownerProfileId = owner,
+			connectionResourceId = optNullable(o, "connectionResourceId"),
+			profileAuthorizationRevision = revision,
+			resourceAuthorizationRevision = if (o.has("resourceAuthorizationRevision"))
+				o.optLong("resourceAuthorizationRevision") else null,
+			sealedExecutionPayload = optNullable(o, "sealedExecutionPayload"),
+		)
+	}
+
+	private fun sealExecutionPayload(entry: RecordingEntry): String =
+		DeviceSecretCipherPlugin.sealForNative(
+			JSONObject().apply {
+				put("url", entry.url)
+				put("headers", JSONObject(entry.headers as Map<String, Any?>))
+			}.toString().toByteArray(Charsets.UTF_8),
+			executionAad(
+				entry.taskId,
+				entry.ownerProfileId,
+				entry.profileAuthorizationRevision,
+			).toByteArray(Charsets.UTF_8),
+		)
+
+	private fun executionAad(id: String, owner: String, revision: Long) =
+		"debrify-android-recording-v1|id=$id|owner=$owner|revision=$revision"
 }
 
 /**

@@ -1,12 +1,17 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
 import '../utils/concurrency.dart';
 import '../utils/json_isolate.dart';
+import 'profiles/profile_preferences.dart';
+import 'profiles/profile_collection_resource_facade.dart';
+import 'profiles/connection_resource_service.dart';
+import 'profiles/profile_async_authorization.dart';
+import '../models/profiles/connection_resource.dart';
+import '../models/profiles/profile_policy.dart';
 
 class StremioAddonImportResult {
   final int discovered;
@@ -118,6 +123,9 @@ class StremioService {
   // Listeners for addon changes (used to refresh UI when addons are added via deep link)
   final List<VoidCallback> _addonsChangedListeners = [];
 
+  @visibleForTesting
+  Future<StremioAddon> Function(String manifestUrl)? debugManifestFetcher;
+
   /// Add a listener to be notified when addons change
   void addAddonsChangedListener(VoidCallback listener) {
     _addonsChangedListeners.add(listener);
@@ -140,10 +148,45 @@ class StremioService {
   // ============================================================
 
   /// Get all stored Stremio addons
-  Future<List<StremioAddon>> getAddons() async {
-    if (_addonsCache != null) return List.from(_addonsCache!);
+  Future<List<StremioAddon>> getAddons({
+    bool forSettings = false,
+    bool forRemoteTransfer = false,
+  }) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      forRemoteTransfer
+          ? ProfileFeature.remoteTransfer
+          : ProfileFeature.addonsAndEngines,
+    );
+    if (!forSettings && !forRemoteTransfer && _addonsCache != null) {
+      if (authorization != null) {
+        await authorization.runIfCurrent(() async {});
+      }
+      return List.from(_addonsCache!);
+    }
 
-    final prefs = await SharedPreferences.getInstance();
+    if (ProfileCollectionResourceFacade.active) {
+      final read = () => ProfileCollectionResourceFacade.read(
+        types: const <ConnectionResourceType>{
+          ConnectionResourceType.stremioAddon,
+        },
+        feature: ProfileFeature.addonsAndEngines,
+        forSettings: forSettings,
+        forRemoteTransfer: forRemoteTransfer,
+      );
+      final rows = authorization == null
+          ? await read()
+          : await authorization.runIfCurrent(read);
+      final addons = rows.map(StremioAddon.fromJson).toList(growable: false);
+      if (!forSettings && !forRemoteTransfer) {
+        if (authorization != null && !authorization.isCurrentlyActive) {
+          throw StateError('Profile session changed before addon publication');
+        }
+        _addonsCache = addons;
+      }
+      return List<StremioAddon>.from(addons);
+    }
+
+    final prefs = await ProfilePreferences.instance();
     final jsonString = prefs.getString(_addonsKey);
 
     if (jsonString == null || jsonString.isEmpty) {
@@ -157,8 +200,8 @@ class StremioService {
           .map((j) => StremioAddon.fromJson(j as Map<String, dynamic>))
           .toList();
       return List.from(_addonsCache!);
-    } catch (e) {
-      debugPrint('StremioService: Error loading addons: $e');
+    } catch (_) {
+      debugPrint('StremioService: Addon storage could not be decoded');
       _addonsCache = [];
       return [];
     }
@@ -177,10 +220,46 @@ class StremioService {
   }
 
   /// Save addons to storage
-  Future<void> _saveAddons(List<StremioAddon> addons) async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonString = json.encode(addons.map((a) => a.toJson()).toList());
-    await prefs.setString(_addonsKey, jsonString);
+  Future<void> _saveAddons(
+    List<StremioAddon> addons, {
+    ProfileAsyncAuthorization? initiatingAuthorization,
+  }) async {
+    Future<void> persist() async {
+      if (ProfileCollectionResourceFacade.active) {
+        await ProfileCollectionResourceFacade.replace(
+          types: const <ConnectionResourceType>{
+            ConnectionResourceType.stremioAddon,
+          },
+          feature: ProfileFeature.addonsAndEngines,
+          items: <ResourceCollectionItem>[
+            for (final addon in addons)
+              ResourceCollectionItem(
+                type: ConnectionResourceType.stremioAddon,
+                label: addon.name,
+                publicConfig: <String, dynamic>{
+                  'addonName': addon.name,
+                  'contentKinds': addon.types,
+                },
+                secretConfig: addon.toJson(),
+                sourceResourceId: addon.connectionResourceId,
+              ),
+          ],
+        );
+      } else {
+        final prefs = await ProfilePreferences.instance();
+        final jsonString = json.encode(addons.map((a) => a.toJson()).toList());
+        await prefs.setString(_addonsKey, jsonString);
+      }
+    }
+
+    if (initiatingAuthorization == null) {
+      await persist();
+    } else {
+      await initiatingAuthorization.runIfCurrent(persist);
+      if (!initiatingAuthorization.isCurrentlyActive) {
+        throw StateError('Profile session changed before addon publication');
+      }
+    }
     _addonsCache = addons;
     // Addon set changed — drop recommendation caches so a title viewed
     // before installing a "Watch Next"-style addon picks it up without an
@@ -198,6 +277,9 @@ class StremioService {
   ///
   /// Returns the addon if successful, throws exception on failure.
   Future<StremioAddon> addAddon(String manifestUrl) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonsAndEngines,
+    );
     // Normalize URL
     manifestUrl = _normalizeManifestUrl(manifestUrl);
 
@@ -228,7 +310,7 @@ class StremioService {
 
     // Add to list and save
     existingAddons.add(addon);
-    await _saveAddons(existingAddons);
+    await _saveAddons(existingAddons, initiatingAuthorization: authorization);
 
     debugPrint('StremioService: Added addon: ${addon.name}');
     return addon;
@@ -240,6 +322,9 @@ class StremioService {
     String jsonContent, {
     bool replaceExisting = false,
   }) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonsAndEngines,
+    );
     final dynamic decoded;
     try {
       decoded = await decodeJsonAsync(jsonContent);
@@ -324,16 +409,14 @@ class StremioService {
         knownUrlVariants.addAll(_duplicateUrlVariants(manifestUrl));
         imported++;
         importedNames.add(addon.name);
-      } catch (e) {
+      } catch (_) {
         failed++;
-        errors.add(
-          '$displayName: ${e.toString().replaceFirst('Exception: ', '')}',
-        );
+        errors.add('$displayName: import failed');
       }
     }
 
     if (imported > 0 || replaceExisting) {
-      await _saveAddons(addons);
+      await _saveAddons(addons, initiatingAuthorization: authorization);
     }
 
     return StremioAddonImportResult(
@@ -350,40 +433,92 @@ class StremioService {
 
   /// Remove an addon by its manifest URL
   Future<void> removeAddon(String manifestUrl) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonsAndEngines,
+    );
     final addons = await getAddons();
+    StremioAddon? target;
+    for (final addon in addons) {
+      if (addon.manifestUrl == manifestUrl) {
+        target = addon;
+        break;
+      }
+    }
+    if (target != null && !target.canManage) {
+      throw const ResourceAuthorizationException(
+        'A shared addon can only be managed by its owner',
+      );
+    }
     addons.removeWhere((a) => a.manifestUrl == manifestUrl);
-    await _saveAddons(addons);
-    debugPrint('StremioService: Removed addon: $manifestUrl');
+    await _saveAddons(addons, initiatingAuthorization: authorization);
+    debugPrint('StremioService: Removed addon');
   }
 
   /// Toggle addon enabled state
-  Future<void> setAddonEnabled(String manifestUrl, bool enabled) async {
+  Future<void> setAddonEnabled(String addonKey, bool enabled) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonsAndEngines,
+    );
     final addons = await getAddons();
-    final index = addons.indexWhere((a) => a.manifestUrl == manifestUrl);
+    final index = addons.indexWhere((a) => a.storageKey == addonKey);
     if (index >= 0) {
-      addons[index] = addons[index].copyWith(enabled: enabled);
-      await _saveAddons(addons);
+      final addon = addons[index];
+      if (ProfileCollectionResourceFacade.active) {
+        final resourceId = addon.connectionResourceId;
+        final resourceRevision = addon.connectionResourceRevision;
+        if (resourceId == null || resourceRevision == null) {
+          throw const ResourceAuthorizationException(
+            'Addon connection authority is missing',
+          );
+        }
+        await ProfileCollectionResourceFacade.setLocalEnabled(
+          resourceId: resourceId,
+          resourceRevision: resourceRevision,
+          feature: ProfileFeature.addonsAndEngines,
+          enabled: enabled,
+        );
+        if (authorization != null && !authorization.isCurrentlyActive) {
+          throw StateError('Profile session changed before addon publication');
+        }
+        _addonsCache = null;
+        _recommendationsCache.clear();
+        _metaDetailsCache.clear();
+        _nonRecommendationAddonIds.clear();
+        _catalogCache.clear();
+        _notifyAddonsChanged();
+        return;
+      }
+      addons[index] = addon.copyWith(enabled: enabled);
+      await _saveAddons(addons, initiatingAuthorization: authorization);
     }
   }
 
   /// Refresh an addon's manifest
   Future<StremioAddon?> refreshAddon(String manifestUrl) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonsAndEngines,
+    );
     try {
-      final newManifest = await fetchManifest(manifestUrl);
       final addons = await getAddons();
       final index = addons.indexWhere((a) => a.manifestUrl == manifestUrl);
       if (index >= 0) {
+        if (!addons[index].canManage) {
+          throw const ResourceAuthorizationException(
+            'A shared addon can only be managed by its owner',
+          );
+        }
+        final newManifest = await fetchManifest(manifestUrl);
         // Preserve enabled state
         addons[index] = newManifest.copyWith(
           enabled: addons[index].enabled,
           addedAt: addons[index].addedAt,
         );
-        await _saveAddons(addons);
+        await _saveAddons(addons, initiatingAuthorization: authorization);
         return addons[index];
       }
-      return newManifest;
-    } catch (e) {
-      debugPrint('StremioService: Error refreshing addon: $e');
+      return null;
+    } catch (_) {
+      debugPrint('StremioService: Addon refresh failed');
       return null;
     }
   }
@@ -392,6 +527,9 @@ class StremioService {
   /// enabled state and original add date. Saves once at the end (a single
   /// listener notification) instead of per-addon to avoid N UI reloads.
   Future<StremioAddonRefreshResult> refreshAllAddons() async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonsAndEngines,
+    );
     final addons = await getAddons();
     var updated = 0;
     var unchanged = 0;
@@ -401,6 +539,10 @@ class StremioService {
 
     for (var i = 0; i < addons.length; i++) {
       final old = addons[i];
+      if (!old.canManage) {
+        unchanged++;
+        continue;
+      }
       try {
         final fresh = await fetchManifest(old.manifestUrl);
         addons[i] = fresh.copyWith(enabled: old.enabled, addedAt: old.addedAt);
@@ -410,14 +552,14 @@ class StremioService {
         } else {
           unchanged++;
         }
-      } catch (e) {
+      } catch (_) {
         failed++;
         failedNames.add(old.name);
-        debugPrint('StremioService: Failed to refresh ${old.name}: $e');
+        debugPrint('StremioService: Addon refresh failed');
       }
     }
 
-    await _saveAddons(addons);
+    await _saveAddons(addons, initiatingAuthorization: authorization);
     return StremioAddonRefreshResult(
       updated: updated,
       unchanged: unchanged,
@@ -429,7 +571,10 @@ class StremioService {
 
   /// Clear all addons
   Future<void> clearAllAddons() async {
-    await _saveAddons([]);
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonsAndEngines,
+    );
+    await _saveAddons([], initiatingAuthorization: authorization);
     debugPrint('StremioService: Cleared all addons');
   }
 
@@ -439,6 +584,8 @@ class StremioService {
 
   /// Fetch and parse a manifest from URL
   Future<StremioAddon> fetchManifest(String manifestUrl) async {
+    final testFetcher = debugManifestFetcher;
+    if (testFetcher != null) return testFetcher(manifestUrl);
     try {
       final uri = Uri.parse(manifestUrl);
       final response = await http.get(uri).timeout(_requestTimeout);
@@ -489,6 +636,43 @@ class StremioService {
   /// - 'addonCounts': `Map<String, int>` - count of results per addon
   /// - 'addonErrors': `Map<String, String>` - error messages per addon
   Future<Map<String, dynamic>> searchStreams({
+    required String type,
+    required String imdbId,
+    int? season,
+    int? episode,
+    List<int>? availableSeasons,
+    Duration? timeout,
+    bool preserveOrder = false,
+  }) async {
+    final capability = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
+    final result = capability == null
+        ? await _searchStreams(
+            type: type,
+            imdbId: imdbId,
+            season: season,
+            episode: episode,
+            availableSeasons: availableSeasons,
+            timeout: timeout,
+            preserveOrder: preserveOrder,
+          )
+        : await capability.runIfCurrent(
+            () => _searchStreams(
+              type: type,
+              imdbId: imdbId,
+              season: season,
+              episode: episode,
+              availableSeasons: availableSeasons,
+              timeout: timeout,
+              preserveOrder: preserveOrder,
+            ),
+          );
+    await capability?.runIfCurrent(() async {});
+    return result;
+  }
+
+  Future<Map<String, dynamic>> _searchStreams({
     required String type,
     required String imdbId,
     int? season,
@@ -590,8 +774,8 @@ class StremioService {
           })
           .catchError((error, _) {
             addonCounts[sourceKey] = 0;
-            addonErrors[sourceKey] = error.toString();
-            debugPrint('StremioService: ${addon.name} error: $error');
+            addonErrors[sourceKey] = 'Stream source failed';
+            debugPrint('StremioService: Stream source failed');
             return <StremioStream>[];
           });
     }, concurrency: 16);
@@ -648,8 +832,8 @@ class StremioService {
           })
           .catchError((e) {
             addonCounts[sourceKey] = 0;
-            addonErrors[sourceKey] = e.toString();
-            debugPrint('StremioService: ${addon.name} (bare IMDB) error: $e');
+            addonErrors[sourceKey] = 'Stream source failed';
+            debugPrint('StremioService: Series stream source failed');
             return <StremioStream>[];
           });
     }, concurrency: 16);
@@ -720,23 +904,24 @@ class StremioService {
         for (final addon in applicableAddons)
           (seasonNum: seasonNum, addon: addon),
     ];
-    final List<List<StremioStream>>
-    seasonResults = await mapWithConcurrency(seasonProbes, (probe) {
-      final streamId = _buildStreamId(imdbId, probe.seasonNum, 1); // S{n}E1
-      return _fetchStreamsFromAddon(
-        probe.addon,
-        'series',
-        streamId,
-        timeout: timeout,
-      ).catchError((e) {
-        final sourceKey = 'stremio:${probe.addon.name}'.toLowerCase();
-        addonErrors[sourceKey] = e.toString();
-        debugPrint(
-          'StremioService: ${probe.addon.name} error probing S${probe.seasonNum}E1: $e',
-        );
-        return <StremioStream>[];
-      });
-    }, concurrency: 16);
+    final List<List<StremioStream>> seasonResults = await mapWithConcurrency(
+      seasonProbes,
+      (probe) {
+        final streamId = _buildStreamId(imdbId, probe.seasonNum, 1); // S{n}E1
+        return _fetchStreamsFromAddon(
+          probe.addon,
+          'series',
+          streamId,
+          timeout: timeout,
+        ).catchError((_) {
+          final sourceKey = 'stremio:${probe.addon.name}'.toLowerCase();
+          addonErrors[sourceKey] = 'Stream source failed';
+          debugPrint('StremioService: Season probe failed');
+          return <StremioStream>[];
+        });
+      },
+      concurrency: 16,
+    );
 
     // Flatten results
     final List<StremioStream> fallbackStreams = [];
@@ -952,7 +1137,7 @@ class StremioService {
           ) // Keep all usable streams (torrent, direct, external)
           .toList();
     } catch (e) {
-      debugPrint('StremioService: Error fetching from ${addon.name}: $e');
+      debugPrint('StremioService: Stream fetch failed');
       rethrow;
     }
   }
@@ -1070,7 +1255,7 @@ class StremioService {
       }
       return recommendations;
     } catch (e) {
-      debugPrint('StremioService: getRecommendations failed: $e');
+      debugPrint('StremioService: Recommendation fetch failed');
       return const [];
     }
   }
@@ -1161,7 +1346,7 @@ class StremioService {
       }
       return null;
     } catch (e) {
-      debugPrint('StremioService: fetchMetaDetails failed: $e');
+      debugPrint('StremioService: Metadata fetch failed');
       return null;
     }
   }
@@ -1334,18 +1519,6 @@ class StremioService {
       'recommendationLinks: $recommendationLinks, skipped: $skipped',
     );
 
-    // Log a few samples for debugging
-    if (results.isNotEmpty) {
-      final samples = results
-          .take(3)
-          .map(
-            (t) =>
-                '${t.streamType.name}:${t.infohash.substring(0, 8)}... (${t.source})',
-          )
-          .toList();
-      debugPrint('StremioService: Samples: $samples');
-    }
-
     return results;
   }
 
@@ -1477,7 +1650,7 @@ class StremioService {
       return List.of(cached.metas);
     }
 
-    debugPrint('StremioService: Fetching catalog from $url');
+    debugPrint('StremioService: Fetching catalog');
 
     try {
       // Use a client that follows redirects
@@ -1528,9 +1701,9 @@ class StremioService {
       } finally {
         client.close();
       }
-    } catch (e) {
+    } catch (_) {
       // Errors are deliberately not cached — the next visit retries.
-      debugPrint('StremioService: Error fetching catalog: $e');
+      debugPrint('StremioService: Catalog fetch failed');
       return [];
     }
   }
@@ -1574,7 +1747,7 @@ class StremioService {
 
     final url =
         '${addon.baseUrl}/meta/series/${Uri.encodeComponent(contentId)}.json';
-    debugPrint('StremioService: Fetching meta from $url');
+    debugPrint('StremioService: Fetching metadata');
 
     try {
       final client = http.Client();
@@ -1623,8 +1796,8 @@ class StremioService {
       } finally {
         client.close();
       }
-    } catch (e) {
-      debugPrint('StremioService: Error fetching meta: $e');
+    } catch (_) {
+      debugPrint('StremioService: Metadata fetch failed');
       return null;
     }
   }
@@ -1660,8 +1833,8 @@ class StremioService {
           if (metas.isNotEmpty) {
             results[key] = metas.take(limit).toList();
           }
-        } catch (e) {
-          debugPrint('StremioService: Error fetching $key: $e');
+        } catch (_) {
+          debugPrint('StremioService: Homepage source failed');
         }
       }
     }
@@ -1724,10 +1897,8 @@ class StremioService {
         catalog: catalog,
         items: items.take(limit).toList(),
       );
-    } catch (e) {
-      debugPrint(
-        'StremioService: Error fetching section ${addon.name}/${catalog.name}: $e',
-      );
+    } catch (_) {
+      debugPrint('StremioService: Catalog section fetch failed');
       return null;
     }
   }
@@ -1991,10 +2162,8 @@ class StremioService {
       } finally {
         client.close();
       }
-    } catch (e) {
-      debugPrint(
-        'StremioService: ${addon.name}/${catalog.name} search error: $e',
-      );
+    } catch (_) {
+      debugPrint('StremioService: Catalog search failed');
       if (throwOnError) rethrow;
       return [];
     }

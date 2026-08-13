@@ -84,7 +84,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   // Virtual folder navigation for Series Arrange mode
   bool _isInVirtualFolder = false;
   String? _virtualFolderName; // e.g., "Season 1"
-  List<Map<String, dynamic>> _virtualFolderFiles = []; // Files in virtual Season
+  List<Map<String, dynamic>> _virtualFolderFiles =
+      []; // Files in virtual Season
 
   // Cache for recursive file listings (avoid repeated API calls)
   final Map<String, List<Map<String, dynamic>>> _recursiveFileCache = {};
@@ -117,15 +118,22 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   int get _selectableFileCount =>
       _files.where((f) => (f['kind'] ?? '') != 'virtual#season').length;
   bool get _isAllSelected =>
-      _selectedFileIds.length == _selectableFileCount && _selectableFileCount > 0;
-  final FocusNode _deleteButtonFocusNode = FocusNode(debugLabel: 'pikpak-delete-btn');
+      _selectedFileIds.length == _selectableFileCount &&
+      _selectableFileCount > 0;
+  final FocusNode _deleteButtonFocusNode = FocusNode(
+    debugLabel: 'pikpak-delete-btn',
+  );
 
   // Search state (for folder browsing mode)
   bool _isSearchActive = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'pikpak-search');
-  final FocusNode _searchButtonFocusNode = FocusNode(debugLabel: 'pikpak-search-button');
-  final FocusNode _searchClearFocusNode = FocusNode(debugLabel: 'pikpak-search-clear');
+  final FocusNode _searchButtonFocusNode = FocusNode(
+    debugLabel: 'pikpak-search-button',
+  );
+  final FocusNode _searchClearFocusNode = FocusNode(
+    debugLabel: 'pikpak-search-clear',
+  );
   List<_PikPakSearchResult> _searchResults = [];
 
   @override
@@ -208,13 +216,16 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
     try {
       if (isFolder) {
-        final folderDetails =
-            await PikPakApiService.instance.getFileDetails(id);
+        final folderDetails = await PikPakApiService.instance.getFileDetails(
+          id,
+        );
         if (folderDetails['phase'] != 'PHASE_TYPE_COMPLETE') {
           if (!mounted) return;
           closeCheckingDialog();
-          _showSnackBar('This PikPak folder is not ready to stream',
-              isError: true);
+          _showSnackBar(
+            'This PikPak folder is not ready to stream',
+            isError: true,
+          );
           return;
         }
         final files = await PikPakApiService.instance.listFilesRecursive(
@@ -242,8 +253,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           final videoId = video['id']?.toString() ?? '';
           if (videoId.isEmpty) continue;
           try {
-            final details =
-                await PikPakApiService.instance.getFileDetails(videoId);
+            final details = await PikPakApiService.instance.getFileDetails(
+              videoId,
+            );
             final url = PikPakApiService.instance.getStreamingUrl(details);
             if (details['phase'] == 'PHASE_TYPE_COMPLETE' &&
                 url != null &&
@@ -258,8 +270,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         if (!mounted) return;
         closeCheckingDialog();
         if (!hasPlayableVideo) {
-          _showSnackBar('This PikPak folder has no ready video streams',
-              isError: true);
+          _showSnackBar(
+            'This PikPak folder has no ready video streams',
+            isError: true,
+          );
           return;
         }
       } else {
@@ -268,8 +282,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         closeCheckingDialog();
         if (details['phase'] != 'PHASE_TYPE_COMPLETE' ||
             PikPakApiService.instance.getStreamingUrl(details) == null) {
-          _showSnackBar('This PikPak file is not ready to stream',
-              isError: true);
+          _showSnackBar(
+            'This PikPak file is not ready to stream',
+            isError: true,
+          );
           return;
         }
       }
@@ -344,7 +360,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     } else {
       MainPageBridge.unregisterTabBackHandler('pikpak');
       if (_tvContentFocusHandler != null) {
-        MainPageBridge.unregisterTvContentFocusHandler(6, _tvContentFocusHandler!);
+        MainPageBridge.unregisterTvContentFocusHandler(
+          6,
+          _tvContentFocusHandler!,
+        );
       }
     }
 
@@ -381,8 +400,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
 
     // If inside a virtual folder or subfolder, navigate up
-    if (_isInVirtualFolder || _navigationStack.isNotEmpty ||
-        (_restrictedFolderId != null && _currentFolderId != _restrictedFolderId)) {
+    if (_isInVirtualFolder ||
+        _navigationStack.isNotEmpty ||
+        (_restrictedFolderId != null &&
+            _currentFolderId != _restrictedFolderId)) {
       _navigateUpWithVirtual();
       return true;
     }
@@ -417,8 +438,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
     // If enabled and has a restricted folder, verify it still exists
     if (enabled && restrictedId != null && restrictedId.isNotEmpty) {
-      final folderExists =
-          await PikPakApiService.instance.verifyRestrictedFolderExists();
+      final folderExists = await PikPakApiService.instance
+          .verifyRestrictedFolderExists();
       if (!folderExists) {
         // Restricted folder was deleted externally
         await _handleRestrictedFolderDeleted();
@@ -459,8 +480,18 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       'PikPak: Restricted folder was deleted externally, logging out user...',
     );
 
-    // Logout from PikPak
-    await PikPakApiService.instance.logout();
+    // A shared owner must resolve borrower impact before this local account
+    // can be removed. Do not claim logout or clear the screen on failure.
+    try {
+      await PikPakApiService.instance.logout();
+    } catch (_) {
+      if (!mounted) return;
+      _showSnackBar(
+        'This connection is shared. Manage profile access before disconnecting.',
+        isError: true,
+      );
+      return;
+    }
 
     if (!mounted) return;
 
@@ -569,7 +600,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
         // Re-apply current view mode to maintain consistency
         final mode = _getCurrentViewMode();
-        if (mode != _FolderViewMode.raw && mode != _FolderViewMode.seriesArrange) {
+        if (mode != _FolderViewMode.raw &&
+            mode != _FolderViewMode.seriesArrange) {
           final transformed = _applyViewMode(mode, _files);
           _files.clear();
           _files.addAll(transformed);
@@ -894,6 +926,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
       // Enqueue download
       await DownloadService.instance.enqueueDownload(
+        credentialKey: 'pikpak_email',
         url: downloadUrl,
         fileName: fileName,
         meta: meta,
@@ -1029,7 +1062,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         try {
           final fileId = file['id'] as String?;
           // Use _fullPath if available (from path tracking), otherwise use original name
-          final fileName = (file['_fullPath'] as String?) ?? file['name'] ?? 'download';
+          final fileName =
+              (file['_fullPath'] as String?) ?? file['name'] ?? 'download';
 
           if (fileId == null) {
             failCount++;
@@ -1056,6 +1090,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
           // Enqueue download with folder name for organization
           await DownloadService.instance.enqueueDownload(
+            credentialKey: 'pikpak_email',
             url: downloadUrl,
             fileName: fileName,
             meta: meta,
@@ -1310,7 +1345,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     final count = ids.length;
     final label = permanent ? 'Deleting permanently' : 'Moving to trash';
 
-    _showSnackBar('$label $count ${count == 1 ? 'file' : 'files'}...', isError: false);
+    _showSnackBar(
+      '$label $count ${count == 1 ? 'file' : 'files'}...',
+      isError: false,
+    );
 
     try {
       if (permanent) {
@@ -1430,11 +1468,16 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
         // Detect if it's actually a series
         if (videoFiles.length < 3) {
-          _showFallbackToSorted('Not enough video files for series detection', allFiles);
+          _showFallbackToSorted(
+            'Not enough video files for series detection',
+            allFiles,
+          );
           return;
         }
 
-        final filenames = videoFiles.map((f) => f['name'] as String? ?? '').toList();
+        final filenames = videoFiles
+            .map((f) => f['name'] as String? ?? '')
+            .toList();
         final isSeries = SeriesParser.isSeriesPlaylist(filenames);
 
         if (!isSeries) {
@@ -1470,13 +1513,18 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
   /// Show snackbar and fallback to sorted view
   /// If allFiles is provided (from recursive fetch), use those instead of _files
-  void _showFallbackToSorted(String reason, List<Map<String, dynamic>>? allFiles) {
+  void _showFallbackToSorted(
+    String reason,
+    List<Map<String, dynamic>>? allFiles,
+  ) {
     if (!mounted) return;
 
     final app = AppThemeScope.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('No series detected in this folder. Switching to Sort (A-Z) view.'),
+        content: const Text(
+          'No series detected in this folder. Switching to Sort (A-Z) view.',
+        ),
         duration: const Duration(seconds: 3),
         backgroundColor: app.cloud.dialogSurface,
         behavior: SnackBarBehavior.floating,
@@ -1510,7 +1558,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   }
 
   /// Apply sorted view (folders first A-Z, then files A-Z) with numerical sorting
-  List<Map<String, dynamic>> _applySortedView(List<Map<String, dynamic>> items) {
+  List<Map<String, dynamic>> _applySortedView(
+    List<Map<String, dynamic>> items,
+  ) {
     final folders = items.where((item) {
       final kind = item['kind'] ?? '';
       return kind == 'drive#folder';
@@ -1634,7 +1684,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
     if (videoFiles.isEmpty) return items;
 
-    final filenames = videoFiles.map((f) => f['name'] as String? ?? '').toList();
+    final filenames = videoFiles
+        .map((f) => f['name'] as String? ?? '')
+        .toList();
 
     try {
       final parsedInfos = SeriesParser.parsePlaylist(filenames);
@@ -1734,22 +1786,22 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
               mode == _FolderViewMode.raw
                   ? Icons.view_list
                   : mode == _FolderViewMode.sortedAZ
-                      ? Icons.sort_by_alpha
-                      : Icons.video_library,
+                  ? Icons.sort_by_alpha
+                  : Icons.video_library,
               color: theme.colorScheme.primary,
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             filled: true,
-            fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.3,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
           ),
           items: const [
-            DropdownMenuItem(
-              value: _FolderViewMode.raw,
-              child: Text('Raw'),
-            ),
+            DropdownMenuItem(value: _FolderViewMode.raw, child: Text('Raw')),
             DropdownMenuItem(
               value: _FolderViewMode.sortedAZ,
               child: Text('Sort (A-Z)'),
@@ -1832,8 +1884,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
               // D-pad exits for Android TV (formerly a Focus/onKeyEvent wrapper)
               onUpArrow: () => _searchFocusNode.unfocus(),
               onDownArrow: () => _searchFocusNode.unfocus(),
-              onRightArrow:
-                  hasText ? () => _searchClearFocusNode.requestFocus() : null,
+              onRightArrow: hasText
+                  ? () => _searchClearFocusNode.requestFocus()
+                  : null,
               decoration: InputDecoration(
                 hintText: 'Search files...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
@@ -1843,7 +1896,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                   borderRadius: app.shape.br(8),
                   borderSide: BorderSide.none,
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
               onChanged: _performSearch,
               onSubmitted: (_) => _searchFocusNode.unfocus(),
@@ -1912,7 +1968,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
   Widget _buildSearchResults() {
     if (_searchController.text.isEmpty) {
       return const Center(
-        child: Text('Type to search files', style: TextStyle(color: Colors.grey)),
+        child: Text(
+          'Type to search files',
+          style: TextStyle(color: Colors.grey),
+        ),
       );
     }
 
@@ -1958,7 +2017,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           colors: [Color(0xFF1F2A44), Color(0xFF111C32)],
         ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1.2),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 1.2,
+        ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -1969,7 +2031,11 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const Icon(Icons.play_circle_outline, color: Colors.blue, size: 32),
+                const Icon(
+                  Icons.play_circle_outline,
+                  color: Colors.blue,
+                  size: 32,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -1985,7 +2051,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                         const SizedBox(height: 4),
                         Text(
                           result.path,
-                          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -2057,15 +2126,19 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
 
     // Check if we should show the view mode dropdown
     // Only show when navigated at least one level deep (inside a folder)
-    final showViewModeDropdown = _navigationStack.isNotEmpty || _isInVirtualFolder;
+    final showViewModeDropdown =
+        _navigationStack.isNotEmpty || _isInVirtualFolder;
     final currentMode = _getCurrentViewMode();
     final showSearch =
-        showViewModeDropdown && currentMode != _FolderViewMode.seriesArrange && !_isInVirtualFolder;
+        showViewModeDropdown &&
+        currentMode != _FolderViewMode.seriesArrange &&
+        !_isInVirtualFolder;
 
     final bool isCompactActions = MediaQuery.sizeOf(context).width < 500;
     final double actionIconSize = isCompactActions ? 20 : 24;
-    final EdgeInsets actionIconPadding =
-        isCompactActions ? const EdgeInsets.all(6) : const EdgeInsets.all(8);
+    final EdgeInsets actionIconPadding = isCompactActions
+        ? const EdgeInsets.all(6)
+        : const EdgeInsets.all(8);
     final BoxConstraints actionIconConstraints = isCompactActions
         ? const BoxConstraints(minWidth: 36, minHeight: 36)
         : const BoxConstraints(minWidth: 48, minHeight: 48);
@@ -2073,7 +2146,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     // Back navigation is handled via MainPageBridge.handleBackNavigation
     return CloudScaffold(
       appBar: AppBar(
-        leading: (_currentFolderId != null && !_isAtRestrictedRoot) || _isInVirtualFolder
+        leading:
+            (_currentFolderId != null && !_isAtRestrictedRoot) ||
+                _isInVirtualFolder
             ? Focus(
                 onKeyEvent: (node, event) {
                   if (event is KeyDownEvent &&
@@ -2094,21 +2169,23 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             // At the browse root (opened from the Cloud hub with no folder
             // target) there's no folder-up back — offer a Back-to-hub instead.
             : (_isBrowsePush
-                ? IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    tooltip: 'Back',
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  )
-                : null),
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    )
+                  : null),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_isInVirtualFolder
-                ? _virtualFolderName ?? 'Virtual Folder'
-                : widget.selectSourceMode
-                    ? 'Select PikPak Source'
-                    : _currentFolderName),
+            Text(
+              _isInVirtualFolder
+                  ? _virtualFolderName ?? 'Virtual Folder'
+                  : widget.selectSourceMode
+                  ? 'Select PikPak Source'
+                  : _currentFolderName,
+            ),
             if (_restrictedFolderId != null && !_isInVirtualFolder)
               const Text(
                 'Restricted Access',
@@ -2124,7 +2201,9 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
               !_isInVirtualFolder &&
               !widget.selectSourceMode)
             IconButton(
-              icon: Icon(_isSelectionMode ? Icons.close : Icons.checklist_outlined),
+              icon: Icon(
+                _isSelectionMode ? Icons.close : Icons.checklist_outlined,
+              ),
               onPressed: _toggleSelectionMode,
               tooltip: _isSelectionMode ? 'Exit selection' : 'Select items',
               color: _isSelectionMode
@@ -2173,7 +2252,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         children: [
           if (_isSelectionMode) _buildSelectionBar(),
           // View mode dropdown (only shown when inside folders)
-          if (showViewModeDropdown && !_isInVirtualFolder) _buildViewModeDropdown(),
+          if (showViewModeDropdown && !_isInVirtualFolder)
+            _buildViewModeDropdown(),
           if (_isSearchActive && showSearch) _buildSearchBar(),
           Expanded(
             child: _isSearchActive
@@ -2188,8 +2268,8 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                       child: _isLoading && _files.isEmpty
                           ? const CloudRowSkeletonList()
                           : _files.isEmpty
-                              ? _buildEmpty()
-                              : _buildFileList(),
+                          ? _buildEmpty()
+                          : _buildFileList(),
                     ),
                   ),
           ),
@@ -2363,17 +2443,20 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
             onPressed: count > 0 ? _handleDeleteSelected : null,
             icon: const Icon(Icons.delete_outline, size: 18),
             label: const Text('Delete'),
-            style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.error,
-              disabledBackgroundColor: theme.colorScheme.error.withValues(alpha: 0.3),
-            ).copyWith(
-              side: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.focused)) {
-                  return BorderSide(color: app.core.tx, width: 3);
-                }
-                return null;
-              }),
-            ),
+            style:
+                FilledButton.styleFrom(
+                  backgroundColor: theme.colorScheme.error,
+                  disabledBackgroundColor: theme.colorScheme.error.withValues(
+                    alpha: 0.3,
+                  ),
+                ).copyWith(
+                  side: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.focused)) {
+                      return BorderSide(color: app.core.tx, width: 3);
+                    }
+                    return null;
+                  }),
+                ),
           ),
         ],
       ),
@@ -2459,10 +2542,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
         kind: isVirtualFolder
             ? CloudRowKind.season
             : isFolder
-                ? CloudRowKind.folder
-                : isVideo
-                    ? CloudRowKind.video
-                    : CloudRowKind.file,
+            ? CloudRowKind.folder
+            : isVideo
+            ? CloudRowKind.video
+            : CloudRowKind.file,
         title: name,
         meta: metaParts.isEmpty ? null : metaParts.join(' · '),
         extra: (!isComplete && !isVirtualFolder)
@@ -2533,10 +2616,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       kind: isVirtualFolder
           ? CloudRowKind.season
           : isFolder
-              ? CloudRowKind.folder
-              : isVideo
-                  ? CloudRowKind.video
-                  : CloudRowKind.file,
+          ? CloudRowKind.folder
+          : isVideo
+          ? CloudRowKind.video
+          : CloudRowKind.file,
       title: name,
       meta: metaParts.isEmpty ? null : metaParts.join(' · '),
       // Virtual season rows are client-synthesized and carry no 'phase', so
@@ -2564,16 +2647,17 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       onTap: isVirtualFolder
           ? () => _navigateIntoVirtualFolder(file)
           : isFolder
-              ? () => _navigateIntoFolder(file['id'], name)
-              : (isVideo && isComplete)
-                  ? () => _playFile(file)
-                  : null,
+          ? () => _navigateIntoFolder(file['id'], name)
+          : (isVideo && isComplete)
+          ? () => _playFile(file)
+          : null,
       actions: actions,
       selectionMode: _isSelectionMode,
       selected: fileId != null && _selectedFileIds.contains(fileId),
       selectable: fileId != null && !isVirtualFolder,
-      onToggleSelected:
-          fileId != null ? () => _toggleFileSelection(fileId) : null,
+      onToggleSelected: fileId != null
+          ? () => _toggleFileSelection(fileId)
+          : null,
       focusNode: index == 0 ? _firstItemFocusNode : null,
     );
   }
@@ -3208,7 +3292,10 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Add', style: TextStyle(color: Colors.black)),
+                      : const Text(
+                          'Add',
+                          style: TextStyle(color: Colors.black),
+                        ),
                 ),
               ),
             ],
@@ -3250,10 +3337,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
     }
 
     if (!_isValidPikPakLink(link)) {
-      _showSnackBar(
-        'Please enter a valid URL or magnet link',
-        isError: true,
-      );
+      _showSnackBar('Please enter a valid URL or magnet link', isError: true);
       return;
     }
 
@@ -3275,9 +3359,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
           children: [
             const CircularProgressIndicator(color: Color(0xFFFFAA00)),
             const SizedBox(height: 16),
-            const Text(
-              'Adding to PikPak...',
-            ),
+            const Text('Adding to PikPak...'),
             const SizedBox(height: 8),
             Text(
               link.length > 50 ? '${link.substring(0, 50)}...' : link,

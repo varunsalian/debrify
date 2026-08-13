@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/platform_util.dart';
+import 'profiles/profile_credential_facade.dart';
 
 /// AES-GCM-256 encryption-at-rest for credential strings in SharedPreferences.
 ///
@@ -53,10 +54,7 @@ class SecretVault {
   /// Encrypts [plaintext] into the `enc1:` envelope.
   static Future<String> seal(String plaintext) async {
     final key = await _key();
-    final box = await _aes.encrypt(
-      utf8.encode(plaintext),
-      secretKey: key,
-    );
+    final box = await _aes.encrypt(utf8.encode(plaintext), secretKey: key);
     final packed = <int>[...box.nonce, ...box.cipherText, ...box.mac.bytes];
     return '$prefix${base64Encode(packed)}';
   }
@@ -84,6 +82,28 @@ class SecretVault {
     }
   }
 
+  /// Migration-only strict decoder. Unlike [open], a present encrypted value
+  /// can never be confused with an absent credential.
+  static Future<String?> openStrict(String? stored) async {
+    if (stored == null) return null;
+    if (!stored.startsWith(prefix)) return stored;
+    try {
+      final packed = base64Decode(stored.substring(prefix.length));
+      if (packed.length < _nonceLength + _tagLength) {
+        throw const FormatException('Encrypted credential is truncated');
+      }
+      final box = SecretBox(
+        packed.sublist(_nonceLength, packed.length - _tagLength),
+        nonce: packed.sublist(0, _nonceLength),
+        mac: Mac(packed.sublist(packed.length - _tagLength)),
+      );
+      final key = await _key();
+      return utf8.decode(await _aes.decrypt(box, secretKey: key));
+    } on Object catch (error) {
+      throw FormatException('Encrypted credential is unreadable', error);
+    }
+  }
+
   /// Whether [stored] carries the ciphertext envelope.
   static bool isSealed(String? stored) => stored?.startsWith(prefix) ?? false;
 
@@ -92,6 +112,8 @@ class SecretVault {
   /// `prefs.getString` + [open]; a legacy plaintext value is lazily rewritten
   /// sealed before being returned, so reads migrate the store over time.
   static Future<String?> getString(SharedPreferences prefs, String key) async {
+    final routed = await ProfileCredentialFacade.read(key);
+    if (routed.handled) return routed.value;
     final stored = prefs.getString(key);
     if (stored == null) return null;
     final value = await open(stored);
@@ -106,8 +128,32 @@ class SecretVault {
     return value;
   }
 
+  static Future<String?> getStringStrict(SharedPreferences prefs, String key) =>
+      openStrict(prefs.getString(key));
+
+  static Future<List<String>> getStringListStrict(
+    SharedPreferences prefs,
+    String key,
+  ) async {
+    final stored = prefs.getStringList(key);
+    if (stored == null) return const <String>[];
+    final values = <String>[];
+    for (final element in stored) {
+      final opened = await openStrict(element);
+      if (opened == null) {
+        throw FormatException('Credential list entry is unreadable: $key');
+      }
+      values.add(opened);
+    }
+    return values;
+  }
+
   static Future<void> setString(
-      SharedPreferences prefs, String key, String value) async {
+    SharedPreferences prefs,
+    String key,
+    String value,
+  ) async {
+    if (await ProfileCredentialFacade.write(key, value)) return;
     await prefs.setString(key, await seal(value));
   }
 
@@ -115,7 +161,9 @@ class SecretVault {
   /// dropped (logged); if any element was legacy plaintext the whole list is
   /// rewritten sealed.
   static Future<List<String>> getStringList(
-      SharedPreferences prefs, String key) async {
+    SharedPreferences prefs,
+    String key,
+  ) async {
     final stored = prefs.getStringList(key);
     if (stored == null) return const [];
     var hadLegacy = false;
@@ -142,7 +190,8 @@ class SecretVault {
       }
       // Same racing rule as getString: only migrate what was actually read.
       final current = prefs.getStringList(key);
-      final unchanged = current != null &&
+      final unchanged =
+          current != null &&
           current.length == stored.length &&
           () {
             for (var i = 0; i < current.length; i++) {
@@ -158,7 +207,10 @@ class SecretVault {
   }
 
   static Future<void> setStringList(
-      SharedPreferences prefs, String key, List<String> values) async {
+    SharedPreferences prefs,
+    String key,
+    List<String> values,
+  ) async {
     final sealed = <String>[];
     for (final value in values) {
       sealed.add(await seal(value));
@@ -171,7 +223,9 @@ class SecretVault {
   /// Returns a copy of [map] with the named string fields sealed (null and
   /// non-string fields are left untouched).
   static Future<Map<String, dynamic>> sealFields(
-      Map<String, dynamic> map, List<String> fields) async {
+    Map<String, dynamic> map,
+    List<String> fields,
+  ) async {
     final out = Map<String, dynamic>.from(map);
     for (final field in fields) {
       final value = out[field];
@@ -185,7 +239,9 @@ class SecretVault {
   /// record: `wasLegacy` is true when any named field was legacy plaintext
   /// (caller decides whether to rewrite the containing blob).
   static Future<({Map<String, dynamic> map, bool wasLegacy})> openFields(
-      Map<String, dynamic> map, List<String> fields) async {
+    Map<String, dynamic> map,
+    List<String> fields,
+  ) async {
     final out = Map<String, dynamic>.from(map);
     var wasLegacy = false;
     for (final field in fields) {
@@ -198,6 +254,18 @@ class SecretVault {
       out[field] = await open(value);
     }
     return (map: out, wasLegacy: wasLegacy);
+  }
+
+  static Future<Map<String, dynamic>> openFieldsStrict(
+    Map<String, dynamic> map,
+    List<String> fields,
+  ) async {
+    final out = Map<String, dynamic>.from(map);
+    for (final field in fields) {
+      final value = out[field];
+      if (value is String) out[field] = await openStrict(value);
+    }
+    return out;
   }
 
   // ------------------------------------------------------------ key mgmt ---
@@ -225,17 +293,21 @@ class SecretVault {
     final prefs = await SharedPreferences.getInstance();
     var deviceId = await _deviceId();
     // Retry transient lookup failures before committing to anything.
-    for (var attempt = 0;
-        deviceId == null && !_deviceIdOverridden && attempt < 2;
-        attempt++) {
+    for (
+      var attempt = 0;
+      deviceId == null && !_deviceIdOverridden && attempt < 2;
+      attempt++
+    ) {
       await Future.delayed(const Duration(milliseconds: 200));
       deviceId = await _deviceId();
     }
 
     final marker = prefs.getString(_keySourceKey);
     if (marker == null) {
-      await prefs.setString(_keySourceKey,
-          deviceId == null ? 'pepper' : 'id:${await _idHash(deviceId)}');
+      await prefs.setString(
+        _keySourceKey,
+        deviceId == null ? 'pepper' : 'id:${await _idHash(deviceId)}',
+      );
     } else if (marker == 'pepper') {
       // This install committed to pepper-only (first launch couldn't resolve
       // an id). Stable-forever beats stronger-but-flipping: switching to the
@@ -249,8 +321,9 @@ class SecretVault {
         // failure to null) and writes error out rather than sealing under a
         // key tomorrow can't reproduce.
         throw StateError(
-            'SecretVault: device identity unavailable; refusing to derive '
-            'a different key');
+          'SecretVault: device identity unavailable; refusing to derive '
+          'a different key',
+        );
       }
       final hash = await _idHash(deviceId);
       if (marker != 'id:$hash') {
@@ -286,14 +359,16 @@ class SecretVault {
       if (PlatformUtil.isTvOS) {
         // device_info_plus has no tvOS implementation; hand-rolled channel in
         // tvos/Runner/AppDelegate.swift.
-        return await const MethodChannel('debrify/tvdevice')
-            .invokeMethod<String>('id');
+        return await const MethodChannel(
+          'debrify/tvdevice',
+        ).invokeMethod<String>('id');
       }
       if (defaultTargetPlatform == TargetPlatform.android) {
         // Hand-rolled channel in MainActivity.kt (device_info_plus removed
         // its ANDROID_ID accessor).
-        return await const MethodChannel('debrify/device')
-            .invokeMethod<String>('id');
+        return await const MethodChannel(
+          'debrify/device',
+        ).invokeMethod<String>('id');
       }
       final plugin = DeviceInfoPlugin();
       if (defaultTargetPlatform == TargetPlatform.iOS) {

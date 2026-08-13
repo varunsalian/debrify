@@ -9,6 +9,21 @@ import '../models/torbox_torrent.dart';
 
 class MainPageBridge {
   static void Function(int index)? switchTab;
+  static VoidCallback? showProfilePicker;
+
+  /// Drops one-shot data owned by the outgoing profile. Callback registrations
+  /// are lifecycle-owned by widgets and are deliberately left alone; only
+  /// content-bearing handoffs are invalidated here.
+  static void clearProfileSessionState() {
+    pendingCatalogDetailOpen = null;
+    pendingMdblistListOpen = null;
+    _pendingPostSetupSnackBarMessage = null;
+    _debrifyTvChannelToAutoPlay = null;
+    _stremioTvChannelToAutoPlay = null;
+    cancelIptvStartupChannel();
+    _continueWatchingItemToAutoPlay = null;
+    _advancedSearchSelectionToAutoPlay = null;
+  }
 
   /// Fired by Settings when the phone-nav style or bar slots change, so the
   /// main shell swaps chrome without a restart.
@@ -119,6 +134,7 @@ class MainPageBridge {
   static void removeExternalPlayerLaunchListener(VoidCallback listener) {
     _externalPlayerLaunchListeners.remove(listener);
   }
+
   static Future<void> Function(String channelId)? watchDebrifyTvChannel;
   static Future<void> Function(String channelId)? watchStremioTvChannel;
   static Future<void> Function(Map<String, dynamic> item)?

@@ -1,10 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import '../utils/app_storage.dart';
 import 'package:sqflite/sqflite.dart';
+
+import 'profiles/profile_storage_paths.dart';
 
 class DebrifyTvDatabase {
   DebrifyTvDatabase._();
@@ -27,8 +26,7 @@ class DebrifyTvDatabase {
       return _db!;
     }
 
-    final docsDir = await AppStorage.documents();
-    final dbPath = p.join(docsDir.path, 'debrify_tv.db');
+    final dbPath = await ProfileStoragePaths.documentsFile('debrify_tv.db');
 
     _db = await openDatabase(
       dbPath,
@@ -125,6 +123,12 @@ class DebrifyTvDatabase {
     return _db!;
   }
 
+  Future<void> closeScope() async {
+    final opened = _db;
+    _db = null;
+    if (opened != null) await opened.close();
+  }
+
   Future<T> runTxn<T>(Future<T> Function(Transaction txn) action) async {
     final db = await database;
     return db.transaction(action, exclusive: false);
@@ -208,14 +212,17 @@ class DebrifyTvDatabase {
     // are backfilled by the reconcile pass the first time each playlist is
     // opened (IptvMediaStore). Until then a migrated VOD favorite keeps
     // presenting as live, exactly as it did before this migration.
-    await db.execute('''
+    await db.execute(
+      '''
       INSERT OR IGNORE INTO iptv_list_channels
         (list_id, url, name, logo_url, channel_group, playlist_id,
          channel_number, content_type, duration, http_headers_json, added_at)
       SELECT ?, url, name, logo_url, channel_group, playlist_id,
              channel_number, NULL, NULL, http_headers_json, added_at
       FROM iptv_favorites
-    ''', [favoritesListId]);
+    ''',
+      [favoritesListId],
+    );
 
     await db.execute('DROP TABLE iptv_favorites');
   }

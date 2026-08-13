@@ -31,12 +31,12 @@ class DiscoveredDevice {
   bool get supportsEncryption => protoVersion >= 2;
 
   Map<String, dynamic> toJson() => {
-        'deviceName': deviceName,
-        'ip': ip,
-        'discoveredAt': discoveredAt.toIso8601String(),
-        'proto': protoVersion,
-        if (staticKey != null) 'spk': staticKey,
-      };
+    'deviceName': deviceName,
+    'ip': ip,
+    'discoveredAt': discoveredAt.toIso8601String(),
+    'proto': protoVersion,
+    if (staticKey != null) 'spk': staticKey,
+  };
 
   factory DiscoveredDevice.fromJson(Map<String, dynamic> json) {
     return DiscoveredDevice(
@@ -51,8 +51,7 @@ class DiscoveredDevice {
   }
 
   @override
-  String toString() =>
-      'DiscoveredDevice($deviceName @ $ip, v$protoVersion)';
+  String toString() => 'DiscoveredDevice($deviceName @ $ip, v$protoVersion)';
 }
 
 /// Service for UDP-based device discovery
@@ -77,12 +76,13 @@ class UdpDiscoveryService {
     required String deviceId,
     required bool isTv,
     String? tvDeviceName,
-  })  : _deviceId = deviceId,
-        _isTv = isTv,
-        _tvDeviceName = tvDeviceName;
+  }) : _deviceId = deviceId,
+       _isTv = isTv,
+       _tvDeviceName = tvDeviceName;
 
   /// Get list of discovered devices
-  List<DiscoveredDevice> get discoveredDevices => List.unmodifiable(_discoveredDevices);
+  List<DiscoveredDevice> get discoveredDevices =>
+      List.unmodifiable(_discoveredDevices);
 
   /// Update TV device name (for TV mode)
   void setTvDeviceName(String name) {
@@ -112,8 +112,10 @@ class UdpDiscoveryService {
       _socket!.listen(
         _handleDatagram,
         onError: (error) {
-          debugPrint('UdpDiscoveryService: Socket error: $error');
-          onError?.call(error.toString());
+          debugPrint(
+            'UdpDiscoveryService: Socket error (${error.runtimeType})',
+          );
+          onError?.call('Discovery socket failed');
         },
         onDone: () {
           debugPrint('UdpDiscoveryService: Socket closed');
@@ -127,9 +129,9 @@ class UdpDiscoveryService {
         _startBroadcasting();
         _startDiscoveryTimeout();
       }
-    } catch (e) {
-      debugPrint('UdpDiscoveryService: Failed to start: $e');
-      onError?.call(e.toString());
+    } catch (_) {
+      debugPrint('UdpDiscoveryService: Failed to start');
+      onError?.call('Discovery could not start');
     }
   }
 
@@ -159,14 +161,10 @@ class UdpDiscoveryService {
 
     // Send to global broadcast (works on most mobile devices)
     try {
-      _socket!.send(
-        data,
-        InternetAddress(kBroadcastAddress),
-        kDiscoveryPort,
-      );
-      debugPrint('UdpDiscoveryService: Sent discovery broadcast to $kBroadcastAddress');
-    } catch (e) {
-      debugPrint('UdpDiscoveryService: Failed to send global broadcast: $e');
+      _socket!.send(data, InternetAddress(kBroadcastAddress), kDiscoveryPort);
+      debugPrint('UdpDiscoveryService: Sent discovery broadcast');
+    } catch (_) {
+      debugPrint('UdpDiscoveryService: Failed to send discovery broadcast');
     }
 
     // Also send to subnet broadcast addresses (needed for macOS/desktop)
@@ -188,15 +186,17 @@ class UdpDiscoveryService {
                 InternetAddress(subnetBroadcast),
                 kDiscoveryPort,
               );
-              debugPrint('UdpDiscoveryService: Sent discovery broadcast to $subnetBroadcast');
-            } catch (e) {
-              debugPrint('UdpDiscoveryService: Failed to send to $subnetBroadcast: $e');
+              debugPrint(
+                'UdpDiscoveryService: Sent subnet discovery broadcast',
+              );
+            } catch (_) {
+              debugPrint('UdpDiscoveryService: Subnet broadcast failed');
             }
           }
         }
       }
-    } catch (e) {
-      debugPrint('UdpDiscoveryService: Failed to get network interfaces: $e');
+    } catch (_) {
+      debugPrint('UdpDiscoveryService: Network interface discovery failed');
     }
   }
 
@@ -212,7 +212,9 @@ class UdpDiscoveryService {
 
   void _startDiscoveryTimeout() {
     _discoveryTimeoutTimer = Timer(kDiscoveryTimeout, () {
-      debugPrint('UdpDiscoveryService: Discovery complete (found ${_discoveredDevices.length} devices)');
+      debugPrint(
+        'UdpDiscoveryService: Discovery complete (found ${_discoveredDevices.length} devices)',
+      );
       // Stop broadcasting after timeout
       _broadcastTimer?.cancel();
       _broadcastTimer = null;
@@ -231,19 +233,22 @@ class UdpDiscoveryService {
       final json = jsonDecode(message) as Map<String, dynamic>;
       final type = json['type'] as String?;
 
-      debugPrint('UdpDiscoveryService: Received $type from ${datagram.address.address}');
+      debugPrint('UdpDiscoveryService: Received ${type ?? 'unknown'} packet');
 
       if (_isTv && type == RemoteMessageType.discovery) {
         _handleDiscoveryRequest(datagram.address, json);
       } else if (!_isTv && type == RemoteMessageType.discoveryResponse) {
         _handleDiscoveryResponse(datagram.address, json);
       }
-    } catch (e) {
-      debugPrint('UdpDiscoveryService: Failed to parse message: $e');
+    } catch (_) {
+      debugPrint('UdpDiscoveryService: Failed to parse discovery packet');
     }
   }
 
-  void _handleDiscoveryRequest(InternetAddress senderAddress, Map<String, dynamic> json) {
+  void _handleDiscoveryRequest(
+    InternetAddress senderAddress,
+    Map<String, dynamic> json,
+  ) {
     // TV received discovery request from mobile - send response. The proto
     // and spk fields are invisible to old phones (they read only deviceName).
     final response = jsonEncode({
@@ -255,18 +260,17 @@ class UdpDiscoveryService {
     });
 
     try {
-      _socket?.send(
-        utf8.encode(response),
-        senderAddress,
-        kDiscoveryPort,
-      );
-      debugPrint('UdpDiscoveryService: Sent discovery response to ${senderAddress.address}');
-    } catch (e) {
-      debugPrint('UdpDiscoveryService: Failed to send response: $e');
+      _socket?.send(utf8.encode(response), senderAddress, kDiscoveryPort);
+      debugPrint('UdpDiscoveryService: Sent discovery response');
+    } catch (_) {
+      debugPrint('UdpDiscoveryService: Failed to send discovery response');
     }
   }
 
-  void _handleDiscoveryResponse(InternetAddress senderAddress, Map<String, dynamic> json) {
+  void _handleDiscoveryResponse(
+    InternetAddress senderAddress,
+    Map<String, dynamic> json,
+  ) {
     // Mobile received discovery response from TV
     // Always use the actual source IP of the packet, not the JSON field
     // (the JSON 'ip' field may be wrong if TV can't determine its own IP)
@@ -278,15 +282,17 @@ class UdpDiscoveryService {
     );
 
     // Check if we already have this device (by IP)
-    final existingIndex = _discoveredDevices.indexWhere((d) => d.ip == device.ip);
+    final existingIndex = _discoveredDevices.indexWhere(
+      (d) => d.ip == device.ip,
+    );
     if (existingIndex >= 0) {
       // Update existing device (name might have changed)
       _discoveredDevices[existingIndex] = device;
-      debugPrint('UdpDiscoveryService: Updated TV: $device');
+      debugPrint('UdpDiscoveryService: Updated discovered device');
     } else {
       // Add new device
       _discoveredDevices.add(device);
-      debugPrint('UdpDiscoveryService: Discovered new TV: $device');
+      debugPrint('UdpDiscoveryService: Discovered new device');
     }
 
     // Notify listeners

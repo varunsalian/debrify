@@ -30,11 +30,14 @@ class RemotePairingStore {
     final stored = await SecretVault.getString(prefs, _keypairKey);
     if (stored != null && stored.isNotEmpty) {
       try {
-        return await RemoteSessionCrypto.x25519
-            .newKeyPairFromSeed(base64Decode(stored));
-      } catch (e) {
-        debugPrint('RemotePairingStore: stored keypair unusable ($e), '
-            'generating a new identity');
+        return await RemoteSessionCrypto.x25519.newKeyPairFromSeed(
+          base64Decode(stored),
+        );
+      } catch (_) {
+        debugPrint(
+          'RemotePairingStore: stored keypair unusable; '
+          'generating a new identity',
+        );
       }
     }
     final keyPair = await RemoteSessionCrypto.x25519.newKeyPair();
@@ -75,15 +78,16 @@ class RemotePairingStore {
     required String name,
   }) async {
     final devices = await listPaired();
-    final kept =
-        devices.where((d) => d.fingerprint != fingerprint).toList();
-    kept.add(PairedDevice(
-      fingerprint: fingerprint,
-      staticKey: base64Encode(staticKey),
-      name: name,
-      pairedAt: DateTime.now().toUtc(),
-      lastUsedAt: DateTime.now().toUtc(),
-    ));
+    final kept = devices.where((d) => d.fingerprint != fingerprint).toList();
+    kept.add(
+      PairedDevice(
+        fingerprint: fingerprint,
+        staticKey: base64Encode(staticKey),
+        name: name,
+        pairedAt: DateTime.now().toUtc(),
+        lastUsedAt: DateTime.now().toUtc(),
+      ),
+    );
     await _writePaired(kept);
   }
 
@@ -106,12 +110,21 @@ class RemotePairingStore {
   static Future<void> forget(String fingerprint) async {
     final devices = await listPaired();
     await _writePaired(
-        devices.where((d) => d.fingerprint != fingerprint).toList());
+      devices.where((d) => d.fingerprint != fingerprint).toList(),
+    );
   }
 
   static Future<void> forgetAll() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_pairedKey);
+  }
+
+  static Future<void> resetDeviceIdentity() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keypairKey);
+    await prefs.remove(_pairedKey);
+    await prefs.remove(_knownReceiversKey);
+    _keyPairFuture = null;
   }
 
   static Future<void> _writePaired(List<PairedDevice> devices) async {
@@ -138,12 +151,14 @@ class RemotePairingStore {
     final prefs = await SharedPreferences.getInstance();
     final known = await knownReceivers();
     final kept = known.where((r) => r.fingerprint != fingerprint).toList();
-    kept.add(KnownReceiver(
-      name: name,
-      fingerprint: fingerprint,
-      staticKey: base64Encode(staticKey),
-      pinnedAt: DateTime.now().toUtc(),
-    ));
+    kept.add(
+      KnownReceiver(
+        name: name,
+        fingerprint: fingerprint,
+        staticKey: base64Encode(staticKey),
+        pinnedAt: DateTime.now().toUtc(),
+      ),
+    );
     await prefs.setString(
       _knownReceiversKey,
       jsonEncode([for (final r in kept) r.toJson()]),
@@ -195,32 +210,32 @@ class PairedDevice {
   });
 
   PairedDevice copyWith({DateTime? lastUsedAt}) => PairedDevice(
-        fingerprint: fingerprint,
-        staticKey: staticKey,
-        name: name,
-        pairedAt: pairedAt,
-        lastUsedAt: lastUsedAt ?? this.lastUsedAt,
-      );
+    fingerprint: fingerprint,
+    staticKey: staticKey,
+    name: name,
+    pairedAt: pairedAt,
+    lastUsedAt: lastUsedAt ?? this.lastUsedAt,
+  );
 
   Map<String, dynamic> toJson() => {
-        'fp': fingerprint,
-        'spk': staticKey,
-        'name': name,
-        'pairedAt': pairedAt.toIso8601String(),
-        'lastUsedAt': lastUsedAt.toIso8601String(),
-      };
+    'fp': fingerprint,
+    'spk': staticKey,
+    'name': name,
+    'pairedAt': pairedAt.toIso8601String(),
+    'lastUsedAt': lastUsedAt.toIso8601String(),
+  };
 
   factory PairedDevice.fromJson(Map<String, dynamic> json) => PairedDevice(
-        fingerprint: json['fp'] as String,
-        staticKey: json['spk'] as String? ?? '',
-        name: json['name'] as String? ?? 'Phone',
-        pairedAt:
-            DateTime.tryParse(json['pairedAt'] as String? ?? '') ??
-                DateTime.fromMillisecondsSinceEpoch(0),
-        lastUsedAt:
-            DateTime.tryParse(json['lastUsedAt'] as String? ?? '') ??
-                DateTime.fromMillisecondsSinceEpoch(0),
-      );
+    fingerprint: json['fp'] as String,
+    staticKey: json['spk'] as String? ?? '',
+    name: json['name'] as String? ?? 'Phone',
+    pairedAt:
+        DateTime.tryParse(json['pairedAt'] as String? ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+    lastUsedAt:
+        DateTime.tryParse(json['lastUsedAt'] as String? ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+  );
 }
 
 class KnownReceiver {
@@ -237,17 +252,18 @@ class KnownReceiver {
   });
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'fp': fingerprint,
-        'spk': staticKey,
-        'pinnedAt': pinnedAt.toIso8601String(),
-      };
+    'name': name,
+    'fp': fingerprint,
+    'spk': staticKey,
+    'pinnedAt': pinnedAt.toIso8601String(),
+  };
 
   factory KnownReceiver.fromJson(Map<String, dynamic> json) => KnownReceiver(
-        name: json['name'] as String? ?? '',
-        fingerprint: json['fp'] as String? ?? '',
-        staticKey: json['spk'] as String? ?? '',
-        pinnedAt: DateTime.tryParse(json['pinnedAt'] as String? ?? '') ??
-            DateTime.fromMillisecondsSinceEpoch(0),
-      );
+    name: json['name'] as String? ?? '',
+    fingerprint: json['fp'] as String? ?? '',
+    staticKey: json['spk'] as String? ?? '',
+    pinnedAt:
+        DateTime.tryParse(json['pinnedAt'] as String? ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+  );
 }

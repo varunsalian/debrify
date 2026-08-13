@@ -220,7 +220,14 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
   }
 
   Future<void> _logout() async {
-    await SimklService.instance.logout();
+    try {
+      await SimklService.instance.logout();
+    } catch (_) {
+      _showSnackBar(
+        'This connection is shared. Revoke or transfer profile access before disconnecting.',
+      );
+      return;
+    }
 
     if (!mounted) return;
 
@@ -295,9 +302,7 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
                                 _isConnected
                                     ? Icons.check_circle
                                     : Icons.circle_outlined,
-                                color: _isConnected
-                                    ? t.success
-                                    : t.dim2,
+                                color: _isConnected ? t.success : t.dim2,
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -342,9 +347,7 @@ class _SimklSettingsPageState extends State<SimklSettingsPage> {
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: t.danger,
                                     side: BorderSide(
-                                      color: t.danger.withValues(
-                                        alpha: 0.4,
-                                      ),
+                                      color: t.danger.withValues(alpha: 0.4),
                                     ),
                                   ),
                                 ),

@@ -519,11 +519,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                   subtitle: _railSubtitle(widget.playlists[i]),
                   selected: selected == i,
                   trailing: widget.defaultPlaylistId == widget.playlists[i].id
-                      ? Icon(
-                          Icons.star_rounded,
-                          size: 18,
-                          color: t.warning,
-                        )
+                      ? Icon(Icons.star_rounded, size: 18, color: t.warning)
                       : null,
                   busy: widget.refreshingIds.contains(widget.playlists[i].id),
                   onFocused: () => _dest.value = _destForRail(i),
@@ -750,7 +746,7 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
     final isDefault = widget.defaultPlaylistId == playlist.id;
     final busy = widget.refreshingIds.contains(playlist.id);
     // Local files have no remote to re-fetch.
-    final canRefresh = !playlist.isLocalFile;
+    final canRefresh = !playlist.isLocalFile && !playlist.connectionReadOnly;
 
     var row = 0;
     return Column(
@@ -761,14 +757,9 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
           title: playlist.name,
           meta: _sourceMeta(playlist),
           badges: [
-            if (isDefault)
-              _Badge('Default', t.warning, Icons.star_rounded),
+            if (isDefault) _Badge('Default', t.warning, Icons.star_rounded),
             if (stats.guide == IptvGuideSource.custom)
-              _Badge(
-                'Custom guide',
-                t.accent2,
-                Icons.event_note_rounded,
-              ),
+              _Badge('Custom guide', t.accent2, Icons.event_note_rounded),
             if (stats.guide == IptvGuideSource.provider)
               _Badge(
                 'Provider guide',
@@ -781,6 +772,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 t.accent2,
                 Icons.schedule_rounded,
               ),
+            if (playlist.connectionReadOnly)
+              _Badge('Shared', t.accent2, Icons.lock_outline_rounded),
           ],
         ),
         const SizedBox(height: 20),
@@ -841,17 +834,18 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
               onTap: () => widget.onSetDefault(playlist),
               onLeft: _returnToRail,
             ),
-            _PaneRow(
-              focusNode: _paneNode(row++),
-              icon: Icons.edit_rounded,
-              title: 'Edit source',
-              subtitle: playlist.isXtreamCodes
-                  ? 'Name, server, username, password'
-                  : 'Name, URL and guide URL',
-              trailing: _chevron,
-              onTap: () => widget.onEdit(playlist),
-              onLeft: _returnToRail,
-            ),
+            if (!playlist.connectionReadOnly)
+              _PaneRow(
+                focusNode: _paneNode(row++),
+                icon: Icons.edit_rounded,
+                title: 'Edit source',
+                subtitle: playlist.isXtreamCodes
+                    ? 'Name, server, username, password'
+                    : 'Name, URL and guide URL',
+                trailing: _chevron,
+                onTap: () => widget.onEdit(playlist),
+                onLeft: _returnToRail,
+              ),
             // Imported files store no catalog, so there is nothing to hide
             // categories against — the row stays off them entirely.
             if (widget.onManageHidden != null && !playlist.isLocalFile)
@@ -868,33 +862,35 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
                 onTap: () => widget.onManageHidden!(playlist),
                 onLeft: _returnToRail,
               ),
-            _PaneRow(
-              focusNode: _paneNode(row++),
-              icon: Icons.event_note_rounded,
-              title: 'Guide (EPG) source',
-              subtitle: switch (stats.guide) {
-                IptvGuideSource.custom =>
-                  'Custom XMLTV URL set for this source',
-                IptvGuideSource.provider =>
-                  "Using the provider's own guide data",
-                IptvGuideSource.none =>
-                  'No guide source — rows show no programmes',
-              },
-              trailing: _chevron,
-              onTap: () => widget.onEdit(playlist),
-              onLeft: _returnToRail,
-            ),
-            _PaneRow(
-              focusNode: _paneNode(row++),
-              icon: Icons.delete_outline_rounded,
-              title: 'Remove source',
-              subtitle: 'Keeps your lists and watch history',
-              danger: true,
-              trailing: _chevron,
-              onTap: () => widget.onDelete(playlist),
-              onLeft: _returnToRail,
-              isLast: true,
-            ),
+            if (!playlist.connectionReadOnly)
+              _PaneRow(
+                focusNode: _paneNode(row++),
+                icon: Icons.event_note_rounded,
+                title: 'Guide (EPG) source',
+                subtitle: switch (stats.guide) {
+                  IptvGuideSource.custom =>
+                    'Custom XMLTV URL set for this source',
+                  IptvGuideSource.provider =>
+                    "Using the provider's own guide data",
+                  IptvGuideSource.none =>
+                    'No guide source — rows show no programmes',
+                },
+                trailing: _chevron,
+                onTap: () => widget.onEdit(playlist),
+                onLeft: _returnToRail,
+              ),
+            if (!playlist.connectionReadOnly)
+              _PaneRow(
+                focusNode: _paneNode(row++),
+                icon: Icons.delete_outline_rounded,
+                title: 'Remove source',
+                subtitle: 'Keeps your lists and watch history',
+                danger: true,
+                trailing: _chevron,
+                onTap: () => widget.onDelete(playlist),
+                onLeft: _returnToRail,
+                isLast: true,
+              ),
           ],
         ),
       ],
@@ -902,6 +898,9 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
   }
 
   String _sourceMeta(IptvPlaylist p) {
+    if (p.credentialsRedacted) {
+      return 'Shared connection · credentials hidden';
+    }
     if (p.isXtreamCodes) {
       final user = (p.username ?? '').isEmpty ? '' : ' · ${p.username}';
       return 'Xtream Codes · ${p.serverUrl ?? ''}$user';
@@ -1390,11 +1389,8 @@ class IptvSettingsTwoPaneState extends State<IptvSettingsTwoPane> {
 
   void _returnToRail() => _focusRail(_selectedRailIndex);
 
-  Widget get _chevron => Icon(
-    Icons.chevron_right_rounded,
-    size: 20,
-    color: _app.settings.dim2,
-  );
+  Widget get _chevron =>
+      Icon(Icons.chevron_right_rounded, size: 20, color: _app.settings.dim2);
 }
 
 // ------------------------------------------------------------------ pieces
@@ -1533,9 +1529,7 @@ class _RailEntryState extends State<_RailEntry> {
             margin: const EdgeInsets.symmetric(vertical: 2),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
             decoration: BoxDecoration(
-              color: _focused
-                  ? t.panel2
-                  : (widget.selected ? t.panel : null),
+              color: _focused ? t.panel2 : (widget.selected ? t.panel : null),
               borderRadius: app.shape.br(11),
               border: Border.all(
                 color: _focused ? t.accent : Colors.transparent,
@@ -1591,11 +1585,7 @@ class _RailEntryState extends State<_RailEntry> {
                 ),
                 if (widget.trailing != null) widget.trailing!,
                 if (widget.chevron)
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 18,
-                    color: t.dim2,
-                  ),
+                  Icon(Icons.chevron_right_rounded, size: 18, color: t.dim2),
               ],
             ),
           ),
@@ -1770,10 +1760,7 @@ class _QuietBanner extends StatelessWidget {
           Icon(icon, size: 18, color: t.dim),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 13, color: t.dim),
-            ),
+            child: Text(text, style: TextStyle(fontSize: 13, color: t.dim)),
           ),
         ],
       ),
@@ -2004,9 +1991,7 @@ class _MethodCardState extends State<_MethodCard> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
             decoration: BoxDecoration(
-              color: _focused
-                  ? t.panel2
-                  : (widget.selected ? t.panel : null),
+              color: _focused ? t.panel2 : (widget.selected ? t.panel : null),
               borderRadius: BorderRadius.circular(13),
               border: Border.all(
                 color: _focused

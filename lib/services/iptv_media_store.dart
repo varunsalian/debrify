@@ -2,13 +2,14 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../models/iptv_playlist.dart';
 import '../utils/json_isolate.dart';
 import 'debrify_tv_database.dart';
 import 'iptv_catalog_db.dart';
+import 'profiles/profile_preferences.dart';
+import 'profiles/profile_runtime.dart';
 
 /// SQLite-backed store for IPTV favorites, IPTV watch history and the shared
 /// video-resume map.
@@ -56,8 +57,9 @@ FavoriteRenameResult computeFavoriteRenamesJob(FavoriteRenameJob job) {
   )) {
     if (storedByCanonical.isEmpty) break;
     if (!storedHosts.any(row.url.contains)) continue;
-    final storedUrls =
-        storedByCanonical.remove(IptvMediaStore.canonicalChannelKey(row.url));
+    final storedUrls = storedByCanonical.remove(
+      IptvMediaStore.canonicalChannelKey(row.url),
+    );
     if (storedUrls == null) continue;
     for (final storedUrl in storedUrls) {
       if (storedUrl != row.url) renames[storedUrl] = row.url;
@@ -164,13 +166,22 @@ class IptvMediaStore {
   static const int _inChunkSize = 500;
 
   static Future<void>? _migration;
+  static String? _migrationScopeKey;
 
   @visibleForTesting
   static void debugResetMigration() {
     _migration = null;
+    _migrationScopeKey = null;
   }
 
   static Future<void> _ensureMigrated() {
+    final scopeKey = ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted
+        ? ProfileRuntime.capture().preferencePrefix
+        : 'legacy';
+    if (_migrationScopeKey != scopeKey) {
+      _migration = null;
+      _migrationScopeKey = scopeKey;
+    }
     return _migration ??= _migrateFromPrefs().catchError((Object e) {
       // A failed import must never make favorites or resume unreadable —
       // clear the memo so the next call retries, and carry on with whatever
@@ -181,7 +192,7 @@ class IptvMediaStore {
   }
 
   static Future<void> _migrateFromPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final db = DebrifyTvDatabase.instance;
 
     final favoritesRaw = prefs.getString(_legacyFavoritesKey);
@@ -474,9 +485,7 @@ class IptvMediaStore {
   /// straight from the catalog on a WORKER isolate — walking a paging
   /// facade here would keep the scan's cost on the UI isolate, which is
   /// tens of near-saturated seconds on a big playlist.
-  static Future<void> reconcileFavoriteUrlsForCatalog(
-    String catalogKey,
-  ) async {
+  static Future<void> reconcileFavoriteUrlsForCatalog(String catalogKey) async {
     await _ensureMigrated();
     if (!IptvCatalogDb.isOpen) return;
     final db = await DebrifyTvDatabase.instance.database;
@@ -712,9 +721,7 @@ class IptvMediaStore {
       whereArgs: [listId],
       orderBy: 'added_at ASC, url ASC',
     );
-    return {
-      for (final row in rows) row['url'] as String: _favoriteMeta(row),
-    };
+    return {for (final row in rows) row['url'] as String: _favoriteMeta(row)};
   }
 
   // ── Favorites compatibility ───────────────────────────────────────────────
@@ -785,9 +792,12 @@ class IptvMediaStore {
         'http_headers_json': (httpHeaders != null && httpHeaders.isNotEmpty)
             ? jsonEncode(httpHeaders)
             : null,
-        'series_id': (seriesId != null && seriesId.isNotEmpty) ? seriesId : null,
-        'series_name':
-            (seriesName != null && seriesName.isNotEmpty) ? seriesName : null,
+        'series_id': (seriesId != null && seriesId.isNotEmpty)
+            ? seriesId
+            : null,
+        'series_name': (seriesName != null && seriesName.isNotEmpty)
+            ? seriesName
+            : null,
         'season': season,
         'episode': episode,
         'has_next': hasNextEpisode == null ? null : (hasNextEpisode ? 1 : 0),
@@ -826,7 +836,11 @@ class IptvMediaStore {
     if (url.isEmpty) return;
     await _ensureMigrated();
     await DebrifyTvDatabase.instance.runTxn((txn) async {
-      await txn.delete('iptv_watch_history', where: 'url = ?', whereArgs: [url]);
+      await txn.delete(
+        'iptv_watch_history',
+        where: 'url = ?',
+        whereArgs: [url],
+      );
       await txn.delete(
         'video_resume',
         where: 'resume_key = ?',
@@ -882,9 +896,7 @@ class IptvMediaStore {
       'iptv_watch_history',
       orderBy: 'last_played_at ASC, url ASC',
     );
-    return {
-      for (final row in rows) row['url'] as String: _historyMeta(row),
-    };
+    return {for (final row in rows) row['url'] as String: _historyMeta(row)};
   }
 
   // ── Video resume ──────────────────────────────────────────────────────────
@@ -981,8 +993,9 @@ class IptvMediaStore {
       'playlist_id': map['playlistId']?.toString() ?? '',
       'http_headers_json': _headersJson(map['httpHeaders']),
       'series_id': (seriesId != null && seriesId.isNotEmpty) ? seriesId : null,
-      'series_name':
-          (seriesName != null && seriesName.isNotEmpty) ? seriesName : null,
+      'series_name': (seriesName != null && seriesName.isNotEmpty)
+          ? seriesName
+          : null,
       'season': (map['season'] as num?)?.toInt(),
       'episode': (map['episode'] as num?)?.toInt(),
       'has_next': hasNext is bool ? (hasNext ? 1 : 0) : null,
@@ -1026,8 +1039,7 @@ class IptvMediaStore {
       // live-by-default reading, which is what those rows did before.
       if (row['content_type'] != null)
         'contentType': row['content_type'] as String,
-      if (row['duration'] != null)
-        'duration': (row['duration'] as num).toInt(),
+      if (row['duration'] != null) 'duration': (row['duration'] as num).toInt(),
       if (headers != null) 'httpHeaders': headers,
       'addedAt': (row['added_at'] as num?)?.toInt() ?? 0,
     };

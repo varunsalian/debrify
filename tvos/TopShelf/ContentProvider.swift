@@ -4,6 +4,7 @@ import TVServices
 private enum TopShelfStore {
     static let appGroup = "group.com.varunsalian.debrifytv"
     static let snapshotPath = "Library/Caches/top-shelf-v1.json"
+    static let actionsPath = "Library/Caches/top-shelf-actions-v1.json"
     static let previewDirectory = "Library/Caches/TopShelfPreviews/"
     static let previewMaxAge: TimeInterval = 14 * 24 * 60 * 60
 }
@@ -12,6 +13,9 @@ private struct SpotlightSnapshot: Decodable {
     let version: Int
     let contextTitle: String
     let items: [SpotlightItem]
+    let snapshotRevision: Int?
+    let ownerProfileId: String?
+    let profileAuthorizationRevision: Int?
 }
 
 private struct SpotlightItem: Decodable {
@@ -27,6 +31,20 @@ private struct SpotlightItem: Decodable {
     let genres: [String]?
     let runtimeMinutes: Int?
     let previewFile: String?
+    let actionToken: String?
+}
+
+private struct ActionDocument: Decodable {
+    let version: Int
+    let snapshotRevision: Int
+    let actions: [String: ActionRecord]
+}
+
+private struct ActionRecord: Decodable {
+    let ownerProfileId: String
+    let expiresAtMs: Int64
+    let consumed: Bool
+    let profileAuthorizationRevision: Int
 }
 
 final class ContentProvider: TVTopShelfContentProvider {
@@ -39,13 +57,23 @@ final class ContentProvider: TVTopShelfContentProvider {
         guard let data = try? Data(contentsOf: url),
               data.count <= 512 * 1024,
               let snapshot = try? JSONDecoder().decode(SpotlightSnapshot.self, from: data),
-              snapshot.version == 1 else {
+              [1, 2].contains(snapshot.version) else {
             return nil
         }
+        let actionDocument: ActionDocument? = {
+            guard snapshot.version == 2,
+                  let revision = snapshot.snapshotRevision,
+                  let actionData = try? Data(contentsOf: container.appendingPathComponent(TopShelfStore.actionsPath)),
+                  let document = try? JSONDecoder().decode(ActionDocument.self, from: actionData),
+                  document.version == 1,
+                  document.snapshotRevision == revision else { return nil }
+            return document
+        }()
+        if snapshot.version == 2 && actionDocument == nil { return nil }
 
         let items = snapshot.items.prefix(8).compactMap { source -> TVTopShelfCarouselItem? in
             guard let imageURL = validatedRemoteURL(source.imageURL),
-                  let actionURL = actionURL(for: source) else {
+                  let actionURL = actionURL(for: source, snapshot: snapshot, document: actionDocument) else {
                 return nil
             }
             let item = TVTopShelfCarouselItem(identifier: source.identifier)
@@ -109,11 +137,26 @@ final class ContentProvider: TVTopShelfContentProvider {
         return url
     }
 
-    private func actionURL(for item: SpotlightItem) -> URL? {
+    private func actionURL(
+        for item: SpotlightItem,
+        snapshot: SpotlightSnapshot,
+        document: ActionDocument?
+    ) -> URL? {
         var components = URLComponents()
         components.scheme = "debrify"
         components.host = "topshelf"
         components.path = "/display"
+        if snapshot.version == 2 {
+            guard let token = item.actionToken,
+                  token.range(of: #"^[A-Za-z0-9_-]{32,128}$"#, options: .regularExpression) != nil,
+                  let record = document?.actions[token],
+                  !record.consumed,
+                  record.ownerProfileId == snapshot.ownerProfileId,
+                  record.profileAuthorizationRevision == snapshot.profileAuthorizationRevision,
+                  record.expiresAtMs >= Int64(Date().timeIntervalSince1970 * 1000) else { return nil }
+            components.queryItems = [URLQueryItem(name: "token", value: token)]
+            return components.url
+        }
         components.queryItems = [
             URLQueryItem(name: "imdbId", value: item.imdbId),
             URLQueryItem(name: "type", value: item.type),

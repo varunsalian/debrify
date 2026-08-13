@@ -55,7 +55,7 @@ import '../../screens/settings/recordings_page.dart';
 import '../../services/desktop_recording_service.dart';
 import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_source_stats.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/profiles/profile_preferences.dart';
 
 import '../../services/live_recording_service.dart';
 import '../recording_limit_dialogs.dart';
@@ -566,7 +566,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     unawaited(_initRecordingSupport());
     if (!kIsWeb && Platform.isIOS) {
       unawaited(
-        SharedPreferences.getInstance().then((prefs) {
+        DevicePreferences.instance().then((prefs) {
           if (!mounted) return;
           if (!(prefs.getBool(_iosNoticeDismissedPref) ?? false)) {
             setState(() => _showIosRecordingNotice = true);
@@ -636,6 +636,17 @@ class IptvResultsViewState extends State<IptvResultsView>
       return _continuePlaylistIds[channel.url];
     }
     return playlist?.id;
+  }
+
+  IptvPlaylist? _recordingResourceFor(IptvChannel channel) {
+    final originId = _originPlaylistIdFor(channel);
+    if (originId == null) return null;
+    for (final playlist in _playlists) {
+      if (playlist.id == originId && playlist.connectionResourceId != null) {
+        return playlist;
+      }
+    }
+    return null;
   }
 
   /// Attribute carrying a list row's originating provider through the
@@ -767,7 +778,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   }
 
   Future<void> _loadSettings({bool forceReload = false}) async {
-    var playlists = await StorageService.getIptvPlaylists();
+    var playlists = await StorageService.getIptvPlaylists(forSettings: false);
     final defaultPlaylistId = await StorageService.getIptvDefaultPlaylist();
     // Cockpit look. Read on every pass so returning from Settings (which
     // re-enters here) adopts a changed style in the same setState as
@@ -1931,7 +1942,9 @@ class IptvResultsViewState extends State<IptvResultsView>
 
     // Guide rebind against the CURRENT stored configuration, mirroring the
     // materialized revalidate. No snapshot write — the DB is the store.
-    final storedPlaylists = await StorageService.getIptvPlaylists();
+    final storedPlaylists = await StorageService.getIptvPlaylists(
+      forSettings: false,
+    );
     if (_revalidateSuperseded(playlist, contentType, ticket)) return;
     IptvPlaylist? storedPlaylist;
     for (final p in storedPlaylists) {
@@ -1988,6 +2001,8 @@ class IptvResultsViewState extends State<IptvResultsView>
           username,
           password,
           onPhase: report,
+          connectionResourceId: playlist.connectionResourceId,
+          connectionResourceRevision: playlist.connectionResourceRevision,
         );
       }
       if (contentType == 'series') {
@@ -1996,6 +2011,8 @@ class IptvResultsViewState extends State<IptvResultsView>
           username,
           password,
           onPhase: report,
+          connectionResourceId: playlist.connectionResourceId,
+          connectionResourceRevision: playlist.connectionResourceRevision,
         );
       }
       return xcService.fetchLiveStreams(
@@ -2004,12 +2021,16 @@ class IptvResultsViewState extends State<IptvResultsView>
         password,
         numberingSourceKey: playlist.id,
         onPhase: report,
+        connectionResourceId: playlist.connectionResourceId,
+        connectionResourceRevision: playlist.connectionResourceRevision,
       );
     }
     return _iptvService.fetchPlaylist(
       playlist.url,
       numberingSourceKey: playlist.id,
       onPhase: report,
+      connectionResourceId: playlist.connectionResourceId,
+      connectionResourceRevision: playlist.connectionResourceRevision,
     );
   }
 
@@ -2863,6 +2884,10 @@ class IptvResultsViewState extends State<IptvResultsView>
           'isXtream': playlist.isXtreamCodes,
           'isList': playlist.isCustomList,
           if (playlist.customListId != null) 'listId': playlist.customListId,
+          if (playlist.connectionResourceId != null)
+            'connectionResourceId': playlist.connectionResourceId,
+          if (playlist.connectionResourceRevision != null)
+            'connectionResourceRevision': playlist.connectionResourceRevision,
         },
   ];
 
@@ -3065,6 +3090,8 @@ class IptvResultsViewState extends State<IptvResultsView>
         episodeSource.username ?? '',
         episodeSource.password ?? '',
         seriesId,
+        connectionResourceId: episodeSource.connectionResourceId,
+        connectionResourceRevision: episodeSource.connectionResourceRevision,
       );
       if (!mounted || info == null) return null;
       final episodes = [
@@ -4496,6 +4523,12 @@ class IptvResultsViewState extends State<IptvResultsView>
         fileName: _stageRecordingFileName(channel.name),
         channelName: channel.name,
         headers: channel.playbackHeaders,
+        connectionResourceId: _recordingResourceFor(
+          channel,
+        )?.connectionResourceId,
+        resourceAuthorizationRevision: _recordingResourceFor(
+          channel,
+        )?.connectionResourceRevision,
       );
       if (!mounted) return;
       if (result.ok) {
@@ -4528,11 +4561,17 @@ class IptvResultsViewState extends State<IptvResultsView>
     // No onFinished: the revision listener already flips Stop back to Record,
     // and endings are announced app-wide by the reporter in main() — which,
     // unlike this widget, is still around when the capture outlives the page.
-    final capture = DesktopRecordingService.instance.start(
+    final capture = await DesktopRecordingService.instance.start(
       url: recordUrl,
       path: path,
       channelName: channel.name,
       headers: channel.playbackHeaders,
+      connectionResourceId: _recordingResourceFor(
+        channel,
+      )?.connectionResourceId,
+      resourceAuthorizationRevision: _recordingResourceFor(
+        channel,
+      )?.connectionResourceRevision,
     );
     if (!mounted) return;
     if (capture != null) setState(() {}); // show Stop immediately
@@ -4635,6 +4674,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       ),
     );
     if (confirmed != true || !mounted) return null;
+    final resource = _recordingResourceFor(channel);
     final result = (!kIsWeb && Platform.isAndroid)
         ? await LiveRecordingService.schedule(
             url: recordUrl,
@@ -4643,6 +4683,8 @@ class IptvResultsViewState extends State<IptvResultsView>
             startMs: programme.start.millisecondsSinceEpoch,
             endMs: programme.stop.millisecondsSinceEpoch,
             headers: channel.playbackHeaders,
+            connectionResourceId: resource?.connectionResourceId,
+            resourceAuthorizationRevision: resource?.connectionResourceRevision,
           )
         : await DesktopScheduleService.instance.add(
             url: recordUrl,
@@ -4651,6 +4693,8 @@ class IptvResultsViewState extends State<IptvResultsView>
             startMs: programme.start.millisecondsSinceEpoch,
             endMs: programme.stop.millisecondsSinceEpoch,
             headers: channel.playbackHeaders,
+            connectionResourceId: resource?.connectionResourceId,
+            resourceAuthorizationRevision: resource?.connectionResourceRevision,
           );
     unawaited(_refreshScheduledCount());
     if (result.errorCode == 'exact_alarms_required') {
@@ -4849,7 +4893,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   void _dismissIosRecordingNotice() {
     setState(() => _showIosRecordingNotice = false);
     unawaited(
-      SharedPreferences.getInstance().then(
+      DevicePreferences.instance().then(
         (prefs) => prefs.setBool(_iosNoticeDismissedPref, true),
       ),
     );
@@ -5327,9 +5371,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               decoration: t == null
                   ? BoxDecoration(
                       borderRadius: app.shape.br(8),
-                      border: Border.all(
-                        color: app.iptv.hairline,
-                      ),
+                      border: Border.all(color: app.iptv.hairline),
                       color: Color.alphaBlend(
                         brand.withValues(alpha: 0.18),
                         const Color(0xFF171B19),
@@ -6798,9 +6840,7 @@ class _IptvFocusStageInfo extends StatelessWidget {
                       height: logoSize,
                       decoration: BoxDecoration(
                         borderRadius: app.shape.brImg(8),
-                        border: Border.all(
-                          color: app.iptv.hairline,
-                        ),
+                        border: Border.all(color: app.iptv.hairline),
                         color: Color.alphaBlend(
                           brand.withValues(alpha: 0.18),
                           const Color(0xFF171B19),

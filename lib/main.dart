@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, exit;
 import 'dart:ui' show AppExitResponse, PointerDeviceKind;
 
 import 'package:flutter/foundation.dart';
@@ -26,6 +26,9 @@ import 'screens/premiumize/premiumize_files_screen.dart';
 import 'screens/alldebrid/alldebrid_files_screen.dart';
 import 'screens/webdav/webdav_files_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/profiles/profile_gate.dart';
+import 'screens/profiles/linux_vault_screen.dart';
+import 'screens/profiles/profile_recovery_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/trakt_calendar_screen.dart';
 import 'screens/magic_tv_screen.dart';
@@ -35,6 +38,13 @@ import 'screens/addons_screen.dart';
 import 'services/android_native_downloader.dart';
 import 'services/discover_prefs.dart';
 import 'services/iptv_catalog_db.dart';
+import 'services/profiles/profile_bootstrap.dart';
+import 'services/profiles/profile_device_reset_service.dart';
+import 'services/profiles/profile_runtime.dart';
+import 'services/profiles/privacy_log.dart';
+import 'services/profiles/desktop_single_instance.dart';
+import 'models/profiles/profile_policy.dart';
+import 'models/profiles/user_profile.dart';
 import 'services/secret_vault.dart';
 import 'services/storage_service.dart';
 import 'services/tv_hero_artwork_quality_controller.dart';
@@ -129,7 +139,17 @@ Future<void> _capImageCache() async {
 // (TvAwarePageTransitionsBuilder) along with the root ThemeData construction
 // it belongs to — both are shared by the legacy and themed builds.
 
-Future<void> main() async {
+Future<void> main(List<String> launchArguments) async {
+  try {
+    await _mainUnchecked(launchArguments);
+  } catch (error) {
+    WidgetsFlutterBinding.ensureInitialized();
+    debugPrint('Application bootstrap failed (${error.runtimeType})');
+    runApp(const _StartupFailureApp());
+  }
+}
+
+Future<void> _mainUnchecked(List<String> launchArguments) async {
   WidgetsFlutterBinding.ensureInitialized();
   // Backstop for async errors nothing awaited (fire-and-forget loads,
   // .then chains without onError). Without a handler these are only printed
@@ -137,7 +157,7 @@ Future<void> main() async {
   // any future crash-reporting hook has a single place to attach. Returning
   // true marks the error handled so it never doubles up in the console.
   PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('Unhandled async error: $error\n$stack');
+    debugPrint('Unhandled async error (${error.runtimeType})');
     return true;
   };
   // On a release tvOS build, Dart's print() lands on stdout, which the device
@@ -161,16 +181,9 @@ Future<void> main() async {
       '[tvOS] physicalSize=${view.physicalSize} dpr=${view.devicePixelRatio}',
     );
   }
-  // Fire-and-forget: Pug's init does several platform-channel reads
-  // (package_info/device_info/connectivity/timezone) + storage setup that are
-  // slow on weak TV hardware. Never block first frame on analytics — it runs
-  // concurrently with the rest of startup and self-guards until ready.
-  unawaited(AnalyticsService.init());
-  // Fire-and-forget: derives the credential-vault key (one device-info
-  // channel round trip) so the pre-runApp startup-channel read and the first
-  // credential access don't pay for it. Never throws.
-  unawaited(SecretVault.warmUp());
-
+  // Install after the optional tvOS sink so that both the Dart console and
+  // native device console receive only the redacted form.
+  PrivacyLog.install();
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     await windowManager.ensureInitialized();
   }
@@ -179,6 +192,110 @@ Future<void> main() async {
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
+  }
+
+  if (!kIsWeb &&
+      (Platform.isMacOS || Platform.isWindows || Platform.isLinux) &&
+      !await DesktopSingleInstance.acquire(launchArguments)) {
+    exit(0);
+  }
+
+  if (await ProfileDeviceResetService.resumeWithoutRegistryIfNeeded()) {
+    await _terminateAfterDeviceReset();
+    return;
+  }
+
+  // Publish legacy/profile storage mode before any preference, credential,
+  // cache, route, or background service can observe application state.
+  try {
+    await ProfileBootstrap.initialize();
+  } on ProfileBootstrapRecoveryRequired {
+    runApp(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        themeMode: ThemeMode.dark,
+        darkTheme: ThemeData.dark(useMaterial3: true),
+        home: ProfileRecoveryScreen(
+          onRecovered: _resumeAfterProfileRecovery,
+          onResetComplete: _terminateAfterDeviceReset,
+        ),
+      ),
+    );
+    return;
+  }
+
+  if (ProfileRuntime.isProfileCommitted &&
+      await ProfileDeviceResetService.journalExists()) {
+    await ProfileDeviceResetService.resumeWithRegistry(
+      ProfileBootstrap.registry,
+    );
+    await _terminateAfterDeviceReset();
+    return;
+  }
+
+  if (ProfileRuntime.isProfileCommitted) {
+    // Capture OS/desktop launch payloads before ProfileGate. They are sealed
+    // device-wide and remain unassigned until local unlock.
+    await DeepLinkService.preflightLaunchIntent();
+    await DeepLinkService.persistPreflightActions();
+  }
+
+  if (ProfileBootstrap.requiresLinuxVault) {
+    runApp(
+      _LinuxVaultBootstrapHost(
+        existingVault: ProfileBootstrap.linuxVaultAlreadyConfigured,
+      ),
+    );
+    return;
+  }
+
+  await _continueApplicationStartup();
+}
+
+class _StartupFailureApp extends StatelessWidget {
+  const _StartupFailureApp();
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    themeMode: ThemeMode.dark,
+    darkTheme: ThemeData.dark(useMaterial3: true),
+    home: const Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Debrify could not start safely. Close the app and try again. '
+              'If this continues, restart the device before changing any data.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+Future<void> _resumeAfterProfileRecovery() async {
+  await DeepLinkService.preflightLaunchIntent();
+  await DeepLinkService.persistPreflightActions();
+  await _continueApplicationStartup();
+}
+
+Future<void> _terminateAfterDeviceReset() async {
+  if (!kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux)) {
+    exit(0);
+  }
+  await SystemNavigator.pop();
+}
+
+Future<void> _continueApplicationStartup() async {
+  // These initializers may touch profile-sensitive state and therefore start
+  // only after the immutable runtime mode and active scope are installed.
+  unawaited(AnalyticsService.init());
+  if (!ProfileRuntime.isProfileCommitted) {
+    unawaited(SecretVault.warmUp());
   }
 
   // Set a sensible default orientation: phones stay portrait, Android TV uses
@@ -222,8 +339,8 @@ Future<void> main() async {
   try {
     await StorageService.getUiSounds();
     await StorageService.getUiHaptics();
-  } catch (e) {
-    debugPrint('main: feedback prefs warm failed, using defaults: $e');
+  } catch (_) {
+    debugPrint('main: feedback preferences warm failed; using defaults');
   }
   UiFeedback.instance.install();
   // The idle compositor. Also a no-op under every look with no idle policy,
@@ -313,6 +430,30 @@ Future<void> main() async {
   }
 }
 
+class _LinuxVaultBootstrapHost extends StatelessWidget {
+  final bool existingVault;
+
+  const _LinuxVaultBootstrapHost({required this.existingVault});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    themeMode: ThemeMode.dark,
+    darkTheme: ThemeData.dark(useMaterial3: true),
+    home: LinuxVaultScreen(
+      existingVault: existingVault,
+      onSubmit: (passphrase) async {
+        await ProfileBootstrap.completeLinuxVault(passphrase);
+        if (ProfileRuntime.isProfileCommitted) {
+          await DeepLinkService.preflightLaunchIntent();
+          await DeepLinkService.persistPreflightActions();
+        }
+        await _continueApplicationStartup();
+      },
+    ),
+  );
+}
+
 /// Resolve the IPTV startup channel BEFORE runApp.
 ///
 /// It has to be settled synchronously by the time `_MainPageState` is
@@ -338,9 +479,9 @@ Future<void> _resolveStartupChannel() async {
     if (channel != null) {
       MainPageBridge.setIptvStartupChannel(channel);
     }
-  } catch (e) {
+  } catch (_) {
     // A startup channel is a convenience; never let it break the boot.
-    debugPrint('Startup channel resolve failed: $e');
+    debugPrint('Startup channel resolve failed');
   }
 }
 
@@ -352,11 +493,11 @@ Future<void> _prewarmIptvCatalogDb() async {
     // paged catalog.
     if ((await StorageService.getIptvPlaylists()).isEmpty) return;
     await IptvCatalogDb.open();
-  } catch (e) {
+  } catch (_) {
     // Prewarming is an optimization. The IPTV page retries through the same
     // open path and owns the user-visible error/loading state if it still
     // cannot initialize.
-    debugPrint('IPTV catalog prewarm failed: $e');
+    debugPrint('IPTV catalog prewarm failed');
   }
 }
 
@@ -456,9 +597,10 @@ void _wireDesktopRecordings() {
       DesktopRecordingEnd.durationCap => '$subject saved (6h limit)',
       // bytes > 0 survives on disk even here (a mid-write crash keeps what it
       // wrote); only the zero-byte case deletes its own file.
-      DesktopRecordingEnd.failed => report.bytes > 0
-          ? '$subject failed — the partial file was kept'
-          : '$subject failed — nothing was captured',
+      DesktopRecordingEnd.failed =>
+        report.bytes > 0
+            ? '$subject failed — the partial file was kept'
+            : '$subject failed — nothing was captured',
     };
     if (message == null) return;
     _scaffoldMessengerKey.currentState?.showSnackBar(
@@ -648,10 +790,7 @@ class _DebrifyAppState extends State<DebrifyApp> {
         // dialogs and overlays all sit within the scaled subtree.
         if (PlatformUtil.isTvOS) {
           const factor = 2.0;
-          final scaled = Size(
-            mq.size.width / factor,
-            mq.size.height / factor,
-          );
+          final scaled = Size(mq.size.width / factor, mq.size.height / factor);
           return MediaQuery(
             data: mq.copyWith(
               size: scaled,
@@ -707,7 +846,7 @@ class _DebrifyAppState extends State<DebrifyApp> {
       // the theme the app has always shipped (the construction moved verbatim
       // into theme/app_theme_adapter.dart, Text Brightness pass included).
       theme: AppThemeController.instance.themeData,
-      home: const AppInitializer(),
+      home: const ProfileGate(child: AppInitializer()),
     );
   }
 }
@@ -933,6 +1072,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   // Remote control state
   bool _remoteControlEnabled = true;
+  UserProfile? _profilePolicy;
   StreamSubscription<Map<String, dynamic>>? _autoUpdateDownloadSub;
   String? _autoUpdateDownloadTaskId;
   bool _hasTrackedInitialTab = false;
@@ -1048,6 +1188,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    unawaited(_loadProfilePolicy());
     // Active-surface signal: the initializer above picked the boot tab before
     // any tap could, so system-bar ownership needs it published explicitly.
     AppSurfaceState.instance.publishTab(_selectedIndex);
@@ -1299,6 +1440,46 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     _scheduleSupportCampaignPrompt();
   }
 
+  Future<void> _loadProfilePolicy() async {
+    if (!ProfileRuntime.isProfileCommitted) return;
+    final scope = ProfileRuntime.capture();
+    final profile = await ProfileBootstrap.registry.getProfile(scope.profileId);
+    if (!mounted || ProfileRuntime.capture() != scope) return;
+    setState(() {
+      _profilePolicy = profile;
+      final visible = _computeVisibleNavIndices();
+      if (!visible.contains(_selectedIndex)) {
+        _selectedIndex = visible.contains(15) ? 15 : visible.first;
+      }
+    });
+  }
+
+  bool _allowsProfileFeature(ProfileFeature feature) {
+    if (!ProfileRuntime.isProfileCommitted) return true;
+    final profile = _profilePolicy;
+    return profile != null && profile.allows(feature);
+  }
+
+  List<int> _applyProfilePolicy(List<int> indices) {
+    if (!ProfileRuntime.isProfileCommitted) return indices;
+    return indices
+        .where((index) {
+          final feature = switch (index) {
+            2 => ProfileFeature.downloads,
+            3 => ProfileFeature.debrifyTv,
+            4 || 5 || 6 || 10 || 11 || 12 || 16 => ProfileFeature.cloud,
+            7 => ProfileFeature.addonsAndEngines,
+            9 => ProfileFeature.stremioTv,
+            13 => ProfileFeature.iptv,
+            14 => ProfileFeature.youtube,
+            18 || 19 => ProfileFeature.trackersAndDiscovery,
+            _ => null,
+          };
+          return feature == null || _allowsProfileFeature(feature);
+        })
+        .toList(growable: false);
+  }
+
   @override
   void dispose() {
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
@@ -1373,6 +1554,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   /// Initialize remote control based on device type
   Future<void> _initializeRemoteControl(bool isTv) async {
+    if (!_allowsProfileFeature(ProfileFeature.remoteControl)) return;
     // Check if remote control is enabled
     _remoteControlEnabled = await StorageService.getRemoteControlEnabled();
     if (!_remoteControlEnabled) return;
@@ -1400,6 +1582,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     // Set the callback for handling magnet links
     deepLinkService.onMagnetLinkReceived = (magnetUri) async {
       if (!mounted) return;
+      if (!_allowsProfileFeature(ProfileFeature.incomingLinks) ||
+          !_allowsProfileFeature(ProfileFeature.torrentSearch)) {
+        _showPolicyDeniedSnack();
+        return;
+      }
 
       // Create handler with callbacks
       final handler = MagnetLinkHandler(
@@ -1452,6 +1639,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     // Set the callback for handling shared URLs
     deepLinkService.onUrlShared = (url) async {
       if (!mounted) return;
+      if (!_allowsProfileFeature(ProfileFeature.incomingLinks) ||
+          !_allowsProfileFeature(ProfileFeature.cloud)) {
+        _showPolicyDeniedSnack();
+        return;
+      }
 
       // Create handler with callbacks for URL handling
       final handler = MagnetLinkHandler(
@@ -1520,6 +1712,11 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     // Set the callback for handling Stremio addon URLs
     deepLinkService.onStremioAddonReceived = (manifestUrl) async {
       if (!mounted) return;
+      if (!_allowsProfileFeature(ProfileFeature.incomingLinks) ||
+          !_allowsProfileFeature(ProfileFeature.addonsAndEngines)) {
+        _showPolicyDeniedSnack();
+        return;
+      }
 
       // Show dialog to choose where to install (phone or TV)
       final choice = await AddonInstallDialog.show(context, manifestUrl);
@@ -1530,7 +1727,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         // Addon URLs can embed debrid keys — same encrypted-session +
         // pairing gate as the settings transfer flows.
         final session = await ensureAuthorizedSession(
-            context, RemoteControlState(), choice.device!);
+          context,
+          RemoteControlState(),
+          choice.device!,
+        );
         if (session == null || !mounted) return;
         final success = await RemoteControlState().sendAddonCommandToDevice(
           AddonCommand.install,
@@ -1715,6 +1915,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
 
   Future<bool> _performAutoUpdateCheck() async {
     try {
+      if (!_allowsProfileFeature(ProfileFeature.appUpdates)) return true;
       final autoEnabled = await StorageService.getUpdateAutoCheckEnabled();
       if (!autoEnabled) return true;
       final packageInfo = await AppVersionInfo.get();
@@ -2418,7 +2619,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       indices.add(7); // Addons
       indices.add(8); // Settings
       _insertTraktCalendarTab(indices, calendar);
-      return indices;
+      return _applyProfilePolicy(indices);
     }
 
     final rd = hasRealDebrid ?? _hasRealDebridKey;
@@ -2445,7 +2646,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         8,
       ]; // Search, Home, Discover, IPTV, YouTube, Stremio TV, Addons, Settings
       _insertTraktCalendarTab(indices, calendar);
-      return indices;
+      return _applyProfilePolicy(indices);
     }
 
     final indices = <int>[17, 15, 18, 2, 13, 14, 3, 9];
@@ -2462,7 +2663,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     indices.add(7); // Addons
     indices.add(8); // Settings
     _insertTraktCalendarTab(indices, calendar);
-    return indices;
+    return _applyProfilePolicy(indices);
   }
 
   /// Group label for the desktop sidebar, keyed by screen index (the index
@@ -2645,6 +2846,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     );
   }
 
+  void _showPolicyDeniedSnack() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('This feature is disabled for this profile.'),
+      ),
+    );
+  }
+
   void _showTabHiddenSnack(String provider) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -2662,6 +2872,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// not configured -> missing-key snack; configured but hidden -> hidden snack.
   void _openCloudProvider(String providerKey) {
     if (!mounted) return;
+    if (!_allowsProfileFeature(ProfileFeature.cloud)) {
+      _showPolicyDeniedSnack();
+      return;
+    }
 
     late final bool enabled;
     late final bool hidden;
@@ -3147,8 +3361,8 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                 final desktopSidebarWidth = desktopPill
                     ? 0.0
                     : expandDesktopSidebar
-                        ? DesktopSidebarNav.expandedWidth
-                        : DesktopSidebarNav.width;
+                    ? DesktopSidebarNav.expandedWidth
+                    : DesktopSidebarNav.width;
 
                 final classicBottomNav =
                     !isDesktopWide &&

@@ -146,6 +146,10 @@ class RecordingAlarmReceiver : BroadcastReceiver() {
 			headers = schedule.headers,
 			maxDurationMs = maxDuration,
 			fromSchedule = true,
+			ownerProfileId = schedule.ownerProfileId,
+			connectionResourceId = schedule.connectionResourceId,
+			profileAuthorizationRevision = schedule.profileAuthorizationRevision,
+			resourceAuthorizationRevision = schedule.resourceAuthorizationRevision,
 		)
 		try {
 			ContextCompat.startForegroundService(context, start)

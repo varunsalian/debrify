@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../models/profiles/profile_policy.dart';
+import '../../services/profiles/profile_policy_guard.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/udp_discovery_service.dart';
@@ -9,6 +11,7 @@ import 'remote_addon_export.dart';
 import 'remote_channel_export.dart';
 import 'remote_config_export.dart';
 import 'remote_keyboard_input.dart';
+import 'remote_pairing_dialog.dart';
 import 'remote_transfer_all.dart';
 
 /// Full remote control UI modal
@@ -43,7 +46,28 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     }
   }
 
-  void _openView(String view) {
+  Future<void> _openView(String view) async {
+    if (view != 'navigate' &&
+        !await ProfilePolicyGuard.allows(ProfileFeature.remoteTransfer)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Setup transfer is disabled for this profile.'),
+        ),
+      );
+      return;
+    }
+    if (view == 'navigate') {
+      if (!mounted) return;
+      final state = RemoteControlState();
+      final device = state.connectedDevice;
+      if (device == null) return;
+      final authorized = await ensureNavigationSession(context, state, device);
+      if (!mounted || !authorized) {
+        return;
+      }
+    }
+    if (!mounted) return;
     setState(() {
       _activeView = view;
     });
@@ -110,14 +134,16 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, bool isConnected, String deviceName) {
+  Widget _buildHeader(
+    BuildContext context,
+    bool isConnected,
+    String deviceName,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withValues(alpha: 0.1),
-          ),
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
       ),
       child: Row(
@@ -134,10 +160,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           Expanded(
             child: Text(
               'Remote Control',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
           ),
 
@@ -269,7 +292,9 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         // Device list or empty state
         if (hasDevices) ...[
           // Device list
-          ...state.discoveredDevices.map((device) => _buildDeviceTile(device, state)),
+          ...state.discoveredDevices.map(
+            (device) => _buildDeviceTile(device, state),
+          ),
         ] else if (!state.isScanning) ...[
           // Empty state
           const SizedBox(height: 40),
@@ -279,9 +304,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: const Color(0xFF1E293B),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1),
-              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: Icon(
               Icons.tv_off,
@@ -329,9 +352,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         foregroundColor: Colors.white.withValues(alpha: 0.85),
         side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -407,8 +428,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     ),
                   ),
                   validator: _validateIpv4,
-                  onFieldSubmitted: (_) =>
-                      _submitManualIp(dialogContext, formKey, controller, state),
+                  onFieldSubmitted: (_) => _submitManualIp(
+                    dialogContext,
+                    formKey,
+                    controller,
+                    state,
+                  ),
                 ),
               ),
             ],
@@ -462,7 +487,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   }
 
   Widget _buildDeviceTile(DiscoveredDevice device, RemoteControlState state) {
-    final isConnecting = state.connectionState == RemoteConnectionState.connecting &&
+    final isConnecting =
+        state.connectionState == RemoteConnectionState.connecting &&
         state.connectedDevice?.ip == device.ip;
 
     return Padding(
@@ -482,9 +508,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFF1E293B),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1),
-              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: Row(
               children: [
@@ -496,11 +520,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     color: const Color(0xFF334155),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
-                    Icons.tv,
-                    color: Colors.white,
-                    size: 24,
-                  ),
+                  child: const Icon(Icons.tv, color: Colors.white, size: 24),
                 ),
 
                 const SizedBox(width: 16),
@@ -536,12 +556,17 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     height: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF6366F1),
+                      ),
                     ),
                   )
                 else
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(16),
@@ -650,9 +675,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFF1E293B).withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
-            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: [
@@ -674,11 +697,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     ),
                   ],
                 ),
-                child: Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 20,
-                ),
+                child: Icon(icon, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -794,15 +813,15 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
               child: OutlinedButton.icon(
                 onPressed: () {
                   HapticFeedback.mediumImpact();
-                  RemoteControlState().sendNavigateCommand(NavigateCommand.back);
+                  RemoteControlState().sendNavigateCommand(
+                    NavigateCommand.back,
+                  );
                 },
                 icon: const Icon(Icons.arrow_back, size: 20),
                 label: const Text('Back'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  side: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.3),
-                  ),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),

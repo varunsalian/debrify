@@ -56,17 +56,17 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   }
 
   Future<void> _load() async {
-    final apiKey = await StorageService.getMdblistApiKey();
+    final configured = await StorageService.hasMdblistCredential();
     if (!mounted) return;
     setState(() {
-      _savedApiKey = apiKey;
+      _savedApiKey = configured ? '' : null;
       _account = MdblistService.instance.currentAccount;
       _loading = false;
     });
 
     // Refresh the account card in the background if we're connected. A failure
     // here is non-fatal — the stored key stays put (it may just be offline).
-    if (apiKey != null && apiKey.isNotEmpty) {
+    if (configured) {
       final account = await MdblistService.instance.refreshAccount();
       if (mounted && account != null) {
         setState(() => _account = account);
@@ -96,10 +96,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
     final t = AppThemeScope.of(context).settings;
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: err ? t.danger : null,
-      ),
+      SnackBar(content: Text(message), backgroundColor: err ? t.danger : null),
     );
   }
 
@@ -125,7 +122,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
     }
 
     setState(() {
-      _savedApiKey = txt;
+      _savedApiKey = '';
       _account = account;
       _isEditing = false;
       _saving = false;
@@ -138,7 +135,15 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
   }
 
   Future<void> _deleteKey() async {
-    await MdblistService.instance.logout();
+    try {
+      await MdblistService.instance.logout();
+    } catch (_) {
+      _snack(
+        'This connection is shared. Revoke or transfer profile access before disconnecting.',
+        err: true,
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _savedApiKey = null;
@@ -247,10 +252,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
         children: [
           Icon(Icons.check_circle, color: t.success, size: 14),
           const SizedBox(width: 4),
-          Text(
-            'Connected',
-            style: TextStyle(color: t.success, fontSize: 12),
-          ),
+          Text('Connected', style: TextStyle(color: t.success, fontSize: 12)),
         ],
       ),
     );
@@ -274,9 +276,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
             prefixIcon: const Icon(Icons.security),
             suffixIcon: IconButton(
               focusColor: t.accent.withValues(alpha: 0.4),
-              icon: Icon(
-                _obscure ? Icons.visibility : Icons.visibility_off,
-              ),
+              icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
               onPressed: () => setState(() => _obscure = !_obscure),
             ),
           ),
@@ -403,11 +403,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.account_circle,
-                  color: t.accent2,
-                  size: 20,
-                ),
+                Icon(Icons.account_circle, color: t.accent2, size: 20),
                 const SizedBox(width: 8),
                 Text(
                   'Account',
@@ -453,10 +449,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
           Expanded(
             child: Text(
               value,
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                color: app.core.tx,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w500, color: app.core.tx),
             ),
           ),
         ],
@@ -487,11 +480,7 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.help_outline,
-                  color: t.accent2,
-                  size: 20,
-                ),
+                Icon(Icons.help_outline, color: t.accent2, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -509,10 +498,9 @@ class _MdblistSettingsPageState extends State<MdblistSettingsPage> {
               '2. Log in if prompted\n'
               '3. Find the "API Access" section and copy your key\n'
               '4. Paste it above and tap Save',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: t.dim,
-                height: 1.5,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: t.dim, height: 1.5),
             ),
             const SizedBox(height: 12),
             _FocusRing(

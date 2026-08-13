@@ -48,10 +48,10 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
 
   Future<void> _loadSettings() async {
     // Check which providers are available
-    final torboxKey = await StorageService.getTorboxApiKey();
-    final rdKey = await StorageService.getApiKey();
-    final premiumizeKey = await StorageService.getPremiumizeApiKey();
-    final allDebridKey = await StorageService.getAllDebridApiKey();
+    final torboxConfigured = await StorageService.hasTorboxCredential();
+    final rdConfigured = await StorageService.hasRealDebridCredential();
+    final premiumizeConfigured = await StorageService.hasPremiumizeCredential();
+    final allDebridConfigured = await StorageService.hasAllDebridCredential();
     final pikpakAuth = await PikPakApiService.instance.isAuthenticated();
 
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
@@ -61,13 +61,10 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     final allDebridEnabled =
         await StorageService.getAllDebridIntegrationEnabled();
 
-    final torboxAvailable =
-        torboxEnabled && torboxKey != null && torboxKey.isNotEmpty;
-    final rdAvailable = rdEnabled && rdKey != null && rdKey.isNotEmpty;
-    final premiumizeAvailable =
-        premiumizeEnabled && premiumizeKey != null && premiumizeKey.isNotEmpty;
-    final allDebridAvailable =
-        allDebridEnabled && allDebridKey != null && allDebridKey.isNotEmpty;
+    final torboxAvailable = torboxEnabled && torboxConfigured;
+    final rdAvailable = rdEnabled && rdConfigured;
+    final premiumizeAvailable = premiumizeEnabled && premiumizeConfigured;
+    final allDebridAvailable = allDebridEnabled && allDebridConfigured;
     final pikpakAvailable = pikpakAuth;
 
     // Load current setting
@@ -366,11 +363,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            color: t.danger,
-            size: 32,
-          ),
+          Icon(Icons.warning_amber_rounded, color: t.danger, size: 32),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -474,9 +467,7 @@ class _ProviderOption extends StatelessWidget {
                     ),
                     child: Icon(
                       icon,
-                      color: selected || isFocused
-                          ? t.accent2
-                          : t.dim,
+                      color: selected || isFocused ? t.accent2 : t.dim,
                       size: 22,
                     ),
                   ),

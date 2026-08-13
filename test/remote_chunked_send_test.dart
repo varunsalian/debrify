@@ -1,9 +1,22 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/services/profiles/profile_bootstrap.dart';
+import 'package:debrify/services/profiles/profile_registry.dart';
+import 'package:debrify/services/profiles/profile_remote_lease.dart';
+import 'package:debrify/services/profiles/profile_runtime.dart';
+import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/services/remote_control/remote_chunked_send.dart';
+import 'package:debrify/services/remote_control/remote_command_router.dart';
 import 'package:debrify/services/remote_control/remote_constants.dart';
+import 'package:debrify/services/remote_control/remote_control_state.dart';
 import 'package:debrify/services/remote_control/remote_session.dart';
+import 'package:debrify/services/remote_control/udp_command_service.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// The framing that carries an oversized config payload to a TV.
 ///
@@ -13,13 +26,14 @@ import 'package:debrify/services/remote_control/remote_session.dart';
 /// tests are what keep it honest as the envelope changes.
 void main() {
   encryptedBudgetTests();
+  productionRouteIntegrationTest();
   String packetFor(String data) => chunkPieceBody(
-        // Worst case for the id: the real one is microseconds + a hash, so
-        // pad to a length no live transfer will exceed.
-        transferId: '9' * 40,
-        index: 999999,
-        data: data,
-      );
+    // Worst case for the id: the real one is microseconds + a hash, so
+    // pad to a length no live transfer will exceed.
+    transferId: '9' * 40,
+    index: 999999,
+    data: data,
+  );
 
   group('packet budget', () {
     test('a full chunk packet still fits one datagram', () {
@@ -69,7 +83,8 @@ void main() {
         final next = [
           ...records,
           {
-            'url': 'http://panel.example:8080/live/user/pw/${records.length}.ts',
+            'url':
+                'http://panel.example:8080/live/user/pw/${records.length}.ts',
             'name': 'Channel ${records.length}',
             'playlistId': 'p1',
           },
@@ -79,10 +94,16 @@ void main() {
         payload = jsonEncode(records);
       }
 
-      expect(payload.length, lessThanOrEqualTo(kChunkDataMaxBytes),
-          reason: 'raw length fits the budget');
-      expect(fitsSinglePacket(payload), isFalse,
-          reason: 'but the escaped form does not');
+      expect(
+        payload.length,
+        lessThanOrEqualTo(kChunkDataMaxBytes),
+        reason: 'raw length fits the budget',
+      );
+      expect(
+        fitsSinglePacket(payload),
+        isFalse,
+        reason: 'but the escaped form does not',
+      );
     });
 
     test('a small payload still goes direct', () {
@@ -134,14 +155,16 @@ void main() {
 
   group('start packet', () {
     test('names the command so the receiver can replay it', () {
-      final decoded = jsonDecode(
-        chunkStartBody(
-          transferId: 't1',
-          command: ConfigCommand.iptvLists,
-          label: 'IPTV lists',
-          totalChunks: 7,
-        ),
-      ) as Map<String, dynamic>;
+      final decoded =
+          jsonDecode(
+                chunkStartBody(
+                  transferId: 't1',
+                  command: ConfigCommand.iptvLists,
+                  label: 'IPTV lists',
+                  totalChunks: 7,
+                ),
+              )
+              as Map<String, dynamic>;
 
       expect(decoded['kind'], ConfigCommand.iptvLists);
       expect(decoded['totalChunks'], 7);
@@ -149,6 +172,273 @@ void main() {
       // on its absence.
       expect(decoded['channelName'], 'IPTV lists');
     });
+  });
+}
+
+void productionRouteIntegrationTest() {
+  group('production encrypted chunk route', () {
+    late Directory temporaryDirectory;
+    late ProfileRegistry registry;
+    final state = RemoteControlState();
+    final router = RemoteCommandRouter();
+
+    setUpAll(() {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    setUp(() async {
+      temporaryDirectory = await Directory.systemTemp.createTemp(
+        'remote-chunk-route-test-',
+      );
+      registry = await ProfileRegistry.open(
+        path: p.join(temporaryDirectory.path, 'profiles.db'),
+      );
+      final admin = await registry.createProfile(
+        name: 'Admin',
+        role: UserProfileRole.admin,
+      );
+      await registry.commitBootstrap(
+        activeProfileId: admin.id,
+        migratedLegacyInstall: false,
+      );
+      ProfileBootstrap.debugInstallRegistry(registry);
+      ProfileRuntime.debugReset();
+      final scope = ProfileScope(
+        profileId: admin.id,
+        dataGeneration: 1,
+        sessionEpoch: 1,
+      );
+      ProfileRuntime.initializeCommitted(scope);
+      ProfileRemoteLease.instance.authorize(admin, scope);
+      router.clearProfileSessionState();
+      await state.debugResetForTesting();
+    });
+
+    tearDown(() async {
+      await state.debugResetForTesting();
+      router.clearProfileSessionState();
+      ProfileRemoteLease.instance.revoke();
+      ProfileRuntime.debugReset();
+      ProfileBootstrap.debugInstallRegistry(null);
+      await registry.close();
+      await temporaryDirectory.delete(recursive: true);
+    });
+
+    test(
+      'reorder, duplicate, and replay preserve exact sealed source',
+      () async {
+        final sid = Uint8List.fromList(const <int>[1, 2, 3, 4, 5, 6, 7, 8]);
+        const keys = SessionKeys(
+          c2s: <int>[
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+          ],
+          s2c: <int>[
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+          ],
+          conf: <int>[
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+          ],
+          sas: <int>[
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+            4,
+          ],
+        );
+        final sender = RemoteSession(
+          sid: sid,
+          role: RemoteSessionRole.sender,
+          keys: keys,
+          peerStaticKey: const <int>[9],
+          peerFingerprint: 'receiver-fingerprint',
+          peerName: 'Receiver',
+          sasCode: '123456',
+          establishedAt: DateTime.utc(2026, 8, 13),
+        )..authorized = true;
+        final receiver = RemoteSession(
+          sid: sid,
+          role: RemoteSessionRole.receiver,
+          keys: keys,
+          peerStaticKey: const <int>[8],
+          peerFingerprint: 'sender-fingerprint',
+          peerName: 'Sender',
+          sasCode: '123456',
+          establishedAt: DateTime.utc(2026, 8, 13),
+        )..authorized = true;
+        final manager = RemoteSessionManager(
+          loadStaticKeyPair: RemoteSessionCrypto.x25519.newKeyPair,
+          deviceName: () => 'Receiver',
+        );
+        manager.sessions[receiver.sidB64] = receiver;
+        state
+          ..debugInstallSessionManager(manager)
+          ..debugInstallOutboundSession(sender, ip: 'receiver')
+          ..debugInstallOutboundSession(receiver, ip: 'sender');
+
+        final wire = <Map<String, dynamic>>[];
+        state.debugPlainSender = (command, _, _) async {
+          wire.add(Map<String, dynamic>.from(command));
+          return true;
+        };
+        final payload = 'PRIVATE_SOURCE_${'x' * 6000}';
+        expect(
+          await sendConfigPayloadToDevice(
+            state,
+            ConfigCommand.realDebrid,
+            'receiver',
+            payload,
+            label: 'Real-Debrid',
+          ),
+          isTrue,
+        );
+        expect(wire.length, greaterThan(2));
+        expect(jsonEncode(wire), isNot(contains('PRIVATE_SOURCE')));
+
+        final start = wire.first;
+        final chunks = wire.skip(1).toList().reversed.toList();
+        Future<void> deliver(Map<String, dynamic> packet) =>
+            state.debugReceiveCommandAndWait(
+              RemoteCommand.fromJson(packet),
+              'sender',
+            );
+        await deliver(start);
+        await deliver(chunks.first);
+        await deliver(chunks.first);
+        for (final packet in chunks.skip(1)) {
+          await deliver(packet);
+        }
+        expect(router.debugProfileTransferValue('realDebridApiKey'), payload);
+
+        // Replaying the same sealed blob/counter is authenticated but rejected.
+        await deliver(start);
+        for (final packet in chunks) {
+          await deliver(packet);
+        }
+        expect(router.debugProfileTransferValue('realDebridApiKey'), payload);
+      },
+    );
   });
 }
 
@@ -174,8 +464,7 @@ void encryptedBudgetTests() {
       expect(decoded['enc'], 1);
     });
 
-    test('worst-case sealed ecmd at the threshold fits one datagram',
-        () async {
+    test('worst-case sealed ecmd at the threshold fits one datagram', () async {
       // Find the largest payload the threshold accepts.
       var lo = 0, hi = kChunkDataMaxBytes;
       while (lo < hi) {
@@ -212,8 +501,7 @@ void encryptedBudgetTests() {
       expect(utf8.encode(envelope).length, lessThanOrEqualTo(kChunkMaxBytes));
     });
 
-    test('payload over the encrypted threshold is under the plaintext one',
-        () {
+    test('payload over the encrypted threshold is under the plaintext one', () {
       // The encrypted path must kick in earlier than the plaintext path —
       // if these ever cross, sealed sends fragment.
       var lo = 0, hi = kChunkDataMaxBytes;

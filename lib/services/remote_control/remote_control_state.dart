@@ -4,6 +4,8 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../../models/profiles/profile_policy.dart';
+import '../profiles/profile_async_authorization.dart';
 import 'remote_constants.dart';
 import 'remote_command_router.dart';
 import 'remote_pairing_store.dart';
@@ -65,6 +67,18 @@ class RemoteControlState extends ChangeNotifier {
   Future<void> Function()? debugSenderStarter;
   @visibleForTesting
   Future<void> Function()? debugRoleStopper;
+  @visibleForTesting
+  Future<Map<String, dynamic>> Function(
+    RemoteSession session,
+    Map<String, dynamic> commandJson,
+  )?
+  debugCommandSealer;
+  @visibleForTesting
+  bool Function(Map<String, dynamic> envelope, String ip, int port)?
+  debugRawSender;
+  @visibleForTesting
+  Future<bool> Function(Map<String, dynamic> command, String ip, int port)?
+  debugPlainSender;
   bool _debugReceiverBound = false;
 
   // Callbacks for TV mode
@@ -74,14 +88,19 @@ class RemoteControlState extends ChangeNotifier {
   /// [onCommandReceived] and additionally learns whether the command arrived
   /// encrypted and over an authorized (paired) session — the router uses this
   /// to gate credential writes.
-  void Function(String action, String command, String? data,
-      RemoteCommandContext context)? onCommandReceivedWithContext;
+  void Function(
+    String action,
+    String command,
+    String? data,
+    RemoteCommandContext context,
+  )?
+  onCommandReceivedWithContext;
 
   /// Pair-action traffic (requests/challenges/proofs/acks) with its session.
   /// Receiver side: the router drives the pairing gate. Sender side: the
   /// pairing sheet awaits challenge/ok/err responses.
   void Function(RemoteSession session, String command, String? data)?
-      onPairMessage;
+  onPairMessage;
 
   // --- Protocol v2 session state -------------------------------------------
   RemoteSessionManager? _sessionManager;
@@ -92,6 +111,7 @@ class RemoteControlState extends ChangeNotifier {
   final Map<String, Completer<RemoteSession?>> _pendingHandshakes = {};
   final Map<String, Completer<void>> _pendingPongs = {};
   final Set<String> _rememberedFingerprints = <String>{};
+  final Set<String> _encryptedPeerIps = <String>{};
   int _pingSeq = 0;
 
   // Getters
@@ -107,8 +127,50 @@ class RemoteControlState extends ChangeNotifier {
 
   /// Initialize receiver mode - start listening for incoming commands.
   /// Any device can call this; it's also the default for Android TV at boot.
-  Future<void> startTvListener(String deviceName) =>
-      _enqueueRoleChange(() => _switchToReceiverRaw(deviceName));
+  Future<T> _authorizedRemote<T>(Future<T> Function() operation) async {
+    return _authorizedFeature(
+      ProfileFeature.remoteControl,
+      operation,
+      stopTransportWhenRevoked: true,
+    );
+  }
+
+  Future<T> _authorizedFeature<T>(
+    ProfileFeature feature,
+    Future<T> Function() operation, {
+    bool stopTransportWhenRevoked = false,
+  }) async {
+    final authorization = await ProfileAsyncAuthorization.capture(feature);
+    if (authorization == null) return operation();
+    final result = await authorization.runIfCurrent(operation);
+    try {
+      // Socket/discovery operations can span multiple awaits. Revalidate after
+      // completion so a switch or policy revision cannot leave an A-owned
+      // transport running under B. Tear down any completed stale transport.
+      await authorization.runIfCurrent(() async {});
+    } catch (_) {
+      if (stopTransportWhenRevoked) {
+        await _enqueueRoleChange(_stopRaw);
+      }
+      rethrow;
+    }
+    return result;
+  }
+
+  Future<T> _authorizedCommand<T>(
+    RemoteCommand command,
+    Future<T> Function() operation,
+  ) {
+    if (command.action == RemoteAction.config ||
+        command.action == RemoteAction.addon) {
+      return _authorizedFeature(ProfileFeature.remoteTransfer, operation);
+    }
+    return operation();
+  }
+
+  Future<void> startTvListener(String deviceName) => _authorizedRemote(
+    () => _enqueueRoleChange(() => _switchToReceiverRaw(deviceName)),
+  );
 
   Future<void> _startTvListenerRaw(String deviceName) async {
     if (_role == _RemoteRole.receiver &&
@@ -130,18 +192,21 @@ class RemoteControlState extends ChangeNotifier {
     // Context-aware path (takes precedence): the router needs to know whether
     // a command arrived over an authorized session to gate credential writes.
     onCommandReceivedWithContext ??= (action, command, data, context) {
-      RemoteCommandRouter()
-          .dispatchCommand(action, command, data, context: context);
+      RemoteCommandRouter().dispatchCommand(
+        action,
+        command,
+        data,
+        context: context,
+      );
     };
     // Receiver-side pairing traffic drives the on-screen code gate.
     onPairMessage ??= (session, command, data) {
       unawaited(
-          RemoteCommandRouter().handlePairMessage(this, session, command, data));
+        RemoteCommandRouter().handlePairMessage(this, session, command, data),
+      );
     };
 
-    debugPrint(
-      'RemoteControlState: Starting receiver listener as "$deviceName"',
-    );
+    debugPrint('RemoteControlState: Starting receiver listener');
 
     final testStarter = debugReceiverStarter;
     if (testStarter != null) {
@@ -161,11 +226,18 @@ class RemoteControlState extends ChangeNotifier {
     );
     await _discoveryService!.start();
     // Advertise our static key once loaded so senders can pin this receiver.
-    unawaited(RemotePairingStore.publicKeyBytes().then((key) {
-      _discoveryService?.advertisedStaticKey = base64Encode(key);
-    }).catchError((Object e) {
-      debugPrint('RemoteControlState: could not load static key: $e');
-    }));
+    unawaited(
+      RemotePairingStore.publicKeyBytes()
+          .then((key) {
+            _discoveryService?.advertisedStaticKey = base64Encode(key);
+          })
+          .catchError((Object error) {
+            debugPrint(
+              'RemoteControlState: could not load static key '
+              '(${error.runtimeType})',
+            );
+          }),
+    );
 
     // Start command service (to receive commands)
     _commandService = UdpCommandService(isTv: true);
@@ -190,13 +262,15 @@ class RemoteControlState extends ChangeNotifier {
   }
 
   /// Initialize for Mobile mode - start scanning for TVs
-  Future<void> startMobileDiscovery() => _enqueueRoleChange(() async {
-    if (_role == _RemoteRole.sender && isScanning) {
-      debugPrint('RemoteControlState: Already scanning');
-      return;
-    }
-    await _switchToSenderRaw();
-  });
+  Future<void> startMobileDiscovery() => _authorizedRemote(
+    () => _enqueueRoleChange(() async {
+      if (_role == _RemoteRole.sender && isScanning) {
+        debugPrint('RemoteControlState: Already scanning');
+        return;
+      }
+      await _switchToSenderRaw();
+    }),
+  );
 
   Future<void> _startMobileDiscoveryRaw() async {
     if (_connectionState == RemoteConnectionState.scanning) {
@@ -328,44 +402,46 @@ class RemoteControlState extends ChangeNotifier {
   /// Starts, restores, and stops share one queue so backing out cannot race a
   /// pending socket bind.
   Future<ReceiverLease> ensureReceiverMode(String deviceName) =>
-      _enqueueRoleChange(() async {
-        final id = ++_nextLeaseId;
-        if (_receiverLeases.isEmpty) {
-          _roleBeforeLeases = _role;
-          _receiverNameBeforeLeases = _receiverName;
-        }
-        _receiverLeases.add(id);
-        try {
-          await _switchToReceiverRaw(deviceName);
-        } catch (error, stackTrace) {
-          _receiverLeases.remove(id);
+      _authorizedRemote(
+        () => _enqueueRoleChange(() async {
+          final id = ++_nextLeaseId;
           if (_receiverLeases.isEmpty) {
-            final previous = _roleBeforeLeases ?? _RemoteRole.stopped;
-            final previousName = _receiverNameBeforeLeases;
-            _roleBeforeLeases = null;
-            _receiverNameBeforeLeases = null;
-            try {
-              switch (previous) {
-                case _RemoteRole.receiver:
-                  if (previousName != null) {
-                    await _switchToReceiverRaw(previousName);
-                  }
-                case _RemoteRole.sender:
-                  await _switchToSenderRaw();
-                case _RemoteRole.stopped:
-                  await _stopRaw();
-              }
-            } catch (restoreError) {
-              debugPrint(
-                'RemoteControlState: Could not restore role after a failed '
-                'receiver lease: $restoreError',
-              );
-            }
+            _roleBeforeLeases = _role;
+            _receiverNameBeforeLeases = _receiverName;
           }
-          Error.throwWithStackTrace(error, stackTrace);
-        }
-        return ReceiverLease._(this, id);
-      });
+          _receiverLeases.add(id);
+          try {
+            await _switchToReceiverRaw(deviceName);
+          } catch (error, stackTrace) {
+            _receiverLeases.remove(id);
+            if (_receiverLeases.isEmpty) {
+              final previous = _roleBeforeLeases ?? _RemoteRole.stopped;
+              final previousName = _receiverNameBeforeLeases;
+              _roleBeforeLeases = null;
+              _receiverNameBeforeLeases = null;
+              try {
+                switch (previous) {
+                  case _RemoteRole.receiver:
+                    if (previousName != null) {
+                      await _switchToReceiverRaw(previousName);
+                    }
+                  case _RemoteRole.sender:
+                    await _switchToSenderRaw();
+                  case _RemoteRole.stopped:
+                    await _stopRaw();
+                }
+              } catch (restoreError) {
+                debugPrint(
+                  'RemoteControlState: Could not restore role after a failed '
+                  'receiver lease (${restoreError.runtimeType})',
+                );
+              }
+            }
+            Error.throwWithStackTrace(error, stackTrace);
+          }
+          return ReceiverLease._(this, id);
+        }),
+      );
 
   Future<void> _releaseReceiverLease(int id) => _enqueueRoleChange(() async {
     if (!_receiverLeases.remove(id)) return;
@@ -408,17 +484,19 @@ class RemoteControlState extends ChangeNotifier {
 
   /// Connect to a specific TV (for mobile)
   Future<void> connectToDevice(DiscoveredDevice device) async {
+    return _authorizedRemote(() => _connectToDeviceRaw(device));
+  }
+
+  Future<void> _connectToDeviceRaw(DiscoveredDevice device) async {
     if (_isTv) return;
 
     // If already connected to this device, do nothing
     if (_connectedDevice?.ip == device.ip && isConnected) {
-      debugPrint(
-        'RemoteControlState: Already connected to ${device.deviceName}',
-      );
+      debugPrint('RemoteControlState: Already connected');
       return;
     }
 
-    debugPrint('RemoteControlState: Connecting to ${device.deviceName}');
+    debugPrint('RemoteControlState: Connecting');
 
     _connectionState = RemoteConnectionState.connecting;
     _connectedDevice = device;
@@ -465,45 +543,70 @@ class RemoteControlState extends ChangeNotifier {
     });
   }
 
-  /// Send [command] to the connected device — encrypted when a session
-  /// exists, plaintext otherwise (v1 TVs). Credential-bearing actions
-  /// (config/addon) never take the plaintext branch; benign remote-control
-  /// traffic keeps working against old receivers.
-  void _sendOpportunistic(RemoteCommand command) {
-    final sensitive = command.action == RemoteAction.config ||
-        command.action == RemoteAction.addon;
-    final ip = _connectedDevice?.ip;
-    final session = ip == null ? null : _sessionByIp[ip];
+  /// Send [command] through a current encrypted session when the peer supports
+  /// one. Navigation/media/text retain v1 compatibility because they contain
+  /// no credentials; setup and addon traffic never takes this fallback.
+  Future<void> _sendOpportunistic(RemoteCommand command) async {
+    await _authorizedRemote(() async {
+      await _authorizedCommand(command, () async {
+        await _sendOpportunisticRaw(command);
+      });
+    });
+  }
+
+  Future<void> _sendOpportunisticRaw(RemoteCommand command) async {
+    final device = _connectedDevice;
+    final ip = device?.ip;
+    if (ip == null) return;
+    final expectsEncryption =
+        device!.supportsEncryption || _encryptedPeerIps.contains(ip);
+    final session = expectsEncryption
+        ? await _ensureEncryptedSessionAuthorized(
+            ip,
+            timeout: const Duration(seconds: 3),
+          )
+        : _sessionByIp[ip];
     if (session != null) {
-      unawaited(sendEncryptedCommand(session, command).then((sent) {
-        if (!sent && !sensitive) _commandService?.sendCommand(command);
-      }));
+      await _sendEncryptedCommandRaw(session, command);
       return;
     }
-    if (sensitive) {
-      debugPrint('RemoteControlState: refusing plaintext ${command.action} — '
-          'no session with $ip');
+    final legacySafe =
+        command.action == RemoteAction.navigate ||
+        command.action == RemoteAction.media ||
+        command.action == RemoteAction.text;
+    if (legacySafe && !device.supportsEncryption) {
+      final service = _commandService;
+      if (service != null && service.isRunning) {
+        service.sendRaw(command.toJson(), ip);
+      }
       return;
     }
-    _commandService?.sendCommand(command);
+    debugPrint(
+      'RemoteControlState: refusing plaintext ${command.action} — '
+      'no authenticated session',
+    );
   }
 
   /// Send a navigation command (sender role)
   void sendNavigateCommand(String direction) {
     if (!isConnected || _isTv) return;
-    _sendOpportunistic(RemoteCommand.navigate(direction));
+    unawaited(_sendOpportunistic(RemoteCommand.navigate(direction)));
   }
 
   /// Send a media command (sender role)
   void sendMediaCommand(String command) {
     if (!isConnected || _isTv) return;
-    _sendOpportunistic(RemoteCommand.media(command));
+    unawaited(_sendOpportunistic(RemoteCommand.media(command)));
   }
 
   /// Send an addon command (sender role)
   void sendAddonCommand(String command, {String? manifestUrl}) {
     if (!isConnected || _isTv) return;
-    _sendOpportunistic(RemoteCommand.addon(command, manifestUrl: manifestUrl));
+    unawaited(
+      _sendOpportunistic(
+        RemoteCommand.addon(command, manifestUrl: manifestUrl),
+      ),
+    );
   }
 
   /// Send an addon command to a specific device by IP (doesn't require connection)
@@ -513,15 +616,25 @@ class RemoteControlState extends ChangeNotifier {
     String command,
     String targetIp, {
     String? manifestUrl,
+    Future<void> Function()? authorizationBarrier,
   }) async {
-    final cmd = RemoteCommand.addon(command, manifestUrl: manifestUrl);
-    final session = _sessionByIp[targetIp];
-    if (session == null) {
-      debugPrint('RemoteControlState: refusing plaintext addon send — '
-          'no session with $targetIp');
-      return false;
-    }
-    return sendEncryptedCommand(session, cmd);
+    return _authorizedRemote(() async {
+      final cmd = RemoteCommand.addon(command, manifestUrl: manifestUrl);
+      return _authorizedCommand(cmd, () async {
+        final session = _sessionByIp[targetIp];
+        if (session == null) {
+          debugPrint(
+            'RemoteControlState: refusing plaintext addon send — no session',
+          );
+          return false;
+        }
+        return _sendEncryptedCommandRaw(
+          session,
+          cmd,
+          authorizationBarrier: authorizationBarrier,
+        );
+      });
+    });
   }
 
   /// Send a config command to a specific device by IP (doesn't require connection)
@@ -541,52 +654,74 @@ class RemoteControlState extends ChangeNotifier {
     String targetIp, {
     String? configData,
     bool plaintextTransport = false,
+    Future<void> Function()? authorizationBarrier,
   }) async {
-    final cmd = RemoteCommand.config(configType, configData: configData);
-    if (plaintextTransport) {
-      // Prefer the persistent socket: hundreds of chunk packets from
-      // one-shot temp sockets would each arrive at the receiver from a
-      // different (instantly dead) source port, and a receiver that replies
-      // toward the latest source would lose the phone's real endpoint.
-      final service = _commandService;
-      if (service != null &&
-          service.isRunning &&
-          service.sendRaw(cmd.toJson(), targetIp)) {
-        return true;
-      }
-      return await UdpCommandService.sendCommandToIp(cmd, targetIp);
-    }
-    final session = _sessionByIp[targetIp];
-    if (session == null) {
-      debugPrint(
-          'RemoteControlState: refusing plaintext config "$configType" — '
-          'no session with $targetIp');
-      return false;
-    }
-    return sendEncryptedCommand(session, cmd);
+    return _authorizedRemote(() async {
+      final cmd = RemoteCommand.config(configType, configData: configData);
+      return _authorizedCommand(cmd, () async {
+        if (plaintextTransport) {
+          final barrier =
+              authorizationBarrier ??
+              ProfileAsyncAuthorization.currentOutboundBarrier;
+          if (barrier != null) {
+            await barrier();
+          }
+          // Prefer the persistent socket: hundreds of chunk packets from
+          // one-shot temp sockets would each arrive at the receiver from a
+          // different (instantly dead) source port, and a receiver that
+          // replies toward the latest source would lose the phone's real
+          // endpoint.
+          final service = _commandService;
+          final testSender = debugPlainSender;
+          if (testSender != null) {
+            return testSender(cmd.toJson(), targetIp, kCommandPort);
+          }
+          if (service != null &&
+              service.isRunning &&
+              service.sendRaw(cmd.toJson(), targetIp)) {
+            return true;
+          }
+          return await UdpCommandService.sendCommandToIp(cmd, targetIp);
+        }
+        final session = _sessionByIp[targetIp];
+        if (session == null) {
+          debugPrint(
+            'RemoteControlState: refusing plaintext config — no session',
+          );
+          return false;
+        }
+        return _sendEncryptedCommandRaw(
+          session,
+          cmd,
+          authorizationBarrier: authorizationBarrier,
+        );
+      });
+    });
   }
 
   /// Send a text input command (sender role)
   void sendTextCommand(String command, {String? text}) {
     if (!isConnected || _isTv) return;
-    _sendOpportunistic(RemoteCommand.text(command, text: text));
+    unawaited(_sendOpportunistic(RemoteCommand.text(command, text: text)));
   }
 
   /// Switch this device into RECEIVER mode (listens for incoming commands).
   /// Stops any existing sender/receiver state first. Safe to call from any platform.
   Future<void> switchToReceiverMode(String deviceName) async {
-    await _enqueueRoleChange(() => _switchToReceiverRaw(deviceName));
+    await _authorizedRemote(
+      () => _enqueueRoleChange(() => _switchToReceiverRaw(deviceName)),
+    );
   }
 
   /// Switch this device into SENDER mode (scans for receivers and sends commands).
   /// Stops any existing sender/receiver state first.
   Future<void> switchToSenderMode() async {
-    await _enqueueRoleChange(_switchToSenderRaw);
+    await _authorizedRemote(() => _enqueueRoleChange(_switchToSenderRaw));
   }
 
   /// Restart scanning (for mobile)
   Future<void> rescan() async {
-    await _enqueueRoleChange(_switchToSenderRaw);
+    await _authorizedRemote(() => _enqueueRoleChange(_switchToSenderRaw));
   }
 
   /// Test-only singleton reset. Production [stop] deliberately keeps [isTv]
@@ -605,6 +740,24 @@ class RemoteControlState extends ChangeNotifier {
     debugReceiverStarter = null;
     debugSenderStarter = null;
     debugRoleStopper = null;
+    debugCommandSealer = null;
+    debugRawSender = null;
+    debugPlainSender = null;
+  }
+
+  @visibleForTesting
+  void debugInstallOutboundSession(
+    RemoteSession session, {
+    required String ip,
+    int port = kCommandPort,
+  }) {
+    _sessionPeers[session.sidB64] = (ip: ip, port: port);
+    _sessionByIp[ip] = session;
+  }
+
+  @visibleForTesting
+  void debugInstallSessionManager(RemoteSessionManager manager) {
+    _sessionManager = manager;
   }
 
   @visibleForTesting
@@ -624,15 +777,25 @@ class RemoteControlState extends ChangeNotifier {
   }
 
   void _handleDeviceDiscovered(DiscoveredDevice device) {
-    debugPrint('RemoteControlState: Device discovered: $device');
+    debugPrint('RemoteControlState: Device discovered');
     // Don't auto-connect - let user choose from list
     // The devices list is updated via onDevicesUpdated callback
   }
 
   void _handleCommand(RemoteCommand command, String sourceIp) {
-    if (command.command != ConfigCommand.debrifyChannelChunk) {
-      debugPrint('RemoteControlState: Command received: $command');
+    final chunkContext = _authenticatedChunkContext(command, sourceIp);
+    if (chunkContext != null) {
+      // Chunk packets contain only an AEAD-sealed blob and routing metadata.
+      // They intentionally avoid a second encrypted envelope to stay below
+      // the UDP fragmentation limit. Associate them with the already
+      // authenticated session for this endpoint; the router verifies the
+      // sid/counter and authenticates the reassembled blob before dispatch.
+      _dispatch(command.action, command.command, command.data, chunkContext);
+      return;
     }
+    // The router admits navigation/media/text and puts legacy setup traffic
+    // through its source-IP-bound local consent flow. Committed profile mode
+    // rejects this unauthenticated context entirely.
     _dispatch(
       command.action,
       command.command,
@@ -645,8 +808,64 @@ class RemoteControlState extends ChangeNotifier {
     );
   }
 
-  void _dispatch(String action, String command, String? data,
-      RemoteCommandContext context) {
+  RemoteCommandContext? _authenticatedChunkContext(
+    RemoteCommand command,
+    String sourceIp,
+  ) {
+    if (command.action != RemoteAction.config ||
+        (command.command != ConfigCommand.debrifyChannelStart &&
+            command.command != ConfigCommand.debrifyChannelChunk)) {
+      return null;
+    }
+    final session = _sessionByIp[sourceIp];
+    if (session == null || !session.authorized) return null;
+    return RemoteCommandContext(
+      encrypted: true,
+      authorized: true,
+      sidB64: session.sidB64,
+      peerFingerprint: session.peerFingerprint,
+      peerName: session.peerName,
+      sourceIp: sourceIp,
+      reject: (code) async {
+        await _sendOverSession(
+          session,
+          RemoteCommand(
+            action: RemoteAction.pair,
+            command: PairCommand.err,
+            data: code,
+          ),
+        );
+      },
+    );
+  }
+
+  /// Exercises the exact production plaintext-transport admission branch
+  /// while allowing an integration test to await router completion.
+  @visibleForTesting
+  Future<void> debugReceiveCommandAndWait(
+    RemoteCommand command,
+    String sourceIp,
+  ) async {
+    final context = _authenticatedChunkContext(command, sourceIp);
+    if (context == null) {
+      _handleCommand(command, sourceIp);
+      return;
+    }
+    // ignore: invalid_use_of_visible_for_testing_member
+    await RemoteCommandRouter().debugDispatchAndWait(
+      command.action,
+      command.command,
+      command.data,
+      context,
+    );
+  }
+
+  void _dispatch(
+    String action,
+    String command,
+    String? data,
+    RemoteCommandContext context,
+  ) {
     final contextual = onCommandReceivedWithContext;
     if (contextual != null) {
       contextual(action, command, data, context);
@@ -679,7 +898,9 @@ class RemoteControlState extends ChangeNotifier {
       loadStaticKeyPair: RemotePairingStore.loadOrCreateKeypair,
       deviceName: () => _receiverName ?? 'Debrify',
     );
-    _pairingGate ??= PairingGate(isRemembered: _rememberedFingerprints.contains);
+    _pairingGate ??= PairingGate(
+      isRemembered: _rememberedFingerprints.contains,
+    );
     service.onSessionMessage = (json, address, port) {
       unawaited(_onSessionMessage(service, json, address.address, port));
     };
@@ -695,7 +916,8 @@ class RemoteControlState extends ChangeNotifier {
       }
       _pairingGate?.tick();
       _sessionByIp.removeWhere(
-          (_, session) => !manager.sessions.containsKey(session.sidB64));
+        (_, session) => !manager.sessions.containsKey(session.sidB64),
+      );
       // Endpoints die with whatever tracked their sid (session, pending
       // handshake) — this keeps the map bounded on the always-on listener.
       _sessionPeers.removeWhere((sid, _) => !manager.knowsSid(sid));
@@ -710,13 +932,20 @@ class RemoteControlState extends ChangeNotifier {
       _rememberedFingerprints
         ..clear()
         ..addAll(paired.map((d) => d.fingerprint));
-    } catch (e) {
-      debugPrint('RemoteControlState: could not load paired devices: $e');
+    } catch (error) {
+      debugPrint(
+        'RemoteControlState: could not load paired devices '
+        '(${error.runtimeType})',
+      );
     }
   }
 
-  Future<void> _onSessionMessage(UdpCommandService service,
-      Map<String, dynamic> json, String ip, int port) async {
+  Future<void> _onSessionMessage(
+    UdpCommandService service,
+    Map<String, dynamic> json,
+    String ip,
+    int port,
+  ) async {
     final manager = _sessionManager;
     if (manager == null) return;
     final type = json['type'] as String?;
@@ -746,6 +975,14 @@ class RemoteControlState extends ChangeNotifier {
       // alone — the next ensureEncryptedSession() probes with a ping and
       // re-handshakes only if that fails.
       debugPrint('RemoteControlState: peer reports unknown session');
+      if (sid is String) {
+        final stale = manager.sessions.remove(sid);
+        if (stale != null && identical(_sessionByIp[ip], stale)) {
+          _sessionByIp.remove(ip);
+        }
+      }
+      _lastError = 'The remote session expired. Reconnecting…';
+      notifyListeners();
       return;
     }
 
@@ -764,6 +1001,7 @@ class RemoteControlState extends ChangeNotifier {
     }
     final established = result.established;
     if (established != null) {
+      _encryptedPeerIps.add(ip);
       _sessionByIp[ip] = established;
       _sessionPeers[established.sidB64] = (ip: ip, port: port);
       _pendingHandshakes.remove(established.sidB64)?.complete(established);
@@ -771,16 +1009,29 @@ class RemoteControlState extends ChangeNotifier {
     }
   }
 
-  void _dispatchDecrypted(UdpCommandService service, RemoteSession session,
-      Map<String, dynamic> command, String ip, int port) {
+  void _dispatchDecrypted(
+    UdpCommandService service,
+    RemoteSession session,
+    Map<String, dynamic> command,
+    String ip,
+    int port,
+  ) {
     final action = command['action'] as String? ?? '';
     final cmd = command['command'] as String? ?? '';
     final data = command['data'] as String?;
 
     if (action == RemoteAction.sys) {
       if (cmd == SysCommand.ping) {
-        unawaited(_sendOverSession(
-            session, RemoteCommand(action: RemoteAction.sys, command: SysCommand.pong, data: data)));
+        unawaited(
+          _sendOverSession(
+            session,
+            RemoteCommand(
+              action: RemoteAction.sys,
+              command: SysCommand.pong,
+              data: data,
+            ),
+          ),
+        );
       } else if (cmd == SysCommand.pong && data != null) {
         _pendingPongs.remove(data)?.complete();
       }
@@ -790,8 +1041,7 @@ class RemoteControlState extends ChangeNotifier {
       onPairMessage?.call(session, cmd, data);
       return;
     }
-    if ((action == RemoteAction.config || action == RemoteAction.addon) &&
-        !session.authorized) {
+    if (!session.authorized) {
       // A remembered phone proved possession of its static key during the
       // handshake (triple-DH), so the stored pairing carries over silently.
       if (kRememberPairedSenders &&
@@ -802,13 +1052,16 @@ class RemoteControlState extends ChangeNotifier {
       } else {
         // v2 senders always pair first — reaching this is a race or a bug,
         // and the reply tells them which gate they missed.
-        unawaited(_sendOverSession(
-          session,
-          RemoteCommand(
+        unawaited(
+          _sendOverSession(
+            session,
+            RemoteCommand(
               action: RemoteAction.pair,
               command: PairCommand.err,
-              data: 'required'),
-        ));
+              data: 'required',
+            ),
+          ),
+        );
         return;
       }
     }
@@ -822,6 +1075,17 @@ class RemoteControlState extends ChangeNotifier {
         sidB64: session.sidB64,
         peerFingerprint: session.peerFingerprint,
         peerName: session.peerName,
+        sourceIp: ip,
+        reject: (code) async {
+          await _sendOverSession(
+            session,
+            RemoteCommand(
+              action: RemoteAction.pair,
+              command: PairCommand.err,
+              data: code,
+            ),
+          );
+        },
       ),
     );
   }
@@ -829,29 +1093,74 @@ class RemoteControlState extends ChangeNotifier {
   /// Seal and send a command over [session]'s wire endpoint. Returns false
   /// when no socket or endpoint is available.
   Future<bool> _sendOverSession(RemoteSession session, RemoteCommand command) =>
-      sendEncryptedCommand(session, command);
+      _sendEncryptedCommandRaw(session, command);
 
   /// Public for the sender flows: send [command] encrypted on [session].
   Future<bool> sendEncryptedCommand(
-      RemoteSession session, RemoteCommand command) async {
+    RemoteSession session,
+    RemoteCommand command, {
+    Future<void> Function()? authorizationBarrier,
+  }) => _authorizedRemote(
+    () => _authorizedCommand(
+      command,
+      () => _sendEncryptedCommandRaw(
+        session,
+        command,
+        authorizationBarrier: authorizationBarrier,
+      ),
+    ),
+  );
+
+  Future<bool> _sendEncryptedCommandRaw(
+    RemoteSession session,
+    RemoteCommand command, {
+    Future<void> Function()? authorizationBarrier,
+  }) async {
     final manager = _sessionManager;
     final service = _commandService;
     final peer = _sessionPeers[session.sidB64];
-    if (manager == null || service == null || peer == null) return false;
-    final envelope = await manager.sealCommand(session, command.toJson());
-    return service.sendRaw(envelope, peer.ip, port: peer.port);
+    final testSealer = debugCommandSealer;
+    final testSender = debugRawSender;
+    if (peer == null || (testSealer == null && manager == null)) return false;
+    if (testSender == null && service == null) return false;
+    final barrier =
+        authorizationBarrier ??
+        ProfileAsyncAuthorization.currentOutboundBarrier;
+    final commandJson = command.toJson();
+    final envelope = testSealer == null
+        ? await manager!.sealCommand(session, commandJson)
+        : await testSealer(session, commandJson);
+    // This is the last await before bytes leave the process. Credential
+    // callers supply the capability that authorized their read so a switch,
+    // grant/resource revision, restore, or policy change during sealing fails
+    // closed here.
+    if (barrier != null) {
+      await barrier();
+    }
+    return testSender?.call(envelope, peer.ip, peer.port) ??
+        service!.sendRaw(envelope, peer.ip, port: peer.port);
   }
 
   /// Liveness probe over an existing session.
-  Future<bool> pingSession(RemoteSession session,
-      {Duration timeout = const Duration(seconds: 3)}) async {
+  Future<bool> pingSession(
+    RemoteSession session, {
+    Duration timeout = const Duration(seconds: 3),
+  }) => _authorizedRemote(() => _pingSessionRaw(session, timeout: timeout));
+
+  Future<bool> _pingSessionRaw(
+    RemoteSession session, {
+    required Duration timeout,
+  }) async {
     final correlator = 'p${++_pingSeq}';
     final completer = Completer<void>();
     _pendingPongs[correlator] = completer;
-    final sent = await sendEncryptedCommand(
+    final sent = await _sendEncryptedCommandRaw(
       session,
       RemoteCommand(
-          action: RemoteAction.sys, command: SysCommand.ping, data: correlator),
+        action: RemoteAction.sys,
+        command: SysCommand.ping,
+        data: correlator,
+      ),
     );
     if (!sent) {
       _pendingPongs.remove(correlator);
@@ -889,23 +1198,41 @@ class RemoteControlState extends ChangeNotifier {
   /// opportunistic connect-time handshake and a credential flow's preflight
   /// race, and whichever finishes LAST overwrites the ip→session mapping
   /// (possibly replacing the paired session with an unauthorized one).
-  Future<RemoteSession?> ensureEncryptedSession(String ip,
-      {Duration timeout = const Duration(seconds: 6)}) {
+  Future<RemoteSession?> ensureEncryptedSession(
+    String ip, {
+    Duration timeout = const Duration(seconds: 6),
+  }) => _authorizedRemote(
+    () => _ensureEncryptedSessionAuthorized(ip, timeout: timeout),
+  );
+
+  Future<RemoteSession?> _ensureEncryptedSessionAuthorized(
+    String ip, {
+    required Duration timeout,
+  }) {
     final inFlight = _handshakesByIp[ip];
     if (inFlight != null) return inFlight;
-    final attempt = _ensureEncryptedSessionInner(ip, timeout)
-        .whenComplete(() => _handshakesByIp.remove(ip));
+    final attempt = _ensureEncryptedSessionInner(
+      ip,
+      timeout,
+    ).whenComplete(() => _handshakesByIp.remove(ip));
     _handshakesByIp[ip] = attempt;
     return attempt;
   }
 
   Future<RemoteSession?> _ensureEncryptedSessionInner(
-      String ip, Duration timeout) async {
+    String ip,
+    Duration timeout,
+  ) async {
     final existing = _sessionByIp[ip];
     if (existing != null &&
         _sessionManager?.sessions.containsKey(existing.sidB64) == true) {
       // Probe: the TV may have restarted and lost the session.
-      if (await pingSession(existing)) return existing;
+      if (await _pingSessionRaw(
+        existing,
+        timeout: const Duration(seconds: 3),
+      )) {
+        return existing;
+      }
       _sessionByIp.remove(ip);
       _sessionManager?.sessions.remove(existing.sidB64);
     }
@@ -940,7 +1267,8 @@ class RemoteControlState extends ChangeNotifier {
       return matches;
     });
     _sessionByIp.removeWhere(
-        (_, session) => !manager.sessions.containsKey(session.sidB64));
+      (_, session) => !manager.sessions.containsKey(session.sidB64),
+    );
   }
 
   void _teardownSessions() {
@@ -950,6 +1278,7 @@ class RemoteControlState extends ChangeNotifier {
     _pairingGate = null;
     _sessionPeers.clear();
     _sessionByIp.clear();
+    _encryptedPeerIps.clear();
     for (final completer in _pendingHandshakes.values) {
       if (!completer.isCompleted) completer.complete(null);
     }

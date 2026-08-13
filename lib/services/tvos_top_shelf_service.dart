@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,11 @@ import 'main_page_bridge.dart';
 import 'storage_service.dart';
 import 'stremio_service.dart';
 import 'youtube_service.dart';
+import 'profiles/profile_bootstrap.dart';
+import 'profiles/profile_lock_controller.dart';
+import 'profiles/profile_runtime.dart';
+import 'profiles/profile_preferences.dart';
+import '../models/profiles/profile_policy.dart';
 
 /// Publishes the Apple TV Home Screen's Top Shelf reel.
 ///
@@ -26,12 +32,15 @@ class TvosTopShelfService {
   static const int _previewHeight = 1080;
   static const int _previewDurationSeconds = 120;
   static const String _previewCacheVersion = 'v1';
+  static const String _multiProfileOptInKey =
+      'tvos_multi_profile_top_shelf_enabled';
 
   String? _lastSourceContent;
   String? _lastPublishedContent;
   bool _initialized = false;
   int _publishGeneration = 0;
   Future<void> _previewQueue = Future<void>.value();
+  Map<String, dynamic>? _pendingProfileAction;
 
   Future<void> initialize() async {
     if (!PlatformUtil.isTvOS || _initialized) return;
@@ -51,10 +60,10 @@ class TvosTopShelfService {
         'takePendingAction',
       );
       if (pending != null) _openTopShelfItem(pending);
-    } catch (error) {
+    } catch (_) {
       // This is optional system furniture. Even a corrupt platform response
       // must not delay the real app from reaching runApp().
-      debugPrint('Top Shelf: pending action unavailable: $error');
+      debugPrint('Top Shelf: pending action unavailable');
     }
   }
 
@@ -66,7 +75,13 @@ class TvosTopShelfService {
   }) async {
     if (!PlatformUtil.isTvOS) return;
     try {
-      final content = buildSnapshot(items, sourceTitle: sourceTitle);
+      final content = await _attachProfileAuthority(
+        buildSnapshot(items, sourceTitle: sourceTitle),
+      );
+      if (content == null) {
+        await clear();
+        return;
+      }
       final contentJson = jsonEncode(content);
       if (_lastSourceContent == contentJson) return;
       final generation = ++_publishGeneration;
@@ -83,14 +98,89 @@ class TvosTopShelfService {
       // flight is allowed to finish as a harmless future cache hit.
       _previewQueue = _previewQueue
           .then((_) => _preparePreviews(generation, items, content))
-          .catchError((Object error) {
-            debugPrint('Top Shelf: preview preparation failed: $error');
+          .catchError((Object _) {
+            debugPrint('Top Shelf: preview preparation failed');
           });
-    } catch (error) {
+    } catch (_) {
       // Top Shelf is optional furniture. A missing entitlement/channel must
       // never interfere with loading or navigating the real Home board.
-      debugPrint('Top Shelf: snapshot publish failed: $error');
+      debugPrint('Top Shelf: snapshot publish failed');
     }
+  }
+
+  Future<void> clear() async {
+    _lastSourceContent = null;
+    _lastPublishedContent = null;
+    _publishGeneration++;
+    _pendingProfileAction = null;
+    if (!PlatformUtil.isTvOS) return;
+    try {
+      await _channel.invokeMethod<void>('clear');
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> _attachProfileAuthority(
+    Map<String, dynamic> source,
+  ) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return source;
+    }
+    if (!ProfileLockController.instance.isUnlocked) {
+      return null;
+    }
+    final scope = ProfileRuntime.capture();
+    final profile = await ProfileBootstrap.registry.getProfile(scope.profileId);
+    if (profile == null || !profile.allows(ProfileFeature.incomingLinks)) {
+      return null;
+    }
+    final profiles = await ProfileBootstrap.registry.listProfiles();
+    if (profiles.length > 1 &&
+        !((await DevicePreferences.instance()).getBool(_multiProfileOptInKey) ??
+            false)) {
+      return null;
+    }
+    final revision = DateTime.now().microsecondsSinceEpoch;
+    final expiresAt = DateTime.now()
+        .toUtc()
+        .add(const Duration(hours: 24))
+        .millisecondsSinceEpoch;
+    final actions = <String, dynamic>{};
+    final decorated = <Map<String, dynamic>>[];
+    for (final raw in (source['items'] as List).take(8)) {
+      final item = Map<String, dynamic>.from(raw as Map);
+      final token = _opaqueToken();
+      item['actionToken'] = token;
+      actions[token] = <String, dynamic>{
+        'ownerProfileId': scope.profileId,
+        'profileAuthorizationRevision': profile.authorizationRevision,
+        'expiresAtMs': expiresAt,
+        'consumed': false,
+        'action': <String, dynamic>{
+          'imdbId': item['imdbId'],
+          'type': item['type'],
+          'title': item['title'],
+          'posterURL': item['posterURL'],
+          'year': item['year'],
+        },
+      };
+      decorated.add(item);
+    }
+    return <String, dynamic>{
+      ...source,
+      'version': 2,
+      'snapshotRevision': revision,
+      'ownerProfileId': scope.profileId,
+      'profileAuthorizationRevision': profile.authorizationRevision,
+      'privacySafe': false,
+      'items': decorated,
+      'actions': actions,
+    };
+  }
+
+  static String _opaqueToken() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(24, (_) => random.nextInt(256));
+    return base64UrlEncode(bytes).replaceAll('=', '');
   }
 
   Future<void> _publishSnapshot(Map<String, dynamic> content) async {
@@ -192,10 +282,10 @@ class TvosTopShelfService {
         snapshot = withPreviewFile(snapshot, imdbId, previewFile);
         await _publishSnapshot(snapshot);
         prepared++;
-      } catch (error) {
+      } catch (_) {
         // One unavailable/restricted trailer must not prevent later titles in
         // the reel from receiving previews.
-        debugPrint('Top Shelf: preview unavailable for $imdbId: $error');
+        debugPrint('Top Shelf: preview unavailable');
       }
     }
   }
@@ -346,6 +436,36 @@ class TvosTopShelfService {
   }
 
   static void _openTopShelfItem(Map<String, dynamic> payload) {
+    unawaited(_openTopShelfItemAuthorized(payload));
+  }
+
+  static Future<void> _openTopShelfItemAuthorized(
+    Map<String, dynamic> payload,
+  ) async {
+    final owner = payload['ownerProfileId'] as String?;
+    if (ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted) {
+      final revision = int.tryParse(
+        payload['profileAuthorizationRevision']?.toString() ?? '',
+      );
+      final profile = owner == null
+          ? null
+          : await ProfileBootstrap.registry.getProfile(owner);
+      if (profile == null ||
+          revision == null ||
+          !profile.isEnabled ||
+          profile.authorizationRevision != revision ||
+          !profile.allows(ProfileFeature.incomingLinks)) {
+        await instance.clear();
+        return;
+      }
+      if (owner == null ||
+          ProfileRuntime.capture().profileId != owner ||
+          !ProfileLockController.instance.isUnlocked) {
+        instance._pendingProfileAction = Map<String, dynamic>.from(payload);
+        MainPageBridge.showProfilePicker?.call();
+        return;
+      }
+    }
     final imdbId = payload['imdbId'] as String?;
     if (imdbId == null || !RegExp(r'^tt\d{7,10}$').hasMatch(imdbId)) return;
     final yearText = payload['year'] as String?;
@@ -359,5 +479,41 @@ class TvosTopShelfService {
       'poster': payload['posterURL'] as String?,
       'year': year,
     });
+  }
+
+  Future<bool> multiProfilePersonalizationEnabled() async =>
+      (await DevicePreferences.instance()).getBool(_multiProfileOptInKey) ??
+      false;
+
+  Future<void> setMultiProfilePersonalizationEnabled(bool enabled) async {
+    final profile = await ProfileBootstrap.registry.getProfile(
+      ProfileRuntime.capture().profileId,
+    );
+    if (profile == null ||
+        profile.role != UserProfileRole.admin ||
+        !profile.allows(ProfileFeature.manageProfiles)) {
+      throw StateError('Only an Admin can change Top Shelf privacy');
+    }
+    if (!await (await DevicePreferences.instance()).setBool(
+      _multiProfileOptInKey,
+      enabled,
+    )) {
+      throw StateError('Could not save Top Shelf privacy preference');
+    }
+    if (!enabled) await clear();
+  }
+
+  void onProfileUnlocked() {
+    final pending = _pendingProfileAction;
+    if (pending == null) return;
+    final owner = pending['ownerProfileId'] as String?;
+    if (owner != null &&
+        ProfileRuntime.isInitialized &&
+        ProfileRuntime.isProfileCommitted &&
+        ProfileRuntime.capture().profileId == owner &&
+        ProfileLockController.instance.isUnlocked) {
+      _pendingProfileAction = null;
+      _openTopShelfItem(pending);
+    }
   }
 }

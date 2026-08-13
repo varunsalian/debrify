@@ -28,6 +28,10 @@ class IndexerManagerConfig {
   final int timeoutSeconds;
   final String jackettIndexerId;
   final List<int> categories;
+  final String? connectionResourceId;
+  final int? connectionResourceRevision;
+  final bool connectionReadOnly;
+  final bool credentialsRedacted;
 
   const IndexerManagerConfig({
     required this.id,
@@ -40,6 +44,10 @@ class IndexerManagerConfig {
     this.timeoutSeconds = 20,
     this.jackettIndexerId = 'all',
     this.categories = const [],
+    this.connectionResourceId,
+    this.connectionResourceRevision,
+    this.connectionReadOnly = false,
+    this.credentialsRedacted = false,
   });
 
   String get displayName {
@@ -63,6 +71,10 @@ class IndexerManagerConfig {
     int? timeoutSeconds,
     String? jackettIndexerId,
     List<int>? categories,
+    String? connectionResourceId,
+    int? connectionResourceRevision,
+    bool? connectionReadOnly,
+    bool? credentialsRedacted,
   }) {
     return IndexerManagerConfig(
       id: id ?? this.id,
@@ -75,6 +87,11 @@ class IndexerManagerConfig {
       timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
       jackettIndexerId: jackettIndexerId ?? this.jackettIndexerId,
       categories: categories ?? this.categories,
+      connectionResourceId: connectionResourceId ?? this.connectionResourceId,
+      connectionResourceRevision:
+          connectionResourceRevision ?? this.connectionResourceRevision,
+      connectionReadOnly: connectionReadOnly ?? this.connectionReadOnly,
+      credentialsRedacted: credentialsRedacted ?? this.credentialsRedacted,
     );
   }
 
@@ -97,6 +114,12 @@ class IndexerManagerConfig {
               .whereType<int>()
               .toList() ??
           const [],
+      connectionResourceId: json['_connectionResourceId']?.toString(),
+      connectionResourceRevision: (json['_connectionResourceRevision'] as num?)
+          ?.toInt(),
+      connectionReadOnly: json['_connectionResourceReadOnly'] as bool? ?? false,
+      credentialsRedacted:
+          json['_connectionResourceCredentialsRedacted'] as bool? ?? false,
     );
   }
 
@@ -112,6 +135,12 @@ class IndexerManagerConfig {
       'timeout_seconds': timeoutSeconds,
       'jackett_indexer_id': jackettIndexerId,
       'categories': categories,
+      if (connectionResourceId != null)
+        '_connectionResourceId': connectionResourceId,
+      if (connectionResourceRevision != null)
+        '_connectionResourceRevision': connectionResourceRevision,
+      if (connectionReadOnly) '_connectionResourceReadOnly': true,
+      if (credentialsRedacted) '_connectionResourceCredentialsRedacted': true,
     };
   }
 

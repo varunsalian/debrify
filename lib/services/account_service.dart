@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import '../models/rd_user.dart';
 import '../services/debrid_service.dart';
 import '../services/storage_service.dart';
+import '../models/profiles/profile_policy.dart';
+import 'profiles/profile_async_authorization.dart';
 
 class AccountService {
   static RDUser? _currentUser;
@@ -28,23 +30,41 @@ class AccountService {
 
     _isValidating = true;
     try {
+      final capability = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.cloud,
+      );
       // Use fallback validation which tries primary then backup endpoint
-      final result = await DebridService.validateApiKeyWithFallback(apiKey);
+      final result = capability == null
+          ? await DebridService.validateApiKeyWithFallback(apiKey)
+          : await capability.run(
+              () => DebridService.validateApiKeyWithFallback(apiKey),
+            );
 
       if (result['success'] == true) {
-        _setCurrentUser(result['user'] as RDUser);
+        if (capability != null && !capability.isCurrentlyActive) return false;
+        Future<void> commit() async {
+          await StorageService.saveApiKey(apiKey);
+          if (capability == null || capability.isCurrentlyActive) {
+            _setCurrentUser(result['user'] as RDUser);
+          }
+        }
 
-        // Save API key to storage
-        await StorageService.saveApiKey(apiKey);
+        if (capability == null) {
+          await commit();
+        } else {
+          await capability.runIfCurrent(commit);
+        }
         // Endpoint is already saved by validateApiKeyWithFallback
 
         return true;
-      } else {
+      } else if (capability == null || capability.isCurrentlyActive) {
         _setCurrentUser(null);
         return false;
       }
+      return false;
     } catch (e) {
-      _setCurrentUser(null);
+      // A stale completion belongs to its initiating session and must not
+      // clear the newly active profile's process-global account state.
       return false;
     } finally {
       _isValidating = false;
@@ -57,7 +77,7 @@ class AccountService {
     if (apiKey == null || apiKey.isEmpty) {
       return false;
     }
-    
+
     return await validateAndGetUserInfo(apiKey);
   }
 
@@ -73,7 +93,7 @@ class AccountService {
       _setCurrentUser(null);
       return false;
     }
-    
+
     return await validateAndGetUserInfo(apiKey);
   }
-} 
+}

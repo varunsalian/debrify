@@ -78,7 +78,6 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
     final enabled = await StorageService.getPikPakEnabled();
     final showVideosOnly = await StorageService.getPikPakShowVideosOnly();
     final ignoreSmallVideos = await StorageService.getPikPakIgnoreSmallVideos();
-    final email = await StorageService.getPikPakEmail();
     final isAuth = await PikPakApiService.instance.isAuthenticated();
     final restrictedId = await StorageService.getPikPakRestrictedFolderId();
     final restrictedName = await StorageService.getPikPakRestrictedFolderName();
@@ -91,7 +90,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       _pikpakEnabled = enabled;
       _showVideosOnly = showVideosOnly;
       _ignoreSmallVideos = ignoreSmallVideos;
-      _emailController.text = email ?? '';
+      // A connected shared account is usable without exposing its credential
+      // fields to this screen. Replacement login always starts empty.
+      _emailController.clear();
       _isConnected = isAuth;
       _restrictedFolderId = restrictedId;
       _restrictedFolderName = restrictedName;
@@ -250,10 +251,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       } else {
         _showSnackBar('Login failed. Please check your credentials.');
       }
-    } catch (e) {
-      print('Error logging in: $e');
+    } catch (_) {
       if (!mounted) return;
-      _showSnackBar('Login error: $e');
+      _showSnackBar('Login failed. Please check your credentials and retry.');
     } finally {
       if (mounted) {
         setState(() {
@@ -291,10 +291,11 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       if (mounted) {
         Navigator.of(context).pop(true);
       }
-    } catch (e) {
-      print('Error logging out: $e');
+    } catch (_) {
       if (!mounted) return;
-      _showSnackBar('Logout error: $e');
+      _showSnackBar(
+        'This connection is shared. Revoke or transfer profile access before disconnecting.',
+      );
     }
   }
 
@@ -398,9 +399,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                   decoration: BoxDecoration(
                     color: t.warning.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: t.warning.withValues(alpha: 0.3),
-                    ),
+                    border: Border.all(color: t.warning.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     children: [
@@ -698,8 +697,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                               const SizedBox(height: 8),
                               Text(
                                 'Choose what happens after adding a torrent to PikPak',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: t.dim),
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.bodySmall?.copyWith(color: t.dim),
                               ),
                               const SizedBox(height: 12),
                               SettingsSelectDropdown(
@@ -866,15 +866,13 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                           title: Text(
                             _isConnected ? 'Connected' : 'Not Connected',
                             style: TextStyle(
-                              color: _isConnected
-                                  ? t.success
-                                  : app.core.tx,
+                              color: _isConnected ? t.success : app.core.tx,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                           subtitle: Text(
                             _isConnected
-                                ? 'Connected as: ${_emailController.text}'
+                                ? 'Connected account'
                                 : 'Login with your PikPak account below',
                             style: TextStyle(color: t.dim),
                           ),
@@ -1052,9 +1050,7 @@ class _FocusRingState extends State<_FocusRing> {
         decoration: BoxDecoration(
           color: _focused ? t.panel2 : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _focused ? t.accent : Colors.transparent,
-          ),
+          border: Border.all(color: _focused ? t.accent : Colors.transparent),
         ),
         child: widget.child,
       ),
