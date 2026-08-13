@@ -3828,7 +3828,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<void> _watchChannel(DebrifyTvChannel channel) async {
+  /// [leadWith] (the Spotlight stage's play-one-title): that torrent plays
+  /// FIRST, with the rest of the shuffled selection behind it. NEVER a
+  /// single-element queue — the pick may not be cached at the provider, and
+  /// a one-item queue has nothing to fall back to, which would make a
+  /// deliberate choice fail exactly where Tune in would have succeeded.
+  Future<void> _watchChannel(
+    DebrifyTvChannel channel, {
+    CachedTorrent? leadWith,
+  }) async {
     debugPrint('🎬 [WATCH] Starting for channel: ${channel.name}');
     _qualityFallbackNotified = false;
     _rdSizeRejections = 0;
@@ -3912,6 +3920,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       cacheEntry,
       normalizedKeywords,
     );
+    if (leadWith != null) {
+      // The chosen title to the front; behaviour after it ends is unchanged.
+      playbackSelection.removeWhere((t) => t.infohash == leadWith.infohash);
+      playbackSelection.insert(0, leadWith);
+    }
     final cachedTorrents = playbackSelection
         .map((cached) => cached.toTorrent())
         .toList();
@@ -7752,9 +7765,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       onDelete: _handleDeleteChannel,
       onToggleFavorite: _toggleChannelFavorite,
       onChannelFocused: _onSpotlightChannelFocused,
-      // Provisional until phase 6: a plate pick tunes the channel. Phase 6
-      // replaces this with pick-first-then-the-rest-of-the-shuffle.
-      onWatchOne: (channel, torrent) => _watchChannel(channel),
+      onWatchOne: (channel, torrent) =>
+          _watchChannel(channel, leadWith: torrent),
     );
   }
 
