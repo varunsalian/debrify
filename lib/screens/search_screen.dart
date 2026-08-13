@@ -800,6 +800,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   List<IptvChannel> _iptvFavChannels = [];
   final List<FocusNode> _iptvFavNodes = [];
 
+  // Debrify's account-independent movie/series watchlist. Full metadata is
+  // stored locally and presented as separate movie and series rows, so neither
+  // row needs a tracker or catalog network request.
+  List<StremioMeta> _watchlistMovieItems = [];
+  List<StremioMeta> _watchlistSeriesItems = [];
+  final List<FocusNode> _watchlistMovieNodes = [];
+  final List<FocusNode> _watchlistSeriesNodes = [];
+
   // Opted-in IPTV custom lists as Home rows (`iptvlist:` extras), rendered
   // through the favourites-row family after the IPTV favourites row. Rebuilt
   // by [_loadIptvListRows] on init, on Home Rows saves, and whenever
@@ -1514,6 +1522,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         _loadTvFavorites(),
         _loadStremioTvFavorites(),
         _loadIptvFavorites(),
+        _loadMyWatchlist(),
         _loadIptvListRows(),
         _loadPlaylistFavorites(),
       ]);
@@ -1903,6 +1912,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       ..._tvFavNodes,
       ..._stvFavNodes,
       ..._iptvFavNodes,
+      ..._watchlistMovieNodes,
+      ..._watchlistSeriesNodes,
       ..._playlistFavNodes,
       ..._kwToolbarNodes, // fixed pool — only disposed here, not in _disposeKwNodes
     ]) {
@@ -1919,6 +1930,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     _tvFavNodes.clear();
     _stvFavNodes.clear();
     _iptvFavNodes.clear();
+    _watchlistMovieNodes.clear();
+    _watchlistSeriesNodes.clear();
     _playlistFavNodes.clear();
     super.dispose();
   }
@@ -2681,15 +2694,28 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       !_homeDisabled.contains('fav:playlist') &&
       _catalogQuery.isEmpty &&
       !_catalogSearching;
+  bool get _watchlistMoviesVisible =>
+      _watchlistMovieItems.isNotEmpty &&
+      !_homeDisabled.contains('watchlist:movies') &&
+      _catalogQuery.isEmpty &&
+      !_catalogSearching;
+  bool get _watchlistSeriesVisible =>
+      _watchlistSeriesItems.isNotEmpty &&
+      !_homeDisabled.contains('watchlist:series') &&
+      _catalogQuery.isEmpty &&
+      !_catalogSearching;
 
-  /// The visible favourites-family rows in render order: Playlist, Debrify TV,
-  /// Stremio TV, IPTV favourites, then one row per opted-in IPTV custom list.
+  /// The visible saved-content rows in render order: Watchlist Movies,
+  /// Watchlist Series, Playlist, Debrify TV, Stremio TV, IPTV favourites, then
+  /// opted-in IPTV custom lists.
   /// This is the single source of truth for both rendering ([_buildBoard]) and
   /// the index-based DPAD focus wiring below, so the two never drift out of
   /// sync. IPTV list rows share the favourites gates (board only, non-empty)
   /// and are opt-in by construction — [_iptvListRows] only ever holds enabled
   /// lists.
   List<_FavRowRef> get _favRowKinds => [
+    if (_watchlistMoviesVisible) const _FavRowRef(_FavKind.watchlistMovies),
+    if (_watchlistSeriesVisible) const _FavRowRef(_FavKind.watchlistSeries),
     if (_playlistFavVisible) const _FavRowRef(_FavKind.playlist),
     if (_tvFavVisible) const _FavRowRef(_FavKind.debrify),
     if (_stvFavVisible) const _FavRowRef(_FavKind.stremio),
@@ -2707,6 +2733,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return HomeExtraRowIds.iptvList(_iptvListRows[ref.list].listId);
     }
     return switch (ref.kind) {
+      _FavKind.watchlistMovies => 'watchlist:movies',
+      _FavKind.watchlistSeries => 'watchlist:series',
       _FavKind.playlist => 'fav:playlist',
       _FavKind.debrify => 'fav:debrify',
       _FavKind.stremio => 'fav:stremio',
@@ -2725,6 +2753,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   List<FocusNode> _favNodesFor(_FavRowRef ref) {
     if (ref.isIptvList) return _iptvListRows[ref.list].nodes;
     switch (ref.kind) {
+      case _FavKind.watchlistMovies:
+        return _watchlistMovieNodes;
+      case _FavKind.watchlistSeries:
+        return _watchlistSeriesNodes;
       case _FavKind.iptv:
         return _iptvFavNodes;
       case _FavKind.debrify:
@@ -3241,6 +3273,167 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     } finally {
       _iptvFavLaunching = false;
     }
+  }
+
+  Future<void> _loadMyWatchlist() async {
+    try {
+      final items = await StorageService.getMyWatchlistItems();
+      if (!mounted) return;
+      setState(() {
+        _watchlistMovieItems = [
+          for (final item in items)
+            if (item.type.toLowerCase() != 'series') item,
+        ];
+        _watchlistSeriesItems = [
+          for (final item in items)
+            if (item.type.toLowerCase() == 'series') item,
+        ];
+      });
+      _syncMyWatchlistNodes();
+      _maybeAutoFocusBoard();
+    } catch (_) {
+      // A local shelf failure is non-fatal; leave it hidden.
+    }
+  }
+
+  void _syncMyWatchlistNodes() {
+    _syncWatchlistNodes(
+      nodes: _watchlistMovieNodes,
+      itemCount: _watchlistMovieItems.length,
+      debugLabel: 'search_watchlist_movie',
+    );
+    _syncWatchlistNodes(
+      nodes: _watchlistSeriesNodes,
+      itemCount: _watchlistSeriesItems.length,
+      debugLabel: 'search_watchlist_series',
+    );
+  }
+
+  void _syncWatchlistNodes({
+    required List<FocusNode> nodes,
+    required int itemCount,
+    required String debugLabel,
+  }) {
+    while (nodes.length < itemCount) {
+      nodes.add(FocusNode(debugLabel: '${debugLabel}_${nodes.length}'));
+    }
+    var removedFocusedNode = false;
+    while (nodes.length > itemCount) {
+      final removed = nodes.removeLast();
+      removedFocusedNode = removedFocusedNode || removed.hasFocus;
+      removed.dispose();
+    }
+    if (removedFocusedNode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (nodes.isNotEmpty) {
+          nodes.last.requestFocus();
+        } else {
+          _focusContent();
+        }
+      });
+    }
+  }
+
+  Future<void> _offerRemoveUnavailableWatchlistItem(
+    StremioMeta item, {
+    required String message,
+  }) async {
+    final remove = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Series unavailable'),
+        content: Text('$message\n\nRemove it from My Watchlist?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (remove != true || !mounted) return;
+
+    try {
+      await StorageService.setMyWatchlistItem(item, false);
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      await _loadMyWatchlist();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Removed from My Watchlist')),
+        );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't update My Watchlist")),
+      );
+    }
+  }
+
+  Future<void> _openMyWatchlistItem(StremioMeta item) async {
+    final xtream = parseXtreamSeriesMetaId(item.id);
+    if (xtream != null || item.sourceAddon?.id == 'xtream-iptv') {
+      if (xtream == null) {
+        await _offerRemoveUnavailableWatchlistItem(
+          item,
+          message: "This series' saved source is invalid.",
+        );
+        return;
+      }
+
+      final playlists = await StorageService.getIptvPlaylists();
+      if (!mounted) return;
+      IptvPlaylist? playlist;
+      for (final candidate in playlists) {
+        if (candidate.id == xtream.playlistId && candidate.isXtreamCodes) {
+          playlist = candidate;
+          break;
+        }
+      }
+      if (playlist == null) {
+        await _offerRemoveUnavailableWatchlistItem(
+          item,
+          message: "This series' provider is no longer available.",
+        );
+        return;
+      }
+
+      await openXtreamSeries(
+        context,
+        playlist: playlist,
+        series: IptvChannel(
+          name: item.name,
+          url: 'xtream-series://${xtream.seriesId}',
+          logoUrl: item.poster,
+          group: item.name,
+          contentType: 'series',
+          attributes: {
+            'series_id': xtream.seriesId,
+            'series_playlist_id': xtream.playlistId,
+            if (item.background?.isNotEmpty ?? false)
+              'backdrop': item.background!,
+            if (item.description?.isNotEmpty ?? false)
+              'plot': item.description!,
+            if (item.year?.isNotEmpty ?? false) 'releaseDate': item.year!,
+            if (item.imdbRating != null) 'rating': item.imdbRating!.toString(),
+            if (item.genres?.isNotEmpty ?? false)
+              'genre': item.genres!.join(', '),
+          },
+        ),
+        isTelevision: widget.isTelevision,
+      );
+      if (mounted) await _refreshAfterPlayback();
+      return;
+    }
+
+    _openItem(item, _addonForContinue(item.sourceAddon?.id));
   }
 
   /// Load the user's saved playlist items for the leading Playlist row. Applies
@@ -4496,6 +4689,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         anyOf(_tvFavNodes) ||
         anyOf(_stvFavNodes) ||
         anyOf(_iptvFavNodes) ||
+        anyOf(_watchlistMovieNodes) ||
+        anyOf(_watchlistSeriesNodes) ||
         anyOf(_playlistFavNodes)) {
       return true;
     }
@@ -5188,6 +5383,40 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
     }
     switch (ref.kind) {
+      case _FavKind.watchlistMovies:
+      case _FavKind.watchlistSeries:
+        final items = ref.kind == _FavKind.watchlistMovies
+            ? _watchlistMovieItems
+            : _watchlistSeriesItems;
+        final item = items[col];
+        return _FavArtCell(
+          isTelevision: true,
+          column: col,
+          rowNodes: nodes,
+          onUp: up,
+          onDown: down,
+          onLeft: onLeft,
+          onRight: onRight,
+          onUpHold: onUpHold,
+          onDownHold: onDownHold,
+          child: _ArtPoster(
+            imageUrl: item.poster,
+            title: item.name,
+            isTelevision: true,
+            ringColor: Colors.white,
+            focusNode: nodes[col],
+            onOpen: () => _openMyWatchlistItem(item),
+            onFocused: () => _canvasFavFocused(
+              railKey,
+              col,
+              _CanvasFavFocus(
+                art: _firstNonEmpty(item.background, item.poster),
+                title: item.name,
+                subtitle: 'MY WATCHLIST · ${item.type.toUpperCase()}',
+              ),
+            ),
+          ),
+        );
       case _FavKind.iptv:
         final channel = _iptvFavChannels[col];
         return _FavArtCell(
@@ -5614,6 +5843,23 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
     }
     switch (ref.kind) {
+      case _FavKind.watchlistMovies:
+      case _FavKind.watchlistSeries:
+        final isMovies = ref.kind == _FavKind.watchlistMovies;
+        final items = isMovies ? _watchlistMovieItems : _watchlistSeriesItems;
+        return SpotlightShelf(
+          title: isMovies ? 'Watchlist Movies' : 'Watchlist Series',
+          nodes: nodes,
+          items: [
+            for (final item in items)
+              SpotlightCard(
+                image: item.poster,
+                title: item.name,
+                subtitle: isMovies ? 'MOVIE' : 'SERIES',
+                onOpen: () => _openMyWatchlistItem(item),
+              ),
+          ],
+        );
       case _FavKind.playlist:
         return SpotlightShelf(
           title: 'Playlists',
@@ -5989,6 +6235,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   int _canvasFavItemCount(_FavRowRef ref) {
     if (ref.isIptvList) return _iptvListRows[ref.list].channels.length;
     switch (ref.kind) {
+      case _FavKind.watchlistMovies:
+        return _watchlistMovieItems.length;
+      case _FavKind.watchlistSeries:
+        return _watchlistSeriesItems.length;
       case _FavKind.iptv:
         return _iptvFavChannels.length;
       case _FavKind.debrify:
@@ -6003,6 +6253,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   String _canvasFavTitle(_FavRowRef ref) {
     if (ref.isIptvList) return _iptvListRows[ref.list].title;
     switch (ref.kind) {
+      case _FavKind.watchlistMovies:
+        return 'Watchlist Movies';
+      case _FavKind.watchlistSeries:
+        return 'Watchlist Series';
       case _FavKind.iptv:
         return 'IPTV Favorites';
       case _FavKind.debrify:
@@ -10784,7 +11038,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           MaterialPageRoute(
             settings: const RouteSettings(name: kCatalogDetailRouteName),
             builder: (_) => CatalogItemDetailScreen(
-              item: item,
+              // Keep the originating addon with the locally-saved My
+              // Watchlist row so reopening it can route to the same source.
+              item: StorageService.withMyWatchlistSource(item, addon),
               isTelevision: widget.isTelevision,
               // Hide "Play" when PikPak is the only provider — no quick-play.
               showQuickPlay: !_pikpakOnly,
@@ -15541,6 +15797,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final withTrackers = trackers || _playedSinceRefresh;
     _playedSinceRefresh = false;
     try {
+      await _loadMyWatchlist();
+      if (!mounted) return;
       await _loadContinueWatching();
       if (!mounted) return;
       await _loadIptvContinueWatching();
@@ -16011,6 +16269,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return _buildIptvListRow(ref, homeRowId);
     }
     switch (ref.kind) {
+      case _FavKind.watchlistMovies:
+      case _FavKind.watchlistSeries:
+        return _buildWatchlistRow(ref, homeRowId);
       case _FavKind.iptv:
         return _buildIptvFavRow(homeRowId);
       case _FavKind.debrify:
@@ -16020,6 +16281,41 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       case _FavKind.playlist:
         return _buildPlaylistFavRow(homeRowId);
     }
+  }
+
+  Widget _buildWatchlistRow(_FavRowRef ref, String homeRowId) {
+    final tv = widget.isTelevision;
+    final isMovies = ref.kind == _FavKind.watchlistMovies;
+    final items = isMovies ? _watchlistMovieItems : _watchlistSeriesItems;
+    final nodes = isMovies ? _watchlistMovieNodes : _watchlistSeriesNodes;
+    return _buildFavRowShell(
+      title: isMovies ? 'Watchlist Movies' : 'Watchlist Series',
+      tags: [
+        _CategoryTag(
+          isMovies ? 'Movies' : 'Series',
+          icon: Icons.bookmark_rounded,
+        ),
+      ],
+      itemCount: items.length,
+      cellBuilder: (col, posterW, cellH) {
+        final item = items[col];
+        return _FavArtCell(
+          isTelevision: tv,
+          column: col,
+          rowNodes: nodes,
+          onUp: _favRowOnUp(homeRowId, col),
+          onDown: _favRowOnDown(homeRowId, col),
+          child: _ArtPoster(
+            imageUrl: item.poster,
+            title: item.name,
+            isTelevision: tv,
+            focusNode: nodes[col],
+            onOpen: () => _openMyWatchlistItem(item),
+            onFocused: _clearHeroLiveIptv,
+          ),
+        );
+      },
+    );
   }
 
   /// Shared scaffold for a favourites row: a header (title + tag pills) above a
@@ -20567,10 +20863,18 @@ class _SeeAllLinkState extends State<_SeeAllLink> {
   }
 }
 
-/// The kinds of leading favourites rows. Render order (Playlist, Debrify TV,
-/// Stremio TV, IPTV) is defined by [_SearchScreenState._favRowKinds], the single
-/// source of truth for both rendering and the index-based DPAD focus wiring.
-enum _FavKind { iptv, debrify, stremio, playlist }
+/// The kinds of leading saved-content rows. Render order (Watchlist Movies,
+/// Watchlist Series, Playlist, Debrify TV, Stremio TV, IPTV) is defined by
+/// [_SearchScreenState._favRowKinds], the single source of truth for rendering
+/// and the index-based DPAD focus wiring.
+enum _FavKind {
+  watchlistMovies,
+  watchlistSeries,
+  iptv,
+  debrify,
+  stremio,
+  playlist,
+}
 
 /// One visible favourites-family row: a singleton [kind] row ([list] == -1),
 /// or — for `kind == _FavKind.iptv` with [list] >= 0 — the IPTV custom-list

@@ -14,6 +14,7 @@ import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/wide_touch_scale.dart';
 import '../episodes_panel.dart';
+import '../tracker_brand_marks.dart';
 import 'detail_model.dart';
 
 /// Card metrics as FRACTIONS of the viewport.
@@ -498,13 +499,31 @@ class ShowcaseIdentity extends StatelessWidget {
       return n;
     }
 
-    if (m.onTrackers != null && actionNodes.isNotEmpty) {
-      actions.add(_Circle(node: next(), icon: Icons.add_rounded, onTap: m.onTrackers!));
-    }
-    if (m.onTrackersSecondary != null && i < actionNodes.length) {
+    if (m.onToggleMyWatchlist != null && actionNodes.isNotEmpty) {
       actions.add(_Circle(
         node: next(),
-        icon: Icons.bookmark_add_outlined,
+        icon: m.inMyWatchlist
+            ? Icons.bookmark_rounded
+            : Icons.bookmark_add_outlined,
+        onTap: m.onToggleMyWatchlist!,
+      ));
+    }
+    if (m.onTrackers != null && actionNodes.isNotEmpty) {
+      // The screen assigns Trakt to the primary slot when it is connected;
+      // otherwise this callback opens Simkl. Keep the mark coupled to that
+      // same rule instead of presenting an ambiguous generic `+`.
+      actions.add(_Circle.mark(
+        node: next(),
+        mark: m.hasTrakt ? const TraktMark() : const SimklMark(),
+        onTap: m.onTrackers!,
+      ));
+    }
+    if (m.onTrackersSecondary != null && i < actionNodes.length) {
+      // The secondary slot only exists when both are connected. Trakt owns
+      // the primary slot above, so this callback always opens Simkl.
+      actions.add(_Circle.mark(
+        node: next(),
+        mark: const SimklMark(),
         onTap: m.onTrackersSecondary!,
       ));
     }
@@ -791,7 +810,7 @@ class _Chip extends StatelessWidget {
 /// Trakt and Simkl are READOUT here, not buttons: filled when tracked, hollow
 /// when not, never focusable. Tracker state describes what a title is to you;
 /// it is not an errand you came to the page to run, and a row of verbs is the
-/// wrong place for it. The `+` button opens both.
+/// wrong place for it. The branded tracker buttons open their matching sheet.
 class _MetaLine extends StatelessWidget {
   final DetailModel model;
 
@@ -1059,10 +1078,21 @@ class _PrimaryState extends State<_Primary> {
 
 class _Circle extends StatefulWidget {
   final FocusNode node;
-  final IconData icon;
+  final IconData? icon;
+  final Widget? mark;
   final VoidCallback onTap;
 
-  const _Circle({required this.node, required this.icon, required this.onTap});
+  const _Circle({
+    required this.node,
+    required IconData this.icon,
+    required this.onTap,
+  }) : mark = null;
+
+  const _Circle.mark({
+    required this.node,
+    required Widget this.mark,
+    required this.onTap,
+  }) : icon = null;
 
   @override
   State<_Circle> createState() => _CircleState();
@@ -1096,11 +1126,12 @@ class _CircleState extends State<_Circle> {
                 color: _f ? _ink : _ink.withValues(alpha: 0.18),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                widget.icon,
-                size: compact ? 20 : 13 * m.k,
-                color: _f ? Colors.black : _ink,
-              ),
+              child: widget.mark ??
+                  Icon(
+                    widget.icon,
+                    size: compact ? 20 : 13 * m.k,
+                    color: _f ? Colors.black : _ink,
+                  ),
             );
           }),
         ),

@@ -136,6 +136,10 @@ class DetailModel {
   final VoidCallback? onTraktMenu;
   final VoidCallback? onSimklMenu;
 
+  /// Debrify's local, account-independent movie/series watchlist.
+  final bool inMyWatchlist;
+  final VoidCallback? onToggleMyWatchlist;
+
   /// Both trackers behind one affordance.
   ///
   /// Showcase's action row has no room for two branded pills, and tracker
@@ -204,6 +208,8 @@ class DetailModel {
     required this.onAppMenu,
     required this.onTraktMenu,
     required this.onSimklMenu,
+    this.inMyWatchlist = false,
+    this.onToggleMyWatchlist,
     this.onTrackers,
     this.onTrackersSecondary,
     this.onManageSources,

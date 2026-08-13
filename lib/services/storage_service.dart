@@ -8,6 +8,7 @@ import 'iptv_media_store.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/quick_play_rules.dart';
+import '../models/stremio_addon.dart';
 import '../models/webdav_item.dart';
 import '../models/android_video_renderer_mode.dart';
 import '../models/tv_hero_artwork_quality.dart';
@@ -377,6 +378,7 @@ class StorageService {
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
   static const String _playlistFavoritesKey = 'playlist_favorites_v1';
+  static const String _myWatchlistKey = 'my_watchlist_v1';
   static const String _onboardingCompleteKey = 'initial_setup_complete_v1';
 
   // Torrent Search History
@@ -3866,6 +3868,159 @@ class StorageService {
       debugPrint('Error reading playlist favorites: $e');
       return {};
     }
+  }
+
+  // ========================================================================
+  // My Watchlist (movies + series)
+  // ========================================================================
+
+  /// Stable identity for Debrify's local movie/series watchlist. Prefer IMDb
+  /// so the same title coming from two addons is one entry; fall back to the
+  /// source addon + its content id for titles that do not expose IMDb metadata.
+  /// Addon ids are part of that fallback because content ids are addon-local.
+  static bool supportsMyWatchlistItem(StremioMeta item) {
+    final type = item.type.trim().toLowerCase();
+    return type == 'movie' || type == 'series';
+  }
+
+  /// Returns the identity-bearing item used by both watchlist reads and
+  /// writes. A stored source is authoritative for non-IMDb ids; [fallback]
+  /// only fills in a source for a newly opened source-less item.
+  static StremioMeta withMyWatchlistSource(
+    StremioMeta item,
+    StremioAddon fallback,
+  ) => item.sourceAddon == null ? item.withSourceAddon(fallback) : item;
+
+  static String myWatchlistItemKey(StremioMeta item) {
+    if (!supportsMyWatchlistItem(item)) {
+      throw ArgumentError.value(
+        item.type,
+        'item.type',
+        'My Watchlist supports only movies and series',
+      );
+    }
+    final type = item.type.trim().toLowerCase();
+    final imdbId = item.effectiveImdbId?.trim();
+    if (imdbId != null && imdbId.isNotEmpty) return '$type:$imdbId';
+
+    final sourceId = item.sourceAddon?.id.trim();
+    final namespace = (sourceId == null || sourceId.isEmpty)
+        ? 'unknown'
+        : sourceId;
+    return '$type:addon:${Uri.encodeComponent(namespace)}:'
+        '${Uri.encodeComponent(item.id)}';
+  }
+
+  static int _myWatchlistAddedAt(Map<String, dynamic> row) {
+    final raw = row['addedAt'];
+    if (raw is num) return raw.toInt();
+    if (raw is String) return int.tryParse(raw) ?? 0;
+    return 0;
+  }
+
+  /// Recomputes keys from stored metadata so rows written by the original
+  /// un-namespaced fallback scheme migrate in memory immediately. The next
+  /// mutation persists the canonical key.
+  static void _canonicalizeMyWatchlistRowKey(Map<String, dynamic> row) {
+    final raw = row['item'];
+    if (raw is! Map) return;
+    try {
+      final item = StremioMeta.fromJson(Map<String, dynamic>.from(raw));
+      if (supportsMyWatchlistItem(item)) {
+        row['key'] = myWatchlistItemKey(item);
+      }
+    } catch (_) {
+      // The item loader below will ignore the malformed row.
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> _readMyWatchlistRows() async {
+    final prefs = await SharedPreferences.getInstance();
+    final encoded = prefs.getString(_myWatchlistKey);
+    if (encoded == null) return <Map<String, dynamic>>[];
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is! List) return <Map<String, dynamic>>[];
+      final rows = [
+        for (final row in decoded)
+          if (row is Map) Map<String, dynamic>.from(row),
+      ];
+      for (final row in rows) {
+        _canonicalizeMyWatchlistRowKey(row);
+      }
+      return rows;
+    } catch (e) {
+      debugPrint('Error reading My Watchlist: $e');
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  /// Saved titles, newest first. Corrupt individual rows are ignored so one
+  /// bad addon payload cannot make the whole shelf disappear.
+  static Future<List<StremioMeta>> getMyWatchlistItems() async {
+    final rows = await _readMyWatchlistRows();
+    rows.sort(
+      (a, b) => _myWatchlistAddedAt(b).compareTo(_myWatchlistAddedAt(a)),
+    );
+    final items = <StremioMeta>[];
+    for (final row in rows) {
+      final raw = row['item'];
+      if (raw is! Map) continue;
+      try {
+        final item = StremioMeta.fromJson(Map<String, dynamic>.from(raw));
+        if (item.id.isEmpty || !supportsMyWatchlistItem(item)) {
+          continue;
+        }
+        items.add(item);
+      } catch (_) {
+        // Skip only the malformed row.
+      }
+    }
+    return items;
+  }
+
+  static Future<bool> isInMyWatchlist(StremioMeta item) async {
+    if (!supportsMyWatchlistItem(item)) return false;
+    final key = myWatchlistItemKey(item);
+    final rows = await _readMyWatchlistRows();
+    return rows.any((row) => row['key'] == key);
+  }
+
+  /// Adds, refreshes, or removes a title. Adding stores the full presentation
+  /// metadata needed by Home, not just an id, so My Watchlist paints instantly
+  /// offline and can route back through the source addon when it is installed.
+  static Future<void> setMyWatchlistItem(StremioMeta item, bool saved) async {
+    if (!supportsMyWatchlistItem(item)) {
+      throw ArgumentError.value(
+        item.type,
+        'item.type',
+        'My Watchlist supports only movies and series',
+      );
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final rows = await _readMyWatchlistRows();
+    final key = myWatchlistItemKey(item);
+    final existing = rows.where((row) => row['key'] == key).firstOrNull;
+    rows.removeWhere((row) => row['key'] == key);
+    if (saved) {
+      rows.insert(0, {
+        'key': key,
+        'addedAt': existing == null
+            ? DateTime.now().millisecondsSinceEpoch
+            : _myWatchlistAddedAt(existing),
+        'item': item.toJson(),
+      });
+    }
+    if (rows.isEmpty) {
+      await prefs.remove(_myWatchlistKey);
+    } else {
+      await prefs.setString(_myWatchlistKey, jsonEncode(rows));
+    }
+  }
+
+  static Future<void> clearMyWatchlist() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_myWatchlistKey);
   }
 
   // ==========================================================================

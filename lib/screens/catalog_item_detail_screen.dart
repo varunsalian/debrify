@@ -11,6 +11,7 @@ import '../services/imdb_enrichment_service.dart';
 import '../services/imdb_parents_guide_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/series_source_service.dart';
+import '../services/storage_service.dart';
 import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/parents_guide_section.dart';
 import '../widgets/shimmer.dart';
@@ -104,6 +105,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     with SingleTickerProviderStateMixin, RouteAware {
   final FocusNode _playFocus = FocusNode(debugLabel: 'detail-play');
   final FocusNode _browseFocus = FocusNode(debugLabel: 'detail-browse');
+  final FocusNode _watchlistFocus = FocusNode(debugLabel: 'detail-watchlist');
 
   /// Drives the wide/TV cinematic sheet. Needed so a D-pad "up" on the top
   /// action row can reveal the (non-focusable) eyebrow/title/meta header:
@@ -134,6 +136,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// The item the screen renders — the enriched copy once available,
   /// otherwise whatever the host handed us.
   StremioMeta get _item => _enriched ?? widget.item;
+  bool get _supportsMyWatchlist =>
+      StorageService.supportsMyWatchlistItem(_item);
 
   /// Drives the staggered entrance reveal of the content sections.
   late final AnimationController _revealCtrl;
@@ -155,6 +159,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// Live Simkl status (drives the "Rewatch" relabel). Null until
   /// [simklStatusLoader] resolves — the button keeps "Play" until then.
   SimklTitleStatus? _simklStatus;
+  bool _inMyWatchlist = false;
 
   /// A movie the user has already finished on Simkl (status `completed`). Its
   /// Play button reads "Rewatch" and the play path un-marks it watched so the
@@ -190,7 +195,45 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       _loadImdbEnrichment();
       _loadResumeInfo();
       _loadSimklStatus();
+      _loadMyWatchlistState();
     });
+  }
+
+  Future<void> _loadMyWatchlistState() async {
+    if (!_supportsMyWatchlist) return;
+    final saved = await StorageService.isInMyWatchlist(_item);
+    if (!mounted || saved == _inMyWatchlist) return;
+    setState(() => _inMyWatchlist = saved);
+  }
+
+  Future<void> _toggleMyWatchlist() async {
+    if (!_supportsMyWatchlist) return;
+    final next = !_inMyWatchlist;
+    setState(() => _inMyWatchlist = next);
+    try {
+      final sourceAddon = _item.sourceAddon ?? widget.item.sourceAddon;
+      final savedItem = sourceAddon == null
+          ? _item
+          : _item.withSourceAddon(sourceAddon);
+      await StorageService.setMyWatchlistItem(savedItem, next);
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              next ? 'Added to My Watchlist' : 'Removed from My Watchlist',
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _inMyWatchlist = !next);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn\'t update My Watchlist')),
+      );
+    }
   }
 
   Future<void> _loadSimklStatus() async {
@@ -408,6 +451,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     _revealCtrl.dispose();
     _playFocus.dispose();
     _browseFocus.dispose();
+    _watchlistFocus.dispose();
     _wideScroll.dispose();
     super.dispose();
   }
@@ -1504,6 +1548,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         hasBoundSource: _hasBoundSource,
         playFocus: _playFocus,
         browseFocus: _browseFocus,
+        watchlistFocus: _watchlistFocus,
         tv: widget.isTelevision,
         playLabel: _primaryLabel,
         // TV only: the top row is the highest focusable widget, so a D-pad
@@ -1515,6 +1560,8 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
         // Browse keeps the detail for the same reason (series drill-down
         // stacks on top). The host handles teardown via _returnToCatalogIfNeeded.
         onBrowse: widget.onBrowse,
+        inMyWatchlist: _inMyWatchlist,
+        onToggleMyWatchlist: _supportsMyWatchlist ? _toggleMyWatchlist : null,
       ),
     );
   }
@@ -2179,6 +2226,7 @@ class _ActionRow extends StatelessWidget {
   final bool hasBoundSource;
   final FocusNode playFocus;
   final FocusNode browseFocus;
+  final FocusNode watchlistFocus;
   final bool tv;
 
   /// The primary button's label — progress-aware ("Start Watching" /
@@ -2186,6 +2234,8 @@ class _ActionRow extends StatelessWidget {
   final String playLabel;
   final VoidCallback onPlay;
   final VoidCallback onBrowse;
+  final bool inMyWatchlist;
+  final VoidCallback? onToggleMyWatchlist;
 
   /// D-pad "up" handler — the row is the top focusable, so this scrolls the
   /// sheet back to the header rather than letting focus dead-end. Null off TV.
@@ -2198,10 +2248,13 @@ class _ActionRow extends StatelessWidget {
     required this.hasBoundSource,
     required this.playFocus,
     required this.browseFocus,
+    required this.watchlistFocus,
     required this.tv,
     required this.playLabel,
     required this.onPlay,
     required this.onBrowse,
+    required this.inMyWatchlist,
+    required this.onToggleMyWatchlist,
     this.onArrowUp,
   });
 
@@ -2223,7 +2276,43 @@ class _ActionRow extends StatelessWidget {
       tinted: hasBoundSource,
     );
 
-    if (!showQuickPlay) return browse;
+    final watchlist = onToggleMyWatchlist == null
+        ? null
+        : _PrimaryButton(
+            focusNode: watchlistFocus,
+            icon: inMyWatchlist
+                ? Icons.bookmark_rounded
+                : Icons.bookmark_add_outlined,
+            label: inMyWatchlist ? 'In My Watchlist' : 'My Watchlist',
+            filled: false,
+            compact: compact,
+            tv: tv,
+            onTap: onToggleMyWatchlist!,
+            onArrowUp: onArrowUp,
+            tinted: inMyWatchlist,
+          );
+
+    if (!showQuickPlay) {
+      if (compact) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            browse,
+            if (watchlist != null) ...[SizedBox(height: gap), watchlist],
+          ],
+        );
+      }
+      return Row(
+        children: [
+          Expanded(child: browse),
+          if (watchlist != null) ...[
+            SizedBox(width: gap),
+            Expanded(child: watchlist),
+          ],
+        ],
+      );
+    }
 
     // Play is the page's IDENTITY control, so it is where this title's own
     // colour belongs — the one role `ArtworkAccentScope` exists to serve.
@@ -2262,6 +2351,7 @@ class _ActionRow extends StatelessWidget {
           play,
           SizedBox(height: gap),
           browse,
+          if (watchlist != null) ...[SizedBox(height: gap), watchlist],
         ],
       );
     }
@@ -2271,6 +2361,10 @@ class _ActionRow extends StatelessWidget {
         Expanded(flex: 3, child: play),
         SizedBox(width: gap),
         Expanded(flex: 2, child: browse),
+        if (watchlist != null) ...[
+          SizedBox(width: gap),
+          Expanded(flex: 2, child: watchlist),
+        ],
       ],
     );
   }

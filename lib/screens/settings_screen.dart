@@ -3746,6 +3746,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearContinueWatching();
     await StorageService.clearPlaylist();
     await StorageService.clearAllPlaylistMetadata();
+    await StorageService.clearMyWatchlist();
     await StorageService.clearTorrentSearchHistory();
     await StorageService.clearAllStartupSettings();
     await StorageService.clearAllHomePageSettings();

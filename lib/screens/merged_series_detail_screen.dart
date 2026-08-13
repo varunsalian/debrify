@@ -399,6 +399,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// [simklStatusLoader] resolves — mirrors [_traktStatus] one-for-one.
   SimklTitleStatus? _simklStatus;
 
+  /// Debrify's local watchlist is independent of tracker connectivity.
+  bool _inMyWatchlist = false;
+  bool get _supportsMyWatchlist =>
+      StorageService.supportsMyWatchlistItem(_item);
+  StremioMeta get _myWatchlistItem => StorageService.withMyWatchlistSource(
+        _item,
+        widget.item.sourceAddon ?? widget.addon,
+      );
+
   /// The Simkl quick-actions strip to render: rebuilt against [_simklStatus]
   /// when a builder was supplied, else the static list passed in.
   List<SimklMenuOption> get _menuOptionsSimkl =>
@@ -421,6 +430,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       _loadResumeInfo();
       _loadTraktStatus();
       _loadSimklStatus();
+      _loadMyWatchlistState();
     });
   }
 
@@ -457,6 +467,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // away — re-read the Trakt status too.
     _loadTraktStatus();
     _loadSimklStatus();
+    _loadMyWatchlistState();
     // And the episode list's ticks/progress: episode quick-play now plays on
     // top of this screen (like Resume), so the list is still alive when the
     // player returns and must reflect the session that just ended.
@@ -465,6 +476,39 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // the app-action menu, so returning here is the only place that catches
     // both. Cheap — a prefs read, not a network call.
     unawaited(_loadBoundSources());
+  }
+
+  Future<void> _loadMyWatchlistState() async {
+    if (!_supportsMyWatchlist) return;
+    final saved = await StorageService.isInMyWatchlist(_myWatchlistItem);
+    if (!mounted || saved == _inMyWatchlist) return;
+    setState(() => _inMyWatchlist = saved);
+  }
+
+  Future<void> _toggleMyWatchlist() async {
+    if (!_supportsMyWatchlist) return;
+    final next = !_inMyWatchlist;
+    setState(() => _inMyWatchlist = next);
+    try {
+      await StorageService.setMyWatchlistItem(_myWatchlistItem, next);
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              next ? 'Added to My Watchlist' : 'Removed from My Watchlist',
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _inMyWatchlist = !next);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn\'t update My Watchlist')),
+      );
+    }
   }
 
   /// Resolve the user's Trakt relationship to this title so the menu shows
@@ -1137,6 +1181,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       onSimklMenu: widget.onSimklAction != null
           ? _showSimklQuickActionsMenu
           : null,
+      inMyWatchlist: _inMyWatchlist,
+      onToggleMyWatchlist: _supportsMyWatchlist ? _toggleMyWatchlist : null,
       // Both trackers behind one affordance, for a layout whose action row has
       // no room for two branded pills. Whichever single service is configured
       // opens directly; with both, the app menu is the chooser that already
@@ -1929,6 +1975,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
             label: 'Sources',
             icon: Icons.layers_rounded,
             onTap: widget.onBrowse!,
+          ),
+        if (_supportsMyWatchlist)
+          _GhostButton(
+            label: _inMyWatchlist ? 'In My Watchlist' : 'My Watchlist',
+            icon: _inMyWatchlist
+                ? Icons.bookmark_rounded
+                : Icons.bookmark_add_outlined,
+            onTap: _toggleMyWatchlist,
           ),
         // Source binding. Takes the LEFT-entry focus node only when Play is
         // hidden (PikPak), so LEFT from an episode always lands on a live target.

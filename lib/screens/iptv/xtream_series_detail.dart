@@ -10,6 +10,20 @@ import '../../services/xtream_codes_service.dart';
 import '../episodes_screen.dart' show kCatalogDetailRouteName;
 import '../merged_series_detail_screen.dart';
 
+/// Decodes the provider identity embedded in an Xtream series watchlist item.
+/// Split on the final colon so playlist ids remain free to contain colons.
+({String playlistId, String seriesId})? parseXtreamSeriesMetaId(String id) {
+  const prefix = 'xtream-series:';
+  if (!id.startsWith(prefix)) return null;
+  final value = id.substring(prefix.length);
+  final separator = value.lastIndexOf(':');
+  if (separator <= 0 || separator == value.length - 1) return null;
+  return (
+    playlistId: value.substring(0, separator),
+    seriesId: value.substring(separator + 1),
+  );
+}
+
 /// Opens the merged series page (hero + two-pane episode list) for an Xtream
 /// IPTV series, wired in direct-source mode: seasons come straight from the
 /// panel's `get_series_info`, episode taps play their `/series/...` URL

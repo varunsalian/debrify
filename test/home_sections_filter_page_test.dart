@@ -72,6 +72,24 @@ void main() {
     expect(await StorageService.getHomeExtraRows(), isEmpty);
   });
 
+  testWidgets('My Watchlist has independent default-on movie and series rows', (
+    tester,
+  ) async {
+    await _pumpPage(tester);
+
+    await tester.tap(find.text('My Watchlist'));
+    await tester.pump();
+    expect(find.text('Movies'), findsOneWidget);
+    expect(find.text('Series'), findsOneWidget);
+    await tester.tap(find.text('Movies'));
+    await tester.pump();
+    await _saveAndClose(tester);
+
+    expect(await StorageService.getHomeDisabledSections(), {
+      'watchlist:movies',
+    });
+  });
+
   testWidgets('an enabled extra with no loaded backing data survives an '
       'unrelated save as an unavailable leaf', (tester) async {
     const stray = (id: 'traktlist:custom:404', title: 'Vanished List');

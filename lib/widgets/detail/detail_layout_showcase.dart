@@ -910,6 +910,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
 
   int _actionCount(DetailModel m) {
     var n = 0;
+    if (m.onToggleMyWatchlist != null) n++;
     if (m.onTrackers != null) n++;
     if (m.onTrackersSecondary != null) n++;
     if (m.hasTrailer) n++;

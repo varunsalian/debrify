@@ -13,6 +13,7 @@ import 'package:debrify/widgets/detail/detail_model.dart';
 import 'package:debrify/widgets/detail/showcase_parts.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/episodes_panel.dart';
+import 'package:debrify/widgets/tracker_brand_marks.dart';
 
 /// Showcase's band model and DPAD map.
 ///
@@ -62,6 +63,11 @@ EpisodesPanelView _view({required bool manySeasons, int count = 5}) {
 DetailModel _model({
   bool isMovie = false,
   bool withCast = true,
+  bool hasTrakt = true,
+  bool hasSimkl = true,
+  bool withSecondaryTracker = false,
+  bool inMyWatchlist = false,
+  bool withMyWatchlist = false,
   List<SeriesSource> sources = const [],
   List<StremioMeta> recs = const [],
   void Function(bool)? onDepth,
@@ -96,11 +102,11 @@ DetailModel _model({
     hasTrailer: true,
     trailerBusy: false,
     trailerPlaying: false,
-    hasTrakt: true,
+    hasTrakt: hasTrakt,
     traktTracked: true,
     traktLabel: 'Watchlist',
     traktRating: 9,
-    hasSimkl: true,
+    hasSimkl: hasSimkl,
     simklTracked: false,
     simklLabel: 'Not tracked',
     simklRating: null,
@@ -113,6 +119,9 @@ DetailModel _model({
     onTraktMenu: () {},
     onSimklMenu: () {},
     onTrackers: () {},
+    onTrackersSecondary: withSecondaryTracker ? () {} : null,
+    inMyWatchlist: inMyWatchlist,
+    onToggleMyWatchlist: withMyWatchlist ? () {} : null,
     onManageSources: () {},
     onRecommendationTap: (_) {},
     onAmbientStill: (_) {},
@@ -253,6 +262,47 @@ void main() {
     // And the marks that replaced them cannot take the cursor.
     expect(find.text('T'), findsOneWidget);
     expect(find.text('S'), findsOneWidget);
+  });
+
+  testWidgets('tracker action uses the connected service brand',
+      (tester) async {
+    await tester.pumpWidget(
+      _host(_model(hasTrakt: true, hasSimkl: false)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(TraktMark), findsOneWidget);
+    expect(find.byType(SimklMark), findsNothing);
+
+    await tester.pumpWidget(
+      _host(_model(hasTrakt: false, hasSimkl: true)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(TraktMark), findsNothing);
+    expect(find.byType(SimklMark), findsOneWidget);
+  });
+
+  testWidgets('both connected trackers get their own branded action',
+      (tester) async {
+    await tester.pumpWidget(
+      _host(_model(withSecondaryTracker: true)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(TraktMark), findsOneWidget);
+    expect(find.byType(SimklMark), findsOneWidget);
+  });
+
+  testWidgets('My Watchlist action reflects saved state', (tester) async {
+    await tester.pumpWidget(
+      _host(_model(withMyWatchlist: true)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.bookmark_add_outlined), findsOneWidget);
+
+    await tester.pumpWidget(
+      _host(_model(withMyWatchlist: true, inMyWatchlist: true)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.bookmark_rounded), findsOneWidget);
   });
 
   testWidgets('the title falls back to text when there is no logo art',
