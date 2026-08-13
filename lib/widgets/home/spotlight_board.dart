@@ -387,6 +387,16 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// measure with.
   double _heroBandH = 0;
 
+  /// The extent the veil rebuild below was last run for.
+  ///
+  /// `ScrollMetricsNotification` is dispatched once per SCROLLED FRAME, not
+  /// only when the extent moves — `_isMetricsChanged` compares `extentBefore`,
+  /// which is `pixels - minScrollExtent`. Rebuilding the board on each one is
+  /// a full rebuild of every shelf and every visible card per frame, which is
+  /// what made touch scrolling lag. The offset ramp does not need it: the veil
+  /// listens to `_scroll` directly. Only an extent CHANGE does.
+  double _lastMaxExtent = -1;
+
   /// True once the board is scrolled far enough that the pinned hero is
   /// effectively covered. Owns the trailer's lifecycle for SCROLLING, which
   /// touch and wheel produce without ever telling the cursor: DPAD descent
@@ -1038,13 +1048,23 @@ class SpotlightBoardState extends State<SpotlightBoard> {
           // Always re-run the crossing detector — a clamped offset never
           // notifies the controller (cheap: no rebuild of its own).
           _onBoardScrolled();
-          // The rebuild exists ONLY for the touch veil, whose ramp reads
-          // the clamped offset. The TV veil snaps off the cursor row and
-          // never reads the offset — and on TV every board-entry batch
-          // append changes the extent, so this setState was a second full
-          // rebuild per append, stacked on the append's own, during the
-          // exact seconds a MiBox is busiest.
-          if (!widget.dpad && mounted) setState(() {});
+          // The rebuild exists ONLY for the touch veil, and only for the
+          // case the controller cannot report: a board reload that SHRINKS
+          // the list under a parked scroll is clamped during layout without
+          // notifying it. The continuous offset ramp is already covered —
+          // the veil's own `AnimatedBuilder` listens to `_scroll`.
+          //
+          // Gated on the EXTENT, because this notification arrives once per
+          // scrolled frame (see [_lastMaxExtent]). Ungated it rebuilt the
+          // hero and every shelf and card on the board every frame of every
+          // touch scroll, which is exactly the lag it was meant to avoid on
+          // TV — where it is skipped, so that path is unchanged.
+          if (!widget.dpad &&
+              mounted &&
+              n.metrics.maxScrollExtent != _lastMaxExtent) {
+            _lastMaxExtent = n.metrics.maxScrollExtent;
+            setState(() {});
+          }
         }
         return false;
       },
