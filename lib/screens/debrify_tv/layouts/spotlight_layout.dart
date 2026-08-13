@@ -8,6 +8,7 @@ import '../../../theme/app_theme_scope.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
 import 'debrify_tv_view.dart';
+import 'spotlight_phone.dart';
 import 'spotlight_rail.dart';
 import 'spotlight_stage.dart';
 
@@ -37,15 +38,20 @@ class SpotlightLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Television first. The phone/touch arm is a phase-5 deliverable; until
-    // it lands every device class renders the TV arm — exactly what the grid
-    // era did, so nothing regresses in the meantime.
-    return _SpotlightTvArm(
-      view: view,
-      bottomInset: bottomInset,
-      entryFocusNode: entryFocusNode,
-      isTelevision: PlatformUtil.isTelevision,
-    );
+    // TELEVISION FIRST, before any width test — `resolveDetailSize`'s rule:
+    // a 1920×1080 panel is 960×540 logical, and a width-only check would
+    // send it to the touch arm.
+    if (PlatformUtil.isTelevision) {
+      return _SpotlightTvArm(
+        view: view,
+        bottomInset: bottomInset,
+        entryFocusNode: entryFocusNode,
+        isTelevision: true,
+      );
+    }
+    // Everything else is a touch/pointer surface: a phone gets a phone — a
+    // list and a channel sheet, not a wall of DPAD targets.
+    return SpotlightPhoneArm(view: view, bottomInset: bottomInset);
   }
 }
 
