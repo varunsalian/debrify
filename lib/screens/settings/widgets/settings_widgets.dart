@@ -197,6 +197,12 @@ abstract final class SettingsRows {
     title: 'IPTV Appearance',
     subtitle: '',
   );
+  // Subtitle is dynamic (the chosen style) — passed per call site.
+  static const debrifyTvAppearance = SettingsRowContent(
+    icon: Icons.connected_tv_rounded,
+    title: 'Debrify TV',
+    subtitle: '',
+  );
   // Subtitle is dynamic (style + palette) — passed per call site.
   static const playerDock = SettingsRowContent(
     icon: Icons.tune_rounded,

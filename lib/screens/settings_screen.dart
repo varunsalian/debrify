@@ -45,6 +45,7 @@ import 'settings/settings_spotlight_shell.dart';
 import 'settings/settings_search.dart';
 import 'settings/discover_layout_page.dart';
 import 'settings/iptv_style_page.dart';
+import 'settings/debrify_tv_style_page.dart';
 import 'settings/text_brightness_page.dart';
 import 'settings/launch_animation_page.dart';
 import '../widgets/launch/launch_ident.dart';
@@ -202,6 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _discoverLayout = 'stage';
   String _tvSidebarStyle = 'ghost';
   String _iptvStyle = 'command';
+  String _debrifyTvStyle = 'grid';
   String _playerGuideStyle = 'classic';
   String _playerDockStyle = 'classic';
   String _playerDockPalette = 'ultraviolet';
@@ -298,6 +300,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getPlayerDockPalette(),
       StorageService.getPlayerDockSize(),
       StorageService.getDesktopSidebarStyle(),
+      StorageService.getDebrifyTvStyle(),
     ]);
 
     if (!mounted) return;
@@ -341,6 +344,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final playerDockPalette = results[34] as String;
     final playerDockSize = results[35] as String;
     final desktopSidebarStyle = results[36] as String;
+    final debrifyTvStyle = results[37] as String;
 
     // Set initial state from cached data
     final rdConnected = rdKey != null && rdKey.isNotEmpty;
@@ -479,6 +483,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _tvSidebarStyle = tvSidebarStyle;
     _discoverLayout = discoverLayout;
     _iptvStyle = iptvStyle;
+    _debrifyTvStyle = debrifyTvStyle;
     _playerGuideStyle = playerGuideStyle;
     _playerDockStyle = playerDockStyle;
     _playerDockPalette = playerDockPalette;
@@ -796,6 +801,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenTvHomeStyle: _openTvHomeStyle,
       iptvStyleLabel: iptvStyleLabel(_iptvStyle),
       onOpenIptvStyle: _openIptvStylePage,
+      debrifyTvStyleLabel: debrifyTvStyleLabel(_debrifyTvStyle),
+      onOpenDebrifyTvStyle: _openDebrifyTvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
       detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
@@ -879,6 +886,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenLaunchAnimation: _openLaunchAnimationPage,
       iptvStyleLabel: iptvStyleLabel(_iptvStyle),
       onOpenIptvStyle: _openIptvStylePage,
+      debrifyTvStyleLabel: debrifyTvStyleLabel(_debrifyTvStyle),
+      onOpenDebrifyTvStyle: _openDebrifyTvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
       playerDockLabel: playerDockLabel(
         _playerDockStyle,
@@ -1331,6 +1340,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'live tv & dvr',
           ],
         ),
+      // Ungated: the pref covers every device class — the Spotlight arm has
+      // a TV layout AND a phone layout. Lands on the picker.
+      nav(
+        SettingsRows.debrifyTvAppearance,
+        'Appearance',
+        _openDebrifyTvStylePage,
+        subtitle: debrifyTvStyleLabel(_debrifyTvStyle),
+        keywords: const [
+          'debrify tv',
+          'channels',
+          'channel grid',
+          'rail',
+          'stage',
+          'spotlight',
+          'style',
+          'layout',
+          'look',
+          'appearance',
+        ],
+      ),
       // Ungated: every platform has a player — phones use the Dart player,
       // Android TV the native one, and both read the pref. Lands on the
       // picker.
@@ -4324,6 +4353,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<void> _openDebrifyTvStylePage() async {
+    await pushSettingsPage(context, const DebrifyTvStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getDebrifyTvStyle();
+    if (!mounted) return;
+    setState(() {
+      _debrifyTvStyle = style;
+    });
+  }
+
   /// Same contract as [_openTvHomeStyle], for the in-player guide picker.
   Future<void> _openPlayerGuideStylePage() async {
     await pushSettingsPage(context, const PlayerGuideStylePage());
@@ -4458,11 +4497,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tvHomeStyle = await StorageService.getTvHomeStyle();
     final iptvStyle = await StorageService.getIptvStyle();
     final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
+    final debrifyTvStyle = await StorageService.getDebrifyTvStyle();
     if (!mounted) return;
     setState(() {
       _tvHomeStyle = tvHomeStyle;
       _iptvStyle = iptvStyle;
       _playerGuideStyle = playerGuideStyle;
+      _debrifyTvStyle = debrifyTvStyle;
     });
   }
 
@@ -4773,6 +4814,8 @@ class _SettingsLayout extends StatelessWidget {
   // pickers (home style, discover, sidebar, screen size) live solely in
   // SettingsTvLayout's Appearance category.
   final bool showIptvAppearance;
+  final String debrifyTvStyleLabel;
+  final Future<void> Function() onOpenDebrifyTvStyle;
   final String textBrightnessLabel;
   final Future<void> Function() onOpenTextBrightness;
   final String launchAnimationLabel;
@@ -4847,6 +4890,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenRecordings,
     required this.onOpenIptvSettings,
     required this.showIptvAppearance,
+    required this.debrifyTvStyleLabel,
+    required this.onOpenDebrifyTvStyle,
     required this.textBrightnessLabel,
     required this.onOpenTextBrightness,
     required this.launchAnimationLabel,
@@ -5042,6 +5087,11 @@ class _SettingsLayout extends StatelessWidget {
                     subtitle: iptvStyleLabel,
                     onTap: onOpenIptvStyle,
                   ),
+                SettingsTile.spec(
+                  SettingsRows.debrifyTvAppearance,
+                  subtitle: debrifyTvStyleLabel,
+                  onTap: onOpenDebrifyTvStyle,
+                ),
                 SettingsTile.spec(
                   SettingsRows.playerGuideStyle,
                   subtitle: playerGuideStyleLabel,
@@ -5335,6 +5385,11 @@ class _SettingsLayout extends StatelessWidget {
                         subtitle: iptvStyleLabel,
                         onTap: onOpenIptvStyle,
                       ),
+                    SettingsTile.spec(
+                      SettingsRows.debrifyTvAppearance,
+                      subtitle: debrifyTvStyleLabel,
+                      onTap: onOpenDebrifyTvStyle,
+                    ),
                     SettingsTile.spec(
                       SettingsRows.playerGuideStyle,
                       subtitle: playerGuideStyleLabel,

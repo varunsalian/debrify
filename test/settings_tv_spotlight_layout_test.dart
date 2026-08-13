@@ -71,6 +71,8 @@ SettingsTvLayout _layout(FocusNode entry) => SettingsTvLayout(
   onOpenTvHomeStyle: _noop,
   iptvStyleLabel: 'Command',
   onOpenIptvStyle: _noop,
+  debrifyTvStyleLabel: 'Spotlight',
+  onOpenDebrifyTvStyle: _noop,
   playerGuideStyleLabel: 'Classic',
   onOpenPlayerGuideStyle: _noop,
   detailPageStyleLabel: 'Showcase',
