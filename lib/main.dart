@@ -199,6 +199,9 @@ Future<void> main() async {
   await StorageService.getTvHomeStyle();
   await StorageService.getTvSidebarStyle();
   await StorageService.getDesktopSidebarStyle();
+  // Debrify TV reads its mirror synchronously on first build; warmed here,
+  // AFTER the migration, so frame one draws what generation 3 just wrote.
+  await StorageService.getDebrifyTvStyle();
   // Warms the Appearance → Text Brightness preset: the root theme is built
   // synchronously in DebrifyApp.build, so the stored choice must be readable
   // before the first frame or text would flash bright and then dim.

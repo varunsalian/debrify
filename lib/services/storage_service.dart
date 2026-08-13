@@ -61,9 +61,13 @@ class StorageService {
   // one of them. Both now default on for every device, and this generation
   // carries that to installs already in the field.
   //
+  // Generation 3 (2026-08): Debrify TV joins the flagship bundle. Installs
+  // wearing the Spotlight THEME (via the Look or a custom mix) adopt the
+  // rail+stage layout; every other install keeps the grid it has always had.
+  //
   // To roll out a future flagship look: bump the generation, append its
   // bundle under a `gen < N` block below.
-  static const int _currentDefaultsGeneration = 2;
+  static const int _currentDefaultsGeneration = 3;
   static const String _defaultsGenerationKey = 'defaults_generation';
 
   /// MUST run before [TextBrightnessController.warm] / theme warms in
@@ -114,6 +118,28 @@ class StorageService {
         if (!prefs.containsKey(entry.key)) {
           await prefs.setBool(entry.key, entry.value);
         }
+      }
+    }
+    if (gen < 3) {
+      // Debrify TV joins the flagship bundle. Raw prefs only — this runs
+      // before any mirror is warmed, so `app_theme` is read directly rather
+      // than through `appThemeCached`. The gen<1 block above has already
+      // written `app_theme` for anyone who never chose, including a fresh
+      // install, so this read is never against an absent key on a migrated
+      // install.
+      //
+      // NOT unconditional the way generation 1 was: this key has never
+      // existed, so `!containsKey` is true for every install on earth, and a
+      // blanket 'spotlight' would restyle every Classic user AND flip their
+      // Presets picker to Custom (Classic pins this key). The proxy is the
+      // THEME, not Look activity — a Custom mix that kept the Spotlight
+      // theme adopts the layout the theme implies; everyone else keeps grid.
+      if (!prefs.containsKey(_debrifyTvStyleKey)) {
+        final theme = prefs.getString(_appThemeKey);
+        await prefs.setString(
+          _debrifyTvStyleKey,
+          theme == 'spotlight' ? 'spotlight' : 'grid',
+        );
       }
     }
     await prefs.setInt(_defaultsGenerationKey, _currentDefaultsGeneration);
@@ -899,6 +925,38 @@ class StorageService {
     tvHomeStyleCached = normalized;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tvHomeStyleKey, normalized);
+  }
+
+  static const String _debrifyTvStyleKey = 'debrify_tv_style';
+
+  /// Every shipping Debrify TV layout. 'grid' is the historical default — the
+  /// channel wall `build()` has always drawn; 'spotlight' is the standing
+  /// rail + stage (list + sheet on phone). One key covers every device class:
+  /// the style resolves its own layout per device, like `detail_page_style`.
+  ///
+  /// Coercion is TOTAL and both ways: a value written by a newer build and
+  /// read by an older one lands on 'grid' rather than rendering nothing.
+  static const Set<String> kDebrifyTvStyles = {'grid', 'spotlight'};
+
+  /// Synchronous mirror of `debrify_tv_style`, kept so a Look can read the
+  /// current value without an await. Every existing caller still goes through
+  /// the async getter, which also refreshes this.
+  static String debrifyTvStyleCached = 'grid';
+
+  static Future<String> getDebrifyTvStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_debrifyTvStyleKey);
+    return debrifyTvStyleCached =
+        kDebrifyTvStyles.contains(raw) ? raw! : 'grid';
+  }
+
+  static Future<void> setDebrifyTvStyle(String style) async {
+    final normalized = kDebrifyTvStyles.contains(style) ? style : 'grid';
+    // Mirror BEFORE the await, so anything reading synchronously on the next
+    // frame sees the choice. Existing async readers are unaffected.
+    debrifyTvStyleCached = normalized;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_debrifyTvStyleKey, normalized);
   }
 
   static const String _detailPageStyleKey = 'detail_page_style';
