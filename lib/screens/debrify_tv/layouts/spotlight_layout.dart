@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../models/debrify_tv/channel.dart';
+import '../../../models/debrify_tv_cache.dart' show DebrifyTvCacheStatus;
 import '../../../services/main_page_bridge.dart';
 import '../../../theme/app_theme_scope.dart';
 import '../../../utils/platform_util.dart';
@@ -80,6 +81,11 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
   static const _kEdit = 'act:edit';
   static const _kShare = 'act:share';
   static const _kDelete = 'act:del';
+
+  // Health pip colours — status literals, same trio the mock draws.
+  static const _kPipOk = Color(0xFF39D98A);
+  static const _kPipWarn = Color(0xFFF4B860);
+  static const _kPipBad = Color(0xFFFF6673);
 
   /// Nodes keyed by stable id (`ch:<id>` for channel rows). Created lazily,
   /// disposed once in [dispose] — a removed channel's node just idles.
@@ -227,6 +233,39 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
     return null;
   }
 
+  /// The pip resolves from rail-cheap signals ONLY (plan §7) — the expensive
+  /// at-your-quality pass never runs for a rail row. Null while health has
+  /// not loaded: no pip is drawn, never a placeholder that reads "healthy".
+  Color? _pip(DebrifyTvChannel c) {
+    final h = widget.view.railHealth[c.id];
+    if (h == null) return null;
+    if (h.status == DebrifyTvCacheStatus.failed || h.pooled == 0) {
+      return _kPipBad;
+    }
+    if (h.pooled < kThinPoolThreshold || h.deadKeywords > 0) return _kPipWarn;
+    return _kPipOk;
+  }
+
+  String _caption(DebrifyTvChannel c) {
+    final h = widget.view.railHealth[c.id];
+    final kws =
+        '${c.keywords.length} '
+        '${c.keywords.length == 1 ? 'keyword' : 'keywords'}';
+    if (h == null) return kws;
+    if (h.status == DebrifyTvCacheStatus.failed) return 'Cache failed — rebuild';
+    return '${_thousands(h.pooled)} pooled · $kws';
+  }
+
+  static String _thousands(int n) {
+    final s = n.toString();
+    final b = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) b.write(',');
+      b.write(s[i]);
+    }
+    return b.toString();
+  }
+
   static const List<String> _actionRun = [
     _kPlay,
     _kPin,
@@ -234,6 +273,8 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
     _kShare,
     _kDelete,
   ];
+
+  int get _sampleCount => widget.view.stats?.sample.length ?? 0;
 
   KeyEventResult _actionKey(String key, FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
@@ -256,8 +297,13 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
       if (i < _actionRun.length - 1) _node(_actionRun[i + 1]).requestFocus();
       return KeyEventResult.handled;
     }
-    if (k == LogicalKeyboardKey.arrowUp || k == LogicalKeyboardKey.arrowDown) {
-      // The sample strip (phase 4) will take UP; DOWN has nothing below.
+    if (k == LogicalKeyboardKey.arrowUp) {
+      // Into the sample strip, at the plate over this action (mock §6).
+      final n = _sampleCount;
+      if (n > 0) _node('plate:${i < n ? i : n - 1}').requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowDown) {
       return KeyEventResult.handled;
     }
     if (event is KeyDownEvent &&
@@ -280,6 +326,52 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _plateKey(int index, FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final k = event.logicalKey;
+    if (k == LogicalKeyboardKey.arrowLeft) {
+      if (index == 0) {
+        final staged = _staged;
+        if (staged != null) _focusRail('ch:${staged.id}');
+      } else {
+        _node('plate:${index - 1}').requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowRight) {
+      if (index < _sampleCount - 1) {
+        _node('plate:${index + 1}').requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowDown) {
+      _node(_kPlay).requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowUp) {
+      return KeyEventResult.handled;
+    }
+    if (event is KeyDownEvent &&
+        (isActivateKey(k) || k == LogicalKeyboardKey.space)) {
+      _activatePlate(index);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _activatePlate(int index) {
+    final staged = _staged;
+    final stats = widget.view.stats;
+    if (staged == null || stats == null || index >= stats.sample.length) {
+      return;
+    }
+    if (!widget.view.busy) {
+      widget.view.onWatchOne(staged, stats.sample[index]);
+    }
   }
 
   @override
@@ -319,10 +411,22 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
                   ),
                 ),
                 const SizedBox(height: 5),
-                Text(
-                  '${ordered.length} '
-                  '${ordered.length == 1 ? 'channel' : 'channels'}',
-                  style: TextStyle(fontSize: 11.5, color: tv.textDim),
+                Builder(
+                  builder: (context) {
+                    var pooled = 0;
+                    for (final c in ordered) {
+                      pooled += view.railHealth[c.id]?.pooled ?? 0;
+                    }
+                    final channels =
+                        '${ordered.length} '
+                        '${ordered.length == 1 ? 'channel' : 'channels'}';
+                    return Text(
+                      pooled > 0
+                          ? '$channels · ${_thousands(pooled)} titles cached'
+                          : channels,
+                      style: TextStyle(fontSize: 11.5, color: tv.textDim),
+                    );
+                  },
                 ),
                 const SizedBox(height: 14),
                 SpotlightRailButton(
@@ -398,12 +502,16 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
                     pinned:
                         staged != null &&
                         view.favoriteIds.contains(staged.id),
+                    stats: view.stats,
                     busy: view.busy,
                     playNode: _node(_kPlay),
                     pinNode: _node(_kPin),
                     editNode: _node(_kEdit),
                     shareNode: _node(_kShare),
                     deleteNode: _node(_kDelete),
+                    plateNodeFor: (i) => _node('plate:$i'),
+                    onPlateKey: _plateKey,
+                    onPlate: _activatePlate,
                     onKey: (n, e) {
                       for (final key in _actionRun) {
                         if (identical(_nodes[key], n)) {
@@ -453,10 +561,8 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
       channel: c,
       pinned: pinned,
       staged: staged?.id == c.id,
-      caption:
-          '${c.keywords.length} '
-          '${c.keywords.length == 1 ? 'keyword' : 'keywords'}',
-      pip: null, // phase 4: rail health
+      caption: _caption(c),
+      pip: _pip(c),
       focusNode: _node(key),
       // Staging follows FOCUS, not activation: resting on a row redraws the
       // stage beside it.

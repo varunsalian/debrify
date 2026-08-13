@@ -12,11 +12,13 @@ import 'package:collection/collection.dart';
 
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
+import '../widgets/torrent_result_row.dart' show qualityTierForName;
 import '../models/debrify_tv_cache.dart';
 import '../models/torbox_file.dart';
 import '../models/torbox_torrent.dart';
 import '../models/debrify_tv_channel_record.dart';
 import '../models/debrify_tv/channel.dart';
+import '../models/debrify_tv/channel_stats.dart';
 import '../models/debrify_tv/prepared_torrents.dart';
 import '../models/debrify_tv/cache_results.dart';
 import '../models/debrify_tv/import_results.dart';
@@ -189,6 +191,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   /// `main()`: tabs are keyed by index and rebuilt on switch, so a picker
   /// change is picked up on the next entry — no bridge, like `iptv_style`.
   final String _debrifyTvStyle = StorageService.debrifyTvStyleCached;
+
+  // ── Spotlight stage data (rail cheap, stage lazy — plan §7) ─────────
+  Map<String, DebrifyTvRailHealth> _spotlightRailHealth = const {};
+  final Map<String, DebrifyTvChannelStats> _spotlightStats = {};
+  Timer? _spotlightStatsDebounce;
+  String? _spotlightFocusedId;
   final Map<String, DebrifyTvChannelCacheEntry> _channelCache = {};
   List<Torrent>? _pikpakCandidatePool;
   final Map<String, bool> _tvEngineStates = <String, bool>{};
@@ -312,6 +320,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     _loadSettings();
     _loadChannels();
     _loadFavoriteChannels();
+    if (_debrifyTvStyle == 'spotlight') {
+      // The rail's pips and captions — three grouped queries, once per mount.
+      _loadSpotlightRailHealth();
+    }
 
     // Register watch channel handler for external calls (e.g., from home screen)
     MainPageBridge.watchDebrifyTvChannel = _watchChannelById;
@@ -330,6 +342,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   @override
   void dispose() {
+    _spotlightStatsDebounce?.cancel();
     // Clear watch channel handler
     MainPageBridge.watchDebrifyTvChannel = null;
     if (_tvContentFocusHandler != null) {
@@ -1170,6 +1183,8 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     await DebrifyTvRepository.instance.deleteChannel(id);
     setState(() {
       _channelCache.remove(id);
+      _spotlightStats.remove(id);
+      _spotlightRailHealth = Map.of(_spotlightRailHealth)..remove(id);
     });
   }
 
@@ -3750,11 +3765,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         if (isEdit && baseline != null) {
           setState(() {
             _channelCache[channel.id] = baseline;
+            _spotlightStats.remove(channel.id);
           });
           await DebrifyTvCacheService.saveEntry(baseline);
         } else {
           setState(() {
             _channelCache.remove(channel.id);
+            _spotlightStats.remove(channel.id);
           });
           await DebrifyTvCacheService.removeEntry(channel.id);
         }
@@ -3779,6 +3796,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _channels = next;
         }
         _channelCache[displayChannel.id] = entry;
+        _spotlightStats.remove(displayChannel.id);
       });
 
       await DebrifyTvRepository.instance.upsertChannel(
@@ -3786,6 +3804,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       await DebrifyTvCacheService.saveEntry(entry);
       await _loadChannels();
+      if (_debrifyTvStyle == 'spotlight') {
+        await _loadSpotlightRailHealth();
+      }
 
       final successMsg = isEdit
           ? 'Channel "${updatedChannel.name}" updated'
@@ -7716,6 +7737,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     return DebrifyTvView(
       channels: _channels,
       favoriteIds: _favoriteChannelIds,
+      railHealth: _spotlightRailHealth,
+      stats: _spotlightFocusedId == null
+          ? null
+          : _spotlightStats[_spotlightFocusedId],
       busy: _isBusy,
       onQuickPlay: _showQuickPlayDialog,
       onAdd: _handleAddChannel,
@@ -7726,9 +7751,89 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       onShare: _handleShareChannelAsMagnet,
       onDelete: _handleDeleteChannel,
       onToggleFavorite: _toggleChannelFavorite,
-      // Phase 4 wires the per-channel stats pass here.
-      onChannelFocused: (_) {},
+      onChannelFocused: _onSpotlightChannelFocused,
+      // Provisional until phase 6: a plate pick tunes the channel. Phase 6
+      // replaces this with pick-first-then-the-rest-of-the-shuffle.
+      onWatchOne: (channel, torrent) => _watchChannel(channel),
     );
+  }
+
+  Future<void> _loadSpotlightRailHealth() async {
+    final health = await DebrifyTvCacheService.loadRailHealth();
+    if (!mounted) return;
+    setState(() => _spotlightRailHealth = health);
+  }
+
+  /// Focus moved to a channel row. The stage's numbers need a per-row name
+  /// classify over the pool, so: debounced (a DPAD glide crosses many rows),
+  /// computed only for the channel that focus RESTS on, and memoised — a
+  /// pool does not change while you are looking at it.
+  void _onSpotlightChannelFocused(DebrifyTvChannel channel) {
+    _spotlightFocusedId = channel.id;
+    if (_spotlightStats.containsKey(channel.id)) {
+      // Memoised — just make sure the view rebuilds pointing at it.
+      setState(() {});
+      return;
+    }
+    _spotlightStatsDebounce?.cancel();
+    _spotlightStatsDebounce = Timer(
+      const Duration(milliseconds: 250),
+      () => _computeSpotlightStats(channel),
+    );
+  }
+
+  Future<void> _computeSpotlightStats(DebrifyTvChannel channel) async {
+    if (!mounted || _spotlightStats.containsKey(channel.id)) return;
+    final entry = await _ensureCacheEntry(channel.id);
+    if (!mounted) return;
+    final torrents = entry?.torrents ?? const <CachedTorrent>[];
+
+    // ONE pass classifies every name: the quality count and the mix buckets
+    // share it. Quality only — size is a per-file rule the pool rows cannot
+    // answer, and counting it here would promise what playback can't keep.
+    final hasQuality = _tvFilters.hasQuality;
+    int uhd = 0, fhd = 0, rest = 0, atQuality = 0;
+    for (final t in torrents) {
+      switch (qualityTierForName(t.name)) {
+        case QualityTier.ultraHd:
+          uhd++;
+        case QualityTier.fullHd:
+          fhd++;
+        case QualityTier.hd:
+        case QualityTier.sd:
+          rest++;
+      }
+      if (!hasQuality || _tvFilters.qualityMatchesName(t.name)) {
+        atQuality++;
+      }
+    }
+
+    final keywordYield = <String, int>{
+      for (final kw in entry?.normalizedKeywords ?? const <String>[])
+        kw: entry?.keywordStats[kw]?.totalFetched ?? 0,
+    };
+    final dead = [
+      for (final e in keywordYield.entries)
+        if (e.value == 0) e.key,
+    ];
+
+    final sample = [...torrents]..shuffle(Random());
+
+    final stats = DebrifyTvChannelStats(
+      pooled: torrents.length,
+      atYourQuality: atQuality,
+      qualityMix: [uhd, fhd, rest],
+      deadKeywords: dead,
+      keywordYield: keywordYield,
+      fetchedAt: (entry?.fetchedAt ?? 0) > 0
+          ? DateTime.fromMillisecondsSinceEpoch(entry!.fetchedAt)
+          : null,
+      status: entry?.status ?? DebrifyTvCacheStatus.warming,
+      sample: sample.take(4).toList(),
+    );
+    setState(() {
+      _spotlightStats[channel.id] = stats;
+    });
   }
 
   void _toggleChannelSearchBar() {

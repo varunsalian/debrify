@@ -2,10 +2,62 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
+import '../models/debrify_tv/channel_stats.dart';
 import '../models/debrify_tv_cache.dart';
 import 'debrify_tv_database.dart';
 
 class DebrifyTvCacheService {
+  /// Rail-cheap health for every channel, in three grouped queries — run once
+  /// when the Spotlight rail loads. Never classifies a torrent name: the
+  /// per-row quality pass belongs to the focused channel's stage stats only.
+  static Future<Map<String, DebrifyTvRailHealth>> loadRailHealth() async {
+    final db = await DebrifyTvDatabase.instance.database;
+    final pooledRows = await db.rawQuery(
+      'SELECT channel_id, COUNT(*) AS n FROM tv_cached_torrents '
+      'GROUP BY channel_id',
+    );
+    final deadRows = await db.rawQuery(
+      'SELECT channel_id, COUNT(*) AS n FROM tv_keyword_stats '
+      'WHERE total_fetched = 0 GROUP BY channel_id',
+    );
+    final stateRows = await db.query(
+      'tv_channel_cache_state',
+      columns: ['channel_id', 'status', 'fetched_at'],
+    );
+
+    final pooled = <String, int>{
+      for (final r in pooledRows)
+        r['channel_id'] as String: (r['n'] as int?) ?? 0,
+    };
+    final dead = <String, int>{
+      for (final r in deadRows)
+        r['channel_id'] as String: (r['n'] as int?) ?? 0,
+    };
+
+    final health = <String, DebrifyTvRailHealth>{};
+    for (final r in stateRows) {
+      final id = r['channel_id'] as String;
+      health[id] = DebrifyTvRailHealth(
+        pooled: pooled[id] ?? 0,
+        deadKeywords: dead[id] ?? 0,
+        status: (r['status'] as String?) ?? DebrifyTvCacheStatus.warming,
+        fetchedAt: (r['fetched_at'] as int?) ?? 0,
+      );
+    }
+    // A channel with pooled rows but no state row still gets a count.
+    for (final id in pooled.keys) {
+      health.putIfAbsent(
+        id,
+        () => DebrifyTvRailHealth(
+          pooled: pooled[id]!,
+          deadKeywords: dead[id] ?? 0,
+          status: DebrifyTvCacheStatus.ready,
+          fetchedAt: 0,
+        ),
+      );
+    }
+    return health;
+  }
   static Future<Map<String, DebrifyTvChannelCacheEntry>> loadAllEntries() async {
     final db = await DebrifyTvDatabase.instance.database;
     final rows = await db.query('tv_channel_cache_state', columns: ['channel_id']);
