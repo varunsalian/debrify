@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:debrify/models/profiles/connection_resource.dart';
+import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
@@ -10,6 +11,7 @@ import 'package:debrify/services/profiles/profile_collection_resource_facade.dar
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -382,5 +384,54 @@ void main() {
       feature: ProfileFeature.addonsAndEngines,
     );
     expect(ownerView.single['enabled'], isTrue);
+  });
+
+  test('IPTV mutation readback returns current execution authority', () async {
+    final existing = IptvPlaylist(
+      id: 'legacy-provider-id',
+      name: 'Existing provider',
+      url: 'https://iptv.invalid/existing.m3u',
+      addedAt: DateTime.utc(2026, 8, 1),
+    );
+    await StorageService.setIptvPlaylists(<IptvPlaylist>[existing]);
+    final migrated = await StorageService.getIptvPlaylists(forSettings: false);
+    expect(migrated.single.connectionResourceId, isNotNull);
+    final existingResourceId = migrated.single.connectionResourceId;
+    final existingResourceRevision = migrated.single.connectionResourceRevision;
+
+    // This is the upgrade path that used to fail: the starter is a raw UI
+    // model while the existing provider is replaced in the resource graph.
+    final starter = IptvPlaylist(
+      id: 'iptv-org-default',
+      name: 'iptv-org',
+      url: 'https://iptv-org.github.io/iptv/index.m3u',
+      addedAt: DateTime.utc(2026, 8, 14),
+    );
+    final canonical = await StorageService.setIptvPlaylistsAndReload(
+      <IptvPlaylist>[starter, ...migrated],
+      forSettings: false,
+    );
+
+    expect(canonical, hasLength(2));
+    final preserved = canonical.singleWhere(
+      (playlist) => playlist.connectionResourceId == existingResourceId,
+    );
+    expect(preserved.connectionResourceId, existingResourceId);
+    expect(
+      preserved.connectionResourceRevision,
+      greaterThan(existingResourceRevision!),
+    );
+    for (final playlist in canonical) {
+      expect(playlist.connectionResourceId, isNotNull);
+      expect(playlist.connectionResourceRevision, isNotNull);
+      await ProfileCollectionResourceFacade.authorizeExecution(
+        resourceId: playlist.connectionResourceId,
+        resourceRevision: playlist.connectionResourceRevision,
+        acceptedTypes: const <ConnectionResourceType>{
+          ConnectionResourceType.iptvM3u,
+        },
+        feature: ProfileFeature.iptv,
+      );
+    }
   });
 }

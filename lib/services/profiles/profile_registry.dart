@@ -1754,7 +1754,7 @@ class ProfileRegistry {
       }
       final placeholders = List.filled(typeNames.length, '?').join(',');
       final existing = await txn.rawQuery(
-        '''SELECT r.id,
+        '''SELECT r.id, r.authorization_revision,
                   SUM(CASE WHEN g.profile_id != r.owner_profile_id THEN 1 ELSE 0 END)
                     AS borrower_count
            FROM connection_resources r
@@ -1768,7 +1768,17 @@ class ProfileRegistry {
           'A shared connection must be changed in profile management',
         );
       }
+      final existingById = <String, Map<String, Object?>>{
+        for (final row in existing) row['id']! as String: row,
+      };
+      final replacementIds = <String>{};
+      for (final replacement in replacements) {
+        if (!replacementIds.add(replacement.resource.id)) {
+          throw StateError('Replacement collection contains duplicate IDs');
+        }
+      }
       for (final row in existing) {
+        if (replacementIds.contains(row['id'])) continue;
         await txn.delete(
           'connection_resources',
           where: 'id = ?',
@@ -1777,26 +1787,66 @@ class ProfileRegistry {
       }
       for (final replacement in replacements) {
         final resource = replacement.resource;
-        await txn.insert('connection_resources', <String, Object?>{
-          'id': resource.id,
-          'type': resource.type.name,
-          'label': resource.label,
-          'owner_profile_id': ownerProfileId,
-          'public_config_json': jsonEncode(resource.publicConfig),
-          'sealed_secret_payload': replacement.sealedSecretPayload,
-          'secret_payload_version': replacement.secretPayloadVersion,
-          'authorization_revision': resource.authorizationRevision,
-          'created_at_ms': now,
-          'updated_at_ms': now,
-        });
-        await txn.insert('profile_resource_grants', <String, Object?>{
-          'profile_id': ownerProfileId,
-          'resource_id': resource.id,
-          'permissions': ownerPermissions,
-          'granted_by_profile_id': ownerProfileId,
-          'grant_origin_json': '{"origin":"ownerCollection"}',
-          'created_at_ms': now,
-        });
+        final prior = existingById[resource.id];
+        if (prior == null) {
+          if (resource.authorizationRevision != 1) {
+            throw StateError('Replacement source is unavailable');
+          }
+          await txn.insert('connection_resources', <String, Object?>{
+            'id': resource.id,
+            'type': resource.type.name,
+            'label': resource.label,
+            'owner_profile_id': ownerProfileId,
+            'public_config_json': jsonEncode(resource.publicConfig),
+            'sealed_secret_payload': replacement.sealedSecretPayload,
+            'secret_payload_version': replacement.secretPayloadVersion,
+            'authorization_revision': resource.authorizationRevision,
+            'created_at_ms': now,
+            'updated_at_ms': now,
+          });
+        } else {
+          final priorRevision = prior['authorization_revision']! as int;
+          if (resource.authorizationRevision != priorRevision + 1) {
+            throw StateError('Replacement source authority changed');
+          }
+          final changed = await txn.update(
+            'connection_resources',
+            <String, Object?>{
+              'type': resource.type.name,
+              'label': resource.label,
+              'public_config_json': jsonEncode(resource.publicConfig),
+              'sealed_secret_payload': replacement.sealedSecretPayload,
+              'secret_payload_version': replacement.secretPayloadVersion,
+              'authorization_revision': resource.authorizationRevision,
+              'updated_at_ms': now,
+              'disabled_at_ms': null,
+            },
+            where:
+                'id = ? AND owner_profile_id = ? AND authorization_revision = ?',
+            whereArgs: <Object>[resource.id, ownerProfileId, priorRevision],
+          );
+          if (changed != 1) {
+            throw StateError('Replacement source authority changed');
+          }
+        }
+        await txn.rawInsert(
+          '''INSERT INTO profile_resource_grants
+             (profile_id, resource_id, permissions, granted_by_profile_id,
+              grant_origin_json, created_at_ms)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT(profile_id, resource_id) DO UPDATE SET
+               permissions = excluded.permissions,
+               granted_by_profile_id = excluded.granted_by_profile_id,
+               grant_origin_json = excluded.grant_origin_json''',
+          <Object>[
+            ownerProfileId,
+            resource.id,
+            ownerPermissions,
+            ownerProfileId,
+            '{"origin":"ownerCollection"}',
+            now,
+          ],
+        );
       }
       await txn.rawUpdate(
         '''UPDATE user_profiles

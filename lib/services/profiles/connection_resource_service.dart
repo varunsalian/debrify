@@ -114,15 +114,21 @@ class ConnectionResourceService {
       );
     }
     final replacements = <PreparedConnectionResource>[];
+    final replacementIds = <String>{};
     for (final item in items) {
       if (!types.contains(item.type)) {
         throw ArgumentError.value(item.type, 'items');
       }
       final sourceId = item.sourceResourceId;
+      var replacementId = _newId();
+      var replacementRevision = 1;
       if (sourceId != null) {
         final source = await registry.getResource(sourceId);
         final grant = await registry.getGrant(owner.id, sourceId);
-        if (source == null || grant == null || !types.contains(source.type)) {
+        if (source == null ||
+            !source.enabled ||
+            grant == null ||
+            !types.contains(source.type)) {
           throw const ResourceAuthorizationException(
             'Collection source is unavailable',
           );
@@ -138,13 +144,22 @@ class ConnectionResourceService {
             'Collection source cannot be managed',
           );
         }
+        // A compatibility model's id is the resource id exposed by read().
+        // Keep that identity stable across collection edits, while rotating
+        // its revision so previously decrypted models cannot be executed.
+        replacementId = source.id;
+        replacementRevision = source.authorizationRevision + 1;
       }
-      final id = _newId();
+      if (!replacementIds.add(replacementId)) {
+        throw const ResourceAuthorizationException(
+          'Collection contains a duplicate source',
+        );
+      }
       final publicConfig = _normalizePublicConfig(item.type, item.publicConfig);
       final sealed = await cipher.seal(
         utf8.encode(jsonEncode(item.secretConfig)),
         associatedData: _associatedData(
-          resourceId: id,
+          resourceId: replacementId,
           type: item.type,
           ownerProfileId: owner.id,
           publicSchemaVersion: 1,
@@ -154,7 +169,7 @@ class ConnectionResourceService {
       replacements.add(
         PreparedConnectionResource(
           resource: ConnectionResource(
-            id: id,
+            id: replacementId,
             type: item.type,
             label: item.label.trim().isEmpty
                 ? item.type.name
@@ -162,7 +177,7 @@ class ConnectionResourceService {
             ownerProfileId: owner.id,
             publicConfig: publicConfig,
             publicSchemaVersion: 1,
-            authorizationRevision: 1,
+            authorizationRevision: replacementRevision,
             enabled: true,
           ),
           sealedSecretPayload: sealed,

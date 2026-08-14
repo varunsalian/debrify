@@ -803,7 +803,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       playlists = [starterPlaylist, ...playlists];
 
       // Save the starter playlist and mark as initialized
-      await StorageService.setIptvPlaylists(playlists);
+      playlists = await StorageService.setIptvPlaylistsAndReload(
+        playlists,
+        forSettings: false,
+      );
       await StorageService.setIptvDefaultsInitialized(true);
     }
 

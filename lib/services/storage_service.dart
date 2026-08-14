@@ -7312,6 +7312,34 @@ class StorageService {
     await prefs.setStringList(_iptvPlaylistsKey, jsonList);
   }
 
+  /// Persists an IPTV collection and returns the authoritative records.
+  ///
+  /// In profile mode a collection write can mint or rotate connection
+  /// resources, so the caller's input objects are deliberately not execution
+  /// capabilities. UI code that keeps using those objects would have no
+  /// resource ID for a new playlist, or a stale revision for an existing one.
+  static Future<List<IptvPlaylist>> setIptvPlaylistsAndReload(
+    List<IptvPlaylist> playlists, {
+    required bool forSettings,
+  }) async {
+    final expectedScope = ProfileCollectionResourceFacade.active
+        ? ProfileRuntime.capture()
+        : null;
+    await setIptvPlaylists(playlists);
+    if (expectedScope != null &&
+        (!ProfileCollectionResourceFacade.active ||
+            ProfileRuntime.capture() != expectedScope)) {
+      throw StateError('Profile changed while saving IPTV playlists');
+    }
+    final saved = await getIptvPlaylists(forSettings: forSettings);
+    if (expectedScope != null &&
+        (!ProfileCollectionResourceFacade.active ||
+            ProfileRuntime.capture() != expectedScope)) {
+      throw StateError('Profile changed while loading IPTV playlists');
+    }
+    return saved;
+  }
+
   /// Get default IPTV playlist ID
   static Future<String?> getIptvDefaultPlaylist() async {
     final prefs = await ProfilePreferences.instance();

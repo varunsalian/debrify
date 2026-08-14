@@ -687,11 +687,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     );
 
     final newPlaylists = [..._playlists, playlist];
-    await StorageService.setIptvPlaylists(newPlaylists);
+    final savedPlaylists = await StorageService.setIptvPlaylistsAndReload(
+      newPlaylists,
+      forSettings: true,
+    );
     if (!mounted) return;
 
     setState(() {
-      _playlists = newPlaylists;
+      _playlists = savedPlaylists;
       _nameController.clear();
       _urlController.clear();
       _epgUrlController.clear();
@@ -806,11 +809,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       );
 
       final newPlaylists = [..._playlists, playlist];
-      await StorageService.setIptvPlaylists(newPlaylists);
+      final savedPlaylists = await StorageService.setIptvPlaylistsAndReload(
+        newPlaylists,
+        forSettings: true,
+      );
       if (!mounted) return;
 
       setState(() {
-        _playlists = newPlaylists;
+        _playlists = savedPlaylists;
       });
       _ensureFocusNodes();
 
@@ -926,11 +932,14 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     );
 
     final newPlaylists = [..._playlists, playlist];
-    await StorageService.setIptvPlaylists(newPlaylists);
+    final savedPlaylists = await StorageService.setIptvPlaylistsAndReload(
+      newPlaylists,
+      forSettings: true,
+    );
     if (!mounted) return;
 
     setState(() {
-      _playlists = newPlaylists;
+      _playlists = savedPlaylists;
       _xcNameController.clear();
       _xcServerController.clear();
       _xcUsernameController.clear();
@@ -956,7 +965,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
   Future<void> _removePlaylistForProfile(IptvPlaylist playlist) async {
     final removedIndex = _playlists.indexWhere((p) => p.id == playlist.id);
     final newPlaylists = _playlists.where((p) => p.id != playlist.id).toList();
-    await StorageService.setIptvPlaylists(newPlaylists);
+    final savedPlaylists = await StorageService.setIptvPlaylistsAndReload(
+      newPlaylists,
+      forSettings: true,
+    );
     await IptvCatalogDb.archiveNumberingSource(playlist.id);
 
     // If removed playlist was the default, clear default
@@ -996,7 +1008,7 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
     await StorageService.removeIptvWatchHistoryByPlaylistId(playlist.id);
 
     if (!mounted) return;
-    setState(() => _playlists = newPlaylists);
+    setState(() => _playlists = savedPlaylists);
     // _ensureFocusNodes disposes the trailing nodes — including the one the
     // focused delete button was using — so reseed DPAD focus on the same row
     // slot of a surviving playlist (or the tab bar when the list empties).
@@ -1544,9 +1556,12 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       for (final p in _playlists)
         if (p.id == playlist.id) updated else p,
     ];
-    await StorageService.setIptvPlaylists(newPlaylists);
+    final savedPlaylists = await StorageService.setIptvPlaylistsAndReload(
+      newPlaylists,
+      forSettings: true,
+    );
     if (!mounted) return;
-    setState(() => _playlists = newPlaylists);
+    setState(() => _playlists = savedPlaylists);
     _showSnackBar('Updated "${updated.name}"', isError: false);
   }
 
