@@ -709,8 +709,8 @@ class StorageService {
   /// `false`, not null. Null means MainActivity never ran at all: iOS, macOS,
   /// desktop. Callers must treat null as "unknown", never as "full res".
   static Future<bool?> getTvLowResRenderActive() async {
-    final prefs = await ProfilePreferences.instance();
-    return prefs.getBool('tv_low_res_render_active');
+    final device = await DevicePreferences.instance();
+    return device.getBool(DevicePreferences.tvLowResRenderActiveKey);
   }
 
   static const String _tvHeroArtworkQualityKey = 'tv_hero_artwork_quality';
@@ -889,10 +889,21 @@ class StorageService {
   static bool? _tvTrailerUnderlaySession;
   static Future<bool> getTvTrailerUnderlayEnabledAtLaunch() async {
     if (_tvTrailerUnderlaySession != null) return _tvTrailerUnderlaySession!;
+    final device = await DevicePreferences.instance();
+    final effective = device.getBool(
+      DevicePreferences.tvTrailerUnderlayEffectiveKey,
+    );
+    if (effective != null) {
+      return _tvTrailerUnderlaySession = effective;
+    }
     final prefs = await ProfilePreferences.instance();
     return _tvTrailerUnderlaySession =
-        prefs.getBool('tv_trailer_underlay_effective') ??
-        (prefs.getBool('tv_trailer_underlay_enabled') ?? true);
+        prefs.getBool('tv_trailer_underlay_enabled') ?? true;
+  }
+
+  @visibleForTesting
+  static void debugResetTvTrailerUnderlaySession() {
+    _tvTrailerUnderlaySession = null;
   }
 
   static Future<bool> getTorboxCacheCheckEnabled() async {

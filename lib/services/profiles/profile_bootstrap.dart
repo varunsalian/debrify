@@ -440,6 +440,7 @@ class ProfileBootstrap {
   }
 
   static const Set<String> _deviceOwnedLegacyKeys = <String>{
+    ...DevicePreferences.nativeLaunchSnapshotKeys,
     'profiles_runtime_mode_v1',
     'profiles_feature_enabled_v1',
     'profiles_native_mirror_v1',

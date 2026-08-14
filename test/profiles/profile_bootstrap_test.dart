@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/utils/app_storage.dart';
@@ -75,6 +76,28 @@ void main() {
 
       expect(ProfileRuntime.isProfileCommitted, isTrue);
       expect(ProfileRuntime.capture().profileId, admin.id);
+    },
+  );
+
+  test(
+    'native launch snapshots do not turn a fresh install into a migration',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        DevicePreferences.tvTrailerUnderlayEffectiveKey: false,
+        DevicePreferences.tvLowResRenderActiveKey: true,
+      });
+      final cipher = MemoryDeviceSecretCipher(
+        List<int>.generate(32, (index) => index + 7),
+      );
+      await cipher.initialize();
+      DeviceKeyProvider.debugInstallCipher(cipher);
+
+      await ProfileBootstrap.initialize();
+
+      expect(
+        (await ProfileBootstrap.registry.activeProfile())?.id,
+        ProfileBootstrap.freshAdminId,
+      );
     },
   );
 

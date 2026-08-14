@@ -204,7 +204,19 @@ class DevicePreferences {
 
   final SharedPreferences _delegate;
 
+  /// Activity/process decisions written by native Android before Dart starts.
+  /// These describe the running Flutter surface, not any user profile.
+  static const String tvTrailerUnderlayEffectiveKey =
+      'tv_trailer_underlay_effective';
+  static const String tvLowResRenderActiveKey =
+      'tv_low_res_render_active';
+  static const Set<String> nativeLaunchSnapshotKeys = <String>{
+    tvTrailerUnderlayEffectiveKey,
+    tvLowResRenderActiveKey,
+  };
+
   static const Set<String> allowedKeys = <String>{
+    ...nativeLaunchSnapshotKeys,
     'profiles_runtime_mode_v1',
     'profiles_committed_once_v1',
     'profiles_feature_enabled_v1',

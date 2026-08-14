@@ -10,6 +10,7 @@ import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_migration_service.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
@@ -77,6 +78,8 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{
         'initial_setup_complete_v1': true,
         'theme_mode': 'dark',
+        DevicePreferences.tvTrailerUnderlayEffectiveKey: false,
+        DevicePreferences.tvLowResRenderActiveKey: true,
         'real_debrid_api_key': 'rd-sentinel',
         'trakt_access_token': 'trakt-sentinel',
         'trakt_refresh_token': 'trakt-refresh-sentinel',
@@ -138,6 +141,9 @@ void main() {
         raw.containsKey('p.${admin.id}.g.1.initial_setup_complete_v1'),
         isFalse,
       );
+      for (final key in DevicePreferences.nativeLaunchSnapshotKeys) {
+        expect(raw.containsKey('p.${admin.id}.g.1.$key'), isFalse);
+      }
       expect(raw.containsKey('p.${admin.id}.g.1.real_debrid_api_key'), isFalse);
       expect(
         await registry.getBoundResourceId(admin.id, 'provider.realDebrid'),
