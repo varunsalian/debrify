@@ -22,17 +22,18 @@ import '../torbox_account_service.dart';
 import '../tv_hero_artwork_quality_controller.dart';
 import '../tvos_top_shelf_service.dart';
 import '../xtream_codes_service.dart';
-import '../engine/local_engine_storage.dart';
+import '../engine/engine_profile_lifecycle.dart';
 import 'profile_lifecycle.dart';
 import 'native_profile_projection.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
 
-/// Resets process-wide mirrors that otherwise retain profile A and warms the
-/// target using a zone-bound candidate scope before it becomes authoritative.
+/// Resets process-wide mirrors that otherwise retain profile A, then warms the
+/// target under its captured scope after authoritative publication.
 class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
   @override
   Future<void> prepareDeactivate(ProfileScope current) async {
+    EngineProfileLifecycle.prepareDeactivate();
     MainPageBridge.clearProfileSessionState();
     await TvosTopShelfService.instance.clear();
     RemoteCommandRouter().clearProfileSessionState();
@@ -49,7 +50,6 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
     DiscoverPrefs.resetProfileScope();
     SubtitleFontService.instance.resetProfileScope();
     SubtitleSettingsService.instance.resetProfileScope();
-    LocalEngineStorage.instance.resetProfileScope();
     AccountService.clearUserInfo();
     TorboxAccountService.clearUserInfo();
     PremiumizeAccountService.clearUserInfo();
@@ -90,7 +90,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
       DiscoverPrefs.resetProfileScope();
       SubtitleFontService.instance.resetProfileScope();
       SubtitleSettingsService.instance.resetProfileScope();
-      LocalEngineStorage.instance.resetProfileScope();
+      await EngineProfileLifecycle.warmCurrentScope();
 
       await StorageService.migrateDefaultsGeneration();
       await Future.wait(<Future<Object?>>[
