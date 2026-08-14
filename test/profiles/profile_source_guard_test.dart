@@ -93,7 +93,8 @@ void main() {
     expect(
       source,
       contains('ProfilePolicy.allAllowedFor(role)'),
-      reason: 'policyFor must select the full role policy while the switch is off.',
+      reason:
+          'policyFor must select the full role policy while the switch is off.',
     );
     expect(
       source,
@@ -101,6 +102,28 @@ void main() {
       reason: 'Initialization must select the full role policy too.',
     );
   });
+
+  test(
+    'search result preservation is owned by the mounted profile session',
+    () {
+      final source = File('lib/screens/search_screen.dart').readAsStringSync();
+      expect(
+        source,
+        contains('ProfileSessionMemory<_KwPreservedState> _kwPreserved'),
+      );
+      expect(
+        source,
+        contains('_profileSessionOwner = ProfileSessionMemory.captureOwner()'),
+      );
+      expect(source, contains('_kwPreserved.take('));
+      expect(source, contains('_kwPreserved.store('));
+      expect(
+        source,
+        isNot(contains('static _KwPreservedState? _kwPreserved')),
+        reason: 'Raw screen statics can carry content across profile switches.',
+      );
+    },
+  );
 
   test('profile, download, deep-link, and remote logs stay redacted', () {
     final files = <File>[

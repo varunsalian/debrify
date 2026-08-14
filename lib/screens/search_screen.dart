@@ -33,6 +33,7 @@ import '../services/local_bound_source_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/playlist_player_service.dart';
 import '../services/premiumize_service.dart';
+import '../services/profiles/profile_session_memory.dart';
 import '../services/series_source_service.dart';
 import '../services/stremio_iptv_service.dart';
 import '../services/stremio_service.dart';
@@ -596,8 +597,14 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   double? _pendingKwScroll;
 
   /// Snapshot of the most recently disposed keyword search, kept alive across
-  /// the tab rebuild. Consumed (and cleared) by the next matching-variant init.
-  static _KwPreservedState? _kwPreserved;
+  /// a same-profile tab rebuild. The holder rejects content from another
+  /// profile/session and participates in profile lifecycle cleanup.
+  static final ProfileSessionMemory<_KwPreservedState> _kwPreserved =
+      ProfileSessionMemory<_KwPreservedState>();
+
+  /// Captured at mount, not dispose: an outgoing screen may be torn down after
+  /// the next profile is published and must still tag its snapshot as outgoing.
+  late final ProfileSessionOwner _profileSessionOwner;
 
   /// Discriminates the three [SearchScreen] variants so a preserved keyword
   /// search only restores into the same kind of tab it came from.
@@ -1283,6 +1290,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   @override
   void initState() {
     super.initState();
+    _profileSessionOwner = ProfileSessionMemory.captureOwner();
     // This one widget backs three tabs (Home board / dedicated Search / Discover).
     AnalyticsService.screenView(
       widget.searchMode
@@ -1686,11 +1694,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// this variant. Returns true when a restore happened. Called from initState
   /// (pre-first-build) so direct field assignment — not setState — is correct.
   bool _restoreKeywordState() {
-    final snap = _kwPreserved;
-    if (snap == null || snap.variant != _variantKey || snap.query.isEmpty) {
+    final snap = _kwPreserved.take(
+      _profileSessionOwner,
+      where: (value) => value.variant == _variantKey && value.query.isNotEmpty,
+    );
+    if (snap == null) {
       return false;
     }
-    _kwPreserved = null; // one-time consume
     _mode = _Mode.keyword;
     _kwQuery = snap.query;
     _kwAll = snap.all;
@@ -1741,22 +1751,25 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         }
         _computeKwProviders(pending);
       }
-      _kwPreserved = _KwPreservedState(
-        variant: _variantKey,
-        query: _kwQuery,
-        all: _kwAll,
-        results: _kwResults,
-        filters: _kwFilters,
-        sort: _kwSort,
-        sortAsc: _kwSortAsc,
-        cache: _kwCache,
-        cachedOnly: _kwCachedOnly,
-        directCounts: _kwDirectCounts,
-        torrentCounts: _kwTorrentCounts,
-        selectedDirect: _kwSelectedDirect,
-        selectedTorrent: _kwSelectedTorrent,
-        sourceTab: _kwSourceTab,
-        scrollOffset: _kwLastScroll,
+      _kwPreserved.store(
+        _profileSessionOwner,
+        _KwPreservedState(
+          variant: _variantKey,
+          query: _kwQuery,
+          all: _kwAll,
+          results: _kwResults,
+          filters: _kwFilters,
+          sort: _kwSort,
+          sortAsc: _kwSortAsc,
+          cache: _kwCache,
+          cachedOnly: _kwCachedOnly,
+          directCounts: _kwDirectCounts,
+          torrentCounts: _kwTorrentCounts,
+          selectedDirect: _kwSelectedDirect,
+          selectedTorrent: _kwSelectedTorrent,
+          sourceTab: _kwSourceTab,
+          scrollOffset: _kwLastScroll,
+        ),
       );
     }
     MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
