@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
+import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
@@ -97,6 +98,39 @@ void main() {
       expect(
         (await ProfileBootstrap.registry.activeProfile())?.id,
         ProfileBootstrap.freshAdminId,
+      );
+    },
+  );
+
+  test(
+    'an over-budget legacy install starts in legacy mode instead of failing',
+    () async {
+      // main() catches only ProfileBootstrapRecoveryRequired, so anything else
+      // escaping initialize() stops the app from starting. A migration that
+      // cannot fit the tvOS preference budget has to degrade, not throw.
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'initial_setup_complete_v1': true,
+        'theme_mode': 'dark',
+        'playback_state_v1': 'x' * (ProfilePreferenceBudget.limitBytes ~/ 2),
+      });
+      ProfilePreferenceBudget.debugEnforcedOverride = true;
+      addTearDown(ProfilePreferenceBudget.debugReset);
+      final cipher = MemoryDeviceSecretCipher(
+        List<int>.generate(32, (index) => index + 9),
+      );
+      await cipher.initialize();
+      DeviceKeyProvider.debugInstallCipher(cipher);
+
+      await ProfileBootstrap.initialize();
+
+      expect(ProfileRuntime.isInitialized, isTrue);
+      expect(ProfileRuntime.isProfileCommitted, isFalse);
+      // The legacy install is untouched and still readable.
+      final preferences = await SharedPreferences.getInstance();
+      expect(preferences.getString('theme_mode'), 'dark');
+      expect(
+        preferences.getKeys().where((key) => key.startsWith('p.')),
+        isEmpty,
       );
     },
   );

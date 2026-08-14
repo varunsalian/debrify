@@ -13,6 +13,7 @@ import '../../services/secret_vault.dart';
 import '../../utils/app_storage.dart';
 import '../../utils/platform_util.dart';
 import 'device_key_provider.dart';
+import 'profile_preference_budget.dart';
 import 'profile_preferences.dart';
 import 'profile_registry.dart';
 import 'profile_scope.dart';
@@ -73,6 +74,47 @@ class ProfileMigrationService {
     return removed;
   }
 
+  /// Refuses a migration that would push tvOS `UserDefaults` past its budget.
+  ///
+  /// Throws [ProfilePreferenceBudgetExceeded] rather than letting the copy loop
+  /// discover the problem partway through. Migration writes are exempt from the
+  /// runtime guard precisely because [_copyPreference] treats a refused write as
+  /// fatal, so this preflight is the only bound on them — and monotonicity is
+  /// what makes it sufficient: the loop only adds keys, so the total after the
+  /// last copy is exactly what is projected here.
+  static void _assertPreferenceBudget(
+    SharedPreferences legacy,
+    Set<String> profileKeys,
+    UserProfile? existingAdmin,
+  ) {
+    if (!ProfilePreferenceBudget.enforced) return;
+    final scope = ProfileScope(
+      profileId: adminProfileId,
+      dataGeneration: existingAdmin?.visibleDataGeneration ?? 1,
+      sessionEpoch: 0,
+    );
+    var projected = ProfilePreferenceBudget.measure(legacy);
+    for (final key in profileKeys) {
+      final physical = scope.preferenceKey(key);
+      // An interrupted run may have copied this key already; recopying it adds
+      // nothing, so counting it would only overestimate.
+      if (legacy.containsKey(physical)) continue;
+      projected += ProfilePreferenceBudget.entryFootprint(
+        physical,
+        legacy.get(key),
+      );
+    }
+    // Projected against the reserved ceiling, not the full limit: migrating to
+    // exactly the limit would leave an install that refuses every write from
+    // its first launch onward.
+    if (projected > ProfilePreferenceBudget.migrationLimitBytes) {
+      throw ProfilePreferenceBudgetExceeded(
+        projectedBytes: projected,
+        limitBytes: ProfilePreferenceBudget.migrationLimitBytes,
+      );
+    }
+  }
+
   Future<UserProfile> migrate() async {
     final support = await AppStorage.support();
     await support.create(recursive: true);
@@ -87,13 +129,22 @@ class ProfileMigrationService {
       final legacy = await SharedPreferences.getInstance();
       await pruneTvOsTransientPreferenceCaches(preferences: legacy);
       final classified = _classifyKeys(legacy.getKeys());
+
+      // Migration is non-destructive: legacy keys stay while scoped copies are
+      // added, so the defaults database holds both afterwards. That duplication
+      // is what crossed the tvOS platform limit and aborted the process. Decide
+      // before the registry or the scoped namespace is touched, so a refusal
+      // leaves the install exactly as it was — barring the rebuildable TVMaze
+      // caches the prune above already dropped.
+      var admin = await registry.getProfile(adminProfileId);
+      _assertPreferenceBudget(legacy, classified.profile, admin);
+
       await _journal(ProfileMigrationStage.preflightPassed, <String, dynamic>{
         'profileKeys': classified.profile.length,
         'resourceKeys': classified.resource.length,
         'deviceKeys': classified.device.length,
       });
 
-      var admin = await registry.getProfile(adminProfileId);
       admin ??= await registry.createProfile(
         id: adminProfileId,
         name: 'Admin',

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../utils/app_storage.dart';
+import 'profile_preference_budget.dart';
 import 'profile_preferences.dart';
 import 'native_profile_projection.dart';
 import 'device_key_provider.dart';
@@ -233,10 +234,31 @@ class ProfileBootstrap {
         ProfileRuntime.initializeLegacy();
         return;
       }
-      final profile = await ProfileMigrationService(
-        registry: registry,
-        cipher: DeviceKeyProvider.cipher,
-      ).migrate();
+      final UserProfile profile;
+      try {
+        profile = await ProfileMigrationService(
+          registry: registry,
+          cipher: DeviceKeyProvider.cipher,
+        ).migrate();
+      } on ProfilePreferenceBudgetExceeded catch (error) {
+        // Copying the legacy keys would push tvOS UserDefaults toward the limit
+        // that terminates the process. The registry and the scoped namespace
+        // are untouched, so stay on the legacy install exactly as a locked
+        // device key does above; the app starts normally and migration is
+        // retried on a later launch. This must not escape: main() only catches
+        // ProfileBootstrapRecoveryRequired, so any other error here would stop
+        // the app from starting at all.
+        //
+        // Logged because the refusal happens before the migration journal's
+        // first entry: without this the device silently never gains profiles,
+        // with nothing in the journal or a bug report to explain why.
+        debugPrint('Profile migration deferred: $error');
+        await registry.close();
+        _registry = null;
+        TvOsProfileRecoveryStore.checkpointCallback = null;
+        ProfileRuntime.initializeLegacy();
+        return;
+      }
       ProfileRuntime.initializeCommitted(
         ProfileScope(
           profileId: profile.id,
@@ -404,6 +426,10 @@ class ProfileBootstrap {
     TvOsProfileRecoveryStore.checkpointCallback = opened.checkpointTvOsRecovery;
     UserProfile profile;
     if (pending.existingInstall) {
+      // No ProfilePreferenceBudgetExceeded handler here, unlike the tvOS path
+      // above: this method is guarded by Platform.isLinux and the budget is
+      // only enforced on tvOS, so the two can never both hold. Enforcing the
+      // budget on any other platform means handling it here too.
       profile = await ProfileMigrationService(
         registry: opened,
         cipher: DeviceKeyProvider.cipher,

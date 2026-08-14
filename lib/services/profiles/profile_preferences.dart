@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'profile_preference_budget.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
 import 'profile_credential_facade.dart';
@@ -134,24 +135,39 @@ class ProfilePreferences implements SharedPreferences {
   }
 
   @override
-  Future<bool> setBool(String key, bool value) =>
-      _write(() => _delegate.setBool(_physical(key), value));
+  Future<bool> setBool(String key, bool value) => _write(
+    () => _delegate.setBool(_physical(key), value),
+    budgetKey: _physical(key),
+    budgetValue: value,
+  );
 
   @override
-  Future<bool> setInt(String key, int value) =>
-      _write(() => _delegate.setInt(_physical(key), value));
+  Future<bool> setInt(String key, int value) => _write(
+    () => _delegate.setInt(_physical(key), value),
+    budgetKey: _physical(key),
+    budgetValue: value,
+  );
 
   @override
-  Future<bool> setDouble(String key, double value) =>
-      _write(() => _delegate.setDouble(_physical(key), value));
+  Future<bool> setDouble(String key, double value) => _write(
+    () => _delegate.setDouble(_physical(key), value),
+    budgetKey: _physical(key),
+    budgetValue: value,
+  );
 
   @override
-  Future<bool> setString(String key, String value) =>
-      _write(() => _delegate.setString(_physical(key), value));
+  Future<bool> setString(String key, String value) => _write(
+    () => _delegate.setString(_physical(key), value),
+    budgetKey: _physical(key),
+    budgetValue: value,
+  );
 
   @override
-  Future<bool> setStringList(String key, List<String> value) =>
-      _write(() => _delegate.setStringList(_physical(key), value));
+  Future<bool> setStringList(String key, List<String> value) => _write(
+    () => _delegate.setStringList(_physical(key), value),
+    budgetKey: _physical(key),
+    budgetValue: value,
+  );
 
   @override
   Future<bool> remove(String key) async {
@@ -162,8 +178,28 @@ class ProfilePreferences implements SharedPreferences {
     return _write(() => _delegate.remove(_physical(key)));
   }
 
-  Future<bool> _write(Future<bool> Function() operation) async {
+  /// [budgetKey]/[budgetValue] describe the growth this write would cause.
+  /// Omitting them skips admission, which is correct for `remove`: shrinking
+  /// the database is always safe.
+  Future<bool> _write(
+    Future<bool> Function() operation, {
+    String? budgetKey,
+    Object? budgetValue,
+  }) async {
     _assertWritable();
+    // Only ordinary runtime writes are gated. Every captured-scope caller
+    // (migration, restore, profile creation) treats a `false` result as fatal
+    // and throws, and during bootstrap an uncaught throw prevents the app from
+    // starting — trading the platform kill for a Dart one. Those paths are
+    // bounded elsewhere: migration by its preflight, restore by the recovery
+    // envelope caps, creation by its fixed 24-key scalar list. Ordinary writes
+    // are both the sole source of unbounded growth and the only ones whose
+    // result is never inspected, so refusing them can only skip a save.
+    if (budgetKey != null &&
+        _capturedAccess == null &&
+        !ProfilePreferenceBudget.admits(_delegate, budgetKey, budgetValue)) {
+      return false;
+    }
     final success = await operation();
     if (success &&
         _scope != null &&

@@ -10,6 +10,7 @@ import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_migration_service.dart';
+import 'package:debrify/services/profiles/profile_preference_budget.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
@@ -329,6 +330,96 @@ void main() {
       preferences.getKeys().where((key) => key.contains('tvmaze_')),
       isEmpty,
     );
+  });
+
+  group('tvOS preference budget preflight', () {
+    tearDown(ProfilePreferenceBudget.debugReset);
+
+    test('refuses a migration that would cross the platform limit', () async {
+      // Migration is non-destructive, so copying duplicates every profile key
+      // into the scoped namespace. That duplication is what aborted the tvOS
+      // process; the preflight has to catch it before anything is written.
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'initial_setup_complete_v1': true,
+        'theme_mode': 'dark',
+        'playback_state_v1': 'x' * (ProfilePreferenceBudget.limitBytes ~/ 2),
+      });
+      ProfilePreferenceBudget.debugEnforcedOverride = true;
+
+      await expectLater(
+        ProfileMigrationService(registry: registry, cipher: cipher).migrate(),
+        throwsA(isA<ProfilePreferenceBudgetExceeded>()),
+      );
+
+      // The refusal precedes createProfile, so neither the registry nor the
+      // scoped namespace is touched and the next launch retries cleanly. The
+      // rebuildable TVMaze prune does run first on a real device; it is a
+      // no-op here because it keys off the platform, not the budget override.
+      expect(
+        await registry.getProfile(ProfileMigrationService.adminProfileId),
+        isNull,
+      );
+      expect(await registry.isMigrationCommitted(), isFalse);
+      final preferences = await SharedPreferences.getInstance();
+      expect(
+        preferences.getKeys().where((key) => key.startsWith('p.')),
+        isEmpty,
+      );
+      expect(preferences.getString('theme_mode'), 'dark');
+    });
+
+    test(
+      'reserves runtime headroom rather than migrating to the limit',
+      () async {
+        // Migration duplicates every profile key, so projecting against the full
+        // limit would let an install migrate to exactly the ceiling and then
+        // refuse every write from its first launch onward.
+        final half =
+            (ProfilePreferenceBudget.limitBytes -
+                ProfilePreferenceBudget.migrationReserveBytes ~/ 2) ~/
+            2;
+        SharedPreferences.setMockInitialValues(<String, Object>{
+          'initial_setup_complete_v1': true,
+          'playback_state_v1': 'x' * half,
+        });
+        ProfilePreferenceBudget.debugEnforcedOverride = true;
+
+        final projected = ProfilePreferenceBudget.measure(
+          await SharedPreferences.getInstance(),
+        );
+        // Fits under the runtime limit once duplicated, but not under the
+        // reserved migration ceiling — exactly the case that must be refused.
+        expect(projected * 2, lessThan(ProfilePreferenceBudget.limitBytes));
+        expect(
+          projected * 2,
+          greaterThan(ProfilePreferenceBudget.migrationLimitBytes),
+        );
+
+        await expectLater(
+          ProfileMigrationService(registry: registry, cipher: cipher).migrate(),
+          throwsA(isA<ProfilePreferenceBudgetExceeded>()),
+        );
+      },
+    );
+
+    test('an ordinary inventory still migrates with the budget on', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'initial_setup_complete_v1': true,
+        'theme_mode': 'dark',
+        'playback_state_v1': '{"position":42}',
+      });
+      ProfilePreferenceBudget.debugEnforcedOverride = true;
+
+      final profile = await ProfileMigrationService(
+        registry: registry,
+        cipher: cipher,
+      ).migrate();
+
+      expect(profile.id, ProfileMigrationService.adminProfileId);
+      expect(await registry.isMigrationCommitted(), isTrue);
+      final preferences = await SharedPreferences.getInstance();
+      expect(preferences.getString('p.legacy-admin-v1.g.1.theme_mode'), 'dark');
+    });
   });
 
   test(
