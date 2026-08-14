@@ -515,4 +515,60 @@ void main() {
       feature: ProfileFeature.torrentSearch,
     );
   });
+
+  test('an Xtream resource migrated without url still loads', () async {
+    // Exactly the shape an affected build left behind: the migration stripped
+    // every empty value before sealing, so `url: ''` — which an Xtream
+    // provider stores on purpose, its endpoint being serverUrl — vanished.
+    // The reader casts url non-null, so ONE such resource threw for the whole
+    // collection and the IPTV page never left its spinner. Migration is a
+    // one-way door, so these devices are only reachable from the read side.
+    await ConnectionResourceService(
+      registry: registry,
+      cipher: cipher,
+    ).create(
+      context: await ProfileAuthorizationContext.capture(registry),
+      type: ConnectionResourceType.iptvXtream,
+      label: 'Panel',
+      publicConfig: const <String, dynamic>{'playlistName': 'Panel'},
+      secretConfig: const <String, dynamic>{
+        'name': 'Panel',
+        'serverUrl': 'https://panel.invalid:8080',
+        'username': 'user',
+        'password': 'pass',
+        'addedAt': '2026-08-14T00:00:00.000Z',
+      },
+    );
+
+    final playlists = await StorageService.getIptvPlaylists(
+      forSettings: false,
+    );
+    final panel = playlists.singleWhere((p) => p.name == 'Panel');
+    expect(panel.url, '');
+    expect(panel.serverUrl, 'https://panel.invalid:8080');
+    expect(panel.isXtreamCodes, isTrue);
+  });
+
+  test('a row missing both url and serverUrl is not papered over', () async {
+    // The repair is deliberately narrow: genuine corruption must still
+    // surface rather than being silently turned into a blank provider.
+    await ConnectionResourceService(
+      registry: registry,
+      cipher: cipher,
+    ).create(
+      context: await ProfileAuthorizationContext.capture(registry),
+      type: ConnectionResourceType.iptvM3u,
+      label: 'Broken',
+      publicConfig: const <String, dynamic>{'playlistName': 'Broken'},
+      secretConfig: const <String, dynamic>{
+        'name': 'Broken',
+        'addedAt': '2026-08-14T00:00:00.000Z',
+      },
+    );
+
+    await expectLater(
+      StorageService.getIptvPlaylists(forSettings: false),
+      throwsA(isA<TypeError>()),
+    );
+  });
 }

@@ -7309,6 +7309,30 @@ class StorageService {
     'url', 'serverUrl', 'username', 'password', 'epgUrl', //
   ];
 
+  /// Restores the `url` key the legacy→profile migration erased.
+  ///
+  /// An Xtream provider legitimately stores `url: ''` — its endpoint is
+  /// [IptvPlaylist.serverUrl]. The migration's shared resource writer stripped
+  /// every empty value before sealing, so an Xtream resource migrated by an
+  /// affected build carries no `url` key at all, and `IptvPlaylist.fromJson`
+  /// threw on the required cast. That took out the ENTIRE playlist list — and
+  /// with it the IPTV page — rather than the one provider.
+  ///
+  /// Fixing the migration cannot help these devices: migration is a one-way
+  /// door that never re-runs. Repairing on read is what brings them back, and
+  /// it keeps working for anyone who migrated on an affected build and updates
+  /// later.
+  ///
+  /// Deliberately narrow: only an absent `url` alongside a usable `serverUrl`
+  /// is repaired. A row missing both is genuinely malformed and still throws,
+  /// because papering over that would hide real corruption.
+  static Map<String, dynamic> _repairMigratedIptvRow(Map<String, dynamic> row) {
+    if (row['url'] != null) return row;
+    final serverUrl = row['serverUrl'];
+    if (serverUrl is! String || serverUrl.trim().isEmpty) return row;
+    return <String, dynamic>{...row, 'url': ''};
+  }
+
   /// Get all saved IPTV playlists
   static Future<List<IptvPlaylist>> getIptvPlaylists({
     bool forSettings = true,
@@ -7324,7 +7348,10 @@ class StorageService {
         forSettings: forSettings,
         forRemoteTransfer: forRemoteTransfer,
       );
-      return rows.map(IptvPlaylist.fromJson).toList(growable: false);
+      return rows
+          .map(_repairMigratedIptvRow)
+          .map(IptvPlaylist.fromJson)
+          .toList(growable: false);
     }
     final prefs = await ProfilePreferences.instance();
     final jsonList = prefs.getStringList(_iptvPlaylistsKey) ?? [];

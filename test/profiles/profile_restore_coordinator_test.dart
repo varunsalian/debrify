@@ -336,6 +336,49 @@ void main() {
     },
   );
 
+  test('a restored Xtream provider keeps its empty url', () async {
+    // Same defect the legacy→profile migration had: an Xtream provider stores
+    // `url: ''` because its endpoint is serverUrl, and stripping empty values
+    // before sealing erased a key the reader casts non-null — which threw for
+    // the whole playlist collection, not just the one provider.
+    final package = LegacyBackupAdapter.adapt(<String, dynamic>{
+      'version': 1,
+      'createdAt': '2026-08-14T00:00:00.000Z',
+      'iptvPlaylists': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'id': 'xtream-1',
+          'name': 'Panel',
+          'url': '',
+          'serverUrl': 'https://panel.invalid:8080',
+          'username': 'user',
+          'password': 'pass',
+          'addedAt': '2026-08-14T00:00:00.000Z',
+        },
+      ],
+    });
+
+    await ProfileRestoreCoordinator(registry: registry, cipher: cipher).restore(
+      package: package,
+      destinationProfileId: profileId,
+      authorization: await ProfileAuthorizationContext.capture(registry),
+    );
+
+    final resource = (await registry.listGrantedResources(profileId)).single;
+    expect(resource.type, ConnectionResourceType.iptvXtream);
+    final secret =
+        await ConnectionResourceService(
+          registry: registry,
+          cipher: cipher,
+        ).resolveSecretForUse(
+          context: await ProfileAuthorizationContext.capture(registry),
+          resourceId: resource.id,
+          feature: ProfileFeature.iptv,
+        );
+    expect(secret.containsKey('url'), isTrue);
+    expect(secret['url'], '');
+    expect(secret['serverUrl'], 'https://panel.invalid:8080');
+  });
+
   test('graph verification rejects bytes changed after finalization', () async {
     const operationId = 'graph-byte-mutation';
     const stagedProfileId = 'staged-profile';

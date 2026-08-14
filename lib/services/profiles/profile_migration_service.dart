@@ -202,8 +202,18 @@ class ProfileMigrationService {
       Map<String, dynamic> public = const <String, dynamic>{},
       bool enabled = true,
     }) async {
-      secrets.removeWhere((_, value) => value == null || value == '');
-      if (secrets.isEmpty) return null;
+      // Two separate jobs, previously tangled into one removeWhere: decide
+      // whether this record is worth a resource at all, and drop absent
+      // fields. Testing emptiness WITHOUT mutating is the difference — an
+      // empty string can be structurally required (an Xtream provider stores
+      // `url: ''` because its endpoint is `serverUrl`), and stripping it left
+      // the sealed record missing a key its reader casts non-null. That threw
+      // for the whole collection, not just the one entry, and migration is a
+      // one-way door so the damage outlived the build that caused it.
+      if (secrets.values.every((value) => value == null || value == '')) {
+        return null;
+      }
+      secrets.removeWhere((_, value) => value == null);
       final id = 'resource-legacy-$stableName';
       if (await registry.getResource(id) == null) {
         final aad = utf8.encode(

@@ -233,7 +233,7 @@ class ProfileRestoreCoordinator {
           type,
           Map<String, dynamic>.from(secretRecord),
         );
-        if (secret.isEmpty) {
+        if (_hasNoUsableSecret(secret)) {
           throw const FormatException('Imported resource secret is empty');
         }
         final publicConfig = _publicConfig(type, record);
@@ -560,7 +560,7 @@ class ProfileRestoreCoordinator {
           type,
           Map<String, dynamic>.from(record['secretConfig'] as Map),
         );
-        if (secret.isEmpty) continue;
+        if (_hasNoUsableSecret(secret)) continue;
         if (type == ConnectionResourceType.iptvM3u ||
             type == ConnectionResourceType.iptvXtream) {
           stagedIptvProviders[IptvTransferPayload.providerFingerprintFromJson(
@@ -1005,8 +1005,24 @@ class ProfileRestoreCoordinator {
         'username': input['username'],
       }..removeWhere((_, value) => value == null || value == '');
     }
-    return input..removeWhere((_, value) => value == null || value == '');
+    // Nulls only, unlike the two shapes above. Those build a fixed record out
+    // of genuinely optional fields, where an empty token means "absent". This
+    // branch passes a provider's own record through, and there a structurally
+    // required field can legitimately be empty — an Xtream provider stores
+    // `url: ''` because its endpoint is `serverUrl`. Dropping it left the
+    // sealed record missing a key its reader casts non-null, which threw for
+    // the whole collection rather than the one entry.
+    return input..removeWhere((_, value) => value == null);
   }
+
+  /// Whether [secret] carries nothing worth sealing.
+  ///
+  /// Deliberately not `Map.isEmpty`: the empty-value strip that used to make
+  /// that test work is exactly what erased required fields. Testing the values
+  /// keeps the "don't mint a resource from an empty record" rule without
+  /// mutating the record to get it.
+  static bool _hasNoUsableSecret(Map<String, dynamic> secret) =>
+      secret.values.every((value) => value == null || value == '');
 
   static Map<String, dynamic> _publicConfig(
     ConnectionResourceType type,

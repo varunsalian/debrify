@@ -463,4 +463,76 @@ void main() {
       expect(jsonDecode(encrypted), containsPair('version', 2));
     },
   );
+
+  test('migration keeps structurally required empty fields', () async {
+    // An Xtream provider stores `url: ''` on purpose — its endpoint is
+    // serverUrl. Stripping empty values while sealing dropped the key
+    // entirely, and the reader casts it non-null, so the whole playlist
+    // collection threw and the IPTV page never left its spinner.
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'iptv_playlists': <String>[
+        jsonEncode(<String, Object?>{
+          'id': 'iptv-xtream',
+          'name': 'Panel',
+          'url': '',
+          'serverUrl': 'https://panel.invalid:8080',
+          'username': 'user',
+          'password': 'pass',
+          'addedAt': '2026-08-14T00:00:00.000Z',
+        }),
+      ],
+    });
+
+    final admin = await ProfileMigrationService(
+      registry: registry,
+      cipher: cipher,
+    ).migrate();
+    ProfileRuntime.initializeCommitted(
+      ProfileScope(
+        profileId: admin.id,
+        dataGeneration: admin.visibleDataGeneration,
+        sessionEpoch: 1,
+      ),
+    );
+
+    final secret =
+        await ConnectionResourceService(
+          registry: registry,
+          cipher: cipher,
+        ).resolveSecretForUse(
+          context: await ProfileAuthorizationContext.capture(registry),
+          resourceId: 'resource-legacy-iptv-0',
+          feature: ProfileFeature.iptv,
+        );
+
+    expect(
+      secret.containsKey('url'),
+      isTrue,
+      reason: 'the required key must survive even when its value is empty',
+    );
+    expect(secret['url'], '');
+    expect(secret['serverUrl'], 'https://panel.invalid:8080');
+  });
+
+  test('an all-empty record still mints no resource', () async {
+    // The emptiness TEST is what decides whether a record is worth a
+    // resource; it must keep working now that it no longer mutates the map.
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'iptv_playlists': <String>[
+        jsonEncode(<String, Object?>{'name': '', 'url': ''}),
+      ],
+    });
+
+    final admin = await ProfileMigrationService(
+      registry: registry,
+      cipher: cipher,
+    ).migrate();
+
+    expect(
+      (await registry.listGrantedResources(
+        admin.id,
+      )).where((resource) => resource.type == ConnectionResourceType.iptvM3u),
+      isEmpty,
+    );
+  });
 }

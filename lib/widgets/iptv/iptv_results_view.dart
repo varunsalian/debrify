@@ -152,6 +152,13 @@ class IptvResultsViewState extends State<IptvResultsView>
   IptvPlaylist? _selectedPlaylist;
   bool _settingsLoaded = false;
 
+  /// Why the settings pass failed, if it did. [_loadSettings] is the gate in
+  /// front of the whole page: it sets [_settingsLoaded] on its LAST line, so
+  /// any throw on the way there used to leave the bare spinner up forever with
+  /// no error, no Retry and nothing on screen to name the failure — the same
+  /// silent-spinner trap [_loadPlaylist] already guards against one level down.
+  String? _settingsError;
+
   /// The cockpit's visual style (`iptv_style` pref). Only the TV/desktop
   /// cockpit branch consults it — classic and touch-tablet layouts ignore it.
   IptvStyle _iptvStyle = IptvStyle.command;
@@ -777,7 +784,23 @@ class IptvResultsViewState extends State<IptvResultsView>
     await _loadPlaylist(playlist);
   }
 
+  /// Guarded entry point — see [_settingsError]. Every caller (initState, the
+  /// addon-changed listener, returning from Settings, Retry) goes through here
+  /// so no path can reintroduce the silent spinner.
   Future<void> _loadSettings({bool forceReload = false}) async {
+    try {
+      await _loadSettingsInner(forceReload: forceReload);
+    } catch (e, st) {
+      debugPrint('IPTV: settings load failed: $e\n$st');
+      if (!mounted) return;
+      // Deliberately NOT setting _settingsLoaded: the page below this gate
+      // assumes a loaded playlist set. Failing here keeps the failure
+      // contained to the gate, which now renders the reason and a Retry.
+      setState(() => _settingsError = '$e');
+    }
+  }
+
+  Future<void> _loadSettingsInner({bool forceReload = false}) async {
     var playlists = await StorageService.getIptvPlaylists(forSettings: false);
     final defaultPlaylistId = await StorageService.getIptvDefaultPlaylist();
     // Cockpit look. Read on every pass so returning from Settings (which
@@ -4790,7 +4813,48 @@ class IptvResultsViewState extends State<IptvResultsView>
   @override
   Widget build(BuildContext context) {
     if (!_settingsLoaded) {
-      return const Center(child: CircularProgressIndicator());
+      final settingsError = _settingsError;
+      if (settingsError == null) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Could not open IPTV',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                settingsError,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                autofocus: true,
+                onPressed: () {
+                  setState(() => _settingsError = null);
+                  unawaited(_loadSettings(forceReload: true));
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     // TV: focus selects the embedded preview. Desktop: hover selects and click
