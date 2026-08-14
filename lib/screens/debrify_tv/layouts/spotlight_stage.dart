@@ -297,10 +297,7 @@ class _StatusChip extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 5),
-          Text(
-            detail,
-            style: TextStyle(fontSize: 10, color: tv.textDim),
-          ),
+          Text(detail, style: TextStyle(fontSize: 10, color: tv.textDim)),
         ],
       ),
     );
@@ -362,10 +359,7 @@ class _KeywordRow extends StatelessWidget {
         children: [
           Text(
             kw,
-            style: TextStyle(
-              fontSize: 10.5,
-              color: dead ? _warn : tv.textDim,
-            ),
+            style: TextStyle(fontSize: 10.5, color: dead ? _warn : tv.textDim),
           ),
           if (count != null) ...[
             const SizedBox(width: 5),
@@ -398,55 +392,57 @@ class _StatsBand extends StatelessWidget {
     final deadCount = s?.deadKeywords.length ?? 0;
     final kwTotal = s?.keywordYield.length ?? 0;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: _StatCard(
-            label: 'In the pool',
-            value: s == null ? '—' : _thousands(s.pooled),
-            caption: 'titles cached for this channel',
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _StatCard(
+              label: 'In the pool',
+              value: s == null ? '—' : _thousands(s.pooled),
+              caption: 'titles cached for this channel',
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatCard(
-            label: 'At your quality',
-            value: s == null ? '—' : _thousands(s.atYourQuality),
-            caption: 'by release name',
-            hot: true,
-            mix: s?.qualityMix,
+          const SizedBox(width: 8),
+          Expanded(
+            child: _StatCard(
+              label: 'At your quality',
+              value: s == null ? '—' : _thousands(s.atYourQuality),
+              caption: 'by release name',
+              hot: true,
+              mix: s?.qualityMix,
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatCard(
-            label: 'Keywords',
-            value: s == null ? '—' : '${kwTotal - deadCount} of $kwTotal',
-            caption: s == null
-                ? ''
-                : deadCount > 0
-                ? '“${s.deadKeywords.first}” found nothing'
-                : 'every keyword returned results',
-            cold: deadCount > 0,
+          const SizedBox(width: 8),
+          Expanded(
+            child: _StatCard(
+              label: 'Keywords',
+              value: s == null ? '—' : '${kwTotal - deadCount} of $kwTotal',
+              caption: s == null
+                  ? ''
+                  : deadCount > 0
+                  ? '“${s.deadKeywords.first}” found nothing'
+                  : 'every keyword returned results',
+              cold: deadCount > 0,
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _StatCard(
-            label: 'Freshness',
-            value: s == null
-                ? '—'
-                : s.status == DebrifyTvCacheStatus.failed
-                ? 'failed'
-                : _relative(s.fetchedAt),
-            caption: s?.status == DebrifyTvCacheStatus.failed
-                ? 'no pool was written'
-                : 'background prefetch keeps it warm',
-            smallValue: true,
+          const SizedBox(width: 8),
+          Expanded(
+            child: _StatCard(
+              label: 'Freshness',
+              value: s == null
+                  ? '—'
+                  : s.status == DebrifyTvCacheStatus.failed
+                  ? 'failed'
+                  : _relative(s.fetchedAt),
+              caption: s?.status == DebrifyTvCacheStatus.failed
+                  ? 'no pool was written'
+                  : 'background prefetch keeps it warm',
+              smallValue: true,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -548,10 +544,7 @@ class _StatCard extends StatelessWidget {
             caption,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 9.5,
-              color: cold ? _warn : tv.textFaint,
-            ),
+            style: TextStyle(fontSize: 9.5, color: cold ? _warn : tv.textFaint),
           ),
           if (m != null && mixTotal > 0) ...[
             const SizedBox(height: 7),
@@ -692,11 +685,7 @@ class _SamplePlate extends StatelessWidget {
                         children: [
                           Row(
                             children: [
-                              _badge(
-                                context,
-                                _tierLabel(name),
-                                strong: true,
-                              ),
+                              _badge(context, _tierLabel(name), strong: true),
                               const Spacer(),
                               if (keywords.isNotEmpty)
                                 Flexible(
@@ -773,9 +762,7 @@ class _SamplePlate extends StatelessWidget {
           fontSize: 7.5,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.7,
-          color: strong
-              ? app.core.tx
-              : app.core.tx.withValues(alpha: 0.6),
+          color: strong ? app.core.tx : app.core.tx.withValues(alpha: 0.6),
         ),
       ),
     );

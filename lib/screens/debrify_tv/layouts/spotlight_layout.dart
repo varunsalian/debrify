@@ -220,13 +220,14 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
   void _focusRail(String key) {
     final node = _railNode(key);
     node.requestFocus();
-    // Keep the focused row on screen; the rail list scrolls, the header and
-    // Quick Play stand.
+    // Keep every focused item in the scrolling run visible. Utility actions
+    // live below the channels, so only scrolling channel keys left Add,
+    // Import and Settings focused off-screen on a long rail.
     final ctx = node.context;
-    if (ctx != null && key.startsWith('ch:')) {
+    if (ctx != null && key != 'qp') {
       Scrollable.ensureVisible(
         ctx,
-        alignment: 0.5,
+        alignment: key.startsWith('ch:') ? 0.5 : 1,
         duration: const Duration(milliseconds: 140),
       );
     }
@@ -311,7 +312,9 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
         '${c.keywords.length} '
         '${c.keywords.length == 1 ? 'keyword' : 'keywords'}';
     if (h == null) return kws;
-    if (h.status == DebrifyTvCacheStatus.failed) return 'Cache failed — rebuild';
+    if (h.status == DebrifyTvCacheStatus.failed) {
+      return 'Cache failed — rebuild';
+    }
     return '${_thousands(h.pooled)} pooled · $kws';
   }
 
@@ -451,7 +454,9 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
     final view = widget.view;
     final ordered = _ordered;
     final staged = _staged;
-    final pinnedCount = ordered.where((c) => view.favoriteIds.contains(c.id)).length;
+    final pinnedCount = ordered
+        .where((c) => view.favoriteIds.contains(c.id))
+        .length;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(24, 22, 32, 16 + widget.bottomInset),
@@ -570,8 +575,7 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
                   child: SpotlightStage(
                     channel: staged,
                     pinned:
-                        staged != null &&
-                        view.favoriteIds.contains(staged.id),
+                        staged != null && view.favoriteIds.contains(staged.id),
                     stats: _stagedStats,
                     busy: view.busy,
                     playNode: _node(_kPlay),

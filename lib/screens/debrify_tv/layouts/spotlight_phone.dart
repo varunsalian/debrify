@@ -10,10 +10,11 @@ import 'spotlight_rail.dart' show SpotlightKick;
 
 /// The Spotlight touch arm: a phone gets a phone — a list, not a TV grid.
 ///
-/// Tapping a row opens the channel SHEET: the stage, folded. The sheet is a
-/// modal route, so it cannot rebuild off the parent's setState; the arm
-/// mirrors its latest view into a [ValueNotifier] and the sheet listens to
-/// that, which is how the stats land after their debounced pass finishes.
+/// Tapping a row opens the channel SHEET: the stage, folded. Its trailing play
+/// control keeps playback one tap away. The sheet is a modal route, so it
+/// cannot rebuild off the parent's setState; the arm mirrors its latest view
+/// into a [ValueNotifier] and the sheet listens to that, which is how the stats
+/// land after their debounced pass finishes.
 ///
 /// The mock's "Rebuild now" row is deliberately absent: the plan is paint
 /// only, and no existing state method rebuilds a pool outside the edit-save
@@ -34,6 +35,7 @@ class SpotlightPhoneArm extends StatefulWidget {
 
 class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
   late final ValueNotifier<DebrifyTvView> _live = ValueNotifier(widget.view);
+  final TextEditingController _search = TextEditingController();
 
   @override
   void didUpdateWidget(SpotlightPhoneArm old) {
@@ -43,6 +45,7 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
 
   @override
   void dispose() {
+    _search.dispose();
     _live.dispose();
     super.dispose();
   }
@@ -51,6 +54,29 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
     ...v.channels.where((c) => v.favoriteIds.contains(c.id)),
     ...v.channels.where((c) => !v.favoriteIds.contains(c.id)),
   ];
+
+  List<DebrifyTvChannel> _filtered(List<DebrifyTvChannel> channels) {
+    final query = _search.text.trim().toLowerCase();
+    if (query.isEmpty) return channels;
+    return channels
+        .where((channel) {
+          final number = channel.channelNumber.toString();
+          final paddedNumber = number.padLeft(2, '0');
+          return channel.name.toLowerCase().contains(query) ||
+              channel.keywords.any(
+                (keyword) => keyword.toLowerCase().contains(query),
+              ) ||
+              number == query ||
+              paddedNumber == query;
+        })
+        .toList(growable: false);
+  }
+
+  void _clearSearch() {
+    if (_search.text.isEmpty) return;
+    _search.clear();
+    setState(() {});
+  }
 
   void _openSheet(DebrifyTvChannel channel) {
     // Kick the stats pass before the sheet draws.
@@ -82,7 +108,9 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
     final app = AppThemeScope.of(context);
     final tv = app.debrifyTv;
     final view = widget.view;
-    final ordered = _orderedOf(view);
+    final allChannels = _orderedOf(view);
+    final ordered = _filtered(allChannels);
+    final searching = _search.text.trim().isNotEmpty;
     final pinnedCount = ordered
         .where((c) => view.favoriteIds.contains(c.id))
         .length;
@@ -92,119 +120,164 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
       pooled += view.railHealth[c.id]?.pooled ?? 0;
     }
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(20, 24, 20, 24 + widget.bottomInset),
-          children: [
-            SpotlightKick('Debrify TV', color: tv.accent),
-            const SizedBox(height: 8),
-            Text(
-              'Channels',
-              style: TextStyle(
-                fontSize: 34,
-                height: 1,
-                letterSpacing: -1,
-                fontWeight: FontWeight.w800,
-                color: app.core.tx,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final media = MediaQuery.sizeOf(context);
+        final isLargeSurface = media.shortestSide >= 600;
+        final maxWidth = isLargeSurface
+            ? (constraints.maxWidth >= 1000 ? 760.0 : 680.0)
+            : 560.0;
+        final horizontalPadding = constraints.maxWidth < 360
+            ? 12.0
+            : isLargeSurface
+            ? 24.0
+            : 20.0;
+        return Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: ListView(
+              key: const ValueKey<String>('debrify-tv-touch-scroll'),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                24,
+                horizontalPadding,
+                24 + widget.bottomInset,
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              pooled > 0
-                  ? '${ordered.length} channels · '
-                        '${_thousands(pooled)} titles cached'
-                  : '${ordered.length} '
-                        '${ordered.length == 1 ? 'channel' : 'channels'}',
-              style: TextStyle(fontSize: 13, color: tv.textDim),
-            ),
-            const SizedBox(height: 16),
-            _PhoneButton(
-              icon: Icons.play_arrow_rounded,
-              label: 'Quick Play',
-              primary: true,
-              onTap: view.busy ? null : view.onQuickPlay,
-            ),
-            const SizedBox(height: 14),
-            if (ordered.isEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 40),
-                child: Column(
-                  children: [
-                    Text(
-                      'Make a channel out of anything you can name.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: app.core.tx,
-                      ),
+              children: [
+                SpotlightKick('Debrify TV', color: tv.accent),
+                const SizedBox(height: 8),
+                Text(
+                  'Channels',
+                  style: TextStyle(
+                    fontSize: 34,
+                    height: 1,
+                    letterSpacing: -1,
+                    fontWeight: FontWeight.w800,
+                    color: app.core.tx,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  searching
+                      ? '${ordered.length} of ${allChannels.length} channels'
+                      : pooled > 0
+                      ? '${ordered.length} channels · '
+                            '${_thousands(pooled)} titles cached'
+                      : '${ordered.length} '
+                            '${ordered.length == 1 ? 'channel' : 'channels'}',
+                  style: TextStyle(fontSize: 13, color: tv.textDim),
+                ),
+                const SizedBox(height: 16),
+                _PhoneButton(
+                  icon: Icons.play_arrow_rounded,
+                  label: 'Quick Play',
+                  primary: true,
+                  onTap: view.busy ? null : view.onQuickPlay,
+                ),
+                const SizedBox(height: 14),
+                _PhoneSearchField(
+                  controller: _search,
+                  onChanged: (_) => setState(() {}),
+                  onClear: _clearSearch,
+                ),
+                const SizedBox(height: 14),
+                if (allChannels.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 40),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Make a channel out of anything you can name.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: app.core.tx,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        _PhoneButton(
+                          icon: Icons.add_rounded,
+                          label: 'Add channel',
+                          onTap: view.busy ? null : view.onAdd,
+                        ),
+                        const SizedBox(height: 8),
+                        _PhoneButton(
+                          icon: Icons.cloud_download_rounded,
+                          label: 'Import',
+                          onTap: view.busy ? null : view.onImport,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 18),
-                    _PhoneButton(
+                  )
+                else if (ordered.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 36),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.search_off_rounded,
+                          size: 34,
+                          color: tv.textFaint,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'No channels match “${_search.text.trim()}”',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: app.core.tx,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: _clearSearch,
+                          child: const Text('Clear search'),
+                        ),
+                      ],
+                    ),
+                  )
+                else ...[
+                  if (pinnedCount > 0) ...[
+                    _groupLabel(context, 'Pinned', pinnedCount),
+                    for (final c in ordered.take(pinnedCount))
+                      _row(context, view, c, pinned: true),
+                    const SizedBox(height: 10),
+                    _groupLabel(
+                      context,
+                      'Everything else',
+                      ordered.length - pinnedCount,
+                    ),
+                  ],
+                  for (final c in ordered.skip(pinnedCount))
+                    _row(context, view, c, pinned: false),
+                ],
+                const SizedBox(height: 18),
+                _PhoneActionGroup(
+                  actions: [
+                    _PhoneAction(
                       icon: Icons.add_rounded,
-                      label: 'Add channel',
+                      label: 'Add',
                       onTap: view.busy ? null : view.onAdd,
                     ),
-                    const SizedBox(height: 8),
-                    _PhoneButton(
+                    _PhoneAction(
                       icon: Icons.cloud_download_rounded,
                       label: 'Import',
                       onTap: view.busy ? null : view.onImport,
                     ),
+                    _PhoneAction(
+                      icon: Icons.settings_rounded,
+                      label: 'Settings',
+                      onTap: view.onSettings,
+                    ),
                   ],
-                ),
-              )
-            else ...[
-              if (pinnedCount > 0) ...[
-                _groupLabel(context, 'Pinned', pinnedCount),
-                for (final c in ordered.take(pinnedCount))
-                  _row(context, view, c, pinned: true),
-                const SizedBox(height: 10),
-                _groupLabel(
-                  context,
-                  'Everything else',
-                  ordered.length - pinnedCount,
-                ),
-              ],
-              for (final c in ordered.skip(pinnedCount))
-                _row(context, view, c, pinned: false),
-            ],
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: _PhoneButton(
-                    icon: Icons.add_rounded,
-                    label: 'Add',
-                    compact: true,
-                    onTap: view.busy ? null : view.onAdd,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _PhoneButton(
-                    icon: Icons.cloud_download_rounded,
-                    label: 'Import',
-                    compact: true,
-                    onTap: view.busy ? null : view.onImport,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _PhoneButton(
-                    icon: Icons.settings_rounded,
-                    label: 'Settings',
-                    compact: true,
-                    onTap: view.onSettings,
-                  ),
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -251,79 +324,117 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
       child: Material(
         color: tv.cardBg,
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => _openSheet(c),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: tv.fillWeak,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        c.channelNumber.toString().padLeft(2, '0'),
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                          color: app.core.tx.withValues(alpha: 0.72),
-                        ),
-                      ),
-                    ),
-                    if (pinned)
-                      Positioned(
-                        top: -5,
-                        right: -5,
-                        child: Icon(
-                          Icons.star_rounded,
-                          size: 13,
-                          color: tv.favorite,
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _openSheet(c),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+                  child: Row(
                     children: [
-                      Text(
-                        c.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w700,
-                          color: app.core.tx,
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: tv.fillWeak,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              c.channelNumber.toString().padLeft(2, '0'),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                                color: app.core.tx.withValues(alpha: 0.72),
+                              ),
+                            ),
+                          ),
+                          if (pinned)
+                            Positioned(
+                              top: -5,
+                              right: -5,
+                              child: Icon(
+                                Icons.star_rounded,
+                                size: 13,
+                                color: tv.favorite,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(width: 11),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              c.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w700,
+                                color: app.core.tx,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              caption,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: tv.textFaint,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        caption,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 11.5, color: tv.textFaint),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 20,
+                        color: tv.textFaint,
                       ),
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 20,
-                  color: tv.textFaint,
-                ),
-              ],
+              ),
             ),
-          ),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Tooltip(
+                message: 'Play ${c.name}',
+                child: Material(
+                  color: tv.fillStrong,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: view.busy
+                        ? null
+                        : () {
+                            FocusManager.instance.primaryFocus?.unfocus();
+                            view.onWatch(c);
+                          },
+                    child: SizedBox.square(
+                      dimension: 44,
+                      child: Icon(
+                        Icons.play_arrow_rounded,
+                        size: 22,
+                        color: view.busy ? tv.textFaint : app.core.tx,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -337,6 +448,121 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
       b.write(s[i]);
     }
     return b.toString();
+  }
+}
+
+class _PhoneSearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  const _PhoneSearchField({
+    required this.controller,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
+    return TextField(
+      key: const ValueKey<String>('debrify-tv-phone-search'),
+      controller: controller,
+      textInputAction: TextInputAction.search,
+      onChanged: onChanged,
+      style: TextStyle(fontSize: 14, color: app.core.tx),
+      decoration: InputDecoration(
+        hintText: 'Search channels',
+        hintStyle: TextStyle(color: tv.textFaint),
+        prefixIcon: Icon(Icons.search_rounded, size: 20, color: tv.textFaint),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Clear search',
+                onPressed: onClear,
+                icon: const Icon(Icons.close_rounded, size: 19),
+              ),
+        filled: true,
+        fillColor: tv.fillWeak,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 13,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(24),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(24),
+          borderSide: BorderSide(color: tv.hairline),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(24),
+          borderSide: BorderSide(color: tv.accent, width: 1.5),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhoneAction {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  const _PhoneAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+}
+
+/// Keeps short actions in one balanced row, then turns them into full-width
+/// rows before either a narrow viewport or accessibility text can clip them.
+class _PhoneActionGroup extends StatelessWidget {
+  final List<_PhoneAction> actions;
+
+  const _PhoneActionGroup({required this.actions});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final scaledLabel = MediaQuery.textScalerOf(context).scale(13);
+        final availablePerAction =
+            (constraints.maxWidth - (actions.length - 1) * 8) / actions.length;
+        final stack = scaledLabel > 17 || availablePerAction < 86;
+
+        Widget button(_PhoneAction action) => _PhoneButton(
+          icon: action.icon,
+          label: action.label,
+          compact: true,
+          onTap: action.onTap,
+        );
+
+        if (stack) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < actions.length; i++) ...[
+                if (i > 0) const SizedBox(height: 8),
+                button(actions[i]),
+              ],
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            for (var i = 0; i < actions.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(child: button(actions[i])),
+            ],
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -464,35 +690,24 @@ class _ChannelSheet extends StatelessWidget {
                   : () => popThen(() => view.onWatch(channel)),
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _PhoneButton(
-                    icon: pinned
-                        ? Icons.star_rounded
-                        : Icons.star_outline_rounded,
-                    label: pinned ? 'Unpin' : 'Pin',
-                    compact: true,
-                    onTap: () => view.onToggleFavorite(channel),
-                  ),
+            _PhoneActionGroup(
+              actions: [
+                _PhoneAction(
+                  icon: pinned
+                      ? Icons.star_rounded
+                      : Icons.star_outline_rounded,
+                  label: pinned ? 'Unpin' : 'Pin',
+                  onTap: () => view.onToggleFavorite(channel),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _PhoneButton(
-                    icon: Icons.edit_rounded,
-                    label: 'Edit',
-                    compact: true,
-                    onTap: () => popThen(() => view.onEdit(channel)),
-                  ),
+                _PhoneAction(
+                  icon: Icons.edit_rounded,
+                  label: 'Edit',
+                  onTap: () => popThen(() => view.onEdit(channel)),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _PhoneButton(
-                    icon: Icons.share_rounded,
-                    label: 'Share',
-                    compact: true,
-                    onTap: () => popThen(() => view.onShare(channel)),
-                  ),
+                _PhoneAction(
+                  icon: Icons.share_rounded,
+                  label: 'Share',
+                  onTap: () => popThen(() => view.onShare(channel)),
                 ),
               ],
             ),
@@ -526,35 +741,51 @@ class _SheetStats extends StatelessWidget {
     final s = stats;
     final dead = s?.deadKeywords.length ?? 0;
     final kwTotal = s?.keywordYield.length ?? 0;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _cell(
-          context,
-          'In the pool',
-          s == null ? '—' : '${s.pooled}',
-          hot: true,
-        ),
-        const SizedBox(width: 6),
-        _cell(context, 'Your quality', s == null ? '—' : '${s.atYourQuality}'),
-        const SizedBox(width: 6),
-        _cell(
-          context,
-          'Keywords',
-          s == null ? '—' : '${kwTotal - dead}/$kwTotal',
-          cold: dead > 0,
-        ),
-        const SizedBox(width: 6),
-        _cell(
-          context,
-          'Fresh',
-          s == null
-              ? '—'
-              : s.status == DebrifyTvCacheStatus.failed
-              ? 'failed'
-              : _short(s.fetchedAt),
-        ),
-      ],
+    final cells = [
+      _cell(context, 'In the pool', s == null ? '—' : '${s.pooled}', hot: true),
+      _cell(context, 'Your quality', s == null ? '—' : '${s.atYourQuality}'),
+      _cell(
+        context,
+        'Keywords',
+        s == null ? '—' : '${kwTotal - dead}/$kwTotal',
+        cold: dead > 0,
+      ),
+      _cell(
+        context,
+        'Fresh',
+        s == null
+            ? '—'
+            : s.status == DebrifyTvCacheStatus.failed
+            ? 'failed'
+            : _short(s.fetchedAt),
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final scaledValue = MediaQuery.textScalerOf(context).scale(14);
+        final useGrid = constraints.maxWidth < 330 || scaledValue > 19;
+        if (useGrid) {
+          final cellWidth = (constraints.maxWidth - 6) / 2;
+          return Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final cell in cells) SizedBox(width: cellWidth, child: cell),
+            ],
+          );
+        }
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < cells.length; i++) ...[
+                if (i > 0) const SizedBox(width: 6),
+                Expanded(child: cells[i]),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -567,47 +798,45 @@ class _SheetStats extends StatelessWidget {
   }) {
     final app = AppThemeScope.of(context);
     final tv = app.debrifyTv;
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
-        decoration: BoxDecoration(
-          color: hot ? tv.accent.withValues(alpha: 0.10) : tv.fillWeak,
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+      decoration: BoxDecoration(
+        color: hot ? tv.accent.withValues(alpha: 0.10) : tv.fillWeak,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+          color: hot
+              ? tv.accent.withValues(alpha: 0.24)
+              : cold
+              ? _warn.withValues(alpha: 0.26)
+              : tv.hairline,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SpotlightKick(
+            label,
             color: hot
-                ? tv.accent.withValues(alpha: 0.24)
+                ? tv.accent
                 : cold
-                ? _warn.withValues(alpha: 0.26)
-                : tv.hairline,
-            width: 1,
+                ? _warn
+                : tv.textFaint,
+            fontSize: 7.5,
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SpotlightKick(
-              label,
-              color: hot
-                  ? tv.accent
-                  : cold
-                  ? _warn
-                  : tv.textFaint,
-              fontSize: 7.5,
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+              color: app.core.tx,
             ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                fontFeatures: const [FontFeature.tabularFigures()],
-                color: app.core.tx,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -695,30 +924,43 @@ class _PhoneButton extends StatelessWidget {
         ? app.core.tx.withValues(alpha: disabled ? 0.4 : 0.92)
         : tv.fillWeak;
     final Color ink = primary ? app.inkOn(app.core.tx) : tv.textDim;
-    final height = compact ? 40.0 : 48.0;
-    return Material(
-      color: fill,
-      borderRadius: BorderRadius.circular(height / 2),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(height / 2),
-        onTap: onTap,
-        child: Container(
-          height: height,
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: compact ? 16 : 18, color: ink),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: compact ? 13 : 15,
-                  fontWeight: FontWeight.w700,
-                  color: ink,
-                ),
+    final minHeight = compact ? 40.0 : 48.0;
+    return SizedBox(
+      width: double.infinity,
+      child: Material(
+        color: fill,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: minHeight),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 6 : 16,
+                vertical: 6,
               ),
-            ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: compact ? 16 : 18, color: ink),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: compact ? 13 : 15,
+                        fontWeight: FontWeight.w700,
+                        color: ink,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -746,8 +988,9 @@ class _DeleteButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(22),
             onTap: onTap,
             child: Container(
-              height: 44,
+              constraints: const BoxConstraints(minHeight: 44),
               alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
