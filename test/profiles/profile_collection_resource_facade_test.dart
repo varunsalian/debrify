@@ -549,6 +549,33 @@ void main() {
     expect(panel.isXtreamCodes, isTrue);
   });
 
+  test('a file-imported playlist migrated without url still loads', () async {
+    // The other kind that stores `url: ''` on purpose: an M3U imported from a
+    // file keeps its body in `content` (see the IPTV settings page). It hits
+    // the same strip as Xtream, so the repair must recognise it too.
+    await ConnectionResourceService(
+      registry: registry,
+      cipher: cipher,
+    ).create(
+      context: await ProfileAuthorizationContext.capture(registry),
+      type: ConnectionResourceType.iptvM3u,
+      label: 'From file',
+      publicConfig: const <String, dynamic>{'playlistName': 'From file'},
+      secretConfig: const <String, dynamic>{
+        'name': 'From file',
+        'content': '#EXTM3U\n#EXTINF:-1,One\nhttps://file.invalid/one',
+        'addedAt': '2026-08-14T00:00:00.000Z',
+      },
+    );
+
+    final playlists = await StorageService.getIptvPlaylists(
+      forSettings: false,
+    );
+    final imported = playlists.singleWhere((p) => p.name == 'From file');
+    expect(imported.url, '');
+    expect(imported.isLocalFile, isTrue);
+  });
+
   test('a row missing both url and serverUrl is not papered over', () async {
     // The repair is deliberately narrow: genuine corruption must still
     // surface rather than being silently turned into a blank provider.

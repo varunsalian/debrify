@@ -7323,15 +7323,24 @@ class StorageService {
   /// it keeps working for anyone who migrated on an affected build and updates
   /// later.
   ///
-  /// Deliberately narrow: only an absent `url` alongside a usable `serverUrl`
-  /// is repaired. A row missing both is genuinely malformed and still throws,
-  /// because papering over that would hide real corruption.
+  /// TWO provider kinds legitimately carry an empty `url`, and both are
+  /// repaired: an Xtream login (endpoint in `serverUrl`) and a playlist
+  /// imported from a file (body in `content` — see the IPTV settings page,
+  /// which writes `url: ''` for exactly that reason). Neither field is
+  /// stripped by the migration, so either one identifies a record whose empty
+  /// `url` was real rather than missing.
+  ///
+  /// Still deliberately narrow: a row with none of the three is genuinely
+  /// malformed and keeps throwing, because papering over that would turn real
+  /// corruption into a silent blank provider.
   static Map<String, dynamic> _repairMigratedIptvRow(Map<String, dynamic> row) {
     if (row['url'] != null) return row;
-    final serverUrl = row['serverUrl'];
-    if (serverUrl is! String || serverUrl.trim().isEmpty) return row;
+    if (!_hasText(row['serverUrl']) && !_hasText(row['content'])) return row;
     return <String, dynamic>{...row, 'url': ''};
   }
+
+  static bool _hasText(Object? value) =>
+      value is String && value.trim().isNotEmpty;
 
   /// Get all saved IPTV playlists
   static Future<List<IptvPlaylist>> getIptvPlaylists({

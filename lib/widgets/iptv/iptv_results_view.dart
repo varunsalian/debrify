@@ -564,8 +564,15 @@ class IptvResultsViewState extends State<IptvResultsView>
     StremioService.instance.addAddonsChangedListener(_onStremioAddonsChanged);
     // Chained, not fire-and-forget: the startup launch needs the playlist list
     // to exist before it can pick the target's provider.
+    // Guarded on the error too, not just mounted: _loadSettings now SWALLOWS
+    // its failures (it renders them instead), so this callback runs on a path
+    // that used to skip it entirely. _maybeRunStartupLaunch consumes the
+    // one-shot startup payload, and burning it against an empty playlist set
+    // would cancel a boot-to-channel request that Retry could still honour.
     _loadSettings().then((_) {
-      if (mounted) unawaited(_maybeRunStartupLaunch());
+      if (mounted && _settingsError == null) {
+        unawaited(_maybeRunStartupLaunch());
+      }
     });
     _loadFavorites();
     // Stage cockpit: recording availability + the rail's Scheduled badge.
