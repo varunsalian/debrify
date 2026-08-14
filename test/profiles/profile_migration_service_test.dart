@@ -290,6 +290,32 @@ void main() {
     expect(await File(legacyPath).exists(), isTrue);
   });
 
+  test('tvOS prunes only rebuildable TVMaze preference caches', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'theme_mode': 'dark',
+      'playback_state_v1': '{"position":42}',
+      'tvmaze_cache_episodes_1139': 'legacy-cache',
+      'tvmaze_timestamp_episodes_1139': 1,
+      'p.legacy-admin-v1.g.1.tvmaze_cache_episodes_527': 'partial-copy',
+      'p.legacy-admin-v1.g.1.tvmaze_timestamp_episodes_527': 2,
+    });
+
+    final preferences = await SharedPreferences.getInstance();
+    expect(
+      await ProfileMigrationService.pruneTvOsTransientPreferenceCaches(
+        preferences: preferences,
+        tvOs: true,
+      ),
+      4,
+    );
+    expect(preferences.getString('theme_mode'), 'dark');
+    expect(preferences.getString('playback_state_v1'), '{"position":42}');
+    expect(
+      preferences.getKeys().where((key) => key.contains('tvmaze_')),
+      isEmpty,
+    );
+  });
+
   test(
     'legacy desktop schedules bind to the final Admin revision and are sealed',
     () async {

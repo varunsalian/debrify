@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'profiles/profile_preferences.dart';
+import '../utils/platform_util.dart';
 
 /// Service for managing persistent cache of TVMaze API responses
 /// Caches data for 30 days to reduce API calls
@@ -8,10 +9,19 @@ class TVMazeCacheService {
   static const String _cachePrefix = 'tvmaze_cache_';
   static const String _timestampPrefix = 'tvmaze_timestamp_';
   static const Duration _cacheDuration = Duration(days: 30);
+  static bool? _persistentCacheSupportedOverride;
+
+  static bool get _persistentCacheSupported =>
+      _persistentCacheSupportedOverride ?? !PlatformUtil.isTvOS;
+
+  @visibleForTesting
+  static void debugSetPersistentCacheSupported(bool? supported) =>
+      _persistentCacheSupportedOverride = supported;
 
   /// Get cached data for a given key
   /// Returns null if data doesn't exist or has expired
   static Future<Map<String, dynamic>?> get(String key) async {
+    if (!_persistentCacheSupported) return null;
     try {
       final prefs = await ProfilePreferences.instance();
       final cacheKey = _cachePrefix + key;
@@ -51,6 +61,7 @@ class TVMazeCacheService {
   /// Get cached list data for a given key
   /// Returns null if data doesn't exist or has expired
   static Future<List<Map<String, dynamic>>?> getList(String key) async {
+    if (!_persistentCacheSupported) return null;
     try {
       final prefs = await ProfilePreferences.instance();
       final cacheKey = _cachePrefix + key;
@@ -90,6 +101,7 @@ class TVMazeCacheService {
 
   /// Store data in cache with current timestamp
   static Future<void> set(String key, Map<String, dynamic> data) async {
+    if (!_persistentCacheSupported) return;
     try {
       final prefs = await ProfilePreferences.instance();
       final cacheKey = _cachePrefix + key;
@@ -112,6 +124,7 @@ class TVMazeCacheService {
     String key,
     List<Map<String, dynamic>> data,
   ) async {
+    if (!_persistentCacheSupported) return;
     try {
       final prefs = await ProfilePreferences.instance();
       final cacheKey = _cachePrefix + key;
@@ -145,6 +158,7 @@ class TVMazeCacheService {
 
   /// Clean up all expired cache entries
   static Future<void> cleanupExpired() async {
+    if (!_persistentCacheSupported) return;
     try {
       final prefs = await ProfilePreferences.instance();
       final keys = prefs.getKeys();

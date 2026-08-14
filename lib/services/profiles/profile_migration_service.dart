@@ -11,6 +11,7 @@ import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/secret_vault.dart';
 import '../../utils/app_storage.dart';
+import '../../utils/platform_util.dart';
 import 'device_key_provider.dart';
 import 'profile_preferences.dart';
 import 'profile_registry.dart';
@@ -40,6 +41,38 @@ class ProfileMigrationService {
 
   ProfileMigrationService({required this.registry, required this.cipher});
 
+  /// Keeps tvOS below CFPreferences' hard payload ceiling before profile
+  /// migration starts duplicating legacy preferences into a scoped namespace.
+  ///
+  /// TVMaze entries are rebuildable API-response caches. Persisting them in
+  /// UserDefaults is especially unsafe on tvOS: a populated legacy cache can
+  /// already approach the platform limit, and the first scoped copy then
+  /// aborts the process inside CFPreferences instead of returning an error.
+  /// Remove both legacy entries and partial scoped copies left by an
+  /// interrupted migration. No user setting, activity, or credential matches
+  /// these prefixes.
+  static Future<int> pruneTvOsTransientPreferenceCaches({
+    required SharedPreferences preferences,
+    bool? tvOs,
+  }) async {
+    if (!(tvOs ?? PlatformUtil.isTvOS)) return 0;
+    final keys = preferences.getKeys().where(_isTvMazeCacheKey).toList()
+      ..sort(
+        (left, right) => _preferenceFootprint(
+          preferences.get(right),
+        ).compareTo(_preferenceFootprint(preferences.get(left))),
+      );
+    var removed = 0;
+    for (final key in keys) {
+      final success = await preferences.remove(key);
+      if (!success && preferences.containsKey(key)) {
+        throw StateError('Unable to release the tvOS preference cache budget');
+      }
+      removed++;
+    }
+    return removed;
+  }
+
   Future<UserProfile> migrate() async {
     final support = await AppStorage.support();
     await support.create(recursive: true);
@@ -52,6 +85,7 @@ class ProfileMigrationService {
         return (await registry.getProfile(adminProfileId))!;
       }
       final legacy = await SharedPreferences.getInstance();
+      await pruneTvOsTransientPreferenceCaches(preferences: legacy);
       final classified = _classifyKeys(legacy.getKeys());
       await _journal(ProfileMigrationStage.preflightPassed, <String, dynamic>{
         'profileKeys': classified.profile.length,
@@ -681,6 +715,19 @@ class ProfileMigrationService {
     }
     return left == right;
   }
+
+  static bool _isTvMazeCacheKey(String key) =>
+      key.startsWith('tvmaze_cache_') ||
+      key.startsWith('tvmaze_timestamp_') ||
+      (key.startsWith('p.') &&
+          (key.contains('.tvmaze_cache_') ||
+              key.contains('.tvmaze_timestamp_')));
+
+  static int _preferenceFootprint(Object? value) => switch (value) {
+    String value => value.length,
+    List<String> value => value.fold<int>(0, (sum, item) => sum + item.length),
+    _ => 16,
+  };
 
   static final RegExp _unknownSecretPattern = RegExp(
     r'(api.?key|password|access.?token|refresh.?token|credential|secret)',

@@ -63,6 +63,13 @@ class ProfileBootstrap {
 
   static Future<void> initialize({bool? enabled}) async {
     if (ProfileRuntime.isInitialized) return;
+    final legacyPreferences = await SharedPreferences.getInstance();
+    // CFPreferences aborts the entire tvOS process when UserDefaults grows too
+    // large. Discard only rebuildable TVMaze responses before any bootstrap
+    // mirror or migration write can cross that hard platform limit.
+    await ProfileMigrationService.pruneTvOsTransientPreferenceCaches(
+      preferences: legacyPreferences,
+    );
     final requested = enabled ?? profilesEnabled;
     final hasRegistry = await ProfileRegistry.defaultRegistryExists();
     final registryCommitted =
@@ -167,7 +174,7 @@ class ProfileBootstrap {
       return;
     }
 
-    await _createOrMigrateInitialAdmin(opened);
+    await _createOrMigrateInitialAdmin(opened, legacyPreferences);
   }
 
   static void _installAuthorityCallback(ProfileRegistry opened) {
@@ -199,8 +206,8 @@ class ProfileBootstrap {
 
   static Future<void> _createOrMigrateInitialAdmin(
     ProfileRegistry registry,
+    SharedPreferences legacy,
   ) async {
-    final legacy = await SharedPreferences.getInstance();
     final legacyKeys = legacy.getKeys().where(_isDebrifyLegacyKey).toSet();
     final isExistingInstall =
         legacyKeys.isNotEmpty ||

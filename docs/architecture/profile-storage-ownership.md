@@ -14,7 +14,7 @@ profile-owned and migrates to the initial Admin.
 | Device jobs | download pending/paused/history, Android recording engine/concurrency, desktop schedules, recording history | Execution continues when its owner is inactive or PIN-locked. Every durable record must gain owner/revision fields. |
 | Device platform | approved executable catalog, writable destination grants, battery/setup notices, OS capability probes | A profile stores only its selected reference. |
 | Profile | all remaining `StorageService` keys | Includes presentation, navigation, playback, provider selection, Home, IPTV, Debrify TV, integrations, content policy preferences, and history. |
-| Profile dynamic | `engine_*`, `series_source_*`, `discover_sort_*`, subtitle keys, Stremio addon JSON, `tvmaze_cache_*`, `tvmaze_timestamp_*` | Accessed only through `ProfilePreferences`. |
+| Profile dynamic | `engine_*`, `series_source_*`, `discover_sort_*`, subtitle keys, Stremio addon JSON, `tvmaze_cache_*`, `tvmaze_timestamp_*` | Accessed only through `ProfilePreferences`. TVMaze responses stay memory-only on tvOS because CFPreferences aborts the process when its payload ceiling is exceeded. |
 | Resource | provider/tracker/WebDAV/IPTV/addon/indexer credentials and shareable connection configuration | Converted from legacy preference/vault keys into sealed resource payloads; never copied by profile-copy UI. |
 | Profile migration | essential-addon seeding state | Version markers are device-wide; seeding markers are profile-owned. |
 
