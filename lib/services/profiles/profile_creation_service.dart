@@ -15,7 +15,9 @@ class ProfileCreationService {
 
   /// Reviewed value-copy allowlist. It intentionally excludes identity,
   /// secrets, connection state, activity/history, jobs, paths/grants,
-  /// onboarding, policies, and migration state.
+  /// the retired onboarding preference, policies, and migration state. The
+  /// registry marks the staged profile ready only after its Admin finishes
+  /// the creation form.
   static const Set<String> copyablePreferenceKeys = <String>{
     'app_theme',
     'text_brightness',

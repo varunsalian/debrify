@@ -33,9 +33,7 @@ class ProfileResetService {
       final staged = await ProfileDataGenerationManager(registry).stage(
         operationId: operationId,
         profileId: current.profileId,
-        preferenceOverlay: const <String, Object?>{
-          'initial_setup_complete_v1': false,
-        },
+        preferenceOverlay: const <String, Object?>{},
         replacePreferences: true,
         copyDurableAreas: false,
       );
@@ -49,6 +47,7 @@ class ProfileResetService {
         baseGeneration: staged.baseGeneration,
         stagedGeneration: staged.generation,
         operationId: operationId,
+        profileSetupComplete: false,
       );
       published = true;
       ProfileRuntime.publish(candidate);

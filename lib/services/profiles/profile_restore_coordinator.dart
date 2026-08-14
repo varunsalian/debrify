@@ -916,17 +916,7 @@ class ProfileRestoreCoordinator {
   }
 
   static String _bindingSlot(ConnectionResourceType type, String backupId) =>
-      switch (type) {
-        ConnectionResourceType.realDebrid => 'provider.realDebrid',
-        ConnectionResourceType.torbox => 'provider.torbox',
-        ConnectionResourceType.premiumize => 'provider.premiumize',
-        ConnectionResourceType.allDebrid => 'provider.allDebrid',
-        ConnectionResourceType.pikpak => 'provider.pikpak',
-        ConnectionResourceType.trakt => 'tracker.trakt',
-        ConnectionResourceType.simkl => 'tracker.simkl',
-        ConnectionResourceType.mdblist => 'tracker.mdblist',
-        _ => 'import.${type.name}.$backupId',
-      };
+      type.singletonCredentialBindingSlot ?? 'import.${type.name}.$backupId';
 
   static String _newId(String prefix) {
     final random = Random.secure();

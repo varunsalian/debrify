@@ -112,7 +112,9 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
       await AppThemeController.warm();
       await TvHeroArtworkQualityController.warm();
       await DiscoverPrefs.warmUp();
-      await PikPakApiService.instance.isAuthenticated();
+      // Do not open credentials here. ProfileGate intentionally keeps the
+      // candidate locked until switchTo returns; the newly mounted profile UI
+      // refreshes provider authentication immediately after unlock.
       await DownloadService.instance.activateProfileView();
     });
   }

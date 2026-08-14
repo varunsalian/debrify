@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_async_authorization.dart';
+import 'profiles/connection_resource_service.dart';
 import 'storage_service.dart';
 
 class PikPakApiService {
@@ -1311,11 +1312,16 @@ class PikPakApiService {
 
   /// Check if user is authenticated
   Future<bool> isAuthenticated() async {
-    final accessToken = await StorageService.getPikPakAccessToken();
-    final refreshToken = await StorageService.getPikPakRefreshToken();
-    final isAuth = accessToken != null && refreshToken != null;
-    authStateNotifier.value = isAuth;
-    return isAuth;
+    try {
+      final accessToken = await StorageService.getPikPakAccessToken();
+      final refreshToken = await StorageService.getPikPakRefreshToken();
+      final isAuth = accessToken != null && refreshToken != null;
+      authStateNotifier.value = isAuth;
+      return isAuth;
+    } on ResourceAuthorizationException {
+      // The outgoing profile may be revoked between the two credential reads.
+      return false;
+    }
   }
 
   /// Drop account material retained in this process before another profile is

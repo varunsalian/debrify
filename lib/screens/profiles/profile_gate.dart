@@ -10,6 +10,7 @@ import '../../services/deep_link_service.dart';
 import '../../services/profiles/profile_app_lifecycle_participant.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
+import '../../services/profiles/connection_resource_service.dart';
 import '../../services/profiles/profile_lifecycle.dart';
 import '../../services/profiles/profile_lock_controller.dart';
 import '../../services/profiles/profile_pin_service.dart';
@@ -172,20 +173,36 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
   }
 
   Future<void> _selected(UserProfile profile) async {
-    if (profile.pinResetRequired) {
+    try {
+      if (profile.pinResetRequired) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('An Admin must reset this profile PIN.'),
+          ),
+        );
+        return;
+      }
+      if (profile.hasPin) {
+        setState(() {
+          _pinForManagement = false;
+          _pinTarget = profile;
+        });
+        return;
+      }
+      await _activate(profile);
+    } on ResourceAuthorizationException catch (error) {
+      debugPrint('Profile activation was revoked (${error.runtimeType})');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('An Admin must reset this profile PIN.')),
+        const SnackBar(content: Text('Could not switch profile. Try again.')),
       );
-      return;
+    } on StateError catch (error) {
+      debugPrint('Profile activation failed (${error.runtimeType})');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not switch profile. Try again.')),
+      );
     }
-    if (profile.hasPin) {
-      setState(() {
-        _pinForManagement = false;
-        _pinTarget = profile;
-      });
-      return;
-    }
-    await _activate(profile);
   }
 
   Future<void> _activate(UserProfile profile) async {

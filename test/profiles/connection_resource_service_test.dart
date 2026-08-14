@@ -125,6 +125,99 @@ void main() {
     );
   });
 
+  test('sharing a scalar credential also binds it for the target', () async {
+    final resource = await resources.create(
+      context: await ProfileAuthorizationContext.capture(registry),
+      type: ConnectionResourceType.allDebrid,
+      label: 'Family AllDebrid',
+      publicConfig: const <String, dynamic>{},
+      secretConfig: const <String, dynamic>{'apiKey': 'ad-secret'},
+    );
+
+    await resources.grant(
+      actor: await ProfileAuthorizationContext.capture(registry),
+      targetProfileId: memberId,
+      resourceId: resource.id,
+      permissions: const <ResourcePermission>{ResourcePermission.use},
+    );
+
+    expect(
+      await registry.getBoundResourceId(memberId, 'provider.allDebrid'),
+      resource.id,
+    );
+    await activate(memberId, 2);
+    final member = await ProfileAuthorizationContext.capture(registry);
+    expect(
+      (await resources.resolveBinding(
+        context: member,
+        slot: 'provider.allDebrid',
+        permission: ResourcePermission.use,
+        acceptedTypes: const <ConnectionResourceType>{
+          ConnectionResourceType.allDebrid,
+        },
+        feature: ProfileFeature.cloud,
+      )).id,
+      resource.id,
+    );
+  });
+
+  test('repairs one unambiguous legacy scalar grant', () async {
+    final resource = await resources.create(
+      context: await ProfileAuthorizationContext.capture(registry),
+      type: ConnectionResourceType.allDebrid,
+      label: 'Legacy shared AllDebrid',
+      publicConfig: const <String, dynamic>{},
+      secretConfig: const <String, dynamic>{'apiKey': 'legacy-ad-secret'},
+    );
+    await registry.bindResource(
+      profileId: adminId,
+      slot: 'provider.allDebrid',
+      resourceId: resource.id,
+    );
+    await registry.upsertGrant(
+      profileId: memberId,
+      resourceId: resource.id,
+      permissions: ResourcePermission.use.bit,
+      grantedByProfileId: adminId,
+      origin: const <String, dynamic>{'origin': 'old-profile-build'},
+    );
+    expect(
+      await registry.getBoundResourceId(memberId, 'provider.allDebrid'),
+      isNull,
+    );
+
+    expect(await registry.repairUnambiguousSingletonBindings(), 1);
+    expect(
+      await registry.getBoundResourceId(memberId, 'provider.allDebrid'),
+      resource.id,
+    );
+  });
+
+  test('does not guess between ambiguous legacy scalar grants', () async {
+    for (final label in const <String>['First AllDebrid', 'Second AllDebrid']) {
+      final resource = await resources.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.allDebrid,
+        label: label,
+        publicConfig: const <String, dynamic>{},
+        secretConfig: <String, dynamic>{'apiKey': '$label-secret'},
+      );
+      await registry.upsertGrant(
+        profileId: memberId,
+        resourceId: resource.id,
+        permissions: ResourcePermission.use.bit,
+        grantedByProfileId: adminId,
+        origin: const <String, dynamic>{'origin': 'old-profile-build'},
+      );
+    }
+
+    expect(await registry.repairUnambiguousSingletonBindings(), 0);
+    expect(
+      await registry.getBoundResourceId(memberId, 'provider.allDebrid'),
+      isNull,
+    );
+  });
+
   test('rejects secret-like public configuration', () async {
     final owner = await ProfileAuthorizationContext.capture(registry);
     expect(

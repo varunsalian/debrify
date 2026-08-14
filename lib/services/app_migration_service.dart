@@ -1,10 +1,11 @@
 import 'package:flutter/foundation.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/app_version_info.dart';
 
+import 'profiles/profile_bootstrap.dart';
 import 'profiles/profile_preferences.dart';
+import 'profiles/profile_runtime.dart';
 import 'stremio_service.dart';
 
 /// Service for running app migrations on fresh install or update.
@@ -58,12 +59,12 @@ class AppMigrationService {
     try {
       final prefs = await ProfilePreferences.instance();
 
-      // Essential addons are seeded independently of the version gate: a
-      // user whose first launch was offline must still get Cinemeta once
-      // they're back online, even though the version hasn't changed. The
-      // per-addon "seeded" flag (set only once the addon is confirmed
-      // present) stops us from ever re-adding one the user removed.
-      await _ensureEssentialAddons(prefs);
+      // Essential addons belong to the app-created Admin baseline. Secondary
+      // and restored profiles must contain only addons explicitly installed
+      // or shared with them.
+      if (shouldSeedEssentialAddons()) {
+        await _ensureEssentialAddons(prefs);
+      }
 
       // Never a bare fromPlatform() here: this call sits AFTER the essential
       // addon seeding but BEFORE every version-gated migration, so a platform
@@ -131,6 +132,16 @@ class AppMigrationService {
   /// every launch via [_ensureEssentialAddons] until it succeeds once.
   static Future<void> _runAllMigrations({required bool isFreshInstall}) async {
     // No version-gated migrations at present.
+  }
+
+  @visibleForTesting
+  static bool shouldSeedEssentialAddons() {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return true;
+    }
+    final profileId = ProfileRuntime.capture().profileId;
+    return profileId == ProfileBootstrap.migratedAdminId ||
+        profileId == ProfileBootstrap.freshAdminId;
   }
 
   /// Seed the essential addons that the app needs to function. Runs on every

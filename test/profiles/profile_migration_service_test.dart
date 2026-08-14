@@ -128,11 +128,16 @@ void main() {
       final admin = await migration.migrate();
 
       expect(admin.id, ProfileMigrationService.adminProfileId);
+      expect(admin.setupComplete, isTrue);
       expect(await registry.isMigrationCommitted(), isTrue);
       expect((await registry.activeProfile())?.id, admin.id);
       final raw = await SharedPreferences.getInstance();
       expect(raw.getString('real_debrid_api_key'), 'rd-sentinel');
       expect(raw.getString('p.${admin.id}.g.1.theme_mode'), 'dark');
+      expect(
+        raw.containsKey('p.${admin.id}.g.1.initial_setup_complete_v1'),
+        isFalse,
+      );
       expect(raw.containsKey('p.${admin.id}.g.1.real_debrid_api_key'), isFalse);
       expect(
         await registry.getBoundResourceId(admin.id, 'provider.realDebrid'),

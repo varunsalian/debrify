@@ -26,6 +26,7 @@ import '../services/profiles/legacy_backup_adapter.dart';
 import '../services/profiles/portable_profile_package.dart';
 import '../services/profiles/profile_app_lifecycle_participant.dart';
 import '../services/profiles/profile_lifecycle.dart';
+import '../services/profiles/profile_lock_controller.dart';
 import '../services/profiles/profile_authorization.dart';
 import '../services/profiles/profile_bootstrap.dart';
 import '../services/profiles/profile_package_service.dart';
@@ -277,6 +278,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSummaries() async {
+    final startingScope = ProfileRuntime.isProfileCommitted
+        ? ProfileRuntime.capture()
+        : null;
+    try {
+      await _loadSummariesForCurrentProfile();
+    } on ResourceAuthorizationException {
+      // ProfileGate replaces this subtree before switching authority. Reads
+      // revoked while this disposed settings page winds down are expected.
+      if (!mounted ||
+          ProfileLockController.instance.lockedProfileId.value != null ||
+          (startingScope != null &&
+              ProfileRuntime.scope.value != startingScope)) {
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _loadSummariesForCurrentProfile() async {
     // Phase 1: Load cached/local state instantly (no network)
     final results = await Future.wait([
       StorageService.hasRealDebridCredential(),

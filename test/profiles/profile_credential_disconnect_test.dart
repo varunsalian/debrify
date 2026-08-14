@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/services/alldebrid_account_service.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
@@ -19,6 +21,7 @@ void main() {
   late Directory temporaryDirectory;
   late ProfileRegistry registry;
   late ConnectionResourceService resources;
+  late MemoryDeviceSecretCipher cipher;
   late String adminId;
   late String memberId;
 
@@ -47,7 +50,7 @@ void main() {
       activeProfileId: adminId,
       migratedLegacyInstall: false,
     );
-    final cipher = MemoryDeviceSecretCipher(List<int>.generate(32, (i) => i));
+    cipher = MemoryDeviceSecretCipher(List<int>.generate(32, (i) => i));
     await cipher.initialize();
     DeviceKeyProvider.debugInstallCipher(cipher);
     ProfileBootstrap.debugInstallRegistry(registry);
@@ -56,6 +59,7 @@ void main() {
       ProfileScope(profileId: adminId, dataGeneration: 1, sessionEpoch: 1),
     );
     resources = ConnectionResourceService(registry: registry, cipher: cipher);
+    AllDebridAccountService.clearUserInfo();
   });
 
   tearDown(() async {
@@ -158,6 +162,43 @@ void main() {
     );
   });
 
+  test(
+    'AllDebrid refresh treats a switch-to-Admin revocation as cancellation',
+    () async {
+      final resource = await resources.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.allDebrid,
+        label: 'Shared AllDebrid',
+        publicConfig: const <String, dynamic>{},
+        secretConfig: const <String, dynamic>{'apiKey': 'ad-secret'},
+        bindingSlot: 'provider.allDebrid',
+      );
+      await resources.grant(
+        actor: await ProfileAuthorizationContext.capture(registry),
+        targetProfileId: memberId,
+        resourceId: resource.id,
+        permissions: const <ResourcePermission>{ResourcePermission.use},
+      );
+      await registry.setActiveProfile(memberId);
+      ProfileRuntime.publish(
+        ProfileScope(profileId: memberId, dataGeneration: 1, sessionEpoch: 2),
+      );
+
+      final blockingCipher = _BlockingOpenCipher(cipher);
+      DeviceKeyProvider.debugInstallCipher(blockingCipher);
+      final refresh = AllDebridAccountService.refreshUserInfo();
+      await blockingCipher.started.future;
+
+      await registry.setActiveProfile(adminId);
+      ProfileRuntime.publish(
+        ProfileScope(profileId: adminId, dataGeneration: 1, sessionEpoch: 3),
+      );
+      blockingCipher.release();
+
+      expect(await refresh, isFalse);
+    },
+  );
+
   test('shared owner logout fails before deleting or revoking', () async {
     final resource = await createTrakt();
     await resources.grant(
@@ -188,4 +229,35 @@ void main() {
       );
     },
   );
+}
+
+class _BlockingOpenCipher implements DeviceSecretCipher {
+  final DeviceSecretCipher delegate;
+  final Completer<void> started = Completer<void>();
+  final Completer<void> _released = Completer<void>();
+
+  _BlockingOpenCipher(this.delegate);
+
+  @override
+  Future<void> initialize() => delegate.initialize();
+
+  @override
+  Future<List<int>> open(
+    String envelope, {
+    required List<int> associatedData,
+  }) async {
+    if (!started.isCompleted) started.complete();
+    await _released.future;
+    return delegate.open(envelope, associatedData: associatedData);
+  }
+
+  @override
+  Future<String> seal(
+    List<int> plaintext, {
+    required List<int> associatedData,
+  }) => delegate.seal(plaintext, associatedData: associatedData);
+
+  void release() {
+    if (!_released.isCompleted) _released.complete();
+  }
 }

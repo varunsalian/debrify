@@ -121,6 +121,7 @@ class ProfileBootstrap {
         }
         await opened.completeInterruptedRestoreRecovery(recovery);
       }
+      await opened.repairUnambiguousSingletonBindings();
       final retiredCutoff = DateTime.now()
           .subtract(const Duration(days: 7))
           .millisecondsSinceEpoch;
@@ -239,7 +240,7 @@ class ProfileBootstrap {
       return;
     }
 
-    await _createFreshAdmin(registry, legacy);
+    await _createFreshAdmin(registry);
   }
 
   static Future<bool> _hasLegacyFileAuthority() async {
@@ -287,10 +288,7 @@ class ProfileBootstrap {
     return value;
   }
 
-  static Future<void> _createFreshAdmin(
-    ProfileRegistry registry,
-    SharedPreferences legacy,
-  ) async {
+  static Future<void> _createFreshAdmin(ProfileRegistry registry) async {
     var profile = await registry.getProfile(freshAdminId);
     profile ??= await registry.createProfile(
       id: freshAdminId,
@@ -298,11 +296,6 @@ class ProfileBootstrap {
       role: UserProfileRole.admin,
       setupComplete: false,
       lifecycle: UserProfileLifecycle.staging,
-    );
-    final device = await DevicePreferences.instance();
-    await device.setBool(
-      'app_onboarding_complete_v1',
-      legacy.getBool('initial_setup_complete_v1') ?? false,
     );
     await registry.commitBootstrap(
       activeProfileId: profile.id,
@@ -407,7 +400,6 @@ class ProfileBootstrap {
         cipher: DeviceKeyProvider.cipher,
       ).migrate();
     } else {
-      final legacy = await SharedPreferences.getInstance();
       var created = await opened.getProfile(freshAdminId);
       created ??= await opened.createProfile(
         id: freshAdminId,
@@ -415,11 +407,6 @@ class ProfileBootstrap {
         role: UserProfileRole.admin,
         setupComplete: false,
         lifecycle: UserProfileLifecycle.staging,
-      );
-      final device = await DevicePreferences.instance();
-      await device.setBool(
-        'app_onboarding_complete_v1',
-        legacy.getBool('initial_setup_complete_v1') ?? false,
       );
       await opened.commitBootstrap(
         activeProfileId: created.id,

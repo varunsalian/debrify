@@ -48,7 +48,18 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
     if (_busy || _digits.length < 4) return;
     final pin = _digits.join();
     setState(() => _busy = true);
-    final result = await widget.onSubmit(pin);
+    late final ProfilePinVerification result;
+    try {
+      result = await widget.onSubmit(pin);
+    } catch (_) {
+      if (!mounted) return;
+      _digits.clear();
+      setState(() {
+        _busy = false;
+        _error = 'Could not unlock profile. Try again.';
+      });
+      return;
+    }
     if (!mounted) return;
     _digits.clear();
     setState(() {

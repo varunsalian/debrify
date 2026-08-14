@@ -39,7 +39,9 @@ import 'services/android_native_downloader.dart';
 import 'services/discover_prefs.dart';
 import 'services/iptv_catalog_db.dart';
 import 'services/profiles/profile_bootstrap.dart';
+import 'services/profiles/connection_resource_service.dart';
 import 'services/profiles/profile_device_reset_service.dart';
+import 'services/profiles/profile_lock_controller.dart';
 import 'services/profiles/profile_runtime.dart';
 import 'services/profiles/privacy_log.dart';
 import 'services/profiles/desktop_single_instance.dart';
@@ -2398,6 +2400,25 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   }
 
   Future<void> _loadIntegrationState() async {
+    final startingScope = ProfileRuntime.isProfileCommitted
+        ? ProfileRuntime.capture()
+        : null;
+    try {
+      await _loadIntegrationStateForCurrentProfile();
+    } on ResourceAuthorizationException {
+      // Opening the picker unmounts this shell and revokes its in-flight
+      // credential reads. That is expected cancellation, not an app error.
+      if (!mounted ||
+          ProfileLockController.instance.lockedProfileId.value != null ||
+          (startingScope != null &&
+              ProfileRuntime.scope.value != startingScope)) {
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _loadIntegrationStateForCurrentProfile() async {
     final rdKey = await StorageService.getApiKey();
     final torboxKey = await StorageService.getTorboxApiKey();
     final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();

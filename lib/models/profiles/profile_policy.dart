@@ -36,6 +36,15 @@ class ProfilePolicy {
     required this.enabled,
   });
 
+  /// Every feature the role ceiling permits. The profile editor uses this
+  /// while its fine-grained feature controls are hidden, so saving cannot
+  /// preserve an invisible stale restriction.
+  factory ProfilePolicy.allAllowedFor(UserProfileRole role) => ProfilePolicy(
+    enabled: ProfileFeature.values
+        .where((feature) => _roleCeilingAllows(role, feature))
+        .toSet(),
+  );
+
   factory ProfilePolicy.defaultsFor(UserProfileRole role) {
     final features = ProfileFeature.values.toSet();
     switch (role) {

@@ -974,6 +974,42 @@ class ProfileRegistry {
     return (await getProfile(id))!;
   }
 
+  /// Updates onboarding readiness for the active profile itself.
+  ///
+  /// This is deliberately separate from [completeProfileSetup], which is an
+  /// Admin operation that publishes a newly-created staging profile. Once a
+  /// profile is active, finishing or skipping onboarding is a local session
+  /// action and must not require the profile to be an Admin.
+  Future<UserProfile> setActiveProfileSetupComplete({
+    required String profileId,
+    required bool setupComplete,
+    required int actingAuthorizationRevision,
+    required int actingSessionEpoch,
+  }) async {
+    var changed = 0;
+    await _db.transaction((txn) async {
+      await _assertActiveSessionActor(
+        txn,
+        profileId: profileId,
+        authorizationRevision: actingAuthorizationRevision,
+        sessionEpoch: actingSessionEpoch,
+      );
+      changed = await txn.update(
+        'user_profiles',
+        <String, Object?>{
+          'profile_setup_complete': setupComplete ? 1 : 0,
+          'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+        },
+        where:
+            "id = ? AND disabled_at_ms IS NULL AND lifecycle_state = 'active'",
+        whereArgs: <Object>[profileId],
+      );
+    });
+    if (changed != 1) throw StateError('Active profile is unavailable');
+    await checkpointTvOsRecovery();
+    return (await getProfile(profileId))!;
+  }
+
   Future<void> disableProfile(
     String id, {
     String? actingProfileId,
@@ -1857,11 +1893,22 @@ class ProfileRegistry {
     required int permissions,
     required String grantedByProfileId,
     required Map<String, dynamic> origin,
+    String? bindingSlot,
     String? actingProfileId,
     int? actingAuthorizationRevision,
     int? expectedResourceAuthorizationRevision,
     int? expectedTargetAuthorizationRevision,
   }) async {
+    final normalizedBindingSlot = bindingSlot?.trim();
+    if (bindingSlot != null && normalizedBindingSlot!.isEmpty) {
+      throw ArgumentError.value(bindingSlot, 'bindingSlot');
+    }
+    if (normalizedBindingSlot != null &&
+        permissions & ResourcePermission.use.bit == 0) {
+      throw ArgumentError(
+        'A singleton credential binding requires use permission',
+      );
+    }
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db.transaction((txn) async {
@@ -1900,6 +1947,24 @@ class ProfileRegistry {
               expectedTargetAuthorizationRevision) {
         throw StateError('Target profile authorization changed');
       }
+      if (normalizedBindingSlot != null) {
+        final resourceRows = await txn.query(
+          'connection_resources',
+          columns: const <String>['type'],
+          where: 'id = ? AND disabled_at_ms IS NULL',
+          whereArgs: <Object>[resourceId],
+          limit: 1,
+        );
+        if (resourceRows.isEmpty) {
+          throw StateError('Connection is unavailable');
+        }
+        final type = ConnectionResourceType.values.byName(
+          resourceRows.single['type']! as String,
+        );
+        if (type.singletonCredentialBindingSlot != normalizedBindingSlot) {
+          throw StateError('Connection type does not fit binding slot');
+        }
+      }
       final targetRole = UserProfileRole.values.byName(
         targetRows.single['role']! as String,
       );
@@ -1928,6 +1993,19 @@ class ProfileRegistry {
           now,
         ],
       );
+      if (normalizedBindingSlot != null) {
+        await txn.insert(
+          'profile_connection_bindings',
+          <String, Object?>{
+            'profile_id': profileId,
+            'slot': normalizedBindingSlot,
+            'resource_id': resourceId,
+            'created_at_ms': now,
+            'updated_at_ms': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
       final revision = await _profileAuthorizationRevision(txn, profileId);
       await txn.update(
         'user_profiles',
@@ -1940,6 +2018,108 @@ class ProfileRegistry {
       );
     });
     await checkpointTvOsRecovery();
+  }
+
+  /// Repairs grants written by profile builds that shared singleton
+  /// credentials without writing the compatibility binding. A slot is only
+  /// repaired when the profile already has use permission and exactly one
+  /// enabled candidate, so this never grants access or guesses between
+  /// multiple accounts.
+  Future<int> repairUnambiguousSingletonBindings() async {
+    final candidates = await _db.rawQuery(
+      '''SELECT g.profile_id, g.resource_id, r.type
+         FROM profile_resource_grants g
+         INNER JOIN connection_resources r ON r.id = g.resource_id
+         INNER JOIN user_profiles p ON p.id = g.profile_id
+         WHERE r.disabled_at_ms IS NULL
+           AND p.disabled_at_ms IS NULL
+           AND p.lifecycle_state = ?
+           AND (g.permissions & ?) = ?
+         ORDER BY g.profile_id, r.type, g.resource_id''',
+      <Object>[
+        UserProfileLifecycle.active.name,
+        ResourcePermission.use.bit,
+        ResourcePermission.use.bit,
+      ],
+    );
+    final byProfileAndSlot = <String, List<String>>{};
+    final profileAndSlot = <String, ({String profileId, String slot})>{};
+    for (final row in candidates) {
+      final type = ConnectionResourceType.values.byName(row['type']! as String);
+      final slot = type.singletonCredentialBindingSlot;
+      if (slot == null) continue;
+      final profileId = row['profile_id']! as String;
+      final key = '$profileId\u0000$slot';
+      byProfileAndSlot
+          .putIfAbsent(key, () => <String>[])
+          .add(row['resource_id']! as String);
+      profileAndSlot[key] = (profileId: profileId, slot: slot);
+    }
+    final repairs = byProfileAndSlot.entries
+        .where((entry) => entry.value.length == 1)
+        .toList(growable: false);
+    if (repairs.isEmpty) return 0;
+
+    await authorityWillChangeCallback?.call();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final repaired = await _db.transaction((txn) async {
+      var count = 0;
+      for (final repair in repairs) {
+        final target = profileAndSlot[repair.key]!;
+        final existing = await txn.query(
+          'profile_connection_bindings',
+          columns: const <String>['resource_id'],
+          where: 'profile_id = ? AND slot = ?',
+          whereArgs: <Object>[target.profileId, target.slot],
+          limit: 1,
+        );
+        if (existing.isNotEmpty) continue;
+        final stillEligible = await txn.rawQuery(
+          '''SELECT r.id
+             FROM profile_resource_grants g
+             INNER JOIN connection_resources r ON r.id = g.resource_id
+             INNER JOIN user_profiles p ON p.id = g.profile_id
+             WHERE g.profile_id = ? AND r.type = ?
+               AND r.disabled_at_ms IS NULL
+               AND p.disabled_at_ms IS NULL
+               AND p.lifecycle_state = ?
+               AND (g.permissions & ?) = ?
+             ORDER BY r.id''',
+          <Object>[
+            target.profileId,
+            ConnectionResourceType.values
+                .firstWhere(
+                  (type) => type.singletonCredentialBindingSlot == target.slot,
+                )
+                .name,
+            UserProfileLifecycle.active.name,
+            ResourcePermission.use.bit,
+            ResourcePermission.use.bit,
+          ],
+        );
+        if (stillEligible.length != 1 ||
+            stillEligible.single['id'] != repair.value.single) {
+          continue;
+        }
+        await txn.insert('profile_connection_bindings', <String, Object?>{
+          'profile_id': target.profileId,
+          'slot': target.slot,
+          'resource_id': repair.value.single,
+          'created_at_ms': now,
+          'updated_at_ms': now,
+        });
+        count++;
+      }
+      return count;
+    });
+    if (repaired != 0) {
+      await checkpointTvOsRecovery();
+    } else {
+      // Balance the pre-mutation fail-closed callback when a concurrent
+      // change made every preflight repair unnecessary or ambiguous.
+      await authorityChangedCallback?.call();
+    }
+    return repaired;
   }
 
   Future<void> revokeGrant(
@@ -2939,6 +3119,7 @@ class ProfileRegistry {
     required int baseGeneration,
     required int stagedGeneration,
     required String operationId,
+    bool? profileSetupComplete,
   }) async {
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -3031,6 +3212,8 @@ class ProfileRegistry {
           'visible_data_generation': stagedGeneration,
           'authorization_revision':
               (await _profileAuthorizationRevision(txn, profileId)) + 1,
+          if (profileSetupComplete != null)
+            'profile_setup_complete': profileSetupComplete ? 1 : 0,
           'updated_at_ms': now,
         },
         where: 'id = ?',
@@ -3376,6 +3559,52 @@ class ProfileRegistry {
       difference |= first[index] ^ second[index];
     }
     return difference == 0;
+  }
+
+  /// Transaction-local proof that a profile is still the unlocked active
+  /// session. Onboarding completion is not a feature capability, so Members
+  /// and Children may finish their own explicitly requested setup without
+  /// receiving an unrelated management permission.
+  static Future<void> _assertActiveSessionActor(
+    DatabaseExecutor db, {
+    required String profileId,
+    required int authorizationRevision,
+    required int sessionEpoch,
+  }) async {
+    final runtimeScope = ProfileRuntime.scope.value;
+    if (!ProfileRuntime.isInitialized ||
+        !ProfileRuntime.isProfileCommitted ||
+        ProfileLockController.instance.lockedProfileId.value != null ||
+        runtimeScope?.profileId != profileId ||
+        runtimeScope?.sessionEpoch != sessionEpoch) {
+      throw StateError('Active profile session has ended');
+    }
+    final active = await db.query(
+      'device_state',
+      columns: const <String>['active_profile_id'],
+      where: 'singleton_id = 1',
+      limit: 1,
+    );
+    final profiles = await db.query(
+      'user_profiles',
+      columns: const <String>['authorization_revision', 'lifecycle_state'],
+      where: 'id = ? AND disabled_at_ms IS NULL',
+      whereArgs: <Object>[profileId],
+      limit: 1,
+    );
+    if (active.isEmpty ||
+        active.single['active_profile_id'] != profileId ||
+        profiles.isEmpty ||
+        profiles.single['authorization_revision'] != authorizationRevision ||
+        profiles.single['lifecycle_state'] !=
+            UserProfileLifecycle.active.name) {
+      throw StateError('Active profile authorization changed');
+    }
+    if (ProfileLockController.instance.lockedProfileId.value != null ||
+        ProfileRuntime.scope.value?.profileId != profileId ||
+        ProfileRuntime.scope.value?.sessionEpoch != sessionEpoch) {
+      throw StateError('Active profile session has ended');
+    }
   }
 
   /// Conditional authorization checked inside the same SQLite transaction as

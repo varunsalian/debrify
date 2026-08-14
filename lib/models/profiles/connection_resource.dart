@@ -17,6 +17,30 @@ enum ConnectionResourceType {
   reddit,
 }
 
+extension ConnectionResourceTypeBinding on ConnectionResourceType {
+  /// The compatibility slot used by scalar credential APIs. Collection
+  /// resources intentionally have no singleton slot because a profile may
+  /// use several of them at once.
+  String? get singletonCredentialBindingSlot => switch (this) {
+    ConnectionResourceType.realDebrid => 'provider.realDebrid',
+    ConnectionResourceType.torbox => 'provider.torbox',
+    ConnectionResourceType.premiumize => 'provider.premiumize',
+    ConnectionResourceType.pikpak => 'provider.pikpak',
+    ConnectionResourceType.allDebrid => 'provider.allDebrid',
+    ConnectionResourceType.trakt => 'tracker.trakt',
+    ConnectionResourceType.simkl => 'tracker.simkl',
+    ConnectionResourceType.mdblist => 'tracker.mdblist',
+    ConnectionResourceType.reddit => 'tracker.reddit',
+    ConnectionResourceType.webDav ||
+    ConnectionResourceType.iptvM3u ||
+    ConnectionResourceType.iptvXtream ||
+    ConnectionResourceType.xmltv ||
+    ConnectionResourceType.stremioAddon ||
+    ConnectionResourceType.jackett ||
+    ConnectionResourceType.prowlarr => null,
+  };
+}
+
 enum ResourcePermission {
   use(1 << 0),
   download(1 << 1),

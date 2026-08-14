@@ -443,6 +443,7 @@ class ConnectionResourceService {
       permissions: mask,
       grantedByProfileId: actor.profileId,
       origin: <String, dynamic>{'origin': 'profileShare'},
+      bindingSlot: resource.type.singletonCredentialBindingSlot,
       actingProfileId: actor.profileId,
       actingAuthorizationRevision: actor.authorizationRevision,
       expectedResourceAuthorizationRevision: resource.authorizationRevision,

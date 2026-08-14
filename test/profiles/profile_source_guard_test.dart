@@ -8,7 +8,7 @@ void main() {
     'direct SharedPreferences opens stay inside reviewed adapters/stores',
     () {
       const reviewedCallCounts = <String, int>{
-        'lib/services/profiles/profile_bootstrap.dart': 2,
+        'lib/services/profiles/profile_bootstrap.dart': 1,
         'lib/services/profiles/profile_preferences.dart': 3,
         'lib/services/profiles/profile_migration_service.dart': 1,
         'lib/services/profiles/profile_package_service.dart': 1,
@@ -71,6 +71,26 @@ void main() {
       }
     }
     expect(violations, isEmpty);
+  });
+
+  test('profile editor keeps feature controls hidden behind one switch', () {
+    final source = File(
+      'lib/screens/profiles/edit_profile_screen.dart',
+    ).readAsStringSync();
+    expect(
+      source,
+      contains('static const bool _showFeaturePolicyControls = false;'),
+    );
+    expect(
+      'if (_showFeaturePolicyControls) ...['.allMatches(source).length,
+      1,
+      reason: 'The existing feature controls must stay present but hidden.',
+    );
+    expect(
+      'ProfilePolicy.allAllowedFor(_role)'.allMatches(source).length,
+      greaterThanOrEqualTo(2),
+      reason: 'Both initialization and save must select the full role policy.',
+    );
   });
 
   test('profile, download, deep-link, and remote logs stay redacted', () {

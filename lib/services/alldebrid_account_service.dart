@@ -4,6 +4,7 @@ import '../services/storage_service.dart';
 import '../services/alldebrid_service.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_async_authorization.dart';
+import 'profiles/connection_resource_service.dart';
 
 class AllDebridAccountService {
   static AllDebridUser? _currentUser;
@@ -63,30 +64,39 @@ class AllDebridAccountService {
       debugPrint('AllDebridAccountService: Validation failed.');
       return false;
     } finally {
-      _isValidating = false;
+      if (_validationToken == token) _isValidating = false;
     }
   }
 
   static Future<bool> isApiKeyValid() async {
-    final apiKey = await StorageService.getAllDebridApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
+    try {
+      final apiKey = await StorageService.getAllDebridApiKey();
+      if (apiKey == null || apiKey.isEmpty) return false;
+      return validateAndGetUserInfo(apiKey, persist: false);
+    } on ResourceAuthorizationException {
+      // A profile switch deliberately revokes a credential read in flight.
       return false;
     }
-    return validateAndGetUserInfo(apiKey, persist: false);
   }
 
   static void clearUserInfo() {
     debugPrint('AllDebridAccountService: Clearing cached user info.');
     _setCurrentUser(null);
     _validationToken++;
+    _isValidating = false;
   }
 
   static Future<bool> refreshUserInfo() async {
-    final apiKey = await StorageService.getAllDebridApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      _setCurrentUser(null);
+    try {
+      final apiKey = await StorageService.getAllDebridApiKey();
+      if (apiKey == null || apiKey.isEmpty) {
+        _setCurrentUser(null);
+        return false;
+      }
+      return validateAndGetUserInfo(apiKey, persist: false);
+    } on ResourceAuthorizationException {
+      // Do not clear the newly active profile's process-global user state.
       return false;
     }
-    return validateAndGetUserInfo(apiKey, persist: false);
   }
 }

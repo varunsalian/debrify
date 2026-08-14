@@ -9,6 +9,7 @@ import 'profiles/profile_preferences.dart';
 import 'profiles/profile_credential_facade.dart';
 import 'profiles/profile_collection_resource_facade.dart';
 import 'profiles/connection_resource_service.dart';
+import 'profiles/profile_authorization.dart';
 import 'profiles/profile_bootstrap.dart';
 import 'profiles/profile_runtime.dart';
 import '../models/profiles/connection_resource.dart';
@@ -1878,12 +1879,76 @@ class StorageService {
 
   static Future<bool> isInitialSetupComplete() async {
     final prefs = await ProfilePreferences.instance();
-    return prefs.getBool(_onboardingCompleteKey) ?? false;
+    if (!ProfileRuntime.isProfileCommitted) {
+      return prefs.getBool(_onboardingCompleteKey) ?? false;
+    }
+
+    final scope = ProfileRuntime.capture();
+    final profile = await ProfileBootstrap.registry.getProfile(scope.profileId);
+    if (profile == null ||
+        !profile.isEnabled ||
+        profile.visibleDataGeneration != scope.dataGeneration) {
+      throw StateError('Active profile onboarding state is unavailable');
+    }
+
+    // Builds that first introduced profiles wrote onboarding state to two
+    // places. Honor an explicitly stored value once (notably `false` from a
+    // profile reset), reconcile it into the registry, then remove the
+    // compatibility value. If the key is absent, the registry was already
+    // correct for migrated Admins and Admin-created profiles.
+    if (!prefs.containsKey(_onboardingCompleteKey)) {
+      return profile.setupComplete;
+    }
+    final compatibilityValue = prefs.getBool(_onboardingCompleteKey);
+    if (compatibilityValue == null) {
+      throw const FormatException('Invalid onboarding completion state');
+    }
+    if (compatibilityValue != profile.setupComplete) {
+      final authorization = await ProfileAuthorizationContext.capture(
+        ProfileBootstrap.registry,
+      );
+      if (ProfileRuntime.capture() != scope ||
+          authorization.profileId != scope.profileId) {
+        throw StateError('Active profile onboarding session has changed');
+      }
+      await ProfileBootstrap.registry.setActiveProfileSetupComplete(
+        profileId: authorization.profileId,
+        setupComplete: compatibilityValue,
+        actingAuthorizationRevision: authorization.authorizationRevision,
+        actingSessionEpoch: authorization.sessionEpoch,
+      );
+    }
+    if (!await prefs.remove(_onboardingCompleteKey)) {
+      throw StateError('Could not retire compatibility onboarding state');
+    }
+    return compatibilityValue;
   }
 
   static Future<void> setInitialSetupComplete(bool value) async {
     final prefs = await ProfilePreferences.instance();
-    await prefs.setBool(_onboardingCompleteKey, value);
+    if (!ProfileRuntime.isProfileCommitted) {
+      await prefs.setBool(_onboardingCompleteKey, value);
+      return;
+    }
+
+    final authorization = await ProfileAuthorizationContext.capture(
+      ProfileBootstrap.registry,
+    );
+    final profile = await authorization.validate(ProfileBootstrap.registry);
+    // Remove the retired compatibility value before the canonical write. If
+    // authority changes, the stale scoped wrapper fails and no other profile
+    // can be mutated. A later retry safely starts from the registry value.
+    if (prefs.containsKey(_onboardingCompleteKey) &&
+        !await prefs.remove(_onboardingCompleteKey)) {
+      throw StateError('Could not retire compatibility onboarding state');
+    }
+    if (profile.setupComplete == value) return;
+    await ProfileBootstrap.registry.setActiveProfileSetupComplete(
+      profileId: authorization.profileId,
+      setupComplete: value,
+      actingAuthorizationRevision: authorization.authorizationRevision,
+      actingSessionEpoch: authorization.sessionEpoch,
+    );
   }
 
   // File Selection methods

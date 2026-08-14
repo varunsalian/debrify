@@ -98,11 +98,6 @@ class ProfileMigrationService {
         await _copyPreference(legacy, destination, key);
         copiedPreferences++;
       }
-      final device = await DevicePreferences.instance();
-      await device.setBool(
-        'app_onboarding_complete_v1',
-        legacy.getBool('initial_setup_complete_v1') ?? false,
-      );
       await _journal(ProfileMigrationStage.preferencesCopied, <String, dynamic>{
         'copied': copiedPreferences,
       });

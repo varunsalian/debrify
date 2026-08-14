@@ -22,6 +22,33 @@ void main() {
     );
   });
 
+  test('full editor policy enables every role-allowed feature', () {
+    final unconstrained = ProfilePolicy(enabled: ProfileFeature.values.toSet());
+    for (final role in UserProfileRole.values) {
+      final full = ProfilePolicy.allAllowedFor(role);
+      for (final feature in ProfileFeature.values) {
+        expect(
+          full.enabled.contains(feature),
+          unconstrained.allows(role, feature),
+          reason: '${role.name}.${feature.name}',
+        );
+      }
+    }
+
+    expect(
+      ProfilePolicy.allAllowedFor(
+        UserProfileRole.child,
+      ).enabled.contains(ProfileFeature.downloads),
+      isTrue,
+    );
+    expect(
+      ProfilePolicy.allAllowedFor(
+        UserProfileRole.child,
+      ).enabled.contains(ProfileFeature.allowAdultContent),
+      isFalse,
+    );
+  });
+
   test('unknown policy versions and malformed JSON fail closed', () {
     final unknown = ProfilePolicy.decode(
       '{"version":99,"enabled":["cloud"]}',

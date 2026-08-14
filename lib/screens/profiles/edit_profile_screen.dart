@@ -7,6 +7,7 @@ import '../../models/profiles/connection_resource.dart';
 import '../../services/profiles/connection_resource_service.dart';
 import '../../services/profiles/device_key_provider.dart';
 import '../../services/profiles/profile_authorization.dart';
+import '../../services/profiles/profile_engine_assignment_service.dart';
 import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_registry.dart';
 import '../../services/profiles/profile_creation_service.dart';
@@ -31,6 +32,10 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
+  // Keep the policy editor available for its later redesign. Until then the
+  // create/edit flows save the selected role's complete allowed feature set.
+  static const bool _showFeaturePolicyControls = false;
+
   late final TextEditingController _name;
   final TextEditingController _pin = TextEditingController();
   late UserProfileRole _role;
@@ -41,9 +46,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late int _inactivityMinutes;
   late String _avatarKey;
   List<ConnectionResource>? _resources;
+  List<ProfileEngineAssignment>? _engines;
   final Set<String> _selectedResources = <String>{};
+  final Set<String> _selectedEngines = <String>{};
   final Map<String, Set<ResourcePermission>> _resourcePermissions =
       <String, Set<ResourcePermission>>{};
+  String? _setupLoadError;
   late ProfileAuthorizationContext _authorization = widget.authorization;
 
   @override
@@ -53,35 +61,83 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _name = TextEditingController(text: profile?.name ?? '');
     _role = profile?.role ?? UserProfileRole.member;
     _features = Set<ProfileFeature>.from(
-      profile?.policy.enabled ?? ProfilePolicy.defaultsFor(_role).enabled,
+      _showFeaturePolicyControls
+          ? profile?.policy.enabled ?? ProfilePolicy.defaultsFor(_role).enabled
+          : ProfilePolicy.allAllowedFor(_role).enabled,
     );
     _lockOnResume = profile?.lockOnResume ?? false;
     _inactivityMinutes = profile?.inactivityTimeoutMinutes ?? 0;
     _avatarKey =
         profile?.avatarKey ??
         (profile?.role == UserProfileRole.child ? 'child' : 'person');
-    _loadResources();
+    _loadSetupOptions();
+  }
+
+  Future<void> _loadSetupOptions() async {
+    try {
+      final actor = await _authorization.validate(widget.registry);
+      final resources = await widget.registry.listGrantedResources(actor.id);
+      final engines = await ProfileEngineAssignmentService(widget.registry)
+          .listForTarget(
+            actor: _authorization,
+            targetProfileId: widget.profile?.id,
+          );
+      final selectedResources = <String>{};
+      final resourcePermissions = <String, Set<ResourcePermission>>{};
+      final targetId = widget.profile?.id;
+      if (targetId != null) {
+        for (final resource in resources) {
+          final grant = await widget.registry.getGrant(targetId, resource.id);
+          if (grant != null) {
+            selectedResources.add(resource.id);
+            resourcePermissions[resource.id] = {
+              for (final permission in ResourcePermission.values)
+                if (grant.allows(permission)) permission,
+            }..add(ResourcePermission.use);
+          }
+        }
+      }
+      await _validateManagingAdmin(_authorization);
+      if (!mounted) return;
+      setState(() {
+        _resources = resources;
+        _engines = engines;
+        _selectedResources
+          ..clear()
+          ..addAll(selectedResources);
+        _resourcePermissions
+          ..clear()
+          ..addAll(resourcePermissions);
+        _selectedEngines
+          ..clear()
+          ..addAll(
+            widget.profile == null
+                ? engines.map((engine) => engine.id)
+                : engines
+                      .where((engine) => engine.assignedToTarget)
+                      .map((engine) => engine.id),
+          );
+        _setupLoadError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _setupLoadError = 'Profile options could not be loaded');
+    }
   }
 
   Future<void> _loadResources() async {
-    final actor = await _authorization.validate(widget.registry);
-    final resources = await widget.registry.listGrantedResources(actor.id);
-    final targetId = widget.profile?.id;
-    _selectedResources.clear();
-    _resourcePermissions.clear();
-    if (targetId != null) {
-      for (final resource in resources) {
-        final grant = await widget.registry.getGrant(targetId, resource.id);
-        if (grant != null) {
-          _selectedResources.add(resource.id);
-          _resourcePermissions[resource.id] = {
-            for (final permission in ResourcePermission.values)
-              if (grant.allows(permission)) permission,
-          }..add(ResourcePermission.use);
-        }
-      }
+    try {
+      final actor = await _authorization.validate(widget.registry);
+      final resources = await widget.registry.listGrantedResources(actor.id);
+      if (!mounted) return;
+      setState(() {
+        _resources = resources;
+        _setupLoadError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _setupLoadError = 'Connections could not be reloaded');
     }
-    if (mounted) setState(() => _resources = resources);
   }
 
   Future<void> _transferOwnership(ConnectionResource resource) async {
@@ -89,6 +145,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (target == null || target.id == resource.ownerProfileId) return;
     final operationActor = _authorization;
     await _validateManagingAdmin(operationActor);
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -150,13 +207,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() {
       _role = role;
       _features = Set<ProfileFeature>.from(
-        ProfilePolicy.defaultsFor(role).enabled,
+        (_showFeaturePolicyControls
+                ? ProfilePolicy.defaultsFor(role)
+                : ProfilePolicy.allAllowedFor(role))
+            .enabled,
       );
     });
   }
 
   Future<void> _save() async {
     if (_saving || _name.text.trim().isEmpty) return;
+    if (_resources == null || _engines == null || _setupLoadError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_setupLoadError ?? 'Profile options are still loading'),
+        ),
+      );
+      return;
+    }
     if (_pin.text.isNotEmpty && !RegExp(r'^\d{4,8}$').hasMatch(_pin.text)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('PIN must contain 4–8 digits')),
@@ -167,7 +235,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       var operationActor = _authorization;
       await _validateManagingAdmin(operationActor);
-      final policy = ProfilePolicy(enabled: _features);
+      final policy = _showFeaturePolicyControls
+          ? ProfilePolicy(enabled: _features)
+          : ProfilePolicy.allAllowedFor(_role);
+      if (!_showFeaturePolicyControls) {
+        _features = Set<ProfileFeature>.from(policy.enabled);
+      }
       final existing = widget.profile;
       late final String savedProfileId;
       if (existing == null) {
@@ -209,6 +282,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             _role,
             operationActor,
           );
+          await _applyEngineAssignments(staged.id, operationActor);
           // Visibility is the last step: a failed PIN/policy/grant write cannot
           // expose a partially configured profile in the picker.
           await widget.registry.completeProfileSetup(
@@ -256,6 +330,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           _role,
           operationActor,
         );
+        await _applyEngineAssignments(savedProfileId, operationActor);
       }
       _authorization = operationActor;
       _pin.clear();
@@ -292,8 +367,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         0,
         (mask, permission) => mask | permission.bit,
       );
+      final bindingSlot = resource.type.singletonCredentialBindingSlot;
+      final bindingMatches =
+          bindingSlot == null ||
+          await widget.registry.getBoundResourceId(
+                targetProfileId,
+                bindingSlot,
+              ) ==
+              resource.id;
       if (selected &&
-          (existing == null || existing.permissions != desiredMask)) {
+          (existing == null ||
+              existing.permissions != desiredMask ||
+              !bindingMatches)) {
         await service.grant(
           actor: operationActor,
           targetProfileId: targetProfileId,
@@ -318,6 +403,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
     return operationActor;
   }
+
+  Future<void> _applyEngineAssignments(
+    String targetProfileId,
+    ProfileAuthorizationContext operationActor,
+  ) => ProfileEngineAssignmentService(widget.registry).apply(
+    actor: operationActor,
+    targetProfileId: targetProfileId,
+    selectedEngineIds: Set<String>.unmodifiable(_selectedEngines),
+  );
 
   Set<ResourcePermission> _defaultResourcePermissions(UserProfileRole role) =>
       <ResourcePermission>{
@@ -504,24 +598,80 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             onChanged: (value) =>
                 setState(() => _inactivityMinutes = value ?? 0),
           ),
-          const SizedBox(height: 20),
-          Text('Features', style: Theme.of(context).textTheme.titleMedium),
-          for (final feature in editableFeatures)
-            CheckboxListTile(
-              value:
-                  _features.contains(feature) &&
-                  ProfilePolicy(enabled: _features).allows(_role, feature),
-              title: Text(_featureLabel(feature)),
-              onChanged: (enabled) {
-                setState(() {
-                  if (enabled == true) {
-                    _features.add(feature);
-                  } else {
-                    _features.remove(feature);
-                  }
-                });
-              },
+          if (_showFeaturePolicyControls) ...[
+            const SizedBox(height: 20),
+            Text('Features', style: Theme.of(context).textTheme.titleMedium),
+            for (final feature in editableFeatures)
+              CheckboxListTile(
+                value:
+                    _features.contains(feature) &&
+                    ProfilePolicy(enabled: _features).allows(_role, feature),
+                title: Text(_featureLabel(feature)),
+                onChanged: (enabled) {
+                  setState(() {
+                    if (enabled == true) {
+                      _features.add(feature);
+                    } else {
+                      _features.remove(feature);
+                    }
+                  });
+                },
+              ),
+          ],
+          if (_setupLoadError != null) ...[
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.error_outline_rounded),
+              title: Text(_setupLoadError!),
+              trailing: TextButton(
+                onPressed: _loadSetupOptions,
+                child: const Text('Retry'),
+              ),
             ),
+          ] else if (_engines == null) ...[
+            const SizedBox(height: 16),
+            const LinearProgressIndicator(),
+          ] else ...[
+            const SizedBox(height: 20),
+            Text(
+              'Torrent engines',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            Text(
+              widget.profile?.id == _authorization.profileId
+                  ? 'Manage engines for the active Admin from Torrent Engines.'
+                  : 'Choose which installed engine definitions are copied into this profile. Each profile keeps an independent copy and settings.',
+            ),
+            if (_engines!.isEmpty)
+              const ListTile(
+                leading: Icon(Icons.travel_explore_rounded),
+                title: Text('No torrent engines installed'),
+                subtitle: Text(
+                  'Install engines in the Admin profile before assigning them.',
+                ),
+              )
+            else
+              for (final engine in _engines!)
+                CheckboxListTile(
+                  value: _selectedEngines.contains(engine.id),
+                  title: Text(engine.displayName),
+                  subtitle: !engine.availableFromManager
+                      ? Text(
+                          'Installed only in ${widget.profile?.name ?? 'this profile'}',
+                        )
+                      : null,
+                  secondary: const Icon(Icons.travel_explore_rounded),
+                  onChanged: widget.profile?.id == _authorization.profileId
+                      ? null
+                      : (selected) => setState(() {
+                          if (selected == true) {
+                            _selectedEngines.add(engine.id);
+                          } else {
+                            _selectedEngines.remove(engine.id);
+                          }
+                        }),
+                ),
+          ],
           if (_resources?.isNotEmpty == true) ...[
             const SizedBox(height: 20),
             Text(
@@ -551,6 +701,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ? null
                     : (selected) => setState(() {
                         if (selected == true) {
+                          final singletonSlot =
+                              resource.type.singletonCredentialBindingSlot;
+                          if (singletonSlot != null) {
+                            for (final other in _resources!) {
+                              if (other.id != resource.id &&
+                                  other.type.singletonCredentialBindingSlot ==
+                                      singletonSlot) {
+                                _selectedResources.remove(other.id);
+                                _resourcePermissions.remove(other.id);
+                              }
+                            }
+                          }
                           _selectedResources.add(resource.id);
                           _resourcePermissions.putIfAbsent(
                             resource.id,

@@ -4,6 +4,7 @@ import '../services/storage_service.dart';
 import '../services/premiumize_service.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/profile_async_authorization.dart';
+import 'profiles/connection_resource_service.dart';
 
 class PremiumizeAccountService {
   static PremiumizeUser? _currentUser;
@@ -65,30 +66,37 @@ class PremiumizeAccountService {
       debugPrint('PremiumizeAccountService: Validation failed.');
       return false;
     } finally {
-      _isValidating = false;
+      if (_validationToken == token) _isValidating = false;
     }
   }
 
   static Future<bool> isApiKeyValid() async {
-    final apiKey = await StorageService.getPremiumizeApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
+    try {
+      final apiKey = await StorageService.getPremiumizeApiKey();
+      if (apiKey == null || apiKey.isEmpty) return false;
+      return validateAndGetUserInfo(apiKey, persist: false);
+    } on ResourceAuthorizationException {
       return false;
     }
-    return validateAndGetUserInfo(apiKey, persist: false);
   }
 
   static void clearUserInfo() {
     debugPrint('PremiumizeAccountService: Clearing cached user info.');
     _setCurrentUser(null);
     _validationToken++;
+    _isValidating = false;
   }
 
   static Future<bool> refreshUserInfo() async {
-    final apiKey = await StorageService.getPremiumizeApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      _setCurrentUser(null);
+    try {
+      final apiKey = await StorageService.getPremiumizeApiKey();
+      if (apiKey == null || apiKey.isEmpty) {
+        _setCurrentUser(null);
+        return false;
+      }
+      return validateAndGetUserInfo(apiKey, persist: false);
+    } on ResourceAuthorizationException {
       return false;
     }
-    return validateAndGetUserInfo(apiKey, persist: false);
   }
 }
