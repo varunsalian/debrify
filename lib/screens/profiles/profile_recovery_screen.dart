@@ -14,6 +14,7 @@ import '../../services/profiles/profile_device_reset_service.dart';
 import '../../services/profiles/profile_restore_coordinator.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../utils/platform_util.dart';
+import '../../widgets/tv_text_field.dart';
 
 /// Privacy-safe startup surface used when a one-way committed installation can
 /// no longer mount its registry. It deliberately initializes none of the
@@ -21,11 +22,13 @@ import '../../utils/platform_util.dart';
 class ProfileRecoveryScreen extends StatefulWidget {
   final Future<void> Function() onRecovered;
   final Future<void> Function() onResetComplete;
+  final bool forceTvSafeInput;
 
   const ProfileRecoveryScreen({
     super.key,
     required this.onRecovered,
     required this.onResetComplete,
+    this.forceTvSafeInput = false,
   });
 
   @override
@@ -49,10 +52,13 @@ class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
           children: [
             Text(message),
             const SizedBox(height: 16),
-            TextField(
+            TvTextField(
               controller: controller,
               obscureText: true,
               autofocus: true,
+              forceTvKeyboard: widget.forceTvSafeInput,
+              textInputAction: TextInputAction.done,
+              keyboardSubmitLabel: 'Continue',
               onSubmitted: (value) => Navigator.pop(dialogContext, value),
               decoration: const InputDecoration(labelText: 'Passphrase'),
             ),
@@ -270,12 +276,14 @@ class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
                 if (!PlatformUtil.isTvOS)
                   FilledButton.icon(
                     onPressed: _busy ? null : _restoreBackup,
+                    autofocus: widget.forceTvSafeInput,
                     icon: const Icon(Icons.restore),
                     label: const Text('Restore a backup'),
                   ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _continueWithRecoveryAdmin,
+                  autofocus: widget.forceTvSafeInput && PlatformUtil.isTvOS,
                   icon: const Icon(Icons.admin_panel_settings_outlined),
                   label: Text(
                     PlatformUtil.isTvOS

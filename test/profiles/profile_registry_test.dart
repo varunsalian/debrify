@@ -223,6 +223,58 @@ void main() {
     );
   });
 
+  test('artifact discovery never steals another profile ownership', () async {
+    final first = await registry.createProfile(
+      name: 'First',
+      role: UserProfileRole.admin,
+    );
+    final second = await registry.createProfile(
+      name: 'Second',
+      role: UserProfileRole.admin,
+    );
+    const ownedPath = 'content://recordings/owned';
+    const orphanPath = 'content://recordings/orphan';
+
+    await registry.upsertOwnedArtifact(
+      kind: 'recording',
+      ownerProfileId: first.id,
+      canonicalPath: ownedPath,
+    );
+    await registry.recordUnassignedArtifact(
+      kind: 'recording',
+      canonicalPath: ownedPath,
+    );
+    await expectLater(
+      registry.upsertOwnedArtifact(
+        kind: 'recording',
+        ownerProfileId: second.id,
+        canonicalPath: ownedPath,
+      ),
+      throwsStateError,
+    );
+    await registry.recordUnassignedArtifact(
+      kind: 'recording',
+      canonicalPath: orphanPath,
+      sizeBytes: 42,
+    );
+
+    expect(
+      (await registry.listOwnedArtifacts(first.id)).single['canonical_path'],
+      ownedPath,
+    );
+    expect(await registry.listOwnedArtifacts(second.id), isEmpty);
+    final unassigned = await registry.listUnassignedArtifacts();
+    expect(unassigned, hasLength(1));
+    expect(unassigned.single['canonical_path'], orphanPath);
+    expect(unassigned.single['owner_profile_id'], isNull);
+
+    await registry.removeArtifactRecord(
+      kind: 'recording',
+      canonicalPath: orphanPath,
+    );
+    expect(await registry.listUnassignedArtifacts(), isEmpty);
+  });
+
   test('diagnostics expose counts without profile identity', () async {
     final admin = await registry.createProfile(
       name: 'Private household name',

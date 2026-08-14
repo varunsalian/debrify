@@ -207,6 +207,17 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
     return;
   }
 
+  // Recovery is mounted before the normal startup warm chain. Resolve TV mode
+  // here so its passphrase prompt never falls through to the system TextField
+  // path on Chromecast/Google TV. A failed Android probe is treated as TV-safe
+  // for this one terminal surface only; a phone seeing the in-app keyboard is
+  // recoverable, while a TV seeing an unusable IME can strand the only backup.
+  var recoveryNeedsTvSafeInput = PlatformUtil.isTvOS;
+  if (!kIsWeb && Platform.isAndroid) {
+    final detectedTv = await PlatformUtil.isAndroidTV();
+    recoveryNeedsTvSafeInput = detectedTv || PlatformUtil.lastProbeFailed;
+  }
+
   // Publish legacy/profile storage mode before any preference, credential,
   // cache, route, or background service can observe application state.
   try {
@@ -220,6 +231,7 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
         home: ProfileRecoveryScreen(
           onRecovered: _resumeAfterProfileRecovery,
           onResetComplete: _terminateAfterDeviceReset,
+          forceTvSafeInput: recoveryNeedsTvSafeInput,
         ),
       ),
     );

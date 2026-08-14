@@ -56,6 +56,7 @@ import '../services/live_recording_service.dart';
 import '../services/desktop_schedule_service.dart';
 import '../services/update_service.dart';
 import '../widgets/support_donation_chooser_dialog.dart';
+import '../widgets/tv_text_field.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/settings_tv_layout.dart';
 import 'settings/settings_spotlight_shell.dart';
@@ -3145,14 +3146,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : (value) => setDialogState(() => sanitized = value),
               ),
               if (!sanitized)
-                TextField(
+                TvTextField(
                   controller: passphrase,
                   obscureText: true,
                   autofocus: true,
+                  textInputAction: TextInputAction.done,
+                  keyboardSubmitLabel: 'Create backup',
                   decoration: const InputDecoration(
                     labelText: 'Backup passphrase (minimum 8 characters)',
                   ),
                   onChanged: (_) => setDialogState(() {}),
+                  onSubmitted: (_) {
+                    if (passphrase.text.length >= 8) {
+                      Navigator.of(dialogContext).pop(true);
+                    }
+                  },
                 ),
             ],
           ),
@@ -3419,10 +3427,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Unlock backup'),
-        content: TextField(
+        content: TvTextField(
           controller: controller,
           obscureText: true,
           autofocus: true,
+          textInputAction: TextInputAction.done,
+          keyboardSubmitLabel: 'Unlock',
           decoration: InputDecoration(
             labelText: 'Passphrase',
             errorText: errorText,
@@ -3454,11 +3464,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Confirm Admin PIN'),
-        content: TextField(
+        content: TvTextField(
           controller: controller,
           autofocus: true,
           obscureText: true,
           keyboardType: TextInputType.number,
+          textInputAction: TextInputAction.done,
+          keyboardSubmitLabel: 'Confirm',
           decoration: const InputDecoration(labelText: 'PIN'),
           onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
         ),
@@ -3534,6 +3546,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     var usePassphrase = false;
     final passphraseController = TextEditingController();
     final confirmController = TextEditingController();
+    final passphraseFocus = FocusNode(debugLabel: 'backupPassphrase');
+    final confirmFocus = FocusNode(debugLabel: 'backupPassphraseConfirmation');
     final confirmed = await showSettingsDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -3592,23 +3606,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onChanged: (v) => setDialogState(() => usePassphrase = v),
                   ),
                   if (usePassphrase) ...[
-                    TextField(
+                    TvTextField(
                       controller: passphraseController,
+                      focusNode: passphraseFocus,
                       obscureText: true,
                       autofocus: true,
+                      textInputAction: TextInputAction.next,
+                      keyboardSubmitLabel: 'Next',
                       decoration: const InputDecoration(
                         labelText: 'Passphrase',
                       ),
                       onChanged: (_) => setDialogState(() {}),
+                      onSubmitted: (_) => confirmFocus.requestFocus(),
                     ),
                     const SizedBox(height: 8),
-                    TextField(
+                    TvTextField(
                       controller: confirmController,
+                      focusNode: confirmFocus,
                       obscureText: true,
+                      textInputAction: TextInputAction.done,
+                      keyboardSubmitLabel: 'Save backup',
                       decoration: const InputDecoration(
                         labelText: 'Confirm passphrase',
                       ),
                       onChanged: (_) => setDialogState(() {}),
+                      onSubmitted: (_) {
+                        if (passphraseOk) Navigator.of(context).pop(true);
+                      },
                     ),
                   ],
                   const SizedBox(height: 12),
@@ -3650,6 +3674,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final passphrase = usePassphrase ? passphraseController.text : null;
     passphraseController.dispose();
     confirmController.dispose();
+    passphraseFocus.dispose();
+    confirmFocus.dispose();
     if (confirmed != true) return;
     if (!mounted) return;
 
@@ -3813,10 +3839,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: const TextStyle(fontSize: 12),
                     ),
                   ),
-                TextField(
+                TvTextField(
                   controller: controller,
                   obscureText: true,
                   autofocus: true,
+                  textInputAction: TextInputAction.done,
+                  keyboardSubmitLabel: 'Unlock',
                   decoration: InputDecoration(
                     labelText: 'Passphrase',
                     errorText: errorText,
@@ -4593,13 +4621,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   'All profiles, connections, jobs, schedules, private data, remote pairings, and device keys will be removed. Downloaded and recorded files remain on disk. The app will close and start fresh next launch.',
                 ),
                 const SizedBox(height: 16),
-                TextField(
+                TvTextField(
                   controller: typed,
                   autofocus: true,
+                  textInputAction: TextInputAction.done,
+                  keyboardSubmitLabel: 'Reset device',
                   decoration: const InputDecoration(
                     labelText: 'Type RESET to continue',
                   ),
                   onChanged: (_) => setDialogState(() {}),
+                  onSubmitted: (_) {
+                    if (typed.text == 'RESET') {
+                      Navigator.of(dialogContext).pop(true);
+                    }
+                  },
                 ),
               ],
             ),

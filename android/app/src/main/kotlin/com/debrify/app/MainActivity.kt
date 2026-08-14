@@ -474,19 +474,20 @@ class MainActivity : FlutterActivity() {
     private fun buildRecordingsLibrary(
         ownerProfileId: String,
         includeUnassigned: Boolean,
+        includeOtherOwners: Boolean,
     ): List<Map<String, Any?>> {
         com.debrify.app.recording.RecordingTaskStore
             .reconcileDeadEntries(this, forceFileCheck = true)
         val entries = com.debrify.app.recording.RecordingTaskStore.all(this)
         val out = ArrayList<Map<String, Any?>>()
 
-        // Every uri any entry owns — including LIVE captures, whose growing
-        // file must not be double-listed by the scans below.
+        // Every uri any entry owns — including another profile's rows and LIVE
+        // captures, whose growing file must not be rediscovered as an
+        // "unassigned" scan result. Visibility is applied only when indexed
+        // rows are appended below; scan de-duplication must be device-global.
         val coveredIds = HashSet<Long>()
         val coveredPaths = HashSet<String>()
-        for (entry in entries.values.filter {
-            it.ownerProfileId == ownerProfileId || includeUnassigned
-        }) {
+        for (entry in entries.values) {
             val raw = entry.uri ?: continue
             val uri = android.net.Uri.parse(raw)
             if (uri.scheme == "file") {
@@ -498,7 +499,7 @@ class MainActivity : FlutterActivity() {
         }
 
         for ((taskId, entry) in entries) {
-            if (entry.ownerProfileId != ownerProfileId && !includeUnassigned) continue
+            if (entry.ownerProfileId != ownerProfileId && !includeOtherOwners) continue
             if (entry.status != "done") continue
             val raw = entry.uri ?: continue
             // Duration = finish (the final store write, which normal engine
@@ -520,6 +521,8 @@ class MainActivity : FlutterActivity() {
                     "durationMs" to durationMs.takeIf {
                         it in 1_000L..(12L * 60 * 60 * 1000)
                     },
+                    "ownerProfileId" to entry.ownerProfileId,
+                    "ownershipState" to "assigned",
                     // Crash-finalized (the OS killed the capture; reconcile
                     // salvaged the partial) — the hub's battery-optimization
                     // nudge keys off this. The WHEN is updatedAt (finalize
@@ -578,6 +581,8 @@ class MainActivity : FlutterActivity() {
                                 // DATE_MODIFIED is in SECONDS.
                                 "recordedAtMs" to cursor.getLong(dateCol) * 1000L,
                                 "durationMs" to null,
+                                "ownerProfileId" to null,
+                                "ownershipState" to "unassigned",
                             ),
                         )
                     }
@@ -601,6 +606,8 @@ class MainActivity : FlutterActivity() {
                         "bytes" to file.length(),
                         "recordedAtMs" to file.lastModified(),
                         "durationMs" to null,
+                        "ownerProfileId" to null,
+                        "ownershipState" to "unassigned",
                     ),
                 )
             }
@@ -1642,10 +1649,25 @@ class MainActivity : FlutterActivity() {
 						// already pruned. Worker thread: reconcile + scan are IO.
 						val active = com.debrify.app.profiles.ProfilePreferenceProjection
 							.activeJobContext(this)
-						val aggregate = call.argument<Boolean>("adminAggregate") == true && activeMayManageProfiles()
+						val committed = com.debrify.app.profiles.ProfilePreferenceProjection
+							.isCommitted(this)
+						val mayManageProfiles = activeMayManageProfiles()
+						// Unassigned disk rows are a separate recovery surface from
+						// another profile's indexed rows. Conflating the two made the
+						// Admin library either hide legacy files or aggregate every
+						// owner's files. Native authority remains the final gate even
+						// when Dart requests recovery visibility.
+						val includeUnassigned = !committed ||
+							(call.argument<Boolean>("includeUnassigned") == true && mayManageProfiles)
+						val includeOtherOwners = !committed ||
+							(call.argument<Boolean>("adminAggregate") == true && mayManageProfiles)
 						Thread {
 							val list = try {
-								buildRecordingsLibrary(active.profileId, aggregate)
+								buildRecordingsLibrary(
+									active.profileId,
+									includeUnassigned,
+									includeOtherOwners,
+								)
 							} catch (e: Exception) { null }
 							runOnUiThread {
 								if (list != null) result.success(list)

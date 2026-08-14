@@ -42,6 +42,7 @@ class TvTextField extends StatefulWidget {
     this.textCapitalization = TextCapitalization.none,
     this.keyboardType,
     this.autofocus = false,
+    this.forceTvKeyboard = false,
     this.enabled = true,
     this.obscureText = false,
     this.cursorColor,
@@ -89,6 +90,11 @@ class TvTextField extends StatefulWidget {
 
   /// On TV this focuses the SHELL (no keyboard pops); elsewhere the field.
   final bool autofocus;
+
+  /// Forces the in-app keyboard even when the platform TV probe is unavailable.
+  /// Intended for terminal recovery surfaces where falling back to a broken TV
+  /// system IME could make the data-preserving action impossible.
+  final bool forceTvKeyboard;
   final bool enabled;
   final bool obscureText;
   final Color? cursorColor;
@@ -330,8 +336,9 @@ class TvTextFieldState extends State<TvTextField> {
   /// The in-app keyboard sidesteps the platform IME entirely, which is the
   /// same reason it exists on Android TV.
   bool get _tvShell =>
-      PlatformUtil.isTelevision &&
-      StorageService.tvKeyboardEnabledCached &&
+      (widget.forceTvKeyboard ||
+          (PlatformUtil.isTelevision &&
+              StorageService.tvKeyboardEnabledCached)) &&
       widget.enabled;
 
   /// Cancels the Apple TV "editing finished" subscription.

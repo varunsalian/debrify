@@ -2461,25 +2461,78 @@ class ProfileRegistry {
     if (canonicalPath.trim().isEmpty || canonicalPath.length > 16 * 1024) {
       throw ArgumentError.value(canonicalPath, 'canonicalPath');
     }
-    final existing = await _db.query(
-      'owned_artifacts',
-      columns: const <String>['id'],
-      where: 'kind = ? AND canonical_path = ?',
-      whereArgs: <Object>[kind, canonicalPath],
-      limit: 1,
-    );
-    final now = DateTime.now().millisecondsSinceEpoch;
-    await _db.insert('owned_artifacts', <String, Object?>{
-      'id': existing.isEmpty ? _newId() : existing.single['id'],
-      'kind': kind,
-      'owner_profile_id': ownerProfileId,
-      'canonical_path': canonicalPath,
-      'ownership_state': 'assigned',
-      'detached_owner_token': null,
-      'size_bytes': sizeBytes,
-      'modified_at_ms': modifiedAtMs ?? now,
-      'created_at_ms': now,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db.transaction((txn) async {
+      final existing = await txn.query(
+        'owned_artifacts',
+        columns: const <String>[
+          'id',
+          'owner_profile_id',
+          'ownership_state',
+          'created_at_ms',
+        ],
+        where: 'kind = ? AND canonical_path = ?',
+        whereArgs: <Object>[kind, canonicalPath],
+        limit: 1,
+      );
+      if (existing.isNotEmpty &&
+          existing.single['ownership_state'] == 'assigned' &&
+          existing.single['owner_profile_id'] != ownerProfileId) {
+        throw StateError('Artifact is already owned by another profile');
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await txn.insert('owned_artifacts', <String, Object?>{
+        'id': existing.isEmpty ? _newId() : existing.single['id'],
+        'kind': kind,
+        'owner_profile_id': ownerProfileId,
+        'canonical_path': canonicalPath,
+        'ownership_state': 'assigned',
+        'detached_owner_token': null,
+        'size_bytes': sizeBytes,
+        'modified_at_ms': modifiedAtMs ?? now,
+        'created_at_ms': existing.isEmpty
+            ? now
+            : existing.single['created_at_ms'],
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
+  }
+
+  /// Records a scan-only public file without guessing which profile owns it.
+  /// Existing assigned/detached rows always win: merely opening an Admin
+  /// recovery view must never transfer another profile's artifact.
+  Future<void> recordUnassignedArtifact({
+    required String kind,
+    required String canonicalPath,
+    int? sizeBytes,
+    int? modifiedAtMs,
+  }) async {
+    if (!const <String>{'download', 'recording'}.contains(kind)) {
+      throw ArgumentError.value(kind, 'kind');
+    }
+    if (canonicalPath.trim().isEmpty || canonicalPath.length > 16 * 1024) {
+      throw ArgumentError.value(canonicalPath, 'canonicalPath');
+    }
+    await _db.transaction((txn) async {
+      final existing = await txn.query(
+        'owned_artifacts',
+        columns: const <String>['id'],
+        where: 'kind = ? AND canonical_path = ?',
+        whereArgs: <Object>[kind, canonicalPath],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) return;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await txn.insert('owned_artifacts', <String, Object?>{
+        'id': _newId(),
+        'kind': kind,
+        'owner_profile_id': null,
+        'canonical_path': canonicalPath,
+        'ownership_state': 'unassigned',
+        'detached_owner_token': null,
+        'size_bytes': sizeBytes,
+        'modified_at_ms': modifiedAtMs ?? now,
+        'created_at_ms': now,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    });
   }
 
   Future<List<Map<String, Object?>>> listOwnedArtifacts(
@@ -2490,6 +2543,26 @@ class ProfileRegistry {
     whereArgs: <Object>[ownerProfileId],
     orderBy: 'created_at_ms, id',
   );
+
+  Future<List<Map<String, Object?>>> listUnassignedArtifacts() => _db.query(
+    'owned_artifacts',
+    where: "ownership_state = 'unassigned'",
+    orderBy: 'created_at_ms, id',
+  );
+
+  Future<void> removeArtifactRecord({
+    required String kind,
+    required String canonicalPath,
+  }) async {
+    if (!const <String>{'download', 'recording'}.contains(kind)) {
+      throw ArgumentError.value(kind, 'kind');
+    }
+    await _db.delete(
+      'owned_artifacts',
+      where: 'kind = ? AND canonical_path = ?',
+      whereArgs: <Object>[kind, canonicalPath],
+    );
+  }
 
   Future<void> removeOwnedArtifactRecords({
     required String ownerProfileId,

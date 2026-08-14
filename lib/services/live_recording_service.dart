@@ -1,10 +1,11 @@
 import 'dart:async' show unawaited;
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 import 'package:flutter/services.dart';
 import '../models/profiles/profile_policy.dart';
 import 'profiles/device_job_store.dart';
+import 'profiles/profile_authorization.dart';
 import 'profiles/profile_preferences.dart';
 import 'profiles/profile_runtime.dart';
 import 'profiles/profile_bootstrap.dart';
@@ -121,6 +122,8 @@ class RecordingLibraryEntry {
   final int bytes;
   final int recordedAtMs;
   final int? durationMs;
+  final String? ownerProfileId;
+  final String ownershipState;
 
   /// True when the capture died (process kill, OS reap) and reconcile
   /// salvaged the partial file — the signal behind the hub's
@@ -138,9 +141,14 @@ class RecordingLibraryEntry {
     required this.bytes,
     required this.recordedAtMs,
     required this.durationMs,
+    this.ownerProfileId,
+    this.ownershipState = 'unassigned',
     this.interrupted = false,
     this.interruptedAtMs,
   });
+
+  bool get isUnassigned =>
+      ownershipState == 'unassigned' || ownerProfileId == null;
 
   factory RecordingLibraryEntry.fromMap(Map<String, dynamic> map) {
     return RecordingLibraryEntry(
@@ -151,11 +159,28 @@ class RecordingLibraryEntry {
       bytes: (map['bytes'] as num?)?.toInt() ?? 0,
       recordedAtMs: (map['recordedAtMs'] as num?)?.toInt() ?? 0,
       durationMs: (map['durationMs'] as num?)?.toInt(),
+      ownerProfileId: map['ownerProfileId']?.toString(),
+      ownershipState:
+          map['ownershipState']?.toString() ??
+          (map['ownerProfileId'] == null ? 'unassigned' : 'assigned'),
       interrupted: map['interrupted'] == true,
       interruptedAtMs: (map['interruptedAtMs'] as num?)?.toInt(),
     );
   }
 }
+
+@visibleForTesting
+List<RecordingLibraryEntry> selectVisibleRecordingLibraryEntries({
+  required Iterable<RecordingLibraryEntry> entries,
+  required String ownerProfileId,
+  required bool includeUnassigned,
+}) => entries
+    .where(
+      (artifact) =>
+          artifact.ownerProfileId == ownerProfileId ||
+          (includeUnassigned && artifact.isUnassigned),
+    )
+    .toList(growable: false);
 
 /// Result of an engine start / schedule call: an id on success, otherwise the
 /// native error code (`recording_limit_reached`, `duplicate`, `bad_time`,
@@ -567,15 +592,31 @@ class LiveRecordingService {
   static Future<List<RecordingLibraryEntry>> queryLibrary() async {
     if (!Platform.isAndroid) return const [];
     try {
-		final raw = await _channel.invokeMethod<List<dynamic>>(
-			'queryRecordingsLibrary',
-			<String, Object?>{
-				..._ownerFilter(),
-				if (!ProfileRuntime.isProfileCommitted) 'adminAggregate': true,
-			},
-		);
+      final committed = ProfileRuntime.isProfileCommitted;
+      final capturedScope = committed ? ProfileRuntime.capture() : null;
+      ProfileAuthorizationContext? authorization;
+      var mayRecoverUnassigned = !committed;
+      if (committed) {
+        authorization = await ProfileAuthorizationContext.capture(
+          ProfileBootstrap.registry,
+        );
+        final profile = await authorization.validate(ProfileBootstrap.registry);
+        mayRecoverUnassigned =
+            profile.isAdmin && profile.allows(ProfileFeature.manageProfiles);
+      }
+      final raw = await _channel.invokeMethod<List<dynamic>>(
+        'queryRecordingsLibrary',
+        <String, Object?>{
+          if (capturedScope != null) 'ownerProfileId': capturedScope.profileId,
+          if (mayRecoverUnassigned) 'includeUnassigned': true,
+        },
+      );
       if (raw == null) return const [];
-      final result = raw
+      if (authorization != null) {
+        await authorization.validate(ProfileBootstrap.registry);
+        if (ProfileRuntime.scope.value != capturedScope) return const [];
+      }
+      final decoded = raw
           .map(
             (e) => RecordingLibraryEntry.fromMap(
               Map<String, dynamic>.from(e as Map),
@@ -583,19 +624,38 @@ class LiveRecordingService {
           )
           .where((e) => e.uri.isNotEmpty)
           .toList(growable: false);
-      if (ProfileRuntime.isProfileCommitted) {
-        final owner = ProfileRuntime.capture().profileId;
+      final result = capturedScope == null
+          ? decoded
+          : selectVisibleRecordingLibraryEntries(
+              entries: decoded,
+              ownerProfileId: capturedScope.profileId,
+              includeUnassigned: mayRecoverUnassigned,
+            );
+      if (capturedScope != null) {
         for (final artifact in result) {
-          await ProfileBootstrap.registry.upsertOwnedArtifact(
-            kind: 'recording',
-            ownerProfileId: owner,
-            canonicalPath: artifact.uri,
-            sizeBytes: artifact.bytes,
-            modifiedAtMs: artifact.recordedAtMs,
-          );
+          if (artifact.isUnassigned) {
+            await ProfileBootstrap.registry.recordUnassignedArtifact(
+              kind: 'recording',
+              canonicalPath: artifact.uri,
+              sizeBytes: artifact.bytes,
+              modifiedAtMs: artifact.recordedAtMs,
+            );
+          } else if (artifact.ownerProfileId == capturedScope.profileId) {
+            await ProfileBootstrap.registry.upsertOwnedArtifact(
+              kind: 'recording',
+              ownerProfileId: capturedScope.profileId,
+              canonicalPath: artifact.uri,
+              sizeBytes: artifact.bytes,
+              modifiedAtMs: artifact.recordedAtMs,
+            );
+          }
         }
+        await authorization!.validate(ProfileBootstrap.registry);
+        if (ProfileRuntime.scope.value != capturedScope) return const [];
       }
       return result;
+    } on StateError {
+      return const [];
     } on PlatformException {
       return const [];
     } on MissingPluginException {
@@ -605,8 +665,23 @@ class LiveRecordingService {
 
   /// Delete a finished recording's file AND its store entry. Refused natively
   /// (`recording_live`) while that file is still being captured.
-  static Future<bool> deleteRecordingFile(String uri) =>
-      _invokeBool('deleteRecordingFile', {'uri': uri});
+  static Future<bool> deleteRecordingFile(String uri) async {
+    final deleted = await _invokeBool('deleteRecordingFile', {'uri': uri});
+    if (deleted &&
+        ProfileRuntime.isInitialized &&
+        ProfileRuntime.isProfileCommitted) {
+      try {
+        await ProfileBootstrap.registry.removeArtifactRecord(
+          kind: 'recording',
+          canonicalPath: uri,
+        );
+      } catch (_) {
+        // The public file is already gone. A stale ledger row is preferable to
+        // reporting a false deletion failure during a registry I/O fault.
+      }
+    }
+    return deleted;
+  }
 
   // ── Schedules ─────────────────────────────────────────────────────────────
 
