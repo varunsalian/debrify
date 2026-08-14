@@ -260,6 +260,10 @@ void main() {
     SharedPreferences.setMockInitialValues(const <String, Object>{});
     final legacyPath = p.join(documents.path, 'iptv_catalog.db');
     final legacy = await openDatabase(legacyPath);
+    expect(
+      (await legacy.rawQuery('PRAGMA journal_mode=WAL')).single.values.single,
+      'wal',
+    );
     await legacy.execute(
       'CREATE TABLE migration_sentinel (id INTEGER PRIMARY KEY, value TEXT)',
     );
@@ -282,7 +286,18 @@ void main() {
       sessionEpoch: 0,
     ).fileIn(documents, 'documents', 'iptv_catalog.db');
     expect(await destination.exists(), isTrue);
-    final migrated = await openDatabase(destination.path, readOnly: true);
+    for (final suffix in const <String>[
+      '.migration.tmp',
+      '.migration.tmp-wal',
+      '.migration.tmp-shm',
+      '.migration.tmp-journal',
+    ]) {
+      expect(await File('${destination.path}$suffix').exists(), isFalse);
+    }
+    final migrated = await openDatabase(
+      destination.path,
+      singleInstance: false,
+    );
     expect(await migrated.query('migration_sentinel'), <Map<String, Object?>>[
       <String, Object?>{'id': 7, 'value': 'database-only-install'},
     ]);

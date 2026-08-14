@@ -562,7 +562,13 @@ class ProfileMigrationService {
           await _fileHash(temp) != sourceHash) {
         throw StateError('$name database snapshot changed during copy');
       }
-      final db = await openDatabase(temp.path, readOnly: true);
+      // A checkpointed database can still retain WAL mode in its header. A
+      // bare copied image has no matching -wal/-shm files, so SQLite cannot
+      // open it read-only (SQLITE_CANTOPEN) even though all committed pages
+      // are present. Open the private copy read/write so SQLite may create
+      // empty companions for validation; the main-file hash below still
+      // proves that the validation did not alter the snapshot.
+      final db = await openDatabase(temp.path, singleInstance: false);
       try {
         final integrity = await db.rawQuery('PRAGMA integrity_check');
         if (integrity.isEmpty || integrity.first.values.first != 'ok') {
@@ -570,6 +576,10 @@ class ProfileMigrationService {
         }
       } finally {
         await db.close();
+        for (final suffix in const <String>['-wal', '-shm', '-journal']) {
+          final companion = File('${temp.path}$suffix');
+          if (await companion.exists()) await companion.delete();
+        }
       }
       if (await destination.exists()) await destination.delete();
       await temp.rename(destination.path);
