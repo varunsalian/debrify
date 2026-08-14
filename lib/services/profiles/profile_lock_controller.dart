@@ -75,10 +75,15 @@ class ProfileLockController {
   }
 
   void _publishPrivacy() {
+    final profile = _profile;
     unawaited(
       _privacy
           .invokeMethod<void>('setSensitive', <String, Object?>{
-            'sensitive': lockedProfileId.value != null,
+            // No active profile is sensitive too: startup/teardown must fail
+            // closed until the committed gate publishes an unlocked profile.
+            'sensitive': !isUnlocked,
+            'protectOnBackground':
+                profile?.lockOnResume == true && profile?.hasPin == true,
           })
           .catchError((_) {}),
     );

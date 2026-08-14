@@ -1059,6 +1059,15 @@ class MediaStoreDownloadService : Service() {
 		val downloaded = state.downloaded
 		val pct = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else 0
 		val details = if (total > 0) "${fmtBytes(downloaded)} / ${fmtBytes(total)} ($pct%)" else fmtBytes(downloaded)
+		val publicStatus = when {
+			completed && title == "Download complete" -> "Download complete"
+			completed && title.contains("access changed") -> "Download stopped"
+			completed -> "Download failed"
+			state.paused -> "Download paused"
+			title.startsWith("Preparing") -> "Preparing download"
+			title.startsWith("Retrying") -> "Retrying download"
+			else -> "Download in progress"
+		}
 
 		val intent = Intent(this, com.debrify.app.MainActivity::class.java)
 		val pendingIntent: PendingIntent? = TaskStackBuilder.create(this).run {
@@ -1071,17 +1080,20 @@ class MediaStoreDownloadService : Service() {
 		}
 
 		val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-			.setContentTitle(state.fileName)
+			// Durable jobs intentionally outlive their owning profile's UI
+			// session. Never put its filename in the system-wide notification
+			// shade, where the next profile (including a Child) can read it.
+			.setContentTitle(publicStatus)
 			.setContentText(details)
-			.setSubText(title)
 			.setSmallIcon(com.debrify.app.R.mipmap.ic_launcher)
+			.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
 			// Paused tasks must survive the service stopping (all-paused
 			// shutdown), so their notifications cannot be ongoing.
 			.setOngoing(!completed && !state.paused)
 			.setOnlyAlertOnce(true)
 			.setContentIntent(pendingIntent)
 			.setPriority(NotificationCompat.PRIORITY_LOW)
-			.setStyle(NotificationCompat.BigTextStyle().bigText(details).setSummaryText(title))
+			.setStyle(NotificationCompat.BigTextStyle().bigText(details).setSummaryText(publicStatus))
 			.setGroup(GROUP_KEY_DOWNLOADS)
 
 		if (indeterminate) {

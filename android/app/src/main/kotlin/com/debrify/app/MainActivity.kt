@@ -921,6 +921,14 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // A lock-on-resume profile must be protected BEFORE Flutter starts and
+        // before Android can take a task snapshot. Dart later clears the flag
+        // only after it has published an unlocked active profile.
+        if (com.debrify.app.profiles.ProfilePrivacyState
+                .shouldProtectWhenBackgrounded(this)
+        ) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        }
         // Decide the surface mode BEFORE super.onCreate builds the FlutterView
         // (which consults getTransparencyMode exactly once), and persist the
         // EFFECTIVE decision where Dart's launch snapshot reads it — both
@@ -1020,6 +1028,14 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onPause() {
+        // Set this BEFORE super.onPause: the task/recents snapshot belongs to
+        // this transition, while Flutter's lock-on-resume callback happens far
+        // too late (after the app becomes active again).
+        if (com.debrify.app.profiles.ProfilePrivacyState
+                .shouldProtectWhenBackgrounded(this)
+        ) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        }
         super.onPause()
         if (ActivityTracker.currentActivity == this) {
             ActivityTracker.currentActivity = null
@@ -1192,6 +1208,13 @@ class MainActivity : FlutterActivity() {
 			when (call.method) {
 				"setSensitive" -> {
 					val sensitive = call.argument<Boolean>("sensitive") == true
+					val protectOnBackground =
+						call.argument<Boolean>("protectOnBackground") == true
+					com.debrify.app.profiles.ProfilePrivacyState.update(
+						this,
+						sensitive,
+						protectOnBackground,
+					)
 					runOnUiThread {
 						if (sensitive) {
 							window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)

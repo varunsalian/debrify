@@ -125,6 +125,102 @@ void main() {
     },
   );
 
+  test(
+    'Android protects recents before pause and notifications stay generic',
+    () {
+      final activity = File(
+        'android/app/src/main/kotlin/com/debrify/app/MainActivity.kt',
+      ).readAsStringSync();
+      final onPause = activity.substring(
+        activity.indexOf('override fun onPause()'),
+        activity.indexOf('override fun onUserLeaveHint()'),
+      );
+      expect(onPause, contains('shouldProtectWhenBackgrounded(this)'));
+      expect(
+        onPause.indexOf('window.addFlags'),
+        lessThan(onPause.indexOf('super.onPause()')),
+        reason: 'FLAG_SECURE must precede Android task-snapshot capture.',
+      );
+
+      final download = File(
+        'android/app/src/main/kotlin/com/debrify/app/download/'
+        'MediaStoreDownloadService.kt',
+      ).readAsStringSync();
+      final recording = File(
+        'android/app/src/main/kotlin/com/debrify/app/recording/'
+        'LiveRecordingService.kt',
+      ).readAsStringSync();
+      final alarm = File(
+        'android/app/src/main/kotlin/com/debrify/app/recording/'
+        'RecordingAlarmReceiver.kt',
+      ).readAsStringSync();
+      expect(download, isNot(contains('.setContentTitle(state.fileName)')));
+      expect(
+        download,
+        isNot(contains('.setSubText(if (completed) null else title)')),
+      );
+      expect(download, isNot(contains('.setSummaryText(title)')));
+      expect(recording, isNot(contains('.setContentTitle(state.channelName)')));
+      expect(
+        recording,
+        isNot(contains('.setSubText(if (completed) null else title)')),
+      );
+      expect(alarm, isNot(contains(r'${schedule.channelName} —')));
+    },
+  );
+
+  test('native subtitle fonts follow the active profile scope', () {
+    final fontManager = File(
+      'android/app/src/main/kotlin/com/debrify/app/util/'
+      'SubtitleFontManager.kt',
+    ).readAsStringSync();
+    final settings = File(
+      'android/app/src/main/kotlin/com/debrify/app/util/SubtitleSettings.kt',
+    ).readAsStringSync();
+
+    expect(
+      fontManager,
+      contains(
+        'ProfilePreferenceProjection.scopedPreferences(context, PREFS_NAME)',
+      ),
+    );
+    expect(
+      fontManager,
+      contains('active.profileId != MIGRATED_ADMIN_PROFILE_ID'),
+    );
+    expect(
+      settings,
+      contains('ProfilePreferenceProjection.scopedPreferences('),
+    );
+  });
+
+  test('Debrify TV access stays behind the profile-switch scope gate', () {
+    final files = <String>[
+      'lib/services/debrify_tv_cache_service.dart',
+      'lib/services/debrify_tv_repository.dart',
+      'lib/services/iptv_media_store.dart',
+    ];
+    final directWrite = RegExp(
+      r'await\s+db\.(?:insert|update|delete|execute|rawInsert|rawUpdate|rawDelete)\s*\(',
+    );
+    final rawHandle = RegExp(
+      r'DebrifyTvDatabase\s*\.\s*instance\s*\.\s*database',
+    );
+    for (final path in files) {
+      final source = File(path).readAsStringSync();
+      expect(
+        directWrite.hasMatch(source),
+        isFalse,
+        reason: '$path can race DebrifyTvDatabase.closeScope()',
+      );
+      expect(
+        rawHandle.hasMatch(source),
+        isFalse,
+        reason: '$path reads can race DebrifyTvDatabase.closeScope()',
+      );
+    }
+  });
+
   test('profile, download, deep-link, and remote logs stay redacted', () {
     final files = <File>[
       ...Directory('lib/services')

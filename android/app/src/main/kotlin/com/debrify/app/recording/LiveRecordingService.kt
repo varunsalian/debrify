@@ -1044,13 +1044,30 @@ class LiveRecordingService : Service() {
 		title: String,
 		completed: Boolean,
 	): Notification {
-		val details = if (completed) title
+		val details = if (completed) {
+			when {
+				title.startsWith("Saved") -> "Recording saved"
+				title.startsWith("Recording finished") -> "Recording finished"
+				else -> "Recording failed"
+			}
+		}
 		else "● REC ${fmtElapsed(state)} · ${fmtBytes(state.bytes)}"
+		val publicStatus = if (completed) {
+			"Recording finished"
+		} else {
+			when {
+				title.startsWith("Starting") -> "Starting recording"
+				title.startsWith("Reconnecting") -> "Reconnecting recording"
+				else -> "Recording in progress"
+			}
+		}
 		val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-			.setContentTitle(state.channelName)
+			// Channel/programme names belong to the job owner, while this
+			// notification survives profile switches and locks.
+			.setContentTitle(publicStatus)
 			.setContentText(details)
-			.setSubText(if (completed) null else title)
 			.setSmallIcon(com.debrify.app.R.mipmap.ic_launcher)
+			.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
 			.setOngoing(!completed)
 			.setOnlyAlertOnce(true)
 			.setContentIntent(contentTapIntent())

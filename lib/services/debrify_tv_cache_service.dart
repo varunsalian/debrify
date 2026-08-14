@@ -10,71 +10,84 @@ class DebrifyTvCacheService {
   /// Rail-cheap health for every channel, in three grouped queries — run once
   /// when the Spotlight rail loads. Never classifies a torrent name: the
   /// per-row quality pass belongs to the focused channel's stage stats only.
-  static Future<Map<String, DebrifyTvRailHealth>> loadRailHealth() async {
-    final db = await DebrifyTvDatabase.instance.database;
-    final pooledRows = await db.rawQuery(
-      'SELECT channel_id, COUNT(*) AS n FROM tv_cached_torrents '
-      'GROUP BY channel_id',
-    );
-    final deadRows = await db.rawQuery(
-      'SELECT channel_id, COUNT(*) AS n FROM tv_keyword_stats '
-      'WHERE total_fetched = 0 GROUP BY channel_id',
-    );
-    final stateRows = await db.query(
-      'tv_channel_cache_state',
-      columns: ['channel_id', 'status', 'fetched_at'],
-    );
-
-    final pooled = <String, int>{
-      for (final r in pooledRows)
-        r['channel_id'] as String: (r['n'] as int?) ?? 0,
-    };
-    final dead = <String, int>{
-      for (final r in deadRows)
-        r['channel_id'] as String: (r['n'] as int?) ?? 0,
-    };
-
-    final health = <String, DebrifyTvRailHealth>{};
-    for (final r in stateRows) {
-      final id = r['channel_id'] as String;
-      health[id] = DebrifyTvRailHealth(
-        pooled: pooled[id] ?? 0,
-        deadKeywords: dead[id] ?? 0,
-        status: (r['status'] as String?) ?? DebrifyTvCacheStatus.warming,
-        fetchedAt: (r['fetched_at'] as int?) ?? 0,
+  static Future<Map<String, DebrifyTvRailHealth>> loadRailHealth() {
+    return DebrifyTvDatabase.instance.runScoped((db) async {
+      final pooledRows = await db.rawQuery(
+        'SELECT channel_id, COUNT(*) AS n FROM tv_cached_torrents '
+        'GROUP BY channel_id',
       );
-    }
-    // A channel with pooled rows but no state row still gets a count.
-    for (final id in pooled.keys) {
-      health.putIfAbsent(
-        id,
-        () => DebrifyTvRailHealth(
-          pooled: pooled[id]!,
+      final deadRows = await db.rawQuery(
+        'SELECT channel_id, COUNT(*) AS n FROM tv_keyword_stats '
+        'WHERE total_fetched = 0 GROUP BY channel_id',
+      );
+      final stateRows = await db.query(
+        'tv_channel_cache_state',
+        columns: ['channel_id', 'status', 'fetched_at'],
+      );
+
+      final pooled = <String, int>{
+        for (final r in pooledRows)
+          r['channel_id'] as String: (r['n'] as int?) ?? 0,
+      };
+      final dead = <String, int>{
+        for (final r in deadRows)
+          r['channel_id'] as String: (r['n'] as int?) ?? 0,
+      };
+
+      final health = <String, DebrifyTvRailHealth>{};
+      for (final r in stateRows) {
+        final id = r['channel_id'] as String;
+        health[id] = DebrifyTvRailHealth(
+          pooled: pooled[id] ?? 0,
           deadKeywords: dead[id] ?? 0,
-          status: DebrifyTvCacheStatus.ready,
-          fetchedAt: 0,
-        ),
-      );
-    }
-    return health;
-  }
-  static Future<Map<String, DebrifyTvChannelCacheEntry>> loadAllEntries() async {
-    final db = await DebrifyTvDatabase.instance.database;
-    final rows = await db.query('tv_channel_cache_state', columns: ['channel_id']);
-    final Map<String, DebrifyTvChannelCacheEntry> entries = {};
-    for (final row in rows) {
-      final channelId = row['channel_id'] as String;
-      final entry = await getEntry(channelId);
-      if (entry != null) {
-        entries[channelId] = entry;
+          status: (r['status'] as String?) ?? DebrifyTvCacheStatus.warming,
+          fetchedAt: (r['fetched_at'] as int?) ?? 0,
+        );
       }
-    }
-    return entries;
+      // A channel with pooled rows but no state row still gets a count.
+      for (final id in pooled.keys) {
+        health.putIfAbsent(
+          id,
+          () => DebrifyTvRailHealth(
+            pooled: pooled[id]!,
+            deadKeywords: dead[id] ?? 0,
+            status: DebrifyTvCacheStatus.ready,
+            fetchedAt: 0,
+          ),
+        );
+      }
+      return health;
+    });
   }
 
-  static Future<DebrifyTvChannelCacheEntry?> getEntry(String channelId) async {
-    final db = await DebrifyTvDatabase.instance.database;
+  static Future<Map<String, DebrifyTvChannelCacheEntry>> loadAllEntries() {
+    return DebrifyTvDatabase.instance.runScoped((db) async {
+      final rows = await db.query(
+        'tv_channel_cache_state',
+        columns: ['channel_id'],
+      );
+      final Map<String, DebrifyTvChannelCacheEntry> entries = {};
+      for (final row in rows) {
+        final channelId = row['channel_id'] as String;
+        final entry = await _getEntry(db, channelId);
+        if (entry != null) {
+          entries[channelId] = entry;
+        }
+      }
+      return entries;
+    });
+  }
 
+  static Future<DebrifyTvChannelCacheEntry?> getEntry(String channelId) {
+    return DebrifyTvDatabase.instance.runScoped(
+      (db) => _getEntry(db, channelId),
+    );
+  }
+
+  static Future<DebrifyTvChannelCacheEntry?> _getEntry(
+    DatabaseExecutor db,
+    String channelId,
+  ) async {
     final stateRows = await db.query(
       'tv_channel_cache_state',
       where: 'channel_id = ?',
@@ -138,16 +151,12 @@ class DebrifyTvCacheService {
 
   static Future<void> saveEntry(DebrifyTvChannelCacheEntry entry) async {
     await DebrifyTvDatabase.instance.runTxn((txn) async {
-      await txn.insert(
-        'tv_channel_cache_state',
-        {
-          'channel_id': entry.channelId,
-          'status': entry.status,
-          'error_message': entry.errorMessage,
-          'fetched_at': entry.fetchedAt,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await txn.insert('tv_channel_cache_state', {
+        'channel_id': entry.channelId,
+        'status': entry.status,
+        'error_message': entry.errorMessage,
+        'fetched_at': entry.fetchedAt,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
 
       await txn.delete(
         'tv_cached_torrents',
@@ -160,24 +169,20 @@ class DebrifyTvCacheService {
         final baseTimestamp = DateTime.now().millisecondsSinceEpoch;
         for (var index = 0; index < entry.torrents.length; index++) {
           final torrent = entry.torrents[index];
-          batch.insert(
-            'tv_cached_torrents',
-            {
-              'channel_id': entry.channelId,
-              'infohash': torrent.infohash,
-              'name': torrent.name,
-              'size_bytes': torrent.sizeBytes,
-              'created_unix': torrent.createdUnix,
-              'seeders': torrent.seeders,
-              'leechers': torrent.leechers,
-              'completed': torrent.completed,
-              'scraped_date': torrent.scrapedDate,
-              'keywords_json': jsonEncode(torrent.keywords),
-              'sources_json': jsonEncode(torrent.sources),
-              'added_at': baseTimestamp + index,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          batch.insert('tv_cached_torrents', {
+            'channel_id': entry.channelId,
+            'infohash': torrent.infohash,
+            'name': torrent.name,
+            'size_bytes': torrent.sizeBytes,
+            'created_unix': torrent.createdUnix,
+            'seeders': torrent.seeders,
+            'leechers': torrent.leechers,
+            'completed': torrent.completed,
+            'scraped_date': torrent.scrapedDate,
+            'keywords_json': jsonEncode(torrent.keywords),
+            'sources_json': jsonEncode(torrent.sources),
+            'added_at': baseTimestamp + index,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
         await batch.commit(noResult: true);
       }
@@ -191,18 +196,14 @@ class DebrifyTvCacheService {
       if (entry.keywordStats.isNotEmpty) {
         final statsBatch = txn.batch();
         entry.keywordStats.forEach((keyword, stat) {
-          statsBatch.insert(
-            'tv_keyword_stats',
-            {
-              'channel_id': entry.channelId,
-              'keyword': keyword,
-              'total_fetched': stat.totalFetched,
-              'last_searched_at': stat.lastSearchedAt,
-              'pages_pulled': stat.pagesPulled,
-              'pirate_bay_hits': stat.pirateBayHits,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          statsBatch.insert('tv_keyword_stats', {
+            'channel_id': entry.channelId,
+            'keyword': keyword,
+            'total_fetched': stat.totalFetched,
+            'last_searched_at': stat.lastSearchedAt,
+            'pages_pulled': stat.pagesPulled,
+            'pirate_bay_hits': stat.pirateBayHits,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         });
         await statsBatch.commit(noResult: true);
       }

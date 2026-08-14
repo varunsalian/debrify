@@ -41,7 +41,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
     RemoteCommandRouter().clearProfileSessionState();
     await DownloadService.instance.prepareProfileSwitch();
     await IptvCatalogDb.closeScope();
-    await DebrifyTvDatabase.instance.closeScope();
+    await DebrifyTvDatabase.instance.closeScope(current);
     StremioService.instance.invalidateCache();
     TraktService.instance.resetProfileScope();
     SimklService.instance.resetProfileScope();
@@ -63,6 +63,7 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
 
   @override
   Future<void> didActivate(ProfileScope active) async {
+    DebrifyTvDatabase.instance.activateScope(active);
     await NativeProfileProjection.publish(active);
     DownloadService.instance.finishProfileSwitch();
   }
@@ -74,6 +75,10 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
     // cannot leave the process attached to the invisible generation.
     await IptvCatalogDb.closeScope();
     await DebrifyTvDatabase.instance.closeScope();
+    // closeScope deliberately tombstones its owner before awaiting the close.
+    // Re-authorize the restored authoritative scope before warmers may touch
+    // Debrify TV storage.
+    DebrifyTvDatabase.instance.activateScope(restored);
     await _warm(restored);
     await NativeProfileProjection.publish(restored);
     DownloadService.instance.finishProfileSwitch();
