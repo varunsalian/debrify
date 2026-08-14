@@ -128,6 +128,41 @@ class ProfileCollectionResourceFacade {
     );
   }
 
+  /// Replaces a compatibility collection and returns the only records callers
+  /// may publish or execute afterwards.
+  ///
+  /// Collection inputs are not capabilities: new entries have no resource
+  /// authority and retained entries receive a new authorization revision.
+  /// Binding the readback to the visible scope also prevents a profile switch
+  /// from redirecting UI/cache publication to another profile.
+  static Future<List<Map<String, dynamic>>> replaceAndRead({
+    required Set<ConnectionResourceType> types,
+    required ProfileFeature feature,
+    required List<ResourceCollectionItem> items,
+    bool forSettings = false,
+  }) async {
+    if (!active) {
+      throw StateError('Connection resources are not active');
+    }
+    final expectedScope = ProfileRuntime.scope.value;
+    if (expectedScope == null) {
+      throw StateError('No visible profile scope');
+    }
+    await replace(types: types, feature: feature, items: items);
+    if (ProfileRuntime.scope.value != expectedScope) {
+      throw StateError('Profile changed while saving connections');
+    }
+    final records = await read(
+      types: types,
+      feature: feature,
+      forSettings: forSettings,
+    );
+    if (ProfileRuntime.scope.value != expectedScope) {
+      throw StateError('Profile changed while loading saved connections');
+    }
+    return records;
+  }
+
   /// Revalidates a credential-bearing compatibility model immediately before
   /// use. The embedded revision makes an object captured before revoke,
   /// rotation, profile switch, or restore unusable even though it still holds

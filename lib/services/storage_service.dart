@@ -5846,9 +5846,17 @@ class StorageService {
     return servers;
   }
 
-  static Future<void> saveWebDavServers(List<WebDavConfig> servers) async {
+  static Future<List<WebDavConfig>> saveWebDavServers(
+    List<WebDavConfig> servers,
+  ) async {
     if (ProfileCollectionResourceFacade.active) {
-      await ProfileCollectionResourceFacade.replace(
+      final expectedScope = ProfileRuntime.scope.value;
+      if (expectedScope == null) throw StateError('No visible profile scope');
+      // Capture the preference namespace before the registry mutation. If a
+      // profile switch races this operation, this handle can only write the
+      // initiating namespace (or fail); it can never write the new profile.
+      final prefs = await ProfilePreferences.instance();
+      final rows = await ProfileCollectionResourceFacade.replaceAndRead(
         types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
         feature: ProfileFeature.cloud,
         items: <ResourceCollectionItem>[
@@ -5861,10 +5869,17 @@ class StorageService {
               sourceResourceId: server.connectionResourceId,
             ),
         ],
+        forSettings: true,
       );
-      final prefs = await ProfilePreferences.instance();
-      await prefs.setBool(_webDavEnabledKey, servers.isNotEmpty);
-      return;
+      final saved = rows.map(WebDavConfig.fromJson).toList(growable: false);
+      if (ProfileRuntime.scope.value != expectedScope) {
+        throw StateError('Profile changed while saving WebDAV connections');
+      }
+      await prefs.setBool(_webDavEnabledKey, saved.isNotEmpty);
+      if (ProfileRuntime.scope.value != expectedScope) {
+        throw StateError('Profile changed while saving WebDAV settings');
+      }
+      return saved;
     }
     final prefs = await ProfilePreferences.instance();
     await SecretVault.setString(
@@ -5873,6 +5888,7 @@ class StorageService {
       jsonEncode(servers.map((server) => server.toJson()).toList()),
     );
     await prefs.setBool(_webDavEnabledKey, servers.isNotEmpty);
+    return List<WebDavConfig>.unmodifiable(servers);
   }
 
   static Future<String?> getSelectedWebDavServerId() async {
@@ -5904,30 +5920,91 @@ class StorageService {
     return servers.first;
   }
 
-  static Future<void> upsertWebDavServer(WebDavConfig config) async {
-    final servers = await getWebDavServers();
+  static Future<WebDavConfig> upsertWebDavServer(WebDavConfig config) async {
+    final expectedScope = ProfileCollectionResourceFacade.active
+        ? ProfileRuntime.scope.value
+        : null;
+    final selectionPrefs = await ProfilePreferences.instance();
+    final servers = (await getWebDavServers()).toList();
+    final priorResourceIds = <String>{
+      for (final server in servers)
+        if (server.connectionResourceId != null) server.connectionResourceId!,
+    };
     final index = servers.indexWhere((server) => server.id == config.id);
+    var persisted = config;
     if (index == -1) {
-      servers.add(config);
+      servers.add(persisted);
     } else {
-      servers[index] = config;
+      final source = servers[index];
+      if (source.connectionReadOnly) {
+        throw const ResourceAuthorizationException(
+          'Shared WebDAV connections cannot be edited',
+        );
+      }
+      persisted = WebDavConfig(
+        id: config.id,
+        name: config.name,
+        baseUrl: config.baseUrl,
+        username: config.username,
+        password: config.password,
+        connectionResourceId: source.connectionResourceId,
+        connectionResourceRevision: source.connectionResourceRevision,
+      );
+      servers[index] = persisted;
     }
-    await saveWebDavServers(servers);
-    await setSelectedWebDavServerId(config.id);
+    final saved = await saveWebDavServers(servers);
+    final WebDavConfig canonical;
+    final sourceResourceId = persisted.connectionResourceId;
+    if (sourceResourceId != null) {
+      canonical = saved.singleWhere(
+        (server) => server.connectionResourceId == sourceResourceId,
+      );
+    } else if (ProfileCollectionResourceFacade.active) {
+      canonical = saved.singleWhere(
+        (server) =>
+            server.connectionResourceId != null &&
+            !priorResourceIds.contains(server.connectionResourceId),
+      );
+    } else {
+      canonical = saved.singleWhere((server) => server.id == persisted.id);
+    }
+    if (expectedScope != null && ProfileRuntime.scope.value != expectedScope) {
+      throw StateError('Profile changed while selecting a WebDAV connection');
+    }
+    await selectionPrefs.setString(_webDavSelectedServerIdKey, canonical.id);
+    if (expectedScope != null && ProfileRuntime.scope.value != expectedScope) {
+      throw StateError('Profile changed while selecting a WebDAV connection');
+    }
+    return canonical;
   }
 
   static Future<void> deleteWebDavServer(String id) async {
-    final servers = await getWebDavServers();
-    servers.removeWhere((server) => server.id == id);
-    await saveWebDavServers(servers);
-    final selected = await getSelectedWebDavServerId();
-    if (selected == id) {
-      await setSelectedWebDavServerId(
-        servers.isEmpty ? null : servers.first.id,
-      );
+    final expectedScope = ProfileCollectionResourceFacade.active
+        ? ProfileRuntime.scope.value
+        : null;
+    final selectionPrefs = await ProfilePreferences.instance();
+    final servers = (await getWebDavServers()).toList();
+    if (expectedScope != null && ProfileRuntime.scope.value != expectedScope) {
+      throw StateError('Profile changed while deleting a WebDAV connection');
     }
-    if (servers.isEmpty) {
-      await setWebDavHiddenFromNav(false);
+    servers.removeWhere((server) => server.id == id);
+    final saved = await saveWebDavServers(servers);
+    final selected = selectionPrefs.getString(_webDavSelectedServerIdKey);
+    if (selected == id) {
+      if (saved.isEmpty) {
+        await selectionPrefs.remove(_webDavSelectedServerIdKey);
+      } else {
+        await selectionPrefs.setString(
+          _webDavSelectedServerIdKey,
+          saved.first.id,
+        );
+      }
+    }
+    if (saved.isEmpty) {
+      await selectionPrefs.setBool(_webDavHiddenFromNavKey, false);
+    }
+    if (expectedScope != null && ProfileRuntime.scope.value != expectedScope) {
+      throw StateError('Profile changed while deleting a WebDAV connection');
     }
   }
 
@@ -6415,11 +6492,11 @@ class StorageService {
         .toList();
   }
 
-  static Future<void> setIndexerManagerConfigs(
+  static Future<List<IndexerManagerConfig>> setIndexerManagerConfigs(
     List<IndexerManagerConfig> configs,
   ) async {
     if (ProfileCollectionResourceFacade.active) {
-      await ProfileCollectionResourceFacade.replace(
+      final rows = await ProfileCollectionResourceFacade.replaceAndRead(
         types: const <ConnectionResourceType>{
           ConnectionResourceType.jackett,
           ConnectionResourceType.prowlarr,
@@ -6439,14 +6516,16 @@ class StorageService {
               sourceResourceId: config.connectionResourceId,
             ),
         ],
+        forSettings: true,
       );
-      return;
+      return rows.map(IndexerManagerConfig.fromJson).toList(growable: false);
     }
     final prefs = await ProfilePreferences.instance();
     final rawList = configs
         .map((config) => jsonEncode(config.toJson()))
         .toList();
     await SecretVault.setStringList(prefs, _indexerManagerConfigsKey, rawList);
+    return List<IndexerManagerConfig>.unmodifiable(configs);
   }
 
   static Future<String?> getSupportRemoteConfigCache() async {
@@ -7323,18 +7402,18 @@ class StorageService {
     required bool forSettings,
   }) async {
     final expectedScope = ProfileCollectionResourceFacade.active
-        ? ProfileRuntime.capture()
+        ? ProfileRuntime.scope.value
         : null;
     await setIptvPlaylists(playlists);
     if (expectedScope != null &&
         (!ProfileCollectionResourceFacade.active ||
-            ProfileRuntime.capture() != expectedScope)) {
+            ProfileRuntime.scope.value != expectedScope)) {
       throw StateError('Profile changed while saving IPTV playlists');
     }
     final saved = await getIptvPlaylists(forSettings: forSettings);
     if (expectedScope != null &&
         (!ProfileCollectionResourceFacade.active ||
-            ProfileRuntime.capture() != expectedScope)) {
+            ProfileRuntime.scope.value != expectedScope)) {
       throw StateError('Profile changed while loading IPTV playlists');
     }
     return saved;

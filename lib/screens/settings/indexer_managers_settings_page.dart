@@ -80,51 +80,65 @@ class _IndexerManagersSettingsPageState
     }
   }
 
-  Future<void> _saveConfigs(
+  Future<List<IndexerManagerConfig>> _saveConfigs(
     List<IndexerManagerConfig> configs, {
     ProfileAsyncAuthorization? authorization,
   }) async {
-    Future<void> save() => StorageService.setIndexerManagerConfigs(configs);
+    Future<List<IndexerManagerConfig>> save() =>
+        StorageService.setIndexerManagerConfigs(configs);
+    final List<IndexerManagerConfig> saved;
     if (authorization == null) {
-      await save();
+      saved = await save();
     } else {
-      await authorization.runIfCurrent(save);
+      saved = await authorization.runIfCurrent(save);
     }
-    if (!mounted) return;
-    setState(() => _configs = configs);
+    if (mounted) setState(() => _configs = saved);
+    return saved;
   }
 
   Future<void> _toggleEnabled(IndexerManagerConfig config, bool enabled) async {
     if (config.connectionReadOnly) return;
     final authorization = await ProfileAsyncAuthorization.capture(
-      ProfileFeature.addonsAndEngines,
+      ProfileFeature.torrentSearch,
     );
     if (!mounted) return;
     final updated = config.copyWith(enabled: enabled);
-    await _replaceConfig(updated, authorization: authorization);
-    if (authorization == null) {
-      await TorrentService.setEngineEnabled(updated.engineId, enabled);
-    } else {
-      await authorization.runIfCurrent(
-        () => TorrentService.setEngineEnabled(updated.engineId, enabled),
-      );
-    }
+    final canonical = await _replaceConfig(
+      updated,
+      authorization: authorization,
+    );
+    await _setEngineEnabled(canonical.engineId, enabled);
   }
 
-  Future<void> _replaceConfig(
+  Future<IndexerManagerConfig> _replaceConfig(
     IndexerManagerConfig updated, {
     ProfileAsyncAuthorization? authorization,
   }) async {
     final configs = _configs
         .map((config) => config.id == updated.id ? updated : config)
         .toList();
-    await _saveConfigs(configs, authorization: authorization);
+    final saved = await _saveConfigs(configs, authorization: authorization);
+    final resourceId = updated.connectionResourceId;
+    if (resourceId != null) {
+      return saved.singleWhere(
+        (config) => config.connectionResourceId == resourceId,
+      );
+    }
+    final idMatch = saved.where((config) => config.id == updated.id);
+    if (idMatch.length == 1) return idMatch.single;
+    return saved.singleWhere(
+      (config) =>
+          config.type == updated.type &&
+          config.normalizedBaseUrl == updated.normalizedBaseUrl &&
+          config.apiKey == updated.apiKey &&
+          config.displayName == updated.displayName,
+    );
   }
 
   Future<void> _deleteConfig(IndexerManagerConfig config) async {
     if (config.connectionReadOnly) return;
     final authorization = await ProfileAsyncAuthorization.capture(
-      ProfileFeature.addonsAndEngines,
+      ProfileFeature.torrentSearch,
     );
     if (!mounted) return;
     final shouldDelete = await showDialog<bool>(
@@ -169,7 +183,7 @@ class _IndexerManagersSettingsPageState
 
   Future<void> _openEditor([IndexerManagerConfig? config]) async {
     final authorization = await ProfileAsyncAuthorization.capture(
-      ProfileFeature.addonsAndEngines,
+      ProfileFeature.torrentSearch,
     );
     if (!mounted) return;
     final result = await showDialog<IndexerManagerConfig>(
@@ -178,16 +192,40 @@ class _IndexerManagersSettingsPageState
     );
     if (result == null || !mounted) return;
 
+    final IndexerManagerConfig canonical;
     if (config == null) {
-      await _saveConfigs([..._configs, result], authorization: authorization);
+      final priorResourceIds = <String>{
+        for (final item in _configs)
+          if (item.connectionResourceId != null) item.connectionResourceId!,
+      };
+      final saved = await _saveConfigs([
+        ..._configs,
+        result,
+      ], authorization: authorization);
+      canonical = saved.singleWhere(
+        (item) =>
+            item.id == result.id ||
+            (item.connectionResourceId != null &&
+                !priorResourceIds.contains(item.connectionResourceId)),
+      );
     } else {
-      await _replaceConfig(result, authorization: authorization);
+      canonical = await _replaceConfig(result, authorization: authorization);
     }
+    await _setEngineEnabled(canonical.engineId, canonical.enabled);
+  }
+
+  Future<void> _setEngineEnabled(String engineId, bool enabled) async {
+    // A collection write rotates the profile authorization revision, so the
+    // capability captured before the editor opened is intentionally stale.
+    // Capture the post-save authority before publishing the engine toggle.
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
     if (authorization == null) {
-      await TorrentService.setEngineEnabled(result.engineId, result.enabled);
+      await TorrentService.setEngineEnabled(engineId, enabled);
     } else {
       await authorization.runIfCurrent(
-        () => TorrentService.setEngineEnabled(result.engineId, result.enabled),
+        () => TorrentService.setEngineEnabled(engineId, enabled),
       );
     }
   }
@@ -528,6 +566,10 @@ class _IndexerManagerEditorDialogState
             ? 'all'
             : _jackettIndexerController.text.trim(),
         categories: categories,
+        connectionResourceId: config?.connectionResourceId,
+        connectionResourceRevision: config?.connectionResourceRevision,
+        connectionReadOnly: config?.connectionReadOnly ?? false,
+        credentialsRedacted: config?.credentialsRedacted ?? false,
       ),
     );
   }

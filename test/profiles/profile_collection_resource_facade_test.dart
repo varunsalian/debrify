@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:debrify/models/indexer_manager_config.dart';
 import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
+import 'package:debrify/models/webdav_item.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
@@ -14,9 +16,11 @@ import 'package:debrify/services/profiles/profile_scope.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late Directory temporaryDirectory;
   late ProfileRegistry registry;
   late MemoryDeviceSecretCipher cipher;
@@ -30,6 +34,7 @@ void main() {
   });
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
     ProfileRuntime.debugReset();
     DeviceKeyProvider.debugReset();
     temporaryDirectory = await Directory.systemTemp.createTemp(
@@ -433,5 +438,81 @@ void main() {
         feature: ProfileFeature.iptv,
       );
     }
+  });
+
+  test('WebDAV save selects and returns its canonical connection', () async {
+    final saved = await StorageService.upsertWebDavServer(
+      const WebDavConfig(
+        id: 'editor-temporary-id',
+        name: 'Media DAV',
+        baseUrl: 'https://dav.invalid/files',
+        username: 'user',
+        password: 'password',
+      ),
+    );
+
+    expect(saved.id, saved.connectionResourceId);
+    expect(saved.connectionResourceRevision, isNotNull);
+    expect(await StorageService.getSelectedWebDavServerId(), saved.id);
+    await ProfileCollectionResourceFacade.authorizeExecution(
+      resourceId: saved.connectionResourceId,
+      resourceRevision: saved.connectionResourceRevision,
+      acceptedTypes: const <ConnectionResourceType>{
+        ConnectionResourceType.webDav,
+      },
+      feature: ProfileFeature.cloud,
+    );
+
+    final edited = await StorageService.upsertWebDavServer(
+      WebDavConfig(
+        id: saved.id,
+        name: 'Media DAV edited',
+        baseUrl: saved.baseUrl,
+        username: saved.username,
+        password: saved.password,
+      ),
+    );
+    expect(edited.connectionResourceId, saved.connectionResourceId);
+    expect(
+      edited.connectionResourceRevision,
+      greaterThan(saved.connectionResourceRevision!),
+    );
+
+    await StorageService.deleteWebDavServer(edited.id);
+    expect(await StorageService.getWebDavServers(), isEmpty);
+    expect(await StorageService.getSelectedWebDavServerId(), isNull);
+  });
+
+  test('indexer collection writes return current stable authority', () async {
+    const input = IndexerManagerConfig(
+      id: 'editor-temporary-id',
+      name: 'Prowlarr',
+      type: IndexerManagerType.prowlarr,
+      baseUrl: 'https://prowlarr.invalid',
+      apiKey: 'sentinel-key',
+    );
+    final created = (await StorageService.setIndexerManagerConfigs(
+      const <IndexerManagerConfig>[input],
+    )).single;
+    expect(created.id, created.connectionResourceId);
+    expect(created.connectionResourceRevision, isNotNull);
+
+    final updated = created.copyWith(maxResults: 100);
+    final canonical = (await StorageService.setIndexerManagerConfigs(
+      <IndexerManagerConfig>[updated],
+    )).single;
+    expect(canonical.connectionResourceId, created.connectionResourceId);
+    expect(
+      canonical.connectionResourceRevision,
+      greaterThan(created.connectionResourceRevision!),
+    );
+    await ProfileCollectionResourceFacade.authorizeExecution(
+      resourceId: canonical.connectionResourceId,
+      resourceRevision: canonical.connectionResourceRevision,
+      acceptedTypes: const <ConnectionResourceType>{
+        ConnectionResourceType.prowlarr,
+      },
+      feature: ProfileFeature.torrentSearch,
+    );
   });
 }

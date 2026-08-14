@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
+import 'package:debrify/services/profiles/profile_authorization.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
@@ -16,6 +18,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 void main() {
   late Directory temporaryDirectory;
   late ProfileRegistry registry;
+  late MemoryDeviceSecretCipher cipher;
   late String firstId;
   late String secondId;
   final service = StremioService.instance;
@@ -49,7 +52,7 @@ void main() {
       activeProfileId: firstId,
       migratedLegacyInstall: false,
     );
-    final cipher = MemoryDeviceSecretCipher(
+    cipher = MemoryDeviceSecretCipher(
       List<int>.generate(32, (index) => index + 17),
     );
     await cipher.initialize();
@@ -106,4 +109,53 @@ void main() {
       expect(await service.getAddons(), isEmpty);
     },
   );
+
+  test('addon save publishes canonical authority into the cache', () async {
+    service.debugManifestFetcher = (manifestUrl) async => StremioAddon(
+      id: 'manifest-addon-id',
+      name: 'Canonical addon',
+      manifestUrl: manifestUrl,
+      baseUrl: 'https://addon.invalid/configured',
+      types: const <String>['movie'],
+      resources: const <String>['stream'],
+    );
+
+    final added = await service.addAddon(
+      'https://addon.invalid/configured/manifest.json',
+    );
+    expect(added.connectionResourceId, isNotNull);
+    expect(added.connectionResourceRevision, isNotNull);
+
+    final cached = (await service.getAddons()).single;
+    expect(cached.connectionResourceId, added.connectionResourceId);
+    expect(cached.connectionResourceRevision, added.connectionResourceRevision);
+
+    await ConnectionResourceService(
+      registry: registry,
+      cipher: cipher,
+    ).updateSecret(
+      context: await ProfileAuthorizationContext.capture(registry),
+      resourceId: added.connectionResourceId!,
+      secretConfig: <String, dynamic>{
+        'id': 'manifest-addon-id',
+        'name': 'Rotated canonical addon',
+        'manifest_url': added.manifestUrl,
+        'base_url': added.baseUrl,
+        'enabled': true,
+        'types': const <String>['movie'],
+        'resources': const <String>['stream'],
+        'added_at': added.addedAt.millisecondsSinceEpoch,
+      },
+    );
+    final reloaded = (await service.getAddons()).single;
+    expect(
+      reloaded.connectionResourceRevision,
+      greaterThan(added.connectionResourceRevision!),
+    );
+    expect(reloaded.name, 'Rotated canonical addon');
+
+    await service.setAddonEnabled(reloaded.storageKey, false);
+    final settings = await service.getAddons(forSettings: true);
+    expect(settings.single.enabled, isFalse);
+  });
 }

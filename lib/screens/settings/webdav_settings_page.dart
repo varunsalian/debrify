@@ -153,9 +153,10 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       final authorization = await ProfileAsyncAuthorization.capture(
         ProfileFeature.cloud,
       );
+      final WebDavConfig savedConfig;
       if (authorization == null) {
         await WebDavService.testConnection(config);
-        await StorageService.upsertWebDavServer(config);
+        savedConfig = await StorageService.upsertWebDavServer(config);
       } else {
         await authorization.runIfCurrent(
           () => WebDavService.testConnection(config),
@@ -163,7 +164,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
         // Revalidate after the network await and execute the write inside the
         // initiating profile scope. A profile switch/revocation cannot redirect
         // this credential into the newly visible profile.
-        await authorization.runIfCurrent(
+        savedConfig = await authorization.runIfCurrent(
           () => StorageService.upsertWebDavServer(config),
         );
       }
@@ -171,7 +172,8 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       if (!mounted) return;
       setState(() {
         _servers = servers;
-        _editingId = config.id;
+        _editingId = savedConfig.id;
+        _editingReadOnly = savedConfig.connectionReadOnly;
         _enabled = true;
         _saving = false;
       });

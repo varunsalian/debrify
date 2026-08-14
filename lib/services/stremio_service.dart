@@ -161,7 +161,26 @@ class StremioService {
       if (authorization != null) {
         await authorization.runIfCurrent(() async {});
       }
-      return List.from(_addonsCache!);
+      if (ProfileCollectionResourceFacade.active) {
+        try {
+          for (final addon in _addonsCache!) {
+            await ProfileCollectionResourceFacade.authorizeExecution(
+              resourceId: addon.connectionResourceId,
+              resourceRevision: addon.connectionResourceRevision,
+              acceptedTypes: const <ConnectionResourceType>{
+                ConnectionResourceType.stremioAddon,
+              },
+              feature: ProfileFeature.addonsAndEngines,
+            );
+          }
+        } on ResourceAuthorizationException {
+          // A resource was rotated, revoked, disabled, or deleted without
+          // going through this singleton. Never serve its decrypted URL from
+          // process memory; rebuild the cache from the current graph below.
+          _addonsCache = null;
+        }
+      }
+      if (_addonsCache != null) return List.from(_addonsCache!);
     }
 
     if (ProfileCollectionResourceFacade.active) {
@@ -220,13 +239,13 @@ class StremioService {
   }
 
   /// Save addons to storage
-  Future<void> _saveAddons(
+  Future<List<StremioAddon>> _saveAddons(
     List<StremioAddon> addons, {
     ProfileAsyncAuthorization? initiatingAuthorization,
   }) async {
-    Future<void> persist() async {
+    Future<List<StremioAddon>> persist() async {
       if (ProfileCollectionResourceFacade.active) {
-        await ProfileCollectionResourceFacade.replace(
+        final rows = await ProfileCollectionResourceFacade.replaceAndRead(
           types: const <ConnectionResourceType>{
             ConnectionResourceType.stremioAddon,
           },
@@ -245,22 +264,25 @@ class StremioService {
               ),
           ],
         );
+        return rows.map(StremioAddon.fromJson).toList(growable: false);
       } else {
         final prefs = await ProfilePreferences.instance();
         final jsonString = json.encode(addons.map((a) => a.toJson()).toList());
         await prefs.setString(_addonsKey, jsonString);
+        return List<StremioAddon>.unmodifiable(addons);
       }
     }
 
+    final List<StremioAddon> saved;
     if (initiatingAuthorization == null) {
-      await persist();
+      saved = await persist();
     } else {
-      await initiatingAuthorization.runIfCurrent(persist);
+      saved = await initiatingAuthorization.runIfCurrent(persist);
       if (!initiatingAuthorization.isCurrentlyActive) {
         throw StateError('Profile session changed before addon publication');
       }
     }
-    _addonsCache = addons;
+    _addonsCache = saved;
     // Addon set changed — drop recommendation caches so a title viewed
     // before installing a "Watch Next"-style addon picks it up without an
     // app restart (and a removed addon stops contributing).
@@ -271,6 +293,7 @@ class StremioService {
     // the same catalog URL, so nothing cached before the change may survive it.
     _catalogCache.clear();
     _notifyAddonsChanged();
+    return List<StremioAddon>.from(saved);
   }
 
   /// Add a new addon by manifest URL
@@ -310,10 +333,16 @@ class StremioService {
 
     // Add to list and save
     existingAddons.add(addon);
-    await _saveAddons(existingAddons, initiatingAuthorization: authorization);
+    final saved = await _saveAddons(
+      existingAddons,
+      initiatingAuthorization: authorization,
+    );
+    final canonical = saved.singleWhere(
+      (item) => item.manifestUrl == addon.manifestUrl,
+    );
 
-    debugPrint('StremioService: Added addon: ${addon.name}');
-    return addon;
+    debugPrint('StremioService: Added addon: ${canonical.name}');
+    return canonical;
   }
 
   /// Import addons from a Debrify Stremio Importer JSON file or a raw Stremio
@@ -513,8 +542,13 @@ class StremioService {
           enabled: addons[index].enabled,
           addedAt: addons[index].addedAt,
         );
-        await _saveAddons(addons, initiatingAuthorization: authorization);
-        return addons[index];
+        final saved = await _saveAddons(
+          addons,
+          initiatingAuthorization: authorization,
+        );
+        return saved.singleWhere(
+          (item) => item.manifestUrl == newManifest.manifestUrl,
+        );
       }
       return null;
     } catch (_) {
