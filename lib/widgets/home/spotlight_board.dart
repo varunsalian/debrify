@@ -1905,10 +1905,70 @@ class _CardState extends State<_Card> {
     final w = widget.height * c.shape.aspect;
     final url = c.image;
     final contained = c.shape.fit == BoxFit.contain;
+    final hasSubtitle = (c.subtitle ?? '').isNotEmpty;
+
+    // The gradient remains part of the artwork so it covers and clips to the
+    // whole poster as that poster grows. Only the glyph layer is counter-
+    // scaled. 1.2 is Flutter's normal line box; 33 is the existing 26 + 7
+    // vertical padding around those lines.
+    final captionBedHeight = 33 +
+        widget.caption * 1.2 *
+            (hasSubtitle ? 1 + 0.85 : 1);
+
+    // Apple platforms map this Flutter family token to SF Pro Text. Android
+    // TV keeps Debrify's Inter face, but shares the same optical treatment.
+    // The caption is supplied to ParallaxFocus as a fixed-scale foreground:
+    // it stays attached to the physical card without scaling its small glyphs
+    // or letting the travelling glare wash through them.
+    final tvCaptionFamily = PlatformUtil.isTvOS ? 'CupertinoSystemText' : null;
+    final overlayCaption = widget.captionBelow
+        ? null
+        : IgnorePointer(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                width: double.infinity,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(7, 26, 7, 7),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        c.title,
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: tvCaptionFamily,
+                          fontSize: widget.caption,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.96),
+                        ),
+                      ),
+                      if (hasSubtitle)
+                        Text(
+                          c.subtitle!,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: tvCaptionFamily,
+                            fontSize: widget.caption * 0.85,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.72),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
 
     final art = ParallaxFocus(
       focused: _f || _h,
       radius: BorderRadius.circular(widget.radius),
+      fixedScaleForeground: overlayCaption,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(widget.radius),
         child: SizedBox(
@@ -1962,6 +2022,25 @@ class _CardState extends State<_Card> {
                     errorWidget: (_, __, ___) => const SizedBox.shrink(),
                   ),
                 ),
+              // Keep the gradient with the art: it must still grow to the
+              // poster's full width and remain inside its rounded clip. The
+              // text itself is the fixed-scale foreground above.
+              if (!widget.captionBelow)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: captionBedHeight,
+                  child: const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [Color(0xDB000000), Color(0x00000000)],
+                      ),
+                    ),
+                  ),
+                ),
               if ((c.progress ?? 0) > 0 && (c.progress ?? 0) < 100)
                 Positioned(
                   left: 0,
@@ -1972,53 +2051,6 @@ class _CardState extends State<_Card> {
                     minHeight: 2,
                     backgroundColor: Colors.black.withValues(alpha: 0.45),
                     valueColor: const AlwaysStoppedAnimation(Colors.white),
-                  ),
-                ),
-              // The caption sits INSIDE over a gradient bed on wide — below
-              // the card on compact, where the art is too small to spare its
-              // bottom quarter.
-              if (!widget.captionBelow)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [Color(0xDB000000), Color(0x00000000)],
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(7, 26, 7, 7),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            c.title,
-                            maxLines: 1,
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: widget.caption,
-                              color: Colors.white.withValues(alpha: 0.86),
-                            ),
-                          ),
-                          if ((c.subtitle ?? '').isNotEmpty)
-                            Text(
-                              c.subtitle!,
-                              maxLines: 1,
-                              textAlign: TextAlign.center,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: widget.caption * 0.85,
-                                color: Colors.white.withValues(alpha: 0.58),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
                   ),
                 ),
             ],

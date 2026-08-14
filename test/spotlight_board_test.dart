@@ -8,6 +8,7 @@ import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/theme/widgets/focus_expression.dart';
+import 'package:debrify/theme/widgets/parallax_focus.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 
@@ -637,18 +638,34 @@ void main() {
     final board = tester.getSize(find.byType(SpotlightBoard)).width;
     final posterH = board * (260 / 1920) * (390 / 260);
 
-    // The caption lives inside the card, so its enclosing ClipRRect IS the
-    // card box.
-    final box = tester
-        .getSize(find.ancestor(
-          of: find.text('Alpha'),
-          matching: find.byType(ClipRRect),
-        ).first);
+    // The fixed-scale caption is a foreground of the card's focus host. The
+    // host retains the resting poster geometry even while its paint lifts.
+    final cardHost = tester
+        .widgetList<ParallaxFocus>(find.byType(ParallaxFocus))
+        .firstWhere((p) => p.fixedScaleForeground != null);
+    final box = tester.getSize(find.byWidget(cardHost));
 
     expect(box.height, closeTo(posterH, 0.5),
         reason: 'the card must be its own height, not the viewport\'s');
     expect(box.width / box.height, closeTo(2 / 3, 0.005),
         reason: 'a poster is 2:3 — anything else means it was stretched');
+  });
+
+  testWidgets('TV card titles use the crisp fixed-scale label treatment',
+      (tester) async {
+    final a = _meta('tt1', 'Alpha');
+    await tester.pumpWidget(host([a], [_section('Top', [a])]));
+    await tester.pumpAndSettle();
+
+    final captionHost = tester
+        .widgetList<ParallaxFocus>(find.byType(ParallaxFocus))
+        .singleWhere((p) => p.fixedScaleForeground != null);
+    expect(captionHost.fixedScaleForeground, isNotNull);
+
+    final cardTitle = tester
+        .widgetList<Text>(find.text('Alpha'))
+        .singleWhere((t) => t.style?.fontWeight == FontWeight.w600);
+    expect(cardTitle.style!.color!.a, closeTo(0.96, 0.001));
   });
 
   testWidgets('LEFT on the FIRST hero slide falls through to the sidebar',
