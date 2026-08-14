@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_avatar.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/profiles/user_profile.dart';
@@ -91,6 +92,73 @@ void main() {
     AppStorage.debugReset();
     await registry.close();
     await temporaryDirectory.delete(recursive: true);
+  });
+
+  test('sanitized export emits only reviewed settings and values', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final prefix = 'p.$profileId.g.1.';
+    await prefs.setString('${prefix}app_theme', 'spotlight');
+    await prefs.setBool('${prefix}ui_sounds', true);
+    await prefs.setString(
+      '${prefix}series_source_tt1234567',
+      '{"name":"Private.Release","infoHash":"private-hash",'
+          '"filePath":"/Users/private/Downloads/video.mkv"}',
+    );
+    await prefs.setString(
+      '${prefix}continue_watching_v1',
+      '[{"title":"Private title"}]',
+    );
+    await prefs.setString(
+      '${prefix}playback_state_v1',
+      '{"url":"http://host/movie/username/password/1.mkv"}',
+    );
+    await prefs.setString(
+      '${prefix}future_innocent_name',
+      'credential-that-a-denylist-would-miss',
+    );
+    await prefs.setString(
+      '${prefix}detail_theme',
+      'https://example.invalid/credential',
+    );
+
+    final resourceService = ConnectionResourceService(
+      registry: registry,
+      cipher: cipher,
+    );
+    await resourceService.create(
+      context: await ProfileAuthorizationContext.capture(registry),
+      type: ConnectionResourceType.iptvXtream,
+      label: 'Private IPTV account',
+      publicConfig: const <String, dynamic>{
+        'playlistName': 'Private IPTV',
+        'providerKind': 'xtream',
+      },
+      secretConfig: const <String, dynamic>{
+        'url': 'http://host',
+        'username': 'private-user',
+        'password': 'private-password',
+      },
+    );
+
+    final package =
+        await ProfilePackageService(
+          registry: registry,
+          resources: resourceService,
+        ).exportProfile(
+          context: await ProfileAuthorizationContext.capture(registry),
+          scope: ProfileRuntime.capture(),
+          includeSecrets: false,
+          sanitized: true,
+        );
+
+    final section = package.sections['profile-0-preferences'] as Map;
+    expect(section['values'], <String, Object?>{
+      'app_theme': 'spotlight',
+      'ui_sounds': true,
+    });
+    expect(package.mode, 'sanitizedSettings');
+    expect(package.resources, isEmpty);
+    expect(package.omissions, isNot(contains('borrowedConnections')));
   });
 
   test('publishes only the finalized staged generation', () async {

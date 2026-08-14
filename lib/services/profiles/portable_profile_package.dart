@@ -6,6 +6,7 @@ import 'package:cryptography/cryptography.dart';
 
 import 'profile_database_snapshot.dart';
 import 'profile_avatar_ingest.dart';
+import 'sanitized_profile_preferences.dart';
 import '../../models/profiles/profile_avatar.dart';
 
 class PortableProfilePackage {
@@ -169,7 +170,7 @@ class PortableProfilePackage {
         .toList(growable: false);
     _rejectDuplicateIds(profileMaps, 'profile');
     _rejectDuplicateIds(resourceMaps, 'resource');
-    if (!authenticatedEncryption) {
+    if (body['mode'] == 'sanitizedSettings') {
       _validateSanitizedPackage(profileMaps, resourceMaps, sections);
     }
     await _verifySections(profileMaps, sections);
@@ -385,24 +386,17 @@ class PortableProfilePackage {
     if (profile.keys.any((key) => !allowedProfileKeys.contains(key))) {
       throw const FormatException('Sanitized backup contains profile identity');
     }
-    for (final resource in resources) {
-      if (resource.containsKey('secretConfig') ||
-          resource['publicConfig'] is! Map ||
-          (resource['publicConfig'] as Map).keys.any(
-            (key) => key != 'schemaVersion',
-          )) {
-        throw const FormatException(
-          'Sanitized backup contains connection details',
-        );
-      }
+    if (resources.isNotEmpty) {
+      throw const FormatException(
+        'Sanitized backup contains connection details',
+      );
     }
     final section = sections[profile['preferencesSection']];
     if (section is! Map || section['values'] is! Map) {
       throw const FormatException('Sanitized preferences are missing');
     }
     for (final entry in (section['values'] as Map).entries) {
-      if (entry.key is! String ||
-          _sanitizedForbiddenPreference.hasMatch(entry.key as String)) {
+      if (!SanitizedProfilePreferences.allowsEntry(entry.key, entry.value)) {
         throw const FormatException('Sanitized backup contains private data');
       }
     }
@@ -652,12 +646,6 @@ class PortableProfilePackage {
     final random = Random.secure();
     return List<int>.generate(length, (_) => random.nextInt(256));
   }
-
-  static final RegExp _sanitizedForbiddenPreference = RegExp(
-    r'(api.?key|password|access.?token|refresh.?token|credential|secret|url|'
-    r'history|resume|playlist|favorite|watchlist|channel|search|path|command)',
-    caseSensitive: false,
-  );
 }
 
 class _Counter {

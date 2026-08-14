@@ -8,6 +8,7 @@ import 'profile_portable_files.dart';
 import 'profile_registry.dart';
 import 'profile_scope.dart';
 import 'portable_profile_package.dart';
+import 'sanitized_profile_preferences.dart';
 
 class ProfilePackageService {
   final ProfileRegistry registry;
@@ -44,35 +45,33 @@ class ProfilePackageService {
 
     final exportedResources = <Map<String, dynamic>>[];
     var borrowedResourcesOmitted = 0;
-    final granted = await registry.listGrantedResources(profile.id);
-    for (var index = 0; index < granted.length; index++) {
-      final resource = granted[index];
-      final grant = await registry.getGrant(profile.id, resource.id);
-      if (grant == null) continue;
-      if (resource.ownerProfileId != profile.id) {
-        borrowedResourcesOmitted++;
-        continue;
+    if (!sanitized) {
+      final granted = await registry.listGrantedResources(profile.id);
+      for (var index = 0; index < granted.length; index++) {
+        final resource = granted[index];
+        final grant = await registry.getGrant(profile.id, resource.id);
+        if (grant == null) continue;
+        if (resource.ownerProfileId != profile.id) {
+          borrowedResourcesOmitted++;
+          continue;
+        }
+        final record = <String, dynamic>{
+          'backupId': 'resource-$index',
+          'type': resource.type.name,
+          'label': resource.label,
+          'owned': true,
+          'publicConfig': resource.publicConfig,
+          'permissions': grant.permissions,
+        };
+        if (includeSecrets) {
+          record['secretConfig'] = await resources.revealSecret(
+            context: context,
+            resourceId: resource.id,
+            feature: ProfileFeature.backupRestore,
+          );
+        }
+        exportedResources.add(record);
       }
-      final record = <String, dynamic>{
-        'backupId': 'resource-$index',
-        'type': resource.type.name,
-        'label': sanitized ? resource.type.name : resource.label,
-        'owned': true,
-        'publicConfig': sanitized
-            ? const <String, dynamic>{'schemaVersion': 1}
-            : resource.publicConfig,
-        'permissions': grant.permissions,
-      };
-      if (!sanitized &&
-          includeSecrets &&
-          resource.ownerProfileId == profile.id) {
-        record['secretConfig'] = await resources.revealSecret(
-          context: context,
-          resourceId: resource.id,
-          feature: ProfileFeature.backupRestore,
-        );
-      }
-      exportedResources.add(record);
     }
 
     final package = PortableProfilePackage(
@@ -256,11 +255,12 @@ class ProfilePackageService {
     for (final physical in raw.getKeys()) {
       if (!physical.startsWith(scope.preferencePrefix)) continue;
       final logical = physical.substring(scope.preferencePrefix.length);
-      if (_excludedPreference(logical) ||
-          (sanitized && _contentSensitivePreference(logical))) {
+      final value = raw.get(physical);
+      if (sanitized
+          ? !SanitizedProfilePreferences.allowsEntry(logical, value)
+          : _excludedPreference(logical)) {
         continue;
       }
-      final value = raw.get(physical);
       if (value is bool ||
           value is num ||
           value is String ||
@@ -279,16 +279,6 @@ class ProfilePackageService {
       key.contains('external_player_custom') ||
       key.contains('custom_command') ||
       key == 'initial_setup_complete_v1';
-
-  static bool _contentSensitivePreference(String key) =>
-      _excludedPreference(key) ||
-      key.contains('history') ||
-      key.contains('resume') ||
-      key.contains('playlist') ||
-      key.contains('favorite') ||
-      key.contains('watchlist') ||
-      key.contains('channel') ||
-      key.contains('search');
 
   static final RegExp _credentialPattern = RegExp(
     r'(api.?key|password|access.?token|refresh.?token|credential|secret|url)',

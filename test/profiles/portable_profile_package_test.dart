@@ -12,9 +12,10 @@ void main() {
   Future<PortableProfilePackage> package({
     String mode = 'singleProfile',
     Map<String, Object?> preferences = const <String, Object?>{
-      'theme_mode': 'dark',
+      'app_theme': 'spotlight',
     },
     Map<String, Object?>? files,
+    List<Map<String, dynamic>> resources = const <Map<String, dynamic>>[],
   }) async {
     final sections = <String, dynamic>{
       'preferences': await PortableProfilePackage.buildSection(preferences),
@@ -32,7 +33,7 @@ void main() {
           if (files != null) 'filesSection': 'files',
         },
       ],
-      resources: const <Map<String, dynamic>>[],
+      resources: resources,
       sections: sections,
     );
   }
@@ -167,25 +168,90 @@ void main() {
   });
 
   test(
-    'sanitized plain backup rejects private preference categories',
+    'sanitized plain backup enforces its reviewed preference schema',
     () async {
-      final safe = await package(mode: 'sanitizedSettings');
+      final safe = await package(
+        mode: 'sanitizedSettings',
+        preferences: const <String, Object?>{
+          'app_theme': 'spotlight',
+          'ui_sounds': true,
+          'tv_ui_scale_percent': 90,
+        },
+      );
       final decoded = await PortableProfilePackage.decodeMap(
         await PortableProfilePackage.withIntegrity(safe),
       );
       expect(decoded.mode, 'sanitizedSettings');
-
-      final private = await package(
-        mode: 'sanitizedSettings',
-        preferences: const <String, Object?>{
-          'provider_url': 'https://example.invalid/token',
+      expect(
+        (decoded.sections['preferences'] as Map)['values'],
+        <String, Object?>{
+          'app_theme': 'spotlight',
+          'ui_sounds': true,
+          'tv_ui_scale_percent': 90,
         },
+      );
+
+      const rejected = <String, Object?>{
+        'series_source_tt1234567':
+            '{"name":"Private.Release","infoHash":"secret"}',
+        'continue_watching_v1': '[{"title":"Private title"}]',
+        'playback_state_v1':
+            '{"url":"http://host/movie/username/password/1.mkv"}',
+        'future_innocent_name': 'credential-that-a-denylist-would-miss',
+        'app_theme': 'https://example.invalid/token',
+        'ui_sounds': 'true',
+      };
+      for (final entry in rejected.entries) {
+        final private = await package(
+          mode: 'sanitizedSettings',
+          preferences: <String, Object?>{entry.key: entry.value},
+        );
+        await expectLater(
+          PortableProfilePackage.decodeMap(
+            await PortableProfilePackage.withIntegrity(private),
+          ),
+          throwsA(isA<FormatException>()),
+          reason: '${entry.key} must not enter an unencrypted package',
+        );
+      }
+
+      final mislabeledEncrypted = await PortableProfilePackage.encrypt(
+        await package(
+          mode: 'sanitizedSettings',
+          preferences: const <String, Object?>{
+            'playback_state_v1':
+                '{"url":"http://host/movie/username/password/1.mkv"}',
+          },
+        ),
+        'correct horse',
+        memory: 8,
+        iterations: 1,
+      );
+      await expectLater(
+        PortableProfilePackage.decrypt(mislabeledEncrypted, 'correct horse'),
+        throwsA(isA<FormatException>()),
+        reason: 'sanitized mode must enforce its schema under any envelope',
+      );
+
+      final accountInventory = await package(
+        mode: 'sanitizedSettings',
+        resources: const <Map<String, dynamic>>[
+          <String, dynamic>{
+            'backupId': 'resource-0',
+            'type': 'iptvXtream',
+            'label': 'iptvXtream',
+            'owned': true,
+            'publicConfig': <String, dynamic>{'schemaVersion': 1},
+            'permissions': 63,
+          },
+        ],
       );
       await expectLater(
         PortableProfilePackage.decodeMap(
-          await PortableProfilePackage.withIntegrity(private),
+          await PortableProfilePackage.withIntegrity(accountInventory),
         ),
         throwsA(isA<FormatException>()),
+        reason: 'sanitized mode must not disclose connected account types',
       );
     },
   );
