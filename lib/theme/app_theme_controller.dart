@@ -86,6 +86,15 @@ class AppThemeController extends ChangeNotifier {
   /// `TextBrightnessController.warm()` — the preset is an input here. Swallows
   /// storage failures: a cosmetic pref must never keep the app from starting,
   /// and the fields already hold the legacy default.
+  ///
+  /// **Notifies, and must.** This is called a second time on every profile
+  /// switch (`ProfileAppLifecycleParticipant._warm`), where the root
+  /// `MaterialApp`/`AppThemeScope` are ancestors of `ProfileGate` — the gate's
+  /// own setState rebuilds only its subtree and can never re-read the theme
+  /// built above it. Recomputing silently here left the incoming profile
+  /// rendering the outgoing profile's theme, accent and texture until the user
+  /// re-picked a theme or restarted. Before `runApp` there are no listeners, so
+  /// the notify costs the startup path nothing.
   static Future<void> warm() async {
     try {
       instance._id = await StorageService.getAppTheme();
@@ -94,7 +103,10 @@ class AppThemeController extends ChangeNotifier {
       // touches storage to answer "what did the user change".
       instance._overrides =
           ThemeOverrides.decode(await StorageService.getThemeOverrides());
-      instance._recomputeSilently();
+      // Notify LAST, after both inputs have landed: TextBrightnessController
+      // warms first and can already have driven a recompute against the
+      // outgoing profile's id, so this is what supersedes it.
+      instance._recompute();
     } catch (e) {
       debugPrint('AppThemeController: warm failed, staying legacy: $e');
     }
