@@ -315,7 +315,9 @@ class ProfileDataGenerationManager {
         if (entity is Link) throw StateError('Scoped data contains a symlink');
         if (entity is! File) continue;
         final relative = p.relative(entity.path, from: source.path);
-        if (_isSqliteSidecar(relative)) continue;
+        if (_isSqliteSidecar(relative) || _isTransientRestoreFile(relative)) {
+          continue;
+        }
         final target = File(p.join(destination.path, relative));
         await target.parent.create(recursive: true);
         final sourceLength = await entity.length();
@@ -369,6 +371,7 @@ class ProfileDataGenerationManager {
         if (entity is Link) throw StateError('Scoped data contains a symlink');
         if (entity is! File) continue;
         final relative = p.relative(entity.path, from: directory.path);
+        if (_isTransientRestoreFile(relative)) continue;
         if (_isSqliteSidecar(relative)) {
           throw StateError('Staged generation contains a SQLite sidecar');
         }
@@ -392,6 +395,12 @@ class ProfileDataGenerationManager {
       path.endsWith('-wal') ||
       path.endsWith('-shm') ||
       path.endsWith('-journal');
+
+  static bool _isTransientRestoreFile(String path) {
+    final normalized = path.replaceAll(r'\', '/');
+    return normalized == '.avatar-restore' ||
+        normalized.startsWith('.avatar-restore/');
+  }
 
   static Future<void> _writeValue(
     SharedPreferences prefs,

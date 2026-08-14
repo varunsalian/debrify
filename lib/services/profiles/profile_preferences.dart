@@ -232,6 +232,7 @@ class DevicePreferences {
     'download_legacy_plugin_authority_v1',
     'subtitle_custom_fonts',
     'tvos_multi_profile_top_shelf_enabled',
+    'profile_gate_style_v1',
   };
 
   static Future<DevicePreferences> instance() async =>

@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:debrify/services/profiles/portable_profile_package.dart';
 import 'package:debrify/services/profiles/legacy_backup_adapter.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'avatar_fixtures.dart';
 
 void main() {
   Future<PortableProfilePackage> package({
@@ -61,6 +64,53 @@ void main() {
       containsPair('account_label', 'private'),
     );
   });
+
+  test(
+    'avatar attachment does not change the legacy files section grammar',
+    () async {
+      final source = await package(
+        files: <String, Object?>{
+          'engines/example.json': <String, Object?>{
+            'encoding': 'base64',
+            'bytes': 2,
+            'sha256': base64UrlEncode(
+              (await Sha256().hash(utf8.encode('{}'))).bytes,
+            ).replaceAll('=', ''),
+            'data': base64Encode(utf8.encode('{}')),
+          },
+        },
+      );
+      final avatarDigest = base64UrlEncode(
+        (await Sha256().hash(tinyGif)).bytes,
+      ).replaceAll('=', '');
+      source.profiles.single.addAll(<String, Object?>{
+        'avatarKey': 'file:avatars/current.gif#4A90D9',
+        // Older v3 builds ignore unknown profile fields, but would reject an
+        // `avatars/` key inside filesSection and abort the entire restore.
+        'avatarFile': <String, Object?>{
+          'path': 'avatars/current.gif',
+          'encoding': 'base64',
+          'bytes': tinyGif.length,
+          'sha256': avatarDigest,
+          'data': base64Encode(tinyGif),
+        },
+      });
+
+      final encrypted = await PortableProfilePackage.encrypt(
+        source,
+        'correct horse',
+        memory: 8,
+        iterations: 1,
+      );
+      final restored = await PortableProfilePackage.decrypt(
+        encrypted,
+        'correct horse',
+      );
+      final files = (restored.sections['files'] as Map)['values'] as Map;
+      expect(files.keys, <Object?>['engines/example.json']);
+      expect(restored.profiles.single['avatarFile'], isA<Map>());
+    },
+  );
 
   test('wrong passphrase and unsafe KDF parameters fail closed', () async {
     final encrypted = await PortableProfilePackage.encrypt(

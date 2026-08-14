@@ -20,6 +20,7 @@ import '../../services/remote_control/remote_command_router.dart';
 import '../../services/tvos_top_shelf_service.dart';
 import 'manage_profiles_screen.dart';
 import 'profile_picker_screen.dart';
+import 'profile_wall_screen.dart';
 import 'profile_pin_screen.dart';
 
 @visibleForTesting
@@ -115,6 +116,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
   }
 
   Future<void> _load({required bool allowSingleProfileAutoEnter}) async {
+    await ProfileGateStyle.warm();
     final profiles = await ProfileBootstrap.registry.listProfiles();
     if (!mounted) return;
     setState(() {
@@ -334,12 +336,24 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
       (profile) => profile.id == ProfileRuntime.capture().profileId,
     );
     final activeProfile = active.isEmpty ? null : active.first;
+    // Both pickers share the same callbacks, so the management authorization
+    // ladder (_requestManage -> PIN -> unlockActiveAdminForManagement) is
+    // identical whichever style renders.
+    final onManage =
+        activeProfile?.allows(ProfileFeature.manageProfiles) == true
+        ? () => _requestManage(activeProfile!)
+        : null;
+    if (ProfileGateStyle.cached == ProfileGateStyle.wall) {
+      return ProfileWallScreen(
+        profiles: profiles,
+        onSelected: _selected,
+        onManage: onManage,
+      );
+    }
     return ProfilePickerScreen(
       profiles: profiles,
       onSelected: _selected,
-      onManage: activeProfile?.allows(ProfileFeature.manageProfiles) == true
-          ? () => _requestManage(activeProfile!)
-          : null,
+      onManage: onManage,
     );
   }
 }

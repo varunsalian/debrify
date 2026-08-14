@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
+import '../../widgets/profiles/profile_avatar_view.dart';
 
 class ProfilePickerScreen extends StatelessWidget {
   final List<UserProfile> profiles;
@@ -90,7 +90,6 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -104,19 +103,16 @@ class _ProfileCard extends StatelessWidget {
               Expanded(
                 child: AspectRatio(
                   aspectRatio: 1,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: <Color>[colors.primary, colors.tertiary],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: Icon(
-                      _avatarIcon(profile.avatarKey, profile.role),
-                      size: 64,
-                      color: colors.onPrimary,
+                  child: ClipOval(
+                    child: ProfileAvatarView(
+                      profileId: profile.id,
+                      avatarKey: profile.avatarKey,
+                      role: profile.role,
+                      name: profile.name,
+                      // Classic cards do not expose focus state to their
+                      // children; keeping animation off still renders every
+                      // art/file selection instead of a generic person icon.
+                      allowAnimation: false,
                     ),
                   ),
                 ),
@@ -139,17 +135,4 @@ class _ProfileCard extends StatelessWidget {
       ),
     );
   }
-
-  static IconData _avatarIcon(String? key, UserProfileRole role) =>
-      switch (key) {
-        'child' => Icons.child_care_rounded,
-        'movie' => Icons.movie_filter_rounded,
-        'rocket' => Icons.rocket_launch_rounded,
-        'sports' => Icons.sports_esports_rounded,
-        'music' => Icons.headphones_rounded,
-        _ =>
-          role == UserProfileRole.child
-              ? Icons.child_care_rounded
-              : Icons.person_rounded,
-      };
 }

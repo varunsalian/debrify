@@ -99,6 +99,7 @@ import 'settings/indexer_managers_settings_page.dart';
 import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
+import 'settings/profiles_settings_page.dart';
 import 'settings/trakt_settings_page.dart';
 import 'settings/simkl_settings_page.dart';
 import 'settings/mdblist_settings_page.dart';
@@ -1011,6 +1012,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     return [
+      if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted)
+        nav(
+          SettingsRows.switchProfile,
+          'Profiles',
+          _switchProfile,
+          keywords: const [
+            'profile',
+            'profiles',
+            'switch',
+            'who is watching',
+            'avatar',
+            'pin',
+            'kids',
+            'account',
+          ],
+        ),
       // Connections
       conn(_rdInfo, const ['debrid', 'real-debrid', 'rd', 'premium']),
       conn(_torboxInfo, const ['debrid', 'premium']),
@@ -2961,8 +2978,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {});
   }
 
-  Future<void> _switchProfile() async =>
-      MainPageBridge.showProfilePicker?.call();
+  /// Opens the Profiles hub (roster + switch + create). The bare
+  /// switch-picker call moved onto the hub itself.
+  Future<void> _switchProfile() async {
+    await pushSettingsPage(context, const ProfilesSettingsPage());
+    if (!mounted) return;
+    setState(() {});
+  }
 
   Future<void> _openFilterSettings() async {
     await pushSettingsPage(context, const FilterSettingsPage());

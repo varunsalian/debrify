@@ -17,6 +17,7 @@ import '../../services/profiles/profile_runtime.dart';
 import '../../services/live_recording_service.dart';
 import '../../services/tvos_top_shelf_service.dart';
 import '../../utils/platform_util.dart';
+import '../../widgets/profiles/profile_avatar_view.dart';
 import 'edit_profile_screen.dart';
 
 class ManageProfilesScreen extends StatefulWidget {
@@ -372,11 +373,16 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
                       final profile = profiles[index];
                       return ListTile(
                         autofocus: index == 0,
-                        leading: CircleAvatar(
-                          child: Icon(
-                            profile.role == UserProfileRole.child
-                                ? Icons.child_care_rounded
-                                : Icons.person_rounded,
+                        leading: SizedBox.square(
+                          dimension: 40,
+                          child: ClipOval(
+                            child: ProfileAvatarView(
+                              profileId: profile.id,
+                              avatarKey: profile.avatarKey,
+                              role: profile.role,
+                              name: profile.name,
+                              allowAnimation: false,
+                            ),
                           ),
                         ),
                         title: Text(profile.name),

@@ -91,11 +91,47 @@ class ProfileCreationService {
       await actor.validate(registry);
       return staged;
     } catch (_) {
-      await ProfileCleanupLedger.scheduleProfile(staged.id);
-      await registry.deleteProfile(staged.id);
-      await ProfileDataGenerationManager.deleteAllProfileData(staged.id);
-      await ProfileCleanupLedger.completeProfile(staged.id);
+      await rollbackStaged(staged.id);
       rethrow;
+    }
+  }
+
+  /// Removes both registry state and every private byte owned by an
+  /// unpublished profile. The cleanup ledger keeps an interrupted deletion
+  /// restart-safe; callers must not replace this with a row-only delete.
+  Future<void> rollbackStaged(String profileId) async {
+    await ProfileCleanupLedger.scheduleProfile(profileId);
+    await registry.deleteProfile(profileId);
+    await ProfileDataGenerationManager.deleteAllProfileData(profileId);
+    await ProfileCleanupLedger.completeProfile(profileId);
+  }
+
+  /// Publishes a staged profile without mistaking a post-transaction recovery
+  /// checkpoint failure for a failed setup. The active/setup-complete row
+  /// proves that the transaction committed; a successful checkpoint retry
+  /// proves that the published state is also durable recovery authority.
+  Future<UserProfile> completeStaged({
+    required String profileId,
+    required ProfileAuthorizationContext actor,
+  }) async {
+    try {
+      return await registry.completeProfileSetup(
+        profileId,
+        actingProfileId: actor.profileId,
+        actingAuthorizationRevision: actor.authorizationRevision,
+        actingSessionEpoch: actor.sessionEpoch,
+      );
+    } catch (error, stackTrace) {
+      final persisted = await registry.getProfile(profileId);
+      if (persisted?.lifecycle == UserProfileLifecycle.active &&
+          persisted?.setupComplete == true) {
+        // On tvOS SQLite is a projection, not the recovery authority. Do not
+        // report the staged profile as published until a retry has durably
+        // checkpointed the already-committed row.
+        await registry.checkpointTvOsRecovery();
+        return persisted!;
+      }
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 

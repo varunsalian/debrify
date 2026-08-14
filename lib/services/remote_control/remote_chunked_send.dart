@@ -110,6 +110,7 @@ Future<bool> sendConfigPayloadToDevice(
   String targetIp,
   String payload, {
   required String label,
+  Duration chunkPace = const Duration(milliseconds: 50),
 }) async {
   final session = state.sessionFor(targetIp);
 
@@ -174,7 +175,7 @@ Future<bool> sendConfigPayloadToDevice(
   for (var i = 0; i < chunks.length; i++) {
     // Pace the send: a burst of hundreds of datagrams overruns the receiver's
     // socket buffer, and a chunk dropped there costs the whole transfer.
-    await Future.delayed(const Duration(milliseconds: 50));
+    await Future.delayed(chunkPace);
     final ok = await state.sendConfigCommandToDevice(
       ConfigCommand.debrifyChannelChunk,
       targetIp,

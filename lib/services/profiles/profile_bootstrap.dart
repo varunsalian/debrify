@@ -14,6 +14,7 @@ import 'tvos_profile_recovery_store.dart';
 import 'profile_migration_service.dart';
 import 'profile_data_generation.dart';
 import 'profile_cleanup_ledger.dart';
+import 'profile_avatar_mutation.dart';
 import 'profile_registry.dart';
 import 'profile_runtime.dart';
 import 'profile_scope.dart';
@@ -110,6 +111,7 @@ class ProfileBootstrap {
       );
     }
     if (await opened.isMigrationCommitted()) {
+      await ProfileAvatarMutation.recover(opened);
       await opened.recoverInterruptedActivation();
       final interrupted = await opened.recoverInterruptedRestores();
       for (final recovery in interrupted) {

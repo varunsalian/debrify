@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 import 'profile_database_snapshot.dart';
+import 'profile_avatar_ingest.dart';
+import '../../models/profiles/profile_avatar.dart';
 
 class PortableProfilePackage {
   static const int version = 3;
@@ -514,6 +516,50 @@ class PortableProfilePackage {
           )) {
             throw const FormatException('Portable file digest mismatch');
           }
+        }
+      }
+
+      // Kept on the profile record rather than in filesSection so builds that
+      // only allow `engines/` paths ignore the optional field and still import
+      // the rest of the package. New builds authenticate and cap it here;
+      // restore performs the image/dimension/frame validation before staging.
+      final avatarFile = profile['avatarFile'];
+      if (avatarFile != null) {
+        final avatarKey = profile['avatarKey'];
+        final avatar = avatarKey is String
+            ? ProfileAvatar.tryParse(avatarKey)
+            : null;
+        if (avatar?.kind != ProfileAvatarKind.image ||
+            avatarFile is! Map ||
+            avatarFile['path'] != avatar!.id ||
+            avatarFile['encoding'] != 'base64' ||
+            avatarFile['bytes'] is! num ||
+            avatarFile['sha256'] is! String ||
+            avatarFile['data'] is! String) {
+          throw const FormatException('Invalid portable avatar attachment');
+        }
+        final claimed = (avatarFile['bytes'] as num).toInt();
+        final encoded = avatarFile['data'] as String;
+        if (claimed < 0 ||
+            claimed > ProfileAvatarIngest.maxBytes ||
+            encoded.length > ((ProfileAvatarIngest.maxBytes + 2) ~/ 3) * 4) {
+          throw const FormatException('Portable avatar exceeds limit');
+        }
+        late final List<int> bytes;
+        try {
+          bytes = base64Decode(encoded);
+        } on FormatException {
+          throw const FormatException('Portable avatar is not valid base64');
+        }
+        if (bytes.length != claimed) {
+          throw const FormatException('Portable avatar size mismatch');
+        }
+        final digest = await Sha256().hash(bytes);
+        if (!_constantTimeEquals(
+          base64UrlEncode(digest.bytes).replaceAll('=', ''),
+          avatarFile['sha256'] as String,
+        )) {
+          throw const FormatException('Portable avatar digest mismatch');
         }
       }
 

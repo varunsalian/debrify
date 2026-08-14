@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:debrify/models/profiles/profile_avatar.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/profiles/user_profile.dart';
 import 'package:debrify/services/debrify_tv_database.dart';
@@ -9,9 +10,12 @@ import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/legacy_backup_adapter.dart';
 import 'package:debrify/services/profiles/portable_profile_package.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
+import 'package:debrify/services/profiles/profile_avatar_ingest.dart';
+import 'package:debrify/services/profiles/profile_avatar_storage.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_data_generation.dart';
 import 'package:debrify/services/profiles/profile_package_service.dart';
+import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_restore_coordinator.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
@@ -21,6 +25,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'avatar_fixtures.dart';
 
 void main() {
   late Directory temporaryDirectory;
@@ -121,6 +127,49 @@ void main() {
     expect(prefs.getString('p.$profileId.g.1.theme_mode'), 'old');
     expect(prefs.getString('p.$profileId.g.2.theme_mode'), 'restored');
     expect(prefs.getString('p.$profileId.g.2.language'), 'en');
+  });
+
+  test('an unknown avatar key does not block single-profile restore', () async {
+    var authorization = await ProfileAuthorizationContext.capture(registry);
+    await registry.updateProfile(
+      id: profileId,
+      avatarKey: 'future-avatar:nebula',
+      actingProfileId: authorization.profileId,
+      actingAuthorizationRevision: authorization.authorizationRevision,
+      actingSessionEpoch: authorization.sessionEpoch,
+    );
+    authorization = await ProfileAuthorizationContext.capture(registry);
+    final section = await PortableProfilePackage.buildSection(
+      const <String, Object?>{'theme_mode': 'restored'},
+    );
+    final package = PortableProfilePackage(
+      mode: 'singleProfile',
+      createdAt: DateTime.utc(2026, 8, 14),
+      profiles: const <Map<String, dynamic>>[
+        <String, dynamic>{
+          'backupId': 'profile-0',
+          'preferencesSection': 'preferences',
+        },
+      ],
+      resources: const <Map<String, dynamic>>[],
+      sections: <String, dynamic>{'preferences': section},
+    );
+
+    final report =
+        await ProfileRestoreCoordinator(
+          registry: registry,
+          cipher: cipher,
+        ).restore(
+          package: package,
+          destinationProfileId: profileId,
+          authorization: authorization,
+        );
+
+    expect(report.publishedGeneration, 2);
+    expect(
+      (await registry.getProfile(profileId))?.avatarKey,
+      'future-avatar:nebula',
+    );
   });
 
   test('invalid preference overlay never changes visible authority', () async {
@@ -343,6 +392,92 @@ void main() {
         <String, Object?>{'value': 'db-sentinel'},
       ]);
       await restoredDatabase.close();
+    },
+  );
+
+  test(
+    'graph restore rolls forward after its publication checkpoint throws',
+    () async {
+      final prepared = await ProfileAvatarIngest.prepare(
+        await paintPng(size: 32),
+      );
+      var authorization = await ProfileAuthorizationContext.capture(registry);
+      await ProfileAvatarIngest.publish(
+        registry: registry,
+        profileId: profileId,
+        avatarKey: prepared.avatar.format(),
+        prepared: prepared,
+        persist: () async {
+          await registry.updateProfile(
+            id: profileId,
+            avatarKey: prepared.avatar.format(),
+            actingProfileId: authorization.profileId,
+            actingAuthorizationRevision: authorization.authorizationRevision,
+            actingSessionEpoch: authorization.sessionEpoch,
+          );
+        },
+        wasPersisted: () async =>
+            (await registry.getProfile(profileId))?.avatarKey ==
+            prepared.avatar.format(),
+      );
+      authorization = await ProfileAuthorizationContext.capture(registry);
+      final package = await ProfilePackageService(
+        registry: registry,
+        resources: ConnectionResourceService(
+          registry: registry,
+          cipher: cipher,
+        ),
+      ).exportAllProfiles(context: authorization, includeSecrets: true);
+      var injected = false;
+      var publishedCheckpointCalls = 0;
+      registry.authorityChangedCallback = () async {
+        final journals = await registry.interruptedRestores();
+        final graphPublished = journals.any(
+          (row) =>
+              row['mode'] == 'registryReplace' && row['stage'] == 'published',
+        );
+        if (graphPublished) publishedCheckpointCalls++;
+        if (!injected && graphPublished) {
+          injected = true;
+          throw StateError('checkpoint failed after graph publication');
+        }
+      };
+
+      final report = await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: cipher,
+      ).restoreDeviceGraph(package: package, authorization: authorization);
+
+      expect(injected, isTrue);
+      expect(
+        publishedCheckpointCalls,
+        2,
+        reason: 'graph publication must checkpoint again before avatar cleanup',
+      );
+      expect(report.profilesImported, 1);
+      final imported = (await registry.listProfiles()).singleWhere(
+        (profile) => profile.id != profileId,
+      );
+      final avatar = ProfileAvatar.tryParse(imported.avatarKey);
+      expect(imported.lifecycle, UserProfileLifecycle.active);
+      expect(avatar?.kind, ProfileAvatarKind.image);
+      expect(
+        await (await ProfileAvatarStorage.fileFor(
+          imported.id,
+          avatar!,
+        )).exists(),
+        isTrue,
+      );
+      final importedScope = ProfileScope(
+        profileId: imported.id,
+        dataGeneration: imported.visibleDataGeneration,
+        sessionEpoch: 0,
+      );
+      final preferences = await ProfilePreferences.forCapturedScope(
+        importedScope,
+        CapturedProfilePreferenceAccess.restore,
+      );
+      expect(preferences.getString('theme_mode'), 'old');
     },
   );
 }

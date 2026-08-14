@@ -38,6 +38,9 @@ class ProfilePackageService {
     final portableFiles = sanitized
         ? const <String, Object?>{}
         : await ProfilePortableFiles.export(scope);
+    final portableAvatar = sanitized
+        ? null
+        : await ProfilePortableFiles.exportAvatar(scope, profile.avatarKey);
 
     final exportedResources = <Map<String, dynamic>>[];
     var borrowedResourcesOmitted = 0;
@@ -83,6 +86,7 @@ class ProfilePackageService {
           if (!sanitized) 'role': profile.role.name,
           if (!sanitized) 'policy': profile.policy.encode(),
           if (!sanitized) 'wasPinProtected': profile.hasPin,
+          if (portableAvatar != null) 'avatarFile': portableAvatar,
           'preferencesSection': 'profile-0-preferences',
           if (databaseSnapshots.isNotEmpty)
             'databasesSection': 'profile-0-databases',
@@ -174,6 +178,13 @@ class ProfilePackageService {
         sections[filesSectionId] = await PortableProfilePackage.buildSection(
           portableFiles,
         );
+      }
+      final portableAvatar = await ProfilePortableFiles.exportAvatar(
+        scope,
+        profile.avatarKey,
+      );
+      if (portableAvatar != null) {
+        profileRecords.last['avatarFile'] = portableAvatar;
       }
     }
 

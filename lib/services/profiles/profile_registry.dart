@@ -3122,6 +3122,21 @@ class ProfileRegistry {
     await checkpointTvOsRecovery();
   }
 
+  /// Resolves the commit ambiguity of [publishProfileGraphRestore]. Its journal
+  /// stage changes in the same transaction as profile visibility/resources, so
+  /// `published` is authoritative even when the later recovery checkpoint
+  /// throws.
+  Future<bool> profileGraphRestorePublished(String operationId) async {
+    final rows = await _db.query(
+      'profile_restore_journal',
+      columns: const <String>['stage'],
+      where: "restore_id = ? AND mode = 'registryReplace'",
+      whereArgs: <Object>[operationId],
+      limit: 1,
+    );
+    return rows.isNotEmpty && rows.single['stage'] == 'published';
+  }
+
   Future<int> reserveDataGeneration({
     required String profileId,
     required String operationId,
@@ -3351,6 +3366,26 @@ class ProfileRegistry {
     });
     await checkpointTvOsRecovery();
     return (await getProfile(profileId))!;
+  }
+
+  /// Resolves a thrown post-transaction checkpoint from
+  /// [publishDataGeneration]. Both predicates are written by its publication
+  /// transaction; neither a directory nor an in-memory flag is authority.
+  Future<bool> dataGenerationPublished({
+    required String operationId,
+    required String profileId,
+    required int generation,
+  }) async {
+    final rows = await _db.rawQuery(
+      '''SELECT 1
+         FROM profile_restore_journal j
+         INNER JOIN user_profiles p ON p.id = j.destination_profile_id
+         WHERE j.restore_id = ? AND j.stage = 'published'
+           AND p.id = ? AND p.visible_data_generation = ?
+         LIMIT 1''',
+      <Object>[operationId, profileId, generation],
+    );
+    return rows.isNotEmpty;
   }
 
   Future<List<Map<String, Object?>>> interruptedRestores() =>

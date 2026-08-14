@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import '../../models/profiles/connection_resource.dart';
+import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/backup_restore_service.dart';
@@ -10,6 +11,8 @@ import 'device_key_provider.dart';
 import 'native_profile_projection.dart';
 import 'portable_profile_package.dart';
 import 'profile_authorization.dart';
+import 'profile_avatar_ingest.dart';
+import 'profile_avatar_mutation.dart';
 import 'profile_data_generation.dart';
 import 'profile_database_snapshot.dart';
 import 'profile_lifecycle.dart';
@@ -138,6 +141,9 @@ class ProfileRestoreCoordinator {
       stagedProfileIds: parsedProfiles.map((profile) => profile.id).toList(),
     );
     var published = false;
+    var publicationUncertain = false;
+    final avatarStages = <ProfilePortableAvatarStage>[];
+    final avatarMutationProfiles = <String>{};
     try {
       for (final profile in parsedProfiles) {
         await registry.createProfile(
@@ -166,36 +172,26 @@ class ProfileRestoreCoordinator {
             throw StateError('Could not stage imported profile settings');
           }
         }
-        await _restoreDatabaseSection(
-          package,
-          package.profiles.singleWhere(
-            (record) =>
-                record['backupId'] ==
-                profileIds.entries
-                    .singleWhere((entry) => entry.value == profile.id)
-                    .key,
-          ),
-          ProfileScope(
-            profileId: profile.id,
-            dataGeneration: 1,
-            sessionEpoch: 0,
-          ),
+        final sourceBackupId = profileIds.entries
+            .singleWhere((entry) => entry.value == profile.id)
+            .key;
+        final sourceRecord = package.profiles.singleWhere(
+          (record) => record['backupId'] == sourceBackupId,
         );
-        await _restoreFilesSection(
-          package,
-          package.profiles.singleWhere(
-            (record) =>
-                record['backupId'] ==
-                profileIds.entries
-                    .singleWhere((entry) => entry.value == profile.id)
-                    .key,
-          ),
-          ProfileScope(
-            profileId: profile.id,
-            dataGeneration: 1,
-            sessionEpoch: 0,
-          ),
+        final stagingScope = ProfileScope(
+          profileId: profile.id,
+          dataGeneration: 1,
+          sessionEpoch: 0,
         );
+        await _restoreDatabaseSection(package, sourceRecord, stagingScope);
+        await _restoreFilesSection(package, sourceRecord, stagingScope);
+        final avatarStage = await ProfilePortableFiles.stageAvatar(
+          scope: stagingScope,
+          record: sourceRecord['avatarFile'],
+          expectedAvatarKey: profile.avatarKey,
+          operationId: operationId,
+        );
+        if (avatarStage != null) avatarStages.add(avatarStage);
         if (profile.wasPinProtected) {
           await registry.setPinRecord(
             profileId: profile.id,
@@ -347,13 +343,65 @@ class ProfileRestoreCoordinator {
           profileId: profile.id,
         );
       }
-      await registry.publishProfileGraphRestore(
-        operationId: operationId,
-        stagedProfileIds: parsedProfiles.map((profile) => profile.id).toList(),
-        resources: stagedResources,
+      await ProfileAvatarMutation.runExclusiveMany(
+        parsedProfiles.map((profile) => profile.id),
+        () async {
+          for (final stage in avatarStages) {
+            await ProfileAvatarMutation.begin(
+              stage.profileId,
+              stage.avatar.format(),
+            );
+            avatarMutationProfiles.add(stage.profileId);
+            await stage.install();
+          }
+          try {
+            await registry.publishProfileGraphRestore(
+              operationId: operationId,
+              stagedProfileIds: parsedProfiles
+                  .map((profile) => profile.id)
+                  .toList(),
+              resources: stagedResources,
+            );
+          } catch (error, stackTrace) {
+            bool committed;
+            try {
+              committed = await registry.profileGraphRestorePublished(
+                operationId,
+              );
+            } catch (_) {
+              publicationUncertain = true;
+              Error.throwWithStackTrace(error, stackTrace);
+            }
+            if (!committed) Error.throwWithStackTrace(error, stackTrace);
+            try {
+              // The journal proves the SQLite transaction, but tvOS may still
+              // have failed before publishing that projection to Keychain.
+              // Require a successful retry before finalizing live avatar bytes.
+              await registry.checkpointTvOsRecovery();
+            } catch (_) {
+              publicationUncertain = true;
+              Error.throwWithStackTrace(error, stackTrace);
+            }
+          }
+          published = true;
+          for (final stage in avatarStages) {
+            try {
+              await stage.finish();
+              await ProfileAvatarMutation.complete(stage.profileId);
+            } catch (_) {
+              // Registry publication is already durable. Retain this profile's
+              // intent and report success; bootstrap finishes the idempotent
+              // prune/staging cleanup instead of inviting a duplicate restore.
+            }
+          }
+        },
       );
-      published = true;
-      await registry.markRestoreCleaned(operationId);
+      try {
+        await registry.markRestoreCleaned(operationId);
+      } catch (_) {
+        // Publication is already authoritative. A retained `published` journal
+        // is harmless and bootstrap removes it idempotently.
+      }
       return ProfileGraphRestoreReport(
         profilesImported: parsedProfiles.length,
         resourcesImported: stagedResources.length,
@@ -364,7 +412,15 @@ class ProfileRestoreCoordinator {
             .length,
       );
     } catch (_) {
-      if (!published) {
+      if (!published && !publicationUncertain) {
+        for (final stage in avatarStages) {
+          try {
+            await stage.rollback();
+          } catch (_) {
+            // The graph journal still owns the whole staging profile and
+            // startup will delete its complete private tree.
+          }
+        }
         var cleanupComplete = true;
         for (final profile in parsedProfiles) {
           try {
@@ -379,6 +435,14 @@ class ProfileRestoreCoordinator {
           }
         }
         if (cleanupComplete) {
+          for (final profileId in avatarMutationProfiles) {
+            try {
+              await ProfileAvatarMutation.complete(profileId);
+            } catch (_) {
+              // Retaining the intent is safe; bootstrap sees no profile and
+              // removes the remaining private tree.
+            }
+          }
           try {
             await registry.markRestoreCleaned(operationId);
           } catch (_) {
@@ -418,7 +482,10 @@ class ProfileRestoreCoordinator {
     final current = ProfileRuntime.capture();
     final restoringActive = current.profileId == destinationProfileId;
     var published = false;
+    var publicationUncertain = false;
     ProfileScope? candidate;
+    ProfilePortableAvatarStage? avatarStage;
+    var avatarStageApplies = false;
     if (restoringActive) {
       for (final participant in lifecycleParticipants) {
         await participant.prepareDeactivate(current);
@@ -448,6 +515,27 @@ class ProfileRestoreCoordinator {
         package.profiles.single,
         stagingScope,
       );
+      final importedAvatarKey = package.profiles.single['avatarKey'];
+      final importedAvatar = importedAvatarKey is String
+          ? ProfileAvatar.tryParse(importedAvatarKey)
+          : null;
+      final currentAvatar = ProfileAvatar.tryParse(actor.avatarKey);
+      avatarStageApplies =
+          importedAvatar?.kind == ProfileAvatarKind.image &&
+          currentAvatar?.kind == ProfileAvatarKind.image &&
+          importedAvatar!.id == currentAvatar!.id;
+      // A single-profile restore does not replace profile identity. Only stage
+      // avatar bytes when they repair the exact file key already owned by the
+      // destination; otherwise there is no live avatar mutation to recover.
+      if (avatarStageApplies) {
+        avatarStage = await ProfilePortableFiles.stageAvatar(
+          scope: stagingScope,
+          record: package.profiles.single['avatarFile'],
+          expectedAvatarKey: importedAvatarKey as String,
+          operationId: operationId,
+        );
+        avatarStageApplies = avatarStage != null;
+      }
       var imported = 0;
       var borrowedSkipped = 0;
       final stagedIptvProviders = <String, String>{};
@@ -563,15 +651,99 @@ class ProfileRestoreCoordinator {
       }
 
       // Revalidate the captured role/policy/revision immediately before the
-      // one visible-state transaction.
+      // one visible-state transaction. The shared avatar queue stays held from
+      // live-file installation through registry publication and pruning.
       await authorization.validate(registry);
-      final publishedProfile = await registry.publishDataGeneration(
-        profileId: destinationProfileId,
-        baseGeneration: staged.baseGeneration,
-        stagedGeneration: staged.generation,
-        operationId: operationId,
-      );
-      published = true;
+      late final UserProfile publishedProfile;
+      await ProfileAvatarMutation.runExclusive(destinationProfileId, () async {
+        // Authorization must be revalidated after waiting in the avatar queue.
+        // Any writer ahead of us increments the profile revision, preventing a
+        // stale actor key from pruning its newly published file.
+        await authorization.validate(registry);
+        final mutationStarted = currentAvatar != null;
+        if (mutationStarted) {
+          await ProfileAvatarMutation.begin(
+            destinationProfileId,
+            actor.avatarKey!,
+          );
+        }
+        try {
+          if (avatarStageApplies) await avatarStage!.install();
+          try {
+            publishedProfile = await registry.publishDataGeneration(
+              profileId: destinationProfileId,
+              baseGeneration: staged.baseGeneration,
+              stagedGeneration: staged.generation,
+              operationId: operationId,
+            );
+          } catch (error, stackTrace) {
+            bool committed;
+            try {
+              committed = await registry.dataGenerationPublished(
+                operationId: operationId,
+                profileId: destinationProfileId,
+                generation: staged.generation,
+              );
+            } catch (_) {
+              publicationUncertain = true;
+              Error.throwWithStackTrace(error, stackTrace);
+            }
+            if (!committed) Error.throwWithStackTrace(error, stackTrace);
+            try {
+              await registry.checkpointTvOsRecovery();
+            } catch (_) {
+              publicationUncertain = true;
+              Error.throwWithStackTrace(error, stackTrace);
+            }
+            publishedProfile = (await registry.getProfile(
+              destinationProfileId,
+            ))!;
+          }
+          published = true;
+          var cleanupComplete = true;
+          try {
+            if (avatarStageApplies) {
+              await avatarStage!.finish();
+            } else {
+              await avatarStage?.rollback();
+            }
+          } catch (_) {
+            cleanupComplete = false;
+          }
+          if (mutationStarted) {
+            try {
+              await ProfileAvatarIngest.commit(
+                profileId: destinationProfileId,
+                avatarKey: actor.avatarKey,
+              );
+            } catch (_) {
+              cleanupComplete = false;
+            }
+            if (cleanupComplete) {
+              try {
+                await ProfileAvatarMutation.complete(destinationProfileId);
+              } catch (_) {
+                // A retained intent is safe and is cleared by bootstrap.
+              }
+            }
+          }
+        } catch (error, stackTrace) {
+          if (!published && !publicationUncertain) {
+            await avatarStage?.rollback();
+            final currentProfile = await registry.getProfile(
+              destinationProfileId,
+            );
+            if (mutationStarted) {
+              await ProfileAvatarIngest.commit(
+                profileId: destinationProfileId,
+                avatarKey: currentProfile?.avatarKey,
+              );
+              await ProfileAvatarMutation.complete(destinationProfileId);
+            }
+          }
+          Error.throwWithStackTrace(error, stackTrace);
+        }
+      });
       if (restoringActive) {
         ProfileRuntime.publish(candidate!);
         // Global caches/controllers may only warm after registry and runtime
@@ -585,7 +757,12 @@ class ProfileRestoreCoordinator {
         }
       }
 
-      await registry.markRestoreCleaned(operationId);
+      try {
+        await registry.markRestoreCleaned(operationId);
+      } catch (_) {
+        // A published restore is successful even if cleanup's recovery
+        // checkpoint fails; its published journal is safe to replay.
+      }
       final omissions = Map<String, dynamic>.from(package.omissions);
       if (legacy is Map) {
         final postScope = restoringActive

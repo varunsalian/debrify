@@ -5,7 +5,9 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import '../../models/profiles/profile_policy.dart';
+import '../profiles/profile_avatar_ingest.dart';
 import '../profiles/profile_async_authorization.dart';
+import 'remote_chunked_send.dart';
 import 'remote_constants.dart';
 import 'remote_command_router.dart';
 import 'remote_pairing_store.dart';
@@ -110,6 +112,7 @@ class RemoteControlState extends ChangeNotifier {
   final Map<String, RemoteSession> _sessionByIp = {};
   final Map<String, Completer<RemoteSession?>> _pendingHandshakes = {};
   final Map<String, Completer<void>> _pendingPongs = {};
+  final Map<String, Completer<bool>> _pendingProfileAvatars = {};
   final Set<String> _rememberedFingerprints = <String>{};
   final Set<String> _encryptedPeerIps = <String>{};
   int _pingSeq = 0;
@@ -587,6 +590,56 @@ class RemoteControlState extends ChangeNotifier {
     );
   }
 
+  /// Sender role: push a picked avatar image to a paired TV. Rides the same
+  /// sealed chunked transfer as every large config payload; the receiver
+  /// validates, ingests and applies it to its active profile.
+  Future<bool> sendProfileAvatar(String targetIp, Uint8List bytes) async {
+    final PreparedProfileAvatar prepared;
+    try {
+      prepared = await ProfileAvatarIngest.prepareForRemote(bytes);
+    } on ProfileAvatarRejected {
+      return false;
+    }
+    final requestId =
+        '${DateTime.now().microsecondsSinceEpoch}_${Random.secure().nextInt(1 << 32)}';
+    final payload = jsonEncode(<String, Object?>{
+      'version': 1,
+      'requestId': requestId,
+      'data': base64Encode(prepared.bytes),
+    });
+    final result = Completer<bool>();
+    _pendingProfileAvatars[requestId] = result;
+    try {
+      // One whole-transfer retry makes a dropped UDP chunk recoverable. The
+      // receiver applies content-addressed bytes idempotently and replies only
+      // after its registry update and prune have completed.
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final delivered = await sendConfigPayloadToDevice(
+          this,
+          ConfigCommand.profileAvatar,
+          targetIp,
+          payload,
+          label: 'profile_avatar',
+          chunkPace: const Duration(milliseconds: 15),
+        );
+        if (!delivered) continue;
+        try {
+          return await result.future.timeout(
+            kChunkTransferTimeout + const Duration(seconds: 5),
+          );
+        } on TimeoutException {
+          // Retry once. A late authenticated reply still completes the same
+          // correlator while the second attempt is on the wire.
+        }
+      }
+      return false;
+    } finally {
+      if (identical(_pendingProfileAvatars[requestId], result)) {
+        _pendingProfileAvatars.remove(requestId);
+      }
+    }
+  }
+
   /// Send a navigation command (sender role)
   void sendNavigateCommand(String direction) {
     if (!isConnected || _isTv) return;
@@ -1038,6 +1091,7 @@ class RemoteControlState extends ChangeNotifier {
       return;
     }
     if (action == RemoteAction.pair) {
+      if (_handleProfileAvatarReply(cmd, data)) return;
       onPairMessage?.call(session, cmd, data);
       return;
     }
@@ -1089,6 +1143,24 @@ class RemoteControlState extends ChangeNotifier {
       ),
     );
   }
+
+  bool _handleProfileAvatarReply(String command, String? data) {
+    if (command != PairCommand.err || data == null) return false;
+    final parts = data.split(':');
+    if (parts.length != 3 || parts.first != 'profile_avatar') return false;
+    final pending = _pendingProfileAvatars.remove(parts[1]);
+    if (pending == null) return true;
+    if (!pending.isCompleted) pending.complete(parts[2] == 'ok');
+    if (parts[2] != 'ok') {
+      _lastError = 'The TV did not apply the profile avatar.';
+      notifyListeners();
+    }
+    return true;
+  }
+
+  @visibleForTesting
+  bool debugHandleProfileAvatarReply(String data) =>
+      _handleProfileAvatarReply(PairCommand.err, data);
 
   /// Seal and send a command over [session]'s wire endpoint. Returns false
   /// when no socket or endpoint is available.
@@ -1287,5 +1359,9 @@ class RemoteControlState extends ChangeNotifier {
       if (!completer.isCompleted) completer.complete();
     }
     _pendingPongs.clear();
+    for (final completer in _pendingProfileAvatars.values) {
+      if (!completer.isCompleted) completer.complete(false);
+    }
+    _pendingProfileAvatars.clear();
   }
 }

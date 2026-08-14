@@ -144,6 +144,71 @@ void main() {
     expect((await registry.getProfile(member.id))?.setupComplete, isTrue);
   });
 
+  test('staged completion survives a post-commit checkpoint failure', () async {
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final creation = ProfileCreationService(registry);
+    final staged = await creation.createStaged(
+      actor: authorization,
+      name: 'Checkpoint member',
+      role: UserProfileRole.member,
+      policy: ProfilePolicy.defaultsFor(UserProfileRole.member),
+      copyDefaultsFromActive: false,
+    );
+    var injected = false;
+    var activeCheckpointCalls = 0;
+    registry.authorityChangedCallback = () async {
+      final current = await registry.getProfile(staged.id);
+      if (current?.lifecycle == UserProfileLifecycle.active) {
+        activeCheckpointCalls++;
+      }
+      if (!injected && current?.lifecycle == UserProfileLifecycle.active) {
+        injected = true;
+        throw StateError('checkpoint failed after commit');
+      }
+    };
+
+    final completed = await creation.completeStaged(
+      profileId: staged.id,
+      actor: authorization,
+    );
+
+    expect(injected, isTrue);
+    expect(
+      activeCheckpointCalls,
+      2,
+      reason: 'completion must checkpoint again',
+    );
+    expect(completed.lifecycle, UserProfileLifecycle.active);
+    expect(completed.setupComplete, isTrue);
+    expect(await registry.getProfile(staged.id), isNotNull);
+  });
+
+  test(
+    'staged-profile rollback removes avatar bytes as well as the row',
+    () async {
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final creation = ProfileCreationService(registry);
+      final staged = await creation.createStaged(
+        actor: authorization,
+        name: 'Member',
+        role: UserProfileRole.member,
+        policy: ProfilePolicy.defaultsFor(UserProfileRole.member),
+        copyDefaultsFromActive: false,
+      );
+      final profileRoot = Directory(
+        p.join(temporaryDirectory.path, 'documents', 'profiles', staged.id),
+      );
+      final avatar = File(p.join(profileRoot.path, 'avatars', 'picked.gif'));
+      await avatar.parent.create(recursive: true);
+      await avatar.writeAsBytes(<int>[1, 2, 3]);
+
+      await creation.rollbackStaged(staged.id);
+
+      expect(await registry.getProfile(staged.id), isNull);
+      expect(await profileRoot.exists(), isFalse);
+    },
+  );
+
   test('profile reset atomically makes onboarding incomplete', () async {
     await ProfileResetService(registry: registry).resetActiveProfile();
 

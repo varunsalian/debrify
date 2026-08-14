@@ -77,19 +77,28 @@ void main() {
     final source = File(
       'lib/screens/profiles/edit_profile_screen.dart',
     ).readAsStringSync();
+    // The switch moved onto the widget (public, @visibleForTesting) when the
+    // save rule was extracted into EditProfileScreen.policyFor.
     expect(
       source,
-      contains('static const bool _showFeaturePolicyControls = false;'),
+      contains('static const bool showFeaturePolicyControls = false;'),
     );
     expect(
-      'if (_showFeaturePolicyControls) ...['.allMatches(source).length,
+      'if (EditProfileScreen.showFeaturePolicyControls) ...['
+          .allMatches(source)
+          .length,
       1,
       reason: 'The existing feature controls must stay present but hidden.',
     );
     expect(
-      'ProfilePolicy.allAllowedFor(_role)'.allMatches(source).length,
-      greaterThanOrEqualTo(2),
-      reason: 'Both initialization and save must select the full role policy.',
+      source,
+      contains('ProfilePolicy.allAllowedFor(role)'),
+      reason: 'policyFor must select the full role policy while the switch is off.',
+    );
+    expect(
+      source,
+      contains('ProfilePolicy.allAllowedFor(_role)'),
+      reason: 'Initialization must select the full role policy too.',
     );
   });
 

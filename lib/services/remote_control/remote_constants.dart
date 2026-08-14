@@ -159,6 +159,9 @@ class ConfigCommand {
   // config command can travel this way.
   static const String debrifyChannelStart = 'debrify_channel_start';
   static const String debrifyChannelChunk = 'debrify_channel_chunk';
+  // A picked avatar image from the paired phone. NOT setup data: it applies
+  // to the active profile immediately instead of joining the staged import.
+  static const String profileAvatar = 'profile_avatar';
   static const String complete =
       'complete'; // Signals all configs sent, TV should restart
 }

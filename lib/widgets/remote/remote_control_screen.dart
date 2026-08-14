@@ -1,8 +1,13 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/profiles/profile_policy.dart';
 import '../../services/profiles/profile_policy_guard.dart';
+import '../../services/profiles/profile_avatar_ingest.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/udp_discovery_service.dart';
@@ -27,6 +32,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   String? _activeView;
   // Track if keyboard input is showing
   bool _showKeyboard = false;
+  bool _sendingAvatar = false;
 
   @override
   void initState() {
@@ -635,6 +641,15 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           onTap: () => _openView('config'),
         ),
 
+        const SizedBox(height: 8),
+
+        _buildMenuItem(
+          icon: Icons.account_circle_outlined,
+          title: _sendingAvatar ? 'Sending Avatar…' : 'Send Profile Avatar',
+          subtitle: 'Apply a photo to the active Admin on TV',
+          onTap: _sendingAvatar ? () {} : () => _pickAndSendAvatar(state),
+        ),
+
         const SizedBox(height: 20),
 
         // Switch TV option
@@ -654,6 +669,83 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _pickAndSendAvatar(RemoteControlState state) async {
+    if (!await ProfilePolicyGuard.allows(ProfileFeature.remoteTransfer) ||
+        !mounted) {
+      return;
+    }
+    final device = state.connectedDevice;
+    if (device == null) return;
+    try {
+      final pick = await FilePicker.platform.pickFiles(
+        dialogTitle: 'Choose a profile avatar',
+        type: FileType.any,
+        withData: false,
+      );
+      if (pick == null || pick.files.isEmpty || !mounted) return;
+      final picked = pick.files.single;
+      if (picked.size > ProfileAvatarIngest.maxInputBytes) {
+        throw const ProfileAvatarRejected(
+          'That image is too large to send. Choose one under 12 MB.',
+        );
+      }
+      final bytes = await _readAvatarBytes(picked);
+      if (!mounted) return;
+      final session = await ensureAuthorizedSession(context, state, device);
+      if (session == null || !mounted) return;
+      setState(() => _sendingAvatar = true);
+      final applied = await state.sendProfileAvatar(device.ip, bytes);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            applied
+                ? 'Profile avatar updated on TV'
+                : 'The TV did not apply that avatar',
+          ),
+        ),
+      );
+    } on ProfileAvatarRejected catch (rejected) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(rejected.message)));
+    } on PlatformException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The image picker is not available.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That avatar could not be sent.')),
+      );
+    } finally {
+      if (mounted) setState(() => _sendingAvatar = false);
+    }
+  }
+
+  Future<Uint8List> _readAvatarBytes(PlatformFile picked) async {
+    final inline = picked.bytes;
+    if (inline != null) return inline;
+    final path = picked.path;
+    if (path == null || path.isEmpty) {
+      throw const ProfileAvatarRejected('That file could not be read.');
+    }
+    final builder = BytesBuilder(copy: false);
+    var length = 0;
+    await for (final chunk in File(path).openRead()) {
+      if (length > ProfileAvatarIngest.maxInputBytes - chunk.length) {
+        throw const ProfileAvatarRejected(
+          'That image is too large to send. Choose one under 12 MB.',
+        );
+      }
+      builder.add(chunk);
+      length += chunk.length;
+    }
+    return builder.takeBytes();
   }
 
   Widget _buildMenuItem({

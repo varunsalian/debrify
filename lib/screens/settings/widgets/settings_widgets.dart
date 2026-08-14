@@ -92,10 +92,12 @@ abstract final class SettingsRows {
     title: 'Remote',
     subtitle: 'Control another device, send or receive setup',
   );
+  // The Profiles hub replaced the bare switch action: switching lives on the
+  // hub beside the roster, so this row is now the one front door.
   static const switchProfile = SettingsRowContent(
     icon: Icons.switch_account_rounded,
-    title: 'Switch profile',
-    subtitle: 'Choose who is using Debrify',
+    title: 'Profiles',
+    subtitle: 'Who can use this device',
   );
   static const navigationStyle = SettingsRowContent(
     icon: Icons.call_to_action_rounded,

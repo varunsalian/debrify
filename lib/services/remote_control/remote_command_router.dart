@@ -40,6 +40,8 @@ import '../profiles/profile_authorization.dart';
 import '../profiles/profile_bootstrap.dart';
 import '../profiles/device_key_provider.dart';
 import '../profiles/legacy_backup_adapter.dart';
+import '../profiles/profile_avatar_ingest.dart';
+import '../profiles/profile_avatar_policy.dart';
 import '../profiles/profile_app_lifecycle_participant.dart';
 import '../profiles/profile_restore_coordinator.dart';
 import '../../services/backup_restore_service.dart';
@@ -714,7 +716,10 @@ class RemoteCommandRouter {
 
     if (ProfileRuntime.isInitialized &&
         ProfileRuntime.isProfileCommitted &&
-        !isTransport) {
+        !isTransport &&
+        // An avatar is not setup data — it applies immediately below rather
+        // than joining the staged import payload.
+        command != ConfigCommand.profileAvatar) {
       if (!_bufferProfileConfig(command, data, context, profileBinding)) {
         return;
       }
@@ -732,6 +737,126 @@ class RemoteCommandRouter {
       _dispatchConfigCommand(command, data, context: context),
     );
   }
+
+  /// A picked image pushed from the paired phone, applied to the ACTIVE
+  /// profile. `updateProfile` requires a managing actor, so this works only
+  /// while a managing Admin is signed in — a deliberate mirror of the local
+  /// rule rather than a new capability.
+  Future<void> _handleProfileAvatarConfig(
+    String? data,
+    RemoteCommandContext context,
+  ) async {
+    String? requestId;
+    var encoded = data;
+    if (data != null && data.startsWith('{')) {
+      try {
+        final envelope = jsonDecode(data);
+        if (envelope is! Map ||
+            envelope['version'] != 1 ||
+            envelope['requestId'] is! String ||
+            envelope['data'] is! String) {
+          throw const FormatException('Invalid avatar envelope');
+        }
+        requestId = envelope['requestId'] as String;
+        encoded = envelope['data'] as String;
+        if (requestId.isEmpty || requestId.length > 96) {
+          throw const FormatException('Invalid avatar request ID');
+        }
+      } on FormatException {
+        await _replyProfileAvatar(context, null, 'invalid');
+        _showSnackBar('Avatar payload could not be read', isError: true);
+        return;
+      }
+    }
+    if (encoded == null || encoded.isEmpty) {
+      await _replyProfileAvatar(context, requestId, 'invalid');
+      return;
+    }
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      await _replyProfileAvatar(context, requestId, 'profiles_disabled');
+      _showSnackBar('Profiles are not enabled on this device', isError: true);
+      return;
+    }
+    if (!ProfileAvatarPolicy.userImagesSupported) {
+      // tvOS keeps no user avatar files. The receiver refuses so that a later
+      // phase cannot quietly grant what the picker denies.
+      await _replyProfileAvatar(context, requestId, 'unsupported');
+      _showSnackBar('This device uses built-in avatars only', isError: true);
+      return;
+    }
+    // Static images may be larger than the stored output and are downscaled by
+    // ingest, exactly like the local picker. Bound the raw input allocation,
+    // not the normalized 1 MiB result.
+    if (encoded.length >
+        ((ProfileAvatarIngest.maxInputBytes + 2) ~/ 3) * 4 + 8) {
+      await _replyProfileAvatar(context, requestId, 'too_large');
+      _showSnackBar('That image is too large for an avatar', isError: true);
+      return;
+    }
+    try {
+      final registry = ProfileBootstrap.registry;
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final actor = await authorization.validate(registry);
+      if (actor.role != UserProfileRole.admin ||
+          !actor.allows(ProfileFeature.manageProfiles)) {
+        await _replyProfileAvatar(context, requestId, 'not_authorized');
+        _showSnackBar(
+          'Only a managing Admin profile can receive an avatar',
+          isError: true,
+        );
+        return;
+      }
+      final prepared = await ProfileAvatarIngest.prepare(base64Decode(encoded));
+      final avatarKey = prepared.avatar.format();
+      await ProfileAvatarIngest.publish(
+        registry: registry,
+        profileId: actor.id,
+        avatarKey: avatarKey,
+        prepared: prepared,
+        persist: () async {
+          await registry.updateProfile(
+            id: actor.id,
+            avatarKey: avatarKey,
+            actingProfileId: authorization.profileId,
+            actingAuthorizationRevision: authorization.authorizationRevision,
+            actingSessionEpoch: authorization.sessionEpoch,
+          );
+        },
+        wasPersisted: () async =>
+            (await registry.getProfile(actor.id))?.avatarKey == avatarKey,
+      );
+      await _replyProfileAvatar(context, requestId, 'ok');
+      _showSnackBar('Profile avatar updated');
+    } on ProfileAvatarRejected catch (rejected) {
+      await _replyProfileAvatar(context, requestId, 'rejected');
+      _showSnackBar(rejected.message, isError: true);
+    } on FormatException {
+      await _replyProfileAvatar(context, requestId, 'invalid');
+      _showSnackBar('Avatar payload could not be read', isError: true);
+    } catch (_) {
+      await _replyProfileAvatar(context, requestId, 'apply_failed');
+      _showSnackBar('Avatar could not be applied', isError: true);
+    }
+  }
+
+  Future<void> _replyProfileAvatar(
+    RemoteCommandContext context,
+    String? requestId,
+    String result,
+  ) async {
+    final reply = context.reject;
+    if (reply == null) return;
+    final code = requestId == null
+        ? 'avatar_$result'
+        : 'profile_avatar:$requestId:$result';
+    await reply(code);
+  }
+
+  @visibleForTesting
+  Future<void> debugHandleProfileAvatar(
+    String? data,
+    RemoteCommandContext context,
+  ) => _handleProfileAvatarConfig(data, context);
 
   Map<String, dynamic>? _profilePayload(
     RemoteCommandContext context,
@@ -1290,6 +1415,9 @@ class RemoteCommandRouter {
         break;
       case ConfigCommand.debrifyChannel:
         await _handleDebrifyChannelConfig(data);
+        break;
+      case ConfigCommand.profileAvatar:
+        await _handleProfileAvatarConfig(data, context);
         break;
       case ConfigCommand.debrifyChannelStart:
         _handleDebrifyChannelStart(data, context);
@@ -2162,6 +2290,17 @@ class RemoteCommandRouter {
         sidB64: session.sidB64,
         peerFingerprint: session.peerFingerprint,
         peerName: session.peerName,
+        sourceIp: buffer.sourceIp,
+        reject: (code) async {
+          await state.sendEncryptedCommand(
+            session,
+            RemoteCommand(
+              action: RemoteAction.pair,
+              command: PairCommand.err,
+              data: code,
+            ),
+          );
+        },
       ),
     );
   }
