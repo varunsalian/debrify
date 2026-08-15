@@ -56,6 +56,12 @@ class EngineRegistry {
   final Lock _loadLock = Lock();
   bool _initialized = false;
   String? _loadedScopeKey;
+
+  /// The profile scope whose engines are actually in [_engines] right now, or
+  /// null when nothing is loaded. Read-only, for the cache ledger: this is a
+  /// MEASURED scope rather than a stamp, so it can disagree with the lifecycle
+  /// and that disagreement is the thing worth seeing.
+  String? get loadedScopeKey => _initialized ? _loadedScopeKey : null;
   int _stateRevision = 0;
 
   /// Whether the registry has been initialized for the authoritative profile
@@ -127,9 +133,7 @@ class EngineRegistry {
       _engines.addAll(engines);
       _loadedScopeKey = requestedScope.key;
       _initialized = true;
-      debugPrint(
-        'EngineRegistry: Initialized with ${_engines.length} engines',
-      );
+      debugPrint('EngineRegistry: Initialized with ${_engines.length} engines');
     } catch (e) {
       debugPrint('EngineRegistry: Initialization failed: $e');
       // Don't crash - leave in empty state

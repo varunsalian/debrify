@@ -18,6 +18,9 @@ import '../../services/live_recording_service.dart';
 import '../../services/tvos_top_shelf_service.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
+// DEV-ONLY, delete with lib/{services,screens}/profiles/dev/.
+import '../../services/profiles/dev/profile_audit_flag.dart';
+import 'dev/profile_data_screen.dart';
 import 'edit_profile_screen.dart';
 
 class ManageProfilesScreen extends StatefulWidget {
@@ -300,6 +303,15 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
     }
   }
 
+  /// DEV-ONLY. Opens the per-profile key/value browser.
+  Future<void> _openProfileData() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ProfileDataScreen(registry: widget.registry),
+      ),
+    );
+  }
+
   Future<void> _showDiagnostics() async {
     final report = await ProfileDiagnosticsService.collectJson(widget.registry);
     if (!mounted) return;
@@ -340,6 +352,16 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
             onPressed: profiles == null ? null : _showDiagnostics,
             icon: const Icon(Icons.health_and_safety_outlined),
           ),
+          // DEV-ONLY, delete with lib/{services,screens}/profiles/dev/.
+          // kProfileAudit is a compile-time const defaulting to false, so a
+          // build that did not opt in has neither this button nor the code
+          // behind it — the tooling cannot ship by being forgotten.
+          if (kProfileAudit)
+            IconButton(
+              tooltip: 'Profile data',
+              onPressed: profiles == null ? null : _openProfileData,
+              icon: const Icon(Icons.data_object_rounded),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(

@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en" data-view="desktop">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Debrify — Profile data browser</title>
+<style>
+  @font-face{font-family:SpaceGrotesk;src:url('../../../assets/fonts/SpaceGrotesk-Medium.ttf') format('truetype');font-weight:500}
+  @font-face{font-family:SpaceGrotesk;src:url('../../../assets/fonts/SpaceGrotesk-Bold.ttf') format('truetype');font-weight:700}
+  @font-face{font-family:JetBrainsMono;src:url('../../../assets/fonts/JetBrainsMono-Regular.ttf') format('truetype');font-weight:400}
+  @font-face{font-family:JetBrainsMono;src:url('../../../assets/fonts/JetBrainsMono-Bold.ttf') format('truetype');font-weight:700}
+
+  :root{
+    --ground:#0D1420; --sunken:#080D16; --raised:#151D2A; --ink:#FFFFFF;
+    --accent:#E23D4C;
+    --ok:#39D98A; --warn:#F4B860; --bad:#FF6673; --device:#5AA9FF;
+    --dim:rgba(255,255,255,.58); --dimmer:rgba(255,255,255,.34); --hair:rgba(255,255,255,.075);
+    --sans:SpaceGrotesk,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:JetBrainsMono,"SFMono-Regular",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:#070B12;color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  body{margin:0;min-width:320px;background:radial-gradient(circle at 84% -18%,rgba(226,61,76,.09),transparent 32rem),#070B12}
+  button,input{font:inherit;color:inherit}
+
+  /* doc chrome ------------------------------------------------------- */
+  .docbar{position:sticky;top:0;z-index:90;display:flex;align-items:center;gap:18px;padding:14px 24px;flex-wrap:wrap;
+    background:rgba(7,11,18,.86);border-bottom:1px solid var(--hair);backdrop-filter:blur(18px)}
+  .docbrand{font:700 11px/1 var(--mono);letter-spacing:.19em;text-transform:uppercase;color:#FF7A86}
+  .docnote{font-size:12px;color:var(--dimmer)}
+  .viewtabs{display:flex;gap:5px;margin-left:auto;padding:4px;border-radius:999px;background:rgba(255,255,255,.05)}
+  .viewtabs button{border:0;background:transparent;padding:8px 13px;border-radius:999px;cursor:pointer;
+    font:700 10px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dimmer)}
+  .viewtabs button.on{background:#fff;color:#0B1019}
+
+  main{width:min(1320px,calc(100% - 44px));margin:0 auto;padding:40px 0 100px}
+  .eyebrow{font:700 10px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:#FF7A86;margin-bottom:12px}
+  h1{font-size:32px;line-height:1.04;letter-spacing:-1px;margin:0 0 12px}
+  .lede{max-width:760px;font-size:14px;line-height:1.65;color:var(--dim);margin:0 0 26px}
+
+  .frame{position:relative;margin:0 auto;border-radius:16px;overflow:hidden;background:var(--sunken);
+    border:1px solid rgba(255,255,255,.10);box-shadow:0 30px 90px rgba(0,0,0,.5);transition:width .22s ease}
+  html[data-view="desktop"] .frame,html[data-view="tv"] .frame{width:100%}
+  html[data-view="tablet"]  .frame{width:min(840px,100%)}
+  html[data-view="phone"]   .frame{width:min(392px,100%);border-radius:28px}
+
+  .stage{container-type:inline-size;background:var(--ground);min-height:560px}
+  html[data-view="tv"] .stage{font-size:17px}
+
+  /* ── header ──────────────────────────────────────────────────────── */
+  .head{position:sticky;top:0;z-index:20;padding:14px 16px;border-bottom:1px solid var(--hair);
+    background:linear-gradient(180deg,rgba(13,20,32,.98),rgba(13,20,32,.92));backdrop-filter:blur(14px)}
+  .head-top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .head-top h2{margin:0;font-size:16px;font-weight:700;letter-spacing:-.2px}
+  .head-top .n{margin-left:auto;font:700 10px/1 var(--mono);color:var(--dimmer);letter-spacing:.08em}
+
+  /* profile picker --------------------------------------------------- */
+  .picker{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+  .picker::-webkit-scrollbar{display:none}
+  .ptab{display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:10px;cursor:pointer;flex:0 0 auto;
+    background:rgba(255,255,255,.045);border:1px solid var(--hair);white-space:nowrap}
+  .ptab .dot{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font:700 10px/1 var(--sans);
+    background:linear-gradient(140deg,#E23D4C,#8B2334);color:#fff}
+  .ptab .dot.m{background:linear-gradient(140deg,#5AA9FF,#2C5C8F)}
+  .ptab .dot.a{background:linear-gradient(140deg,#F4B860,#96692B)}
+  .ptab .dot.d{background:rgba(255,255,255,.10);color:var(--device)}
+  .ptab b{font-size:12.5px}
+  .ptab i{font:400 9.5px/1 var(--mono);font-style:normal;color:var(--dimmer);letter-spacing:.05em}
+  .ptab.on{background:rgba(226,61,76,.13);border-color:rgba(226,61,76,.42)}
+  .ptab.on i{color:rgba(255,255,255,.5)}
+
+  /* toolbar ---------------------------------------------------------- */
+  .tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--hair)}
+  .search{flex:1 1 190px;min-width:0;display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:9px;
+    background:var(--sunken);border:1px solid var(--hair)}
+  .search input{flex:1;min-width:0;border:0;background:transparent;outline:none;font:400 12px/1 var(--mono);color:var(--ink)}
+  .search input::placeholder{color:rgba(255,255,255,.26)}
+  .search .mag{font:700 11px/1 var(--mono);color:var(--dimmer)}
+  .seg{display:flex;gap:4px;padding:3px;border-radius:9px;background:rgba(255,255,255,.05);flex:0 0 auto}
+  .seg button{border:0;background:transparent;padding:7px 10px;border-radius:7px;cursor:pointer;
+    font:700 9.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dimmer)}
+  .seg button.on{background:#fff;color:#0B1019}
+
+  /* group header ----------------------------------------------------- */
+  .gh{display:flex;align-items:center;gap:8px;padding:14px 16px 7px}
+  .gh span{font:700 9.5px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer)}
+  .gh hr{flex:1;border:0;border-top:1px solid var(--hair);margin:0}
+  .gh b{font:700 9.5px/1 var(--mono);color:rgba(255,255,255,.22)}
+
+  /* the key/value row ------------------------------------------------ */
+  .kv{display:grid;grid-template-columns:minmax(0,1fr);gap:5px;padding:10px 16px;
+    border-bottom:1px solid rgba(255,255,255,.04)}
+  @container (min-width:700px){
+    .kv{grid-template-columns:minmax(210px,.9fr) minmax(0,1.6fr);gap:16px;align-items:baseline}
+  }
+  .kv:hover{background:rgba(255,255,255,.018)}
+  .kv .key{font:700 11.5px/1.35 var(--mono);color:#CFE6FF;word-break:break-all;letter-spacing:.01em}
+  .kv .key em{display:block;font:400 9.5px/1.4 var(--mono);font-style:normal;color:rgba(255,255,255,.22);
+    margin-top:3px;word-break:break-all}
+  .kv .val{font:400 11.5px/1.5 var(--mono);color:var(--dim);word-break:break-word;min-width:0}
+  .kv .val .t{font:700 8.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+    color:rgba(255,255,255,.24);margin-right:7px}
+  .kv .val .json{display:block;margin-top:5px;padding:8px 10px;border-radius:7px;background:var(--sunken);
+    border:1px solid var(--hair);color:rgba(255,255,255,.5);font-size:10.5px;line-height:1.55;
+    max-height:78px;overflow:hidden;position:relative}
+  .kv .val .json::after{content:"";position:absolute;left:0;right:0;bottom:0;height:26px;
+    background:linear-gradient(180deg,transparent,var(--sunken))}
+  .more{display:inline-block;margin-top:6px;font:700 9.5px/1 var(--mono);letter-spacing:.09em;
+    text-transform:uppercase;color:#7FB6FF;cursor:pointer}
+
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border-radius:5px;margin-left:7px;
+    font:700 8.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;vertical-align:middle;
+    background:rgba(255,255,255,.05);border:1px solid var(--hair);color:var(--dimmer)}
+  .badge.sealed{color:var(--ok);background:rgba(57,217,138,.10);border-color:rgba(57,217,138,.26)}
+  .badge.plain{color:var(--bad);background:rgba(255,102,115,.11);border-color:rgba(255,102,115,.30)}
+  .badge.dev{color:var(--device);background:rgba(90,169,255,.10);border-color:rgba(90,169,255,.26)}
+  .badge.same{color:var(--warn);background:rgba(244,184,96,.11);border-color:rgba(244,184,96,.30)}
+
+  .kv.flag{background:linear-gradient(90deg,rgba(255,102,115,.09),transparent 62%);box-shadow:inset 3px 0 0 var(--bad)}
+  .kv.watch{background:linear-gradient(90deg,rgba(244,184,96,.08),transparent 62%);box-shadow:inset 3px 0 0 var(--warn)}
+
+  /* compare mode ----------------------------------------------------- */
+  .cmp{display:none}
+  html[data-mode="compare"] .single{display:none}
+  html[data-mode="compare"] .cmp{display:block}
+  .cmprow{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:11px 16px;
+    border-bottom:1px solid rgba(255,255,255,.04)}
+  @container (min-width:700px){
+    .cmprow{grid-template-columns:minmax(180px,.8fr) minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:baseline}
+  }
+  .cmprow .key{font:700 11.5px/1.35 var(--mono);color:#CFE6FF;word-break:break-all}
+  .cmpv{font:400 11px/1.5 var(--mono);color:var(--dim);word-break:break-word}
+  .cmpv b{display:block;font:700 8.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+    color:rgba(255,255,255,.2);margin-bottom:5px}
+  @container (min-width:700px){ .cmpv b{display:none} }
+  .cmpv.miss{color:rgba(255,255,255,.2);font-style:italic}
+  .cmprow.identical{background:linear-gradient(90deg,rgba(244,184,96,.08),transparent 70%);
+    box-shadow:inset 3px 0 0 var(--warn)}
+  .cmphead{display:none}
+  @container (min-width:700px){
+    .cmphead{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(0,1fr) minmax(0,1fr);gap:14px;
+      padding:9px 16px;border-bottom:1px solid var(--hair);background:rgba(255,255,255,.02)}
+    .cmphead span{font:700 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer)}
+  }
+
+  .foot{display:flex;gap:8px;flex-wrap:wrap;padding:16px}
+  .ghostbtn{border:1px solid var(--hair);background:rgba(255,255,255,.04);border-radius:9px;padding:10px 13px;
+    cursor:pointer;font:700 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+  .ghostbtn.primary{background:var(--accent);border-color:transparent;color:#fff}
+
+  .caption{margin:16px auto 0;max-width:920px;font-size:12px;line-height:1.65;color:var(--dimmer);text-align:center}
+  .caption code{font-family:var(--mono);color:#9FD5FF}
+</style>
+</head>
+<body>
+
+<div class="docbar">
+  <span class="docbrand">Debrify · mockup</span>
+  <span class="docnote">Profile data browser — every key/value, per profile</span>
+  <div class="viewtabs" id="viewtabs">
+    <button data-v="phone">Phone</button>
+    <button data-v="tablet">Tablet</button>
+    <button data-v="desktop" class="on">Desktop</button>
+    <button data-v="tv">TV</button>
+  </div>
+</div>
+
+<main>
+  <p class="eyebrow">Settings → Advanced → Profile data</p>
+  <h1>Every key, every value, per profile.</h1>
+  <p class="lede">
+    Pick a profile and read its actual stored data. <b>Compare</b> puts two profiles side by side and flags any key
+    where they hold the <b>same value</b> — which is the shape almost every isolation bug takes. Device-scoped keys
+    live under their own tab so "unscoped" is a place you can look at, not an absence.
+  </p>
+
+  <div class="frame">
+    <div class="stage">
+
+      <!-- ── header ────────────────────────────────────────────────── -->
+      <div class="head">
+        <div class="head-top">
+          <h2>Profile data</h2>
+          <span class="n">428 keys · 44.0 MB</span>
+        </div>
+        <div class="picker">
+          <div class="ptab on"><span class="dot">K</span><span><b>Kai</b><br><i>admin · g3</i></span></div>
+          <div class="ptab"><span class="dot m">M</span><span><b>Mira</b><br><i>member · g2</i></span></div>
+          <div class="ptab"><span class="dot a">A</span><span><b>Ana</b><br><i>child · g1</i></span></div>
+          <div class="ptab"><span class="dot d">D</span><span><b>Device</b><br><i>unscoped · 29</i></span></div>
+        </div>
+      </div>
+
+      <!-- ── toolbar ───────────────────────────────────────────────── -->
+      <div class="tools">
+        <label class="search">
+          <span class="mag">/</span>
+          <input placeholder="filter keys or values…">
+        </label>
+        <div class="seg" id="modeseg">
+          <button data-m="single" class="on">Browse</button>
+          <button data-m="compare">Compare</button>
+        </div>
+      </div>
+
+      <!-- ══ BROWSE ════════════════════════════════════════════════ -->
+      <div class="single">
+
+        <div class="gh"><span>Credentials</span><hr><b>7 keys</b></div>
+        <div class="kv">
+          <div class="key">real_debrid_api_key<em>p.kai-7f2a.g.3.real_debrid_api_key</em></div>
+          <div class="val"><span class="t">str</span>enc1:9vKb2c…4Af= <span class="badge sealed">sealed</span></div>
+        </div>
+        <div class="kv">
+          <div class="key">torbox_api_key<em>p.kai-7f2a.g.3.torbox_api_key</em></div>
+          <div class="val"><span class="t">str</span>enc1:Q1p8xz…tG0= <span class="badge sealed">sealed</span></div>
+        </div>
+        <div class="kv flag">
+          <div class="key">alldebrid_api_key<em>p.kai-7f2a.g.3.alldebrid_api_key</em></div>
+          <div class="val"><span class="t">str</span>••••••••••••••••••• <span class="badge plain">plaintext</span></div>
+        </div>
+        <div class="kv">
+          <div class="key">trakt_access_token<em>p.kai-7f2a.g.3.trakt_access_token</em></div>
+          <div class="val"><span class="t">str</span>enc1:Hh3mA1…9Kd= <span class="badge sealed">sealed</span></div>
+        </div>
+        <div class="kv">
+          <div class="key">stremio_addons_v1<em>p.kai-7f2a.g.3.stremio_addons_v1</em></div>
+          <div class="val"><span class="t">json</span>4 addons <span class="badge dev">plain by design</span>
+            <span class="json">[{"url":"https://v3-cinemeta.strem.io/manifest.json","enabled":true,
+"types":["movie","series"]},{"url":"https://opensubtitles-v3…"}]</span>
+            <span class="more">Show full value</span>
+          </div>
+        </div>
+
+        <div class="gh"><span>Content &amp; activity</span><hr><b>96 keys</b></div>
+        <div class="kv watch">
+          <div class="key">playback_state_v1<em>p.kai-7f2a.g.3.playback_state_v1</em></div>
+          <div class="val"><span class="t">json</span>31 entries <span class="badge same">contains urls</span>
+            <span class="json">{"video_dune_part_two":{"title":"Dune Part Two","positionMs":4123000,
+"url":"http://panel.example:8080/movie/kai/••••••/8823.mkv","imdbId":"tt15239678"}}</span>
+            <span class="more">Show full value</span>
+          </div>
+        </div>
+        <div class="kv">
+          <div class="key">continue_watching_v1<em>p.kai-7f2a.g.3.continue_watching_v1</em></div>
+          <div class="val"><span class="t">json</span>12 entries
+            <span class="json">[{"imdbId":"tt0903747","title":"Breaking Bad","season":4,"episode":6,
+"updatedAt":1755109200000}]</span>
+          </div>
+        </div>
+        <div class="kv">
+          <div class="key">user_playlist_v1<em>p.kai-7f2a.g.3.user_playlist_v1</em></div>
+          <div class="val"><span class="t">json</span>18 items</div>
+        </div>
+        <div class="kv">
+          <div class="key">my_watchlist_v1<em>p.kai-7f2a.g.3.my_watchlist_v1</em></div>
+          <div class="val"><span class="t">json</span>7 titles</div>
+        </div>
+        <div class="kv">
+          <div class="key">series_source_tt0903747<em>p.kai-7f2a.g.3.series_source_tt0903747</em></div>
+          <div class="val"><span class="t">json</span>2 bound sources
+            <span class="json">[{"torrentHash":"a1c9…f20","torrentName":"Breaking.Bad.S04.1080p…",
+"debridService":"realdebrid","boundAt":1754880000000}]</span>
+          </div>
+        </div>
+        <div class="kv">
+          <div class="key">torrent_search_history_v1<em>p.kai-7f2a.g.3.torrent_search_history_v1</em></div>
+          <div class="val"><span class="t">list</span>24 entries</div>
+        </div>
+
+        <div class="gh"><span>Appearance</span><hr><b>31 keys</b></div>
+        <div class="kv">
+          <div class="key">app_theme<em>p.kai-7f2a.g.3.app_theme</em></div>
+          <div class="val"><span class="t">str</span>signal</div>
+        </div>
+        <div class="kv">
+          <div class="key">tv_home_style<em>p.kai-7f2a.g.3.tv_home_style</em></div>
+          <div class="val"><span class="t">str</span>canvas</div>
+        </div>
+        <div class="kv">
+          <div class="key">discover_layout<em>p.kai-7f2a.g.3.discover_layout</em></div>
+          <div class="val"><span class="t">str</span>stage</div>
+        </div>
+        <div class="kv">
+          <div class="key">tv_trailer_underlay_enabled<em>p.kai-7f2a.g.3.tv_trailer_underlay_enabled</em></div>
+          <div class="val"><span class="t">bool</span>true</div>
+        </div>
+
+        <div class="gh"><span>Non-preference stores</span><hr><b>4</b></div>
+        <div class="kv">
+          <div class="key">debrify_tv.db<em>profiles/kai-7f2a/g/3/documents</em></div>
+          <div class="val"><span class="t">sqlite</span>video_resume 214 · iptv_list_channels 61 · quick_check ok</div>
+        </div>
+        <div class="kv">
+          <div class="key">iptv_catalog.db<em>profiles/kai-7f2a/g/3/documents</em></div>
+          <div class="val"><span class="t">sqlite</span>channels 48 210 · epg 12 004 · quick_check ok</div>
+        </div>
+        <div class="kv">
+          <div class="key">engines/<em>profiles/kai-7f2a/g/3/documents/engines</em></div>
+          <div class="val"><span class="t">files</span>6 yaml · 214 KB</div>
+        </div>
+        <div class="kv">
+          <div class="key">avatars/<em>profiles/kai-7f2a/avatars — outside the generation</em></div>
+          <div class="val"><span class="t">files</span>1 png · 42 KB</div>
+        </div>
+      </div>
+
+      <!-- ══ COMPARE ═══════════════════════════════════════════════ -->
+      <div class="cmp">
+        <div class="cmphead"><span>Key</span><span>Kai · g3</span><span>Mira · g2</span></div>
+
+        <div class="gh"><span>Same value in both — inspect these first</span><hr><b>3</b></div>
+        <div class="cmprow identical">
+          <div class="key">engine_1337x_enabled</div>
+          <div class="cmpv"><b>Kai</b>true</div>
+          <div class="cmpv"><b>Mira</b>true</div>
+        </div>
+        <div class="cmprow identical">
+          <div class="key">app_theme</div>
+          <div class="cmpv"><b>Kai</b>signal</div>
+          <div class="cmpv"><b>Mira</b>signal</div>
+        </div>
+        <div class="cmprow identical">
+          <div class="key">real_debrid_api_key</div>
+          <div class="cmpv"><b>Kai</b>enc1:9vKb2c…4Af=</div>
+          <div class="cmpv"><b>Mira</b>enc1:9vKb2c…4Af=</div>
+        </div>
+
+        <div class="gh"><span>Differs</span><hr><b>214</b></div>
+        <div class="cmprow">
+          <div class="key">continue_watching_v1</div>
+          <div class="cmpv"><b>Kai</b>12 entries</div>
+          <div class="cmpv"><b>Mira</b>3 entries</div>
+        </div>
+        <div class="cmprow">
+          <div class="key">tv_home_style</div>
+          <div class="cmpv"><b>Kai</b>canvas</div>
+          <div class="cmpv"><b>Mira</b>classic</div>
+        </div>
+        <div class="cmprow">
+          <div class="key">user_playlist_v1</div>
+          <div class="cmpv"><b>Kai</b>18 items</div>
+          <div class="cmpv"><b>Mira</b>2 items</div>
+        </div>
+
+        <div class="gh"><span>Only in one</span><hr><b>97</b></div>
+        <div class="cmprow">
+          <div class="key">series_source_tt0903747</div>
+          <div class="cmpv"><b>Kai</b>2 bound sources</div>
+          <div class="cmpv miss"><b>Mira</b>— not set —</div>
+        </div>
+        <div class="cmprow">
+          <div class="key">alldebrid_api_key</div>
+          <div class="cmpv"><b>Kai</b>plaintext</div>
+          <div class="cmpv miss"><b>Mira</b>— not set —</div>
+        </div>
+        <div class="cmprow">
+          <div class="key">iptv_playlists</div>
+          <div class="cmpv miss"><b>Kai</b>— not set —</div>
+          <div class="cmpv"><b>Mira</b>2 providers</div>
+        </div>
+      </div>
+
+      <div class="foot">
+        <button class="ghostbtn primary">Copy as JSON</button>
+        <button class="ghostbtn">Reveal masked values</button>
+        <button class="ghostbtn">Export all profiles</button>
+      </div>
+
+    </div>
+  </div>
+
+  <p class="caption">
+    Amber = the two profiles hold an identical value. Some are innocent (<code>app_theme</code>) and some are the
+    bug (<code>real_debrid_api_key</code> is only legitimate when the resource is genuinely shared) — the screen
+    surfaces the candidates and you judge. Secrets stay masked until <b>Reveal</b>.
+  </p>
+</main>
+
+<script>
+  const tabs = document.getElementById('viewtabs');
+  tabs.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...tabs.children].forEach(x => x.classList.toggle('on', x === b));
+    document.documentElement.dataset.view = b.dataset.v;
+  });
+  const seg = document.getElementById('modeseg');
+  seg.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    [...seg.children].forEach(x => x.classList.toggle('on', x === b));
+    document.documentElement.dataset.mode = b.dataset.m;
+  });
+  document.querySelectorAll('.picker .ptab').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('.picker .ptab').forEach(x => x.classList.toggle('on', x === t));
+  }));
+</script>
+</body>
+</html>

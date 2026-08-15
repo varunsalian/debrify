@@ -15,6 +15,11 @@ enum CapturedProfilePreferenceAccess {
   migration,
   profileCreation,
   restore,
+
+  /// The dev audit export, which inventories every profile's keys. Read-only
+  /// like [nativeProjectionReadOnly] — a diagnostic that can write is a
+  /// diagnostic that can corrupt the thing it is measuring.
+  diagnosticsReadOnly,
 }
 
 class ProfilePreferences implements SharedPreferences {
@@ -67,11 +72,16 @@ class ProfilePreferences implements SharedPreferences {
     }
   }
 
+  static const Set<CapturedProfilePreferenceAccess> _readOnlyAccess =
+      <CapturedProfilePreferenceAccess>{
+        CapturedProfilePreferenceAccess.nativeProjectionReadOnly,
+        CapturedProfilePreferenceAccess.diagnosticsReadOnly,
+      };
+
   void _assertWritable() {
     _assertReadable();
-    if (_capturedAccess ==
-        CapturedProfilePreferenceAccess.nativeProjectionReadOnly) {
-      throw StateError('Native projection preference access is read-only');
+    if (_readOnlyAccess.contains(_capturedAccess)) {
+      throw StateError('${_capturedAccess!.name} preference access is read-only');
     }
   }
 

@@ -23,6 +23,8 @@ import '../tv_hero_artwork_quality_controller.dart';
 import '../tvos_top_shelf_service.dart';
 import '../xtream_codes_service.dart';
 import '../engine/engine_profile_lifecycle.dart';
+import '../engine/engine_registry.dart';
+import 'profile_cache_ledger.dart';
 import 'profile_lifecycle.dart';
 import 'native_profile_projection.dart';
 import 'profile_runtime.dart';
@@ -84,20 +86,45 @@ class ProfileAppLifecycleParticipant implements ProfileLifecycleParticipant {
     DownloadService.instance.finishProfileSwitch();
   }
 
+  /// Warms [reset] and records that this cache now belongs to [scope].
+  ///
+  /// Stamped one group at a time rather than once at the end: a throw partway
+  /// through the warm must leave every later cache showing its PREVIOUS scope,
+  /// because that stale stamp is the observable signature of the leak. See
+  /// [ProfileCacheLedger].
+  void _warmed(String name, ProfileScope scope, void Function() reset) {
+    reset();
+    ProfileCacheLedger.stamp(name, scope);
+  }
+
   Future<void> _warm(ProfileScope scope) {
     return ProfileRuntime.withCapturedScope(scope, () async {
-      StorageService.resetProfileCaches();
-      StremioService.instance.invalidateCache();
-      TraktService.instance.resetProfileScope();
-      SimklService.instance.resetProfileScope();
-      PikPakApiService.instance.resetProfileScope();
-      MdblistService.instance.resetProfileScope();
-      IptvService.instance.clearCache();
-      XtreamCodesService.instance.clearCache();
-      DiscoverPrefs.resetProfileScope();
-      SubtitleFontService.instance.resetProfileScope();
-      SubtitleSettingsService.instance.resetProfileScope();
+      _warmed('StorageService', scope, StorageService.resetProfileCaches);
+      _warmed('Stremio', scope, StremioService.instance.invalidateCache);
+      _warmed('Trakt', scope, TraktService.instance.resetProfileScope);
+      _warmed('Simkl', scope, SimklService.instance.resetProfileScope);
+      _warmed('PikPak', scope, PikPakApiService.instance.resetProfileScope);
+      _warmed('MDBList', scope, MdblistService.instance.resetProfileScope);
+      _warmed('IPTV', scope, IptvService.instance.clearCache);
+      _warmed('Xtream', scope, XtreamCodesService.instance.clearCache);
+      _warmed('DiscoverPrefs', scope, DiscoverPrefs.resetProfileScope);
+      _warmed(
+        'SubtitleFont',
+        scope,
+        SubtitleFontService.instance.resetProfileScope,
+      );
+      _warmed(
+        'SubtitleSettings',
+        scope,
+        SubtitleSettingsService.instance.resetProfileScope,
+      );
       await EngineProfileLifecycle.warmCurrentScope();
+      // Measured, not declared: the registry tracks its own loaded scope, so
+      // this row reports what it actually holds rather than that we asked.
+      ProfileCacheLedger.stampRaw(
+        'Engines',
+        EngineRegistry.instance.loadedScopeKey,
+      );
 
       await StorageService.migrateDefaultsGeneration();
       await Future.wait(<Future<Object?>>[
