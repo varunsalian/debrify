@@ -388,6 +388,48 @@ Two consequences to weigh before shipping:
 - AirPlay and spatial routes remain unproven, exactly as that plan warned —
   only now they get 6 channels instead of 2.
 
+## 4d. Route-aware channel capping (2026-08-15) — a regression the AO switch caused
+
+Selecting `ao_avfoundation` changed `audio_channels` from 2 to 6, because it
+hands the route the file's native layout instead of downmixing like
+`ao_audiounit` did. On a **two-channel route that is audibly wrong**: the owner
+described AirPods as "too noisy, kind of like I am in a bus" — the LFE-heavy
+signature of a 5.1 fold done badly.
+
+That is a regression affecting every Bluetooth listener, not only the Atmos
+case being fixed, so it is capped automatically rather than behind a setting:
+
+- New read-only `outputChannelCount` on the existing `debrify/tvlog` channel
+  returns `max(currentRoute.outputs.first.channels.count,
+  maximumOutputNumberOfChannels)`. It **only reads** the session — no category,
+  no activation. The AOs own the session and configuring it underneath them is
+  what makes that ownership fragile.
+- `PlayerAudioConfig` sets `audio-channels=stereo` when the route reports
+  <= 2, and leaves a multichannel route native.
+- **0 means unknown and changes nothing.** Capping a real AVR would undo the
+  fix, so an unanswered query defers to mpv's default.
+- The explicit multichannel opt-in still wins, spelled out in code rather than
+  relying on the later `audio-channels=auto` overwriting by list order.
+
+### Measured on Bedroom, same AC-3 5.1 source
+
+| Route | `audio_channels` | Result |
+|---|---|---|
+| Monitor (HDMI) | 6 native | good |
+| AirPods, uncapped | 6 | **bad — the regression** |
+| AirPods, capped | 2 | acceptable |
+| Second Bluetooth earphone, capped | 2 | good |
+
+Two independent Bluetooth devices report the route identically, so the cap is
+not tuned to one pair. The AirPods sounding merely "not that great" at 2
+channels tracks that pair rather than the code — a different earphone on the
+same build sounds fine, and Bluetooth on Apple TV is AAC over A2DP regardless.
+
+**Still untested: HomePod and AirPlay speakers.** They are not stereo-limited
+and may report 6+, so the cap will not engage and they will get the native
+layout like an AVR. That is arguably right, and it is exactly the "unproven
+spatial route" `AUDIO_FIDELITY_PLAN.md` has warned about throughout.
+
 ## 5. Verification gap — read before starting
 
 Two separate claims are being tested, and only one of them needs hardware we

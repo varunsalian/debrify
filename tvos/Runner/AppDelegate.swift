@@ -419,6 +419,27 @@ class AppDelegate: FlutterAppDelegate {
         logChannel.setMethodCallHandler { call, result in
             if call.method == "log", let message = call.arguments as? String {
                 NSLog("[dart] %@", message)
+                result(nil)
+                return
+            }
+            // How many channels the CURRENT output route can actually take.
+            // The player caps mpv to stereo when this is <= 2: ao_avfoundation
+            // hands the route the file's native layout, and on a 2-channel
+            // route (AirPods, Bluetooth, a stereo TV) the resulting 5.1 fold
+            // is audibly wrong -- LFE-heavy, "like being on a bus".
+            //
+            // This only READS the session. It deliberately does not set a
+            // category or activate anything: ao_audiounit/ao_avfoundation own
+            // the session, and configuring it underneath them is what makes
+            // that ownership fragile.
+            if call.method == "outputChannelCount" {
+                let session = AVAudioSession.sharedInstance()
+                let current = session.currentRoute.outputs.first?.channels?.count ?? 0
+                let maximum = session.maximumOutputNumberOfChannels
+                // currentRoute can report 0 before the first activation; the
+                // maximum is the stable answer, so prefer the larger.
+                result(max(current, maximum))
+                return
             }
             result(nil)
         }

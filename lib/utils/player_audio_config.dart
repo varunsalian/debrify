@@ -45,6 +45,7 @@ class PlayerAudioConfig {
     required bool systemAudioEffects,
     required bool multichannelEnabled,
     bool isTvOS = false,
+    int routeOutputChannels = 0,
   }) {
     final props = <(String, String)>[];
     if (isAndroid) {
@@ -58,6 +59,24 @@ class PlayerAudioConfig {
     }
     if (isTvOS) {
       props.add(('ao', 'avfoundation,audiounit'));
+      // ao_avfoundation hands the route the file's NATIVE layout rather than
+      // downmixing like ao_audiounit did. On a route that can only take two
+      // channels -- AirPods, Bluetooth, a stereo TV -- letting a 5.1 track
+      // through produces an audibly wrong fold, LFE-heavy and diffuse. Cap it
+      // ourselves; a multichannel route (AVR, soundbar, Atmos) is left alone,
+      // which is the case the AO switch exists to fix.
+      //
+      // routeOutputChannels <= 0 means the query failed or has not answered
+      // yet; leave mpv's default rather than guessing, since capping a real
+      // multichannel route would undo the fix.
+      // The multichannel opt-in is an explicit "give me the native layout",
+      // so it wins. Spelled out here rather than relying on the later
+      // audio-channels=auto overwriting this one by list order.
+      if (!multichannelEnabled &&
+          routeOutputChannels > 0 &&
+          routeOutputChannels <= 2) {
+        props.add(('audio-channels', 'stereo'));
+      }
     }
     if (isApple && multichannelEnabled) {
       props.add(('audio-channels', 'auto'));
