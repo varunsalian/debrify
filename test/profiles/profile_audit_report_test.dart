@@ -268,20 +268,20 @@ void main() {
     expect(screen, contains('if (kProfileAudit)'));
   });
 
-  test('the default is ON, deliberately and temporarily', () {
-    // User decision 2026-08-15: default true so local --release tvOS builds
-    // carry the tool without a --dart-define. The consequence is real — CI
-    // passes no defines, so a release artifact cut today includes this — and
-    // is accepted only while this branch has one user.
+  test('the default is OFF, so the tool cannot ship by being forgotten', () {
+    // Flipped back to false on 2026-08-15 ahead of alpha. An alpha is a
+    // release to other people, and CI passes no --dart-define, so a default of
+    // true would put a raw key/value browser in front of testers.
     //
-    // This assertion exists so that flipping the default back is a deliberate
-    // act with a failing test to explain itself, rather than a silent change.
+    // Pinned separately from the entry-point guard above: that one proves the
+    // button is behind the flag, this one proves the flag is off. Both are
+    // needed, because either alone permits the tooling to ship.
     expect(
       kProfileAudit,
-      isTrue,
+      isFalse,
       reason:
-          'flip this test with the default; see profile_audit_flag.dart for '
-          'why it is on and when it must go off',
+          'turn it on per build with --dart-define=DEBRIFY_PROFILE_AUDIT=true, '
+          'not by changing the default',
     );
   });
 

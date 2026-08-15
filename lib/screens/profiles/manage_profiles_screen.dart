@@ -353,10 +353,10 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
             icon: const Icon(Icons.health_and_safety_outlined),
           ),
           // DEV-ONLY, delete with lib/{services,screens}/profiles/dev/.
-          // kProfileAudit is a compile-time const, so a build with it off has
-          // neither this button nor the code behind it. It currently defaults
-          // to TRUE by user decision — see profile_audit_flag.dart for why, and
-          // for the fact that a release cut today would therefore include it.
+          // kProfileAudit is a compile-time const defaulting to false, so a
+          // build that did not opt in has neither this button nor the code
+          // behind it — the tooling cannot ship by being forgotten. Opt in with
+          // --dart-define=DEBRIFY_PROFILE_AUDIT=true.
           if (kProfileAudit)
             IconButton(
               tooltip: 'Profile data',

@@ -19,28 +19,28 @@ Mockup: `design/mockups/profile_dashboard_mockup/index.html`.
 Entry point: Manage profiles → the `{}` icon in the app bar. Behind the Admin
 PIN ladder **and** behind a compile-time flag.
 
-## The flag is currently ON
+## The flag is OFF
 
 `kProfileAudit` (`profile_audit_flag.dart`) is
-`bool.fromEnvironment('DEBRIFY_PROFILE_AUDIT', defaultValue: true)` — set to
-`true` by user decision on 2026-08-15 so local `--release` tvOS builds carry the
-tool without remembering a define.
+`bool.fromEnvironment('DEBRIFY_PROFILE_AUDIT', defaultValue: false)`, so this
+tooling does not ship. It was `true` for one day (2026-08-15) so local
+`--release` tvOS builds carried it without remembering a define, and was flipped
+back the same day once alpha became real: an alpha is a release to other people,
+and CI passes no defines, so the default was the only thing standing between a
+raw key/value browser and a tester's screen.
 
-**Consequence, stated so it is not a surprise later:** CI passes no defines
-either, so a release artifact cut today *includes* this tooling. Accepted only
-while this branch has one user. Flip the default to `false` before anything
-here reaches other people — or run the removal recipe below, which is the real
-end state.
+Because `kProfileAudit` is a compile-time const, a build without the opt-in has
+neither the entry point nor the code behind it — the tree-shaker drops both.
 
-Turn it off for a single build without editing the file:
+Turn it on for a single build without editing the file:
 
 ```
-flutter-tvos build tvos --release --dart-define=DEBRIFY_PROFILE_AUDIT=false
+flutter-tvos build tvos --release --dart-define=DEBRIFY_PROFILE_AUDIT=true
 ```
 
-Two tests guard this: one pins that the entry point stays behind the flag
-(whichever way the default points), one pins the current default so changing it
-is deliberate rather than silent.
+Two tests guard this, and both are needed because either alone would permit the
+tooling to ship: one pins that the entry point stays behind the flag (whichever
+way the default points), the other pins that the default is off.
 
 Deliberately not `kDebugMode`: the device this exists for is an Apple TV, and
 tvOS builds are `--release`. A debug-only gate would hide the tool on exactly
