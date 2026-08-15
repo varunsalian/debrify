@@ -73,6 +73,8 @@ import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.Extractor
+import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import android.net.ConnectivityManager
 import android.net.Network
@@ -344,6 +346,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val entry = iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive } ?: return
         val url = currentIptvStreamUrl ?: entry.url
         iptvTuneDiagnostics.onRecovery(source, "retune", "attempt=$attempt")
+        // Video-stall attempt 1 was a plain re-tune (transient wedges heal
+        // on a codec reset). Still frozen: drop the aggressive TS join flags
+        // for this channel before going again — mid-GOP joins are exactly
+        // what strict MediaTek decoders wedge on (frozen video, running
+        // audio; the Google TV Streamer report). setIptvMediaItem below
+        // recomputes iptvStrictTsActive from the set. Segmented/HLS streams
+        // never see the progressive extractor factory, so a stall there says
+        // nothing about the flags — recording one would only poison the
+        // two-URLs-means-strict-device session escalation.
+        if (source == "video-stall" && attempt >= 2 &&
+            !isCurrentIptvSegmented() && iptvStrictTsUrls.add(url)
+        ) {
+            iptvTuneDiagnostics.onRecovery(source, "strict-ts")
+        }
         // A same-URL reopen would append a fresh TS connection — reset
         // PCR/PTS, no discontinuity marker — into the active tee file, and
         // setIptvMediaItem's finalize only fires on URL CHANGE. Finalize
@@ -551,6 +567,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // extension-less URLs — jmp2.uk-style — infer as progressive). Session
     // memory so zapping back starts straight in HLS with no failed attempt.
     private val iptvHlsForcedUrls = HashSet<String>()
+
+    /** Channels whose video wedged twice under the aggressive TS join flags
+     *  (see the IPTV media-source factory in setupPlayer): their re-tunes
+     *  and later visits demux strictly — IDR-only sync points, spec AU
+     *  boundaries — the way the browse screen's stock preview player does.
+     *  Session-scoped, like [iptvHlsForcedUrls]. Two distinct URLs earning
+     *  a place means the DEVICE is the strict one (MediaTek boxes refusing
+     *  mid-GOP joins), so from there every tune goes strict. */
+    private val iptvStrictTsUrls = HashSet<String>()
+
+    /** The factory's per-tune switch: written on main before each prepare
+     *  (setIptvMediaItem), read on the extractor's loader thread. */
+    @Volatile private var iptvStrictTsActive = false
     private var currentIptvStreamUrl: String? = null
     private var iptvGuideOverlay: View? = null
     private var iptvGuideList: RecyclerView? = null
@@ -876,6 +905,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 // exactly what must NOT read as a stall.
                 if (isIptvMode) {
                     iptvLiveRecovery.onProgress(it.currentPosition, it.playWhenReady)
+                    // The renderer's own output counter — the one signal
+                    // that survives a wedged video decoder under a healthy
+                    // audio clock (finding #13; the Streamer report).
+                    val frames = it.videoDecoderCounters?.let { c ->
+                        c.ensureUpdated()
+                        c.renderedOutputBufferCount
+                    } ?: -1
+                    iptvLiveRecovery.onVideoFrames(
+                        renderedFrames = frames,
+                        hasVideoTrack = it.videoFormat != null,
+                        wantsPlayback = it.playWhenReady,
+                    )
                 }
             }
             progressHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
@@ -1760,10 +1801,29 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         //    UNDER an intact buffer for transient errors, so the common
         //    connection drop heals without the player ever leaving READY.
         val mediaSourceFactory = if (isIptvMode) {
-            val iptvExtractors = DefaultExtractorsFactory().setTsExtractorFlags(
+            val aggressiveTs = DefaultExtractorsFactory().setTsExtractorFlags(
                 DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
                     DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
             )
+            // The fallback the video-stall detector escalates to (see
+            // performIptvLiveRetune): stock demux — IDR-only sync points —
+            // for channels whose decoder wedges on mid-GOP joins. This is
+            // the pre-0.8.1 behavior, and what the browse screen's preview
+            // player runs with everywhere (which is why the same channel
+            // plays fine in the two-pane stage on those boxes).
+            val strictTs = DefaultExtractorsFactory()
+            val iptvExtractors = object : ExtractorsFactory {
+                override fun createExtractors(): Array<Extractor> =
+                    (if (iptvStrictTsActive) strictTs else aggressiveTs)
+                        .createExtractors()
+
+                override fun createExtractors(
+                    uri: Uri,
+                    responseHeaders: Map<String, List<String>>,
+                ): Array<Extractor> =
+                    (if (iptvStrictTsActive) strictTs else aggressiveTs)
+                        .createExtractors(uri, responseHeaders)
+            }
             DefaultMediaSourceFactory(this, iptvExtractors)
                 .setDataSourceFactory(recordingDataSourceFactory)
                 .setLoadErrorHandlingPolicy(IptvLiveLoadErrorPolicy())
@@ -11291,6 +11351,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // BEFORE the media item so the first playlist fetch already has them.
         currentIptvHttpHeaders = entry.httpHeaders
         currentIptvStreamUrl = streamUrl
+        // Demux mode for this tune: strict for channels that earned it — and
+        // for the whole session once two did (that's a strict-decoder device,
+        // not two odd channels). Read per media-period load by the extractor
+        // factory installed in setupPlayer.
+        iptvStrictTsActive =
+            iptvStrictTsUrls.contains(streamUrl) || iptvStrictTsUrls.size >= 2
         iptvTuneDiagnostics.onTuneStart(
             entry.name,
             streamUrl,
