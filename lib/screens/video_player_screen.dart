@@ -382,6 +382,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _audioPassthroughEnabled = false;
   bool _systemAudioEffectsEnabled = false;
   bool _appleMultichannelEnabled = false;
+  int _tvosRouteOutputChannels = 0;
   int _playerInstanceGeneration = 0;
   bool _playerPresentationInitialized = false;
 
@@ -2289,6 +2290,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final props = PlayerAudioConfig.audioProperties(
       isAndroid: !kIsWeb && Platform.isAndroid,
       isApple: PlatformUtil.isTvOS || PlatformUtil.isIosMobile,
+      isTvOS: PlatformUtil.isTvOS,
+      routeOutputChannels: _tvosRouteOutputChannels,
       passthroughEnabled: _audioPassthroughEnabled,
       systemAudioEffects: _systemAudioEffectsEnabled,
       multichannelEnabled: _appleMultichannelEnabled,
@@ -4436,6 +4439,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } else if (PlatformUtil.isTvOS || PlatformUtil.isIosMobile) {
       _appleMultichannelEnabled =
           await StorageService.getAppleMultichannelAudio();
+    }
+    if (PlatformUtil.isTvOS) {
+      // What the CURRENT output route can take. ao_avfoundation passes the
+      // file's native layout through, so a 5.1 track on a two-channel route
+      // (AirPods, Bluetooth, stereo TV) folds badly; PlayerAudioConfig caps
+      // those to stereo. 0 means "unknown" and leaves mpv's default alone.
+      try {
+        _tvosRouteOutputChannels =
+            await _tvReleaseLogChannel.invokeMethod<int>('outputChannelCount') ??
+            0;
+      } catch (_) {
+        _tvosRouteOutputChannels = 0;
+      }
     }
 
     debugPrint('VideoPlayer: Loaded defaults - aspect=$_aspectMode');

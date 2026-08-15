@@ -5,6 +5,8 @@ import 'package:debrify/utils/player_audio_config.dart';
 List<(String, String)> _props({
   bool isAndroid = false,
   bool isApple = false,
+  bool isTvOS = false,
+  int routeChannels = 0,
   bool passthrough = false,
   bool effects = false,
   bool multichannel = false,
@@ -12,6 +14,8 @@ List<(String, String)> _props({
     PlayerAudioConfig.audioProperties(
       isAndroid: isAndroid,
       isApple: isApple,
+      isTvOS: isTvOS,
+      routeOutputChannels: routeChannels,
       passthroughEnabled: passthrough,
       systemAudioEffects: effects,
       multichannelEnabled: multichannel,
@@ -94,5 +98,73 @@ void main() {
       ),
       [('ao', 'audiotrack,opensles'), ('audio-spdif', '')],
     );
+  });
+
+  test('tvOS selects avfoundation with an audiounit fallback', () {
+    // ao_audiounit goes silent on a Dolby Atmos HDMI route; avfoundation
+    // renders through AVSampleBufferAudioRenderer instead. The comma list is
+    // the point: mpv falls back if the new AO cannot initialise.
+    expect(_props(isApple: true, isTvOS: true), [
+      ('ao', 'avfoundation,audiounit'),
+    ]);
+  });
+
+  test('iOS is untouched by the tvOS audio output change', () {
+    expect(_props(isApple: true, isTvOS: false), isEmpty);
+  });
+
+  test('tvOS keeps the multichannel opt-in after the ao selection', () {
+    // Order matters: ao is applied before audio-channels.
+    expect(_props(isApple: true, isTvOS: true, multichannel: true), [
+      ('ao', 'avfoundation,audiounit'),
+      ('audio-channels', 'auto'),
+    ]);
+  });
+
+  test('Android never gets the tvOS audio output', () {
+    expect(
+      _props(isAndroid: true, isTvOS: true, passthrough: true),
+      isNot(contains(('ao', 'avfoundation,audiounit'))),
+    );
+  });
+
+  test('a two-channel route is capped to stereo', () {
+    // ao_avfoundation passes the native layout through, so 5.1 on AirPods or
+    // a stereo TV folds badly (LFE-heavy). Cap it.
+    expect(_props(isApple: true, isTvOS: true, routeChannels: 2), [
+      ('ao', 'avfoundation,audiounit'),
+      ('audio-channels', 'stereo'),
+    ]);
+  });
+
+  test('a multichannel route is left native', () {
+    // The AVR/Atmos case the AO switch exists to fix.
+    expect(_props(isApple: true, isTvOS: true, routeChannels: 6), [
+      ('ao', 'avfoundation,audiounit'),
+    ]);
+  });
+
+  test('an unknown route count changes nothing', () {
+    // 0 means the query failed; capping a real multichannel route would undo
+    // the fix, so leave mpv's default.
+    expect(_props(isApple: true, isTvOS: true, routeChannels: 0), [
+      ('ao', 'avfoundation,audiounit'),
+    ]);
+  });
+
+  test('the explicit multichannel opt-in beats the stereo cap', () {
+    expect(
+      _props(
+        isApple: true,
+        isTvOS: true,
+        routeChannels: 2,
+        multichannel: true,
+      ),
+      [('ao', 'avfoundation,audiounit'), ('audio-channels', 'auto')],
+    );
+  });
+
+  test('route capping never applies off tvOS', () {
+    expect(_props(isApple: true, isTvOS: false, routeChannels: 2), isEmpty);
   });
 }

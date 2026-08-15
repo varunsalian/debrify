@@ -17,6 +17,19 @@ class PlayerAudioConfig {
   ///   keeps audio alive on any device where AudioTrack fails), then
   ///   `audio-spdif=ac3,eac3,dts` for passthrough. DTS-HD MA sends its DTS
   ///   core over this path — the setting's caption says so.
+  /// - tvOS: `ao=avfoundation,audiounit`. `ao_audiounit` goes silent on a
+  ///   Dolby Atmos HDMI route (confirmed on a user's receiver, restart-
+  ///   controlled: Atmos on = silence, Atmos off = sound). `ao_avfoundation`
+  ///   renders through `AVSampleBufferAudioRenderer`, the same Apple stack the
+  ///   external players that *do* work on that route use.
+  ///
+  ///   Written as a LIST, not a single value: mpv falls back to `audiounit`
+  ///   if the new AO fails to initialise. That matters because upstream mpv
+  ///   only ever builds `ao_avfoundation` for macOS — running it on tvOS
+  ///   needs `patch/mpv/avfoundation-tvos.patch` from the rebuilt libmpv
+  ///   (TVOS_LIBMPV_UPGRADE_PLAN.md), and nobody has run it on this platform
+  ///   before. The fallback does NOT cover a successful init that then
+  ///   produces silence, which is the failure mode being fixed.
   /// - Apple (tvOS + iOS): `audio-channels=auto` when the multichannel
   ///   toggle is on. mpv's audiounit output self-caps at the route's real
   ///   channel maximum (MIN(deviceMax, requested)), so an AVR route gets
@@ -31,6 +44,8 @@ class PlayerAudioConfig {
     required bool passthroughEnabled,
     required bool systemAudioEffects,
     required bool multichannelEnabled,
+    bool isTvOS = false,
+    int routeOutputChannels = 0,
   }) {
     final props = <(String, String)>[];
     if (isAndroid) {
@@ -41,6 +56,27 @@ class PlayerAudioConfig {
         props.add(('audio-spdif', 'ac3,eac3,dts'));
       }
       return props;
+    }
+    if (isTvOS) {
+      props.add(('ao', 'avfoundation,audiounit'));
+      // ao_avfoundation hands the route the file's NATIVE layout rather than
+      // downmixing like ao_audiounit did. On a route that can only take two
+      // channels -- AirPods, Bluetooth, a stereo TV -- letting a 5.1 track
+      // through produces an audibly wrong fold, LFE-heavy and diffuse. Cap it
+      // ourselves; a multichannel route (AVR, soundbar, Atmos) is left alone,
+      // which is the case the AO switch exists to fix.
+      //
+      // routeOutputChannels <= 0 means the query failed or has not answered
+      // yet; leave mpv's default rather than guessing, since capping a real
+      // multichannel route would undo the fix.
+      // The multichannel opt-in is an explicit "give me the native layout",
+      // so it wins. Spelled out here rather than relying on the later
+      // audio-channels=auto overwriting this one by list order.
+      if (!multichannelEnabled &&
+          routeOutputChannels > 0 &&
+          routeOutputChannels <= 2) {
+        props.add(('audio-channels', 'stereo'));
+      }
     }
     if (isApple && multichannelEnabled) {
       props.add(('audio-channels', 'auto'));
