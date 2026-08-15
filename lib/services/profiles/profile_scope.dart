@@ -34,6 +34,22 @@ class ProfileScope {
 
   String get preferencePrefix => 'p.$profileId.g.$dataGeneration.';
 
+  /// Canonical identity of this scope *including* the session epoch, for
+  /// process-global caches that must prove which scope they were warmed for.
+  ///
+  /// Unlike [preferencePrefix] this includes [sessionEpoch], because a cache
+  /// warmed before a switch and one warmed after are different even when the
+  /// profile and generation are identical.
+  ///
+  /// Defined here rather than on each consumer because it previously was not:
+  /// `EngineRegistry` and `ProfileCacheLedger` each grew their own format
+  /// (`profile:<id>:g:N:e:N` versus `p.<id>.g.N.e.N`) while the ledger's
+  /// documentation claimed they matched. They were compared with `==`, so the
+  /// engines row could never match the active scope and the dev audit screen
+  /// reported it as a stale cache permanently — a false positive on the one
+  /// cache that has actually leaked in the past.
+  String get cacheKey => 'p.$profileId.g.$dataGeneration.e.$sessionEpoch';
+
   Directory generationDirectory(Directory root) => Directory(
     p.join(root.path, 'profiles', profileId, 'g', '$dataGeneration'),
   );

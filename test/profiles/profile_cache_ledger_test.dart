@@ -67,6 +67,32 @@ void main() {
     expect(snapshot['Engines'], isNot(snapshot['Trakt']));
   });
 
+  test('a self-reported key is comparable to a stamped one', () {
+    // The regression this file previously enabled rather than caught.
+    //
+    // The stampRaw test above hand-feeds a string already in the ledger's
+    // format, so it proved only that the ledger stores what it is given. The
+    // real caller passes EngineRegistry's key, which was built by a separate
+    // expression using ':' separators. Comparing the two with `==` — which is
+    // exactly what the dev audit screen does — could never succeed, so the
+    // engines row was reported as a permanently stale cache.
+    //
+    // Asserting the two producers agree is the property that matters; the
+    // literal format is incidental and deliberately not pinned here.
+    final scope = scopeFor('alpha', 2, 5);
+    expect(
+      ProfileCacheLedger.keyFor(scope),
+      scope.cacheKey,
+      reason: 'the ledger and the scope must agree on one identity',
+    );
+    expect(
+      scope.cacheKey,
+      isNot(scopeFor('alpha', 2, 6).cacheKey),
+      reason: 'the session epoch must participate, or a switch looks like a '
+          'no-op to every cache that compares keys',
+    );
+  });
+
   test('snapshot is sorted and immutable', () {
     ProfileCacheLedger.stamp('Zulu', scopeFor('alpha', 1, 1));
     ProfileCacheLedger.stamp('Alpha', scopeFor('alpha', 1, 1));

@@ -22,10 +22,12 @@ import 'profile_scope.dart';
 abstract final class ProfileCacheLedger {
   static final Map<String, String> _stamps = <String, String>{};
 
-  /// The canonical scope key. Matches the shape `EngineRegistry` already uses
-  /// for its own tracking, so the two are comparable in one table.
-  static String keyFor(ProfileScope scope) =>
-      'p.${scope.profileId}.g.${scope.dataGeneration}.e.${scope.sessionEpoch}';
+  /// The canonical scope key, delegating to [ProfileScope.cacheKey] so that
+  /// every producer of a scope key uses one definition.
+  ///
+  /// This used to build the string itself and claim it matched the shape
+  /// `EngineRegistry` uses. It did not — see [ProfileScope.cacheKey].
+  static String keyFor(ProfileScope scope) => scope.cacheKey;
 
   static void stamp(String name, ProfileScope scope) {
     _stamps[name] = keyFor(scope);

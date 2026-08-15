@@ -398,10 +398,10 @@ class _EngineRegistryScope {
     if (active == null) {
       return const _EngineRegistryScope('runtime:committed-unbound', null);
     }
-    return _EngineRegistryScope(
-      'profile:${active.profileId}:g:${active.dataGeneration}:e:${active.sessionEpoch}',
-      active,
-    );
+    // ProfileScope.cacheKey, not a locally-built string: this key is compared
+    // against ProfileCacheLedger entries by the dev audit screen, and the two
+    // formats silently disagreed until 2026-08-15.
+    return _EngineRegistryScope(active.cacheKey, active);
   }
 
   bool get isCurrent => key == capture().key;
