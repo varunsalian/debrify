@@ -383,6 +383,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _systemAudioEffectsEnabled = false;
   bool _appleMultichannelEnabled = false;
   int _tvosRouteOutputChannels = 0;
+  bool _tvosForceStereoAudio = false;
+  bool _tvosLegacyAudioOutput = false;
   int _playerInstanceGeneration = 0;
   bool _playerPresentationInitialized = false;
 
@@ -2292,6 +2294,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       isApple: PlatformUtil.isTvOS || PlatformUtil.isIosMobile,
       isTvOS: PlatformUtil.isTvOS,
       routeOutputChannels: _tvosRouteOutputChannels,
+      tvosForceStereo: _tvosForceStereoAudio,
+      tvosLegacyAudioOutput: _tvosLegacyAudioOutput,
       passthroughEnabled: _audioPassthroughEnabled,
       systemAudioEffects: _systemAudioEffectsEnabled,
       multichannelEnabled: _appleMultichannelEnabled,
@@ -4441,6 +4445,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           await StorageService.getAppleMultichannelAudio();
     }
     if (PlatformUtil.isTvOS) {
+      _tvosForceStereoAudio = await StorageService.getTvosForceStereoAudio();
+      _tvosLegacyAudioOutput = await StorageService.getTvosLegacyAudioOutput();
       // What the CURRENT output route can take. ao_avfoundation passes the
       // file's native layout through, so a 5.1 track on a two-channel route
       // (AirPods, Bluetooth, stereo TV) folds badly; PlayerAudioConfig caps

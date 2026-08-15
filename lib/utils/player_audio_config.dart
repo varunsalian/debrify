@@ -46,6 +46,8 @@ class PlayerAudioConfig {
     required bool multichannelEnabled,
     bool isTvOS = false,
     int routeOutputChannels = 0,
+    bool tvosForceStereo = false,
+    bool tvosLegacyAudioOutput = false,
   }) {
     final props = <(String, String)>[];
     if (isAndroid) {
@@ -58,7 +60,13 @@ class PlayerAudioConfig {
       return props;
     }
     if (isTvOS) {
-      props.add(('ao', 'avfoundation,audiounit'));
+      // Diagnostic escape hatch: back to the pre-2026-08 output. Silent on
+      // Atmos routes, which is why it is not the default, but it isolates
+      // whether a problem comes from the new AO.
+      props.add((
+        'ao',
+        tvosLegacyAudioOutput ? 'audiounit' : 'avfoundation,audiounit',
+      ));
       // ao_avfoundation hands the route the file's NATIVE layout rather than
       // downmixing like ao_audiounit did. On a route that can only take two
       // channels -- AirPods, Bluetooth, a stereo TV -- letting a 5.1 track
@@ -72,9 +80,11 @@ class PlayerAudioConfig {
       // The multichannel opt-in is an explicit "give me the native layout",
       // so it wins. Spelled out here rather than relying on the later
       // audio-channels=auto overwriting this one by list order.
+      // tvosForceStereo caps regardless of what the route reports — the
+      // counterpart to multichannelEnabled, which forces the native layout.
       if (!multichannelEnabled &&
-          routeOutputChannels > 0 &&
-          routeOutputChannels <= 2) {
+          (tvosForceStereo ||
+              (routeOutputChannels > 0 && routeOutputChannels <= 2))) {
         props.add(('audio-channels', 'stereo'));
       }
     }

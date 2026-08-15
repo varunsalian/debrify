@@ -334,6 +334,10 @@ class StorageService {
   static const String _audioPassthroughKey = 'player_audio_passthrough';
   static const String _appleMultichannelAudioKey =
       'player_apple_multichannel_audio';
+  static const String _tvosForceStereoAudioKey =
+      'tvos_force_stereo_audio_v1';
+  static const String _tvosLegacyAudioOutputKey =
+      'tvos_legacy_audio_output_v1';
   static const String _uiSoundsKey = 'ui_sounds';
   static const String _uiHapticsKey = 'ui_haptics';
   static const String _subtitleAutoSyncKey = 'subtitle_auto_sync_enabled';
@@ -7076,6 +7080,36 @@ class StorageService {
   static Future<void> setAppleMultichannelAudio(bool enabled) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_appleMultichannelAudioKey, enabled);
+  }
+
+  /// Apple TV diagnostics. The player picks `ao=avfoundation,audiounit` and
+  /// caps `audio-channels` to stereo on a route that reports two channels;
+  /// these two override that automatic choice from either direction, so a
+  /// reporter can narrow an audio problem without a custom build.
+  ///
+  /// Force stereo: cap regardless of what the route claims. Use when a
+  /// multichannel route folds badly.
+  static Future<bool> getTvosForceStereoAudio() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_tvosForceStereoAudioKey) ?? false;
+  }
+
+  static Future<void> setTvosForceStereoAudio(bool enabled) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_tvosForceStereoAudioKey, enabled);
+  }
+
+  /// Legacy output: go back to `ao=audiounit`, the pre-2026-08 behaviour.
+  /// It is silent on Dolby Atmos routes — which is why avfoundation is now
+  /// the default — but it is the escape hatch if the new output misbehaves.
+  static Future<bool> getTvosLegacyAudioOutput() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_tvosLegacyAudioOutputKey) ?? false;
+  }
+
+  static Future<void> setTvosLegacyAudioOutput(bool enabled) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_tvosLegacyAudioOutputKey, enabled);
   }
 
   /// Apple TV only: force the media-kit player to software video decoding.

@@ -7,6 +7,8 @@ List<(String, String)> _props({
   bool isApple = false,
   bool isTvOS = false,
   int routeChannels = 0,
+  bool forceStereo = false,
+  bool legacyAo = false,
   bool passthrough = false,
   bool effects = false,
   bool multichannel = false,
@@ -16,6 +18,8 @@ List<(String, String)> _props({
       isApple: isApple,
       isTvOS: isTvOS,
       routeOutputChannels: routeChannels,
+      tvosForceStereo: forceStereo,
+      tvosLegacyAudioOutput: legacyAo,
       passthroughEnabled: passthrough,
       systemAudioEffects: effects,
       multichannelEnabled: multichannel,
@@ -166,5 +170,54 @@ void main() {
 
   test('route capping never applies off tvOS', () {
     expect(_props(isApple: true, isTvOS: false, routeChannels: 2), isEmpty);
+  });
+
+  test('force-stereo caps even a multichannel route', () {
+    // The diagnostic counterpart to the multichannel opt-in: it caps
+    // regardless of what the route claims to support.
+    expect(
+      _props(isApple: true, isTvOS: true, routeChannels: 6, forceStereo: true),
+      [('ao', 'avfoundation,audiounit'), ('audio-channels', 'stereo')],
+    );
+  });
+
+  test('the legacy audio engine drops back to audiounit alone', () {
+    // No fallback list here — the point is to isolate the old AO.
+    expect(
+      _props(isApple: true, isTvOS: true, routeChannels: 6, legacyAo: true),
+      [('ao', 'audiounit')],
+    );
+  });
+
+  test('legacy engine still respects the route cap', () {
+    expect(
+      _props(isApple: true, isTvOS: true, routeChannels: 2, legacyAo: true),
+      [('ao', 'audiounit'), ('audio-channels', 'stereo')],
+    );
+  });
+
+  test('the multichannel opt-in still beats force-stereo', () {
+    expect(
+      _props(
+        isApple: true,
+        isTvOS: true,
+        routeChannels: 2,
+        forceStereo: true,
+        multichannel: true,
+      ),
+      [('ao', 'avfoundation,audiounit'), ('audio-channels', 'auto')],
+    );
+  });
+
+  test('the tvOS diagnostics never leak to iOS', () {
+    expect(
+      _props(
+        isApple: true,
+        isTvOS: false,
+        forceStereo: true,
+        legacyAo: true,
+      ),
+      isEmpty,
+    );
   });
 }

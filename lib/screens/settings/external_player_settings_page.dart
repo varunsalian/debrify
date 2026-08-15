@@ -86,6 +86,8 @@ class _ExternalPlayerSettingsPageState
   bool _tvosForceSoftwareDecode = false; // Apple TV only, opt-in
   bool _audioPassthrough = false; // Android only, opt-in
   bool _appleMultichannel = false; // tvOS/iOS only, opt-in
+  bool _tvosForceStereo = false; // tvOS diagnostics
+  bool _tvosLegacyAudioOutput = false; // tvOS diagnostics
   AndroidVideoRendererMode _androidVideoRendererMode =
       AndroidVideoRendererMode.automatic;
   bool _startPortrait = false; // Phone only, opt-in
@@ -117,6 +119,8 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _tvosForceSwDecodeFocusNode = FocusNode();
   final FocusNode _audioPassthroughFocusNode = FocusNode();
   final FocusNode _appleMultichannelFocusNode = FocusNode();
+  final FocusNode _tvosForceStereoFocusNode = FocusNode();
+  final FocusNode _tvosLegacyAudioFocusNode = FocusNode();
   final FocusNode _androidVideoRendererFocusNode = FocusNode();
   final FocusNode _startPortraitFocusNode = FocusNode();
   final FocusNode _subtitleAutoSyncFocusNode = FocusNode();
@@ -135,6 +139,8 @@ class _ExternalPlayerSettingsPageState
   bool _tvosForceSwDecodeFocused = false;
   bool _audioPassthroughFocused = false;
   bool _appleMultichannelFocused = false;
+  bool _tvosForceStereoFocused = false;
+  bool _tvosLegacyAudioFocused = false;
   bool _androidVideoRendererFocused = false;
   bool _startPortraitFocused = false;
   bool _subtitleAutoSyncFocused = false;
@@ -253,6 +259,18 @@ class _ExternalPlayerSettingsPageState
         _appleMultichannelFocused = _appleMultichannelFocusNode.hasFocus;
       });
     });
+    _tvosForceStereoFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _tvosForceStereoFocused = _tvosForceStereoFocusNode.hasFocus;
+      });
+    });
+    _tvosLegacyAudioFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _tvosLegacyAudioFocused = _tvosLegacyAudioFocusNode.hasFocus;
+      });
+    });
     _androidVideoRendererFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -344,6 +362,8 @@ class _ExternalPlayerSettingsPageState
     _tvosForceSwDecodeFocusNode.dispose();
     _audioPassthroughFocusNode.dispose();
     _appleMultichannelFocusNode.dispose();
+    _tvosForceStereoFocusNode.dispose();
+    _tvosLegacyAudioFocusNode.dispose();
     _androidVideoRendererFocusNode.dispose();
     _startPortraitFocusNode.dispose();
     _subtitleAutoSyncFocusNode.dispose();
@@ -456,6 +476,12 @@ class _ExternalPlayerSettingsPageState
       final tvosForceSoftwareDecode = PlatformUtil.isTvOS
           ? await StorageService.getTvosForceSoftwareDecode()
           : false;
+      final tvosForceStereo = PlatformUtil.isTvOS
+          ? await StorageService.getTvosForceStereoAudio()
+          : false;
+      final tvosLegacyAudioOutput = PlatformUtil.isTvOS
+          ? await StorageService.getTvosLegacyAudioOutput()
+          : false;
       final audioPassthrough = Platform.isAndroid
           ? await StorageService.getAudioPassthroughEnabled()
           : false;
@@ -520,6 +546,8 @@ class _ExternalPlayerSettingsPageState
         _tvosForceSoftwareDecode = tvosForceSoftwareDecode;
         _audioPassthrough = audioPassthrough;
         _appleMultichannel = appleMultichannel;
+        _tvosForceStereo = tvosForceStereo;
+        _tvosLegacyAudioOutput = tvosLegacyAudioOutput;
         _androidVideoRendererMode = androidVideoRendererMode;
         _startPortrait = startPortrait;
         _subtitleAutoSync = subtitleAutoSync;
@@ -983,6 +1011,16 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setTvosForceSoftwareDecode(bool enabled) async {
     setState(() => _tvosForceSoftwareDecode = enabled);
     await StorageService.setTvosForceSoftwareDecode(enabled);
+  }
+
+  Future<void> _setTvosForceStereo(bool enabled) async {
+    setState(() => _tvosForceStereo = enabled);
+    await StorageService.setTvosForceStereoAudio(enabled);
+  }
+
+  Future<void> _setTvosLegacyAudioOutput(bool enabled) async {
+    setState(() => _tvosLegacyAudioOutput = enabled);
+    await StorageService.setTvosLegacyAudioOutput(enabled);
   }
 
   Future<void> _setAudioPassthrough(bool enabled) async {
@@ -2283,6 +2321,42 @@ class _ExternalPlayerSettingsPageState
                               onChanged: _setAppleMultichannel,
                               focusNode: _appleMultichannelFocusNode,
                               isFocused: _appleMultichannelFocused,
+                            ),
+                          ],
+
+                          // Apple TV audio diagnostics. The player normally
+                          // decides both of these from the output route; these
+                          // let a reporter narrow an audio problem without
+                          // waiting on a custom build.
+                          if (PlatformUtil.isTvOS) ...[
+                            const SizedBox(height: 4),
+                            _buildCheckboxTile(
+                              context,
+                              title: 'Force stereo audio',
+                              subtitle:
+                                  'Always downmix to 2 channels, whatever the '
+                                  'TV or receiver reports. Try this if '
+                                  'surround sound is noisy or distorted. '
+                                  'Restart playback to apply.',
+                              value: _tvosForceStereo,
+                              onChanged: _setTvosForceStereo,
+                              focusNode: _tvosForceStereoFocusNode,
+                              isFocused: _tvosForceStereoFocused,
+                            ),
+                            const SizedBox(height: 4),
+                            _buildCheckboxTile(
+                              context,
+                              title: 'Use the previous audio engine',
+                              subtitle:
+                                  'Go back to the audio output used before '
+                                  'August 2026. It has no sound at all when '
+                                  'Dolby Atmos is enabled, so only use it if '
+                                  'the current one misbehaves. Restart '
+                                  'playback to apply.',
+                              value: _tvosLegacyAudioOutput,
+                              onChanged: _setTvosLegacyAudioOutput,
+                              focusNode: _tvosLegacyAudioFocusNode,
+                              isFocused: _tvosLegacyAudioFocused,
                             ),
                           ],
                         ],
