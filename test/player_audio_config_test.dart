@@ -5,6 +5,7 @@ import 'package:debrify/utils/player_audio_config.dart';
 List<(String, String)> _props({
   bool isAndroid = false,
   bool isApple = false,
+  bool isTvOS = false,
   bool passthrough = false,
   bool effects = false,
   bool multichannel = false,
@@ -12,6 +13,7 @@ List<(String, String)> _props({
     PlayerAudioConfig.audioProperties(
       isAndroid: isAndroid,
       isApple: isApple,
+      isTvOS: isTvOS,
       passthroughEnabled: passthrough,
       systemAudioEffects: effects,
       multichannelEnabled: multichannel,
@@ -93,6 +95,34 @@ void main() {
         systemAudioEffects: true,
       ),
       [('ao', 'audiotrack,opensles'), ('audio-spdif', '')],
+    );
+  });
+
+  test('tvOS selects avfoundation with an audiounit fallback', () {
+    // ao_audiounit goes silent on a Dolby Atmos HDMI route; avfoundation
+    // renders through AVSampleBufferAudioRenderer instead. The comma list is
+    // the point: mpv falls back if the new AO cannot initialise.
+    expect(_props(isApple: true, isTvOS: true), [
+      ('ao', 'avfoundation,audiounit'),
+    ]);
+  });
+
+  test('iOS is untouched by the tvOS audio output change', () {
+    expect(_props(isApple: true, isTvOS: false), isEmpty);
+  });
+
+  test('tvOS keeps the multichannel opt-in after the ao selection', () {
+    // Order matters: ao is applied before audio-channels.
+    expect(_props(isApple: true, isTvOS: true, multichannel: true), [
+      ('ao', 'avfoundation,audiounit'),
+      ('audio-channels', 'auto'),
+    ]);
+  });
+
+  test('Android never gets the tvOS audio output', () {
+    expect(
+      _props(isAndroid: true, isTvOS: true, passthrough: true),
+      isNot(contains(('ao', 'avfoundation,audiounit'))),
     );
   });
 }

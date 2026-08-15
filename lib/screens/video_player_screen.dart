@@ -2289,6 +2289,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final props = PlayerAudioConfig.audioProperties(
       isAndroid: !kIsWeb && Platform.isAndroid,
       isApple: PlatformUtil.isTvOS || PlatformUtil.isIosMobile,
+      isTvOS: PlatformUtil.isTvOS,
       passthroughEnabled: _audioPassthroughEnabled,
       systemAudioEffects: _systemAudioEffectsEnabled,
       multichannelEnabled: _appleMultichannelEnabled,

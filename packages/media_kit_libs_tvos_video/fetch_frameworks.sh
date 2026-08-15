@@ -14,6 +14,11 @@
 # fetch resumes where it stopped.
 set -euo pipefail
 
+# Rebuilt in-house — see design/plans/TVOS_LIBMPV_UPGRADE_PLAN.md.
+# karelrooted/libmpv is abandoned (last push 2023-12-22) and its mpv predates
+# ao_avfoundation, which this port needs. Point these at our own release once
+# the artifacts are published; until then the frameworks are installed locally
+# by the build in ~/Documents/Projects/libmpv-tvos-build (`xcframework.sh`).
 REPO="karelrooted/libmpv"
 TAG="v0.0.1-beta"
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,9 +32,8 @@ WORK="${TMPDIR:-/tmp}/libmpv-tvos-$TAG"
 # list and OTHER_LDFLAGS in sync.
 FRAMEWORKS=(
   Libass Libavcodec Libavdevice Libavfilter Libavformat Libavutil
-  Libbluray Libcrypto Libdav1d Libfreetype Libfribidi Libglslang
-  Libgmp Libgnutls Libharfbuzz Libhogweed Liblcms2 Libluajit-5.1
-  Libmpv Libnettle Libplacebo Libpng Libshaderc_combined Libssl
+  Libbluray Libcrypto Libdav1d Libfreetype Libfribidi Libharfbuzz
+  Liblcms2 Libluajit Libmpv Libplacebo Libpng Libshaderc Libssl
   Libswresample Libswscale Libuchardet MoltenVK
 )
 
