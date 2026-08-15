@@ -63,6 +63,7 @@ import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/home/cw_card_menu.dart';
 import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
+import '../widgets/home/row_tag_pill.dart';
 import '../widgets/home/spotlight_board.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
@@ -2209,7 +2210,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           );
           if (items.isEmpty) return null;
           return CatalogSection(
-            title: '${addon.name}: ${catalog.name}',
+            title: CatalogSection.rowTitle(catalog),
             addon: addon,
             catalog: catalog,
             // Keep the whole first page; more pages stream in on horizontal scroll.
@@ -4547,7 +4548,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         if (!mounted || token != _catalogSearchToken) return null;
         if (items.isEmpty) return null;
         final section = CatalogSection(
-          title: '${entry.addon.name}: ${entry.catalog.name}',
+          title: CatalogSection.rowTitle(entry.catalog),
           addon: entry.addon,
           catalog: entry.catalog,
           items: items,
@@ -5723,7 +5724,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           if (items.isEmpty) continue;
           setState(() {
             _spotlightHeroOverride = CatalogSection(
-              title: '${addon.name}: ${catalog.name}',
+              title: CatalogSection.rowTitle(catalog),
               addon: addon,
               catalog: catalog,
               items: items.toList(),
@@ -5791,8 +5792,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final row = rail.cw;
     if (row != null) {
       return SpotlightShelf(
-        title: row.tag == null ? row.title : '${row.title} · ${row.tag}',
+        title: row.title,
+        // The tag used to be folded into the title text; now it IS the tag —
+        // the same pill grammar the catalog rows wear.
+        tag: row.tag,
         nodes: row.nodes,
+        // Already nullable on the row itself — a tracker row with no grid
+        // behind it hands over null and simply draws no chevron.
+        onSeeAll: row.onSeeAll,
+        // CW captions carry information (which title, how far) — kept.
         items: [
           for (final m in row.items)
             SpotlightCard(
@@ -5811,7 +5819,16 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final i = rail.sectionIndex!;
     return SpotlightShelf(
       title: _sections[i].title,
+      tag: _sectionTag(_sections[i]),
       nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
+      // The same destination the classic rails' "See All" link opens —
+      // including the tracker-list rows, which _openCatalogSeeAll routes to
+      // their own browser rather than the catalog pager.
+      onSeeAll: () => _openCatalogSeeAll(_sections[i]),
+      // Catalog cards go caption-free off TV — the art is the label; a
+      // caption repeating the poster's own title was the reference's one
+      // piece of noise we added ourselves.
+      captions: false,
       items: [
         for (final m in _sections[i].items)
           SpotlightCard(
@@ -5857,6 +5874,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         return SpotlightShelf(
           title: isMovies ? 'Watchlist Movies' : 'Watchlist Series',
           nodes: nodes,
+          // Same rule as the catalog rows off TV: pure poster cards. The
+          // subtitle stays on the card because TV still renders overlay
+          // captions (this flag is non-TV only) — dropping it here would
+          // have changed TV cards too.
+          captions: false,
           items: [
             for (final item in items)
               SpotlightCard(
@@ -8882,9 +8904,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   /// Tab label for a rail, with colliding titles disambiguated by the
-  /// section's type tag — two addon catalogs often share a name ("Popular"
-  /// for both Movies and Series), and identical neighbouring tabs read as a
-  /// rendering bug.
+  /// section's provenance tag. Titles carry their content type themselves
+  /// now ("Popular Movies" — [CatalogSection.rowTitle]), so the only way two
+  /// tabs still collide is the same catalog name+type from two ADDONS — and
+  /// the addon is exactly what tells those apart.
   String _canvasTabTitle(List<_CanvasRail> rails, int i) {
     final title = _canvasRailTitle(rails[i]);
     final rail = rails[i];
@@ -8893,8 +8916,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       (r) => !identical(r, rail) && _canvasRailTitle(r) == title,
     );
     if (!duplicated) return title;
-    final type = _sectionTypeLabel(_sections[rail.sectionIndex!]);
-    return type == null ? title : '$title · $type';
+    return '$title · ${_sectionTag(_sections[rail.sectionIndex!])}';
   }
 
   /// Quiet rail-name tabs above the Canvas shelf — a window around the
@@ -15666,24 +15688,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
   /// "Movies" / "Series" (etc.) tag for a catalog row, so two "Popular" rows
   /// (one movies, one series) are distinguishable. Null for unknown types.
-  String? _sectionTypeLabel(CatalogSection section) {
-    // Tracker list rows: the tag names the SOURCE ("Watchlist · Trakt") — the
-    // list itself mixes movies and shows, so a type tag would be wrong.
+  /// The row's provenance tag: which SOURCE fills it. Tracker list rows name
+  /// their tracker; catalog rows name the addon. The content TYPE stopped
+  /// being the tag when it moved into the heading itself ("Popular Movies" —
+  /// see [CatalogSection.rowTitle]); the addon moved the other way, out of
+  /// the heading it used to shout open ("Cinemeta: Popular") and into the
+  /// quiet pill this feeds.
+  String _sectionTag(CatalogSection section) {
     if (section is HomeListSection) {
       return section.isTrakt ? 'Trakt' : 'Simkl';
     }
-    switch (section.catalog.type.toLowerCase()) {
-      case 'movie':
-        return 'Movies';
-      case 'series':
-        return 'Series';
-      case 'tv':
-        return 'TV';
-      case 'channel':
-        return 'Channels';
-      default:
-        return null;
-    }
+    return section.addon.name;
   }
 
   /// Open the full-screen Stremio-styled catalog browser for a rail. Seeds the
@@ -15915,10 +15930,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         .then((_) => _refreshAfterPlayback(trackers: true));
   }
 
-  /// Shared header for a board rail: a plain "Popular · Movies"-style title
-  /// (Stremio keeps the type as quiet suffix text, not a coloured pill). The
-  /// "See All" link is a mouse/tap affordance shown on desktop only — TV keeps
-  /// the rail chrome-free and paginates as the user scrolls.
+  /// Shared header for a board rail: a "Popular Movies"-style title (the
+  /// content type lives in the words — [CatalogSection.rowTitle]) with the
+  /// source riding beside it as a small [RowTagPill]. The "See All" link is a
+  /// mouse/tap affordance shown on desktop only — TV keeps the rail
+  /// chrome-free and paginates as the user scrolls.
   Widget _railHeader({
     required String title,
     String? tag,
@@ -15940,61 +15956,43 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: compact
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.poppins(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: app.fade(app.core.tx, 0.92),
-                        ),
-                      ),
-                      if (tag != null)
-                        Text(
-                          tag,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.poppins(
-                            color: app.fade(app.core.tx, 0.38),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                    ],
-                  )
-                : Text.rich(
-                    TextSpan(
-                      text: title,
-                      children: [
-                        if (tag != null)
-                          TextSpan(
-                            text: '  ·  $tag',
-                            style: TextStyle(
-                              color: app.fade(app.core.tx, 0.34),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                      ],
-                    ),
+            // One shape for every tier now: title + provenance pill. The tag
+            // used to render as a second line (compact) / a dot-suffix (wide)
+            // back when it was the content type; as the ADDON it reads as
+            // provenance, and the pill keeps it a footnote on all three tiers
+            // (the same chip the Spotlight board's headings wear).
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    // Poppins for the rail titles too, so headings share one display
-                    // face; loosened from the old -0.2 tracking for the airier look.
-                    // TV runs them quieter (15px) — the hero carries the weight, the
-                    // row title just labels the shelf (Nuvio's row grammar).
+                    // Poppins for the rail titles too, so headings share one
+                    // display face. TV runs them quieter (15px) — the hero
+                    // carries the weight, the row title just labels the shelf
+                    // (Nuvio's row grammar).
                     style: GoogleFonts.poppins(
-                      fontSize: tv ? 15 : 17,
+                      fontSize: tv || compact ? 15 : 17,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0,
                       color: app.fade(app.core.tx, 0.92),
                     ),
                   ),
+                ),
+                if (tag != null) ...[
+                  const SizedBox(width: 8),
+                  // Intrinsic width under a hard cap — a second Flexible here
+                  // would halve the title's max width and wrap it (the
+                  // Spotlight heading hit exactly that).
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 150),
+                    child: RowTagPill(tag, fontSize: 9.5),
+                  ),
+                ],
+              ],
+            ),
           ),
           if (onSeeAll != null && !tv)
             _SeeAllLink(onTap: onSeeAll, compact: compact),
@@ -16014,14 +16012,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // for the hover/focus lift.
     final cellH = posterH;
     final rowH = cellH + 14;
-    final typeLabel = _sectionTypeLabel(section);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _railHeader(
           title: section.title,
-          tag: typeLabel,
+          tag: _sectionTag(section),
           onSeeAll: () => _openCatalogSeeAll(section),
         ),
         SizedBox(

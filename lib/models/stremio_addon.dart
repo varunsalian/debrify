@@ -432,7 +432,8 @@ class StremioMeta {
 
 /// Represents a section of catalog content for homepage display
 class CatalogSection {
-  /// Display title (e.g., "Cinemeta: Popular Movies")
+  /// Display title (e.g., "Popular Movies" — see [rowTitle]; the addon rides
+  /// separately as the row's provenance tag)
   final String title;
 
   /// The addon this section is from
@@ -473,6 +474,38 @@ class CatalogSection {
     this.exhausted = false,
     this.query,
   }) : nextSkip = nextSkip ?? items.length;
+
+  /// The row heading for a catalog: catalog name + content type — "Popular"
+  /// of type movie becomes "Popular Movies". The addon's name is NOT baked
+  /// in any more (it rides separately as the row's provenance tag), which is
+  /// also what un-duplicates rows: the old "Cinemeta: Popular" appeared
+  /// twice — movies and series — with nothing on screen telling them apart.
+  ///
+  /// Catalogs whose name already carries the type word ("New Movies", "MTV")
+  /// keep it un-doubled. A contains() guard rather than endsWith, on
+  /// purpose: skipping the suffix is always safe, doubling never is.
+  ///
+  /// Row-order persistence is untouched by any of this — saved orders key on
+  /// `addon.id:type:id`, never on the display title.
+  static String rowTitle(StremioAddonCatalog catalog) {
+    final name = catalog.name.trim();
+    final type = switch (catalog.type.toLowerCase()) {
+      'movie' => 'Movies',
+      'series' => 'Series',
+      'tv' => 'TV',
+      'channel' => 'Channels',
+      _ => null,
+    };
+    if (type == null) return name;
+    // Nameless catalogs exist in the wild; the type alone beats " Movies".
+    if (name.isEmpty) return type;
+    // Matched on the SINGULAR stem so "Movie Night" and a catalog literally
+    // named "movie" both count as already-typed — "movie Movies" is exactly
+    // the doubling this guard exists to prevent.
+    final stem = type.toLowerCase().replaceFirst(RegExp(r's$'), '');
+    if (name.toLowerCase().contains(stem)) return name;
+    return '$name $type';
+  }
 }
 
 /// Represents a Stremio addon that can be used for torrent search.

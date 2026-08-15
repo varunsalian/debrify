@@ -1,0 +1,400 @@
+<title>Home Rows — Naming & Air</title>
+<style>
+  /* Deliberately single-theme: a dark studio wall for judging dark UI frames.
+     Every colour painted explicitly so the page holds on any host ground. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0B0E14;
+    color: #E9EDF4;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding: 56px 32px 96px;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+  /* ── page header ─────────────────────────────────────────────── */
+  .kicker {
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    color: #6E9BFF; font-weight: 700; margin-bottom: 10px;
+  }
+  h1 { font-size: 32px; font-weight: 800; letter-spacing: -.02em; text-wrap: balance; }
+  .lede { color: #8A93A6; max-width: 640px; margin-top: 10px; }
+  .lede b { color: #C9D2E0; font-weight: 600; }
+
+  section { margin-top: 64px; }
+  h2 { font-size: 20px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 6px; }
+  .sub { color: #8A93A6; font-size: 13.5px; max-width: 640px; margin-bottom: 24px; }
+
+  /* ── naming grammar table ────────────────────────────────────── */
+  .grammar {
+    display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px 18px;
+    background: #11161F; border: 1px solid #1C2330; border-radius: 14px;
+    padding: 22px 24px; max-width: 760px; font-size: 13.5px; align-items: center;
+  }
+  .grammar .old { color: #7A8496; text-decoration: line-through; text-decoration-color: #3A4356; }
+  .grammar .arr { color: #4A5468; }
+  .grammar .new b { color: #FFFFFF; font-weight: 700; }
+  .grammar .new .tg {
+    font-size: 10px; letter-spacing: .12em; color: #8A93A6;
+    text-transform: uppercase; margin-left: 8px;
+  }
+  .grammar .hd {
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: #55607A; font-weight: 700; padding-bottom: 2px; border-bottom: 1px solid #1C2330;
+  }
+
+  /* ── phone strip ─────────────────────────────────────────────── */
+  .strip {
+    display: flex; gap: 30px; overflow-x: auto; padding: 6px 4px 22px;
+    scrollbar-width: thin; scrollbar-color: #2A3242 transparent;
+  }
+  .concept { flex: 0 0 380px; }
+  .phone {
+    width: 380px; height: 828px; background: #0F1626;
+    border: 1px solid rgba(255,255,255,.09); border-radius: 26px;
+    overflow: hidden; position: relative;
+  }
+  .c-label { display: flex; align-items: baseline; gap: 10px; margin: 16px 2px 6px; }
+  .c-key {
+    font-size: 11px; font-weight: 800; letter-spacing: .1em; color: #6E9BFF;
+    text-transform: uppercase;
+  }
+  .c-name { font-size: 15px; font-weight: 700; }
+  .c-badge {
+    font-size: 9.5px; font-weight: 800; letter-spacing: .1em; color: #0B0E14;
+    background: #6E9BFF; border-radius: 99px; padding: 3px 8px; margin-left: auto;
+  }
+  .c-notes { color: #8A93A6; font-size: 12.5px; max-width: 372px; }
+  .c-notes b { color: #C9D2E0; font-weight: 600; }
+
+  /* hero sliver: anchors the scroll position without spending frame height */
+  .hero {
+    height: 108px; position: relative;
+    background:
+      radial-gradient(120% 160% at 50% -40%, rgba(140,90,60,.55), rgba(30,26,40,.25) 55%, rgba(15,22,38,0) 100%),
+      linear-gradient(180deg, #241D2A 0%, rgba(15,22,38,0) 90%);
+  }
+  .dots { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; justify-content: center; gap: 5px; }
+  .dot { width: 4px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.34); }
+  .dot.on { width: 11px; background: rgba(255,255,255,.95); }
+
+  /* rows */
+  .rowhead { display: flex; align-items: center; padding: 0 16px; }
+  .chev { display: inline-block; transform: translateY(1px); font-weight: 700; }
+
+  /* today's heading */
+  .t-head { margin-top: 20px; }
+  .t-head .ttl { font-size: 19px; font-weight: 600; color: rgba(233,237,244,.84); }
+  .t-head .chev { font-size: 17px; color: rgba(233,237,244,.5); margin-left: 5px; }
+
+  /* new heading */
+  .n-head { margin-top: 34px; }
+  .n-head .ttl { font-size: 22px; font-weight: 700; color: rgba(255,255,255,.96); letter-spacing: -.01em; }
+  .n-head .chev { font-size: 19px; color: rgba(255,255,255,.5); margin-left: 6px; }
+
+  /* tag placements */
+  .tag-trail { margin-left: auto; font-size: 10px; letter-spacing: .14em; color: rgba(233,237,244,.35); text-transform: uppercase; font-weight: 600; }
+  .tag-kick  { display: block; padding: 0 16px; margin: 34px 0 -31px; font-size: 10px; letter-spacing: .14em; color: rgba(233,237,244,.38); text-transform: uppercase; font-weight: 700; }
+  .kicked { margin-top: 3px; }
+  .tag-suffix { font-size: 12.5px; color: rgba(233,237,244,.42); font-weight: 500; margin-left: 10px; transform: translateY(1px); }
+  .tag-pill {
+    font-size: 9.5px; letter-spacing: .1em; color: rgba(233,237,244,.5); text-transform: uppercase; font-weight: 700;
+    border: 1px solid rgba(233,237,244,.22); border-radius: 99px; padding: 2.5px 7px; margin-left: 10px;
+  }
+
+  /* poster rails */
+  .rail { display: flex; gap: 12px; padding-left: 16px; margin-top: 12px; overflow: hidden; }
+  .t-rail { margin-top: 10px; }
+  .card { flex: 0 0 auto; }
+  .pstr { border-radius: 10px; position: relative; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); }
+  .n-size .pstr { width: 104px; height: 156px; }
+  .t-size .pstr { width: 92px; height: 138px; }
+  .cap { font-size: 12px; color: rgba(233,237,244,.66); margin-top: 7px; max-width: 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .icap { font-size: 11px; color: rgba(233,237,244,.5); margin-top: 7px; }
+
+  /* progress bar (CW) */
+  .prog { position: absolute; left: 8px; right: 8px; bottom: 7px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.22); }
+  .prog i { display: block; height: 100%; border-radius: 2px; background: rgba(255,255,255,.92); }
+
+  /* fake key art — gradient + type, judged for chrome not for art */
+  .pstr span {
+    position: absolute; left: 0; right: 0; text-align: center;
+    font-weight: 800; letter-spacing: .12em; color: rgba(255,255,255,.92);
+    font-size: 9px; text-transform: uppercase;
+  }
+  .a1 { background: radial-gradient(140% 110% at 30% 15%, #1E3A3A 0%, #0C1616 60%, #060A0A 100%); }
+  .a1 span { bottom: 12px; }
+  .a2 { background: linear-gradient(160deg, #2B1E4E 0%, #171034 45%, #34104A 100%); }
+  .a2 span { bottom: 12px; color: #CBB8FF; }
+  .a3 { background: linear-gradient(200deg, #4A1010 0%, #1A0505 70%); }
+  .a3 span { bottom: 12px; color: #FF9A8A; }
+  .a4 { background: #38506E; }
+  .a4 span { top: 42%; font-size: 11px; letter-spacing: .04em; text-transform: none; font-weight: 600; font-family: Georgia, serif; }
+  .a5 { background: radial-gradient(120% 100% at 50% 20%, #6E1E4E 0%, #1A0A2E 75%); }
+  .a5 span { bottom: 12px; color: #FFB8D8; }
+  .a6 { background: linear-gradient(180deg, #46503F 0%, #232B20 65%, #12160F 100%); }
+  .a6 span { top: 14px; }
+  .a7 { background: radial-gradient(100% 130% at 50% 110%, #0E4A4A 0%, #06201F 70%); }
+  .a7 span { bottom: 12px; color: #9AE8DC; }
+  .a8 { background: linear-gradient(210deg, #4A2A0E 0%, #1C0F06 60%); }
+  .a8 span { bottom: 12px; color: #FFC89A; }
+
+  /* ── desktop frame ───────────────────────────────────────────── */
+  .desk {
+    width: 100%; max-width: 1160px; height: 470px; background: #0F1626;
+    border: 1px solid rgba(255,255,255,.09); border-radius: 18px; overflow: hidden;
+  }
+  .desk .rowhead { padding: 0 44px; }
+  .desk .n-head { margin-top: 40px; }
+  .desk .n-head .ttl { font-size: 24px; }
+  .desk .rail { padding-left: 44px; gap: 16px; margin-top: 14px; }
+  .desk .pstr { width: 140px; height: 210px; }
+  .desk .pstr span { font-size: 11px; }
+
+  /* ── notes ───────────────────────────────────────────────────── */
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; max-width: 1160px; }
+  .note {
+    background: #11161F; border: 1px solid #1C2330; border-radius: 14px; padding: 20px 22px;
+    font-size: 13.5px; color: #A7B0C2;
+  }
+  .note h3 { font-size: 13px; font-weight: 700; color: #E9EDF4; margin-bottom: 8px; letter-spacing: .01em; }
+  .note code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: #9FC0FF; background: rgba(110,155,255,.08); border-radius: 5px; padding: 1px 5px; }
+  .note ul { margin: 6px 0 0 16px; }
+  .note li { margin-top: 5px; }
+</style>
+
+<div class="wrap">
+  <div class="kicker">Debrify · Home (Spotlight) · phone / tablet / desktop</div>
+  <h1>Rows that say what they are</h1>
+  <p class="lede">Four treatments of the same three fixes: headings become <b>editorial and bright</b> ("Popular Movies", not "Cinemeta: Popular"), the addon becomes a <b>quiet tag</b> instead of a shouted prefix, and catalog cards <b>drop their redundant captions</b> and grow into the freed space. The naming grammar applies everywhere including TV; the scale, caption and spacing changes are non-TV only. Concepts differ in exactly one thing — where the tag lives.</p>
+
+  <section>
+    <h2>The grammar</h2>
+    <p class="sub">Heading = catalog + content type. Tag = the addon, demoted to provenance. Rows that shared a name stop colliding.</p>
+    <div class="grammar mono">
+      <div class="hd">Today</div><div class="hd"></div><div class="hd">Proposed</div>
+      <div class="old">Cinemeta: Popular</div><div class="arr">→</div><div class="new"><b>Popular Movies</b><span class="tg">Cinemeta</span></div>
+      <div class="old">Cinemeta: Popular</div><div class="arr">→</div><div class="new"><b>Popular Series</b><span class="tg">Cinemeta</span></div>
+      <div class="old">Cinemeta: New</div><div class="arr">→</div><div class="new"><b>New Movies</b><span class="tg">Cinemeta</span></div>
+      <div class="old">Streaming Catalogs: Netflix</div><div class="arr">→</div><div class="new"><b>Netflix Movies</b><span class="tg">Streaming Catalogs</span></div>
+      <div class="old">Continue Watching · MOVIE</div><div class="arr">→</div><div class="new"><b>Continue Watching</b><span class="tg">Trakt · Movies</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Concepts</h2>
+    <p class="sub">Frame 0 is today, for contrast. A–D share the new type scale, caption-free catalog cards, larger posters and 34px of inter-row air — pick on tag placement alone. Continue Watching keeps a caption because there it carries information.</p>
+    <div class="strip">
+
+      <!-- ─── TODAY ─── -->
+      <div class="concept">
+        <div class="phone">
+          <div class="hero"><div class="dots"><i class="dot on"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div></div>
+          <div class="rowhead t-head"><span class="ttl">Cinemeta: Popular</span><span class="chev">›</span></div>
+          <div class="rail t-rail t-size">
+            <div class="card"><div class="pstr a1"><span>Obsession</span></div><div class="cap">Obsession</div></div>
+            <div class="card"><div class="pstr a2"><span>Masters</span></div><div class="cap">Masters of the…</div></div>
+            <div class="card"><div class="pstr a3"><span>Web of Night</span></div><div class="cap">Web of Night</div></div>
+            <div class="card"><div class="pstr a4"><span>sterling point</span></div><div class="cap">Sterling Point</div></div>
+          </div>
+          <div class="rowhead t-head"><span class="ttl">Cinemeta: Popular</span><span class="chev">›</span></div>
+          <div class="rail t-rail t-size">
+            <div class="card"><div class="pstr a8"><span>Dragon Court</span></div><div class="cap">Dragon Court</div></div>
+            <div class="card"><div class="pstr a6"><span>Last House</span></div><div class="cap">The Last House</div></div>
+            <div class="card"><div class="pstr a5"><span>Soulm8te</span></div><div class="cap">Soulm8te</div></div>
+            <div class="card"><div class="pstr a7"><span>Devil's Mouth</span></div><div class="cap">The Devil's Mo…</div></div>
+          </div>
+          <div class="rowhead t-head"><span class="ttl">Cinemeta: New</span><span class="chev">›</span></div>
+          <div class="rail t-rail t-size">
+            <div class="card"><div class="pstr a6"><span>Last House</span></div><div class="cap">11817</div></div>
+            <div class="card"><div class="pstr a5"><span>Soulm8te</span></div><div class="cap">Soulm8te</div></div>
+            <div class="card"><div class="pstr a7"><span>Devil's Mouth</span></div><div class="cap">The Devil's Mo…</div></div>
+            <div class="card"><div class="pstr a3"><span>Web of Night</span></div><div class="cap">Web of Night</div></div>
+          </div>
+          <div class="rowhead t-head"><span class="ttl">Cinemeta: New</span><span class="chev">›</span></div>
+          <div class="rail t-rail t-size">
+            <div class="card"><div class="pstr a2"><span>Masters</span></div><div class="cap">Masters of th…</div></div>
+            <div class="card"><div class="pstr a1"><span>Obsession</span></div><div class="cap">Obsession</div></div>
+            <div class="card"><div class="pstr a4"><span>sterling point</span></div><div class="cap">Sterling Point</div></div>
+          </div>
+        </div>
+        <div class="c-label"><span class="c-key">Frame 0</span><span class="c-name">Today</span></div>
+        <p class="c-notes">Same heading twice in a row, addon shouted first, captions repeating the art, rows packed tight. Reads like a debug build of the reference.</p>
+      </div>
+
+      <!-- ─── A · LEDGER ─── -->
+      <div class="concept">
+        <div class="phone">
+          <div class="hero"><div class="dots"><i class="dot on"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div></div>
+          <div class="rowhead n-head"><span class="ttl">Popular Movies</span><span class="chev">›</span><span class="tag-trail">Cinemeta</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a1"><span>Obsession</span></div></div>
+            <div class="card"><div class="pstr a2"><span>Masters</span></div></div>
+            <div class="card"><div class="pstr a3"><span>Web of Night</span></div></div>
+            <div class="card"><div class="pstr a4"><span>sterling point</span></div></div>
+          </div>
+          <div class="rowhead n-head"><span class="ttl">Popular Series</span><span class="chev">›</span><span class="tag-trail">Cinemeta</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a8"><span>Dragon Court</span></div></div>
+            <div class="card"><div class="pstr a6"><span>Last House</span></div></div>
+            <div class="card"><div class="pstr a5"><span>Soulm8te</span></div></div>
+            <div class="card"><div class="pstr a7"><span>Devil's Mouth</span></div></div>
+          </div>
+          <div class="rowhead n-head"><span class="ttl">Continue Watching</span><span class="chev">›</span><span class="tag-trail">Trakt · Movies</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a7"><span>Devil's Mouth</span><div class="prog"><i style="width:62%"></i></div></div><div class="icap">48 min left</div></div>
+            <div class="card"><div class="pstr a2"><span>Masters</span><div class="prog"><i style="width:24%"></i></div></div><div class="icap">1 h 32 left</div></div>
+            <div class="card"><div class="pstr a1"><span>Obsession</span><div class="prog"><i style="width:81%"></i></div></div><div class="icap">19 min left</div></div>
+            <div class="card"><div class="pstr a5"><span>Soulm8te</span><div class="prog"><i style="width:45%"></i></div></div><div class="icap">57 min left</div></div>
+          </div>
+        </div>
+        <div class="c-label"><span class="c-key">A</span><span class="c-name">Ledger</span></div>
+        <p class="c-notes">Tag at the trailing edge, out of the reading line entirely. <b>Cleanest heading</b>; the tag column scans like provenance. Long headings can crowd it on narrow phones.</p>
+      </div>
+
+      <!-- ─── B · KICKER ─── -->
+      <div class="concept">
+        <div class="phone">
+          <div class="hero"><div class="dots"><i class="dot on"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div></div>
+          <span class="tag-kick">Cinemeta</span>
+          <div class="rowhead n-head kicked"><span class="ttl">Popular Movies</span><span class="chev">›</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a1"><span>Obsession</span></div></div>
+            <div class="card"><div class="pstr a2"><span>Masters</span></div></div>
+            <div class="card"><div class="pstr a3"><span>Web of Night</span></div></div>
+            <div class="card"><div class="pstr a4"><span>sterling point</span></div></div>
+          </div>
+          <span class="tag-kick">Cinemeta</span>
+          <div class="rowhead n-head kicked"><span class="ttl">Popular Series</span><span class="chev">›</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a8"><span>Dragon Court</span></div></div>
+            <div class="card"><div class="pstr a6"><span>Last House</span></div></div>
+            <div class="card"><div class="pstr a5"><span>Soulm8te</span></div></div>
+            <div class="card"><div class="pstr a7"><span>Devil's Mouth</span></div></div>
+          </div>
+          <span class="tag-kick">Trakt · Movies</span>
+          <div class="rowhead n-head kicked"><span class="ttl">Continue Watching</span><span class="chev">›</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a7"><span>Devil's Mouth</span><div class="prog"><i style="width:62%"></i></div></div><div class="icap">48 min left</div></div>
+            <div class="card"><div class="pstr a2"><span>Masters</span><div class="prog"><i style="width:24%"></i></div></div><div class="icap">1 h 32 left</div></div>
+            <div class="card"><div class="pstr a1"><span>Obsession</span><div class="prog"><i style="width:81%"></i></div></div><div class="icap">19 min left</div></div>
+            <div class="card"><div class="pstr a5"><span>Soulm8te</span><div class="prog"><i style="width:45%"></i></div></div><div class="icap">57 min left</div></div>
+          </div>
+        </div>
+        <div class="c-label"><span class="c-key">B</span><span class="c-name">Kicker</span></div>
+        <p class="c-notes">Editorial eyebrow above the heading. Most magazine-like — but with one or two addons the same word repeats down the whole page in a prominent slot, and each row grows a line taller.</p>
+      </div>
+
+      <!-- ─── C · SUFFIX ─── -->
+      <div class="concept">
+        <div class="phone">
+          <div class="hero"><div class="dots"><i class="dot on"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div></div>
+          <div class="rowhead n-head"><span class="ttl">Popular Movies</span><span class="chev">›</span><span class="tag-suffix">Cinemeta</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a1"><span>Obsession</span></div></div>
+            <div class="card"><div class="pstr a2"><span>Masters</span></div></div>
+            <div class="card"><div class="pstr a3"><span>Web of Night</span></div></div>
+            <div class="card"><div class="pstr a4"><span>sterling point</span></div></div>
+          </div>
+          <div class="rowhead n-head"><span class="ttl">Popular Series</span><span class="chev">›</span><span class="tag-suffix">Cinemeta</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a8"><span>Dragon Court</span></div></div>
+            <div class="card"><div class="pstr a6"><span>Last House</span></div></div>
+            <div class="card"><div class="pstr a5"><span>Soulm8te</span></div></div>
+            <div class="card"><div class="pstr a7"><span>Devil's Mouth</span></div></div>
+          </div>
+          <div class="rowhead n-head"><span class="ttl">Continue Watching</span><span class="chev">›</span><span class="tag-suffix">Trakt · Movies</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a7"><span>Devil's Mouth</span><div class="prog"><i style="width:62%"></i></div></div><div class="icap">48 min left</div></div>
+            <div class="card"><div class="pstr a2"><span>Masters</span><div class="prog"><i style="width:24%"></i></div></div><div class="icap">1 h 32 left</div></div>
+            <div class="card"><div class="pstr a1"><span>Obsession</span><div class="prog"><i style="width:81%"></i></div></div><div class="icap">19 min left</div></div>
+            <div class="card"><div class="pstr a5"><span>Soulm8te</span><div class="prog"><i style="width:45%"></i></div></div><div class="icap">57 min left</div></div>
+          </div>
+        </div>
+        <div class="c-label"><span class="c-key">C</span><span class="c-name">Suffix</span><span class="c-badge">Recommended</span></div>
+        <p class="c-notes">Quiet lowercase suffix riding just after the chevron — the house "· tag" grammar the CW rows already use, now naming the addon. Never collides, ellipsizes gracefully, and reads on TV unchanged.</p>
+      </div>
+
+      <!-- ─── D · PILL ─── -->
+      <div class="concept">
+        <div class="phone">
+          <div class="hero"><div class="dots"><i class="dot on"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div></div>
+          <div class="rowhead n-head"><span class="ttl">Popular Movies</span><span class="chev">›</span><span class="tag-pill">Cinemeta</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a1"><span>Obsession</span></div></div>
+            <div class="card"><div class="pstr a2"><span>Masters</span></div></div>
+            <div class="card"><div class="pstr a3"><span>Web of Night</span></div></div>
+            <div class="card"><div class="pstr a4"><span>sterling point</span></div></div>
+          </div>
+          <div class="rowhead n-head"><span class="ttl">Popular Series</span><span class="chev">›</span><span class="tag-pill">Cinemeta</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a8"><span>Dragon Court</span></div></div>
+            <div class="card"><div class="pstr a6"><span>Last House</span></div></div>
+            <div class="card"><div class="pstr a5"><span>Soulm8te</span></div></div>
+            <div class="card"><div class="pstr a7"><span>Devil's Mouth</span></div></div>
+          </div>
+          <div class="rowhead n-head"><span class="ttl">Continue Watching</span><span class="chev">›</span><span class="tag-pill">Trakt</span></div>
+          <div class="rail n-size">
+            <div class="card"><div class="pstr a7"><span>Devil's Mouth</span><div class="prog"><i style="width:62%"></i></div></div><div class="icap">48 min left</div></div>
+            <div class="card"><div class="pstr a2"><span>Masters</span><div class="prog"><i style="width:24%"></i></div></div><div class="icap">1 h 32 left</div></div>
+            <div class="card"><div class="pstr a1"><span>Obsession</span><div class="prog"><i style="width:81%"></i></div></div><div class="icap">19 min left</div></div>
+            <div class="card"><div class="pstr a5"><span>Soulm8te</span><div class="prog"><i style="width:45%"></i></div></div><div class="icap">57 min left</div></div>
+          </div>
+        </div>
+        <div class="c-label"><span class="c-key">D</span><span class="c-name">Pill</span></div>
+        <p class="c-notes">Bordered chip after the heading. Most legible as "this is a source" — but it's chrome on a heading whose whole point is having none, and it fights the chevron for the same slot.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>The recommended concept at desktop / tablet width</h2>
+    <p class="sub">Mid/wide tiers get the same grammar with their own metrics — heading 24px, posters ~150px, gutter 44. TV is untouched except the words themselves.</p>
+    <div class="desk">
+      <div class="rowhead n-head"><span class="ttl">Popular Movies</span><span class="chev">›</span><span class="tag-suffix">Cinemeta</span></div>
+      <div class="rail">
+        <div class="card"><div class="pstr a1"><span>Obsession</span></div></div>
+        <div class="card"><div class="pstr a2"><span>Masters</span></div></div>
+        <div class="card"><div class="pstr a3"><span>Web of Night</span></div></div>
+        <div class="card"><div class="pstr a4"><span>sterling point</span></div></div>
+        <div class="card"><div class="pstr a5"><span>Soulm8te</span></div></div>
+        <div class="card"><div class="pstr a6"><span>Last House</span></div></div>
+        <div class="card"><div class="pstr a7"><span>Devil's Mouth</span></div></div>
+        <div class="card"><div class="pstr a8"><span>Dragon Court</span></div></div>
+      </div>
+      <div class="rowhead n-head"><span class="ttl">Popular Series</span><span class="chev">›</span><span class="tag-suffix">Cinemeta</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Scope &amp; wiring</h2>
+    <div class="notes">
+      <div class="note">
+        <h3>Where the words come from</h3>
+        <ul>
+          <li>Kill the baked prefix: <code>'${addon.name}: ${catalog.name}'</code> at <code>stremio_service.dart:1929</code> and <code>search_screen.dart:2212 / 4550 / 5726</code>.</li>
+          <li>Heading = <code>catalog.name</code> + <code>_sectionTypeLabel()</code> ("Popular" + "Movies"). Guard the double: if the catalog name already ends in the type word ("New Movies"), don't append it again.</li>
+          <li>Tag = <code>addon.name</code>. Tracker list rows already carry the right shape ("Watchlist · Trakt") — unchanged.</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>Device scope</h3>
+        <ul>
+          <li><b>All devices, TV included:</b> the naming grammar (heading words + addon tag).</li>
+          <li><b>Non-TV only:</b> heading scale/weight, caption removal, larger posters, 34px inter-row air. TV rails stay chrome-free and DPAD-paginated, exactly as today.</li>
+          <li>Applies to Spotlight and the classic <code>_railHeader</code> path alike — one grammar, two renderers.</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>Captions rule</h3>
+        <ul>
+          <li>Catalog cards: none — the art is the label, as in the reference.</li>
+          <li>Continue Watching: keep, but make it information ("48 min left"), not the title again.</li>
+          <li>Channel/logo rails (IPTV, Debrify TV): keep names — a logo tile without its name is a guess.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>

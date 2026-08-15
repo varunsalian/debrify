@@ -1926,7 +1926,7 @@ class StremioService {
       if (items.isEmpty) return null;
 
       return CatalogSection(
-        title: '${addon.name}: ${catalog.name}',
+        title: CatalogSection.rowTitle(catalog),
         addon: addon,
         catalog: catalog,
         items: items.take(limit).toList(),
