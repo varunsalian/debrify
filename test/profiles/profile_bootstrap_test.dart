@@ -135,6 +135,62 @@ void main() {
     },
   );
 
+  test(
+    'a migration that throws still starts the app on the untouched legacy install',
+    () async {
+      // The budget case above degrades correctly because it is caught by name.
+      // Every OTHER migration failure escaped, and main() catches only
+      // ProfileBootstrapRecoveryRequired — so on an upgrade the app simply did
+      // not start, with no way back in.
+      //
+      // migrate() throws StateError for nine conditions that are realistic on
+      // a device with real accumulated data. This drives the cheapest of them:
+      // a credential-shaped legacy key the classifier has no disposition for,
+      // which is what an older build leaving a provider key behind looks like.
+      //
+      // Degrading is safe because migration copies rather than moves —
+      // authority changes only at the final commitBootstrap — so a failure
+      // before that leaves the legacy install whole. Both halves are asserted:
+      // that the app starts, and that legacy data survived intact.
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'initial_setup_complete_v1': true,
+        'theme_mode': 'dark',
+        'some_retired_provider_api_key': 'legacy-secret',
+      });
+      final cipher = MemoryDeviceSecretCipher(
+        List<int>.generate(32, (index) => index + 11),
+      );
+      await cipher.initialize();
+      DeviceKeyProvider.debugInstallCipher(cipher);
+
+      await ProfileBootstrap.initialize();
+
+      expect(
+        ProfileRuntime.isInitialized,
+        isTrue,
+        reason: 'the app must reach a usable state, not fail to launch',
+      );
+      expect(
+        ProfileRuntime.isProfileCommitted,
+        isFalse,
+        reason: 'a failed migration must not claim profile authority',
+      );
+
+      final preferences = await SharedPreferences.getInstance();
+      expect(preferences.getString('theme_mode'), 'dark');
+      expect(
+        preferences.getString('some_retired_provider_api_key'),
+        'legacy-secret',
+        reason: 'migration copies rather than moves; legacy must be untouched',
+      );
+      expect(
+        preferences.getKeys().where((key) => key.startsWith('p.')),
+        isEmpty,
+        reason: 'no half-migrated scoped namespace may be left behind',
+      );
+    },
+  );
+
   test('one-way marker plus missing registry enters recovery', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'profiles_committed_once_v1': true,

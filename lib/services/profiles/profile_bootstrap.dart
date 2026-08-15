@@ -205,6 +205,21 @@ class ProfileBootstrap {
     };
   }
 
+  /// Abandons the profile bootstrap and runs the app on the untouched legacy
+  /// install, leaving migration to be retried on a later launch.
+  ///
+  /// Safe from any point before `commitBootstrap` because migration copies
+  /// rather than moves — see the catch blocks in [_createOrMigrateInitialAdmin].
+  /// Extracted because four separate paths need exactly this sequence, and one
+  /// of them forgetting to null `_registry` or clear the checkpoint callback
+  /// would leave a closed registry reachable.
+  static Future<void> _stayOnLegacy(ProfileRegistry registry) async {
+    await registry.close();
+    _registry = null;
+    TvOsProfileRecoveryStore.checkpointCallback = null;
+    ProfileRuntime.initializeLegacy();
+  }
+
   static Future<void> _createOrMigrateInitialAdmin(
     ProfileRegistry registry,
     SharedPreferences legacy,
@@ -220,18 +235,12 @@ class ProfileBootstrap {
         existingInstall: isExistingInstall,
         hasWrappedKey: await DeviceKeyProvider.linuxHasWrappedKey(),
       );
-      await registry.close();
-      _registry = null;
-      TvOsProfileRecoveryStore.checkpointCallback = null;
-      ProfileRuntime.initializeLegacy();
+      await _stayOnLegacy(registry);
       return;
     }
     if (isExistingInstall) {
       if (!DeviceKeyProvider.isUnlocked) {
-        await registry.close();
-        _registry = null;
-        TvOsProfileRecoveryStore.checkpointCallback = null;
-        ProfileRuntime.initializeLegacy();
+        await _stayOnLegacy(registry);
         return;
       }
       final UserProfile profile;
@@ -245,18 +254,43 @@ class ProfileBootstrap {
         // that terminates the process. The registry and the scoped namespace
         // are untouched, so stay on the legacy install exactly as a locked
         // device key does above; the app starts normally and migration is
-        // retried on a later launch. This must not escape: main() only catches
-        // ProfileBootstrapRecoveryRequired, so any other error here would stop
-        // the app from starting at all.
+        // retried on a later launch.
         //
         // Logged because the refusal happens before the migration journal's
         // first entry: without this the device silently never gains profiles,
         // with nothing in the journal or a bug report to explain why.
         debugPrint('Profile migration deferred: $error');
-        await registry.close();
-        _registry = null;
-        TvOsProfileRecoveryStore.checkpointCallback = null;
-        ProfileRuntime.initializeLegacy();
+        await _stayOnLegacy(registry);
+        return;
+      } on ProfileBootstrapRecoveryRequired {
+        // Not reachable from migrate() today — every throw site is in
+        // initialize() above this call — but it is the one exception main()
+        // knows how to render, so it must never be swallowed by the catch
+        // below if that ever changes.
+        rethrow;
+      } catch (error, stackTrace) {
+        // ANY other migration failure keeps the app running on legacy.
+        //
+        // Migration is copy-then-commit: the legacy keys, databases and files
+        // are never mutated, and authority moves only at the final
+        // commitBootstrap. So every failure before that point leaves a fully
+        // intact legacy install, and continuing on it is strictly safer than
+        // not starting.
+        //
+        // Without this, the app does not launch at all. main() catches only
+        // ProfileBootstrapRecoveryRequired, while migrate() throws StateError
+        // for nine conditions that are realistic on a device with real
+        // accumulated data — a background write landing mid-copy, a database
+        // failing its integrity check after an earlier crash, a legacy key
+        // from an old version the classifier has no disposition for. On an
+        // upgrade that is a bricked install with no way back in.
+        //
+        // The stack trace is printed because this path is, by definition, the
+        // one nobody predicted: the message alone rarely identifies which of
+        // the nine it was.
+        debugPrint('Profile migration failed, staying on legacy: $error');
+        debugPrint('$stackTrace');
+        await _stayOnLegacy(registry);
         return;
       }
       ProfileRuntime.initializeCommitted(
