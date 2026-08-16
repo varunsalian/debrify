@@ -38,12 +38,8 @@ import '../profiles/profile_runtime.dart';
 import '../profiles/profile_scope.dart';
 import '../profiles/profile_authorization.dart';
 import '../profiles/profile_bootstrap.dart';
-import '../profiles/device_key_provider.dart';
-import '../profiles/legacy_backup_adapter.dart';
 import '../profiles/profile_avatar_ingest.dart';
 import '../profiles/profile_avatar_policy.dart';
-import '../profiles/profile_app_lifecycle_participant.dart';
-import '../profiles/profile_restore_coordinator.dart';
 import '../../services/backup_restore_service.dart';
 
 /// Callback type for remote command handlers
@@ -142,6 +138,15 @@ class RemoteCommandRouter {
   /// Open the collecting window, or push its deadline out because another
   /// packet just landed.
   void _beginOrExtendBatch() {
+    // While a remote payload is being applied, the apply loop OWNS the batch
+    // (opened with no idle timer; flushed once in its finally). An out-of-
+    // band packet mid-loop (a channel push, an avatar) must not re-arm the
+    // idle timer — it would flush the loop's batch early and let the
+    // remaining messages parade individually.
+    if (_applyingRemotePayload) {
+      _batching = true;
+      return;
+    }
     _batching = true;
     _scheduleBatchFlush();
   }
@@ -1077,9 +1082,9 @@ class RemoteCommandRouter {
             title: const Text('Receive profile configuration?'),
             content: Text(
               'Destination: ${profile.name}\n\n'
-              '$itemCount configuration item(s) will be staged, '
-              'verified, and published together. Downloads, recordings, '
-              'PINs, profiles, and remote pairings are not transferred.',
+              '$itemCount configuration item(s) will be applied. '
+              'Downloads, recordings, PINs, profiles, and remote pairings '
+              'are not transferred.',
             ),
             actions: <Widget>[
               TextButton(
@@ -1117,37 +1122,157 @@ class RemoteCommandRouter {
         clearProfileTransferBuffer();
         throw StateError('Remote transfer destination changed');
       }
-      final package = LegacyBackupAdapter.adapt(payload);
-      // Consume the receive capability before any writes. A repeated
-      // `complete` packet cannot open a second commit over the same secrets.
-      clearProfileTransferBuffer();
-      // The restore clones the whole profile generation before publishing —
-      // on a large library that is real time (minutes on weak TV hardware
-      // even with the hashing off-thread). Say so, or the closed dialog
-      // reads as "done" and the wait reads as a hang.
-      _showSnackBar(
-        'Importing… this can take a few minutes for a large library',
-      );
-      final report =
-          await ProfileRestoreCoordinator(
-            registry: ProfileBootstrap.registry,
-            cipher: DeviceKeyProvider.cipher,
-            lifecycleParticipants: <ProfileAppLifecycleParticipant>[
-              ProfileAppLifecycleParticipant(),
-            ],
-          ).restore(
-            package: package,
-            destinationProfileId: profile.id,
-            authorization: authorization,
-          );
-      _showSnackBar(
-        'Profile configuration imported (${report.resourcesImported} connections)',
-      );
+      // A second `complete` racing a running apply: the collection facades
+      // are read-modify-write, so two interleaved loops could lose one
+      // side's merge. The first confirm wins; the racer bows out here.
+      if (_applyingRemotePayload) {
+        _showSnackBar(
+          'A transfer is already being applied — try again in a moment',
+          isError: true,
+        );
+        return;
+      }
+      _applyingRemotePayload = true;
+      try {
+        // Consume the receive capability before any writes. A repeated
+        // `complete` packet cannot open a second commit over the same
+        // secrets.
+        clearProfileTransferBuffer();
+        // Apply each item directly through the same per-command handlers
+        // the legacy (pre-profiles) path and the Settings screens use —
+        // every one is profile-aware and writes sealed secrets through the
+        // reviewed facade. The staged-generation restore this replaced
+        // cloned and re-hashed the ENTIRE profile (minutes on a TV with a
+        // large IPTV library) to land what is usually one addon or a
+        // handful of keys; that machinery remains where whole-package
+        // atomicity is the point — backup-FILE restores. The trade is
+        // per-item application instead of all-or-nothing, which remote
+        // transfers tolerate by construction: they are idempotent, and a
+        // resend converges.
+        await _applyProfileRemotePayload(payload, binding);
+      } finally {
+        _applyingRemotePayload = false;
+      }
     } catch (_) {
+      // Reachable only from the pre-write validations above; the apply loop
+      // itself never throws. Keep the wording survivable either way.
       _showSnackBar(
-        'Profile import failed; existing data is unchanged',
+        'Profile import stopped — nothing further was applied',
         isError: true,
       );
+    }
+  }
+
+  bool _applyingRemotePayload = false;
+
+  /// Replays a staged remote payload through the per-command config
+  /// handlers, in wire order (IPTV memberships name the playlists they
+  /// belong to, so playlists must land first; addons go last — each is a
+  /// manifest fetch). Never throws: every handler banks its own success or
+  /// NAMED failure snackbar into the batch, and the single flush at the end
+  /// is the honest summary — "2 failed (Real-Debrid, PikPak)" beats any
+  /// counter this function could keep.
+  Future<void> _applyProfileRemotePayload(
+    Map<String, dynamic> payload,
+    _ProfileCommandBinding binding,
+  ) async {
+    // No number in the opener: the dialog counts granular items (every
+    // engine, every server) while the flush counts one banked message per
+    // category — two different numbers seconds apart read as dropped data.
+    _showSnackBarNow('Applying the transfer from your phone…');
+    // Hold the snackbar batch open MANUALLY — no idle timer. The timer
+    // would flush mid-loop during any addon manifest fetch (>1200ms idle),
+    // announce "Import complete" while items were still applying, and let
+    // the remaining handler messages parade one by one. The flush in the
+    // finally below is the only exit.
+    _batching = true;
+    _batchIdleTimer?.cancel();
+    _batchIdleTimer = null;
+    var destinationLost = false;
+    Future<void> apply(String label, Future<void> Function() body) async {
+      if (destinationLost) return;
+      // The confirm dialog authorized THIS profile. Handlers capture the
+      // active profile per call, so a mid-loop profile switch would seal
+      // the phone's remaining secrets into whichever profile is active now
+      // — stop instead, and say so. Residual window: a switch DURING one
+      // item's body can still land that single in-flight item in the new
+      // profile; shrinking it to zero needs pinned-destination writes in
+      // every handler, which the per-call capture design trades away.
+      if (ProfileRuntime.capture() != binding.scope) {
+        destinationLost = true;
+        _showSnackBar(
+          'Profile changed — remaining items were not applied',
+          isError: true,
+        );
+        return;
+      }
+      try {
+        await body();
+      } catch (_) {
+        // Handlers bank their own named failures; this catch only covers
+        // throws that escape them (and the addon path below).
+        debugPrint('RemoteCommandRouter: applying $label failed');
+        _showSnackBar('$label: could not be applied', isError: true);
+      }
+    }
+
+    try {
+      const rawStringCategories = <String, String>{
+        'realDebridApiKey': ConfigCommand.realDebrid,
+        'torboxApiKey': ConfigCommand.torbox,
+        'premiumizeApiKey': ConfigCommand.premiumize,
+        'allDebridApiKey': ConfigCommand.allDebrid,
+      };
+      // Wire order: memberships resolve against playlists — playlists first.
+      const encodedCategories = <String, String>{
+        'pikpak': ConfigCommand.pikpak,
+        'trakt': ConfigCommand.trakt,
+        'simkl': ConfigCommand.simkl,
+        'searchEngineIds': ConfigCommand.searchEngines,
+        'webDavServers': ConfigCommand.webDav,
+        'indexerManagers': ConfigCommand.indexerManagers,
+        'iptvPlaylists': ConfigCommand.iptvPlaylists,
+        'iptvFavorites': ConfigCommand.iptvFavorites,
+        'iptvLists': ConfigCommand.iptvLists,
+      };
+      for (final entry in rawStringCategories.entries) {
+        final value = payload[entry.key];
+        if (value is! String || value.isEmpty) continue;
+        await apply(
+          entry.key,
+          () => _dispatchConfigCommand(entry.value, value),
+        );
+      }
+      for (final entry in encodedCategories.entries) {
+        final value = payload[entry.key];
+        if (value == null) continue;
+        await apply(
+          entry.key,
+          () => _dispatchConfigCommand(entry.value, jsonEncode(value)),
+        );
+      }
+      final addonUrls = payload['addonManifestUrls'];
+      if (addonUrls is List) {
+        for (final url in addonUrls) {
+          if (url is! String || url.trim().isEmpty) continue;
+          await apply('Addon', () async {
+            try {
+              final addon = await StremioService.instance.addAddon(url.trim());
+              _showSnackBar('Addon installed: ${addon.name}');
+            } catch (error) {
+              // Idempotence: a resend of an addon that already landed must
+              // read as success, or the summary lies about the retry.
+              if (error.toString().contains('already exists')) {
+                _showSnackBar('Addon already installed');
+                return;
+              }
+              rethrow;
+            }
+          });
+        }
+      }
+    } finally {
+      _flushBatch(prefix: 'Transfer applied');
     }
   }
 
