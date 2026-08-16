@@ -273,3 +273,19 @@ Findings, all fixed same day:
 - Flow save error now names the admin-invariant failure instead of the
   generic retry line; BACK from Review reports full-editor changes via the
   show() contract; edit test fixture diverged so the round-trip is pinned.
+
+## On-device findings (2026-08-16, first real kid profile)
+
+1. **addonUse split (4f093160)**: getAddons demanded addonsAndEngines →
+   Kid Home threw "Profile authorization does not allow this feature".
+   Policy v3 `addonUse` = addon-READ operation, all roles, never asked;
+   management keeps addonsAndEngines. Decode upgrade heals stored policies.
+2. **Engine seeding (5c6dba6f)**: engines are per-profile FILE COPIES, not
+   connection resources — grant seeding can't cover them. The questionnaire
+   create now assigns every manager engine (the full editor's old default).
+   Profiles created before this fix have zero engines: repair via Full
+   editor → Access (or recreate the profile).
+
+Lesson pinned in memory: every feature a preset turns OFF must be audited
+for OPERATION consumers, and every per-profile store (grants, engines,
+prefs) needs its own seeding story — one mechanism never covers both.
