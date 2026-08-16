@@ -144,6 +144,23 @@ class _ResolvedCacheEntry {
   const _ResolvedCacheEntry(this.streams, this.at);
 }
 
+/// One client rung's chosen streams, pre-probe (see the client ladder in
+/// [YoutubeService._resolveStreamsBlocking]).
+class _StreamSelection {
+  final String playUrl;
+  final String? audioUrl;
+  final List<YoutubeQuality> qualities;
+  final String? bestMuxedUrl;
+  final int? bestMuxedHeight;
+  const _StreamSelection({
+    required this.playUrl,
+    required this.audioUrl,
+    required this.qualities,
+    required this.bestMuxedUrl,
+    required this.bestMuxedHeight,
+  });
+}
+
 /// Service for searching and resolving YouTube videos fully on-device.
 ///
 /// - **Search** uses YouTube's internal InnerTube API directly (the same
@@ -456,9 +473,10 @@ class YoutubeService {
   /// The heavy resolution, run OFF the main isolate. Pure Dart (youtube_explode
   /// is HTTP-only, no plugins/platform channels), so it's isolate-safe. The
   /// [yt_explode.YoutubeExplode] instance (and any sockets) die with the isolate.
-  /// Errors propagate to [_resolveUncached] on the main isolate (where logging
-  /// works); only [yt_explode.YoutubeExplode.close] is guarded so a teardown
-  /// failure can't discard a valid result.
+  /// A failed client rung is logged and the next one tried; only an unexpected
+  /// error outside the ladder still propagates to [_resolveUncached]. Only
+  /// [yt_explode.YoutubeExplode.close] is guarded so a teardown failure can't
+  /// discard a valid result.
   static Future<YoutubeResolvedStreams?> _resolveStreamsBlocking(
     String videoId,
     int maxHeight,
@@ -467,121 +485,74 @@ class YoutubeService {
   ) async {
     final yt = yt_explode.YoutubeExplode();
     try {
-      // Use the ANDROID_VR client: its googlevideo stream URLs open directly in
-      // ffmpeg/mpv, whereas the default (ANDROID) client's URLs return HTTP 403
-      // unless the request carries a Range header (which media_kit's bundled
-      // ffmpeg omits on initial open). Fall back to the default client if VR
-      // extraction fails for a given video.
-      yt_explode.StreamManifest manifest;
-      try {
-        manifest = await yt.videos.streamsClient.getManifest(
-          videoId,
-          ytClients: [yt_explode.YoutubeApiClient.androidVr],
-        );
-      } catch (_) {
-        manifest = await yt.videos.streamsClient.getManifest(videoId);
-      }
-
-      // Best muxed single-file stream (download + playback fallback). Keep the
-      // stream object (not just its URL) so we can report its resolution as the
-      // actual download quality to the user.
-      final muxed = manifest.muxed.toList()
-        ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
-      final muxedMp4 = muxed.where((s) => s.container.name.toLowerCase() == 'mp4');
-      final bestMuxedStream = muxedMp4.isNotEmpty
-          ? muxedMp4.first
-          : (muxed.isNotEmpty ? muxed.first : null);
-      final bestMuxed = bestMuxedStream?.url.toString();
-      final bestMuxedHeight = bestMuxedStream?.videoResolution.height;
-
-      // High-res playback: video-only track + best AAC audio (mp4). We allow
-      // H.264 (avc) AND VP9, but deliberately EXCLUDE AV1 (av01) — AV1 decode is
-      // unreliable across our player matrix (mpv on macOS stalls on it). VP9 is
-      // what unlocks resolutions above 1080p: YouTube serves 1440p/2160p only in
-      // VP9/AV1, never H.264.
-      //
-      // RISK CONTAINMENT — this must not regress existing playback:
-      //  * The shipped default preference is 1080p, and every height <=1080p
-      //    resolves to H.264 (the tie-break below keeps it), so out-of-the-box
-      //    auto-play is byte-equivalent to before VP9 was allowed.
-      //  * VP9 becomes the default pick ONLY when the user explicitly raises the
-      //    Quality preference to 1440p/2160p — heights YouTube serves only in
-      //    VP9. That is a deliberate opt-in they can lower again if their device
-      //    can't decode it smoothly.
-      //  * Every height is also offered in the in-player quality switcher for a
-      //    per-video override, independent of the preference.
-      bool isAvc(String c) => c.toLowerCase().contains('avc');
-      bool isVp9(String c) {
-        final l = c.toLowerCase();
-        return l.contains('vp9') || l.contains('vp09');
-      }
-
-      String? playUrl;
-      String? audioUrl;
-      final qualities = <YoutubeQuality>[];
-      final videoOnly = manifest.videoOnly
-          .where((s) => isAvc(s.videoCodec) || isVp9(s.videoCodec))
-          .toList();
-      final audioStreams = manifest.audioOnly
-          .where((s) => s.container.name.toLowerCase() == 'mp4')
-          .toList();
-      if (videoOnly.isNotEmpty && audioStreams.isNotEmpty) {
-        // Highest first; within a single height the tie-break is the caller's
-        // call. Content playback keeps H.264 so the <=1080p rungs resolve to
-        // the exact stream they used before VP9 was allowed (the risk-
-        // containment contract above). Ambient trailers pass [preferVp9]:
-        // YouTube serves VP9 at every rung, its encodes run visibly cleaner
-        // at trailer bitrates, and every ambient surface's decoder handles it
-        // (phone/desktop hardware VP9; Apple TV software VP9 at its 1080 cap;
-        // Android TV certifies VP9 hardware decode for the Exo underlay).
-        videoOnly.sort((a, b) {
-          final byHeight =
-              b.videoResolution.height.compareTo(a.videoResolution.height);
-          if (byHeight != 0) return byHeight;
-          final aPreferred =
-              preferVp9 ? isVp9(a.videoCodec) : isAvc(a.videoCodec);
-          final bPreferred =
-              preferVp9 ? isVp9(b.videoCodec) : isAvc(b.videoCodec);
-          if (aPreferred == bPreferred) return 0;
-          return aPreferred ? -1 : 1;
-        });
-
-        // One switchable entry per distinct height (highest first). Dedup keeps
-        // the first, which — after the sort above — is H.264 wherever it exists.
-        // The list is NOT filtered to maxHeight; the whole point of in-player
-        // switching is to override the launch cap. YouTube can list several
-        // bitrates per height; keep the first.
-        final seenHeights = <int>{};
-        for (final s in videoOnly) {
-          final h = s.videoResolution.height;
-          if (!seenHeights.add(h)) continue;
-          qualities.add(YoutubeQuality(height: h, videoUrl: s.url.toString()));
+      // Client ladder — impersonations of official YouTube apps, tried in
+      // order until one yields URLs that actually answer. Every rung earns
+      // its place:
+      //  * androidVr first: its googlevideo URLs open directly in ffmpeg/mpv
+      //    and need no PO token — but YouTube A/B-kills this client by region
+      //    (since ~2026-03 affected regions intermittently get only format 18
+      //    or URL-less streams), so it can't be the only rung.
+      //  * androidSdkless second: the token-free android variant (omits
+      //    androidSdkVersion, so YouTube's PO-token requirement never
+      //    triggers). Android-family URLs can still 403 without a Range
+      //    header — which media_kit's bundled ffmpeg omits on initial open —
+      //    hence the probe below.
+      //  * android last: sdkless's parent client, WITH the androidSdkVersion
+      //    field that trips YouTube's PO-token gate for some regions. Mostly
+      //    redundant, but A/B throttling is per-client, so it occasionally
+      //    answers when both variants above are being squeezed — and when its
+      //    URLs are token-gated the probe rejects them.
+      // A web-family rung (tv/safari) would dodge the android quirks entirely
+      // and is what yt-dlp defaults to — but in youtube_explode 3.1.0 those
+      // clients' signed URLs need the deno-based JS challenge solver, which
+      // can't ship on user devices. Probed live 2026-08: tv and safari yield
+      // host-less URLs ("No host specified in URI"), mweb and mediaConnect
+      // 403. Revisit only if the library gains an on-device solver.
+      // youtube_explode HEAD-checks only the FIRST stream of each manifest,
+      // which can pass while the adaptive streams we actually pick still 403 —
+      // so a rung is accepted only after ITS chosen URLs survive the probe.
+      final rungs = <(String, List<yt_explode.YoutubeApiClient>)>[
+        ('androidVr', [yt_explode.YoutubeApiClient.androidVr]),
+        ('androidSdkless', [yt_explode.YoutubeApiClient.androidSdkless]),
+        ('android', [yt_explode.YoutubeApiClient.android]),
+      ];
+      _StreamSelection? selection;
+      for (final (label, clients) in rungs) {
+        yt_explode.StreamManifest manifest;
+        try {
+          manifest = await yt.videos.streamsClient
+              .getManifest(videoId, ytClients: clients);
+        } catch (e) {
+          debugPrint('YoutubeService: $videoId [$label] manifest failed — $e');
+          continue;
         }
-
-        // Default pick = highest quality at or below the user's preferred height
-        // (the Quality dropdown); if the video has nothing that low, the lowest
-        // available so it still plays. [qualities] is descending and H.264 sorts
-        // first at equal heights, so any preference <=1080p resolves to the SAME
-        // H.264 stream as before — VP9 is chosen only when the preference is
-        // 1440p/2160p AND the video actually offers it. A video that lacks the
-        // preferred height steps down to the next best automatically. Chosen FROM
-        // [qualities] so [playUrl] always matches an entry (the in-player "now
-        // playing" highlight matches by URL).
-        final atOrBelow = qualities.where((q) => q.height <= maxHeight).toList();
-        playUrl =
-            (atOrBelow.isNotEmpty ? atOrBelow.first : qualities.last).videoUrl;
-
-        audioStreams.sort(
-            (a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
-        audioUrl = audioStreams.first.url.toString();
+        final candidate = _selectStreams(manifest, maxHeight, preferVp9);
+        if (candidate == null) {
+          debugPrint(
+              'YoutubeService: $videoId [$label] had no playable streams');
+          continue;
+        }
+        if (!await _chosenUrlsUsable(candidate.playUrl, candidate.audioUrl)) {
+          debugPrint(
+              'YoutubeService: $videoId [$label] chosen URLs returned 403');
+          continue;
+        }
+        if (label != 'androidVr') {
+          // The line that matters in a user's log: which fallback saved this.
+          debugPrint('YoutubeService: $videoId resolved via [$label]');
+        }
+        selection = candidate;
+        break;
       }
-
-      // Fall back to muxed if adaptive streams are unavailable.
-      if (playUrl == null) {
-        playUrl = bestMuxed;
-        audioUrl = null;
+      if (selection == null) {
+        debugPrint('YoutubeService: $videoId — every client rung failed');
+        return null;
       }
-      if (playUrl == null) return null;
+      final playUrl = selection.playUrl;
+      final audioUrl = selection.audioUrl;
+      final qualities = selection.qualities;
+      final bestMuxed = selection.bestMuxedUrl;
+      final bestMuxedHeight = selection.bestMuxedHeight;
 
       String? title;
       String? thumb;
@@ -661,6 +632,147 @@ class YoutubeService {
         yt.close();
       } catch (_) {}
     }
+  }
+
+  /// Pick what one client's [manifest] has to offer: the default video-only
+  /// + AAC audio pair, the quality-switcher list, and the best muxed
+  /// single-file stream. Null when the manifest has nothing playable at all.
+  static _StreamSelection? _selectStreams(
+    yt_explode.StreamManifest manifest,
+    int maxHeight,
+    bool preferVp9,
+  ) {
+    // Best muxed single-file stream (download + playback fallback). Keep the
+    // stream object (not just its URL) so we can report its resolution as the
+    // actual download quality to the user.
+    final muxed = manifest.muxed.toList()
+      ..sort((a, b) =>
+          b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+    final muxedMp4 = muxed.where((s) => s.container.name.toLowerCase() == 'mp4');
+    final bestMuxedStream = muxedMp4.isNotEmpty
+        ? muxedMp4.first
+        : (muxed.isNotEmpty ? muxed.first : null);
+    final bestMuxed = bestMuxedStream?.url.toString();
+    final bestMuxedHeight = bestMuxedStream?.videoResolution.height;
+
+    // High-res playback: video-only track + best AAC audio (mp4). We allow
+    // H.264 (avc) AND VP9, but deliberately EXCLUDE AV1 (av01) — AV1 decode is
+    // unreliable across our player matrix (mpv on macOS stalls on it). VP9 is
+    // what unlocks resolutions above 1080p: YouTube serves 1440p/2160p only in
+    // VP9/AV1, never H.264.
+    //
+    // RISK CONTAINMENT — this must not regress existing playback:
+    //  * The shipped default preference is 1080p, and every height <=1080p
+    //    resolves to H.264 (the tie-break below keeps it), so out-of-the-box
+    //    auto-play is byte-equivalent to before VP9 was allowed.
+    //  * VP9 becomes the default pick ONLY when the user explicitly raises the
+    //    Quality preference to 1440p/2160p — heights YouTube serves only in
+    //    VP9. That is a deliberate opt-in they can lower again if their device
+    //    can't decode it smoothly.
+    //  * Every height is also offered in the in-player quality switcher for a
+    //    per-video override, independent of the preference.
+    bool isAvc(String c) => c.toLowerCase().contains('avc');
+    bool isVp9(String c) {
+      final l = c.toLowerCase();
+      return l.contains('vp9') || l.contains('vp09');
+    }
+
+    String? playUrl;
+    String? audioUrl;
+    final qualities = <YoutubeQuality>[];
+    final videoOnly = manifest.videoOnly
+        .where((s) => isAvc(s.videoCodec) || isVp9(s.videoCodec))
+        .toList();
+    final audioStreams = manifest.audioOnly
+        .where((s) => s.container.name.toLowerCase() == 'mp4')
+        .toList();
+    if (videoOnly.isNotEmpty && audioStreams.isNotEmpty) {
+      // Highest first; within a single height the tie-break is the caller's
+      // call. Content playback keeps H.264 so the <=1080p rungs resolve to
+      // the exact stream they used before VP9 was allowed (the risk-
+      // containment contract above). Ambient trailers pass [preferVp9]:
+      // YouTube serves VP9 at every rung, its encodes run visibly cleaner
+      // at trailer bitrates, and every ambient surface's decoder handles it
+      // (phone/desktop hardware VP9; Apple TV software VP9 at its 1080 cap;
+      // Android TV certifies VP9 hardware decode for the Exo underlay).
+      videoOnly.sort((a, b) {
+        final byHeight =
+            b.videoResolution.height.compareTo(a.videoResolution.height);
+        if (byHeight != 0) return byHeight;
+        final aPreferred =
+            preferVp9 ? isVp9(a.videoCodec) : isAvc(a.videoCodec);
+        final bPreferred =
+            preferVp9 ? isVp9(b.videoCodec) : isAvc(b.videoCodec);
+        if (aPreferred == bPreferred) return 0;
+        return aPreferred ? -1 : 1;
+      });
+
+      // One switchable entry per distinct height (highest first). Dedup keeps
+      // the first, which — after the sort above — is H.264 wherever it exists.
+      // The list is NOT filtered to maxHeight; the whole point of in-player
+      // switching is to override the launch cap. YouTube can list several
+      // bitrates per height; keep the first.
+      final seenHeights = <int>{};
+      for (final s in videoOnly) {
+        final h = s.videoResolution.height;
+        if (!seenHeights.add(h)) continue;
+        qualities.add(YoutubeQuality(height: h, videoUrl: s.url.toString()));
+      }
+
+      // Default pick = highest quality at or below the user's preferred height
+      // (the Quality dropdown); if the video has nothing that low, the lowest
+      // available so it still plays. [qualities] is descending and H.264 sorts
+      // first at equal heights, so any preference <=1080p resolves to the SAME
+      // H.264 stream as before — VP9 is chosen only when the preference is
+      // 1440p/2160p AND the video actually offers it. A video that lacks the
+      // preferred height steps down to the next best automatically. Chosen FROM
+      // [qualities] so [playUrl] always matches an entry (the in-player "now
+      // playing" highlight matches by URL).
+      final atOrBelow = qualities.where((q) => q.height <= maxHeight).toList();
+      playUrl =
+          (atOrBelow.isNotEmpty ? atOrBelow.first : qualities.last).videoUrl;
+
+      audioStreams.sort(
+          (a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+      audioUrl = audioStreams.first.url.toString();
+    }
+
+    // Fall back to muxed if adaptive streams are unavailable.
+    if (playUrl == null) {
+      playUrl = bestMuxed;
+      audioUrl = null;
+    }
+    if (playUrl == null) return null;
+    return _StreamSelection(
+      playUrl: playUrl,
+      audioUrl: audioUrl,
+      qualities: qualities,
+      bestMuxedUrl: bestMuxed,
+      bestMuxedHeight: bestMuxedHeight,
+    );
+  }
+
+  /// Probe the URLs the player will actually open. Rejects a client rung ONLY
+  /// on an explicit HTTP 403 — the signature of YouTube's PO-token/Range
+  /// gating — and fails OPEN on timeouts or transport errors, so a flaky
+  /// probe can never take down a playback that would have worked.
+  static Future<bool> _chosenUrlsUsable(String playUrl, String? audioUrl) async {
+    Future<bool> usable(String url) async {
+      try {
+        final resp = await http
+            .head(Uri.parse(url))
+            .timeout(const Duration(seconds: 8));
+        return resp.statusCode != 403;
+      } catch (_) {
+        return true;
+      }
+    }
+
+    final checks = await Future.wait([
+      usable(playUrl),
+      if (audioUrl != null && audioUrl.isNotEmpty) usable(audioUrl),
+    ]);
+    return !checks.contains(false);
   }
 
   // ============== URL helpers (shared with Lemmy) ==============
