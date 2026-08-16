@@ -45,6 +45,18 @@ enum ProfileFeature {
   /// list is the owner's viewing history, so this defaults off for
   /// non-admins while [cloud] stays on for playback.
   cloudFiles,
+
+  // ── v3 OPERATION feature ───────────────────────────────────────────────
+
+  /// OPERATION feature (policy schema v3): READING granted Stremio addons —
+  /// catalog rows, title search, metadata, stream resolution. Split from
+  /// [addonsAndEngines], which is the MANAGEMENT surface (Addons page,
+  /// add/remove/import/refresh — the questionnaire's "Manage own sources").
+  /// Every role default keeps this on and the questionnaire never asks:
+  /// a Kid with "Manage own sources" off still gets Home shelves and
+  /// catalog search from the addons an admin granted. Which addons are
+  /// visible stays a per-resource GRANT decision, never this bit.
+  addonUse,
 }
 
 enum UserProfileRole { admin, member, child }
@@ -52,16 +64,23 @@ enum UserProfileRole { admin, member, child }
 /// Stable, versioned feature policy. Unknown fields never grant authority.
 class ProfilePolicy {
   /// v2 (2026-08-16): introduced the surface features ([ProfileFeature
-  /// .keywordSearch], [ProfileFeature.cloudFiles]). v1 policies upgrade at
-  /// decode — see [decode].
-  static const int currentSchemaVersion = 2;
+  /// .keywordSearch], [ProfileFeature.cloudFiles]). v3 (same day):
+  /// [ProfileFeature.addonUse], the addon-read operation. Older policies
+  /// upgrade at decode — see [decode].
+  static const int currentSchemaVersion = 3;
 
-  /// The features v2 introduced. A v1 policy predates them entirely, so
-  /// their absence there means "never asked", not "denied".
-  static const Set<ProfileFeature> _v2SurfaceFeatures = <ProfileFeature>{
-    ProfileFeature.keywordSearch,
-    ProfileFeature.cloudFiles,
-  };
+  /// Features by the schema version that introduced them. A policy stored
+  /// under an older version predates these entirely, so their absence there
+  /// means "never asked", not "denied" — decode seeds them from the role's
+  /// current defaults.
+  static const Map<int, Set<ProfileFeature>> _featuresIntroducedIn =
+      <int, Set<ProfileFeature>>{
+        2: <ProfileFeature>{
+          ProfileFeature.keywordSearch,
+          ProfileFeature.cloudFiles,
+        },
+        3: <ProfileFeature>{ProfileFeature.addonUse},
+      };
 
   final int schemaVersion;
   final Set<ProfileFeature> enabled;
@@ -151,7 +170,7 @@ class ProfilePolicy {
         throw const FormatException('Profile policy must be an object');
       }
       final version = decoded['schemaVersion'];
-      if (version != currentSchemaVersion && version != 1) {
+      if (version is! int || version < 1 || version > currentSchemaVersion) {
         throw FormatException('Unsupported profile policy version: $version');
       }
       final raw = decoded['enabled'];
@@ -168,20 +187,24 @@ class ProfilePolicy {
           enabled.add(feature.first);
         }
       }
-      if (version == 1) {
-        // Decode-time upgrade, not a stored migration: a v1 policy predates
-        // the surface features, so their absence is "never asked", not
-        // "denied" — seed exactly those from the role's v2 defaults and
-        // touch nothing else, so any customization of v1-era bits survives.
-        // Deterministic from the stored bytes, which is what makes skipping
-        // a persisted rewrite safe: the stored policy plus this decode IS
-        // the authority, so no authorizationRevision churn is needed. The
-        // profile re-encodes as v2 on its next ordinary save.
+      if (version < currentSchemaVersion) {
+        // Decode-time upgrade, not a stored migration: an older policy
+        // predates the features later versions introduced, so their absence
+        // is "never asked", not "denied" — seed exactly those from the
+        // role's current defaults and touch nothing else, so any
+        // customization of the stored-era bits survives. Deterministic from
+        // the stored bytes, which is what makes skipping a persisted rewrite
+        // safe: the stored policy plus this decode IS the authority, so no
+        // authorizationRevision churn is needed. The profile re-encodes as
+        // the current version on its next ordinary save.
         final defaults = ProfilePolicy.defaultsFor(role).enabled;
-        for (final feature in _v2SurfaceFeatures) {
-          if (defaults.contains(feature) &&
-              _roleCeilingAllows(role, feature)) {
-            enabled.add(feature);
+        for (final entry in _featuresIntroducedIn.entries) {
+          if (version >= entry.key) continue;
+          for (final feature in entry.value) {
+            if (defaults.contains(feature) &&
+                _roleCeilingAllows(role, feature)) {
+              enabled.add(feature);
+            }
           }
         }
       }

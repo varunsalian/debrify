@@ -152,10 +152,14 @@ class StremioService {
     bool forSettings = false,
     bool forRemoteTransfer = false,
   }) async {
+    // READING addons is an operation every profile keeps ([ProfileFeature
+    // .addonUse]) — Home shelves and catalog search must survive "Manage own
+    // sources" being off. The management entry points (add/remove/import/
+    // refresh/toggle/clear) each demand addonsAndEngines themselves.
     final authorization = await ProfileAsyncAuthorization.capture(
       forRemoteTransfer
           ? ProfileFeature.remoteTransfer
-          : ProfileFeature.addonsAndEngines,
+          : ProfileFeature.addonUse,
     );
     if (!forSettings && !forRemoteTransfer && _addonsCache != null) {
       if (authorization != null) {
@@ -170,7 +174,7 @@ class StremioService {
               acceptedTypes: const <ConnectionResourceType>{
                 ConnectionResourceType.stremioAddon,
               },
-              feature: ProfileFeature.addonsAndEngines,
+              feature: ProfileFeature.addonUse,
             );
           }
         } on ResourceAuthorizationException {
@@ -188,7 +192,7 @@ class StremioService {
         types: const <ConnectionResourceType>{
           ConnectionResourceType.stremioAddon,
         },
-        feature: ProfileFeature.addonsAndEngines,
+        feature: ProfileFeature.addonUse,
         forSettings: forSettings,
         forRemoteTransfer: forRemoteTransfer,
       );

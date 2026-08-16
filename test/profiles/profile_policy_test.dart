@@ -116,6 +116,17 @@ void main() {
     ]) {
       expect(child.contains(on), isTrue, reason: 'child ${on.name}');
     }
+    // addonUse is the v3 addon-read operation: EVERY role keeps it, or Home
+    // shelves and catalog search die with "Manage own sources" off.
+    for (final role in UserProfileRole.values) {
+      expect(
+        ProfilePolicy.defaultsFor(role).enabled.contains(
+          ProfileFeature.addonUse,
+        ),
+        isTrue,
+        reason: '${role.name} addonUse',
+      );
+    }
   });
 
   test('v1 policies upgrade at decode: surfaces seeded from role defaults', () {
@@ -126,7 +137,8 @@ void main() {
         .where(
           (f) =>
               f != ProfileFeature.keywordSearch &&
-              f != ProfileFeature.cloudFiles,
+              f != ProfileFeature.cloudFiles &&
+              f != ProfileFeature.addonUse,
         )
         .toList();
 
@@ -156,5 +168,24 @@ void main() {
     expect(child.enabled.contains(ProfileFeature.debrifyTv), isTrue);
     expect(child.enabled.contains(ProfileFeature.cloud), isTrue);
     expect(child.enabled.contains(ProfileFeature.iptv), isFalse);
+    // …but every upgrade seeds the addon-read operation.
+    expect(child.enabled.contains(ProfileFeature.addonUse), isTrue);
+  });
+
+  test('v2 policies upgrade at decode: addonUse seeded for every role', () {
+    // A faithful v2 payload — the kid the questionnaire wrote on 2026-08-16,
+    // before addonUse existed. Decoding it must grant the addon-read
+    // operation or its Home shelves break, while the v2-era bits (no
+    // keywordSearch, no iptv) stay exactly as stored.
+    final kidV2 = ProfilePolicy.decode(
+      '{"schemaVersion":2,"enabled":["cloud","torrentSearch","debrifyTv",'
+      '"trackersAndDiscovery","externalPlayers","incomingLinks"]}',
+      UserProfileRole.child,
+    );
+    expect(kidV2.schemaVersion, ProfilePolicy.currentSchemaVersion);
+    expect(kidV2.enabled.contains(ProfileFeature.addonUse), isTrue);
+    expect(kidV2.enabled.contains(ProfileFeature.keywordSearch), isFalse);
+    expect(kidV2.enabled.contains(ProfileFeature.iptv), isFalse);
+    expect(kidV2.enabled.contains(ProfileFeature.debrifyTv), isTrue);
   });
 }
