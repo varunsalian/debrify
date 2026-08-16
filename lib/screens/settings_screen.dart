@@ -2377,6 +2377,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       leaf(
         'Playback',
+        'Network & Buffering',
+        'Connection patience & stream buffer for slow sources',
+        const [
+          'network',
+          'buffer',
+          'buffering',
+          'cache',
+          'timeout',
+          'plex',
+          'slow',
+          'stall',
+          'patience',
+        ],
+      ),
+      leaf(
+        'Playback',
         'Allow system audio effects',
         'Let equalizer apps process audio (Android)',
         const ['audio effects', 'equalizer', 'wavelet', 'dolby'],

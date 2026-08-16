@@ -291,6 +291,10 @@ class StorageService {
   static const String _lemmyDefaultCommunityKey = 'lemmy_default_community';
   // YouTube settings
   static const String _youtubeMaxHeightKey = 'youtube_max_height';
+  // Network tuning (Debrify player). 'standard' = leave the player's own
+  // defaults completely untouched — see NetworkTuning.
+  static const String _networkConnectPatienceKey = 'network_connect_patience';
+  static const String _networkBufferSizeKey = 'network_buffer_size';
   static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
   static const String _updateIgnoredVersionKey = 'update_ignored_version';
 
@@ -5408,6 +5412,29 @@ class StorageService {
   static Future<void> setYoutubeMaxHeight(int height) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_youtubeMaxHeightKey, height);
+  }
+
+  // Network tuning (Debrify player)
+  /// 'standard' | 'extended' | 'patient'. Standard = player defaults untouched.
+  static Future<String> getNetworkConnectPatience() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getString(_networkConnectPatienceKey) ?? 'standard';
+  }
+
+  static Future<void> setNetworkConnectPatience(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_networkConnectPatienceKey, value);
+  }
+
+  /// 'standard' | 'large' | 'huge'. Standard = player defaults untouched.
+  static Future<String> getNetworkBufferSize() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getString(_networkBufferSizeKey) ?? 'standard';
+  }
+
+  static Future<void> setNetworkBufferSize(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_networkBufferSizeKey, value);
   }
 
   // PikPak API Settings

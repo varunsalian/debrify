@@ -88,6 +88,7 @@ import '../widgets/iptv/styles/iptv_style.dart';
 import 'video_player/widgets/source_sheet.dart';
 import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
+import 'video_player/services/network_tuning.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import 'video_player/services/playback_ui_clock.dart';
 import 'video_player/services/skip_segment_ui_controller.dart';
@@ -3353,6 +3354,80 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _activeSkipSegmentUi.clear();
   }
 
+  /// The user's Network & Buffering presets, loaded once per screen. A
+  /// mid-session settings change applies on the next playback — accurate
+  /// today because Settings isn't reachable without popping the player; an
+  /// in-player settings entry point would have to re-read this.
+  NetworkTuning? _networkTuning;
+
+  /// Stock values of exactly the player-global properties [_networkTuning]
+  /// has overridden, captured before the first override. A later live open
+  /// on the same player (mixed playlist) restores these, so the tuned live
+  /// IPTV pipeline can never inherit VOD tuning. Null until tuning has
+  /// actually touched the player — the Standard path never populates it and
+  /// so never sets a single property.
+  Map<String, String>? _networkTuningDefaults;
+
+  /// Serializes tuning applies: a rapid zap starts a newer [_openMedia]
+  /// while an older one is suspended mid-capture, and interleaved property
+  /// writes could land VOD tuning on the newer open's live stream. Each
+  /// apply runs WHOLE, in order, and bails via its generation check when a
+  /// newer open owns the player.
+  Future<void> _networkTuningChain = Future<void>.value();
+
+  Future<void> _applyNetworkTuning(
+    mk.NativePlayer platform,
+    NetworkTuning tuning, {
+    required bool liveStream,
+    required int generation,
+  }) {
+    return _networkTuningChain = _networkTuningChain.then(
+      (_) => _applyNetworkTuningInner(
+        platform,
+        tuning,
+        liveStream: liveStream,
+        generation: generation,
+      ),
+    );
+  }
+
+  Future<void> _applyNetworkTuningInner(
+    mk.NativePlayer platform,
+    NetworkTuning tuning, {
+    required bool liveStream,
+    required int generation,
+  }) async {
+    final want = liveStream ? const <String, String>{} : tuning.mpvProperties;
+    // Standard (and live-before-any-tuning): nothing was ever applied,
+    // nothing to restore — the player is untouched.
+    if (want.isEmpty && _networkTuningDefaults == null) return;
+    if (generation != _decoderProbeGeneration) return; // superseded in queue
+    try {
+      if (want.isNotEmpty && _networkTuningDefaults == null) {
+        final defaults = <String, String>{};
+        for (final key in want.keys) {
+          final value = await platform.getProperty(key);
+          // The vendored getProperty returns '' instead of throwing when mpv
+          // has no value. An empty "default" would silently fail to restore
+          // later — refuse to tune rather than capture poison.
+          if (value.isEmpty) {
+            debugPrint('Player: network tuning skipped — $key unreadable');
+            return;
+          }
+          defaults[key] = value;
+        }
+        if (generation != _decoderProbeGeneration) return;
+        _networkTuningDefaults = defaults;
+      }
+      for (final entry in _networkTuningDefaults!.entries) {
+        if (generation != _decoderProbeGeneration) return;
+        await platform.setProperty(entry.key, want[entry.key] ?? entry.value);
+      }
+    } catch (e) {
+      debugPrint('Player: network tuning apply failed: $e');
+    }
+  }
+
   Future<void> _openMedia(
     mk.Media media, {
     required bool play,
@@ -3372,6 +3447,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // for finite files (mpv's own defaults handle those).
     final platform = _player.platform;
     if (platform is mk.NativePlayer) {
+      final tuningGeneration = _decoderProbeGeneration;
+      NetworkTuning tuning;
+      try {
+        tuning = _networkTuning ??= await NetworkTuning.load();
+      } catch (e) {
+        // Profile storage refusing a read must degrade to "no tuning", never
+        // block playback — this line is on the Standard path too.
+        debugPrint('Player: network tuning load failed: $e');
+        tuning = _networkTuning = const NetworkTuning(
+          patience: NetworkTuning.standard,
+          buffer: NetworkTuning.standard,
+        );
+      }
       try {
         await platform.setProperty(
           'stream-lavf-o',
@@ -3380,16 +3468,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // answer every time — must surface), and not 429 (a comma-list
           // value can't ride mpv's key-value list safely, and escalating a
           // rate limit to the slower ladder is politer to the origin).
+          //
+          // VOD opens carry the user's Network & Buffering patience preset
+          // ('' at Standard — today's exact behavior).
           liveStream
               ? 'reconnect=1,reconnect_streamed=1,'
                     'reconnect_on_network_error=1,'
                     'reconnect_on_http_error=5xx,'
                     'reconnect_delay_max=5'
-              : '',
+              : tuning.vodLavfOptions,
         );
       } catch (e) {
         debugPrint('Player: stream-lavf-o set failed: $e');
       }
+      await _applyNetworkTuning(
+        platform,
+        tuning,
+        liveStream: liveStream,
+        generation: tuningGeneration,
+      );
     }
     final remedy = _tvosDecodeRemedy;
     if (remedy != null) {

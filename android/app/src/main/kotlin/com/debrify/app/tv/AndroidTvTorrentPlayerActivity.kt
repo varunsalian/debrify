@@ -683,6 +683,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var stremioSourceBadgeText: TextView? = null
     private var stremioResolutionToken = 0 // Guards against stale async resolution callbacks
     private var hasPlaylistResolver = false // True when source switching rebuilds entire playlist
+
+    // Network & Buffering presets (Settings → Playback), riding the launch
+    // payload. "standard" = the stock configuration in setupPlayer runs
+    // untouched — the invariant that keeps this feature regression-free.
+    private var networkPatience = "standard"
+    private var networkBuffer = "standard"
     // Series source tabs (payload-gated): torrent sources split into
     // "Season packs" / "Episodes" columns, each offering "Load more sources"
     // until its dedicated fetch has run (a series play arrives with only one
@@ -1709,10 +1715,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // clobbering any per-request User-Agent — which would break IPTV
         // channels that declare their own UA (injected via the resolver's
         // dataSpec headers, which override defaults in the merge).
+        // Connection patience preset: longer connect/read timeouts for slow
+        // origins (Plex-backed addons can take >15s to first byte while the
+        // upstream server wakes). VOD only — IPTV's resilience ladder depends
+        // on failing fast enough to retry, so it keeps the stock 15s.
+        val networkTimeoutMs = if (!isIptvMode) when (networkPatience) {
+            "extended" -> 30_000
+            "patient" -> 60_000
+            else -> 15_000
+        } else 15_000
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(15000)
+            .setConnectTimeoutMs(networkTimeoutMs)
+            .setReadTimeoutMs(networkTimeoutMs)
             .setDefaultRequestProperties(
                 mapOf(
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -1865,6 +1880,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         2_000,  // bufferForPlaybackAfterRebufferMs (default 5000)
                     )
                     .setPrioritizeTimeOverSizeThresholds(true)
+                    .build()
+            )
+        } else if (!isIptvMode && networkBuffer != "standard") {
+            // Stream buffer preset: wider read-ahead rides over origin
+            // stalls. Start thresholds stay stock (only min/max grow), so
+            // start latency is unchanged; the byte target is the real memory
+            // guard (mirrors the mpv side's demuxer-max-bytes) — loading
+            // stops at whichever target hits first, exactly like stock.
+            val hugeBuffer = networkBuffer == "huge"
+            // Unlike mpv's native-memory demuxer cache, this target is JAVA
+            // heap (DefaultAllocator's byte[] segments) — an uncapped 512 MiB
+            // sails past the heap ceiling of most TV boxes and OOMs
+            // mid-playback on exactly the hardware this preset serves. Clamp
+            // to half the large-heap class so the buffer can never own more
+            // than half the heap; the preset then degrades gracefully on
+            // small boxes instead of crashing them.
+            val activityManager =
+                getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+            val heapCapBytes = activityManager.largeMemoryClass / 2 * 1024 * 1024
+            val requestedBytes = (if (hugeBuffer) 512 else 256) * 1024 * 1024
+            playerBuilder.setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(
+                        if (hugeBuffer) 300_000 else 120_000, // minBufferMs
+                        if (hugeBuffer) 300_000 else 120_000, // maxBufferMs
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+                    )
+                    .setTargetBufferBytes(minOf(requestedBytes, heapCapBytes))
                     .build()
             )
         }
@@ -14343,6 +14387,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
             // Parse playlist resolver flag
             hasPlaylistResolver = obj.optBoolean("hasPlaylistResolver", false)
+
+            // Network & Buffering presets. Parsed unconditionally (defaults
+            // "standard") so a relaunch/next-episode payload can never
+            // inherit stale tuning.
+            networkPatience = obj.optString("networkPatience", "standard")
+            networkBuffer = obj.optString("networkBuffer", "standard")
 
             // Series source tabs: pack/episode split + per-tab "Load more"
             // availability. Parsed unconditionally (defaults off) so a

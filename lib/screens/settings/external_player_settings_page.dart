@@ -9,6 +9,7 @@ import '../../services/subtitle_font_service.dart';
 import '../../services/analytics_service.dart';
 import '../../services/skip_segment_service.dart';
 import '../../models/android_video_renderer_mode.dart';
+import '../video_player/services/network_tuning.dart';
 import '../../utils/deovr_utils.dart' as deovr;
 import '../video_player/services/subtitle_settings_service.dart';
 import '../../utils/platform_util.dart';
@@ -94,6 +95,8 @@ class _ExternalPlayerSettingsPageState
   bool _subtitleAutoSync = true; // Android TV only, ON by default (opt-out)
   bool _skipSegmentsEnabled = true;
   String _skipSegmentProvider = SkipSegmentProviders.auto;
+  String _netPatience = NetworkTuning.standard;
+  String _netBuffer = NetworkTuning.standard;
   String?
   _defaultSubtitleLanguage; // null = no preference, 'off' = disabled, 'en'/'es'/etc = language
   String?
@@ -132,6 +135,8 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _subtitleBgFocusNode = FocusNode();
   final FocusNode _subtitleFontFocusNode = FocusNode();
   final FocusNode _subtitleBoldFocusNode = FocusNode();
+  final FocusNode _netPatienceFocusNode = FocusNode();
+  final FocusNode _netBufferFocusNode = FocusNode();
   bool _aspectFocused = false;
   bool _defaultAudioLangFocused = false;
   bool _defaultSubtitleLangFocused = false;
@@ -152,6 +157,8 @@ class _ExternalPlayerSettingsPageState
   bool _subtitleBgFocused = false;
   bool _subtitleFontFocused = false;
   bool _subtitleBoldFocused = false;
+  bool _netPatienceFocused = false;
+  bool _netBufferFocused = false;
 
   // DeoVR FocusNodes for DPAD navigation
   final FocusNode _screenTypeFocusNode = FocusNode();
@@ -337,6 +344,18 @@ class _ExternalPlayerSettingsPageState
         _subtitleBoldFocused = _subtitleBoldFocusNode.hasFocus;
       });
     });
+    _netPatienceFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _netPatienceFocused = _netPatienceFocusNode.hasFocus;
+      });
+    });
+    _netBufferFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _netBufferFocused = _netBufferFocusNode.hasFocus;
+      });
+    });
   }
 
   @override
@@ -375,6 +394,8 @@ class _ExternalPlayerSettingsPageState
     _subtitleBgFocusNode.dispose();
     _subtitleFontFocusNode.dispose();
     _subtitleBoldFocusNode.dispose();
+    _netPatienceFocusNode.dispose();
+    _netBufferFocusNode.dispose();
     super.dispose();
   }
 
@@ -505,6 +526,8 @@ class _ExternalPlayerSettingsPageState
           await StorageService.getDefaultSubtitleLanguage();
       final defaultAudioLanguage =
           await StorageService.getDefaultAudioLanguage();
+      final netPatience = await StorageService.getNetworkConnectPatience();
+      final netBuffer = await StorageService.getNetworkBufferSize();
 
       // Load subtitle settings
       final subtitleSettings = await SubtitleSettingsService.instance.loadAll();
@@ -553,6 +576,14 @@ class _ExternalPlayerSettingsPageState
         _subtitleAutoSync = subtitleAutoSync;
         _skipSegmentsEnabled = skipSegmentsEnabled;
         _skipSegmentProvider = skipSegmentProvider;
+        // Unknown stored value (a downgrade across versions) falls back to
+        // Standard rather than crashing the dropdown.
+        _netPatience = NetworkTuning.patienceOptions.containsKey(netPatience)
+            ? netPatience
+            : NetworkTuning.standard;
+        _netBuffer = NetworkTuning.bufferOptions.containsKey(netBuffer)
+            ? netBuffer
+            : NetworkTuning.standard;
         _defaultSubtitleLanguage = defaultSubtitleLanguage;
         _defaultAudioLanguage = defaultAudioLanguage;
         _subtitleSizeIndex = subtitleSettings.sizeIndex;
@@ -1057,6 +1088,16 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setSkipSegmentProvider(String provider) async {
     setState(() => _skipSegmentProvider = provider);
     await StorageService.setSkipSegmentProvider(provider);
+  }
+
+  Future<void> _setNetPatience(String value) async {
+    setState(() => _netPatience = value);
+    await StorageService.setNetworkConnectPatience(value);
+  }
+
+  Future<void> _setNetBuffer(String value) async {
+    setState(() => _netBuffer = value);
+    await StorageService.setNetworkBufferSize(value);
   }
 
   Future<void> _setDefaultSubtitleLanguage(String? languageCode) async {
@@ -2424,6 +2465,69 @@ class _ExternalPlayerSettingsPageState
                     ),
                   ),
 
+                  const SizedBox(height: 16),
+
+                  // Network & Buffering: the escape hatch for slow stream
+                  // origins (Plex-backed addons, remote seedboxes). Standard
+                  // leaves both players untouched — the Debrify (mpv) player
+                  // reads the presets directly; the native Android TV player
+                  // gets them via the launch payload.
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Network & Buffering',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'For stream sources that stall or time out — '
+                            'Plex-backed addons, remote servers. Standard '
+                            'leaves playback exactly as before.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: t.dim,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildDropdownSetting(
+                            context,
+                            label: 'Connection patience',
+                            value: _netPatience,
+                            items: NetworkTuning.patienceOptions,
+                            onChanged: _setNetPatience,
+                            focusNode: _netPatienceFocusNode,
+                            isFocused: _netPatienceFocused,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildDropdownSetting(
+                            context,
+                            label: 'Stream buffer',
+                            value: _netBuffer,
+                            items: NetworkTuning.bufferOptions,
+                            onChanged: _setNetBuffer,
+                            focusNode: _netBufferFocusNode,
+                            isFocused: _netBufferFocused,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Patience raises connection timeouts and adds '
+                            'automatic retries where the player supports '
+                            'them. Bigger buffers ride over origin stalls '
+                            'but use more memory. Live TV keeps its own '
+                            'tuned pipeline. Restart playback to apply.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: t.dim2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 16),
 
                   // Subtitle Appearance
