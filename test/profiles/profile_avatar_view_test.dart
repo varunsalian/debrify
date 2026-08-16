@@ -29,6 +29,7 @@ void main() {
     required String? avatarKey,
     bool focused = false,
     bool allowAnimation = true,
+    bool animateWhenIdle = false,
     UserProfileRole role = UserProfileRole.admin,
     String name = 'Meera',
   }) => MaterialApp(
@@ -43,6 +44,7 @@ void main() {
           name: name,
           focused: focused,
           allowAnimation: allowAnimation,
+          animateWhenIdle: animateWhenIdle,
         ),
       ),
     ),
@@ -142,6 +144,29 @@ void main() {
       await pumpResolved(tester, harness(avatarKey: key, focused: true));
       expect(find.byType(Image), findsOneWidget);
       expect(find.byKey(ProfileAvatarView.stillFrameKey), findsNothing);
+    });
+
+    testWidgets('animateWhenIdle plays the GIF without focus (touch)', (
+      tester,
+    ) async {
+      final key = (await tester.runAsync(writeGif))!;
+      await pumpResolved(
+        tester,
+        harness(avatarKey: key, animateWhenIdle: true),
+      );
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.byKey(ProfileAvatarView.stillFrameKey), findsNothing);
+    });
+
+    testWidgets('the animation switch still outranks animateWhenIdle', (
+      tester,
+    ) async {
+      final key = (await tester.runAsync(writeGif))!;
+      await pumpResolved(
+        tester,
+        harness(avatarKey: key, animateWhenIdle: true, allowAnimation: false),
+      );
+      expect(find.byKey(ProfileAvatarView.stillFrameKey), findsOneWidget);
     });
   });
 

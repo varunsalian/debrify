@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/profiles/profile_preferences.dart';
+import '../../utils/platform_util.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
 
 /// The gate's style: `classic` is the shipped card grid, `wall` the Portrait
@@ -206,6 +207,10 @@ class _ProfileWallScreenState extends State<ProfileWallScreen> {
         role: profile.role,
         name: profile.name,
         focused: focused,
+        // TV keeps the focus-only contract (one moving tile is the focus
+        // indicator); on touch nothing is ever focused, so without this a
+        // chosen GIF simply never moved.
+        animateWhenIdle: !PlatformUtil.isTelevision,
       ),
     );
   }

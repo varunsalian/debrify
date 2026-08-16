@@ -3,6 +3,7 @@ import 'package:debrify/models/profiles/user_profile.dart';
 import 'package:debrify/screens/profiles/profile_wall_screen.dart';
 import 'package:debrify/screens/profiles/profile_picker_screen.dart';
 import 'package:debrify/widgets/profiles/profile_avatar_view.dart';
+import 'package:debrify/utils/platform_util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -36,6 +37,11 @@ void main() {
   testWidgets('Manage focus clears the last profile focus and animation', (
     tester,
   ) async {
+    // The focus-only animation contract is TV's — on touch the tile keeps
+    // living regardless of focus (the next test). Pin the platform so this
+    // keeps guarding the TV behavior it was written for.
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
     await tester.binding.setSurfaceSize(const Size(1000, 700));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
@@ -53,6 +59,33 @@ void main() {
     await tester.pump();
 
     expect(artIsAnimating(tester), isFalse);
+  });
+
+  testWidgets('touch keeps the avatar living when focus leaves the tile', (
+    tester,
+  ) async {
+    // No cursor on touch, so focus-gated animation would mean a chosen GIF
+    // or living art never moves at all — the wall opts in to idle animation
+    // off TV (2026-08-16 report: "I thought GIFs would act as GIFs").
+    PlatformUtil.debugSetAndroidTvCached(false);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    await tester.binding.setSurfaceSize(const Size(1000, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileWallScreen(
+          profiles: <UserProfile>[profile],
+          onSelected: (_) {},
+          onManage: () {},
+        ),
+      ),
+    );
+    expect(artIsAnimating(tester), isTrue);
+
+    Focus.of(tester.element(find.text('Manage profiles'))).requestFocus();
+    await tester.pump();
+
+    expect(artIsAnimating(tester), isTrue);
   });
 
   testWidgets('the classic picker renders the selected avatar kind', (

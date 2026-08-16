@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/profiles/user_profile.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
+import '../../utils/platform_util.dart';
 
 class ProfilePickerScreen extends StatelessWidget {
   final List<UserProfile> profiles;
@@ -110,9 +111,12 @@ class _ProfileCard extends StatelessWidget {
                       role: profile.role,
                       name: profile.name,
                       // Classic cards do not expose focus state to their
-                      // children; keeping animation off still renders every
-                      // art/file selection instead of a generic person icon.
-                      allowAnimation: false,
+                      // children, so on TV animation stays off entirely (the
+                      // calm grid is the style's point). Touch has no focus
+                      // to expose in the first place — there a chosen GIF or
+                      // living art should simply play.
+                      allowAnimation: !PlatformUtil.isTelevision,
+                      animateWhenIdle: !PlatformUtil.isTelevision,
                     ),
                   ),
                 ),

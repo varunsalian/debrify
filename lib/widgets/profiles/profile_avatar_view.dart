@@ -11,8 +11,8 @@ import 'profile_art.dart';
 
 /// Renders any avatar kind — icon, procedural art, static image or GIF.
 ///
-/// **Focus-only animation is the contract**, and it means something different
-/// per kind, so the mechanisms are deliberately not shared:
+/// **Focus-only animation is the DPAD contract**, and it means something
+/// different per kind, so the mechanisms are deliberately not shared:
 ///
 /// * procedural art holds a controller and simply stops ticking when unfocused
 ///   — no decode, no cache, nothing to free;
@@ -22,6 +22,10 @@ import 'profile_art.dart';
 ///
 /// One moving element is also how the eye finds focus across a room, so the
 /// animation doubles as the focus indicator rather than competing with it.
+/// That reasoning is a TV room's: on touch surfaces nothing is ever focused,
+/// which silently demoted every GIF to its first frame — a person who chose
+/// an animated avatar never saw it move. Touch surfaces therefore opt in via
+/// [animateWhenIdle], which animates without claiming the focus styling.
 ///
 /// A missing file is an ordinary state, never an error: a package restored on
 /// tvOS keeps its key without materialising bytes, and files can vanish
@@ -39,6 +43,13 @@ class ProfileAvatarView extends StatefulWidget {
   /// animate normally.
   final bool allowAnimation;
 
+  /// Animate even while unfocused — the touch surfaces' opt-in (there is no
+  /// cursor there, so focus-gated animation meant GIFs and living art never
+  /// moved at all). Does NOT imply the focused visual treatment; it only
+  /// widens when the GIF codec / art ticker may run. [allowAnimation] still
+  /// outranks it.
+  final bool animateWhenIdle;
+
   const ProfileAvatarView({
     super.key,
     required this.profileId,
@@ -47,6 +58,7 @@ class ProfileAvatarView extends StatefulWidget {
     required this.name,
     this.focused = false,
     this.allowAnimation = true,
+    this.animateWhenIdle = false,
   });
 
   /// The gate's ambient wash for a key, without building anything or touching
@@ -126,7 +138,8 @@ class _ProfileAvatarViewState extends State<ProfileAvatarView>
       _adopt();
     } else {
       if (old.focused != widget.focused ||
-          old.allowAnimation != widget.allowAnimation) {
+          old.allowAnimation != widget.allowAnimation ||
+          old.animateWhenIdle != widget.animateWhenIdle) {
         _syncTicker();
       }
       // Restore or ingest can repair missing bytes under the same
@@ -172,7 +185,9 @@ class _ProfileAvatarViewState extends State<ProfileAvatarView>
         ? ProfileArtRegistry.byId(_avatar!.id)
         : null;
     final shouldRun =
-        widget.focused && widget.allowAnimation && (art?.animated ?? false);
+        (widget.focused || widget.animateWhenIdle) &&
+        widget.allowAnimation &&
+        (art?.animated ?? false);
     if (shouldRun) {
       if (!_controller.isAnimating) _controller.repeat();
     } else if (_controller.isAnimating) {
@@ -222,7 +237,7 @@ class _ProfileAvatarViewState extends State<ProfileAvatarView>
         errorBuilder: (_, __, ___) => _buildFallback(),
       );
     }
-    if (widget.focused && widget.allowAnimation) {
+    if ((widget.focused || widget.animateWhenIdle) && widget.allowAnimation) {
       return Image.file(
         file,
         fit: BoxFit.cover,
