@@ -968,7 +968,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   // that owns the launch is the one that mounts. Resolved in main() before
   // runApp precisely so this initializer can read it; tab 13 is unconditional
   // in _computeVisibleNavIndices, so it can never be swallowed.
-  int _selectedIndex = MainPageBridge.hasPendingIptvStartup ? 13 : 15;
+  int _selectedIndex = MainPageBridge.hasPendingIptvStartup
+      ? MainTab.iptv
+      : MainTab.home;
 
   // Phone nav chrome: 'classic' (bottom bar, default) vs 'floating' (the
   // glass button). Nothing renders until the pref is read — a one-frame
@@ -1214,6 +1216,15 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     // IPTV page assembling itself underneath, and publish the splash hand-off
     // signal — AppInitializer waits on homeBoardReady, which only the Home
     // board sets, so booting to tab 13 would otherwise stall on its 10s valve.
+    // The startup channel resolved before any profile was chosen — the
+    // signed-in profile may not be allowed IPTV at all. Cancel BEFORE the
+    // IPTV page can mount and start tuning; the guard mirror is valid here
+    // because the gate updates it before revealing this tree.
+    if (MainPageBridge.hasPendingIptvStartup &&
+        !ProfilePolicyGuard.allowsSync(ProfileFeature.iptv)) {
+      MainPageBridge.cancelIptvStartupChannel();
+      _selectedIndex = MainTab.home;
+    }
     if (MainPageBridge.hasPendingIptvStartup) {
       _showIptvStartupOverlay = true;
       MainPageBridge.hideAutoLaunchOverlay = _hideIptvStartupOverlay;

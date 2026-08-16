@@ -14,6 +14,8 @@ import 'package:screen_brightness/screen_brightness.dart';
 // Removed volume_controller; using media_kit player volume instead
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
+import '../models/profiles/profile_policy.dart';
+import '../services/profiles/profile_policy_guard.dart';
 import '../services/skip_segment_service.dart';
 import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
@@ -2541,8 +2543,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // an API 21–28 device shows Record, and a tap in that window starts a
     // recording whose Stop button the probe then hides.
     final nativeBackend = _player.platform is mk.NativePlayer;
-    _recordingSupported = nativeBackend && !Platform.isAndroid;
-    if (nativeBackend && Platform.isAndroid) {
+    // A profile without the recordings feature never sees Record — the
+    // platform probe below must not be able to flip it back on.
+    final recordingsAllowed = ProfilePolicyGuard.allowsSync(
+      ProfileFeature.recordings,
+    );
+    _recordingSupported = recordingsAllowed && nativeBackend && !Platform.isAndroid;
+    if (recordingsAllowed && nativeBackend && Platform.isAndroid) {
       unawaited(
         AndroidNativeDownloader.canPublishRecordings().then((canPublish) {
           if (!canPublish || !mounted) return;

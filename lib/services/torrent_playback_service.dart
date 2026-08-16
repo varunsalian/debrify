@@ -4555,14 +4555,17 @@ class TorrentPlaybackService {
             ),
           ),
         ),
-        DebridActionItem(
-          icon: Icons.download_rounded,
-          color: const Color(0xFF3B82F6),
-          title: 'Download to device',
-          subtitle: 'Grab the file(s) via ${_label(provider)}.',
-          pillLabel: 'Download',
-          onTap: () => unawaited(_download(context, r, torrent, provider)),
-        ),
+        // The service refuses anyway, but a profile that can't download
+        // shouldn't be offered a button that only fails.
+        if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads))
+          DebridActionItem(
+            icon: Icons.download_rounded,
+            color: const Color(0xFF3B82F6),
+            title: 'Download to device',
+            subtitle: 'Grab the file(s) via ${_label(provider)}.',
+            pillLabel: 'Download',
+            onTap: () => unawaited(_download(context, r, torrent, provider)),
+          ),
         DebridActionItem(
           icon: Icons.playlist_add_rounded,
           color: const Color(0xFF8B5CF6),

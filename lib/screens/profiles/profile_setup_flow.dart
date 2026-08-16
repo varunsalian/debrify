@@ -5,6 +5,7 @@ import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
+import '../../services/profiles/profile_creation_service.dart';
 import '../../services/profiles/profile_engine_assignment_service.dart';
 import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_registry.dart';
@@ -104,6 +105,12 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
   // old feature matrix split.
   bool _seedDownloads = true;
   bool _seedRemote = true;
+
+  // Create-only: copy the creator's appearance & player defaults onto the
+  // new profile (ProfileCreationService's reviewed allowlist). Unticked by
+  // default — a fresh profile starting from stock is the less surprising
+  // outcome; inheriting the admin's tuned setup is the opt-in.
+  bool _copyDefaults = false;
 
   bool _saving = false;
   // Changes made through the embedded full editor must survive a BACK out
@@ -265,49 +272,61 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
       final artKey = _artId == null ? null : 'art:$_artId';
       final existing = widget.profile;
       if (existing == null) {
-        final created = await widget.registry.createProfile(
+        // The editor's create path: STAGED first, published only when every
+        // step lands, rolled back (row + private bytes) on failure — a
+        // half-created profile must never survive. createStaged also owns
+        // the optional defaults copy (reviewed allowlist).
+        final creation = ProfileCreationService(widget.registry);
+        final staged = await creation.createStaged(
+          actor: actor,
           name: _name.text.trim(),
           role: _role,
           policy: policy,
+          copyDefaultsFromActive: _copyDefaults,
           avatarKey: artKey,
-          setupComplete: true,
-          actingProfileId: actor.profileId,
-          actingAuthorizationRevision: actor.authorizationRevision,
-          actingSessionEpoch: actor.sessionEpoch,
         );
-        // Torrent engines are per-profile file copies, NOT connection
-        // resources — the registry's default-grant seeding cannot cover
-        // them. Match the full editor's create default: a new profile
-        // starts with every engine its creator has; trimming engines is an
-        // edit-time decision (full editor → Access). Non-fatal by design:
-        // the profile must survive an engine-copy failure, and the full
-        // editor can repair the assignment.
         try {
-          // createProfile moves authorization revisions; a stale actor
-          // would be rejected by the engine service's admin revalidation.
-          final freshActor = await ProfileAuthorizationContext.capture(
-            widget.registry,
-          );
-          final engines = ProfileEngineAssignmentService(widget.registry);
-          final available = await engines.listForTarget(
-            actor: freshActor,
-            targetProfileId: created.id,
-          );
-          final fromManager = available
-              .where((engine) => engine.availableFromManager)
-              .map((engine) => engine.id)
-              .toSet();
-          if (fromManager.isNotEmpty) {
-            await engines.apply(
+          // Torrent engines are per-profile file copies, NOT connection
+          // resources — the registry's default-grant seeding cannot cover
+          // them. Match the full editor's create default: a new profile
+          // starts with every engine its creator has; trimming engines is
+          // an edit-time decision (full editor → Access). Non-fatal by
+          // design: the profile must survive an engine-copy failure, and
+          // the full editor can repair the assignment.
+          try {
+            // createStaged moves authorization revisions; a stale actor
+            // would be rejected by the engine service's admin revalidation.
+            final freshActor = await ProfileAuthorizationContext.capture(
+              widget.registry,
+            );
+            final engines = ProfileEngineAssignmentService(widget.registry);
+            final available = await engines.listForTarget(
               actor: freshActor,
-              targetProfileId: created.id,
-              selectedEngineIds: fromManager,
+              targetProfileId: staged.id,
+            );
+            final fromManager = available
+                .where((engine) => engine.availableFromManager)
+                .map((engine) => engine.id)
+                .toSet();
+            if (fromManager.isNotEmpty) {
+              await engines.apply(
+                actor: freshActor,
+                targetProfileId: staged.id,
+                selectedEngineIds: fromManager,
+              );
+            }
+          } catch (error) {
+            debugPrint(
+              'ProfileSetupFlow engine seeding failed (${error.runtimeType})',
             );
           }
-        } catch (error) {
-          debugPrint(
-            'ProfileSetupFlow engine seeding failed (${error.runtimeType})',
+          await creation.completeStaged(
+            profileId: staged.id,
+            actor: await ProfileAuthorizationContext.capture(widget.registry),
           );
+        } catch (error) {
+          await creation.rollbackStaged(staged.id);
+          rethrow;
         }
       } else {
         await widget.registry.updateProfile(
@@ -523,7 +542,8 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
         // right after each step's last focusable row or a remote can never
         // reach it.
         _footer(switch (_step) {
-          _QStep.identity => 2,
+          // Create shows the copy-defaults card at row 2; edit doesn't.
+          _QStep.identity => _isEdit ? 2 : 3,
           _QStep.role => 3,
           _QStep.search => 2,
           _QStep.sources => 4,
@@ -658,6 +678,20 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
             color: Colors.white.withValues(alpha: 0.42),
           ),
         ),
+        if (!_isEdit) ...[
+          const SizedBox(height: 14),
+          _optionCard(
+            row: 2,
+            selected: _copyDefaults,
+            check: true,
+            onActivate: () => setState(() => _copyDefaults = !_copyDefaults),
+            title: 'Start from my settings',
+            description:
+                'Copy appearance and player defaults — theme, TV scale, '
+                'subtitle language — from your profile. Off = stock '
+                'defaults.',
+          ),
+        ],
       ],
     );
   }

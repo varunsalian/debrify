@@ -10270,6 +10270,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 _snack('URL copied to clipboard');
               },
             ),
+            if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads))
             ListTile(
               leading: const Icon(
                 Icons.download_rounded,
@@ -22274,6 +22275,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                 _snack('URL copied to clipboard');
               },
             ),
+            if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads))
             ListTile(
               leading: const Icon(
                 Icons.download_rounded,

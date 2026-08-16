@@ -70,7 +70,10 @@ void main() {
   // windows, and pumps are BOUNDED, never settled: a focused text field's
   // cursor blink schedules frames forever, so a settle would hang the suite.
   Future<void> pumpFrames(WidgetTester tester) async {
-    for (var i = 0; i < 4; i++) {
+    // 10 windows: the staged create (staging insert → defaults copy →
+    // engine probe → publish checkpoint) is the longest chain driven
+    // through a single tap.
+    for (var i = 0; i < 10; i++) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 40)),
       );
