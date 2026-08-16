@@ -1545,23 +1545,24 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
       focused: focused,
       shape: ParallaxShape.episodeStill,
       radius: BorderRadius.circular(12),
-      child: Container(
+      child: SizedBox(
         width: m.epCell,
         height: m.stillH + m.epPlate,
-        decoration: BoxDecoration(
-          // A step off the page, like every card slot — on the Spotlight
-          // palette this lands on the mock's #141416-on-black.
-          color: slot,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: m.epCell,
-              height: m.stillH,
-              child: Stack(
+            // No card fill: still + caption sit straight on the page, the
+            // wide/TV cell's anatomy (user call 2026-08-16 — the solid
+            // integrated card read as a foreign object on a board where
+            // every other surface is the page). The still carries its own
+            // full rounded clip now; under the old whole-card clip its
+            // bottom corners were squared off against the plate below.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: m.epCell,
+                height: m.stillH,
+                child: Stack(
                 fit: StackFit.expand,
                 children: [
                   if (url != null && url.isNotEmpty)
@@ -1602,11 +1603,24 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                       ),
                     ),
                 ],
+                ),
               ),
             ),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 9, 12, 8),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                // The wide/TV cell's answer to focus, echoed here for the
+                // scroll-settled card: the caption gains an ink plate while
+                // the still lifts. Padded identically in BOTH states so
+                // gaining the plate never shifts the text — only its ground
+                // appears (the wide cell's own rule).
+                decoration: BoxDecoration(
+                  color: focused ? _ink.withValues(alpha: 0.13) : null,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                // Near-flush with the still's edge — page text, not card
+                // text, now that the resting fill is gone.
+                padding: const EdgeInsets.fromLTRB(8, 9, 8, 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1623,11 +1637,31 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Expanded(
-                      child: Text(
-                        episode.overview ?? '',
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: _t(11.5, a: 0.55).copyWith(height: 1.4),
+                      // Whole lines only. maxLines guards the HORIZONTAL
+                      // overflow of the last permitted line — it does nothing
+                      // about the box being 2.6 line-heights tall, which
+                      // sliced the third line through its middle. Fit the
+                      // line count to the height that actually exists
+                      // (text-scale aware), and the last line ends in an
+                      // ellipsis instead of a crop.
+                      child: LayoutBuilder(
+                        builder: (context, c) {
+                          const fs = 11.5;
+                          final line =
+                              MediaQuery.textScalerOf(context).scale(fs) * 1.4;
+                          final lines =
+                              (c.maxHeight / line).floor().clamp(1, 3);
+                          return Align(
+                            alignment: Alignment.topLeft,
+                            child: Text(
+                              episode.overview ?? '',
+                              maxLines: lines,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  _t(fs, a: 0.55).copyWith(height: 1.4),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     Row(
