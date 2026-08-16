@@ -234,6 +234,64 @@ Future<String?> showPairingCodeEntrySheet(
   );
 }
 
+/// The credential gate's shared busy surface, shown while the v2 handshake
+/// probe runs (up to ~6s against a TV that never answers). It dismisses
+/// ITSELF when [dismissed] flips: the gate may finish before this route has
+/// built (live paired session), so the gate never touches the navigator —
+/// a blind pop there would remove whatever sits beneath instead.
+class _GateBusyDialog extends StatefulWidget {
+  const _GateBusyDialog({required this.dismissed});
+
+  final ValueNotifier<bool> dismissed;
+
+  @override
+  State<_GateBusyDialog> createState() => _GateBusyDialogState();
+}
+
+class _GateBusyDialogState extends State<_GateBusyDialog> {
+  @override
+  void initState() {
+    super.initState();
+    widget.dismissed.addListener(_maybePop);
+    // Covers the built-after-dismissal race: if the gate already finished,
+    // the listener never fires again, so check once the route is up.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePop());
+  }
+
+  @override
+  void dispose() {
+    widget.dismissed.removeListener(_maybePop);
+    super.dispose();
+  }
+
+  void _maybePop() {
+    if (!mounted || !widget.dismissed.value) return;
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // BACK must not pop this (the pop would desync the notifier contract and
+    // the gate is not cancellable anyway); it ends itself within seconds.
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        content: Row(
+          children: const [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            SizedBox(width: 18),
+            Expanded(child: Text('Connecting securely…')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Policy: credential transfers to receivers that never advertised protocol
 /// v2 are refused outright (kLegacyCredentialPolicy = block).
 Future<void> showLegacyBlockedDialog(BuildContext context, String tvName) {
@@ -385,16 +443,51 @@ Future<RemoteSession?> ensureAuthorizedSession(
   // to 1 there even for a current TV — and an attacker can strip the
   // advertisement anyway. Probe first; the policy dialogs only fire when the
   // peer genuinely cannot do v2.
-  final RemoteSession? session;
+  //
+  // The probe takes up to 6 seconds against a TV that never answers, and
+  // every credential flow funnels through here — so the busy feedback lives
+  // HERE, once, instead of per-screen (transfer-all shipped its own and the
+  // other four flows showed dead air for the whole window).
+  //
+  // Two deliberate subtleties:
+  //  * The dialog appears only if the probe is still running after a short
+  //    grace period — the healthy path (paired TV, live session) resolves in
+  //    milliseconds and must not flash a modal on every send.
+  //  * The dialog dismisses ITSELF via the notifier, and the gate AWAITS its
+  //    route closing before showing anything else. Navigator.pop removes the
+  //    TOPMOST route, so a still-unbuilt busy dialog popping late would
+  //    otherwise eat the refusal/pairing dialog pushed after it.
+  final busyDismissed = ValueNotifier<bool>(false);
+  Future<void>? busyClosed;
+  final busyReveal = Timer(const Duration(milliseconds: 250), () {
+    if (busyDismissed.value || !context.mounted) return;
+    busyClosed = showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _GateBusyDialog(dismissed: busyDismissed),
+    );
+  });
+  RemoteSession? session;
+  Object? gateError;
   try {
     session = await state.ensureEncryptedSession(device.ip);
   } catch (error) {
     // A throw here (profile authorization revoked mid-flight, socket refused)
     // used to surface as a spinner that never stopped and no dialog at all.
-    debugPrint('RemoteGate: handshake threw — $error');
+    gateError = error;
+  } finally {
+    busyReveal.cancel();
+    busyDismissed.value = true;
+  }
+  // Strict ordering: nothing else may touch the navigator until the busy
+  // route is fully gone (see the pop-the-topmost note above).
+  final closing = busyClosed;
+  if (closing != null) await closing;
+  if (gateError != null) {
+    debugPrint('RemoteGate: handshake threw — $gateError');
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not reach the TV: $error')),
+        SnackBar(content: Text('Could not reach the TV: $gateError')),
       );
     }
     return null;
