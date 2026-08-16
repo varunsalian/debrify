@@ -5800,7 +5800,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Already nullable on the row itself — a tracker row with no grid
         // behind it hands over null and simply draws no chevron.
         onSeeAll: row.onSeeAll,
-        // CW captions carry information (which title, how far) — kept.
+        // Caption-free like the catalog rows. The mock kept CW captions for
+        // the INFORMATIVE case ("48 min left") — but the card model only has
+        // the title, and a title caption under one row on a board where no
+        // other row has any read as the odd one out, not as information
+        // (user call, 2026-08-16). The progress bar stays CW's signal.
+        captions: false,
         items: [
           for (final m in row.items)
             SpotlightCard(

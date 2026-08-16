@@ -52,8 +52,13 @@ don't append it again.
 
 Shared across A–D (non-TV only): heading 22px w700 @ 0.96, catalog cards
 caption-free, posters ~0.30 width (from 0.243), 34px inter-row air.
-Captions rule: catalog rows none; CW keeps informative captions ("48 min
-left"); channel/logo rails (IPTV, Debrify TV) keep names.
+Captions rule (as BUILT, revised 2026-08-16): catalog, watchlist AND CW rows
+none — the mock kept CW captions for the informative "48 min left" case, but
+the card model only carries the title, and a title caption under one row on
+an otherwise caption-free board read as inconsistency, not information (the
+progress bar stays CW's signal). Channel/logo rails (IPTV, Debrify TV,
+Stremio TV) and playlists keep names — a logo tile without its name is a
+guess.
 
 ## Wiring notes
 
