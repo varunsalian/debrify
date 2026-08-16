@@ -5,6 +5,7 @@ import '../../models/profiles/profile_avatar.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/profiles/profile_authorization.dart';
 import '../../services/profiles/profile_bootstrap.dart';
+import '../../services/profiles/profile_engine_assignment_service.dart';
 import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_registry.dart';
 import '../../services/profiles/profile_runtime.dart';
@@ -264,7 +265,7 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
       final artKey = _artId == null ? null : 'art:$_artId';
       final existing = widget.profile;
       if (existing == null) {
-        await widget.registry.createProfile(
+        final created = await widget.registry.createProfile(
           name: _name.text.trim(),
           role: _role,
           policy: policy,
@@ -274,6 +275,40 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
           actingAuthorizationRevision: actor.authorizationRevision,
           actingSessionEpoch: actor.sessionEpoch,
         );
+        // Torrent engines are per-profile file copies, NOT connection
+        // resources — the registry's default-grant seeding cannot cover
+        // them. Match the full editor's create default: a new profile
+        // starts with every engine its creator has; trimming engines is an
+        // edit-time decision (full editor → Access). Non-fatal by design:
+        // the profile must survive an engine-copy failure, and the full
+        // editor can repair the assignment.
+        try {
+          // createProfile moves authorization revisions; a stale actor
+          // would be rejected by the engine service's admin revalidation.
+          final freshActor = await ProfileAuthorizationContext.capture(
+            widget.registry,
+          );
+          final engines = ProfileEngineAssignmentService(widget.registry);
+          final available = await engines.listForTarget(
+            actor: freshActor,
+            targetProfileId: created.id,
+          );
+          final fromManager = available
+              .where((engine) => engine.availableFromManager)
+              .map((engine) => engine.id)
+              .toSet();
+          if (fromManager.isNotEmpty) {
+            await engines.apply(
+              actor: freshActor,
+              targetProfileId: created.id,
+              selectedEngineIds: fromManager,
+            );
+          }
+        } catch (error) {
+          debugPrint(
+            'ProfileSetupFlow engine seeding failed (${error.runtimeType})',
+          );
+        }
       } else {
         await widget.registry.updateProfile(
           id: existing.id,
