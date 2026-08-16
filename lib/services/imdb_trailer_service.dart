@@ -21,7 +21,10 @@ import 'youtube_service.dart';
 /// simplest thing the players eat (no merge, plain progressive MP4, H.264).
 class ImdbTrailerService {
   static const String _endpoint = 'https://graphql.imdb.com/';
-  static const Duration _httpTimeout = Duration(seconds: 12);
+  // Tight-ish: this rung runs AFTER a failed YouTube ladder, with a loading
+  // pill already up at every call site — a long timeout here stretches the
+  // window where the pill spins on a title that will end up static.
+  static const Duration _httpTimeout = Duration(seconds: 8);
 
   static const String _query = r'''
     query Trailer($id: ID!) {
@@ -43,33 +46,40 @@ class ImdbTrailerService {
   /// under that so a held entry is never handed out stale, but long enough
   /// that hero focus-dwell and a follow-up detail open share one fetch.
   static const Duration _cacheTtl = Duration(hours: 3);
+
+  /// Failures are cached too, but briefly: long enough that an offline (or
+  /// IMDb-blocked) session doesn't re-burn the HTTP timeout on every hero
+  /// dwell, short enough that a transient hiccup can't blank a title's
+  /// trailer for hours.
+  static const Duration _negativeTtl = Duration(minutes: 5);
   static final Map<String, _CacheEntry> _cache = {};
   static final Map<String, Future<YoutubeResolvedStreams?>> _inFlight = {};
 
   /// Resolve the primary IMDb trailer for [imdbId] (a `tt...` id) into a
-  /// direct MP4, highest quality at or below [maxHeight] (uncapped when null
-  /// — IMDb tops out at 1080p). Returns null when the title has no video or
-  /// the API/shape fails; never throws.
+  /// direct MP4, highest quality at or below [maxHeight] (uncapped when null).
+  /// Returns null when the title has no video or the API/shape fails; never
+  /// throws.
   static Future<YoutubeResolvedStreams?> resolveTrailer(
     String imdbId, {
     int? maxHeight,
   }) {
-    final key = maxHeight == null ? imdbId : '$imdbId#h$maxHeight';
+    // IMDb's top rung is 1080p, so any cap at or above it selects identically
+    // to no cap — normalize so the ambient surfaces (cap 1080/1440) and the
+    // uncapped detail page share one cache entry and one fetch per title.
+    final cap = (maxHeight != null && maxHeight < 1080) ? maxHeight : null;
+    final key = cap == null ? imdbId : '$imdbId#h$cap';
     final cached = _cache[key];
     if (cached != null &&
-        DateTime.now().difference(cached.at) < _cacheTtl) {
+        DateTime.now().difference(cached.at) <
+            (cached.streams == null ? _negativeTtl : _cacheTtl)) {
       return Future.value(cached.streams);
     }
     final inFlight = _inFlight[key];
     if (inFlight != null) return inFlight;
-    final future = _resolveUncached(imdbId, maxHeight).then((streams) {
-      // Failures are NOT cached: the next surface to want this trailer should
-      // retry (a transient IMDb hiccup must not blank a title for 3 hours).
-      if (streams != null) {
-        _cache.removeWhere(
-            (_, e) => DateTime.now().difference(e.at) >= _cacheTtl);
-        _cache[key] = _CacheEntry(streams, DateTime.now());
-      }
+    final future = _resolveUncached(imdbId, cap).then((streams) {
+      _cache.removeWhere(
+          (_, e) => DateTime.now().difference(e.at) >= _cacheTtl);
+      _cache[key] = _CacheEntry(streams, DateTime.now());
       return streams;
     });
     _inFlight[key] = future;
@@ -152,7 +162,8 @@ class ImdbTrailerService {
 }
 
 class _CacheEntry {
-  final YoutubeResolvedStreams streams;
+  /// Null = cached failure (see [ImdbTrailerService._negativeTtl]).
+  final YoutubeResolvedStreams? streams;
   final DateTime at;
   const _CacheEntry(this.streams, this.at);
 }
