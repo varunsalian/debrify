@@ -17,6 +17,7 @@ import '../services/imdb_parents_guide_service.dart';
 import '../services/main_page_bridge.dart';
 import '../services/storage_service.dart';
 import '../services/video_player_launcher.dart';
+import '../services/imdb_trailer_service.dart';
 import '../services/youtube_service.dart';
 import '../widgets/detail/detail_layout_console.dart';
 import '../widgets/detail/detail_layout_dossier.dart';
@@ -719,6 +720,14 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     } catch (_) {
       streams = null;
     }
+    // Backup source: IMDb's own trailer MP4s, for when YouTube resolution is
+    // blocked (regional client kills) — the backdrop still gets to move.
+    if (streams == null || !(streams.playUrl?.isNotEmpty ?? false)) {
+      final imdbId = _item.effectiveImdbId;
+      if (imdbId != null) {
+        streams = await ImdbTrailerService.resolveTrailer(imdbId);
+      }
+    }
     if (!mounted) return;
     final playable = streams?.playUrl?.isNotEmpty ?? false;
     setState(() {
@@ -800,6 +809,15 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       streams = await YoutubeService.resolveStreams(ytId);
     } catch (_) {
       streams = null;
+    }
+    // Same backup as the ambient path: a blocked YouTube must not reduce the
+    // Trailer button to a "Couldn't load trailer" snackbar when IMDb hosts
+    // the same trailer as a plain MP4.
+    if (streams == null || !(streams.playUrl?.isNotEmpty ?? false)) {
+      final imdbId = _item.effectiveImdbId;
+      if (imdbId != null) {
+        streams = await ImdbTrailerService.resolveTrailer(imdbId);
+      }
     }
 
     if (!mounted) return;

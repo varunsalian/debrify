@@ -9,6 +9,7 @@ import '../../services/app_route_observer.dart';
 import '../../services/main_page_bridge.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
+import '../../services/imdb_trailer_service.dart';
 import '../../services/youtube_service.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../utils/platform_util.dart';
@@ -463,17 +464,27 @@ class _DiscoverDetailRailState extends State<DiscoverDetailRail>
         );
         ytId = full?.trailerYtId;
       } catch (_) {
-        return fail();
+        // Meta fetch failed — the IMDb backup below may still carry it.
       }
     }
     if (stale()) return; // moved on — the new title owns the pill now
-    if (ytId == null || ytId.isEmpty) return fail(); // no trailer for this title
     // Ambient rail backdrop: resolve at a low cap (small box, weak TV).
-    final streams = await YoutubeService.resolveStreams(
-      ytId,
-      maxHeightOverride: YoutubeService.ambientTrailerMaxHeight,
-      preferVp9: true,
-    );
+    var streams = (ytId != null && ytId.isNotEmpty)
+        ? await YoutubeService.resolveStreams(
+            ytId,
+            maxHeightOverride: YoutubeService.ambientTrailerMaxHeight,
+            preferVp9: true,
+          )
+        : null;
+    // Backup source: IMDb's own trailer MP4s — a YouTube block (or a title
+    // with no YouTube id) still lights the stage.
+    if (streams == null || !streams.hasPlayable) {
+      if (stale()) return;
+      streams = await ImdbTrailerService.resolveTrailer(
+        imdb,
+        maxHeight: YoutubeService.ambientTrailerMaxHeight,
+      );
+    }
     if (stale()) return;
     if (streams == null || !streams.hasPlayable) return fail();
     // Publish — the stage mounts the player; the pill stays up until the stage

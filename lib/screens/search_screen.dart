@@ -58,6 +58,7 @@ import '../utils/format_tag_detector.dart';
 import '../utils/torrent_filter_matcher.dart';
 import '../utils/tv_keys.dart';
 import '../services/app_route_observer.dart';
+import '../services/imdb_trailer_service.dart';
 import '../services/youtube_service.dart';
 import '../widgets/add_source_picker_dialog.dart';
 import '../widgets/debrid_action_sheet.dart';
@@ -9258,9 +9259,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
 
       // YouTube id: catalog rows rarely carry it, so fall back to the /meta
       // details (the same fetch — and cache — the hero enrichment uses).
+      final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
       String? ytId = item.trailerYtId;
       if (ytId == null || ytId.isEmpty) {
-        final imdb = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
         if (imdb == null) return fail();
         try {
           final full = await _stremio.fetchMetaDetails(
@@ -9269,17 +9270,27 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           );
           ytId = full?.trailerYtId;
         } catch (_) {
-          return fail(); // silent: the static backdrop simply stays
+          // Meta fetch failed — the IMDb backup below may still carry it.
         }
       }
       if (!mounted || req != _heroTrailerReq) return;
-      if (ytId == null || ytId.isEmpty) return fail();
       // Ambient hero backdrop: resolve at a low cap (small region, weak TV).
-      final streams = await YoutubeService.resolveStreams(
-        ytId,
-        maxHeightOverride: YoutubeService.ambientTrailerMaxHeight,
-        preferVp9: true,
-      );
+      var streams = (ytId != null && ytId.isNotEmpty)
+          ? await YoutubeService.resolveStreams(
+              ytId,
+              maxHeightOverride: YoutubeService.ambientTrailerMaxHeight,
+              preferVp9: true,
+            )
+          : null;
+      // Backup source: IMDb hosts its own trailer MP4s, so a YouTube block
+      // (or a title with no YouTube id at all) still gets a moving hero.
+      if ((streams == null || !streams.hasPlayable) && imdb != null) {
+        if (!mounted || req != _heroTrailerReq) return;
+        streams = await ImdbTrailerService.resolveTrailer(
+          imdb,
+          maxHeight: YoutubeService.ambientTrailerMaxHeight,
+        );
+      }
       if (!mounted || req != _heroTrailerReq) return;
       if (streams == null || !streams.hasPlayable) return fail();
       _heroTrailer.value = streams;
