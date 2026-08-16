@@ -5706,7 +5706,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// tab body with no app bar of its own, so pushing it would strand the user
   /// with no way back.
   void _navigateToAddons() {
-    MainPageBridge.switchTab?.call(7); // 7 = Addons (see main.dart _pages)
+    MainPageBridge.switchTab?.call(MainTab.addons);
   }
 
   /// Stage LEFT-exit: land on the exact row the stage was opened from — the

@@ -100,7 +100,7 @@ import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
 import 'settings/profiles_settings_page.dart';
-import 'profiles/edit_profile_screen.dart';
+import 'profiles/profile_setup_flow.dart';
 import 'settings/trakt_settings_page.dart';
 import 'settings/simkl_settings_page.dart';
 import 'settings/mdblist_settings_page.dart';
@@ -1717,9 +1717,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'yaml',
           'add engine',
         ],
-        onTap: () async => MainPageBridge.switchTab?.call(
-          7, // 7 = Addons (see main.dart _pages)
-        ),
+        onTap: () async => MainPageBridge.switchTab?.call(MainTab.addons),
       ),
 
       // TV Mode
@@ -3048,22 +3046,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// The Profiles card's "Add a profile" row — the hub's create flow without
   /// the detour through the hub.
   Future<void> _addProfile() async {
-    final registry = ProfileBootstrap.registry;
     if (!await _mayManageProfiles()) {
       _profilesDenied('add');
       return;
     }
-    final authorization = await ProfileAuthorizationContext.capture(registry);
     if (!mounted) return;
-    await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => EditProfileScreen(
-          registry: registry,
-          pins: ProfilePinService(registry: registry),
-          authorization: authorization,
-        ),
-      ),
-    );
+    await ProfileSetupFlow.show(context);
     if (!mounted) return;
     setState(() {});
   }
@@ -3086,18 +3074,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     }
     if (active == null) return;
-    final authorization = await ProfileAuthorizationContext.capture(registry);
     if (!mounted) return;
-    await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => EditProfileScreen(
-          registry: registry,
-          pins: ProfilePinService(registry: registry),
-          authorization: authorization,
-          profile: active,
-        ),
-      ),
-    );
+    await ProfileSetupFlow.show(context, profile: active);
     if (!mounted) return;
     setState(() {});
   }

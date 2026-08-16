@@ -418,7 +418,7 @@ class _PikPakFilesScreenState extends State<PikPakFilesScreen> {
       // If came from torrent search flow, switch back to torrent search tab
       if (MainPageBridge.returnToTorrentSearchOnBack) {
         MainPageBridge.returnToTorrentSearchOnBack = false;
-        MainPageBridge.switchTab?.call(0);
+        MainPageBridge.switchTab?.call(MainTab.legacyTorrentSearch);
         return true;
       }
     }

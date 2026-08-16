@@ -57,6 +57,7 @@ import 'widgets/app_initializer.dart';
 
 import 'widgets/animated_background.dart';
 import 'services/main_page_bridge.dart';
+import 'services/profiles/profile_policy_guard.dart';
 import 'theme/app_surfaces.dart';
 import 'theme/app_theme_controller.dart';
 import 'theme/idle_dim.dart';
@@ -1230,35 +1231,38 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.navPrefsChanged = () {
       if (mounted) unawaited(_loadPhoneNavPrefs());
     };
+    MainPageBridge.reloadProfilePolicy = () {
+      if (mounted) unawaited(_loadProfilePolicy());
+    };
     // Expose tab switcher for deep-link flows
     MainPageBridge.switchTab = (int index) {
       if (!mounted) return;
       final visibleIndices = _computeVisibleNavIndices();
       if (!visibleIndices.contains(index)) {
-        if (index == 4) {
+        if (index == MainTab.realDebrid) {
           _showMissingApiKeySnack('Real Debrid');
-        } else if (index == 5) {
+        } else if (index == MainTab.torbox) {
           _showMissingApiKeySnack('Torbox');
-        } else if (index == 6) {
+        } else if (index == MainTab.pikPak) {
           // PikPak tab - check if enabled but hidden vs not configured
           if (_pikpakEnabled && _pikpakHiddenFromNav) {
             _showTabHiddenSnack('PikPak');
           } else {
             _showMissingApiKeySnack('PikPak');
           }
-        } else if (index == 10) {
+        } else if (index == MainTab.webDav) {
           if (_webDavEnabled && _webDavHiddenFromNav) {
             _showTabHiddenSnack('WebDAV');
           } else {
             _showMissingApiKeySnack('WebDAV');
           }
-        } else if (index == 11) {
+        } else if (index == MainTab.premiumize) {
           if (_premiumizeEnabled && _premiumizeHiddenFromNav) {
             _showTabHiddenSnack('Premiumize');
           } else {
             _showMissingApiKeySnack('Premiumize');
           }
-        } else if (index == 12) {
+        } else if (index == MainTab.allDebrid) {
           if (_allDebridEnabled && _allDebridHiddenFromNav) {
             _showTabHiddenSnack('AllDebrid');
           } else {
@@ -1459,11 +1463,13 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final scope = ProfileRuntime.capture();
     final profile = await ProfileBootstrap.registry.getProfile(scope.profileId);
     if (!mounted || ProfileRuntime.capture() != scope) return;
+    ProfilePolicyGuard.updateActiveProfile(profile);
     setState(() {
       _profilePolicy = profile;
       final visible = _computeVisibleNavIndices();
       if (!visible.contains(_selectedIndex)) {
-        _selectedIndex = visible.contains(15) ? 15 : visible.first;
+        _selectedIndex =
+            visible.contains(MainTab.home) ? MainTab.home : visible.first;
       }
     });
   }
@@ -1479,14 +1485,23 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     return indices
         .where((index) {
           final feature = switch (index) {
-            2 => ProfileFeature.downloads,
-            3 => ProfileFeature.debrifyTv,
-            4 || 5 || 6 || 10 || 11 || 12 || 16 => ProfileFeature.cloud,
-            7 => ProfileFeature.addonsAndEngines,
-            9 => ProfileFeature.stremioTv,
-            13 => ProfileFeature.iptv,
-            14 => ProfileFeature.youtube,
-            18 || 19 => ProfileFeature.trackersAndDiscovery,
+            MainTab.downloads => ProfileFeature.downloads,
+            MainTab.debrifyTv => ProfileFeature.debrifyTv,
+            // File-browsing tabs follow the SURFACE feature; provider
+            // operations stay on ProfileFeature.cloud (see the enum docs).
+            MainTab.realDebrid ||
+            MainTab.torbox ||
+            MainTab.pikPak ||
+            MainTab.webDav ||
+            MainTab.premiumize ||
+            MainTab.allDebrid ||
+            MainTab.cloud => ProfileFeature.cloudFiles,
+            MainTab.addons => ProfileFeature.addonsAndEngines,
+            MainTab.stremioTv => ProfileFeature.stremioTv,
+            MainTab.iptv => ProfileFeature.iptv,
+            MainTab.youtube => ProfileFeature.youtube,
+            MainTab.discover ||
+            MainTab.calendar => ProfileFeature.trackersAndDiscovery,
             _ => null,
           };
           return feature == null || _allowsProfileFeature(feature);
@@ -1499,6 +1514,7 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     MainPageBridge.removeIntegrationListener(_handleIntegrationChanged);
     MainPageBridge.switchTab = null;
     MainPageBridge.navPrefsChanged = null;
+    MainPageBridge.reloadProfilePolicy = null;
     MainPageBridge.tvSidebarStyleChanged = null;
     MainPageBridge.desktopSidebarStyleChanged = null;
     MainPageBridge.openDebridOptions = null;
@@ -2624,14 +2640,14 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       final allDebrid = allDebridEnabled ?? _allDebridEnabled;
       final adHidden = allDebridHidden ?? _allDebridHiddenFromNav;
       final indices = <int>[
-        17,
-        15,
-        18,
-        2,
-        13,
-        14,
-        3,
-        9,
+        MainTab.search,
+        MainTab.home,
+        MainTab.discover,
+        MainTab.downloads,
+        MainTab.iptv,
+        MainTab.youtube,
+        MainTab.debrifyTv,
+        MainTab.stremioTv,
       ]; // Search, Home, Discover, Downloads, IPTV, YouTube,
       // Debrify TV, Stremio TV. The dedicated Search tab (17) is no longer
       // TV-only — every non-TV layout WIDE enough for a sidebar carries it
@@ -2647,10 +2663,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
           (premiumize && !pmHidden) ||
           (allDebrid && !adHidden) ||
           (webDav && !wdHidden)) {
-        indices.add(16); // Cloud
+        indices.add(MainTab.cloud);
       }
-      indices.add(7); // Addons
-      indices.add(8); // Settings
+      indices.add(MainTab.addons);
+      indices.add(MainTab.settings);
       _insertTraktCalendarTab(indices, calendar);
       return _applyProfilePolicy(indices);
     }
@@ -2669,20 +2685,29 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
     final adHidden = allDebridHidden ?? _allDebridHiddenFromNav;
     if (!rd && !tb && !pikpak && !webDav && !premiumize && !allDebrid) {
       final indices = <int>[
-        17,
-        15,
-        18,
-        13,
-        14,
-        9,
-        7,
-        8,
+        MainTab.search,
+        MainTab.home,
+        MainTab.discover,
+        MainTab.iptv,
+        MainTab.youtube,
+        MainTab.stremioTv,
+        MainTab.addons,
+        MainTab.settings,
       ]; // Search, Home, Discover, IPTV, YouTube, Stremio TV, Addons, Settings
       _insertTraktCalendarTab(indices, calendar);
       return _applyProfilePolicy(indices);
     }
 
-    final indices = <int>[17, 15, 18, 2, 13, 14, 3, 9];
+    final indices = <int>[
+      MainTab.search,
+      MainTab.home,
+      MainTab.discover,
+      MainTab.downloads,
+      MainTab.iptv,
+      MainTab.youtube,
+      MainTab.debrifyTv,
+      MainTab.stremioTv,
+    ];
     // Consolidated Cloud tab (see TV branch above): one entry when any provider
     // is enabled & not hidden.
     if ((rd && !rdHidden) ||
@@ -2691,10 +2716,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
         (premiumize && !pmHidden) ||
         (allDebrid && !adHidden) ||
         (webDav && !wdHidden)) {
-      indices.add(16); // Cloud
+      indices.add(MainTab.cloud);
     }
-    indices.add(7); // Addons
-    indices.add(8); // Settings
+    indices.add(MainTab.addons);
+    indices.add(MainTab.settings);
     _insertTraktCalendarTab(indices, calendar);
     return _applyProfilePolicy(indices);
   }
@@ -2905,7 +2930,10 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
   /// not configured -> missing-key snack; configured but hidden -> hidden snack.
   void _openCloudProvider(String providerKey) {
     if (!mounted) return;
-    if (!_allowsProfileFeature(ProfileFeature.cloud)) {
+    // Surface gate: this pushes a file-browsing screen. Streaming through
+    // the provider is ProfileFeature.cloud and is deliberately NOT checked
+    // here-adjacent — hiding the pages never severs the plumbing.
+    if (!_allowsProfileFeature(ProfileFeature.cloudFiles)) {
       _showPolicyDeniedSnack();
       return;
     }

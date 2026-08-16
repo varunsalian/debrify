@@ -374,7 +374,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     }
     if (MainPageBridge.returnToTorrentSearchOnBack) {
       MainPageBridge.returnToTorrentSearchOnBack = false;
-      MainPageBridge.switchTab?.call(0);
+      MainPageBridge.switchTab?.call(MainTab.legacyTorrentSearch);
       return true;
     }
     return false;

@@ -90,16 +90,26 @@ void main() {
       1,
       reason: 'The existing feature controls must stay present but hidden.',
     );
+    // The ceiling must never seed editor state again: grant masks derive
+    // from _features, and allAllowedFor handed every newly ticked resource
+    // writeRemote regardless of the profile's actual policy (review finding,
+    // 2026-08-16). policyFor: stored policy on edit, role DEFAULTS on create.
     expect(
       source,
-      contains('ProfilePolicy.allAllowedFor(role)'),
-      reason:
-          'policyFor must select the full role policy while the switch is off.',
+      contains('return ProfilePolicy.defaultsFor(role);'),
+      reason: 'policyFor must fall back to role defaults on create.',
     );
     expect(
       source,
-      contains('ProfilePolicy.allAllowedFor(_role)'),
-      reason: 'Initialization must select the full role policy too.',
+      contains(
+        "profile?.policy.enabled ?? ProfilePolicy.defaultsFor(_role).enabled",
+      ),
+      reason: 'Initialization must seed from the stored policy, not a preset.',
+    );
+    expect(
+      RegExp(r'allAllowedFor\(').allMatches(source).length,
+      0,
+      reason: 'The role ceiling must not seed editor state.',
     );
   });
 

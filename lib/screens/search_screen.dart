@@ -31,6 +31,8 @@ import '../services/iptv_cw_router.dart';
 import '../services/iptv_media_store.dart';
 import '../services/local_bound_source_service.dart';
 import '../services/main_page_bridge.dart';
+import '../models/profiles/profile_policy.dart';
+import '../services/profiles/profile_policy_guard.dart';
 import '../services/playlist_player_service.dart';
 import '../services/premiumize_service.dart';
 import '../services/profiles/profile_session_memory.dart';
@@ -1702,6 +1704,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     if (snap == null) {
       return false;
     }
+    // The keyword surface is per-profile; a snapshot saved under a profile
+    // that had it must not restore into one that doesn't.
+    if (!ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)) {
+      return false;
+    }
     _mode = _Mode.keyword;
     _kwQuery = snap.query;
     _kwAll = snap.all;
@@ -2060,7 +2067,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
     final saved = await StorageService.getHomeDefaultSourceType();
     if (!mounted || widget.searchMode || widget.discoverMode) return;
-    final mode = saved == 'keyword' ? _Mode.keyword : _Mode.catalog;
+    final mode =
+        saved == 'keyword' &&
+            ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)
+        ? _Mode.keyword
+        : _Mode.catalog;
     if (_mode != mode) _switchMode(mode);
   }
 
@@ -2719,14 +2730,23 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// sync. IPTV list rows share the favourites gates (board only, non-empty)
   /// and are opt-in by construction — [_iptvListRows] only ever holds enabled
   /// lists.
+  // Reach-sweep rule: a feature that's off drops its Home rows too, not
+  // just its tab — the profile should never see a shelf it can't open.
   List<_FavRowRef> get _favRowKinds => [
     if (_watchlistMoviesVisible) const _FavRowRef(_FavKind.watchlistMovies),
     if (_watchlistSeriesVisible) const _FavRowRef(_FavKind.watchlistSeries),
     if (_playlistFavVisible) const _FavRowRef(_FavKind.playlist),
-    if (_tvFavVisible) const _FavRowRef(_FavKind.debrify),
-    if (_stvFavVisible) const _FavRowRef(_FavKind.stremio),
-    if (_iptvFavVisible) const _FavRowRef(_FavKind.iptv),
-    if (_catalogQuery.isEmpty && !_catalogSearching)
+    if (_tvFavVisible &&
+        ProfilePolicyGuard.allowsSync(ProfileFeature.debrifyTv))
+      const _FavRowRef(_FavKind.debrify),
+    if (_stvFavVisible &&
+        ProfilePolicyGuard.allowsSync(ProfileFeature.stremioTv))
+      const _FavRowRef(_FavKind.stremio),
+    if (_iptvFavVisible && ProfilePolicyGuard.allowsSync(ProfileFeature.iptv))
+      const _FavRowRef(_FavKind.iptv),
+    if (_catalogQuery.isEmpty &&
+        !_catalogSearching &&
+        ProfilePolicyGuard.allowsSync(ProfileFeature.iptv))
       for (var i = 0; i < _iptvListRows.length; i++)
         if (_iptvListRows[i].channels.isNotEmpty) _FavRowRef(_FavKind.iptv, i),
   ];
@@ -2911,7 +2931,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return;
     }
     MainPageBridge.notifyDebrifyTvChannelToAutoPlay(channel.id);
-    MainPageBridge.switchTab?.call(3); // 3 = Debrify TV (see main.dart _pages)
+    MainPageBridge.switchTab?.call(MainTab.debrifyTv);
   }
 
   /// Load the user's starred Stremio TV channels for the leading favourites row.
@@ -2987,7 +3007,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       return;
     }
     MainPageBridge.notifyStremioTvChannelToAutoPlay(channel.id);
-    MainPageBridge.switchTab?.call(9); // 9 = Stremio TV (see main.dart _pages)
+    MainPageBridge.switchTab?.call(MainTab.stremioTv);
   }
 
   /// Load the user's starred IPTV channels for the leading favourites row.
@@ -9732,7 +9752,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       'likes': choice.likes,
     };
     // Discover tab — main.dart `case 18`.
-    MainPageBridge.switchTab?.call(18);
+    MainPageBridge.switchTab?.call(MainTab.discover);
   }
 
   /// Seed the keyword filter set from the user's saved defaults (Settings →
@@ -10835,6 +10855,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   void _switchMode(_Mode mode) {
+    // Belt for every entry point at once: the keyword surface is gated per
+    // profile (catalog search never is).
+    if (mode == _Mode.keyword &&
+        !ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)) {
+      return;
+    }
     if (_mode == mode) return;
     setState(() {
       _mode = mode;
@@ -21322,6 +21348,12 @@ class _ModeToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     final scheme = Theme.of(context).colorScheme;
+    // With the keyword surface gated off for this profile there is no
+    // choice to present — the toggle disappears rather than showing a
+    // single working segment beside a dead one.
+    if (!ProfilePolicyGuard.allowsSync(ProfileFeature.keywordSearch)) {
+      return const SizedBox.shrink();
+    }
     final catalog = _segment(
       context,
       _Mode.catalog,

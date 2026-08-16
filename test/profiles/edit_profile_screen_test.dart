@@ -25,18 +25,37 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 /// widget tests here are rendering smoke: the form builds and no control goes
 /// missing in a regrouping.
 void main() {
-  group('policyFor — role is the feature-level control', () {
-    test('every role saves its complete allowed set', () {
+  group('policyFor — the hidden matrix must never clobber the author', () {
+    test('a create seeds the role DEFAULTS (the questionnaire presets)', () {
       for (final role in UserProfileRole.values) {
         expect(
           EditProfileScreen.policyFor(
             role: role,
             selected: const <ProfileFeature>{},
           ).enabled,
-          ProfilePolicy.allAllowedFor(role).enabled,
+          ProfilePolicy.defaultsFor(role).enabled,
           reason: '$role must ignore the hidden per-feature selection',
         );
       }
+    });
+
+    test('an edit PRESERVES the stored policy — identity edits must not '
+        'silently un-restrict a questionnaire-configured profile', () {
+      final configured = ProfilePolicy(
+        enabled: <ProfileFeature>{
+          ProfileFeature.debrifyTv,
+          ProfileFeature.cloud,
+          ProfileFeature.torrentSearch,
+        },
+      );
+      expect(
+        EditProfileScreen.policyFor(
+          role: UserProfileRole.child,
+          selected: ProfileFeature.values.toSet(),
+          existing: configured,
+        ).enabled,
+        configured.enabled,
+      );
     });
 
     test('the per-feature policy editor stays off', () {

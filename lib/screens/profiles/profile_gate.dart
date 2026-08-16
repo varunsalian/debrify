@@ -14,6 +14,7 @@ import '../../services/profiles/connection_resource_service.dart';
 import '../../services/profiles/profile_lifecycle.dart';
 import '../../services/profiles/profile_lock_controller.dart';
 import '../../services/profiles/profile_pin_service.dart';
+import '../../services/profiles/profile_policy_guard.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../services/profiles/profile_remote_lease.dart';
 import '../../services/remote_control/remote_command_router.dart';
@@ -140,6 +141,10 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
     }
     final activeId = ProfileRuntime.capture().profileId;
     final active = profiles.where((profile) => profile.id == activeId);
+    // Keep the sync policy mirror current for build-path gates (nav, rows).
+    ProfilePolicyGuard.updateActiveProfile(
+      active.isNotEmpty ? active.first : null,
+    );
     if (active.isNotEmpty) {
       ProfileLockController.instance.activate(active.first, unlocked: _entered);
       if (_entered) {
@@ -222,6 +227,10 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
       );
       if (!switched || !mounted) return;
     }
+    // Mirror BEFORE the frame that reveals the child tree: build-path gates
+    // (nav, rows) must never render one frame under the previous profile's
+    // policy across a switch.
+    ProfilePolicyGuard.updateActiveProfile(profile);
     setState(() {
       _pinTarget = null;
       _pinForManagement = false;

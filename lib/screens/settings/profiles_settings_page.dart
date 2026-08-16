@@ -11,6 +11,7 @@ import '../../widgets/profiles/profile_avatar_view.dart';
 import '../profiles/edit_profile_screen.dart';
 import '../profiles/profile_wall_screen.dart';
 import '../profiles/manage_profiles_screen.dart';
+import '../profiles/profile_setup_flow.dart';
 
 /// Settings → Profiles: the roster, and almost nothing else.
 ///
@@ -97,19 +98,11 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
   }
 
   Future<void> _create() async {
-    final registry = ProfileBootstrap.registry;
-    final authorization = await ProfileAuthorizationContext.capture(registry);
-    if (!mounted) return;
-    final created = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => EditProfileScreen(
-          registry: registry,
-          pins: ProfilePinService(registry: registry),
-          authorization: authorization,
-        ),
-      ),
-    );
-    if (created == true) await _load();
+    // The questionnaire is the create path now: role presets, five human
+    // questions, and it writes an explicit policy — the raw editor stays
+    // the deep-identity tool (PIN, photo avatars), reachable from Review.
+    final created = await ProfileSetupFlow.show(context);
+    if (created) await _load();
   }
 
   Future<void> _manage() async {

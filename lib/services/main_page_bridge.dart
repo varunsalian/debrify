@@ -7,9 +7,58 @@ import '../models/advanced_search_selection.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_torrent.dart';
 
+/// Stable page identities for [MainPageBridge.switchTab], deep links and the
+/// nav — indices into main.dart's `_pages`/`_titles`, NEVER visible-nav
+/// positions (per-profile and per-config filtering hides entries without
+/// renumbering; see `_applyProfilePolicy`). Every numeric caller names its
+/// target through this table — the nav-index audit's close-out.
+///
+/// [legacyTorrentSearch] is the deprecated index-0 slot some cloud screens
+/// still target on their "return to search" path; named rather than silently
+/// retargeted so the legacy behavior stays visible and greppable.
+abstract final class MainTab {
+  static const int legacyTorrentSearch = 0;
+  static const int playlist = 1;
+  static const int downloads = 2;
+  static const int debrifyTv = 3;
+  static const int realDebrid = 4;
+  static const int torbox = 5;
+  static const int pikPak = 6;
+  static const int addons = 7;
+  static const int settings = 8;
+  static const int stremioTv = 9;
+  static const int webDav = 10;
+  static const int premiumize = 11;
+  static const int allDebrid = 12;
+  static const int iptv = 13;
+  static const int youtube = 14;
+  static const int home = 15;
+  static const int cloud = 16;
+  static const int search = 17;
+  static const int discover = 18;
+  static const int calendar = 19;
+}
+
 class MainPageBridge {
   static void Function(int index)? switchTab;
+
+  /// Stable page identities for [switchTab], deep links and the nav — these
+  /// are indices into main.dart's `_pages`/`_titles`, NEVER visible-nav
+  /// positions (per-profile and per-config filtering hides entries without
+  /// renumbering; see `_applyProfilePolicy`). Every numeric caller names its
+  /// target through this table — the nav-index audit's close-out.
+  ///
+  /// [legacyTorrentSearch] is the deprecated index-0 slot some cloud screens
+  /// still target on their "return to search" path; kept named rather than
+  /// silently retargeted so the legacy behavior stays visible and greppable.
+
   static VoidCallback? showProfilePicker;
+
+  /// Re-reads the ACTIVE profile's policy into MainPage's tab gating and the
+  /// ProfilePolicyGuard sync mirror. Editing screens call this after saving
+  /// the signed-in profile — that path never crosses the gate, which is what
+  /// refreshes the mirrors everywhere else.
+  static VoidCallback? reloadProfilePolicy;
 
   /// Drops one-shot data owned by the outgoing profile. Callback registrations
   /// are lifecycle-owned by widgets and are deliberately left alone; only
@@ -175,13 +224,13 @@ class MainPageBridge {
   static void requestCatalogDetailOpen(Map<String, dynamic> data) {
     final copied = Map<String, dynamic>.from(data);
     final handler = _catalogDetailOpenHandler;
-    if (_activeTvTabIndex == 15 && handler != null) {
+    if (_activeTvTabIndex == MainTab.home && handler != null) {
       pendingCatalogDetailOpen = null;
       unawaited(handler(copied));
       return;
     }
     pendingCatalogDetailOpen = copied;
-    switchTab?.call(15);
+    switchTab?.call(MainTab.home);
   }
 
   /// A one-shot request from the Search tab's Lists mode to open a specific

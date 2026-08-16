@@ -46,6 +46,8 @@ import '../services/community/magnet_yaml_service.dart';
 import '../services/community/community_channel_model.dart';
 import '../services/community/community_channels_service.dart';
 import '../services/main_page_bridge.dart';
+import '../models/profiles/profile_policy.dart';
+import '../services/profiles/profile_policy_guard.dart';
 import '../theme/app_surfaces.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/overlay_theme.dart';
@@ -240,6 +242,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _quickHideOptions = false;
   bool _quickHideBackButton = false;
   bool _quickAvoidNsfw = true;
+
+  /// The viewer-scoped, role-locked NSFW rail: forced for a child profile
+  /// regardless of any channel's stored flag or dialog toggle. Evaluated
+  /// live so a profile switch retunes filtering without a rebuild dance.
+  bool get _viewerForcesNsfw =>
+      !ProfilePolicyGuard.allowsSync(ProfileFeature.allowAdultContent);
   bool _rdSkipBlockedTorrents = true;
   String _quickProvider = _providerRealDebrid;
 
@@ -929,8 +937,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     DebrifyTvChannelCacheEntry? baseline,
     Set<String>? keywordsToSearch,
   }) async {
-    // Use channel's own NSFW setting
-    final channelAvoidNsfw = channel.avoidNsfw;
+    // The channel's own NSFW setting, FLOORED by the viewer: filtering is
+    // role-locked for a child profile no matter who authored the channel or
+    // what its stored flag says (the rail is viewer-scoped, evaluated at
+    // search/play — never only at creation).
+    final channelAvoidNsfw = channel.avoidNsfw || _viewerForcesNsfw;
     final registry = EngineRegistry.instance;
     await registry.initialize();
     final enabledTvEngines = _enabledTvKeywordEngines(registry);
@@ -2177,10 +2188,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         const SizedBox(height: 12),
                         SwitchRow(
                           title: 'Avoid NSFW content',
-                          subtitle:
-                              'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
-                          value: avoidNsfw,
+                          subtitle: _viewerForcesNsfw
+                              ? 'Always on for this profile'
+                              : 'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
+                          value: _viewerForcesNsfw || avoidNsfw,
                           onChanged: (v) {
+                            // Role-locked: a child session cannot loosen it.
+                            if (_viewerForcesNsfw) return;
                             setModalState(() {
                               avoidNsfw =
                                   v; // Only update local channel setting
@@ -3987,7 +4001,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugPrint('🎬 [WATCH] Launching AllDebrid flow...');
       await _watchAllDebridWithCachedTorrents(
         cachedTorrents,
-        applyNsfwFilter: channel.avoidNsfw,
+        applyNsfwFilter: channel.avoidNsfw || _viewerForcesNsfw,
         channelName: channel.name,
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
@@ -3996,7 +4010,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugPrint('🎬 [WATCH] Launching RealDebrid flow...');
       await _watchWithCachedTorrents(
         cachedTorrents,
-        applyNsfwFilter: channel.avoidNsfw,
+        applyNsfwFilter: channel.avoidNsfw || _viewerForcesNsfw,
         channelName: channel.name,
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
@@ -4551,7 +4565,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
           // Apply NSFW filter if enabled
           List<Torrent> torrentsToProcess = torrents;
-          if (_quickAvoidNsfw) {
+          if (_quickAvoidNsfw || _viewerForcesNsfw) {
             final beforeCount = torrents.length;
             torrentsToProcess = torrents.where((torrent) {
               if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
@@ -5143,7 +5157,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         // Apply NSFW filter if enabled
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw) {
+        if (_quickAvoidNsfw || _viewerForcesNsfw) {
           final beforeCount = torrents.length;
           torrentsToProcess = torrents.where((torrent) {
             if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
@@ -5520,7 +5534,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         // Apply NSFW filter if enabled
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw) {
+        if (_quickAvoidNsfw || _viewerForcesNsfw) {
           final beforeCount = torrents.length;
           torrentsToProcess = torrents.where((torrent) {
             if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
@@ -9027,10 +9041,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               const SizedBox(height: 8),
               SwitchRow(
                 title: 'Avoid NSFW content',
-                subtitle:
-                    'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
-                value: _quickAvoidNsfw,
+                subtitle: _viewerForcesNsfw
+                    ? 'Always on for this profile'
+                    : 'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
+                value: _viewerForcesNsfw || _quickAvoidNsfw,
                 onChanged: (v) {
+                  // Role-locked: a child session cannot loosen it.
+                  if (_viewerForcesNsfw) return;
                   setState(() {
                     _quickAvoidNsfw = v;
                   });
@@ -9198,11 +9215,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       contentPadding: EdgeInsets.zero,
                       activeColor: tv.accent,
                       title: const Text('Avoid NSFW content'),
-                      subtitle: const Text(
-                        'Applies a best-effort filter while searching',
+                      subtitle: Text(
+                        _viewerForcesNsfw
+                            ? 'Always on for this profile'
+                            : 'Applies a best-effort filter while searching',
                       ),
-                      value: avoidNsfw,
+                      value: _viewerForcesNsfw || avoidNsfw,
                       onChanged: (value) {
+                        // Role-locked: a child session cannot loosen it.
+                        if (_viewerForcesNsfw) return;
                         setDialogState(() => avoidNsfw = value);
                       },
                     ),
@@ -9984,7 +10005,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
 
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw) {
+        if (_quickAvoidNsfw || _viewerForcesNsfw) {
           torrentsToProcess = torrents.where((t) {
             return !NsfwFilter.shouldFilter(t.category, t.name);
           }).toList();
@@ -10273,7 +10294,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
 
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw) {
+        if (_quickAvoidNsfw || _viewerForcesNsfw) {
           torrentsToProcess = torrents.where((t) {
             return !NsfwFilter.shouldFilter(t.category, t.name);
           }).toList();

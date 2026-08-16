@@ -330,7 +330,7 @@ class _AppInitializerState extends State<AppInitializer>
           content: Text(message),
           action: SnackBarAction(
             label: 'OPEN SETTINGS',
-            onPressed: () => MainPageBridge.switchTab?.call(8),
+            onPressed: () => MainPageBridge.switchTab?.call(MainTab.settings),
           ),
         ),
       );

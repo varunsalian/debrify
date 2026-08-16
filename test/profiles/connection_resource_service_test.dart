@@ -442,7 +442,12 @@ void main() {
         ),
         throwsStateError,
       );
-      expect(await registry.getGrant(memberId, resource.id), isNull);
+      // Default-on sharing seeds use|download at resource creation, so a
+      // grant exists here by design — the FAILED race transaction must not
+      // have strengthened it.
+      final afterRace = await registry.getGrant(memberId, resource.id);
+      expect(afterRace, isNotNull);
+      expect(afterRace!.allows(ResourcePermission.writeRemote), isFalse);
 
       await registry.upsertGrant(
         profileId: memberId,

@@ -570,6 +570,7 @@ class ProfileRegistry {
         'created_at_ms': now,
         'updated_at_ms': now,
       });
+      await _seedDefaultGrantsForProfile(txn, profileId, now);
     });
     await checkpointTvOsRecovery();
     return (await getProfile(profileId))!;
@@ -1256,6 +1257,90 @@ class ProfileRegistry {
     await checkpointTvOsRecovery();
   }
 
+  /// Connection kinds that are PERSONAL and therefore excluded from the
+  /// default-on sharing seed: watch history is one person's, and a shared
+  /// tracker would interleave two people's scrobbles. Sharing one stays a
+  /// deliberate act (the sources editor / service.grant).
+  static const Set<ConnectionResourceType> personalResourceTypes =
+      <ConnectionResourceType>{
+        ConnectionResourceType.trakt,
+        ConnectionResourceType.simkl,
+        ConnectionResourceType.mdblist,
+        ConnectionResourceType.reddit,
+      };
+
+  /// The default-share permission mask: usable for playback and downloads,
+  /// nothing that exposes or moves the credential. Everything stronger stays
+  /// owner-only or an explicit grant.
+  static final int defaultShareMask =
+      ResourcePermission.use.bit | ResourcePermission.download.bit;
+
+  /// Everything on this device starts enabled for every profile — except the
+  /// personal kinds. Seeds a use+download grant for [profileId] on every
+  /// existing shareable resource it doesn't already have one for. Runs inside
+  /// the caller's transaction; INSERT OR IGNORE keeps it idempotent. Seeding
+  /// fires only from createProfile/insertResource — a resource or profile
+  /// that is disabled at that moment and re-enabled later stays unseeded
+  /// until an admin shares it explicitly (accepted gap; profiles are
+  /// unshipped, so no installs exist to backfill).
+  Future<void> _seedDefaultGrantsForProfile(
+    DatabaseExecutor txn,
+    String profileId,
+    int nowMs,
+  ) async {
+    final resources = await txn.query(
+      'connection_resources',
+      columns: const <String>['id', 'type', 'owner_profile_id'],
+      where: 'disabled_at_ms IS NULL',
+    );
+    for (final row in resources) {
+      final type = ConnectionResourceType.values
+          .where((value) => value.name == row['type'])
+          .firstOrNull;
+      if (type == null || personalResourceTypes.contains(type)) continue;
+      if (row['owner_profile_id'] == profileId) continue;
+      await txn.insert('profile_resource_grants', <String, Object?>{
+        'profile_id': profileId,
+        'resource_id': row['id'],
+        'permissions': defaultShareMask,
+        'granted_by_profile_id': row['owner_profile_id'],
+        'grant_origin_json': '{"origin":"defaultSeed"}',
+        'created_at_ms': nowMs,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+  }
+
+  /// The other direction of the same default: a NEW shareable resource is
+  /// granted to every existing enabled profile except its owner.
+  Future<void> _seedDefaultGrantsForResource(
+    DatabaseExecutor txn,
+    ConnectionResource resource,
+    int nowMs,
+  ) async {
+    if (personalResourceTypes.contains(resource.type)) return;
+    // Mirror the profile-side filter: a resource inserted disabled is not
+    // shareable, so it seeds nothing (see _seedDefaultGrantsForProfile's
+    // doc for the re-enable gap).
+    if (!resource.enabled) return;
+    final profiles = await txn.query(
+      'user_profiles',
+      columns: const <String>['id'],
+      where: "disabled_at_ms IS NULL AND lifecycle_state = 'active'",
+    );
+    for (final row in profiles) {
+      final profileId = row['id'] as String;
+      if (profileId == resource.ownerProfileId) continue;
+      await txn.insert('profile_resource_grants', <String, Object?>{
+        'profile_id': profileId,
+        'resource_id': resource.id,
+        'permissions': defaultShareMask,
+        'granted_by_profile_id': resource.ownerProfileId,
+        'grant_origin_json': '{"origin":"defaultSeed"}',
+        'created_at_ms': nowMs,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+  }
+
   Future<void> insertResource({
     required ConnectionResource resource,
     required String sealedSecretPayload,
@@ -1320,6 +1405,7 @@ class ProfileRegistry {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       }
+      await _seedDefaultGrantsForResource(txn, resource, now);
       final revision = await _profileAuthorizationRevision(
         txn,
         resource.ownerProfileId,

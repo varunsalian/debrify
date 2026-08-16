@@ -19,6 +19,8 @@ import '../../services/profiles/profile_diagnostics_service.dart';
 import '../../services/profiles/profile_engine_assignment_service.dart';
 import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_registry.dart';
+import '../../services/profiles/profile_runtime.dart';
+import '../../services/main_page_bridge.dart';
 import '../../services/profiles/profile_creation_service.dart';
 import '../../widgets/profiles/profile_art.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
@@ -47,15 +49,24 @@ class EditProfileScreen extends StatefulWidget {
   @visibleForTesting
   static const bool showFeaturePolicyControls = false;
 
-  /// The policy a save writes. Extracted so the rule is stated once and can be
-  /// pinned by a test: it is exactly what a grouping change must not alter.
+  /// The policy a save writes. Extracted so the rule is stated once and can
+  /// be pinned by a test.
+  ///
+  /// With the feature matrix hidden, the questionnaire (ProfileSetupFlow) is
+  /// the policy author — so a CREATE seeds the role DEFAULTS and an EDIT
+  /// PRESERVES what is stored. The old `allAllowedFor` rewrite silently
+  /// un-restricted a configured profile on any avatar/PIN edit, which is
+  /// exactly the clobber a hidden control must never perform.
   @visibleForTesting
   static ProfilePolicy policyFor({
     required UserProfileRole role,
     required Set<ProfileFeature> selected,
-  }) => showFeaturePolicyControls
-      ? ProfilePolicy(enabled: selected)
-      : ProfilePolicy.allAllowedFor(role);
+    ProfilePolicy? existing,
+  }) {
+    if (showFeaturePolicyControls) return ProfilePolicy(enabled: selected);
+    if (existing != null) return existing;
+    return ProfilePolicy.defaultsFor(role);
+  }
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -128,10 +139,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final profile = widget.profile;
     _name = TextEditingController(text: profile?.name ?? '');
     _role = profile?.role ?? UserProfileRole.member;
+    // Always the policy this screen will WRITE (policyFor: stored policy on
+    // edit, role defaults on create) — grant masks derive from _features, so
+    // seeding it from the role CEILING would hand every newly ticked
+    // resource writeRemote regardless of the profile's remote answer.
     _features = Set<ProfileFeature>.from(
-      EditProfileScreen.showFeaturePolicyControls
-          ? profile?.policy.enabled ?? ProfilePolicy.defaultsFor(_role).enabled
-          : ProfilePolicy.allAllowedFor(_role).enabled,
+      profile?.policy.enabled ?? ProfilePolicy.defaultsFor(_role).enabled,
     );
     _lockOnResume = profile?.lockOnResume ?? false;
     _inactivityMinutes = profile?.inactivityTimeoutMinutes ?? 0;
@@ -276,10 +289,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() {
       _role = role;
       _features = Set<ProfileFeature>.from(
-        (EditProfileScreen.showFeaturePolicyControls
-                ? ProfilePolicy.defaultsFor(role)
-                : ProfilePolicy.allAllowedFor(role))
-            .enabled,
+        ProfilePolicy.defaultsFor(role).enabled,
       );
     });
   }
@@ -400,6 +410,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final policy = EditProfileScreen.policyFor(
         role: snapshot.role,
         selected: snapshot.features,
+        existing: widget.profile?.policy,
       );
       final existing = widget.profile;
       late final String savedProfileId;
@@ -554,6 +565,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _features = Set<ProfileFeature>.from(policy.enabled);
       _pendingAvatarBytes = null;
       _pin.clear();
+      // Saving the SIGNED-IN profile never crosses the gate, so the policy
+      // mirrors (MainPage tab gating + ProfilePolicyGuard) must be told.
+      if (ProfileRuntime.isProfileCommitted &&
+          widget.profile?.id == ProfileRuntime.capture().profileId) {
+        MainPageBridge.reloadProfilePolicy?.call();
+      }
       Navigator.of(context).pop(true);
     } on ProfileAvatarRejected catch (rejected) {
       if (!mounted) return;
@@ -654,11 +671,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         (features ?? _features).contains(ProfileFeature.remoteTransfer))
       ResourcePermission.writeRemote,
   };
-
-  bool _permissionAllowedForRole(ResourcePermission permission) =>
-      _role != UserProfileRole.child ||
-      permission == ResourcePermission.use ||
-      permission == ResourcePermission.download;
 
   Future<void> _validateManagingAdmin(
     ProfileAuthorizationContext context,
@@ -1247,6 +1259,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (resources == null || resources.isEmpty) return const <Widget>[];
     final grouped = <String, List<ConnectionResource>>{};
     for (final resource in resources) {
+      // Reddit is a vestige — no sharing section for it.
+      if (resource.type == ConnectionResourceType.reddit) continue;
       final label = _accessGroups
           .where((group) => group.$2.contains(resource.type))
           .map((group) => group.$1)
@@ -1347,39 +1361,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               }
             }),
     ),
-    if (_selectedResources.contains(resource.id) &&
-        resource.ownerProfileId != widget.profile?.id)
-      Padding(
-        padding: const EdgeInsets.only(left: 24, right: 12, bottom: 8),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: [
-            for (final permission in ResourcePermission.values)
-              if (_permissionAllowedForRole(permission))
-                FilterChip(
-                  label: Text(_permissionLabel(permission)),
-                  selected:
-                      (_resourcePermissions[resource.id] ??
-                              _defaultResourcePermissions(_role))
-                          .contains(permission),
-                  onSelected: permission == ResourcePermission.use
-                      ? null
-                      : (selected) => setState(() {
-                          final permissions = _resourcePermissions.putIfAbsent(
-                            resource.id,
-                            () => _defaultResourcePermissions(_role),
-                          );
-                          if (selected) {
-                            permissions.add(permission);
-                          } else {
-                            permissions.remove(permission);
-                          }
-                        }),
-                ),
-          ],
-        ),
-      ),
+    // Sharing is BINARY now (profile_features spec): the per-resource
+    // permission chips are gone. A newly ticked resource gets the mask
+    // DERIVED from the profile's feature policy (_defaultResourcePermissions);
+    // an already-granted one keeps its stored mask via the load-time seeding,
+    // so explicit grants never churn on an unrelated save.
   ];
 
   static String _featureLabel(ProfileFeature feature) {
@@ -1390,13 +1376,4 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return '${spaced[0].toUpperCase()}${spaced.substring(1)}';
   }
 
-  static String _permissionLabel(ResourcePermission permission) =>
-      switch (permission) {
-        ResourcePermission.use => 'Use',
-        ResourcePermission.download => 'Download / record',
-        ResourcePermission.writeRemote => 'Send remotely',
-        ResourcePermission.manage => 'Manage',
-        ResourcePermission.revealSecret => 'Reveal secret',
-        ResourcePermission.share => 'Share onward',
-      };
 }
