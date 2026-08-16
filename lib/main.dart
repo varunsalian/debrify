@@ -39,6 +39,8 @@ import 'services/android_native_downloader.dart';
 import 'services/discover_prefs.dart';
 import 'services/iptv_catalog_db.dart';
 import 'services/profiles/profile_bootstrap.dart';
+import 'services/profiles/profile_migration_service.dart';
+import 'services/profiles/profile_registry.dart';
 import 'services/profiles/connection_resource_service.dart';
 import 'services/profiles/profile_device_reset_service.dart';
 import 'services/profiles/profile_lock_controller.dart';
@@ -219,6 +221,23 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
     recoveryNeedsTvSafeInput = detectedTv || PlatformUtil.lastProbeFailed;
   }
 
+  // A legacy install with real media databases is about to be migrated into
+  // the profile store — a one-time job that can run for MINUTES on weak TV
+  // hardware (integrity scans + hashes over every byte of the IPTV catalog).
+  // Without a frame on screen first that whole window is a black screen:
+  // users assume a hang, force-close, and restart the migration from
+  // scratch. Fresh installs and every post-migration launch skip this (the
+  // registry exists / the legacy databases don't), so nothing ever flashes.
+  if (!kIsWeb &&
+      ProfileBootstrap.profilesEnabled &&
+      !await ProfileRegistry.defaultRegistryExists() &&
+      await ProfileMigrationService.legacyMediaDatabasesExist()) {
+    runApp(const _MigrationUpdateScreen());
+    // The migration owns startup the moment initialize() runs — make sure
+    // the message actually reaches the panel before that happens.
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
   // Publish legacy/profile storage mode before any preference, credential,
   // cache, route, or background service can observe application state.
   try {
@@ -296,6 +315,70 @@ Future<void> _resumeAfterProfileRecovery() async {
   await DeepLinkService.preflightLaunchIntent();
   await DeepLinkService.persistPreflightActions();
   await _continueApplicationStartup();
+}
+
+/// The one-time post-update screen. Everything it promises is true: the
+/// migration is atomic and resumable, so closing the app is SAFE — but it
+/// restarts the work from scratch, which is exactly the loop this screen
+/// exists to prevent. Deliberately self-contained (no theme/pref warms have
+/// run yet) and dark, matching the launch surface.
+class _MigrationUpdateScreen extends StatelessWidget {
+  const _MigrationUpdateScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFF05070E),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 620),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  const Text(
+                    'Finishing the update…',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Debrify is upgrading your library for this new version. '
+                    'This launch can take up to 5 minutes on large setups — '
+                    'please don’t close the app or turn off the device. '
+                    'This only happens once.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.72),
+                      fontSize: 16,
+                      height: 1.55,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> _terminateAfterDeviceReset() async {

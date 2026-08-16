@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:path/path.dart' as p;
@@ -586,6 +587,24 @@ class ProfileMigrationService {
     );
   }
 
+  /// Whether a legacy (pre-profiles) install left either database that
+  /// [_copyDatabases] byte-copies — the only migration inputs slow enough to
+  /// need a visible "finishing the update" screen before bootstrap runs.
+  /// Lives here (not in main.dart) so the fixed database names stay inside
+  /// the reviewed adapter set the source guard test pins.
+  static Future<bool> legacyMediaDatabasesExist() async {
+    try {
+      final root = await AppStorage.documents();
+      for (final name in const <String>['debrify_tv.db', 'iptv_catalog.db']) {
+        if (await File(p.join(root.path, name)).exists()) return true;
+      }
+    } catch (_) {
+      // If the storage probe fails, the migration has nothing big to copy
+      // either — callers skip the screen rather than block startup on it.
+    }
+    return false;
+  }
+
   Future<List<Map<String, dynamic>>> _copyDatabases(ProfileScope scope) async {
     final root = await AppStorage.documents();
     final out = <Map<String, dynamic>>[];
@@ -619,8 +638,8 @@ class ProfileMigrationService {
       } finally {
         await tempHandle.close();
       }
-      if (await temp.length() != sourceBytes ||
-          await _fileHash(temp) != sourceHash) {
+      final tempHash = await _fileHash(temp);
+      if (await temp.length() != sourceBytes || tempHash != sourceHash) {
         throw StateError('$name database snapshot changed during copy');
       }
       // A checkpointed database can still retain WAL mode in its header. A
@@ -644,15 +663,17 @@ class ProfileMigrationService {
       }
       if (await destination.exists()) await destination.delete();
       await temp.rename(destination.path);
-      final destinationHash = await _fileHash(destination);
-      if (await destination.length() != sourceBytes ||
-          destinationHash != sourceHash) {
+      // rename() moves the inode: the bytes just verified as [tempHash] ARE
+      // the destination's bytes. Re-hashing after the rename proved nothing
+      // and cost a third full pass over the database on the black-screen
+      // critical path; the length check still catches a botched rename.
+      if (await destination.length() != sourceBytes) {
         throw StateError('$name database publication mismatch');
       }
       out.add(<String, dynamic>{
         'name': name,
         'bytes': sourceBytes,
-        'sha256': destinationHash,
+        'sha256': tempHash,
       });
     }
     return out;
@@ -771,8 +792,25 @@ class ProfileMigrationService {
     if (!success) throw StateError('Failed to copy legacy preference $key');
   }
 
-  static Future<String> _fileHash(File file) async {
-    final hash = await Sha256().hash(await file.readAsBytes());
+  /// Streams the file through SHA-256 in a background isolate.
+  ///
+  /// The original shape — `readAsBytes` + pure-Dart hash on the MAIN isolate
+  /// — is why updating from a pre-profiles build showed minutes of black
+  /// screen on TV hardware: a stress-sized IPTV catalog was read fully into
+  /// memory (an OOM hazard on 2 GB boxes) and hashed at pure-Dart speed on
+  /// the UI thread, repeatedly, before the first frame ever painted.
+  static Future<String> _fileHash(File file) {
+    final path = file.path;
+    return Isolate.run(() => _hashFileStreaming(path));
+  }
+
+  static Future<String> _hashFileStreaming(String path) async {
+    final sink = Sha256().newHashSink();
+    await for (final chunk in File(path).openRead()) {
+      sink.add(chunk);
+    }
+    sink.close();
+    final hash = await sink.hash();
     return base64UrlEncode(hash.bytes).replaceAll('=', '');
   }
 
