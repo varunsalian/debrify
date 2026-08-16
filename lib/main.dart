@@ -226,11 +226,17 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
   // hardware (integrity scans + hashes over every byte of the IPTV catalog).
   // Without a frame on screen first that whole window is a black screen:
   // users assume a hang, force-close, and restart the migration from
-  // scratch. Fresh installs and every post-migration launch skip this (the
-  // registry exists / the legacy databases don't), so nothing ever flashes.
+  // scratch. Post-migration launches and fresh installs skip this (authority
+  // committed / no legacy databases), so nothing ever flashes.
+  //
+  // The probe is authority-COMMITTED, deliberately not file-exists: opening
+  // the registry creates profiles.db BEFORE migration runs, so a force-close
+  // mid-migration leaves the file present while the work is all still ahead —
+  // exactly the retry launch that needs this screen the most.
   if (!kIsWeb &&
       ProfileBootstrap.profilesEnabled &&
-      !await ProfileRegistry.defaultRegistryExists() &&
+      ProfileBootstrap.migrationRolloutReady &&
+      !await ProfileRegistry.defaultAuthorityIsCommitted() &&
       await ProfileMigrationService.legacyMediaDatabasesExist()) {
     runApp(const _MigrationUpdateScreen());
     // The migration owns startup the moment initialize() runs — make sure

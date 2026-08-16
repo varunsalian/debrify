@@ -615,6 +615,13 @@ class ProfileMigrationService {
       await destination.parent.create(recursive: true);
       final temp = File('${destination.path}.migration.tmp');
       if (await temp.exists()) await temp.delete();
+      // A prior attempt that crashed inside the validation window below can
+      // leave -wal/-shm/-journal companions behind; a fresh main file paired
+      // with stale companions is exactly what SQLite recovery would replay.
+      for (final suffix in const <String>['-wal', '-shm', '-journal']) {
+        final companion = File('${temp.path}$suffix');
+        if (await companion.exists()) await companion.delete();
+      }
 
       // The legacy services are not mounted while bootstrap runs, but SQLite
       // may still have left committed pages in a WAL after the prior process.
@@ -638,16 +645,13 @@ class ProfileMigrationService {
       } finally {
         await tempHandle.close();
       }
-      final tempHash = await _fileHash(temp);
-      if (await temp.length() != sourceBytes || tempHash != sourceHash) {
-        throw StateError('$name database snapshot changed during copy');
-      }
       // A checkpointed database can still retain WAL mode in its header. A
       // bare copied image has no matching -wal/-shm files, so SQLite cannot
       // open it read-only (SQLITE_CANTOPEN) even though all committed pages
       // are present. Open the private copy read/write so SQLite may create
-      // empty companions for validation; the main-file hash below still
-      // proves that the validation did not alter the snapshot.
+      // empty companions for validation; the snapshot hash BELOW runs after
+      // this open on purpose — it proves the validation did not alter the
+      // snapshot, the guarantee the (removed) post-rename hash used to carry.
       final db = await openDatabase(temp.path, singleInstance: false);
       try {
         final integrity = await db.rawQuery('PRAGMA integrity_check');
@@ -660,6 +664,13 @@ class ProfileMigrationService {
           final companion = File('${temp.path}$suffix');
           if (await companion.exists()) await companion.delete();
         }
+      }
+      // One hash covers everything between the source snapshot and the
+      // rename: a torn copy, a write fault, and any main-file mutation by the
+      // validation open all surface here as a mismatch against [sourceHash].
+      final tempHash = await _fileHash(temp);
+      if (await temp.length() != sourceBytes || tempHash != sourceHash) {
+        throw StateError('$name database snapshot changed during copy');
       }
       if (await destination.exists()) await destination.delete();
       await temp.rename(destination.path);
