@@ -100,6 +100,7 @@ import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
 import 'settings/profiles_settings_page.dart';
+import 'profiles/edit_profile_screen.dart';
 import 'settings/trakt_settings_page.dart';
 import 'settings/simkl_settings_page.dart';
 import 'settings/mdblist_settings_page.dart';
@@ -794,6 +795,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       showSwitchProfile:
           ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted,
       onSwitchProfile: _switchProfile,
+      onAddProfile: _addProfile,
+      onEditProfile: _editActiveProfile,
       onOpenTorrentSettings: _openTorrentSettings,
       onOpenFilterSettings: _openFilterSettings,
       onOpenProviderSettings: _openProviderSettings,
@@ -892,6 +895,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       showSwitchProfile:
           ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted,
       onSwitchProfile: _switchProfile,
+      onAddProfile: _addProfile,
+      onEditProfile: _editActiveProfile,
       onOpenNavigationSettings: _openNavigationSettings,
       isAndroidTv: _isAndroidTv,
       onClearDownloads: _clearDownloadData,
@@ -1012,7 +1017,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     return [
-      if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted)
+      if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) ...[
         nav(
           SettingsRows.switchProfile,
           'Profiles',
@@ -1026,8 +1031,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'pin',
             'kids',
             'account',
+            'startup',
+            'always ask',
           ],
         ),
+        nav(
+          SettingsRows.addProfile,
+          'Profiles',
+          _addProfile,
+          keywords: const [
+            'create profile',
+            'new profile',
+            'add user',
+            'kid',
+            'member',
+            'admin',
+          ],
+        ),
+        nav(
+          SettingsRows.editProfile,
+          'Profiles',
+          _editActiveProfile,
+          keywords: const [
+            'rename',
+            'avatar',
+            'pin',
+            'access',
+            'permissions',
+            'edit user',
+          ],
+        ),
+      ],
       // Connections
       conn(_rdInfo, const ['debrid', 'real-debrid', 'rd', 'premium']),
       conn(_torboxInfo, const ['debrid', 'premium']),
@@ -2982,6 +3016,88 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// switch-picker call moved onto the hub itself.
   Future<void> _switchProfile() async {
     await pushSettingsPage(context, const ProfilesSettingsPage());
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// The admin check the hub applies before its Create/Manage rows — the
+  /// Profiles card's action rows share it, but answer with a spoken refusal
+  /// instead of hiding: a card whose rows come and go with who is signed in
+  /// reads as broken, not as policy.
+  Future<bool> _mayManageProfiles() async {
+    final registry = ProfileBootstrap.registry;
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    UserProfile? actor;
+    try {
+      actor = await authorization.validate(registry);
+    } catch (_) {
+      actor = null;
+    }
+    return actor != null &&
+        actor.role == UserProfileRole.admin &&
+        actor.allows(ProfileFeature.manageProfiles);
+  }
+
+  void _profilesDenied(String action) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Only an admin can $action profiles.')),
+    );
+  }
+
+  /// The Profiles card's "Add a profile" row — the hub's create flow without
+  /// the detour through the hub.
+  Future<void> _addProfile() async {
+    final registry = ProfileBootstrap.registry;
+    if (!await _mayManageProfiles()) {
+      _profilesDenied('add');
+      return;
+    }
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    if (!mounted) return;
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => EditProfileScreen(
+          registry: registry,
+          pins: ProfilePinService(registry: registry),
+          authorization: authorization,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// The Profiles card's "Edit this profile" row — straight into the ACTIVE
+  /// profile's editor, matching the hub's active-card Edit button.
+  Future<void> _editActiveProfile() async {
+    final registry = ProfileBootstrap.registry;
+    if (!await _mayManageProfiles()) {
+      _profilesDenied('edit');
+      return;
+    }
+    final profiles = await registry.listProfiles();
+    final activeId = ProfileRuntime.capture().profileId;
+    UserProfile? active;
+    for (final profile in profiles) {
+      if (profile.id == activeId) {
+        active = profile;
+        break;
+      }
+    }
+    if (active == null) return;
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    if (!mounted) return;
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => EditProfileScreen(
+          registry: registry,
+          pins: ProfilePinService(registry: registry),
+          authorization: authorization,
+          profile: active,
+        ),
+      ),
+    );
     if (!mounted) return;
     setState(() {});
   }
@@ -5447,6 +5563,16 @@ const List<SettingsCategoryDefinition> _kAdaptiveSettingsCategories = [
         'service.',
   ),
   SettingsCategoryDefinition(
+    icon: Icons.switch_account_rounded,
+    label: 'Profiles',
+    subtitle: 'Who can use this device',
+    eyebrow: 'Profiles',
+    title: 'One device, many viewers.',
+    description:
+        'Switch between people, add someone new, and shape what each '
+        'profile can reach.',
+  ),
+  SettingsCategoryDefinition(
     icon: Icons.storage_rounded,
     label: 'Data & Backup',
     subtitle: 'Downloads, backup & restore',
@@ -5492,6 +5618,8 @@ class _SettingsLayout extends StatelessWidget {
   final VoidCallback onOpenRemoteControl;
   final bool showSwitchProfile;
   final Future<void> Function() onSwitchProfile;
+  final Future<void> Function() onAddProfile;
+  final Future<void> Function() onEditProfile;
   final Future<void> Function() onOpenNavigationSettings;
   final bool isAndroidTv;
   final Future<void> Function() onClearDownloads;
@@ -5575,6 +5703,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenRemoteControl,
     required this.showSwitchProfile,
     required this.onSwitchProfile,
+    required this.onAddProfile,
+    required this.onEditProfile,
     required this.onOpenNavigationSettings,
     required this.isAndroidTv,
     required this.onClearDownloads,
@@ -5876,14 +6006,40 @@ class _SettingsLayout extends StatelessWidget {
               SettingsRows.remote,
               onTap: () async => onOpenRemoteControl(),
             ),
-            if (showSwitchProfile)
+          ],
+        );
+      case 8:
+        // Profiles' own card (it used to be a tenant row under Devices). A
+        // legacy-mode install keeps the card but says why it's empty rather
+        // than presenting actions that would fail.
+        return SettingsSection(
+          title: '',
+          children: [
+            if (showSwitchProfile) ...[
               SettingsTile.spec(
                 SettingsRows.switchProfile,
                 onTap: onSwitchProfile,
               ),
+              SettingsTile.spec(
+                SettingsRows.addProfile,
+                onTap: onAddProfile,
+              ),
+              SettingsTile.spec(
+                SettingsRows.editProfile,
+                onTap: onEditProfile,
+              ),
+            ] else
+              SettingsTile.spec(
+                const SettingsRowContent(
+                  icon: Icons.info_outline_rounded,
+                  title: 'Profiles unavailable',
+                  subtitle: 'This install is running in legacy mode',
+                ),
+                onTap: () async {},
+              ),
           ],
         );
-      case 8:
+      case 9:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -5929,7 +6085,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 9:
+      case 10:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -5984,7 +6140,7 @@ class _SettingsLayout extends StatelessWidget {
             ),
           ],
         );
-      case 10:
+      case 11:
         return SettingsSection(
           title: '',
           accentColor: t.danger,
@@ -6206,13 +6362,32 @@ class _SettingsLayout extends StatelessWidget {
                       SettingsRows.remote,
                       onTap: () async => onOpenRemoteControl(),
                     ),
-                    if (showSwitchProfile)
+                  ],
+                ),
+                // Profiles' own card (it used to be a tenant row under
+                // Devices). The list layout simply hides it in legacy mode —
+                // no index coupling to preserve here, unlike the category
+                // switches.
+                if (showSwitchProfile) ...[
+                  const SizedBox(height: 24),
+                  SettingsSection(
+                    title: 'Profiles',
+                    children: [
                       SettingsTile.spec(
                         SettingsRows.switchProfile,
                         onTap: onSwitchProfile,
                       ),
-                  ],
-                ),
+                      SettingsTile.spec(
+                        SettingsRows.addProfile,
+                        onTap: onAddProfile,
+                      ),
+                      SettingsTile.spec(
+                        SettingsRows.editProfile,
+                        onTap: onEditProfile,
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 24),
                 SettingsSection(
                   title: 'Data & Backup',

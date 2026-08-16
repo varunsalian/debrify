@@ -93,11 +93,23 @@ abstract final class SettingsRows {
     subtitle: 'Control another device, send or receive setup',
   );
   // The Profiles hub replaced the bare switch action: switching lives on the
-  // hub beside the roster, so this row is now the one front door.
+  // hub beside the roster, so this row is now the one front door. It heads
+  // the Profiles SECTION now (its own card, not a Devices tenant), with the
+  // two most-wanted actions surfaced beside it as rows of their own.
   static const switchProfile = SettingsRowContent(
     icon: Icons.switch_account_rounded,
     title: 'Profiles',
     subtitle: 'Who can use this device',
+  );
+  static const addProfile = SettingsRowContent(
+    icon: Icons.person_add_alt_rounded,
+    title: 'Add a profile',
+    subtitle: 'Admin, Member or Kid',
+  );
+  static const editProfile = SettingsRowContent(
+    icon: Icons.edit_rounded,
+    title: 'Edit this profile',
+    subtitle: 'Name, avatar, PIN & access',
   );
   static const navigationStyle = SettingsRowContent(
     icon: Icons.call_to_action_rounded,

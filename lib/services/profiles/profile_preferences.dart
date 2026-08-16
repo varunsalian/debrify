@@ -291,6 +291,7 @@ class DevicePreferences {
     'subtitle_custom_fonts',
     'tvos_multi_profile_top_shelf_enabled',
     'profile_gate_style_v1',
+    'profile_gate_always_ask_v1',
   };
 
   static Future<DevicePreferences> instance() async =>

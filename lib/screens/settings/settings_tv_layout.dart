@@ -44,6 +44,8 @@ class SettingsTvLayout extends StatefulWidget {
   final VoidCallback onOpenRemoteControl;
   final bool showSwitchProfile;
   final Future<void> Function()? onSwitchProfile;
+  final Future<void> Function()? onAddProfile;
+  final Future<void> Function()? onEditProfile;
   final Future<void> Function() onOpenTorrentSettings;
   final Future<void> Function() onOpenFilterSettings;
   final Future<void> Function() onOpenProviderSettings;
@@ -135,6 +137,8 @@ class SettingsTvLayout extends StatefulWidget {
     required this.onOpenRemoteControl,
     this.showSwitchProfile = false,
     this.onSwitchProfile,
+    this.onAddProfile,
+    this.onEditProfile,
     required this.onOpenTorrentSettings,
     required this.onOpenFilterSettings,
     required this.onOpenProviderSettings,
@@ -280,6 +284,13 @@ const List<_Category> _kCategories = [
     'Remote control & setup transfer',
     'Let your devices work together.',
     'Control another screen or move this setup without retyping it.',
+  ),
+  _Category(
+    Icons.switch_account_rounded,
+    'Profiles',
+    'Who can use this device',
+    'One device, many viewers.',
+    'Switch between people, add someone new, and shape their access.',
   ),
   _Category(
     Icons.storage_rounded,
@@ -1011,16 +1022,46 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 onTap: () async => widget.onOpenRemoteControl(),
                 focusNode: _paneNodes[0],
               ),
-              if (widget.showSwitchProfile)
+            ],
+          ),
+        ];
+      case 8: // Profiles — its own card (it was a tenant row under Devices).
+        return [
+          SettingsSection(
+            title: '',
+            children: [
+              if (widget.showSwitchProfile) ...[
                 SettingsTile.spec(
                   SettingsRows.switchProfile,
                   onTap: widget.onSwitchProfile ?? () async {},
+                  focusNode: _paneNodes[0],
+                ),
+                SettingsTile.spec(
+                  SettingsRows.addProfile,
+                  onTap: widget.onAddProfile ?? () async {},
                   focusNode: _paneNodes[1],
+                ),
+                SettingsTile.spec(
+                  SettingsRows.editProfile,
+                  onTap: widget.onEditProfile ?? () async {},
+                  focusNode: _paneNodes[2],
+                ),
+              ] else
+                // Legacy-mode installs keep the card but say why it's empty
+                // rather than presenting actions that would fail.
+                SettingsTile.spec(
+                  const SettingsRowContent(
+                    icon: Icons.info_outline_rounded,
+                    title: 'Profiles unavailable',
+                    subtitle: 'This install is running in legacy mode',
+                  ),
+                  onTap: () async {},
+                  focusNode: _paneNodes[0],
                 ),
             ],
           ),
         ];
-      case 8: // Data & Backup
+      case 9: // Data & Backup
         {
           // Focus nodes are claimed sequentially so the optional
           // download-location row doesn't shift hardcoded indices.
@@ -1077,7 +1118,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ];
         }
-      case 9: // About (Updates + Support merged — matches the phone layout)
+      case 10: // About (Updates + Support merged — matches the phone layout)
         {
           // The donation row is conditional, so index the pane nodes off a
           // running counter to keep Up/Down wiring contiguous.
@@ -1145,7 +1186,7 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
             ),
           ];
         }
-      case 10: // Danger Zone
+      case 11: // Danger Zone
         return [
           SettingsSection(
             title: '',

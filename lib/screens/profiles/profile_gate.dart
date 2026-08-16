@@ -117,13 +117,19 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
 
   Future<void> _load({required bool allowSingleProfileAutoEnter}) async {
     await ProfileGateStyle.warm();
+    await ProfileGateAlwaysAsk.warm();
     final profiles = await ProfileBootstrap.registry.listProfiles();
     if (!mounted) return;
     setState(() {
       _profiles = profiles;
       _entered = shouldAutoEnterSoleProfile(
         profiles,
-        allowSingleProfileAutoEnter: allowSingleProfileAutoEnter,
+        // The sole-profile launch convenience is opt-IN now: the gate always
+        // asks unless the hub's startup toggle re-enables auto-enter. The
+        // caller's argument still outranks everything — an explicit Switch
+        // or a lock must land on the picker regardless of the toggle.
+        allowSingleProfileAutoEnter:
+            allowSingleProfileAutoEnter && !ProfileGateAlwaysAsk.cached,
       );
     });
     if (!_entered) {

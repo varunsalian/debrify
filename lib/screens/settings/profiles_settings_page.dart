@@ -42,6 +42,7 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
 
   Future<void> _load() async {
     try {
+      await ProfileGateAlwaysAsk.warm();
       final registry = ProfileBootstrap.registry;
       final profiles = await registry.listProfiles();
       final activeId = ProfileRuntime.capture().profileId;
@@ -161,6 +162,20 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
                           ? ProfileGateStyle.classic
                           : ProfileGateStyle.wall,
                     );
+                    if (mounted) setState(() {});
+                  },
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.login_rounded),
+                  title: const Text('Ask who\'s watching at startup'),
+                  subtitle: Text(
+                    ProfileGateAlwaysAsk.cached
+                        ? 'Always — even with a single profile'
+                        : 'A sole profile without a PIN signs in on its own',
+                  ),
+                  value: ProfileGateAlwaysAsk.cached,
+                  onChanged: (value) async {
+                    await ProfileGateAlwaysAsk.set(value);
                     if (mounted) setState(() {});
                   },
                 ),

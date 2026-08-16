@@ -32,6 +32,36 @@ class ProfileGateStyle {
   }
 }
 
+/// Whether launch always stops at "Who's watching?", even when a sole
+/// PIN-less profile could auto-enter. Device-level for the same reason as
+/// [ProfileGateStyle]: the gate consults it before any profile exists.
+///
+/// Defaults ON — the profile screen is the app's front door, and skipping it
+/// is the opt-out (the startup toggle on Settings → Profiles). The gate's
+/// OTHER auto-enter suppressions (explicit Switch, lock, resume) are not
+/// this setting's business and keep their own `allowSingleProfileAutoEnter`
+/// argument.
+class ProfileGateAlwaysAsk {
+  ProfileGateAlwaysAsk._();
+
+  static const String key = 'profile_gate_always_ask_v1';
+
+  /// Synchronous mirror for build paths; loaded whenever the gate loads its
+  /// roster, and after the hub writes a change.
+  static bool cached = true;
+
+  static Future<void> warm() async {
+    final device = await DevicePreferences.instance();
+    cached = device.getBool(key) ?? true;
+  }
+
+  static Future<void> set(bool value) async {
+    final device = await DevicePreferences.instance();
+    await device.setBool(key, value);
+    cached = value;
+  }
+}
+
 /// Portrait Wall — the redesigned "Who's watching?".
 ///
 /// Same contract as the classic picker: [onSelected] and [onManage] come from
