@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:path/path.dart' as p;
@@ -420,9 +421,22 @@ class ProfileDataGenerationManager {
     if (!success) throw StateError('Could not stage preference $key');
   }
 
-  static Future<String> _hashFile(File file) async {
+  /// Streams the file through SHA-256 in a background isolate.
+  ///
+  /// Streaming alone is not enough: a generation clone hashes every staged
+  /// file (the profile-scoped IPTV catalog can be hundreds of MB) up to
+  /// THREE times — source, copy verification, and finalize's re-manifest —
+  /// and pure-Dart SHA-256 on the MAIN isolate pinned a TV's UI thread for
+  /// minutes per remote import (caught live on a Mi Box: "Import" confirmed,
+  /// then the whole app crawled with no feedback until the hashes finished).
+  static Future<String> _hashFile(File file) {
+    final path = file.path;
+    return Isolate.run(() => _hashFileStreaming(path));
+  }
+
+  static Future<String> _hashFileStreaming(String path) async {
     final sink = Sha256().newHashSink();
-    await for (final chunk in file.openRead()) {
+    await for (final chunk in File(path).openRead()) {
       sink.add(chunk);
     }
     sink.close();

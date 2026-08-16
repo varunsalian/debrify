@@ -199,7 +199,65 @@ class StremioService {
       final rows = authorization == null
           ? await read()
           : await authorization.runIfCurrent(read);
-      final addons = rows.map(StremioAddon.fromJson).toList(growable: false);
+      // Restored rows (remote import, file backup) carry only a manifest URL
+      // — the restore adapters cannot fetch manifests. The strict parse used
+      // to throw on the first such row, which took EVERY catalog down with a
+      // type-cast error (caught live on a TV right after a remote import).
+      // Split them out and hydrate instead of crashing the whole list.
+      final parsed = <StremioAddon>[];
+      final restoredRows = <Map<String, dynamic>>[];
+      for (final row in rows) {
+        if (_isRestoredUrlOnlyRow(row)) {
+          restoredRows.add(row);
+        } else {
+          parsed.add(StremioAddon.fromJson(row));
+        }
+      }
+      var addons = parsed;
+      if (restoredRows.isNotEmpty) {
+        // Stubs in EVERY mode, not just the manage screen: [_saveAddons]
+        // REPLACES the owned collection, so a persisted list must represent
+        // every restored row — a partial persist (one row hydrated, one
+        // fetch timed out and absent) would silently DELETE the missing
+        // resource. [_hydrateRestoredAddons] returns exactly one entry —
+        // real or stub — per row, so the invariant holds by construction.
+        // The stub is disabled, carries its real resource id (visible and
+        // deletable on the manage screen), and re-enters hydration on later
+        // reads via its id prefix.
+        final hydrated = await _hydrateRestoredAddons(
+          restoredRows,
+          stubUnfetchable: true,
+        );
+        addons = <StremioAddon>[...parsed, ...hydrated];
+        final anyReal = hydrated.any(
+          (a) => !a.id.startsWith(_restoredPendingIdPrefix),
+        );
+        // Persist only when a fetch actually completed something new, and
+        // NEVER from the manage screen's read: its addons-changed listener
+        // reloads on every save, and with the failed-URL memo making stub
+        // recreation instant, a settings-read persist becomes an endless
+        // save→notify→reload loop that re-seals secrets and bumps every
+        // addon's authorization revision each turn.
+        if (anyReal && !forRemoteTransfer && !forSettings) {
+          // Best-effort: a profile allowed to USE addons but not manage
+          // them cannot write the collection — serve the hydrated list for
+          // this session and let a manager's read repair it durably. The
+          // captured authorization rides along so a profile switch during
+          // the (network-long) hydration can never publish under the new
+          // profile's scope.
+          try {
+            return await _saveAddons(
+              addons,
+              initiatingAuthorization: authorization,
+            );
+          } catch (_) {
+            debugPrint(
+              'StremioService: could not persist hydrated addons; '
+              'serving them unpersisted',
+            );
+          }
+        }
+      }
       if (!forSettings && !forRemoteTransfer) {
         if (authorization != null && !authorization.isCurrentlyActive) {
           throw StateError('Profile session changed before addon publication');
@@ -228,6 +286,85 @@ class StremioService {
       _addonsCache = [];
       return [];
     }
+  }
+
+  /// Id prefix marking a placeholder written for a restored addon whose
+  /// manifest could not be fetched. Rows carrying it re-enter hydration on
+  /// every read, even if a settings-screen save persisted the placeholder.
+  static const String _restoredPendingIdPrefix = 'restored-pending:';
+
+  /// A row that a restore wrote from a URL-only payload (or any row missing
+  /// the strict-parse fields). `manifestUrl` (camelCase) is the restore
+  /// adapters' key; the full records store `manifest_url`.
+  static bool _isRestoredUrlOnlyRow(Map<String, dynamic> row) {
+    final id = row['id'];
+    if (id is String && id.startsWith(_restoredPendingIdPrefix)) return true;
+    return id is! String ||
+        row['name'] is! String ||
+        row['manifest_url'] is! String ||
+        row['base_url'] is! String;
+  }
+
+  /// URLs whose manifest fetch failed this session — without this memo an
+  /// offline device would pay a full network timeout on EVERY catalog load
+  /// until the fetch succeeds. Cleared by restart (retry is cheap then).
+  static final Set<String> _hydrationFailedUrls = <String>{};
+
+  /// Fetches the real manifest for restored URL-only rows and rebinds each
+  /// result to its existing connection resource, so grants and identity are
+  /// preserved when [_saveAddons] republishes the collection.
+  ///
+  /// [stubUnfetchable] (the manage screen) turns rows whose fetch failed
+  /// into visible, disabled placeholders that carry the real resource id —
+  /// without one, a permanently-dead manifest URL would be an invisible and
+  /// therefore undeletable resource.
+  Future<List<StremioAddon>> _hydrateRestoredAddons(
+    List<Map<String, dynamic>> rows, {
+    bool stubUnfetchable = false,
+  }) async {
+    final result = <StremioAddon>[];
+    for (final row in rows) {
+      final raw = (row['manifestUrl'] ?? row['manifest_url']) as String?;
+      final url = raw?.trim() ?? '';
+      void addStub() {
+        if (!stubUnfetchable) return;
+        final host = Uri.tryParse(url)?.host ?? '';
+        result.add(
+          StremioAddon(
+            id: '$_restoredPendingIdPrefix$url',
+            name: host.isEmpty
+                ? 'Imported addon (unavailable)'
+                : 'Imported addon (unavailable) · $host',
+            manifestUrl: url,
+            baseUrl: url,
+            enabled: false,
+            connectionResourceId: row['_connectionResourceId'] as String?,
+            connectionResourceRevision:
+                row['_connectionResourceRevision'] as int?,
+          ),
+        );
+      }
+
+      if (url.isEmpty || _hydrationFailedUrls.contains(url)) {
+        addStub();
+        continue;
+      }
+      try {
+        final fetched = await fetchManifest(_normalizeManifestUrl(url));
+        result.add(
+          fetched.copyWith(
+            connectionResourceId: row['_connectionResourceId'] as String?,
+            connectionResourceRevision:
+                row['_connectionResourceRevision'] as int?,
+          ),
+        );
+      } catch (_) {
+        debugPrint('StremioService: could not hydrate restored addon');
+        _hydrationFailedUrls.add(url);
+        addStub();
+      }
+    }
+    return result;
   }
 
   /// Get only enabled addons

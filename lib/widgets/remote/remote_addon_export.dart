@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -93,6 +95,19 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
           : await authorization.runIfCurrent(sendCurrent);
       if (!sent) throw StateError('Remote addon send was refused');
 
+      // A profiles-committed receiver STAGES addon sends into its profile
+      // import payload and only ConfigCommand.complete commits them — found
+      // live as "both sides green, addon never appears": without this signal
+      // the TV said "staged for profile import" and nothing ever imported.
+      // The short delay mirrors the other export flows (let the addon packet
+      // finish processing before the commit signal lands).
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      final committed = await state.sendConfigCommandToDevice(
+        ConfigCommand.complete,
+        target.ip,
+      );
+      if (!committed) throw StateError('Remote addon commit was refused');
+
       // Show success feedback
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -106,6 +121,11 @@ class _RemoteAddonExportState extends State<RemoteAddonExport> {
       }
     } catch (_) {
       debugPrint('RemoteAddonExport: addon send failed');
+      // Refusals are usually a stale revision (the collection was
+      // republished between this screen's load and the tap — hydration
+      // repair does that). Reload so the NEXT tap matches; without this the
+      // failure is sticky until the user backs out and re-enters.
+      unawaited(_loadAddons());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

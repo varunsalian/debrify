@@ -719,7 +719,15 @@ class RemoteCommandRouter {
         !isTransport &&
         // An avatar is not setup data — it applies immediately below rather
         // than joining the staged import payload.
-        command != ConfigCommand.profileAvatar) {
+        command != ConfigCommand.profileAvatar &&
+        // Debrify TV channels are repository data, not connection secrets:
+        // there is no staging category or restore adapter for them, so this
+        // gate used to feed them into a FormatException that was swallowed —
+        // channels sent to a profiles TV VANISHED while both sides reported
+        // success. They import directly into the active profile's channel
+        // repository, exactly as the pre-profiles path did; the transport is
+        // already authorized and encrypted at this point.
+        command != ConfigCommand.debrifyChannel) {
       if (!_bufferProfileConfig(command, data, context, profileBinding)) {
         return;
       }
@@ -1113,6 +1121,13 @@ class RemoteCommandRouter {
       // Consume the receive capability before any writes. A repeated
       // `complete` packet cannot open a second commit over the same secrets.
       clearProfileTransferBuffer();
+      // The restore clones the whole profile generation before publishing —
+      // on a large library that is real time (minutes on weak TV hardware
+      // even with the hashing off-thread). Say so, or the closed dialog
+      // reads as "done" and the wait reads as a hang.
+      _showSnackBar(
+        'Importing… this can take a few minutes for a large library',
+      );
       final report =
           await ProfileRestoreCoordinator(
             registry: ProfileBootstrap.registry,
