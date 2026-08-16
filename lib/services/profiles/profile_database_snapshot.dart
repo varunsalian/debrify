@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
@@ -22,6 +23,13 @@ class ProfileDatabaseSnapshot {
     'debrify_tv.db',
     'iptv_catalog.db',
   };
+
+  /// Test seam: routes export through [_checkpointCopySnapshot] as if the OS
+  /// SQLite predated VACUUM INTO. The test rig bundles a modern library, so
+  /// the fallback — the exact code Android 7-9 devices run — would otherwise
+  /// never execute in the suite.
+  @visibleForTesting
+  static bool debugForceCheckpointCopy = false;
 
   static Future<Map<String, Object?>> export(ProfileScope scope) async {
     final documents = await AppStorage.documents();
@@ -47,9 +55,27 @@ class ProfileDatabaseSnapshot {
             throw StateError('$name failed export integrity check');
           }
           final escaped = snapshot.path.replaceAll("'", "''");
-          await db.execute("VACUUM INTO '$escaped'");
+          if (debugForceCheckpointCopy) {
+            await db.close();
+            await _checkpointCopySnapshot(source, snapshot);
+          } else {
+            try {
+              await db.execute("VACUUM INTO '$escaped'");
+            } on DatabaseException catch (error) {
+              // VACUUM INTO needs SQLite 3.27 (2019). sqflite links the OS
+              // library, and Android ships 3.27+ only from 10 up — on the
+              // Android 7-9 TV-box generation the statement fails to
+              // COMPILE, which took profile backups down with it (same
+              // class as the ON-CONFLICT upsert caught live on a Mi Box).
+              // Fall back to a checkpoint-and-copy snapshot on exactly that
+              // signature.
+              if (!_looksLikeSyntaxError(error)) rethrow;
+              await db.close();
+              await _checkpointCopySnapshot(source, snapshot);
+            }
+          }
         } finally {
-          await db.close();
+          if (db.isOpen) await db.close();
         }
         final length = await snapshot.length();
         total += length;
@@ -143,6 +169,45 @@ class ProfileDatabaseSnapshot {
       }
     }
     return restored;
+  }
+
+  static bool _looksLikeSyntaxError(DatabaseException error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('syntax error');
+  }
+
+  /// Pre-3.27 snapshot: checkpoint the WAL into the main file, byte-copy it,
+  /// and prove the copy by integrity-checking it. VACUUM INTO's point-in-time
+  /// guarantee is lost, so a concurrent writer surfaces as a failed check —
+  /// retried a few times rather than silently exporting a torn image.
+  static Future<void> _checkpointCopySnapshot(File source, File snapshot) async {
+    StateError? lastFailure;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      final db = await openDatabase(source.path, singleInstance: false);
+      try {
+        await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+      } finally {
+        await db.close();
+      }
+      if (await snapshot.exists()) await snapshot.delete();
+      await source.copy(snapshot.path);
+      // A bare copy has no -wal/-shm companions, so validate via a
+      // read/write open (SQLite may create empty companions) and drop them
+      // after — the same shape the migration's snapshot validation uses.
+      final copy = await openDatabase(snapshot.path, singleInstance: false);
+      try {
+        final integrity = await copy.rawQuery('PRAGMA integrity_check');
+        if (_integrityOk(integrity)) return;
+        lastFailure = StateError('snapshot failed integrity check');
+      } finally {
+        await copy.close();
+        for (final suffix in const <String>['-wal', '-shm', '-journal']) {
+          final companion = File('${snapshot.path}$suffix');
+          if (await companion.exists()) await companion.delete();
+        }
+      }
+    }
+    throw lastFailure ?? StateError('could not take a consistent snapshot');
   }
 
   static bool _integrityOk(List<Map<String, Object?>> rows) =>

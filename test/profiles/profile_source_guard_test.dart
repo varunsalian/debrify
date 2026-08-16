@@ -73,6 +73,39 @@ void main() {
     expect(violations, isEmpty);
   });
 
+  test('sqflite-facing SQL never uses ON CONFLICT upserts', () {
+    // `INSERT … ON CONFLICT DO UPDATE` needs SQLite 3.24 (2018). sqflite
+    // links the OS library, and Android ships 3.24+ only from Android 10 —
+    // minSdk 24 means Android 7/8/9 TV boxes (SQLite 3.9/3.18/3.22) fail to
+    // COMPILE the statement: caught live on a Mi Box as "Failed to remove"
+    // any Stremio addon. Use ProfileRegistry._compatUpsert instead. Files
+    // that import package:sqlite3 bundle their own modern library and are
+    // exempt (the IPTV catalog DB).
+    // VACUUM INTO (SQLite 3.27) is allowed ONLY where a pre-3.27 fallback is
+    // implemented and reviewed.
+    const vacuumIntoAllowed = <String>{
+      'lib/services/profiles/profile_database_snapshot.dart',
+    };
+    final violations = <String>[];
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final path = entity.path.replaceAll('\\', '/');
+      final source = entity.readAsStringSync();
+      if (!source.contains("import 'package:sqflite")) continue;
+      if (source.contains('ON CONFLICT')) {
+        violations.add(path);
+      }
+      if (source.contains('VACUUM INTO') && !vacuumIntoAllowed.contains(path)) {
+        violations.add('$path (VACUUM INTO without a fallback)');
+      }
+    }
+    expect(
+      violations,
+      isEmpty,
+      reason: 'these statements break on the OS SQLite of Android < 10',
+    );
+  });
+
   test('profile editor keeps feature controls hidden behind one switch', () {
     final source = File(
       'lib/screens/profiles/edit_profile_screen.dart',

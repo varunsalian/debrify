@@ -81,6 +81,49 @@ void main() {
     },
   );
 
+  test('checkpoint-copy fallback round-trips like VACUUM INTO', () async {
+    // The path Android 7-9 devices actually take: their OS SQLite predates
+    // VACUUM INTO (3.27), and the test rig's bundled library can't reproduce
+    // that — so the seam forces the fallback here.
+    ProfileDatabaseSnapshot.debugForceCheckpointCopy = true;
+    addTearDown(() => ProfileDatabaseSnapshot.debugForceCheckpointCopy = false);
+    final sourceScope = ProfileScope(
+      profileId: 'profile-legacy-sqlite',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    final destinationScope = ProfileScope(
+      profileId: 'profile-legacy-restore',
+      dataGeneration: 2,
+      sessionEpoch: 1,
+    );
+    final documents = await AppStorage.documents();
+    final source = sourceScope.fileIn(documents, 'documents', 'debrify_tv.db');
+    await source.parent.create(recursive: true);
+    final database = await openDatabase(source.path);
+    await database.execute('CREATE TABLE sample (value TEXT NOT NULL)');
+    await database.insert('sample', <String, Object?>{'value': 'legacy'});
+    await database.close();
+
+    final attachments = await ProfileDatabaseSnapshot.export(sourceScope);
+    expect(attachments.keys, contains('debrify_tv.db'));
+    expect(
+      await ProfileDatabaseSnapshot.restore(destinationScope, attachments),
+      1,
+    );
+    final restored = await openDatabase(
+      destinationScope.fileIn(documents, 'documents', 'debrify_tv.db').path,
+      readOnly: true,
+    );
+    try {
+      expect(await restored.query('sample'), <Map<String, Object?>>[
+        <String, Object?>{'value': 'legacy'},
+      ]);
+    } finally {
+      await restored.close();
+    }
+  });
+
   test('rejects attachment digest tampering before publication', () async {
     final destinationScope = ProfileScope(
       profileId: 'profile-tampered',

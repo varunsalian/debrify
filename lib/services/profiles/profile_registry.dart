@@ -1700,26 +1700,32 @@ class ProfileRegistry {
         throw StateError('New owner authorization changed');
       }
       final now = DateTime.now().millisecondsSinceEpoch;
-      await txn.rawInsert(
-        '''INSERT INTO profile_resource_grants
-           (profile_id, resource_id, permissions, granted_by_profile_id,
-            grant_origin_json, created_at_ms)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT(profile_id, resource_id) DO UPDATE SET
-             permissions = excluded.permissions,
-             granted_by_profile_id = excluded.granted_by_profile_id,
-             grant_origin_json = excluded.grant_origin_json''',
-        <Object>[
-          newOwnerProfileId,
-          resourceId,
-          ownerPermissions,
-          transferredByProfileId,
-          jsonEncode(<String, Object?>{
+      await _compatUpsert(
+        txn,
+        table: 'profile_resource_grants',
+        insert: <String, Object?>{
+          'profile_id': newOwnerProfileId,
+          'resource_id': resourceId,
+          'permissions': ownerPermissions,
+          'granted_by_profile_id': transferredByProfileId,
+          'grant_origin_json': jsonEncode(<String, Object?>{
             'origin': 'ownershipTransfer',
             'previousOwnerProfileId': currentOwnerProfileId,
           }),
-          now,
-        ],
+          'created_at_ms': now,
+        },
+        update: <String, Object?>{
+          'permissions': ownerPermissions,
+          'granted_by_profile_id': transferredByProfileId,
+          'grant_origin_json': jsonEncode(<String, Object?>{
+            'origin': 'ownershipTransfer',
+            'previousOwnerProfileId': currentOwnerProfileId,
+          }),
+        },
+        key: <String, Object?>{
+          'profile_id': newOwnerProfileId,
+          'resource_id': resourceId,
+        },
       );
       final changed = await txn.rawUpdate(
         '''UPDATE connection_resources
@@ -1915,23 +1921,26 @@ class ProfileRegistry {
             throw StateError('Replacement source authority changed');
           }
         }
-        await txn.rawInsert(
-          '''INSERT INTO profile_resource_grants
-             (profile_id, resource_id, permissions, granted_by_profile_id,
-              grant_origin_json, created_at_ms)
-             VALUES (?, ?, ?, ?, ?, ?)
-             ON CONFLICT(profile_id, resource_id) DO UPDATE SET
-               permissions = excluded.permissions,
-               granted_by_profile_id = excluded.granted_by_profile_id,
-               grant_origin_json = excluded.grant_origin_json''',
-          <Object>[
-            ownerProfileId,
-            resource.id,
-            ownerPermissions,
-            ownerProfileId,
-            '{"origin":"ownerCollection"}',
-            now,
-          ],
+        await _compatUpsert(
+          txn,
+          table: 'profile_resource_grants',
+          insert: <String, Object?>{
+            'profile_id': ownerProfileId,
+            'resource_id': resource.id,
+            'permissions': ownerPermissions,
+            'granted_by_profile_id': ownerProfileId,
+            'grant_origin_json': '{"origin":"ownerCollection"}',
+            'created_at_ms': now,
+          },
+          update: <String, Object?>{
+            'permissions': ownerPermissions,
+            'granted_by_profile_id': ownerProfileId,
+            'grant_origin_json': '{"origin":"ownerCollection"}',
+          },
+          key: <String, Object?>{
+            'profile_id': ownerProfileId,
+            'resource_id': resource.id,
+          },
         );
       }
       await txn.rawUpdate(
@@ -2010,14 +2019,23 @@ class ProfileRegistry {
         resourceAuthorizationRevision: expectedResourceAuthorizationRevision,
         permission: ResourcePermission.use,
       );
-      await txn.rawInsert(
-        '''INSERT INTO profile_resource_settings
-           (profile_id, resource_id, enabled, settings_json)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT(profile_id, resource_id) DO UPDATE SET
-             enabled = excluded.enabled,
-             settings_json = excluded.settings_json''',
-        <Object>[profileId, resourceId, enabled ? 1 : 0, encoded],
+      await _compatUpsert(
+        txn,
+        table: 'profile_resource_settings',
+        insert: <String, Object?>{
+          'profile_id': profileId,
+          'resource_id': resourceId,
+          'enabled': enabled ? 1 : 0,
+          'settings_json': encoded,
+        },
+        update: <String, Object?>{
+          'enabled': enabled ? 1 : 0,
+          'settings_json': encoded,
+        },
+        key: <String, Object?>{
+          'profile_id': profileId,
+          'resource_id': resourceId,
+        },
       );
     });
     await checkpointTvOsRecovery();
@@ -2111,23 +2129,26 @@ class ProfileRegistry {
               0) {
         throw StateError('Child resource permission ceiling exceeded');
       }
-      await txn.rawInsert(
-        '''INSERT INTO profile_resource_grants
-           (profile_id, resource_id, permissions, granted_by_profile_id,
-            grant_origin_json, created_at_ms)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT(profile_id, resource_id) DO UPDATE SET
-             permissions = excluded.permissions,
-             granted_by_profile_id = excluded.granted_by_profile_id,
-             grant_origin_json = excluded.grant_origin_json''',
-        <Object>[
-          profileId,
-          resourceId,
-          permissions,
-          grantedByProfileId,
-          jsonEncode(origin),
-          now,
-        ],
+      await _compatUpsert(
+        txn,
+        table: 'profile_resource_grants',
+        insert: <String, Object?>{
+          'profile_id': profileId,
+          'resource_id': resourceId,
+          'permissions': permissions,
+          'granted_by_profile_id': grantedByProfileId,
+          'grant_origin_json': jsonEncode(origin),
+          'created_at_ms': now,
+        },
+        update: <String, Object?>{
+          'permissions': permissions,
+          'granted_by_profile_id': grantedByProfileId,
+          'grant_origin_json': jsonEncode(origin),
+        },
+        key: <String, Object?>{
+          'profile_id': profileId,
+          'resource_id': resourceId,
+        },
       );
       if (normalizedBindingSlot != null) {
         await txn.insert(
@@ -2454,29 +2475,38 @@ class ProfileRegistry {
     }.contains(kind)) {
       throw ArgumentError.value(kind, 'kind');
     }
-    await _db.rawInsert(
-      '''INSERT INTO job_ownership
-         (backend, external_job_id, kind, owner_profile_id, resource_id,
-          profile_authorization_revision, resource_authorization_revision,
-          created_at_ms, terminal_at_ms)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(backend, external_job_id) DO UPDATE SET
-           owner_profile_id = excluded.owner_profile_id,
-           resource_id = excluded.resource_id,
-           profile_authorization_revision = excluded.profile_authorization_revision,
-           resource_authorization_revision = excluded.resource_authorization_revision,
-           terminal_at_ms = excluded.terminal_at_ms''',
-      <Object?>[
-        backend,
-        externalJobId,
-        kind,
-        ownerProfileId,
-        resourceId,
-        profileAuthorizationRevision,
-        resourceAuthorizationRevision,
-        DateTime.now().millisecondsSinceEpoch,
-        terminalAtMs,
-      ],
+    // Wrapped in a transaction: this is the one upsert not already inside
+    // one, and the two-statement compat form must stay as atomic as the
+    // single statement it replaced.
+    await _db.transaction(
+      (txn) => _compatUpsert(
+        txn,
+        table: 'job_ownership',
+        insert: <String, Object?>{
+          'backend': backend,
+          'external_job_id': externalJobId,
+          'kind': kind,
+          'owner_profile_id': ownerProfileId,
+          'resource_id': resourceId,
+          'profile_authorization_revision': profileAuthorizationRevision,
+          'resource_authorization_revision': resourceAuthorizationRevision,
+          'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+          'terminal_at_ms': terminalAtMs,
+        },
+        // The original DO UPDATE SET deliberately left `kind` and
+        // created_at_ms untouched on conflict — preserved here.
+        update: <String, Object?>{
+          'owner_profile_id': ownerProfileId,
+          'resource_id': resourceId,
+          'profile_authorization_revision': profileAuthorizationRevision,
+          'resource_authorization_revision': resourceAuthorizationRevision,
+          'terminal_at_ms': terminalAtMs,
+        },
+        key: <String, Object?>{
+          'backend': backend,
+          'external_job_id': externalJobId,
+        },
+      ),
     );
   }
 
@@ -3756,6 +3786,40 @@ class ProfileRegistry {
     );
     if (rows.isEmpty) throw StateError('Profile does not exist');
     return rows.single['authorization_revision']! as int;
+  }
+
+  /// UPSERT that works on the OS SQLite of every supported Android version.
+  ///
+  /// `INSERT … ON-CONFLICT DO UPDATE` needs SQLite 3.24 (2018); Android only
+  /// ships that from 10 up, and minSdk is 24 — the Mi Box class of TV
+  /// hardware runs Android 8/9 (SQLite 3.18/3.22), where the statement fails
+  /// to COMPILE ("near \"ON\": syntax error"). sqflite uses the OS library,
+  /// so the modern form must never appear in registry SQL; the IPTV catalog
+  /// DB is immune because it links its own SQLite via package:sqlite3. A
+  /// source-guard test pins this.
+  ///
+  /// Two statements replace it: INSERT OR IGNORE keeps the original row's
+  /// immutable columns (created_at_ms), then UPDATE overwrites exactly the
+  /// columns the old DO UPDATE SET listed — the same end state on both the
+  /// fresh-insert and conflict paths. Callers run inside a transaction for
+  /// the same atomicity the single statement had.
+  static Future<void> _compatUpsert(
+    DatabaseExecutor db, {
+    required String table,
+    required Map<String, Object?> insert,
+    required Map<String, Object?> update,
+    required Map<String, Object?> key,
+  }) async {
+    await db.rawInsert(
+      'INSERT OR IGNORE INTO $table (${insert.keys.join(', ')}) '
+      'VALUES (${List.filled(insert.length, '?').join(', ')})',
+      insert.values.toList(),
+    );
+    await db.rawUpdate(
+      'UPDATE $table SET ${update.keys.map((c) => '$c = ?').join(', ')} '
+      'WHERE ${key.keys.map((c) => '$c = ?').join(' AND ')}',
+      <Object?>[...update.values, ...key.values],
+    );
   }
 
   static Future<void> _assertAdminInvariant(
