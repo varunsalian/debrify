@@ -415,7 +415,13 @@ class YoutubeService {
       preferVp9: preferVp9,
     );
     _resolveInFlight[key] = future;
-    return future.whenComplete(() => _resolveInFlight.remove(key));
+    // Block body: an arrow would return the removed (already-completed)
+    // future for whenComplete to await — harmless here because the map holds
+    // the INNER future, but one refactor from the self-deadlock this exact
+    // shape caused in remote_control_state. Don't leave the trap armed.
+    return future.whenComplete(() {
+      _resolveInFlight.remove(key);
+    });
   }
 
   static String _resolveKey(

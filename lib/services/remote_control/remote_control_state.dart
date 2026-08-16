@@ -1283,10 +1283,13 @@ class RemoteControlState extends ChangeNotifier {
   }) {
     final inFlight = _handshakesByIp[ip];
     if (inFlight != null) return inFlight;
-    final attempt = _ensureEncryptedSessionInner(
-      ip,
-      timeout,
-    ).whenComplete(() => _handshakesByIp.remove(ip));
+    // Block body, NOT an arrow: Map.remove returns the removed value — this
+    // very future — and whenComplete AWAITS a future-returning callback, so
+    // the arrow form deadlocks the attempt on itself. Every caller (and the
+    // dedup reusers) then hangs forever with the 6s timeout long fired.
+    final attempt = _ensureEncryptedSessionInner(ip, timeout).whenComplete(() {
+      _handshakesByIp.remove(ip);
+    });
     _handshakesByIp[ip] = attempt;
     return attempt;
   }
@@ -1317,10 +1320,12 @@ class RemoteControlState extends ChangeNotifier {
     final completer = Completer<RemoteSession?>();
     _pendingHandshakes[sid] = completer;
     service.sendRaw(hs1, ip);
+    debugPrint('RemoteHs: hs1 sent to $ip, waiting ${timeout.inSeconds}s');
     try {
       final session = await completer.future.timeout(timeout);
       return session;
     } on TimeoutException {
+      debugPrint('RemoteHs: no reply within ${timeout.inSeconds}s — v1 peer');
       _pendingHandshakes.remove(sid);
       return null;
     }

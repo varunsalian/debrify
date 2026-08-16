@@ -9,6 +9,7 @@ import '../../services/iptv_transfer_payload.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
+import '../../services/remote_control/remote_session.dart';
 import 'remote_pairing_dialog.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
@@ -48,6 +49,12 @@ class _TransferItem {
 class _RemoteTransferAllState extends State<RemoteTransferAll> {
   bool _loading = true;
   bool _transferring = false;
+
+  /// The credential gate runs BEFORE any item is sent and can take several
+  /// seconds against a TV that never answers the handshake (an old build).
+  /// Without this the button sits inert for that whole window and the
+  /// transfer reads as broken — the refusal dialog only lands afterwards.
+  bool _connecting = false;
   bool _done = false;
 
   String? _traktUsername;
@@ -358,7 +365,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   bool get _hasPikpak => _items.any((i) => i.key == ConfigCommand.pikpak);
 
   bool get _canStart {
-    if (_items.isEmpty || _transferring || _done) return false;
+    if (_items.isEmpty || _transferring || _connecting || _done) return false;
     if (_hasPikpak && _pikpakPasswordController.text.isEmpty) return false;
     return true;
   }
@@ -374,7 +381,18 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     // Credential gate: encrypted session + pairing code (or remembered
     // pairing). Old-version TVs are refused with an "update the TV" dialog —
     // there is no plaintext credential path anymore.
-    final session = await ensureAuthorizedSession(context, state, target);
+    // No overall deadline here on purpose: every step inside the gate is
+    // individually bounded (6s handshake probe, 120s pairing-code entry), and
+    // a flat ceiling would abort a first-time pairing while the user is still
+    // typing the code the TV is showing. The spinner covers the wait; the
+    // gate itself owns telling the user what went wrong.
+    setState(() => _connecting = true);
+    final RemoteSession? session;
+    try {
+      session = await ensureAuthorizedSession(context, state, target);
+    } finally {
+      if (mounted) setState(() => _connecting = false);
+    }
     if (session == null || !mounted) return;
 
     setState(() {
@@ -721,10 +739,25 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(_done ? Icons.check : Icons.send, size: 18),
+                        if (_connecting)
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        else
+                          Icon(_done ? Icons.check : Icons.send, size: 18),
                         const SizedBox(width: 8),
                         Text(
-                          _done ? 'Done' : 'Transfer Everything',
+                          _connecting
+                              ? 'Connecting securely…'
+                              : _done
+                                  ? 'Done'
+                                  : 'Transfer Everything',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,

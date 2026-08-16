@@ -83,7 +83,11 @@ class ImdbTrailerService {
       return streams;
     });
     _inFlight[key] = future;
-    return future.whenComplete(() => _inFlight.remove(key));
+    // Block body — see the whenComplete self-deadlock note in
+    // remote_control_state's handshake dedup; same shape, same trap.
+    return future.whenComplete(() {
+      _inFlight.remove(key);
+    });
   }
 
   static Future<YoutubeResolvedStreams?> _resolveUncached(

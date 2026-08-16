@@ -35,6 +35,12 @@ class RemoteMessageType {
 /// the field's absence), v2 = X25519/AES-GCM sessions + pairing codes.
 const int kProtoVersion = 2;
 
+/// First Debrify release whose RECEIVER speaks [kProtoVersion] 2, quoted to
+/// the user when a send is refused. v2 landed after 0.8.1-alpha.1 shipped, so
+/// every build released before this one is a v1 receiver and cannot be set up
+/// from a phone. Bump only if the v2 receiver's first release changes.
+const String kFirstV2ReceiverVersion = '0.8.2';
+
 /// Session handshake / lifetime tuning.
 const Duration kHandshakeRetransmit = Duration(milliseconds: 700);
 const int kHandshakeMaxRetransmits = 3;

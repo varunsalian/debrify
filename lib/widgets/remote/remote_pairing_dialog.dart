@@ -240,12 +240,15 @@ Future<void> showLegacyBlockedDialog(BuildContext context, String tvName) {
   return showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: const Text('Update the TV app first'),
+      title: const Text('Update Debrify on the TV'),
       content: Text(
-        '"$tvName" is running a Debrify version that can\'t receive '
-        'credentials securely. Update Debrify on the TV, then try again.\n\n'
-        'The D-pad remote remains available, but setup and credentials '
-        'require both devices to be updated.',
+        '"$tvName" is running a version older than $kFirstV2ReceiverVersion, '
+        'which cannot receive your accounts and settings securely — so '
+        'nothing was sent.\n\n'
+        'Update Debrify on the TV to $kFirstV2ReceiverVersion or newer, then '
+        'run this transfer again.\n\n'
+        'The D-pad remote still works in the meantime; only setup and '
+        'credentials need the newer version.',
       ),
       actions: [
         FilledButton(
@@ -366,9 +369,15 @@ Future<RemoteSession?> ensureAuthorizedSession(
   RemoteControlState state,
   DiscoveredDevice device,
 ) async {
+  // Traced end to end: "transfer just spins" is the single hardest remote
+  // report to diagnose, because every step here is silent on the happy path
+  // and the failure modes are indistinguishable from the outside.
+  debugPrint('RemoteGate: start for ${device.deviceName} @ ${device.ip} '
+      '(advertised proto v${device.protoVersion})');
   final sameNamePins = await RemotePairingStore.knownReceiversNamed(
     device.deviceName,
   );
+  debugPrint('RemoteGate: ${sameNamePins.length} pin(s) for this name');
   if (!context.mounted) return null;
 
   // The handshake itself is the version detector: manually entered IPs (and
@@ -376,14 +385,31 @@ Future<RemoteSession?> ensureAuthorizedSession(
   // to 1 there even for a current TV — and an attacker can strip the
   // advertisement anyway. Probe first; the policy dialogs only fire when the
   // peer genuinely cannot do v2.
-  final session = await state.ensureEncryptedSession(device.ip);
+  final RemoteSession? session;
+  try {
+    session = await state.ensureEncryptedSession(device.ip);
+  } catch (error) {
+    // A throw here (profile authorization revoked mid-flight, socket refused)
+    // used to surface as a spinner that never stopped and no dialog at all.
+    debugPrint('RemoteGate: handshake threw — $error');
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not reach the TV: $error')),
+      );
+    }
+    return null;
+  }
+  debugPrint('RemoteGate: handshake returned ${session == null ? "NO session "
+      "(peer did not answer v2)" : "a session"}');
   if (!context.mounted) return null;
 
   if (session == null) {
-    switch (decideLegacyCredentialSend(
+    final decision = decideLegacyCredentialSend(
       peerAdvertisesV2: device.supportsEncryption,
       peerPinnedV2: sameNamePins.isNotEmpty,
-    )) {
+    );
+    debugPrint('RemoteGate: refusing — $decision');
+    switch (decision) {
       case LegacySendDecision.suspectedDowngrade:
         await showTvIdentityChangedDialog(context, device.deviceName);
       case LegacySendDecision.blocked:
