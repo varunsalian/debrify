@@ -324,9 +324,16 @@ class _ProfileSetupFlowState extends State<ProfileSetupFlow> {
             profileId: staged.id,
             actor: await ProfileAuthorizationContext.capture(widget.registry),
           );
-        } catch (error) {
-          await creation.rollbackStaged(staged.id);
-          rethrow;
+        } catch (error, stackTrace) {
+          // completeStaged can throw AFTER the row durably committed (a
+          // recovery-checkpoint retry failing) — the editor's guard: never
+          // roll back a row that made it to active, or a real profile and
+          // all its data would be deleted over a checkpoint hiccup.
+          final persisted = await widget.registry.getProfile(staged.id);
+          if (persisted?.lifecycle != UserProfileLifecycle.active) {
+            await creation.rollbackStaged(staged.id);
+          }
+          Error.throwWithStackTrace(error, stackTrace);
         }
       } else {
         await widget.registry.updateProfile(
