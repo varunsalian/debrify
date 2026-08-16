@@ -479,11 +479,16 @@ void main() {
     }
     await tester.pump();
     expect(remote.debugReceiverLeaseCount, 1);
-    expect(find.text('Open Remote on the phone'), findsOneWidget);
+    expect(find.text('Open Remote on the other device'), findsOneWidget);
     await tester.binding.handlePopRoute();
     for (var i = 0; i < 5 && remote.debugReceiverLeaseCount != 0; i++) {
       await tester.pump();
     }
+    // The lease loop exits the moment the count hits zero — the mode step's
+    // setState lands in the same turn and still needs one frame to paint.
+    // (Non-TV used to get that frame for free from the landing-focus
+    // request every transition scheduled; the focus gate removed it.)
+    await tester.pump();
     expect(find.text('Set it up here'), findsOneWidget);
     expect(remote.debugReceiverLeaseCount, 0);
     await tester.pumpWidget(const SizedBox.shrink());
