@@ -180,6 +180,11 @@ class ConfigCommand {
   // per-command import, and it supersedes the piecemeal send when chosen.
   // v2-only by construction (rides the sealed chunked transport).
   static const String profileGraph = 'profile_graph';
+  // Receiver → sender: the real outcome of a profile-graph transfer
+  // (delivered is not applied — the TV user confirms, authorization can
+  // refuse, the import can fail). Consumed in RemoteControlState._dispatch
+  // on any role; never routed to the command router.
+  static const String profileGraphResult = 'profile_graph_result';
   static const String complete =
       'complete'; // Signals all configs sent, TV should restart
 }

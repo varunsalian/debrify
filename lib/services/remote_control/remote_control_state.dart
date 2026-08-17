@@ -43,6 +43,12 @@ class RemoteControlState extends ChangeNotifier {
   factory RemoteControlState() => _instance;
   RemoteControlState._internal();
 
+  /// Outcome reports for profile-graph transfers this device SENT (see
+  /// [ConfigCommand.profileGraphResult]). Broadcast so a late listener
+  /// simply misses old events instead of buffering them forever.
+  final StreamController<({bool ok, String message})> profileGraphResults =
+      StreamController<({bool ok, String message})>.broadcast();
+
   // Services
   UdpDiscoveryService? _discoveryService;
   UdpCommandService? _commandService;
@@ -942,6 +948,18 @@ class RemoteControlState extends ChangeNotifier {
             ),
           );
         }
+      }
+      return;
+    }
+    // Profile-graph outcome reports are consumed here for the same reason:
+    // the SENDING phone has no receiver-role callbacks wired, so routing
+    // through the router would drop them. Broadcast to whoever is waiting
+    // (the Transfer Everything screen).
+    if (action == RemoteAction.config &&
+        command == ConfigCommand.profileGraphResult) {
+      if (data != null && context.encrypted && context.authorized) {
+        final result = parseProfileGraphResultBody(data);
+        if (result != null) profileGraphResults.add(result);
       }
       return;
     }

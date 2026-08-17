@@ -789,6 +789,29 @@ class RemoteCommandRouter {
   /// authority a file restore demands, and the user confirms on-screen
   /// before anything is created. Never staged: it applies atomically through
   /// [ProfileRestoreCoordinator.restoreDeviceGraph] or not at all.
+  /// Reports a profile-graph transfer's real outcome back to the sender —
+  /// delivery is not application, and without this the phone's "sent" toast
+  /// was a lie whenever the TV refused or the user declined.
+  Future<void> _reportProfileGraphResult(
+    RemoteCommandContext remoteContext, {
+    required bool ok,
+    required String message,
+  }) async {
+    final sidB64 = remoteContext.sidB64;
+    if (sidB64 == null) return;
+    final state = RemoteControlState();
+    final session = state.sessionManager?.sessionBySid(sidB64);
+    if (session == null || !session.authorized) return;
+    await state.sendEncryptedCommand(
+      session,
+      RemoteCommand(
+        action: RemoteAction.config,
+        command: ConfigCommand.profileGraphResult,
+        data: profileGraphResultBody(ok: ok, message: message),
+      ),
+    );
+  }
+
   Future<void> _handleProfileGraphConfig(
     String data,
     RemoteCommandContext remoteContext,
@@ -803,6 +826,11 @@ class RemoteCommandRouter {
     // still up must not stack a second dialog and duplicate the whole graph.
     if (_profileGraphInFlight) {
       _showSnackBar('A profile import is already in progress', isError: true);
+      await _reportProfileGraphResult(
+        remoteContext,
+        ok: false,
+        message: 'The TV is already importing profiles — wait for it',
+      );
       return;
     }
     _profileGraphInFlight = true;
@@ -824,6 +852,11 @@ class RemoteCommandRouter {
         'Profiles are not set up on this device yet — finish setup first',
         isError: true,
       );
+      await _reportProfileGraphResult(
+        remoteContext,
+        ok: false,
+        message: 'Finish setting up the TV, then resend',
+      );
       return;
     }
     final PortableProfilePackage package;
@@ -839,6 +872,11 @@ class RemoteCommandRouter {
         'Profile transfer rejected: ${error.message}',
         isError: true,
       );
+      await _reportProfileGraphResult(
+        remoteContext,
+        ok: false,
+        message: 'The TV rejected the package: ${error.message}',
+      );
       return;
     }
     final registry = ProfileBootstrap.registry;
@@ -848,6 +886,11 @@ class RemoteCommandRouter {
       actor = await authorization.validate(registry);
     } catch (_) {
       _showSnackBar('Profile import authorization expired', isError: true);
+      await _reportProfileGraphResult(
+        remoteContext,
+        ok: false,
+        message: 'TV profile authorization expired — resend',
+      );
       return;
     }
     if (actor.role != UserProfileRole.admin ||
@@ -857,11 +900,21 @@ class RemoteCommandRouter {
         'Switch this TV to an Admin profile to receive profiles',
         isError: true,
       );
+      await _reportProfileGraphResult(
+        remoteContext,
+        ok: false,
+        message: 'Open an Admin profile on the TV, then resend',
+      );
       return;
     }
     final context = _navigatorKey?.currentContext;
     if (context == null || !context.mounted) {
       _showSnackBar('Profile import needs the app screen open', isError: true);
+      await _reportProfileGraphResult(
+        remoteContext,
+        ok: false,
+        message: 'Open the Debrify screen on the TV, then resend',
+      );
       return;
     }
     final sender =
@@ -900,6 +953,11 @@ class RemoteCommandRouter {
         false;
     if (!confirmed) {
       _showSnackBar('Profile import declined');
+      await _reportProfileGraphResult(
+        remoteContext,
+        ok: false,
+        message: 'Declined on the TV',
+      );
       return;
     }
     // Busy dialog while the restore stages and verifies. Self-dismissing via
@@ -928,11 +986,23 @@ class RemoteCommandRouter {
         '${report.resourcesImported} connections from $sender.'
         '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) need a new PIN.'}',
       );
+      await _reportProfileGraphResult(
+        remoteContext,
+        ok: true,
+        message:
+            'TV imported ${report.profilesImported} profiles and '
+            '${report.resourcesImported} connections',
+      );
     } catch (_) {
       debugPrint('RemoteCommandRouter: profile graph restore failed');
       _showSnackBar(
         'Profile import failed; existing data is unchanged',
         isError: true,
+      );
+      await _reportProfileGraphResult(
+        remoteContext,
+        ok: false,
+        message: 'Import failed on the TV; nothing was changed there',
       );
     } finally {
       done.value = true;

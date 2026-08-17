@@ -121,6 +121,30 @@ void main() {
     });
   });
 
+  group('profile graph result', () {
+    test('outcome body round-trips and rejects malformed input', () {
+      final body = profileGraphResultBody(
+        ok: false,
+        message: 'Open an Admin profile on the TV, then resend',
+      );
+      final parsed = parseProfileGraphResultBody(body);
+      expect(parsed, isNotNull);
+      expect(parsed!.ok, isFalse);
+      expect(parsed.message, contains('Admin profile'));
+
+      expect(parseProfileGraphResultBody('not json'), isNull);
+      expect(parseProfileGraphResultBody('{"ok":"yes","message":1}'), isNull);
+      // A hostile peer must not be able to pump an unbounded string into a
+      // sender-side toast.
+      expect(
+        parseProfileGraphResultBody(
+          '{"ok":true,"message":"${'x' * 600}"}',
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('round trip', () {
     test('reassembles exactly what was sent', () {
       final payload = jsonEncode([

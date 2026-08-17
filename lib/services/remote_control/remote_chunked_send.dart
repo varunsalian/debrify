@@ -122,6 +122,26 @@ String chunkNeedBody({
   }
 }
 
+/// Body of a profile-graph outcome report (receiver → sender).
+String profileGraphResultBody({required bool ok, required String message}) {
+  return jsonEncode({'ok': ok, 'message': message});
+}
+
+/// Parse of [profileGraphResultBody]; null when malformed.
+({bool ok, String message})? parseProfileGraphResultBody(String data) {
+  try {
+    final map = jsonDecode(data) as Map<String, dynamic>;
+    final ok = map['ok'];
+    final message = map['message'];
+    if (ok is! bool || message is! String || message.length > 500) {
+      return null;
+    }
+    return (ok: ok, message: message);
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Sent chunks kept for gap repair. Chunks are SEALED ciphertext slices —
 /// caching them holds no plaintext — and resends go to the transfer's
 /// original target only, never to whoever asked (a forged need can at worst

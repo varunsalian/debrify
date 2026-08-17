@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -591,14 +592,32 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       ok = false;
     }
     if (!mounted) return;
-    setState(() {
-      _transferring = false;
-      _done = ok;
-    });
-    if (ok) {
-      _toast('Profiles sent — confirm the import on the TV');
-    } else {
+    if (!ok) {
+      setState(() => _transferring = false);
       _toast('Profile transfer failed', error: true);
+      return;
+    }
+    // Delivered is not applied: the TV user still confirms, authorization
+    // can refuse, the import can fail. Wait for the receiver's real
+    // outcome instead of declaring victory at the first hop.
+    _toast('Delivered — confirm the import on the TV');
+    try {
+      final result = await state.profileGraphResults.stream.first.timeout(
+        const Duration(seconds: 180),
+      );
+      if (!mounted) return;
+      setState(() {
+        _transferring = false;
+        _done = result.ok;
+      });
+      _toast(result.message, error: !result.ok);
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() => _transferring = false);
+      _toast(
+        'No response from the TV. Open an Admin profile there and resend.',
+        error: true,
+      );
     }
   }
 
