@@ -187,21 +187,11 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
       _backspace();
       return KeyEventResult.handled;
     }
-    if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.numpadEnter) {
-      // This handler sits on an ANCESTOR Focus, so it sees keys bubbling up
-      // from whichever keypad button holds focus. Claiming select here is
-      // what broke TV entry: DPAD-center on a focused digit submitted an
-      // (empty) PIN instead of pressing the button. Only submit when focus
-      // rests on this wrapper itself (physical-keyboard flow); otherwise let
-      // the focused button activate.
-      if (FocusManager.instance.primaryFocus != node) {
-        return KeyEventResult.ignored;
-      }
-      _submit();
-      return KeyEventResult.handled;
-    }
+    // Enter/select are NEVER claimed here: this handler sits on an ancestor
+    // of whichever keypad button holds focus, and claiming them is what
+    // broke TV entry — DPAD-center submitted an (empty) PIN instead of
+    // pressing the focused button. Digits and backspace are safe to handle
+    // for physical keyboards because no child wants them.
     return KeyEventResult.ignored;
   }
 
@@ -215,8 +205,15 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
         ),
         title: Text(widget.profile.name),
       ),
+      // A pure key LISTENER, never a focus target: when this wrapper was
+      // focusable (autofocus: true), it took primary focus and trapped it —
+      // every button lies inside its rect, so directional DPAD traversal
+      // found no candidate "in any direction" and the keypad was unreachable.
+      // With the wrapper unfocusable, the digit-1 button's own autofocus
+      // wins, and bubbling still delivers hardware digits/backspace here.
       body: Focus(
-        autofocus: true,
+        canRequestFocus: false,
+        skipTraversal: true,
         onKeyEvent: _handleHardwareKey,
         child: SafeArea(
           child: Center(

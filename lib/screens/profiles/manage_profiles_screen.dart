@@ -79,6 +79,48 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
     }
   }
 
+  void Function(String) _runProfileAction(UserProfile profile) => (action) {
+    if (action == 'edit') _edit(profile);
+    if (action == 'delete') _delete(profile);
+    if (action == 'toggle') _toggleEnabled(profile);
+  };
+
+  /// TV replacement for the popup trailing: selecting a row opens its
+  /// actions as a DPAD-navigable dialog.
+  Future<void> _showProfileActions(UserProfile profile) async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text(profile.name),
+        children: [
+          if (profile.isEnabled)
+            ListTile(
+              autofocus: true,
+              leading: const Icon(Icons.edit_rounded),
+              title: const Text('Edit'),
+              onTap: () => Navigator.of(dialogContext).pop('edit'),
+            ),
+          ListTile(
+            autofocus: !profile.isEnabled,
+            leading: Icon(
+              profile.isEnabled
+                  ? Icons.pause_circle_outline_rounded
+                  : Icons.play_circle_outline_rounded,
+            ),
+            title: Text(profile.isEnabled ? 'Disable' : 'Enable'),
+            onTap: () => Navigator.of(dialogContext).pop('toggle'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline_rounded),
+            title: const Text('Delete'),
+            onTap: () => Navigator.of(dialogContext).pop('delete'),
+          ),
+        ],
+      ),
+    );
+    if (action != null) _runProfileAction(profile)(action);
+  }
+
   Future<void> _edit([UserProfile? profile]) async {
     try {
       final initiatingProfileId = _authorization.profileId;
@@ -414,31 +456,38 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
                               ? profile.role.name
                               : '${profile.role.name} · disabled',
                         ),
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (action) {
-                            if (action == 'edit') _edit(profile);
-                            if (action == 'delete') _delete(profile);
-                            if (action == 'toggle') _toggleEnabled(profile);
-                          },
-                          itemBuilder: (_) => [
-                            if (profile.isEnabled)
-                              const PopupMenuItem(
-                                value: 'edit',
-                                child: Text('Edit'),
+                        // The popup trailing is unreachable by DPAD — it
+                        // sits inside the focused tile's rect, so directional
+                        // traversal never steps into it (and disabled rows
+                        // weren't focusable at all). On TV the row itself
+                        // opens an action dialog instead.
+                        trailing: PlatformUtil.isTelevision
+                            ? const Icon(Icons.more_horiz_rounded)
+                            : PopupMenuButton<String>(
+                                onSelected: _runProfileAction(profile),
+                                itemBuilder: (_) => [
+                                  if (profile.isEnabled)
+                                    const PopupMenuItem(
+                                      value: 'edit',
+                                      child: Text('Edit'),
+                                    ),
+                                  PopupMenuItem(
+                                    value: 'toggle',
+                                    child: Text(
+                                      profile.isEnabled ? 'Disable' : 'Enable',
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text('Delete'),
+                                  ),
+                                ],
                               ),
-                            PopupMenuItem(
-                              value: 'toggle',
-                              child: Text(
-                                profile.isEnabled ? 'Disable' : 'Enable',
-                              ),
-                            ),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Text('Delete'),
-                            ),
-                          ],
-                        ),
-                        onTap: profile.isEnabled ? () => _edit(profile) : null,
+                        onTap: PlatformUtil.isTelevision
+                            ? () => _showProfileActions(profile)
+                            : profile.isEnabled
+                            ? () => _edit(profile)
+                            : null,
                       );
                     },
                   ),
