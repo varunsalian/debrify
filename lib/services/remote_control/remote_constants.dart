@@ -174,6 +174,12 @@ class ConfigCommand {
   // A picked avatar image from the paired phone. NOT setup data: it applies
   // to the active profile immediately instead of joining the staged import.
   static const String profileAvatar = 'profile_avatar';
+  // A complete profile graph (exportAllProfiles package, integrity-stamped)
+  // from an Admin phone. Applied atomically through the same
+  // restoreDeviceGraph path a file restore uses — it never joins the staged
+  // per-command import, and it supersedes the piecemeal send when chosen.
+  // v2-only by construction (rides the sealed chunked transport).
+  static const String profileGraph = 'profile_graph';
   static const String complete =
       'complete'; // Signals all configs sent, TV should restart
 }
@@ -205,6 +211,13 @@ const int kChunkNeedMaxIndices = 100;
 
 /// How long a sender keeps a finished transfer's chunks for repair.
 const Duration kChunkResendCacheTtl = Duration(seconds: 90);
+
+/// Largest profile-graph payload a sender will put on the wire. The
+/// receiver's chunk reassembly buffer caps at 16 MB and holds the sealed
+/// blob as base64 (x4/3), so ~11.9 MB of plaintext is the true ceiling —
+/// 10 MB leaves headroom. A graph over budget is re-exported without its
+/// library database snapshots (catalogs rebuild from their sources).
+const int kMaxProfileGraphWireBytes = 10 * 1024 * 1024;
 
 const int kChunkMaxBytes =
     1400; // Safe single-fragment UDP payload (MTU 1500 - IP/UDP headers)

@@ -128,9 +128,13 @@ class ProfilePackageService {
     return package;
   }
 
+  /// [includeDatabaseSnapshots] exists for the remote transport, whose
+  /// reassembly buffer cannot take a maxed-out library database; skipping
+  /// them is recorded in omissions so the receiver can say so.
   Future<PortableProfilePackage> exportAllProfiles({
     required ProfileAuthorizationContext context,
     required bool includeSecrets,
+    bool includeDatabaseSnapshots = true,
   }) async {
     final actor = await context.validate(registry);
     if (actor.role != UserProfileRole.admin ||
@@ -172,7 +176,9 @@ class ProfilePackageService {
       sections[sectionId] = await PortableProfilePackage.buildSection(
         await _exportPreferences(scope, sanitized: false),
       );
-      final databaseExport = await ProfileDatabaseSnapshot.export(scope);
+      final databaseExport = includeDatabaseSnapshots
+          ? await ProfileDatabaseSnapshot.export(scope)
+          : (attachments: const <String, Object?>{}, skipped: const <String>[]);
       skippedDatabases.addAll(
         databaseExport.skipped.map((entry) => '${profile.name}: $entry'),
       );
@@ -255,6 +261,7 @@ class ProfilePackageService {
         'cachesAndTransientEpg': true,
         if (skippedDatabases.isNotEmpty)
           'libraryDatabasesTooLarge': skippedDatabases.join(', '),
+        if (!includeDatabaseSnapshots) 'libraryDatabasesOmitted': true,
       },
     );
     await context.validate(registry);

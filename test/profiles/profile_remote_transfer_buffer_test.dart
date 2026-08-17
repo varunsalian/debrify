@@ -70,6 +70,31 @@ void main() {
     await temporaryDirectory.delete(recursive: true);
   });
 
+  test('a profile graph is never staged as a config category', () async {
+    // Contrast: a normal config command stages into the transfer buffer...
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.searchEngines,
+      '[]',
+      peer,
+    );
+    expect(router.debugProfileTransferScope, isNotNull);
+    router.clearProfileTransferBuffer();
+
+    // ...but a profile graph must bypass staging entirely: it either runs
+    // the atomic restoreDeviceGraph path (blocked here — no navigator for
+    // its confirm dialog) or does nothing. It must never sit in the buffer
+    // pretending to be an importable category.
+    await router.debugDispatchAndWait(
+      RemoteAction.config,
+      ConfigCommand.profileGraph,
+      '{"format":"debrify-profile-package"}',
+      peer,
+    );
+    expect(router.debugProfileTransferScope, isNull);
+    expect((await registry.listProfiles()).length, 2);
+  });
+
   test(
     'buffer is replaced rather than inherited after a profile switch',
     () async {

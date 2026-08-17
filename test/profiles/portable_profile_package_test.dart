@@ -179,6 +179,32 @@ void main() {
     expect(legacyProbe.legacySource, contains('dark'));
   });
 
+  test('authenticated-transport encode/decode round-trips', () async {
+    // The remote session's AEAD stands in for the passphrase layer: the
+    // same sensitive package that plain decodeMap refuses is accepted via
+    // decodeAuthenticatedMap, with all structural checks still applied.
+    final source = await package(
+      preferences: const <String, Object?>{'account_label': 'private'},
+    );
+    final json = await PortableProfilePackage.encodeAuthenticatedJson(source);
+    final decoded = jsonDecode(json) as Map<String, dynamic>;
+    await expectLater(
+      PortableProfilePackage.decodeMap(decoded),
+      throwsA(isA<FormatException>()),
+    );
+    final restored = await PortableProfilePackage.decodeAuthenticatedMap(
+      decoded,
+    );
+    expect(restored.profiles.single['name'], 'Private profile');
+
+    // Tampering after the integrity stamp still fails closed.
+    decoded['mode'] = 'deviceGraph';
+    await expectLater(
+      PortableProfilePackage.decodeAuthenticatedMap(decoded),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
   test('wrong passphrase and unsafe KDF parameters fail closed', () async {
     final encrypted = await PortableProfilePackage.encrypt(
       await package(),

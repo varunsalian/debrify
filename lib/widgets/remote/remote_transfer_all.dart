@@ -14,6 +14,13 @@ import 'remote_pairing_dialog.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
 import '../../services/profiles/profile_async_authorization.dart';
+import '../../services/profiles/profile_authorization.dart';
+import '../../services/profiles/profile_bootstrap.dart';
+import '../../services/profiles/profile_package_service.dart';
+import '../../services/profiles/profile_runtime.dart';
+import '../../services/profiles/connection_resource_service.dart';
+import '../../services/profiles/device_key_provider.dart';
+import '../../services/profiles/portable_profile_package.dart';
 import '../../models/profiles/profile_policy.dart';
 
 /// One-click "Transfer Everything" flow. Pushes all configured services
@@ -56,6 +63,11 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   /// transfer reads as broken — the refusal dialog only lands afterwards.
   bool _connecting = false;
   bool _done = false;
+
+  /// Admin-only: send the complete profile graph (profiles, connections,
+  /// PINs) instead of merging items into the TV's current profile.
+  bool _canSendProfileGraph = false;
+  bool _includeProfiles = false;
 
   String? _traktUsername;
   String? _simklUsername;
@@ -349,11 +361,13 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         );
       }
 
+      final canSendProfileGraph = await _profileGraphEligible();
       if (!mounted) return;
       setState(() {
         _items
           ..clear()
           ..addAll(items);
+        _canSendProfileGraph = canSendProfileGraph;
         _loading = false;
       });
     } catch (_) {
@@ -365,9 +379,32 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
   bool get _hasPikpak => _items.any((i) => i.key == ConfigCommand.pikpak);
 
   bool get _canStart {
-    if (_items.isEmpty || _transferring || _connecting || _done) return false;
+    if (_transferring || _connecting || _done) return false;
+    // A graph send supersedes the item list, PikPak password included —
+    // the package carries the sealed secret store, not re-entered passwords.
+    if (_includeProfiles) return true;
+    if (_items.isEmpty) return false;
     if (_hasPikpak && _pikpakPasswordController.text.isEmpty) return false;
     return true;
+  }
+
+  Future<bool> _profileGraphEligible() async {
+    try {
+      if (!ProfileRuntime.isInitialized ||
+          !ProfileRuntime.isProfileCommitted) {
+        return false;
+      }
+      final registry = ProfileBootstrap.registry;
+      final authorization = await ProfileAuthorizationContext.capture(
+        registry,
+      );
+      final actor = await authorization.validate(registry);
+      return actor.role == UserProfileRole.admin &&
+          actor.allows(ProfileFeature.manageProfiles) &&
+          actor.allows(ProfileFeature.backupRestore);
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _start() async {
@@ -394,6 +431,11 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       if (mounted) setState(() => _connecting = false);
     }
     if (session == null || !mounted) return;
+
+    if (_includeProfiles) {
+      await _startProfileGraph(state, target.ip);
+      return;
+    }
 
     setState(() {
       _transferring = true;
@@ -474,6 +516,89 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
       _toast('Transfer failed', error: true);
     } else {
       _toast('Transferred $success, $failure failed', warning: true);
+    }
+  }
+
+  /// Sends the complete profile graph as one atomic payload — the file
+  /// restore's package over the sealed session, no passphrase step. The TV
+  /// confirms on-screen before importing, so success here means DELIVERED,
+  /// not yet applied.
+  Future<void> _startProfileGraph(
+    RemoteControlState state,
+    String targetIp,
+  ) async {
+    setState(() {
+      _transferring = true;
+      _done = false;
+    });
+    HapticFeedback.mediumImpact();
+    var ok = false;
+    try {
+      Future<bool> sendGraph() async {
+        final registry = ProfileBootstrap.registry;
+        final authorization = await ProfileAuthorizationContext.capture(
+          registry,
+        );
+        final service = ProfilePackageService(
+          registry: registry,
+          resources: ConnectionResourceService(
+            registry: registry,
+            cipher: DeviceKeyProvider.cipher,
+          ),
+        );
+        var package = await service.exportAllProfiles(
+          context: authorization,
+          includeSecrets: true,
+        );
+        var payload = await PortableProfilePackage.encodeAuthenticatedJson(
+          package,
+        );
+        // Measure WIRE bytes, not UTF-16 units: profile names and settings
+        // can hold non-ASCII that jsonEncode emits unescaped.
+        if (utf8.encode(payload).length > kMaxProfileGraphWireBytes) {
+          // Library databases can outgrow the receiver's reassembly buffer;
+          // send without them — catalogs rebuild from their restored sources.
+          package = await service.exportAllProfiles(
+            context: authorization,
+            includeSecrets: true,
+            includeDatabaseSnapshots: false,
+          );
+          payload = await PortableProfilePackage.encodeAuthenticatedJson(
+            package,
+          );
+          if (utf8.encode(payload).length > kMaxProfileGraphWireBytes) {
+            throw StateError('Profile package too large for remote transfer');
+          }
+        }
+        return sendConfigPayloadToDevice(
+          state,
+          ConfigCommand.profileGraph,
+          targetIp,
+          payload,
+          label: 'All profiles',
+        );
+      }
+
+      // Same outbound barrier every piecemeal item send runs under.
+      final outbound = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.remoteTransfer,
+      );
+      ok = outbound == null
+          ? await sendGraph()
+          : await outbound.runIfCurrentAsOutbound(sendGraph);
+    } catch (_) {
+      debugPrint('RemoteTransferAll: profile graph send failed');
+      ok = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _transferring = false;
+      _done = ok;
+    });
+    if (ok) {
+      _toast('Profiles sent — confirm the import on the TV');
+    } else {
+      _toast('Profile transfer failed', error: true);
     }
   }
 
@@ -702,15 +827,18 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
               ),
             ),
           )
-        else if (_items.isEmpty) ...[
+        else if (_items.isEmpty && !_canSendProfileGraph) ...[
           _buildEmpty(),
           // Nothing sendable, but if the reason is a file-only IPTV setup the
           // user deserves to know that rather than "nothing configured".
           if (_iptvFileImported > 0) _buildFileImportedNote(),
         ] else ...[
-          if (_hasPikpak) _buildPikpakPassword(),
-          ..._items.map(_buildItemTile),
-          if (_iptvFileImported > 0) _buildFileImportedNote(),
+          if (_canSendProfileGraph) _buildProfilesToggle(),
+          if (!_includeProfiles) ...[
+            if (_hasPikpak) _buildPikpakPassword(),
+            ..._items.map(_buildItemTile),
+            if (_iptvFileImported > 0) _buildFileImportedNote(),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -757,7 +885,9 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                               ? 'Connecting securely…'
                               : _done
                                   ? 'Done'
-                                  : 'Transfer Everything',
+                                  : _includeProfiles
+                                      ? 'Send All Profiles'
+                                      : 'Transfer Everything',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -782,6 +912,37 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ],
         ],
       ],
+    );
+  }
+
+  Widget _buildProfilesToggle() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(
+            0xFF6366F1,
+          ).withValues(alpha: _includeProfiles ? 0.6 : 0.15),
+        ),
+      ),
+      child: SwitchListTile(
+        value: _includeProfiles,
+        onChanged: _transferring || _connecting
+            ? null
+            : (value) => setState(() => _includeProfiles = value),
+        title: const Text('Include all profiles'),
+        subtitle: Text(
+          'Recreates every profile on the TV — settings, connections, and '
+          'PINs — instead of merging into its signed-in profile. The TV '
+          'asks before importing.',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
     );
   }
 

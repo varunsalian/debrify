@@ -34,6 +34,7 @@ import '../../models/debrify_tv_channel_record.dart';
 import '../../models/indexer_manager_config.dart';
 import '../../models/webdav_item.dart';
 import '../../models/profiles/profile_policy.dart';
+import '../../models/profiles/user_profile.dart';
 import '../profiles/profile_remote_lease.dart';
 import '../profiles/profile_runtime.dart';
 import '../profiles/profile_scope.dart';
@@ -41,6 +42,11 @@ import '../profiles/profile_authorization.dart';
 import '../profiles/profile_bootstrap.dart';
 import '../profiles/profile_avatar_ingest.dart';
 import '../profiles/profile_avatar_policy.dart';
+import '../profiles/portable_profile_package.dart';
+import '../profiles/profile_app_lifecycle_participant.dart';
+import '../profiles/profile_lifecycle.dart';
+import '../profiles/profile_restore_coordinator.dart';
+import '../profiles/device_key_provider.dart';
 import '../../services/backup_restore_service.dart';
 
 /// Callback type for remote command handlers
@@ -755,7 +761,10 @@ class RemoteCommandRouter {
         // success. They import directly into the active profile's channel
         // repository, exactly as the pre-profiles path did; the transport is
         // already authorized and encrypted at this point.
-        command != ConfigCommand.debrifyChannel) {
+        command != ConfigCommand.debrifyChannel &&
+        // A profile graph is its own atomic import path (restoreDeviceGraph)
+        // with its own confirmation — never a staged category.
+        command != ConfigCommand.profileGraph) {
       if (!_bufferProfileConfig(command, data, context, profileBinding)) {
         return;
       }
@@ -772,6 +781,162 @@ class RemoteCommandRouter {
     await _trackConfigWork(
       _dispatchConfigCommand(command, data, context: context),
     );
+  }
+
+  /// A complete profile graph pushed from a paired Admin phone — the file
+  /// restore's deviceGraph path over the wire. The session AEAD stands in
+  /// for the backup passphrase, the ACTIVE TV profile must hold the same
+  /// authority a file restore demands, and the user confirms on-screen
+  /// before anything is created. Never staged: it applies atomically through
+  /// [ProfileRestoreCoordinator.restoreDeviceGraph] or not at all.
+  Future<void> _handleProfileGraphConfig(
+    String data,
+    RemoteCommandContext remoteContext,
+  ) async {
+    if (!remoteContext.encrypted || !remoteContext.authorized) {
+      debugPrint(
+        'RemoteCommandRouter: profile graph requires an authorized session',
+      );
+      return;
+    }
+    // One import at a time: a phone re-sending while the confirm dialog is
+    // still up must not stack a second dialog and duplicate the whole graph.
+    if (_profileGraphInFlight) {
+      _showSnackBar('A profile import is already in progress', isError: true);
+      return;
+    }
+    _profileGraphInFlight = true;
+    try {
+      await _handleProfileGraphConfigInner(data, remoteContext);
+    } finally {
+      _profileGraphInFlight = false;
+    }
+  }
+
+  bool _profileGraphInFlight = false;
+
+  Future<void> _handleProfileGraphConfigInner(
+    String data,
+    RemoteCommandContext remoteContext,
+  ) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      _showSnackBar(
+        'Profiles are not set up on this device yet — finish setup first',
+        isError: true,
+      );
+      return;
+    }
+    final PortableProfilePackage package;
+    try {
+      // Off-main: a 10 MB parse + digest would freeze TV hardware for
+      // seconds on the UI isolate.
+      package = await PortableProfilePackage.decodeAuthenticatedJson(data);
+      if (package.mode != 'deviceGraph') {
+        throw const FormatException('Not a profile graph package');
+      }
+    } on FormatException catch (error) {
+      _showSnackBar(
+        'Profile transfer rejected: ${error.message}',
+        isError: true,
+      );
+      return;
+    }
+    final registry = ProfileBootstrap.registry;
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final UserProfile actor;
+    try {
+      actor = await authorization.validate(registry);
+    } catch (_) {
+      _showSnackBar('Profile import authorization expired', isError: true);
+      return;
+    }
+    if (actor.role != UserProfileRole.admin ||
+        !actor.allows(ProfileFeature.manageProfiles) ||
+        !actor.allows(ProfileFeature.backupRestore)) {
+      _showSnackBar(
+        'Switch this TV to an Admin profile to receive profiles',
+        isError: true,
+      );
+      return;
+    }
+    final context = _navigatorKey?.currentContext;
+    if (context == null || !context.mounted) {
+      _showSnackBar('Profile import needs the app screen open', isError: true);
+      return;
+    }
+    final sender =
+        remoteContext.peerName ?? remoteContext.sourceIp ?? 'a paired phone';
+    final librariesOmitted = package.omissions['libraryDatabasesOmitted'] ==
+        true;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: Text('Import ${package.profiles.length} profiles?'),
+            content: Text(
+              'From: $sender\n\n'
+              'The profiles and their shared connections are staged under '
+              'new IDs, then made visible together. Existing profiles are '
+              'not overwritten. Profiles keep their PINs when the transfer '
+              'carries them.'
+              '${librariesOmitted ? '\n\nLarge library databases were left '
+                  'out of this transfer; catalogs rebuild from their '
+                  'sources.' : ''}',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                autofocus: true,
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Import profiles'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) {
+      _showSnackBar('Profile import declined');
+      return;
+    }
+    // Busy dialog while the restore stages and verifies. Self-dismissing via
+    // its own context — the router must never pop someone else's route.
+    final done = ValueNotifier<bool>(false);
+    if (context.mounted) {
+      unawaited(
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) =>
+              _RouterBusyDialog(message: 'Importing profiles…', done: done),
+        ),
+      );
+    }
+    try {
+      final report = await ProfileRestoreCoordinator(
+        registry: registry,
+        cipher: DeviceKeyProvider.cipher,
+        lifecycleParticipants: <ProfileLifecycleParticipant>[
+          ProfileAppLifecycleParticipant(),
+        ],
+      ).restoreDeviceGraph(package: package, authorization: authorization);
+      _showSnackBar(
+        'Imported ${report.profilesImported} profiles and '
+        '${report.resourcesImported} connections from $sender.'
+        '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) need a new PIN.'}',
+      );
+    } catch (_) {
+      debugPrint('RemoteCommandRouter: profile graph restore failed');
+      _showSnackBar(
+        'Profile import failed; existing data is unchanged',
+        isError: true,
+      );
+    } finally {
+      done.value = true;
+    }
   }
 
   /// A picked image pushed from the paired phone, applied to the ACTIVE
@@ -1581,6 +1746,9 @@ class RemoteCommandRouter {
         break;
       case ConfigCommand.profileAvatar:
         await _handleProfileAvatarConfig(data, context);
+        break;
+      case ConfigCommand.profileGraph:
+        await _handleProfileGraphConfig(data, context);
         break;
       case ConfigCommand.debrifyChannelStart:
         _handleDebrifyChannelStart(data, context);
@@ -2927,4 +3095,61 @@ class _LegacyItem {
       isComplete = true,
       command = ConfigCommand.complete,
       data = '';
+}
+
+/// Busy dialog for long-running remote imports: undismissable while work
+/// runs, closed through its OWN context when `done` fires — the initiating
+/// State may be anywhere, and an orphaned `canPop: false` modal on the root
+/// navigator would wedge the app.
+class _RouterBusyDialog extends StatefulWidget {
+  const _RouterBusyDialog({required this.message, required this.done});
+
+  final String message;
+  final ValueNotifier<bool> done;
+
+  @override
+  State<_RouterBusyDialog> createState() => _RouterBusyDialogState();
+}
+
+class _RouterBusyDialogState extends State<_RouterBusyDialog> {
+  @override
+  void initState() {
+    super.initState();
+    widget.done.addListener(_maybeClose);
+    if (widget.done.value) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeClose());
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.done.removeListener(_maybeClose);
+    super.dispose();
+  }
+
+  void _maybeClose() {
+    if (widget.done.value && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            const SizedBox(width: 16),
+            Expanded(child: Text(widget.message)),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -217,6 +217,33 @@ class PortableProfilePackage {
     Map<String, dynamic> decoded,
   ) => _decodeMap(decoded, authenticatedEncryption: false);
 
+  /// Decode for transports that already provide authenticated encryption —
+  /// the paired remote session's AEAD stands in for the passphrase layer.
+  /// Every structural validation and the integrity digest still run.
+  static Future<PortableProfilePackage> decodeAuthenticatedMap(
+    Map<String, dynamic> decoded,
+  ) => _decodeMap(decoded, authenticatedEncryption: true);
+
+  /// Off-main integrity-stamp + compact encode for session-authenticated
+  /// transports (remote transfer). No passphrase layer: the wire seals it.
+  static Future<String> encodeAuthenticatedJson(
+    PortableProfilePackage package,
+  ) {
+    return Isolate.run(() async => jsonEncode(await withIntegrity(package)));
+  }
+
+  /// Off-main counterpart for the receiving side: parse + validate a
+  /// session-authenticated payload without stalling the UI isolate.
+  static Future<PortableProfilePackage> decodeAuthenticatedJson(String json) {
+    return Isolate.run(() async {
+      final decoded = jsonDecode(json);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Profile graph must be an object');
+      }
+      return decodeAuthenticatedMap(decoded);
+    });
+  }
+
   static Future<PortableProfilePackage> _decodeMap(
     Map<String, dynamic> decoded, {
     required bool authenticatedEncryption,
