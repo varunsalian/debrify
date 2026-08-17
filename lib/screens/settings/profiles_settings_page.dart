@@ -65,9 +65,7 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
           actor.allows(ProfileFeature.manageProfiles);
       // Managers see the whole household, disabled profiles included —
       // hiding them is how "why can't I delete it" support threads start.
-      final profiles = await registry.listProfiles(
-        includeDisabled: mayManage,
-      );
+      final profiles = await registry.listProfiles(includeDisabled: mayManage);
       if (!mounted) return;
       setState(() {
         _profiles = profiles;
@@ -216,6 +214,36 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
     );
   }
 
+  Future<void> _pickGateStyle() async {
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Who\'s-watching style'),
+        children: [
+          for (final option in ProfileGateStyle.options)
+            ListTile(
+              // The current choice takes first focus, so DPAD opens the
+              // dialog standing on what is already set.
+              autofocus: option.id == ProfileGateStyle.cached,
+              title: Text(option.label),
+              subtitle: Text(
+                option.id == ProfileGateStyle.defaultStyle
+                    ? '${option.blurb} · default'
+                    : option.blurb,
+              ),
+              trailing: option.id == ProfileGateStyle.cached
+                  ? const Icon(Icons.check_rounded)
+                  : null,
+              onTap: () => Navigator.of(dialogContext).pop(option.id),
+            ),
+        ],
+      ),
+    );
+    if (picked == null) return;
+    await ProfileGateStyle.set(picked);
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final profiles = _profiles ?? const <UserProfile>[];
@@ -241,18 +269,9 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
                   leading: const Icon(Icons.style_rounded),
                   title: const Text('Who\'s-watching style'),
                   subtitle: Text(
-                    ProfileGateStyle.cached == ProfileGateStyle.wall
-                        ? 'Portrait Wall'
-                        : 'Classic',
+                    ProfileGateStyle.labelFor(ProfileGateStyle.cached),
                   ),
-                  onTap: () async {
-                    await ProfileGateStyle.set(
-                      ProfileGateStyle.cached == ProfileGateStyle.wall
-                          ? ProfileGateStyle.classic
-                          : ProfileGateStyle.wall,
-                    );
-                    if (mounted) setState(() {});
-                  },
+                  onTap: _pickGateStyle,
                 ),
                 SwitchListTile(
                   secondary: const Icon(Icons.login_rounded),
@@ -295,7 +314,9 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
                   ListTile(
                     leading: const Icon(Icons.save_alt_rounded),
                     title: const Text('Back up'),
-                    subtitle: const Text('Encrypted file — one or all profiles'),
+                    subtitle: const Text(
+                      'Encrypted file — one or all profiles',
+                    ),
                     onTap: _backUp,
                   ),
                   ListTile(

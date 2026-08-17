@@ -20,6 +20,7 @@ import '../../services/profiles/profile_remote_lease.dart';
 import '../../services/remote_control/remote_command_router.dart';
 import '../../services/tvos_top_shelf_service.dart';
 import 'manage_profiles_screen.dart';
+import 'profile_gate_looks.dart';
 import 'profile_picker_screen.dart';
 import 'profile_wall_screen.dart';
 import 'profile_pin_screen.dart';
@@ -403,17 +404,40 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
         activeProfile?.allows(ProfileFeature.manageProfiles) == true
         ? () => _requestManage(activeProfile!)
         : null;
-    if (ProfileGateStyle.cached == ProfileGateStyle.wall) {
-      return ProfileWallScreen(
-        profiles: profiles,
-        onSelected: _selected,
-        onManage: onManage,
-      );
+    switch (ProfileGateStyle.cached) {
+      case ProfileGateStyle.classic:
+        return ProfilePickerScreen(
+          profiles: profiles,
+          onSelected: _selected,
+          onManage: onManage,
+        );
+      case ProfileGateStyle.wall:
+        return ProfileWallScreen(
+          profiles: profiles,
+          onSelected: _selected,
+          onManage: onManage,
+        );
+      case ProfileGateStyle.row:
+        return ProfileRowGateScreen(
+          profiles: profiles,
+          onSelected: _selected,
+          onManage: onManage,
+        );
+      case ProfileGateStyle.marquee:
+        return ProfileMarqueeGateScreen(
+          profiles: profiles,
+          onSelected: _selected,
+          onManage: onManage,
+        );
+      // Theater is the default; an unknown stored value (a future style
+      // rolled back) lands here too rather than on a blank screen.
+      case ProfileGateStyle.theater:
+      default:
+        return ProfileTheaterGateScreen(
+          profiles: profiles,
+          onSelected: _selected,
+          onManage: onManage,
+        );
     }
-    return ProfilePickerScreen(
-      profiles: profiles,
-      onSelected: _selected,
-      onManage: onManage,
-    );
   }
 }

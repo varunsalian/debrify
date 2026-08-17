@@ -7,23 +7,56 @@ import '../../services/profiles/profile_preferences.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
 
-/// The gate's style: `classic` is the shipped card grid, `wall` the Portrait
-/// Wall. Device-level, because the gate renders before any profile is entered
-/// and profile-scoped preferences do not exist yet at that point.
+/// The gate's style. Device-level, because the gate renders before any
+/// profile is entered and profile-scoped preferences do not exist yet at
+/// that point.
+///
+/// `theater` is the DEFAULT (2026-08-17): a device that never chose keeps
+/// getting the flagship look; an explicit earlier choice (classic/wall) is a
+/// stored value and survives.
 class ProfileGateStyle {
   ProfileGateStyle._();
 
   static const String key = 'profile_gate_style_v1';
   static const String classic = 'classic';
   static const String wall = 'wall';
+  static const String row = 'row';
+  static const String marquee = 'marquee';
+  static const String theater = 'theater';
+
+  static const String defaultStyle = theater;
+
+  /// Picker metadata, in display order.
+  static const List<({String id, String label, String blurb})> options = [
+    (
+      id: theater,
+      label: 'Theater',
+      blurb: 'The chosen profile lights the whole room',
+    ),
+    (
+      id: marquee,
+      label: 'Marquee',
+      blurb: 'A big stage for whoever is focused',
+    ),
+    (id: row, label: 'Row', blurb: 'A simple row of portraits'),
+    (
+      id: wall,
+      label: 'Portrait Wall',
+      blurb: 'Tall posters, colour-washed room',
+    ),
+    (id: classic, label: 'Classic', blurb: 'The original card grid'),
+  ];
+
+  static String labelFor(String id) =>
+      options.firstWhere((o) => o.id == id, orElse: () => options.first).label;
 
   /// Synchronous mirror for build paths; loaded whenever the gate loads its
   /// roster, and after the hub writes a change.
-  static String cached = classic;
+  static String cached = defaultStyle;
 
   static Future<void> warm() async {
     final device = await DevicePreferences.instance();
-    cached = device.getString(key) ?? classic;
+    cached = device.getString(key) ?? defaultStyle;
   }
 
   static Future<void> set(String value) async {
