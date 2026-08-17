@@ -94,6 +94,30 @@ abstract final class ParallaxTravel {
   }
 }
 
+/// Marks a subtree that should get the FULL parallax on Android TV — the
+/// spring, the tilt and the specular glare — instead of the cheap lite body
+/// the platform otherwise degrades to.
+///
+/// The lite body exists because the full effect stutters when a whole *board*
+/// of cards animates on a weak Mali box. A detail page is a different budget:
+/// a handful of focusable cards, one lifting at a time, so it can afford the
+/// real thing. Wrapping the detail Showcase in this scope opts it in without
+/// touching the home board, settings or onboarding, which stay lite.
+///
+/// Absent (the default) means lite — so any tree that does not opt in keeps
+/// the exact behaviour it shipped with.
+class ParallaxRichScope extends InheritedWidget {
+  const ParallaxRichScope({super.key, required super.child});
+
+  static bool of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<ParallaxRichScope>() !=
+      null;
+
+  @override
+  bool updateShouldNotify(ParallaxRichScope oldWidget) => false;
+}
+
 /// The tvOS focus effect: lift, rise, tilt, shift, travelling shadow and a
 /// specular glare, spring-driven.
 ///
@@ -154,6 +178,9 @@ class ParallaxFocus extends StatelessWidget {
       curve: app.motion.emphasized,
       duration: app.motion.base,
       fixedScaleForeground: fixedScaleForeground,
+      // Android TV degrades to the lite body unless a [ParallaxRichScope]
+      // above opts this subtree into the full effect (the detail page does).
+      richTv: ParallaxRichScope.of(context),
       child: child,
     );
   }
@@ -193,6 +220,10 @@ class _ParallaxBody extends StatefulWidget {
   final Duration duration;
   final Widget? fixedScaleForeground;
 
+  /// Opts this body into the full effect on Android TV (spring + tilt + glare)
+  /// rather than the lite body. Set by a [ParallaxRichScope] ancestor.
+  final bool richTv;
+
   const _ParallaxBody({
     required this.focused,
     required this.child,
@@ -202,6 +233,7 @@ class _ParallaxBody extends StatefulWidget {
     required this.curve,
     required this.duration,
     required this.fixedScaleForeground,
+    required this.richTv,
   });
 
   @override
@@ -301,7 +333,7 @@ class _ParallaxBodyState extends State<_ParallaxBody>
     // mid-spring. A short ease-out reaches the same endpoint in about a
     // tenth of the frames and reads crisper under DPAD repeat. Same
     // policy family as the lite body below.
-    if (PlatformUtil.isAndroidTvCached) {
+    if (PlatformUtil.isAndroidTvCached && !widget.richTv) {
       _c.animateTo(
         target,
         duration: const Duration(milliseconds: 140),
@@ -385,8 +417,10 @@ class _ParallaxBodyState extends State<_ParallaxBody>
           // RadialGradient) and with it the rounded ClipRRect (a saveLayer
           // on that pipeline). Same compromise-per-box family as grain-off
           // and the flattened ground gradient; Apple TV and pointer devices
-          // keep the full effect below.
-          if (PlatformUtil.isAndroidTvCached) {
+          // keep the full effect below — as does any subtree inside a
+          // [ParallaxRichScope] (the detail page), which is why [richTv] skips
+          // this branch.
+          if (PlatformUtil.isAndroidTvCached && !widget.richTv) {
             return Transform(
               alignment: Alignment.center,
               transform: Matrix4.identity()

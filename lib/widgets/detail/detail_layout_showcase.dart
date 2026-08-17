@@ -520,8 +520,14 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   @override
   Widget build(BuildContext context) {
     final host = widget.episodesHost;
-    if (host == null || widget.model.isMovie) return _shell(context, null);
-    return host((context, view) => _shell(context, view));
+    final Widget content = (host == null || widget.model.isMovie)
+        ? _shell(context, null)
+        : host((context, view) => _shell(context, view));
+    // Opt the whole detail page into the FULL parallax on Android TV (spring +
+    // tilt + glare). A handful of cards lifting one at a time is a budget the
+    // busy home board is not — so home, settings and onboarding stay on the
+    // cheap lite body, and only this subtree gets the rich effect.
+    return ParallaxRichScope(child: content);
   }
 
   // ── IMDb-enriched bands: shared predicates ─────────────────────────────
