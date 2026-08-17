@@ -116,6 +116,22 @@ class IptvLiveRecovery(
          *  stall/tune watchdogs' business, not the video detector's. Just
          *  over one 5s progress tick. */
         private const val POSITION_FRESH_MS = 6_000L
+
+        /** Circuit breaker for the intermittent-wedge loop. The per-episode
+         *  [VIDEO_STALL_MAX_ATTEMPTS] latch only catches a video that stays
+         *  frozen: any rendered frame resets the attempt climb, so a decoder
+         *  that plays a few seconds, wedges, gets re-tuned, plays the re-tune's
+         *  replayed buffer, then wedges AGAIN never reaches the latch — it
+         *  re-tunes forever, each re-tune rewinding ~15s (the Google TV
+         *  Streamer whose freeze strict-TS reduced from permanent to periodic,
+         *  2026-08-18). If [VIDEO_STALL_LOOP_MAX] re-tunes fire within
+         *  [VIDEO_STALL_LOOP_WINDOW_MS], the re-tune cure isn't sticking:
+         *  latch off and let the imperfect-but-playing stream ride (audio was
+         *  fine throughout). This window survives frame flow — only a real zap
+         *  or user retry clears it — which is the whole point. A genuine
+         *  one-off transient wedge heals and never recurs, so it never trips. */
+        private const val VIDEO_STALL_LOOP_WINDOW_MS = 60_000L
+        private const val VIDEO_STALL_LOOP_MAX = 3
     }
 
     /** True after the machine gave up; cleared by [userRetry] or a real zap. */
@@ -143,6 +159,19 @@ class IptvLiveRecovery(
     private var framesBaselineRealtime = 0L
     private var videoStallAttempts = 0
     private var videoStallLatched = false
+
+    /** Elapsed-realtime of each recent video-stall re-tune, for the loop
+     *  circuit breaker (see [VIDEO_STALL_LOOP_WINDOW_MS]). Deliberately NOT
+     *  cleared when frames start flowing again — only a real zap / user retry
+     *  clears it, so an intermittent wedge can't hide behind its own replays. */
+    private val videoStallRetuneTimes = ArrayDeque<Long>()
+
+    /** Sticky sibling of [videoStallLatched]: once the loop breaker trips, it
+     *  STAYS tripped until a real zap / [cancel] / [userRetry]. [videoStallLatched]
+     *  alone is not enough — the frame-flow branch clears that every time a
+     *  re-tune's replayed buffer plays, which is exactly how the intermittent
+     *  wedge would slip the leash and resume looping. */
+    private var videoStallLoopTripped = false
 
     /** Set (and cleared) by the owner around a machine-driven re-tune so
      *  [onTuneStarted] can tell a recovery re-tune from a real zap. */
@@ -177,6 +206,8 @@ class IptvLiveRecovery(
         deferredSource = null
         videoStallAttempts = 0
         videoStallLatched = false
+        videoStallLoopTripped = false
+        videoStallRetuneTimes.clear()
     }
 
     fun onReady() {
@@ -275,13 +306,30 @@ class IptvLiveRecovery(
             return
         }
         // Count unchanged.
-        if (videoStallLatched || episodeActive || isSurrendered || pending != null) return
+        if (videoStallLatched || videoStallLoopTripped ||
+            episodeActive || isSurrendered || pending != null
+        ) return
         if (offline || !wantsPlayback || !readySeen) return
         // A stopped clock is the position detectors' business, not ours.
         if (now - lastAdvanceRealtime > POSITION_FRESH_MS) return
         if (now - framesBaselineRealtime < VIDEO_STALL_WINDOW_MS) return
         if (now - lastRetuneRealtime < RETUNE_DEBOUNCE_MS) return
         if (!callbacks.isEligible()) return
+        // Loop circuit breaker: if re-tunes keep recurring, the cure isn't
+        // sticking (an intermittent wedge, not a one-off). Stop fighting it —
+        // looping the user through ~15s replays is worse than the glitch.
+        while (videoStallRetuneTimes.isNotEmpty() &&
+            now - videoStallRetuneTimes.first() > VIDEO_STALL_LOOP_WINDOW_MS
+        ) {
+            videoStallRetuneTimes.removeFirst()
+        }
+        if (videoStallRetuneTimes.size >= VIDEO_STALL_LOOP_MAX) {
+            videoStallLatched = true
+            videoStallLoopTripped = true
+            callbacks.onRecovered()
+            return
+        }
+        videoStallRetuneTimes.addLast(now)
         videoStallAttempts++
         framesBaselineRealtime = now // one judgment per window
         if (videoStallAttempts > VIDEO_STALL_MAX_ATTEMPTS) {
@@ -354,6 +402,8 @@ class IptvLiveRecovery(
         decoderAttempts = 0
         videoStallAttempts = 0
         videoStallLatched = false
+        videoStallLoopTripped = false
+        videoStallRetuneTimes.clear()
         fire(source, immediate = true)
     }
 
@@ -368,6 +418,8 @@ class IptvLiveRecovery(
         deferredSource = null
         videoStallAttempts = 0
         videoStallLatched = false
+        videoStallLoopTripped = false
+        videoStallRetuneTimes.clear()
         lastRenderedFrames = -1
     }
 
