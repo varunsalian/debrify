@@ -490,14 +490,19 @@ class _ProfileMarqueeGateScreenState extends State<ProfileMarqueeGateScreen> {
           child: Row(
             children: [
               // A big household must scroll along the rail, not overflow
-              // off the right edge of a 960-logical TV.
-              Flexible(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: _rail(dot: 56),
+              // off the right edge of a 960-logical TV. Expanded+Align, not
+              // Flexible+Spacer: a Spacer would claim half the free width,
+              // capping the rail's viewport and pushing the legend off the
+              // right edge.
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: _rail(dot: 56),
+                  ),
                 ),
               ),
-              const Spacer(),
               const SizedBox(width: 16),
               const _KeyLegend(),
             ],
