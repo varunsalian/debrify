@@ -192,6 +192,7 @@ abstract final class SanitizedProfilePreferences {
     'marquee',
     'prism',
     'horizon',
+    'collider',
     'neon',
     'chrome',
     'monogram',

@@ -1422,12 +1422,13 @@ class StorageService {
 
   static const String _launchAnimationKey = 'launch_animation';
   // MUST stay in step with kLaunchIdents — an id missing here is silently
-  // normalized back to 'horizon', so the picker would appear not to save.
+  // normalized back to the default, so the picker would appear not to save.
   static const Set<String> _launchAnimationValues = {
     'drop',
     'marquee',
     'prism',
     'horizon',
+    'collider',
     'neon',
     'chrome',
     'monogram',
@@ -1449,23 +1450,26 @@ class StorageService {
   static Set<String> get launchAnimationValues => _launchAnimationValues;
 
   /// Which launch ident the splash plays (Appearance → Launch Animation).
-  /// Values are the ids in `widgets/launch/launch_ident.dart`; 'horizon'
-  /// (Event Horizon) is the default, 'drop' is the original splash.
+  /// Values are the ids in `widgets/launch/launch_ident.dart`; 'collider'
+  /// (Collider) is the default, 'horizon' is the ident it replaced as such,
+  /// and 'drop' is the original splash.
   ///
   /// [launchAnimationCached] mirrors it for SYNCHRONOUS reads: AppInitializer
   /// builds its splash in initState, before any async pref read could land.
   /// Warmed in main() before runApp and kept in sync by the setter.
   ///
-  /// Normalizes toward 'horizon' on BOTH sides — an unrecognized value has
-  /// to mean the default for the reader and the writer alike.
-  static String launchAnimationCached = 'horizon';
+  /// Normalizes toward the default on BOTH sides — an unrecognized value has
+  /// to mean the default for the reader and the writer alike. Only installs
+  /// that never CHOSE move when this changes: an explicit 'horizon' is a
+  /// stored value and keeps playing Horizon.
+  static String launchAnimationCached = 'collider';
 
   static Future<String> getLaunchAnimation() async {
     final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_launchAnimationKey);
     launchAnimationCached = _launchAnimationValues.contains(value)
         ? value!
-        : 'horizon';
+        : 'collider';
     return launchAnimationCached;
   }
 
@@ -1473,7 +1477,7 @@ class StorageService {
     final prefs = await ProfilePreferences.instance();
     final normalized = _launchAnimationValues.contains(value)
         ? value
-        : 'horizon';
+        : 'collider';
     await prefs.setString(_launchAnimationKey, normalized);
     launchAnimationCached = normalized;
   }
@@ -8428,7 +8432,7 @@ class StorageService {
     parentsGuideStyleCached = 'compass';
     iptvStyleCached = 'command';
     discoverLayoutCached = 'stage';
-    launchAnimationCached = 'horizon';
+    launchAnimationCached = 'collider';
     launchIdentPaletteCached = 'ident';
     tvSidebarStyleCached = 'ghost';
     desktopSidebarStyleCached = 'rail';
