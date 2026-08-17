@@ -118,6 +118,54 @@ void main() {
     expect(grant.allows(ResourcePermission.share), isFalse);
   });
 
+  test('revoking owned shares unblocks deleting a scaffold profile', () async {
+    // The post-restore trap: a setup admin's auto-seeded resources are
+    // granted to every profile, which made the scaffold profile
+    // undeletable. Revocation strips the borrowers' grants (bumping their
+    // authorization revisions) and the delete-time shared==0 guard passes.
+    final ids = await household();
+    // A second admin so the admin invariant survives deleting the first;
+    // give the scaffold-to-be a seeded resource shared with everyone.
+    final keeper = await createActing('Keeper', UserProfileRole.admin);
+    await insert(ids.admin, ConnectionResourceType.stremioAddon);
+    expect(await registry.getGrant(ids.kid, 'r1'), isNotNull);
+
+    final kidBefore = (await registry.getProfile(ids.kid))!;
+    final fresh = await ProfileAuthorizationContext.capture(registry);
+    final revoked = await registry.revokeGrantsOnOwnedResources(
+      ownerProfileId: ids.admin,
+      actingProfileId: fresh.profileId,
+      actingAuthorizationRevision: fresh.authorizationRevision,
+      actingSessionEpoch: fresh.sessionEpoch,
+    );
+    expect(revoked, greaterThanOrEqualTo(2)); // kid + keeper at minimum
+    expect(await registry.getGrant(ids.kid, 'r1'), isNull);
+    expect(
+      (await registry.getProfile(ids.kid))!.authorizationRevision,
+      greaterThan(kidBefore.authorizationRevision),
+    );
+    // The owner's own grant survives.
+    expect(await registry.getGrant(ids.admin, 'r1'), isNotNull);
+
+    // Deletion now passes the shared==0 guard. Switch the active profile
+    // away first (active profiles cannot be deleted).
+    await registry.setActiveProfile(keeper.id);
+    ProfileRuntime.debugReset();
+    ProfileRuntime.initializeCommitted(
+      ProfileScope(profileId: keeper.id, dataGeneration: 1, sessionEpoch: 1),
+    );
+    final acting = await ProfileAuthorizationContext.capture(registry);
+    await registry.deleteProfileWithDisposition(
+      id: ids.admin,
+      deleteOwnedResources: true,
+      detachPublicArtifacts: true,
+      actingProfileId: acting.profileId,
+      actingAuthorizationRevision: acting.authorizationRevision,
+      actingSessionEpoch: acting.sessionEpoch,
+    );
+    expect(await registry.getProfile(ids.admin), isNull);
+  });
+
   test('a new profile is granted every existing shareable resource', () async {
     final ids = await household();
     await insert(ids.admin, ConnectionResourceType.torbox, id: 'r2');

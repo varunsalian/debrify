@@ -167,6 +167,7 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
     }
     if (!mounted) return;
     var deleteConnections = dependencies.ownedResources == 0;
+    var revokeShares = false;
     var retainPublicFiles = true;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -187,8 +188,25 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
                 if (dependencies.activeJobs > 0)
                   const Text('\nFinish or cancel active jobs before deletion.'),
                 if (dependencies.sharedResources > 0)
-                  const Text(
-                    '\nRevoke borrowers or transfer shared connections before deletion.',
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: revokeShares,
+                    title: Text(
+                      'Revoke shared access '
+                      '(${dependencies.sharedResources} connection'
+                      '${dependencies.sharedResources == 1 ? '' : 's'})',
+                    ),
+                    subtitle: const Text(
+                      'Other profiles lose access to the connections this '
+                      'profile shares; connections they own themselves are '
+                      'untouched.',
+                    ),
+                    onChanged: (value) => setDialogState(() {
+                      revokeShares = value == true;
+                      // Revoked shares leave the resources unshared —
+                      // orphaning them isn't an option, so they go too.
+                      if (revokeShares) deleteConnections = true;
+                    }),
                   ),
                 if (dependencies.ownedResources > 0)
                   CheckboxListTile(
@@ -228,7 +246,7 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
             FilledButton(
               onPressed:
                   dependencies.activeJobs == 0 &&
-                      dependencies.sharedResources == 0 &&
+                      (dependencies.sharedResources == 0 || revokeShares) &&
                       deleteConnections
                   ? () => Navigator.pop(context, true)
                   : null,
@@ -241,6 +259,16 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
     if (confirmed != true) return;
     try {
       await _validateManagingAdmin(operationActor);
+      if (revokeShares) {
+        await widget.registry.revokeGrantsOnOwnedResources(
+          ownerProfileId: profile.id,
+          actingProfileId: operationActor.profileId,
+          actingAuthorizationRevision: operationActor.authorizationRevision,
+          actingSessionEpoch: operationActor.sessionEpoch,
+        );
+        // The delete transaction re-verifies shared == 0, so a racing
+        // re-grant safely re-blocks rather than slipping through.
+      }
       if (!retainPublicFiles) {
         final artifacts = await widget.registry.listOwnedArtifacts(profile.id);
         for (final artifact in artifacts) {

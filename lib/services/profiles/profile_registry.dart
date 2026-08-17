@@ -1157,6 +1157,60 @@ class ProfileRegistry {
     );
   }
 
+  /// Revokes every grant and binding OTHER profiles hold on resources owned
+  /// by [ownerProfileId]. This is the deletion dialog's "revoke shared
+  /// access" path — a managing-Admin convenience equal to editing each
+  /// borrower by hand, which unblocks retiring a profile whose only shares
+  /// are auto-seeded defaults (the post-restore scaffold admin). Borrowers'
+  /// authorization revisions are bumped so their live sessions revalidate.
+  Future<int> revokeGrantsOnOwnedResources({
+    required String ownerProfileId,
+    String? actingProfileId,
+    int? actingAuthorizationRevision,
+    int? actingSessionEpoch,
+  }) async {
+    await authorityWillChangeCallback?.call();
+    var revoked = 0;
+    await _db.transaction((txn) async {
+      await _assertManagingActor(
+        txn,
+        actingProfileId,
+        actingAuthorizationRevision,
+        actingSessionEpoch,
+      );
+      final borrowers = await txn.rawQuery(
+        '''SELECT DISTINCT g.profile_id FROM profile_resource_grants g
+           INNER JOIN connection_resources r ON r.id = g.resource_id
+           WHERE r.owner_profile_id = ? AND g.profile_id != ?''',
+        <Object>[ownerProfileId, ownerProfileId],
+      );
+      await txn.rawDelete(
+        '''DELETE FROM profile_connection_bindings
+           WHERE profile_id != ? AND resource_id IN
+             (SELECT id FROM connection_resources WHERE owner_profile_id = ?)''',
+        <Object>[ownerProfileId, ownerProfileId],
+      );
+      revoked = await txn.rawDelete(
+        '''DELETE FROM profile_resource_grants
+           WHERE profile_id != ? AND resource_id IN
+             (SELECT id FROM connection_resources WHERE owner_profile_id = ?)''',
+        <Object>[ownerProfileId, ownerProfileId],
+      );
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      for (final row in borrowers) {
+        await txn.rawUpdate(
+          '''UPDATE user_profiles
+             SET authorization_revision = authorization_revision + 1,
+                 updated_at_ms = ?
+             WHERE id = ?''',
+          <Object>[nowMs, row['profile_id']! as String],
+        );
+      }
+    });
+    await checkpointTvOsRecovery();
+    return revoked;
+  }
+
   /// Deletes a non-active profile only after the UI has chosen explicit
   /// dispositions. Shared resources and active jobs remain hard blockers.
   Future<void> deleteProfileWithDisposition({
