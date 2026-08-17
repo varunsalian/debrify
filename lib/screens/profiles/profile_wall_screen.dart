@@ -11,9 +11,9 @@ import '../../widgets/profiles/profile_avatar_view.dart';
 /// profile is entered and profile-scoped preferences do not exist yet at
 /// that point.
 ///
-/// `theater` is the DEFAULT (2026-08-17): a device that never chose keeps
-/// getting the flagship look; an explicit earlier choice (classic/wall) is a
-/// stored value and survives.
+/// `marquee` is the DEFAULT (2026-08-17, after a couch comparison of all
+/// five): a device that never chose keeps getting the flagship look; an
+/// explicit earlier choice is a stored value and survives.
 class ProfileGateStyle {
   ProfileGateStyle._();
 
@@ -24,19 +24,19 @@ class ProfileGateStyle {
   static const String marquee = 'marquee';
   static const String theater = 'theater';
 
-  static const String defaultStyle = theater;
+  static const String defaultStyle = marquee;
 
   /// Picker metadata, in display order.
   static const List<({String id, String label, String blurb})> options = [
     (
-      id: theater,
-      label: 'Theater',
-      blurb: 'The chosen profile lights the whole room',
-    ),
-    (
       id: marquee,
       label: 'Marquee',
       blurb: 'A big stage for whoever is focused',
+    ),
+    (
+      id: theater,
+      label: 'Theater',
+      blurb: 'The chosen profile lights the whole room',
     ),
     (id: row, label: 'Row', blurb: 'A simple row of portraits'),
     (

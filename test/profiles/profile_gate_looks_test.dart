@@ -66,8 +66,8 @@ void main() {
   }
 
   group('style registry', () {
-    test('theater is the default and labels resolve', () {
-      expect(ProfileGateStyle.defaultStyle, ProfileGateStyle.theater);
+    test('marquee is the default and labels resolve', () {
+      expect(ProfileGateStyle.defaultStyle, ProfileGateStyle.marquee);
       expect(ProfileGateStyle.labelFor(ProfileGateStyle.theater), 'Theater');
       expect(ProfileGateStyle.labelFor(ProfileGateStyle.row), 'Row');
       expect(
@@ -83,7 +83,7 @@ void main() {
     });
 
     test('unknown stored ids fall back to the default label', () {
-      expect(ProfileGateStyle.labelFor('style-from-the-future'), 'Theater');
+      expect(ProfileGateStyle.labelFor('style-from-the-future'), 'Marquee');
     });
   });
 
