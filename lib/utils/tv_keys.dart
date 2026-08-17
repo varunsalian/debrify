@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart' show KeyEventResult;
+import 'package:flutter/widgets.dart';
 
 /// Returns `true` when [key] is a D-pad / remote "OK" (activation) key.
 ///
@@ -47,99 +47,123 @@ bool isActivateOrSpaceKey(LogicalKeyboardKey key) =>
 /// Reset it when focus leaves, or a key-up that arrives after the cursor has
 /// moved on is read as a tap on whatever is focused now.
 ///
-/// **[onHold] fires on RELEASE, not when the dwell elapses.** That is the
-/// whole reason this class exists rather than a bare `Timer`, and it is worth
-/// stating plainly because the obvious implementation is broken in a way that
-/// looks like the feature was never wired up:
+/// [onHold] fires the moment [dwell] elapses, WHILE the key is still down —
+/// the menu should appear under your thumb, not after you let go, which is
+/// what a long press means everywhere else and what the app's other held-OK
+/// surfaces already do.
 ///
-/// Opening a menu the instant the dwell elapses opens it UNDER A KEY THAT IS
-/// STILL DOWN. The menu takes focus — TV menus autofocus their first item so
-/// the remote has a live target — and Android is still auto-repeating the held
-/// key. Flutter's default activation shortcut is
-/// `SingleActivator(..., includeRepeats: true)`, so the next repeat activates
-/// whatever the menu just focused. The user holds OK, and the options sheet
-/// flashes open and immediately runs its first entry. On the episode cards
-/// that first entry is Play, so a held OK looked exactly like a plain press
-/// and the menu appeared not to exist at all.
-///
-/// Waiting for the key to come up costs nothing perceptible — the hand is
-/// already lifting — and means the menu opens into a keyboard that is idle.
+/// **That puts one obligation on whatever [onHold] opens: wrap it in a
+/// [TvHeldKeyGuard].** The menu arrives under a key that is still held, and
+/// Android keeps auto-repeating it. Flutter's default activation shortcut is
+/// `SingleActivator(..., includeRepeats: true)`, so if the menu autofocuses an
+/// entry — TV menus do, so the remote has a live target — the next repeat
+/// activates it. The episode sheet autofocuses Play, so a held OK opened the
+/// sheet and instantly played the episode: indistinguishable from a plain
+/// press, which is why the gesture looked like it had never been wired up.
+/// The app's other hold menus survive only because they autofocus nothing.
 class TvHoldOk {
   TvHoldOk({
     required this.onTap,
     required this.onHold,
     this.dwell = const Duration(milliseconds: 600),
-    this.hapticOnArm = true,
+    this.haptic = true,
   });
 
   /// A plain press, fired on key-up when the press was short.
   final VoidCallback onTap;
 
-  /// The long press, fired on key-up once [dwell] has elapsed under the key.
+  /// The long press, fired under the key once [dwell] has elapsed.
   final VoidCallback onHold;
 
   final Duration dwell;
 
-  /// Buzz when the press becomes a hold, so a phone user knows they can let
-  /// go. TV remotes have no motor; there the menu on release is the feedback.
-  final bool hapticOnArm;
+  /// Buzz when the hold fires. A TV remote has no motor; there the menu
+  /// appearing is the feedback.
+  final bool haptic;
 
   Timer? _timer;
-  bool _armed = false;
+  bool _fired = false;
 
   /// Guards against a key-up whose key-down went to a different widget.
   bool _sawDown = false;
 
-  /// True once the press has lasted long enough to count as a hold — the
-  /// caller may use it to show that letting go will open the menu.
-  bool get armed => _armed;
+  /// Whether this press has already become a hold.
+  bool get holdFired => _fired;
 
   KeyEventResult handle(KeyEvent event) {
     if (event is KeyDownEvent) {
       _sawDown = true;
-      _armed = false;
+      _fired = false;
       _timer?.cancel();
-      _timer = Timer(dwell, _arm);
+      _timer = Timer(dwell, _fire);
       return KeyEventResult.handled;
     }
     if (event is KeyRepeatEvent) {
-      // Swallowed, not ignored. These arrive under a held key, and letting
-      // them through means every ancestor and shortcut sees an activation for
-      // a press this widget has already claimed.
+      // Swallowed, not ignored: these arrive under a key this widget has
+      // already claimed, and passing them on hands the shortcut layer an
+      // activation for a press that is spoken for.
       return KeyEventResult.handled;
     }
     if (event is KeyUpEvent) {
       _timer?.cancel();
       _timer = null;
       final ours = _sawDown;
-      final armed = _armed;
+      final fired = _fired;
       _sawDown = false;
-      _armed = false;
+      _fired = false;
       if (!ours) return KeyEventResult.handled;
-      if (armed) {
-        onHold();
-      } else {
-        onTap();
-      }
+      // The hold already did its work; the release is just the end of it.
+      if (!fired) onTap();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
 
-  void _arm() {
+  void _fire() {
     _timer = null;
-    if (_armed) return;
-    _armed = true;
-    if (hapticOnArm) HapticFeedback.mediumImpact();
+    if (_fired) return;
+    _fired = true;
+    if (haptic) HapticFeedback.mediumImpact();
+    onHold();
   }
 
   /// Abandon an in-flight press — call from `onFocusChange(false)` and dispose.
   void reset() {
     _timer?.cancel();
     _timer = null;
-    _armed = false;
+    _fired = false;
     _sawDown = false;
   }
+}
+
+/// Eats the tail of the press that opened this subtree.
+///
+/// Wrap the content of any menu, sheet or dialog opened by [TvHoldOk.onHold].
+/// The menu appears while the key is still down and Android keeps repeating
+/// it; without this the first repeat activates whatever the menu autofocused,
+/// closing it again before the user has let go. Swallowing activation REPEATS
+/// is right for a menu regardless — a held OK should never machine-gun the
+/// entry under the cursor.
+///
+/// It sits between the menu's focused entry and the app-level `Shortcuts`, so
+/// it sees the repeat first. A nested `Shortcuts` cannot do this job: an
+/// activator that declines an event does not block it, it just lets it travel
+/// on to the app-level binding that accepts it.
+class TvHeldKeyGuard extends StatelessWidget {
+  const TvHeldKeyGuard({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: (node, event) =>
+            event is KeyRepeatEvent && isActivateOrSpaceKey(event.logicalKey)
+                ? KeyEventResult.handled
+                : KeyEventResult.ignored,
+        child: child,
+      );
 }
 
 

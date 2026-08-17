@@ -1,6 +1,6 @@
 import 'package:debrify/utils/tv_keys.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A held DPAD centre never becomes a pointer long-press, so every episode
@@ -36,7 +36,7 @@ void main() {
       onHold: () => holds++,
       dwell: const Duration(milliseconds: 600),
       // The test binding has no haptics channel wired.
-      hapticOnArm: false,
+      haptic: false,
     );
   });
 
@@ -49,20 +49,21 @@ void main() {
     expect(holds, 0);
   });
 
-  testWidgets('the menu waits for the key to come up', (tester) async {
+  testWidgets('the menu opens under the key, not on release', (tester) async {
     hold.handle(okDown);
-    await tester.pump(const Duration(milliseconds: 900));
-    // NOT while the key is down. A menu opened here autofocuses its first
-    // entry into a keyboard that is still auto-repeating this very press, and
-    // the next repeat activates it — which is how a held OK used to read as a
-    // plain press that just played the episode.
-    expect(holds, 0, reason: 'the key has not been released yet');
-    expect(hold.armed, isTrue, reason: 'but the press has become a hold');
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(holds, 0, reason: 'the dwell has not elapsed');
+    await tester.pump(const Duration(milliseconds: 300));
+    // Under the thumb: a long press that only pays out after you let go is
+    // the thing users read as broken.
+    expect(holds, 1);
+    expect(taps, 0);
 
+    // The release that ends the hold must not also count as a press.
     hold.handle(okUp);
     await tester.pump();
     expect(holds, 1);
-    expect(taps, 0, reason: 'a hold is not also a press');
+    expect(taps, 0);
   });
 
   testWidgets('repeats under a held key are swallowed, never passed on', (
@@ -94,6 +95,36 @@ void main() {
     await tester.pump();
     expect(taps, 0);
     expect(holds, 0);
+  });
+
+  testWidgets('the guard stops a held key from activating the menu it opened',
+      (tester) async {
+    var activations = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TvHeldKeyGuard(
+          child: Material(
+            child: ListTile(
+              autofocus: true, // exactly what the episode sheet does
+              title: const Text('Play'),
+              onTap: () => activations++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // The tail of the press that opened this menu.
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(activations, 0,
+        reason: 'a repeat belongs to the press that opened the menu');
+
+    // A deliberate press afterwards must still work.
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(activations, 1);
   });
 
   testWidgets('losing focus abandons an in-flight hold', (tester) async {
