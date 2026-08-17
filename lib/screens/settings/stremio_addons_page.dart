@@ -1889,7 +1889,11 @@ class _AddonTile extends StatefulWidget {
 }
 
 class _AddonTileState extends State<_AddonTile> {
-  bool _isFocused = false;
+  /// Live, never cached — Flutter can skip the falling edge of a focus
+  /// notification, and a remembered flag then survives the change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `widgets/settings_widgets.dart`.
+  bool get _isFocused => widget.focusNode.hasFocus;
 
   @override
   void initState() {
@@ -1904,9 +1908,8 @@ class _AddonTileState extends State<_AddonTile> {
   }
 
   void _onFocusChanged() {
-    setState(() {
-      _isFocused = widget.focusNode.hasFocus;
-    });
+    if (!mounted) return;
+    setState(() {});
   }
 
   String _getAddonSubtitle(StremioAddon addon) {
@@ -2323,7 +2326,11 @@ class _OptionTile extends StatefulWidget {
 }
 
 class _OptionTileState extends State<_OptionTile> {
-  bool _isFocused = false;
+  /// Live, never cached — Flutter can skip the falling edge of a focus
+  /// notification, and a remembered flag then survives the change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `widgets/settings_widgets.dart`.
+  bool get _isFocused => widget.focusNode.hasFocus;
 
   @override
   void initState() {
@@ -2338,9 +2345,8 @@ class _OptionTileState extends State<_OptionTile> {
   }
 
   void _onFocusChanged() {
-    setState(() {
-      _isFocused = widget.focusNode.hasFocus;
-    });
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
@@ -2441,6 +2447,15 @@ class _GlowFocusButtonState extends State<_GlowFocusButton> {
   void initState() {
     super.initState();
     widget.focusNode.addListener(_onFocus);
+  }
+
+  @override
+  void didUpdateWidget(_GlowFocusButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode.removeListener(_onFocus);
+      widget.focusNode.addListener(_onFocus);
+    }
   }
 
   @override

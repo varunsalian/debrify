@@ -1352,8 +1352,9 @@ class _ConnectionCardState extends State<ConnectionCard> {
 
   bool _hovered = false;
 
-  /// Live, never cached. `hasFocus` here is ancestor-inclusive, so it is true
-  /// while the card's own InkWell holds focus — which is the intent.
+  /// Live, never cached. `hasFocus` is DESCENDANT-inclusive, so this wrapper
+  /// reads true while the card's own InkWell below it holds focus — which is
+  /// the intent, and the same value `Focus.onFocusChange` used to deliver.
   bool get _focused => _wrapNode.hasFocus;
 
   /// The theme's tempo, resolved in the one hook that may depend on inherited
@@ -1954,9 +1955,19 @@ class _SettingsTileState extends State<SettingsTile> {
   /// plate, so the list comes back from a sub-page with two or three cursors
   /// on it and no way to tell which row OK will open.
   ///
-  /// Derived state cannot go stale: `onFocusChange` below only asks for a
-  /// rebuild, and the value is re-read here. Any later frame — and a route
-  /// transition brings plenty — corrects it.
+  /// Derived state cannot go stale the way a remembered one does: the value is
+  /// re-read on every build, so it is only ever as old as the last rebuild
+  /// rather than as old as the last callback that arrived.
+  ///
+  /// Being precise about what that does and does not buy, because the
+  /// difference matters if this is ever revisited: the repaint trigger is
+  /// still the same `onFocusChange` the bug rides on, so a silently-missed
+  /// notification leaves the WRONG PIXELS up until something rebuilds this
+  /// row — it does not repaint it the instant focus leaves. What reliably
+  /// rebuilds it is the row's own `onTap` being awaited below: callers
+  /// setState when the pushed page returns, which rebuilds the list with
+  /// fresh values. (A route transition alone would NOT do it — ModalScope
+  /// caches the page subtree behind its AnimatedBuilder's `child`.)
   bool get _focused => _node.hasFocus;
 
   @override

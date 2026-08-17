@@ -29,7 +29,17 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
 
   // Focus nodes for D-pad navigation
   final List<FocusNode> _providerFocusNodes = [];
-  int _focusedIndex = -1;
+
+  /// Which row wears the ring, DERIVED rather than remembered.
+  ///
+  /// This used to be a cached index with a hand-written falling edge ("focus
+  /// left this row and no sibling claimed the ring — clear it"), which is the
+  /// same workaround the rest of settings needed and for the same reason:
+  /// Flutter can skip that notification entirely, and then the ghost ring the
+  /// workaround exists to prevent lingers anyway. Asking the nodes is both
+  /// shorter and always true — `indexWhere` already yields -1 for "nobody".
+  int get _focusedIndex =>
+      _providerFocusNodes.indexWhere((node) => node.hasFocus);
 
   @override
   void initState() {
@@ -134,15 +144,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
 
   void _onFocusChange(int index) {
     if (!mounted) return;
-    setState(() {
-      if (_providerFocusNodes[index].hasFocus) {
-        _focusedIndex = index;
-      } else if (_focusedIndex == index) {
-        // Focus left this row and no sibling claimed the ring — clear it so
-        // no ghost accent ring lingers when focus leaves the group.
-        _focusedIndex = -1;
-      }
-    });
+    setState(() {});
   }
 
   Future<void> _selectProvider(String provider) async {
