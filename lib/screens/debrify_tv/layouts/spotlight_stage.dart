@@ -25,6 +25,10 @@ class SpotlightStage extends StatelessWidget {
   final DebrifyTvChannelStats? stats;
   final bool busy;
 
+  /// A search query is thinning the rail. A null [channel] then means "no
+  /// matches", not "no channels" — the first-run prompt would be wrong.
+  final bool filtering;
+
   final FocusNode playNode;
   final FocusNode pinNode;
   final FocusNode editNode;
@@ -49,6 +53,7 @@ class SpotlightStage extends StatelessWidget {
     required this.pinned,
     required this.stats,
     required this.busy,
+    this.filtering = false,
     required this.playNode,
     required this.pinNode,
     required this.editNode,
@@ -73,6 +78,21 @@ class SpotlightStage extends StatelessWidget {
     final tv = app.debrifyTv;
     final ch = channel;
     if (ch == null) {
+      if (filtering) {
+        // A search emptied the rail — the user HAS channels, so the
+        // first-run prompt below would be wrong.
+        return Center(
+          child: Text(
+            'No channels match your search.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: tv.textDim,
+            ),
+          ),
+        );
+      }
       // No channels at all. The redesigned empty surface is a phase-7
       // deliverable; until it lands this stays a quiet prompt (the rail's
       // Add / Import rows are the actionable path).

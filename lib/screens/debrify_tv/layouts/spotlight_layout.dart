@@ -8,6 +8,7 @@ import '../../../services/main_page_bridge.dart';
 import '../../../theme/app_theme_scope.dart';
 import '../../../utils/platform_util.dart';
 import '../../../utils/tv_keys.dart';
+import '../../../widgets/tv_text_field.dart';
 import 'debrify_tv_view.dart';
 import 'spotlight_phone.dart';
 import 'spotlight_rail.dart';
@@ -80,9 +81,14 @@ class _SpotlightTvArm extends StatefulWidget {
 }
 
 class _SpotlightTvArmState extends State<_SpotlightTvArm> {
+  static const _kFind = 'find';
   static const _kAdd = 'add';
   static const _kImport = 'import';
   static const _kSettings = 'settings';
+  static const _kSearch = 'search';
+
+  /// The utility icon row under Quick Play, left to right.
+  static const List<String> _utilRun = [_kFind, _kAdd, _kImport, _kSettings];
   static const _kPlay = 'act:play';
   static const _kPin = 'act:pin';
   static const _kEdit = 'act:edit';
@@ -98,10 +104,24 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
   /// disposed once in [dispose] — a removed channel's node just idles.
   final Map<String, FocusNode> _nodes = {};
   final ScrollController _railScroll = ScrollController();
+  final TextEditingController _search = TextEditingController();
+
+  /// Whether the search field is unfolded under the utility row. Closing it
+  /// always clears the query — a hidden filter must never keep thinning the
+  /// rail.
+  bool _searchOpen = false;
+
+  /// The utility icon the vertical run returns to — DOWN from Quick Play and
+  /// UP from the list land on the icon the user last stood on.
+  String _utilMemory = _kFind;
 
   /// The channel the stage is showing. Independent of DPAD focus: focus can
   /// sit on Quick Play while the stage keeps the last channel.
   String? _stagedId;
+
+  /// The last channel id reported through [DebrifyTvView.onChannelFocused] —
+  /// see [_notifyStagedIfChanged].
+  String? _notifiedStagedId;
 
   @override
   void initState() {
@@ -110,8 +130,7 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
     // hear about it the same way it hears about every later focus move.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final staged = _staged;
-      if (staged != null) widget.view.onChannelFocused(staged);
+      _notifyStagedIfChanged();
     });
   }
 
@@ -144,7 +163,10 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
         // or the new channel's stage sits on its placeholder forever.
         final staged = _staged;
         setState(() => _stagedId = staged?.id);
-        if (staged != null) widget.view.onChannelFocused(staged);
+        if (staged != null) {
+          _notifiedStagedId = staged.id;
+          widget.view.onChannelFocused(staged);
+        }
       }
       // Explicit focus repair — never left to geometric traversal. Focus is
       // orphaned when the focused row/action unmounted with the deletion.
@@ -173,6 +195,7 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
       n.dispose();
     }
     _railScroll.dispose();
+    _search.dispose();
     super.dispose();
   }
 
@@ -181,13 +204,32 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
     () => FocusNode(debugLabel: 'debrify-tv-spotlight-$key'),
   );
 
-  /// Channel rows in rail display order: pinned first, then the rest.
+  /// Channel rows in rail display order: pinned first, then the rest,
+  /// thinned by the search query while the search field is open.
   List<DebrifyTvChannel> get _ordered {
     final fav = widget.view.favoriteIds;
-    return [
+    final all = [
       ...widget.view.channels.where((c) => fav.contains(c.id)),
       ...widget.view.channels.where((c) => !fav.contains(c.id)),
     ];
+    final query = _query;
+    if (query.isEmpty) return all;
+    return [
+      for (final c in all)
+        if (_matches(c, query)) c,
+    ];
+  }
+
+  String get _query => _searchOpen ? _search.text.trim().toLowerCase() : '';
+
+  /// Same matcher as the touch arm: name, any keyword, or the channel number
+  /// (bare or zero-padded, exact).
+  static bool _matches(DebrifyTvChannel c, String query) {
+    final number = c.channelNumber.toString();
+    return c.name.toLowerCase().contains(query) ||
+        c.keywords.any((k) => k.toLowerCase().contains(query)) ||
+        number == query ||
+        number.padLeft(2, '0') == query;
   }
 
   DebrifyTvChannel? get _staged {
@@ -202,32 +244,35 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
   void _stage(DebrifyTvChannel channel) {
     if (_stagedId == channel.id) return;
     setState(() => _stagedId = channel.id);
+    _notifiedStagedId = channel.id;
     widget.view.onChannelFocused(channel);
   }
 
-  /// The rail's focus run, top to bottom, as node keys.
+  /// The rail's VERTICAL focus run, top to bottom, as node keys. The whole
+  /// utility icon row is one stop ('util'); LEFT/RIGHT move within it.
   List<String> get _railRun => [
     'qp',
+    'util',
+    if (_searchOpen) _kSearch,
     for (final c in _ordered) 'ch:${c.id}',
-    _kAdd,
-    _kImport,
-    _kSettings,
   ];
 
-  FocusNode _railNode(String key) =>
-      key == 'qp' ? widget.entryFocusNode : _node(key);
+  FocusNode _railNode(String key) => key == 'qp'
+      ? widget.entryFocusNode
+      : key == 'util'
+      ? _node(_utilMemory)
+      : _node(key);
 
   void _focusRail(String key) {
     final node = _railNode(key);
     node.requestFocus();
-    // Keep every focused item in the scrolling run visible. Utility actions
-    // live below the channels, so only scrolling channel keys left Add,
-    // Import and Settings focused off-screen on a long rail.
+    // Keep every focused channel row visible in the scroll region. Quick
+    // Play, the utility row and the search field are pinned above it.
     final ctx = node.context;
-    if (ctx != null && key != 'qp') {
+    if (ctx != null && key.startsWith('ch:')) {
       Scrollable.ensureVisible(
         ctx,
-        alignment: key.startsWith('ch:') ? 0.5 : 1,
+        alignment: 0.5,
         duration: const Duration(milliseconds: 140),
       );
     }
@@ -271,17 +316,115 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
     switch (key) {
       case 'qp':
         if (!view.busy) view.onQuickPlay();
+      default:
+        final ch = _channelFor(key);
+        // One press still plays: OK on a rail row tunes the channel.
+        if (ch != null && !view.busy) view.onWatch(ch);
+    }
+  }
+
+  /// Keys for the utility icon row: LEFT/RIGHT walk the icons, UP returns to
+  /// Quick Play, DOWN drops into the search field / channel list, LEFT past
+  /// the first icon opens the app sidebar (house policy: LEFT at column 0).
+  KeyEventResult _utilKey(String key, FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final k = event.logicalKey;
+    final i = _utilRun.indexOf(key);
+
+    if (k == LogicalKeyboardKey.arrowLeft) {
+      if (i > 0) {
+        _node(_utilRun[i - 1]).requestFocus();
+      } else {
+        MainPageBridge.focusTvSidebar?.call();
+      }
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowRight) {
+      if (i < _utilRun.length - 1) {
+        _node(_utilRun[i + 1]).requestFocus();
+      } else if (_staged != null) {
+        _node(_kPlay).requestFocus();
+      }
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowUp) {
+      _focusRail('qp');
+      return KeyEventResult.handled;
+    }
+    if (k == LogicalKeyboardKey.arrowDown) {
+      final run = _railRun;
+      final at = run.indexOf('util');
+      if (at >= 0 && at < run.length - 1) _focusRail(run[at + 1]);
+      return KeyEventResult.handled;
+    }
+    if (event is KeyDownEvent &&
+        (isActivateKey(k) || k == LogicalKeyboardKey.space)) {
+      _activateUtil(key);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _activateUtil(String key) {
+    final view = widget.view;
+    switch (key) {
+      case _kFind:
+        _toggleSearch();
       case _kAdd:
         if (!view.busy) view.onAdd();
       case _kImport:
         if (!view.busy) view.onImport();
       case _kSettings:
         view.onSettings();
-      default:
-        final ch = _channelFor(key);
-        // One press still plays: OK on a rail row tunes the channel.
-        if (ch != null && !view.busy) view.onWatch(ch);
     }
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _searchOpen = !_searchOpen;
+      if (!_searchOpen) _search.clear();
+    });
+    if (_searchOpen) {
+      // The field mounts on this frame's build; focus its shell right after.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _searchOpen) _node(_kSearch).requestFocus();
+      });
+    } else {
+      _notifyStagedIfChanged();
+      _node(_kFind).requestFocus();
+    }
+  }
+
+  /// Every query change can swap the staged channel out from under the stage
+  /// (the [_staged] fallback picks the first match). Tell the state when it
+  /// does, or the stage keeps quiet placeholders until a row is focused.
+  /// Compared against the last id actually reported — the controller's text
+  /// has already changed by the time onChanged fires, so a before/after read
+  /// around setState would always agree.
+  void _notifyStagedIfChanged() {
+    final staged = _staged;
+    if (staged != null && staged.id != _notifiedStagedId) {
+      _notifiedStagedId = staged.id;
+      widget.view.onChannelFocused(staged);
+    }
+  }
+
+  void _searchChanged() {
+    setState(() {});
+    _notifyStagedIfChanged();
+  }
+
+  /// The keyboard's Search key: an empty query folds the field away; a query
+  /// with matches jumps to the first result.
+  void _searchSubmitted(String text) {
+    if (text.trim().isEmpty) {
+      _toggleSearch();
+      return;
+    }
+    final ordered = _ordered;
+    if (ordered.isNotEmpty) _focusRail('ch:${ordered.first.id}');
   }
 
   DebrifyTvChannel? _channelFor(String key) {
@@ -488,6 +631,13 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
                 const SizedBox(height: 5),
                 Builder(
                   builder: (context) {
+                    if (_query.isNotEmpty) {
+                      return Text(
+                        '${ordered.length} of ${view.channels.length} '
+                        'channels',
+                        style: TextStyle(fontSize: 11.5, color: tv.textDim),
+                      );
+                    }
                     var pooled = 0;
                     for (final c in ordered) {
                       pooled += view.railHealth[c.id]?.pooled ?? 0;
@@ -514,12 +664,30 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
                   primary: true,
                 ),
                 const SizedBox(height: 8),
+                _utilityRow(context),
+                if (_searchOpen) ...[
+                  const SizedBox(height: 8),
+                  _searchField(context),
+                ],
+                const SizedBox(height: 8),
                 Expanded(
                   child: SingleChildScrollView(
                     controller: _railScroll,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        if (ordered.isEmpty && _query.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 18),
+                            child: Text(
+                              'No channels match '
+                              '“${_search.text.trim()}”',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: tv.textFaint,
+                              ),
+                            ),
+                          ),
                         if (pinnedCount > 0) ...[
                           SpotlightGroupLabel('Pinned', pinnedCount),
                           for (final c in ordered.take(pinnedCount))
@@ -531,33 +699,6 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
                         ],
                         for (final c in ordered.skip(pinnedCount))
                           _row(c, pinned: false, staged: staged),
-                        const SizedBox(height: 10),
-                        SpotlightRailButton(
-                          focusNode: _node(_kAdd),
-                          onKey: (n, e) => _railKey(_kAdd, n, e),
-                          onActivate: view.busy ? null : view.onAdd,
-                          icon: Icons.add_rounded,
-                          label: 'Add channel',
-                          compact: true,
-                        ),
-                        const SizedBox(height: 5),
-                        SpotlightRailButton(
-                          focusNode: _node(_kImport),
-                          onKey: (n, e) => _railKey(_kImport, n, e),
-                          onActivate: view.busy ? null : view.onImport,
-                          icon: Icons.cloud_download_rounded,
-                          label: 'Import',
-                          compact: true,
-                        ),
-                        const SizedBox(height: 5),
-                        SpotlightRailButton(
-                          focusNode: _node(_kSettings),
-                          onKey: (n, e) => _railKey(_kSettings, n, e),
-                          onActivate: view.onSettings,
-                          icon: Icons.settings_rounded,
-                          label: 'Settings',
-                          compact: true,
-                        ),
                       ],
                     ),
                   ),
@@ -574,6 +715,7 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
                 Expanded(
                   child: SpotlightStage(
                     channel: staged,
+                    filtering: _query.isNotEmpty,
                     pinned:
                         staged != null && view.favoriteIds.contains(staged.id),
                     stats: _stagedStats,
@@ -622,6 +764,147 @@ class _SpotlightTvArmState extends State<_SpotlightTvArm> {
           ),
         ],
       ),
+    );
+  }
+
+  /// The utility icon row pinned under Quick Play, plus a caption naming the
+  /// focused icon (icon-only circles need one on a ten-foot UI).
+  Widget _utilityRow(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
+    final view = widget.view;
+
+    Widget button(
+      String key,
+      IconData icon,
+      String label,
+      VoidCallback? onActivate, {
+      bool active = false,
+    }) {
+      return SpotlightUtilityButton(
+        focusNode: _node(key),
+        onKey: (n, e) => _utilKey(key, n, e),
+        onActivate: onActivate,
+        onFocusChange: (focused) {
+          if (focused) _utilMemory = key;
+        },
+        icon: icon,
+        label: label,
+        active: active,
+      );
+    }
+
+    return Row(
+      children: [
+        button(
+          _kFind,
+          Icons.search_rounded,
+          'Search',
+          _toggleSearch,
+          active: _searchOpen,
+        ),
+        const SizedBox(width: 7),
+        button(
+          _kAdd,
+          Icons.add_rounded,
+          'Add channel',
+          view.busy ? null : view.onAdd,
+        ),
+        const SizedBox(width: 7),
+        button(
+          _kImport,
+          Icons.cloud_download_rounded,
+          'Import',
+          view.busy ? null : view.onImport,
+        ),
+        const SizedBox(width: 7),
+        button(_kSettings, Icons.settings_rounded, 'Settings', view.onSettings),
+        const SizedBox(width: 9),
+        Expanded(
+          child: ListenableBuilder(
+            listenable: Listenable.merge([for (final k in _utilRun) _node(k)]),
+            builder: (context, _) {
+              const labels = {
+                _kFind: 'Search',
+                _kAdd: 'Add channel',
+                _kImport: 'Import',
+                _kSettings: 'Settings',
+              };
+              String caption = '';
+              for (final k in _utilRun) {
+                if (_node(k).hasFocus) {
+                  caption = labels[k]!;
+                  break;
+                }
+              }
+              return Text(
+                caption,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: tv.textDim,
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _searchField(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
+    return TvTextField(
+      controller: _search,
+      focusNode: _node(_kSearch),
+      style: TextStyle(fontSize: 12.5, color: app.core.tx),
+      textInputAction: TextInputAction.search,
+      // The shared TV shell/keyboard chrome follows settings.accent, same as
+      // every other Debrify TV field (see magic_tv_screen's rationale).
+      accent: app.settings.accent,
+      keyboardGround: app.youtube.keyboardPanel,
+      keyboardInk: app.core.tx,
+      keyboardInkOnAccent: app.inkOn(app.settings.accent),
+      decoration: InputDecoration(
+        hintText: 'Search channels',
+        hintStyle: TextStyle(fontSize: 12.5, color: tv.textFaint),
+        prefixIcon: Icon(Icons.search_rounded, size: 16, color: tv.textFaint),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 34,
+          minHeight: 34,
+        ),
+        isDense: true,
+        filled: true,
+        fillColor: tv.fillWeak,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(17),
+          borderSide: BorderSide(color: tv.hairline),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(17),
+          borderSide: BorderSide(color: tv.hairline),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(17),
+          borderSide: BorderSide(color: app.settings.accent, width: 1.5),
+        ),
+      ),
+      onChanged: (_) => _searchChanged(),
+      onSubmitted: _searchSubmitted,
+      onUpArrow: () => _focusRail('util'),
+      onDownArrow: () {
+        final run = _railRun;
+        final i = run.indexOf(_kSearch);
+        if (i >= 0 && i < run.length - 1) _focusRail(run[i + 1]);
+      },
+      onLeftArrow: () => MainPageBridge.focusTvSidebar?.call(),
+      onRightArrow: () {
+        if (_staged != null) _node(_kPlay).requestFocus();
+      },
     );
   }
 

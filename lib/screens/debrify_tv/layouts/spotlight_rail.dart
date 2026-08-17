@@ -174,6 +174,99 @@ class SpotlightRailButton extends StatelessWidget {
   }
 }
 
+/// A utility icon in the row under Quick Play — Search, Add, Import,
+/// Settings. Same focus grammar as every rail control: invert and lift,
+/// never a coloured ring. [active] tints the resting state with the accent
+/// (the Search icon while a filter is applied).
+class SpotlightUtilityButton extends StatelessWidget {
+  final FocusNode focusNode;
+  final KeyEventResult Function(FocusNode, KeyEvent) onKey;
+  final VoidCallback? onActivate;
+  final ValueChanged<bool> onFocusChange;
+  final IconData icon;
+  final String label;
+  final bool active;
+
+  const SpotlightUtilityButton({
+    super.key,
+    required this.focusNode,
+    required this.onKey,
+    required this.onActivate,
+    required this.onFocusChange,
+    required this.icon,
+    required this.label,
+    this.active = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final tv = app.debrifyTv;
+    return Focus(
+      focusNode: focusNode,
+      onFocusChange: onFocusChange,
+      onKeyEvent: onKey,
+      child: ListenableBuilder(
+        listenable: focusNode,
+        builder: (context, _) {
+          final focused = focusNode.hasFocus;
+          final disabled = onActivate == null;
+          final Color fill = focused
+              ? app.core.tx
+              : active
+              ? tv.accent.withValues(alpha: 0.2)
+              : tv.fillWeak;
+          final Color ink = focused
+              ? app.inkOn(app.core.tx)
+              : active
+              ? tv.accent
+              : tv.textDim;
+          return RepaintBoundary(
+            child: Semantics(
+              label: label,
+              button: true,
+              child: GestureDetector(
+                onTap: onActivate,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOutCubic,
+                  width: 34,
+                  height: 34,
+                  transform: focused
+                      ? (Matrix4.identity()..translateByDouble(0, -2, 0, 1))
+                      : Matrix4.identity(),
+                  decoration: BoxDecoration(
+                    color: disabled ? tv.fillWeak.withValues(alpha: 0.5) : fill,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: focused ? app.core.tx : tv.hairline,
+                      width: 1,
+                    ),
+                    boxShadow: focused
+                        ? const [
+                            BoxShadow(
+                              color: Color(0x66000000),
+                              blurRadius: 20,
+                              offset: Offset(0, 10),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 15,
+                    color: disabled ? tv.textFaint : ink,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 /// One channel row: number badge, name + caption, health pip slot.
 class SpotlightChannelRow extends StatelessWidget {
   final DebrifyTvChannel channel;
@@ -267,9 +360,7 @@ class SpotlightChannelRow extends StatelessWidget {
                           height: 30,
                           decoration: BoxDecoration(
                             color: focused
-                                ? app
-                                      .inkOn(app.core.tx)
-                                      .withValues(alpha: 0.09)
+                                ? app.inkOn(app.core.tx).withValues(alpha: 0.09)
                                 : staged
                                 ? tv.accent.withValues(alpha: 0.2)
                                 : tv.fillWeak,

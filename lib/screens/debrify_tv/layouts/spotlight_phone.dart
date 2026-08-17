@@ -180,34 +180,41 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
                   onChanged: (_) => setState(() {}),
                   onClear: _clearSearch,
                 ),
+                // Management actions live at the TOP, beside search — never
+                // below a list that can be dozens of channels long.
+                const SizedBox(height: 10),
+                _PhoneActionGroup(
+                  actions: [
+                    _PhoneAction(
+                      icon: Icons.add_rounded,
+                      label: 'Add',
+                      onTap: view.busy ? null : view.onAdd,
+                    ),
+                    _PhoneAction(
+                      icon: Icons.cloud_download_rounded,
+                      label: 'Import',
+                      onTap: view.busy ? null : view.onImport,
+                    ),
+                    _PhoneAction(
+                      icon: Icons.settings_rounded,
+                      label: 'Settings',
+                      onTap: view.onSettings,
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 14),
                 if (allChannels.isEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 40),
-                    child: Column(
-                      children: [
-                        Text(
-                          'Make a channel out of anything you can name.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: app.core.tx,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        _PhoneButton(
-                          icon: Icons.add_rounded,
-                          label: 'Add channel',
-                          onTap: view.busy ? null : view.onAdd,
-                        ),
-                        const SizedBox(height: 8),
-                        _PhoneButton(
-                          icon: Icons.cloud_download_rounded,
-                          label: 'Import',
-                          onTap: view.busy ? null : view.onImport,
-                        ),
-                      ],
+                    child: Text(
+                      'Make a channel out of anything you can name — '
+                      'Add or Import above.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: app.core.tx,
+                      ),
                     ),
                   )
                 else if (ordered.isEmpty)
@@ -253,26 +260,6 @@ class _SpotlightPhoneArmState extends State<SpotlightPhoneArm> {
                   for (final c in ordered.skip(pinnedCount))
                     _row(context, view, c, pinned: false),
                 ],
-                const SizedBox(height: 18),
-                _PhoneActionGroup(
-                  actions: [
-                    _PhoneAction(
-                      icon: Icons.add_rounded,
-                      label: 'Add',
-                      onTap: view.busy ? null : view.onAdd,
-                    ),
-                    _PhoneAction(
-                      icon: Icons.cloud_download_rounded,
-                      label: 'Import',
-                      onTap: view.busy ? null : view.onImport,
-                    ),
-                    _PhoneAction(
-                      icon: Icons.settings_rounded,
-                      label: 'Settings',
-                      onTap: view.onSettings,
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
