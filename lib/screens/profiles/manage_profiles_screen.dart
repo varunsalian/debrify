@@ -153,7 +153,7 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
 
   Future<void> _delete(UserProfile profile) async {
     late final ProfileDeletionDependencies dependencies;
-    late final ProfileAuthorizationContext operationActor;
+    late ProfileAuthorizationContext operationActor;
     try {
       operationActor = _authorization;
       await _validateManagingAdmin(operationActor);
@@ -266,6 +266,18 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
           actingAuthorizationRevision: operationActor.authorizationRevision,
           actingSessionEpoch: operationActor.sessionEpoch,
         );
+        // Revocation bumps every BORROWER's authorization revision — and
+        // under default-on sharing the acting admin is almost always one of
+        // them, so its captured context just went stale. Re-capture (same
+        // session, same profile) or every later authority check fails.
+        final refreshed = await ProfileAuthorizationContext.capture(
+          widget.registry,
+        );
+        if (refreshed.profileId != operationActor.profileId) {
+          throw StateError('Managing profile session changed');
+        }
+        operationActor = refreshed;
+        await _validateManagingAdmin(operationActor);
         // The delete transaction re-verifies shared == 0, so a racing
         // re-grant safely re-blocks rather than slipping through.
       }

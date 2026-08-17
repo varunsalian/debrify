@@ -130,13 +130,22 @@ void main() {
     await insert(ids.admin, ConnectionResourceType.stremioAddon);
     expect(await registry.getGrant(ids.kid, 'r1'), isNotNull);
 
+    // The REAL post-restore shape: the acting admin is NOT the owner — it
+    // borrows the scaffold's seeded resources like everyone else, so the
+    // revocation bumps the ACTOR's own revision and its captured context
+    // goes stale (the live bug: every later authority check failed).
+    await registry.setActiveProfile(keeper.id);
+    ProfileRuntime.debugReset();
+    ProfileRuntime.initializeCommitted(
+      ProfileScope(profileId: keeper.id, dataGeneration: 1, sessionEpoch: 1),
+    );
     final kidBefore = (await registry.getProfile(ids.kid))!;
-    final fresh = await ProfileAuthorizationContext.capture(registry);
+    final actorBefore = await ProfileAuthorizationContext.capture(registry);
     final revoked = await registry.revokeGrantsOnOwnedResources(
       ownerProfileId: ids.admin,
-      actingProfileId: fresh.profileId,
-      actingAuthorizationRevision: fresh.authorizationRevision,
-      actingSessionEpoch: fresh.sessionEpoch,
+      actingProfileId: actorBefore.profileId,
+      actingAuthorizationRevision: actorBefore.authorizationRevision,
+      actingSessionEpoch: actorBefore.sessionEpoch,
     );
     expect(revoked, greaterThanOrEqualTo(2)); // kid + keeper at minimum
     expect(await registry.getGrant(ids.kid, 'r1'), isNull);
@@ -146,14 +155,25 @@ void main() {
     );
     // The owner's own grant survives.
     expect(await registry.getGrant(ids.admin, 'r1'), isNotNull);
-
-    // Deletion now passes the shared==0 guard. Switch the active profile
-    // away first (active profiles cannot be deleted).
-    await registry.setActiveProfile(keeper.id);
-    ProfileRuntime.debugReset();
-    ProfileRuntime.initializeCommitted(
-      ProfileScope(profileId: keeper.id, dataGeneration: 1, sessionEpoch: 1),
+    // The acting admin was a borrower: its OWN revision bumped, so the
+    // pre-revocation context is now stale and must be refused.
+    expect(
+      (await registry.getProfile(keeper.id))!.authorizationRevision,
+      greaterThan(actorBefore.authorizationRevision),
     );
+    await expectLater(
+      registry.deleteProfileWithDisposition(
+        id: ids.admin,
+        deleteOwnedResources: true,
+        detachPublicArtifacts: true,
+        actingProfileId: actorBefore.profileId,
+        actingAuthorizationRevision: actorBefore.authorizationRevision,
+        actingSessionEpoch: actorBefore.sessionEpoch,
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    // With a FRESH capture (the fix), deletion passes the shared==0 guard.
     final acting = await ProfileAuthorizationContext.capture(registry);
     await registry.deleteProfileWithDisposition(
       id: ids.admin,
