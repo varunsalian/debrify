@@ -19,6 +19,19 @@ class ProfileDatabaseSnapshot {
 
   static const int maxAttachmentBytes = 64 * 1024 * 1024;
   static const int maxTotalBytes = 128 * 1024 * 1024;
+
+  /// Export-side budget for all database snapshots combined, deliberately
+  /// tighter than the restore-side caps above: snapshot bytes are base64d
+  /// into the package (x4/3), and the encrypted envelope base64s the whole
+  /// ciphertext again (x4/3 = x16/9 net), so 64 MB raw is what actually fits
+  /// under [PortableProfilePackage.maxEnvelopeBytes] with room for the rest
+  /// of the package. Restore keeps accepting up to the looser caps.
+  static const int maxExportRawBytes = 64 * 1024 * 1024;
+
+  /// Test seam: shrinks [maxAttachmentBytes]/[maxExportRawBytes] so the
+  /// skip-oversized path is exercisable without building a 64 MB database.
+  @visibleForTesting
+  static int? debugExportBudgetOverride;
   static const Set<String> databaseNames = <String>{
     'debrify_tv.db',
     'iptv_catalog.db',
@@ -31,12 +44,23 @@ class ProfileDatabaseSnapshot {
   @visibleForTesting
   static bool debugForceCheckpointCopy = false;
 
-  static Future<Map<String, Object?>> export(ProfileScope scope) async {
+  /// Snapshots every profile database that exists into base64 attachments.
+  ///
+  /// A database whose snapshot would not fit the export budget is SKIPPED and
+  /// named in `skipped` (with its size) rather than failing the whole backup:
+  /// a huge IPTV catalog must not make credentials and settings unbackupable.
+  /// [databaseNames] iterates small-first, so the important small database
+  /// still ships when the big one is dropped.
+  static Future<({Map<String, Object?> attachments, List<String> skipped})>
+  export(ProfileScope scope) async {
+    final attachmentCap = debugExportBudgetOverride ?? maxAttachmentBytes;
+    final budget = debugExportBudgetOverride ?? maxExportRawBytes;
     final documents = await AppStorage.documents();
     final support = await AppStorage.support();
     final scratch = Directory(p.join(support.path, 'profile-snapshot-tmp'));
     await scratch.create(recursive: true);
     final result = <String, Object?>{};
+    final skipped = <String>[];
     var total = 0;
     for (final name in databaseNames) {
       final source = scope.fileIn(documents, 'documents', name);
@@ -78,10 +102,11 @@ class ProfileDatabaseSnapshot {
           if (db.isOpen) await db.close();
         }
         final length = await snapshot.length();
-        total += length;
-        if (length > maxAttachmentBytes || total > maxTotalBytes) {
-          throw StateError('Profile database backup exceeds attachment limit');
+        if (length > attachmentCap || total + length > budget) {
+          skipped.add('$name (${(length / (1024 * 1024)).ceil()} MB)');
+          continue;
         }
+        total += length;
         final bytes = await snapshot.readAsBytes();
         result[name] = <String, Object?>{
           'encoding': 'base64',
@@ -100,7 +125,7 @@ class ProfileDatabaseSnapshot {
     } catch (_) {
       // A concurrent export may still own the shared scratch directory.
     }
-    return result;
+    return (attachments: result, skipped: skipped);
   }
 
   static Future<int> restore(

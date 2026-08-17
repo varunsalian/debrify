@@ -113,6 +113,72 @@ void main() {
     },
   );
 
+  test('off-main file pipeline probes, unlocks, and round-trips', () async {
+    // The UI paths go through probeFile/decryptFile/decodeFile so the KDF and
+    // whole-envelope JSON never run on the main isolate; this pins that the
+    // worker-isolate pipeline matches the raw methods end to end.
+    final directory = await Directory.systemTemp.createTemp('portable-pkg-');
+    addTearDown(() => directory.delete(recursive: true));
+
+    final source = await package(
+      preferences: const <String, Object?>{'account_label': 'private'},
+    );
+    final encryptedBytes = await PortableProfilePackage.encodeEncryptedBytes(
+      source,
+      'correct horse',
+      memory: 8,
+      iterations: 1,
+    );
+    // Encrypted envelopes are compact-encoded — no pretty-print inflation.
+    expect(utf8.decode(encryptedBytes), isNot(contains('\n')));
+    final encryptedFile = File('${directory.path}/backup.json');
+    await encryptedFile.writeAsBytes(encryptedBytes);
+
+    final probe = await PortableProfilePackage.probeFile(encryptedFile.path);
+    expect(probe.isProfilePackage, isTrue);
+    expect(probe.encrypted, isTrue);
+    expect(probe.legacySource, isNull);
+
+    final restored = await PortableProfilePackage.decryptFile(
+      encryptedFile.path,
+      'correct horse',
+    );
+    expect(restored.profiles.single['name'], 'Private profile');
+    expect(
+      restored.sections['preferences']['values']['account_label'],
+      'private',
+    );
+    await expectLater(
+      PortableProfilePackage.decryptFile(encryptedFile.path, 'wrong horses'),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Wrong passphrase or tampered backup',
+        ),
+      ),
+    );
+
+    final sanitized = await package(
+      mode: 'sanitizedSettings',
+      preferences: const <String, Object?>{'app_theme': 'spotlight'},
+    );
+    final plainBytes = await PortableProfilePackage.encodePlainBytes(sanitized);
+    final plainFile = File('${directory.path}/sanitized.json');
+    await plainFile.writeAsBytes(plainBytes);
+    final plainProbe = await PortableProfilePackage.probeFile(plainFile.path);
+    expect(plainProbe.isProfilePackage, isTrue);
+    expect(plainProbe.encrypted, isFalse);
+    final decoded = await PortableProfilePackage.decodeFile(plainFile.path);
+    expect(decoded.mode, 'sanitizedSettings');
+
+    final legacyFile = File('${directory.path}/legacy.json');
+    await legacyFile.writeAsString('{"settings": {"theme": "dark"}}');
+    final legacyProbe = await PortableProfilePackage.probeFile(legacyFile.path);
+    expect(legacyProbe.isProfilePackage, isFalse);
+    expect(legacyProbe.legacySource, contains('dark'));
+  });
+
   test('wrong passphrase and unsafe KDF parameters fail closed', () async {
     final encrypted = await PortableProfilePackage.encrypt(
       await package(),

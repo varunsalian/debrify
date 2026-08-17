@@ -60,10 +60,14 @@ void main() {
       await database.insert('sample', <String, Object?>{'value': 'isolated'});
       await database.close();
 
-      final attachments = await ProfileDatabaseSnapshot.export(sourceScope);
-      expect(attachments.keys, contains('debrify_tv.db'));
+      final export = await ProfileDatabaseSnapshot.export(sourceScope);
+      expect(export.attachments.keys, contains('debrify_tv.db'));
+      expect(export.skipped, isEmpty);
       expect(
-        await ProfileDatabaseSnapshot.restore(destinationScope, attachments),
+        await ProfileDatabaseSnapshot.restore(
+          destinationScope,
+          export.attachments,
+        ),
         1,
       );
 
@@ -105,10 +109,13 @@ void main() {
     await database.insert('sample', <String, Object?>{'value': 'legacy'});
     await database.close();
 
-    final attachments = await ProfileDatabaseSnapshot.export(sourceScope);
-    expect(attachments.keys, contains('debrify_tv.db'));
+    final export = await ProfileDatabaseSnapshot.export(sourceScope);
+    expect(export.attachments.keys, contains('debrify_tv.db'));
     expect(
-      await ProfileDatabaseSnapshot.restore(destinationScope, attachments),
+      await ProfileDatabaseSnapshot.restore(
+        destinationScope,
+        export.attachments,
+      ),
       1,
     );
     final restored = await openDatabase(
@@ -122,6 +129,32 @@ void main() {
     } finally {
       await restored.close();
     }
+  });
+
+  test('skips and names an oversized database instead of failing', () async {
+    // A huge IPTV catalog must not make the whole backup impossible — the
+    // exporter drops what doesn't fit and reports it, keeping the rest.
+    ProfileDatabaseSnapshot.debugExportBudgetOverride = 1024;
+    addTearDown(
+      () => ProfileDatabaseSnapshot.debugExportBudgetOverride = null,
+    );
+    final sourceScope = ProfileScope(
+      profileId: 'profile-oversized',
+      dataGeneration: 1,
+      sessionEpoch: 1,
+    );
+    final documents = await AppStorage.documents();
+    final source = sourceScope.fileIn(documents, 'documents', 'debrify_tv.db');
+    await source.parent.create(recursive: true);
+    final database = await openDatabase(source.path);
+    await database.execute('CREATE TABLE sample (value TEXT NOT NULL)');
+    await database.insert('sample', <String, Object?>{'value': 'big'});
+    await database.close();
+
+    final export = await ProfileDatabaseSnapshot.export(sourceScope);
+    expect(export.attachments, isEmpty);
+    expect(export.skipped, hasLength(1));
+    expect(export.skipped.single, startsWith('debrify_tv.db ('));
   });
 
   test('rejects attachment digest tampering before publication', () async {

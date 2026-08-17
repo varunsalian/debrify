@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -80,6 +82,100 @@ class PortableProfilePackage {
     };
     _ensureEnvelopeFits(envelope);
     return envelope;
+  }
+
+  // ---- Off-main-isolate pipeline ------------------------------------------
+  //
+  // The KDF, AEAD, digests, and whole-envelope JSON work below are pure Dart
+  // (package:cryptography with no platform delegate registered), and on a
+  // 100 MB library backup they cost tens of seconds — run on the UI isolate
+  // they freeze every frame of it. These entry points move the complete
+  // pipeline into a short-lived worker isolate; UI callers should prefer
+  // them over the raw methods further down.
+
+  /// Sanitized/plain export: integrity-stamp and pretty-print the package.
+  /// Pretty output is deliberate here — a sanitized backup is small and meant
+  /// to be human-inspectable.
+  static Future<Uint8List> encodePlainBytes(PortableProfilePackage package) {
+    return Isolate.run(() async {
+      final envelope = await withIntegrity(package);
+      return Uint8List.fromList(
+        utf8.encode(const JsonEncoder.withIndent('  ').convert(envelope)),
+      );
+    });
+  }
+
+  /// Encrypted export, compact-encoded: the envelope's bulk is one opaque
+  /// base64 ciphertext, so indentation would only inflate the file.
+  static Future<Uint8List> encodeEncryptedBytes(
+    PortableProfilePackage package,
+    String passphrase, {
+    int memory = 19456,
+    int iterations = 2,
+  }) {
+    if (passphrase.length < 8) {
+      throw ArgumentError.value(
+        passphrase,
+        'passphrase',
+        'Minimum 8 characters',
+      );
+    }
+    return Isolate.run(() async {
+      final envelope = await encrypt(
+        package,
+        passphrase,
+        memory: memory,
+        iterations: iterations,
+      );
+      return Uint8List.fromList(utf8.encode(jsonEncode(envelope)));
+    });
+  }
+
+  /// Reads just enough of a picked backup file to route it: is it a profile
+  /// package, and does it need a passphrase prompt before the real parse?
+  /// Legacy-format sources come back whole (they are small preference blobs)
+  /// so the legacy adapter can parse them without a second read.
+  static Future<({bool isProfilePackage, bool encrypted, String? legacySource})>
+  probeFile(String path) {
+    return Isolate.run(() async {
+      final source = await readBoundedUtf8(File(path).openRead());
+      final decoded = jsonDecode(source);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Backup must be a JSON object');
+      }
+      final isPackage = decoded['format'] == 'debrify-profile-package';
+      return (
+        isProfilePackage: isPackage,
+        encrypted: isPackage && decoded['encrypted'] == true,
+        legacySource: isPackage ? null : source,
+      );
+    });
+  }
+
+  /// Full unlock of an encrypted package file. Re-reads the file rather than
+  /// accepting a pre-parsed envelope so the 100 MB parse never happens on the
+  /// caller's isolate; wrong-passphrase retries repeat the read, which the
+  /// KDF dominates anyway.
+  static Future<PortableProfilePackage> decryptFile(
+    String path,
+    String passphrase,
+  ) {
+    return Isolate.run(() async {
+      return decrypt(await _readEnvelopeFile(path), passphrase);
+    });
+  }
+
+  /// Off-main parse+validate of an unencrypted package file.
+  static Future<PortableProfilePackage> decodeFile(String path) {
+    return Isolate.run(() async => decodeMap(await _readEnvelopeFile(path)));
+  }
+
+  static Future<Map<String, dynamic>> _readEnvelopeFile(String path) async {
+    final decoded = jsonDecode(await readBoundedUtf8(File(path).openRead()));
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Backup must be a JSON object');
+    }
+    return decoded;
   }
 
   static Future<PortableProfilePackage> decode(String source) async {

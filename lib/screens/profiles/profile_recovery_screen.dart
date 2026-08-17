@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -124,29 +123,26 @@ class _ProfileRecoveryScreenState extends State<ProfileRecoveryScreen> {
           selected.path == null) {
         throw const FormatException('Backup is not locally readable');
       }
-      final source = await PortableProfilePackage.readBoundedUtf8(
-        File(selected.path!).openRead(),
-      );
-      final decoded = jsonDecode(source);
-      if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('Backup must be an object');
-      }
+      // The probe/decrypt pipeline runs the heavy parse + KDF in a worker
+      // isolate so this screen's busy spinner keeps animating.
+      final path = selected.path!;
+      final probe = await PortableProfilePackage.probeFile(path);
 
       final PortableProfilePackage package;
-      if (decoded['format'] == 'debrify-profile-package') {
-        if (decoded['encrypted'] == true) {
+      if (probe.isProfilePackage) {
+        if (probe.encrypted) {
           if (!mounted) return 'Restore cancelled.';
           final passphrase = await _promptSecret(
             'Backup passphrase',
             'Enter the passphrase used when this backup was created.',
           );
           if (passphrase == null) return 'Restore cancelled.';
-          package = await PortableProfilePackage.decrypt(decoded, passphrase);
+          package = await PortableProfilePackage.decryptFile(path, passphrase);
         } else {
-          package = await PortableProfilePackage.decodeMap(decoded);
+          package = await PortableProfilePackage.decodeFile(path);
         }
       } else {
-        var legacy = BackupRestoreService.parse(source);
+        var legacy = BackupRestoreService.parse(probe.legacySource!);
         if (BackupRestoreService.isEncrypted(legacy)) {
           if (!mounted) return 'Restore cancelled.';
           final passphrase = await _promptSecret(

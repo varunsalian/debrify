@@ -3326,22 +3326,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       registry: registry,
       resources: resourceService,
     );
-    final package = allProfiles
-        ? await service.exportAllProfiles(
-            context: authorization,
-            includeSecrets: true,
-          )
-        : await service.exportProfile(
-            context: authorization,
-            scope: ProfileRuntime.capture(),
-            includeSecrets: !sanitized,
-            sanitized: sanitized,
-          );
-    final map = sanitized
-        ? await PortableProfilePackage.withIntegrity(package)
-        : await PortableProfilePackage.encrypt(package, password);
-    final bytes = Uint8List.fromList(
-      utf8.encode(const JsonEncoder.withIndent('  ').convert(map)),
+    var packageOmissions = const <String, dynamic>{};
+    final bytes = await _profileBackupProgress<Uint8List>(
+      'Packaging profile data…',
+      (setStage) async {
+        final package = allProfiles
+            ? await service.exportAllProfiles(
+                context: authorization,
+                includeSecrets: true,
+              )
+            : await service.exportProfile(
+                context: authorization,
+                scope: ProfileRuntime.capture(),
+                includeSecrets: !sanitized,
+                sanitized: sanitized,
+              );
+        packageOmissions = package.omissions;
+        if (!sanitized) {
+          setStage('Encrypting backup — this can take a minute…');
+        }
+        return sanitized
+            ? PortableProfilePackage.encodePlainBytes(package)
+            : PortableProfilePackage.encodeEncryptedBytes(package, password);
+      },
     );
     final stamp = DateTime.now().toUtc().toIso8601String().substring(0, 10);
     final saved = await FilePicker.platform.saveFile(
@@ -3354,13 +3361,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
       bytes: bytes,
     );
     if (!mounted || saved == null) return;
+    final skippedDatabases = packageOmissions['libraryDatabasesTooLarge'];
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          allProfiles ? 'All-profile backup saved' : 'Profile backup saved',
+          skippedDatabases is String
+              ? '${allProfiles ? 'All-profile backup' : 'Profile backup'} saved. '
+                    'Too large to include: $skippedDatabases'
+              : allProfiles
+              ? 'All-profile backup saved'
+              : 'Profile backup saved',
         ),
+        duration: skippedDatabases is String
+            ? const Duration(seconds: 8)
+            : const Duration(seconds: 4),
       ),
     );
+  }
+
+  /// Modal stage indicator for backup/restore work. The crypto and
+  /// whole-envelope parse stages run in a worker isolate so the spinner
+  /// animates through them (packaging still reads databases on this isolate);
+  /// [setStage] swaps the label between phases without re-opening the dialog.
+  /// The dialog dismisses itself through its own context, so it cannot leak
+  /// on the root navigator if this State unmounts mid-run.
+  Future<T> _profileBackupProgress<T>(
+    String initialStage,
+    Future<T> Function(void Function(String) setStage) run,
+  ) async {
+    final stage = ValueNotifier<String>(initialStage);
+    final done = ValueNotifier<bool>(false);
+    unawaited(
+      showSettingsDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _BackupProgressDialog(stage: stage, done: done),
+      ),
+    );
+    try {
+      return await run((value) => stage.value = value);
+    } finally {
+      done.value = true;
+    }
   }
 
   Future<void> _restoreProfileBackup() async {
@@ -3409,26 +3451,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (path == null) {
       throw const FormatException('Selected backup is not locally readable');
     }
-    final selected = File(path);
-    final source = await PortableProfilePackage.readBoundedUtf8(
-      selected.openRead(),
+    final probe = await _profileBackupProgress(
+      'Reading backup…',
+      (_) => PortableProfilePackage.probeFile(path),
     );
-    final decoded = jsonDecode(source);
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('Backup must be a JSON object');
-    }
 
     PortableProfilePackage package;
-    if (decoded['format'] == 'debrify-profile-package') {
-      if (decoded['encrypted'] == true) {
-        final unlocked = await _promptAndDecryptProfilePackage(decoded);
+    if (probe.isProfilePackage) {
+      if (probe.encrypted) {
+        final unlocked = await _promptAndDecryptProfilePackage(path);
         if (unlocked == null) return;
         package = unlocked;
       } else {
-        package = await PortableProfilePackage.decodeMap(decoded);
+        package = await _profileBackupProgress(
+          'Checking backup…',
+          (_) => PortableProfilePackage.decodeFile(path),
+        );
       }
     } else {
-      var legacy = BackupRestoreService.parse(source);
+      var legacy = BackupRestoreService.parse(probe.legacySource!);
       if (BackupRestoreService.isEncrypted(legacy)) {
         final unlocked = await _promptAndDecryptBackup(legacy);
         if (unlocked == null) return;
@@ -3488,9 +3529,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ],
     );
     if (graphRestore) {
-      final report = await coordinator.restoreDeviceGraph(
-        package: package,
-        authorization: authorization,
+      final report = await _profileBackupProgress(
+        'Importing profiles — this can take a few minutes…',
+        (_) => coordinator.restoreDeviceGraph(
+          package: package,
+          authorization: authorization,
+        ),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3506,10 +3550,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       return;
     }
-    final report = await coordinator.restore(
-      package: package,
-      destinationProfileId: profile.id,
-      authorization: authorization,
+    final report = await _profileBackupProgress(
+      'Restoring — verifying and staging data, this can take a few minutes…',
+      (_) => coordinator.restore(
+        package: package,
+        destinationProfileId: profile.id,
+        authorization: authorization,
+      ),
     );
     if (!mounted) return;
     await _loadSummaries();
@@ -3533,7 +3580,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<PortableProfilePackage?> _promptAndDecryptProfilePackage(
-    Map<String, dynamic> envelope,
+    String path,
   ) async {
     String? errorText;
     while (true) {
@@ -3542,7 +3589,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       if (password == null) return null;
       try {
-        return await PortableProfilePackage.decrypt(envelope, password);
+        return await _profileBackupProgress(
+          'Unlocking backup…',
+          (_) => PortableProfilePackage.decryptFile(path, password),
+        );
       } on FormatException catch (error) {
         if (error.message == 'Wrong passphrase or tampered backup') {
           errorText = 'Wrong passphrase or damaged backup — try again';
@@ -6534,6 +6584,70 @@ class _SettingsSearchBarState extends State<_SettingsSearchBar> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Busy dialog for [_profileBackupProgress]: undismissable while work runs,
+/// and closed through its OWN context when `done` fires — the caller's State
+/// may unmount mid-run, and an orphaned `canPop: false` modal on the root
+/// navigator would wedge the whole app.
+class _BackupProgressDialog extends StatefulWidget {
+  const _BackupProgressDialog({required this.stage, required this.done});
+
+  final ValueNotifier<String> stage;
+  final ValueNotifier<bool> done;
+
+  @override
+  State<_BackupProgressDialog> createState() => _BackupProgressDialogState();
+}
+
+class _BackupProgressDialogState extends State<_BackupProgressDialog> {
+  @override
+  void initState() {
+    super.initState();
+    widget.done.addListener(_maybeClose);
+    if (widget.done.value) {
+      // The work finished before this route's first build (a fast probe):
+      // the listener never fires, so close on the next frame instead.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeClose());
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.done.removeListener(_maybeClose);
+    super.dispose();
+  }
+
+  void _maybeClose() {
+    if (widget.done.value && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: ValueListenableBuilder<String>(
+                valueListenable: widget.stage,
+                builder: (_, value, _) => Text(value),
+              ),
+            ),
+          ],
         ),
       ),
     );

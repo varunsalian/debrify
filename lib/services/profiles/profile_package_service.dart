@@ -33,9 +33,10 @@ class ProfilePackageService {
       throw StateError('Profile is not allowed to export backups');
     }
     final preferences = await _exportPreferences(scope, sanitized: sanitized);
-    final databaseSnapshots = sanitized
-        ? const <String, Object?>{}
+    final databaseExport = sanitized
+        ? null
         : await ProfileDatabaseSnapshot.export(scope);
+    final databaseSnapshots = databaseExport?.attachments ?? const {};
     final portableFiles = sanitized
         ? const <String, Object?>{}
         : await ProfilePortableFiles.export(scope);
@@ -115,6 +116,8 @@ class ProfilePackageService {
         'cachesAndTransientEpg': true,
         if (borrowedResourcesOmitted > 0)
           'borrowedConnections': borrowedResourcesOmitted,
+        if (databaseExport != null && databaseExport.skipped.isNotEmpty)
+          'libraryDatabasesTooLarge': databaseExport.skipped.join(', '),
       },
     );
     await context.validate(registry);
@@ -138,6 +141,7 @@ class ProfilePackageService {
     final profileBackupIds = <String, String>{};
     final profileRecords = <Map<String, dynamic>>[];
     final sections = <String, dynamic>{};
+    final skippedDatabases = <String>[];
     for (var index = 0; index < profiles.length; index++) {
       final profile = profiles[index];
       final backupId = 'profile-$index';
@@ -162,12 +166,15 @@ class ProfilePackageService {
       sections[sectionId] = await PortableProfilePackage.buildSection(
         await _exportPreferences(scope, sanitized: false),
       );
-      final databaseSnapshots = await ProfileDatabaseSnapshot.export(scope);
-      if (databaseSnapshots.isNotEmpty) {
+      final databaseExport = await ProfileDatabaseSnapshot.export(scope);
+      skippedDatabases.addAll(
+        databaseExport.skipped.map((entry) => '${profile.name}: $entry'),
+      );
+      if (databaseExport.attachments.isNotEmpty) {
         final databaseSectionId = '$backupId-databases';
         profileRecords.last['databasesSection'] = databaseSectionId;
         sections[databaseSectionId] = await PortableProfilePackage.buildSection(
-          databaseSnapshots,
+          databaseExport.attachments,
         );
       }
       final portableFiles = await ProfilePortableFiles.export(scope);
@@ -232,7 +239,7 @@ class ProfilePackageService {
       profiles: profileRecords,
       resources: resourceRecords,
       sections: sections,
-      omissions: const <String, dynamic>{
+      omissions: <String, dynamic>{
         'downloadAndRecordingBinaries': true,
         'activeJobsAndSchedules': true,
         'devicePathsAndOsGrants': true,
@@ -240,6 +247,8 @@ class ProfilePackageService {
         'pinHashesAndLockout': true,
         'deviceKeysAndExecutables': true,
         'cachesAndTransientEpg': true,
+        if (skippedDatabases.isNotEmpty)
+          'libraryDatabasesTooLarge': skippedDatabases.join(', '),
       },
     );
     await context.validate(registry);
