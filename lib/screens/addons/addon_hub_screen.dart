@@ -772,8 +772,11 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
     }
   }
 
+  // storageKey, NOT manifestUrl: under profiles an addon is a connection
+  // resource and its key is that resource's id, so the URL matches nothing
+  // and the toggle silently did nothing at all.
   Future<void> _toggleAddon(StremioAddon a) =>
-      _stremio.setAddonEnabled(a.manifestUrl, !a.enabled);
+      _stremio.setAddonEnabled(a.storageKey, !a.enabled);
 
   Future<void> _updateAddon(StremioAddon a) async {
     final messenger = ScaffoldMessenger.of(context);

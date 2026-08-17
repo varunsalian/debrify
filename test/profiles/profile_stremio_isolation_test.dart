@@ -157,5 +157,37 @@ void main() {
     await service.setAddonEnabled(reloaded.storageKey, false);
     final settings = await service.getAddons(forSettings: true);
     expect(settings.single.enabled, isFalse);
+
+    // A disabled addon is hidden from the plain read, so the toggle back ON
+    // has to look it up through the settings read or it can never find the
+    // thing it is meant to re-enable.
+    expect(await service.getAddons(), isEmpty);
+    await service.setAddonEnabled(settings.single.storageKey, true);
+    expect((await service.getAddons(forSettings: true)).single.enabled, isTrue);
+    expect(await service.getAddons(), hasLength(1));
+  });
+
+  test('toggling by manifest URL is refused instead of doing nothing', () async {
+    // The Addon Hub passed a manifest URL here. Under profiles the storage key
+    // is the connection resource id, so the lookup missed and the toggle was a
+    // silent no-op — the shape of bug this throw exists to prevent.
+    service.debugManifestFetcher = (manifestUrl) async => StremioAddon(
+      id: 'manifest-addon-id',
+      name: 'Canonical addon',
+      manifestUrl: manifestUrl,
+      baseUrl: 'https://addon.invalid/configured',
+      types: const <String>['movie'],
+      resources: const <String>['stream'],
+    );
+    final added = await service.addAddon(
+      'https://addon.invalid/configured/manifest.json',
+    );
+    expect(added.storageKey, isNot(added.manifestUrl));
+
+    await expectLater(
+      () => service.setAddonEnabled(added.manifestUrl, false),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect((await service.getAddons(forSettings: true)).single.enabled, isTrue);
   });
 }

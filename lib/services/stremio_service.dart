@@ -629,38 +629,53 @@ class StremioService {
     final authorization = await ProfileAsyncAuthorization.capture(
       ProfileFeature.addonsAndEngines,
     );
-    final addons = await getAddons();
+    // forSettings, because the plain read HIDES disabled addons — the facade
+    // drops any row whose local settings say enabled == false. Reading that
+    // list here meant a disabled addon was not in it, so the toggle that would
+    // turn it back ON could never find it: disable worked once and enable
+    // never did.
+    final addons = await getAddons(forSettings: true);
     final index = addons.indexWhere((a) => a.storageKey == addonKey);
-    if (index >= 0) {
-      final addon = addons[index];
-      if (ProfileCollectionResourceFacade.active) {
-        final resourceId = addon.connectionResourceId;
-        final resourceRevision = addon.connectionResourceRevision;
-        if (resourceId == null || resourceRevision == null) {
-          throw const ResourceAuthorizationException(
-            'Addon connection authority is missing',
-          );
-        }
-        await ProfileCollectionResourceFacade.setLocalEnabled(
-          resourceId: resourceId,
-          resourceRevision: resourceRevision,
-          feature: ProfileFeature.addonsAndEngines,
-          enabled: enabled,
-        );
-        if (authorization != null && !authorization.isCurrentlyActive) {
-          throw StateError('Profile session changed before addon publication');
-        }
-        _addonsCache = null;
-        _recommendationsCache.clear();
-        _metaDetailsCache.clear();
-        _nonRecommendationAddonIds.clear();
-        _catalogCache.clear();
-        _notifyAddonsChanged();
-        return;
-      }
-      addons[index] = addon.copyWith(enabled: enabled);
-      await _saveAddons(addons, initiatingAuthorization: authorization);
+    if (index < 0) {
+      // Returning quietly here is how a caller passing the wrong key — a
+      // manifest URL, which IS the storage key until profiles turn addons
+      // into connection resources — became an invisible dead toggle rather
+      // than a crash. Say so; the key that missed is the whole diagnosis.
+      throw ArgumentError.value(
+        addonKey,
+        'addonKey',
+        'No addon with this storage key (expected storageKey, which is the '
+            'connection resource id under profiles — not the manifest URL)',
+      );
     }
+    final addon = addons[index];
+    if (ProfileCollectionResourceFacade.active) {
+      final resourceId = addon.connectionResourceId;
+      final resourceRevision = addon.connectionResourceRevision;
+      if (resourceId == null || resourceRevision == null) {
+        throw const ResourceAuthorizationException(
+          'Addon connection authority is missing',
+        );
+      }
+      await ProfileCollectionResourceFacade.setLocalEnabled(
+        resourceId: resourceId,
+        resourceRevision: resourceRevision,
+        feature: ProfileFeature.addonsAndEngines,
+        enabled: enabled,
+      );
+      if (authorization != null && !authorization.isCurrentlyActive) {
+        throw StateError('Profile session changed before addon publication');
+      }
+      _addonsCache = null;
+      _recommendationsCache.clear();
+      _metaDetailsCache.clear();
+      _nonRecommendationAddonIds.clear();
+      _catalogCache.clear();
+      _notifyAddonsChanged();
+      return;
+    }
+    addons[index] = addon.copyWith(enabled: enabled);
+    await _saveAddons(addons, initiatingAuthorization: authorization);
   }
 
   /// Refresh an addon's manifest
