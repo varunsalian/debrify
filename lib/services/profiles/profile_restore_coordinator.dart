@@ -16,6 +16,7 @@ import 'profile_avatar_mutation.dart';
 import 'profile_data_generation.dart';
 import 'profile_database_snapshot.dart';
 import 'profile_lifecycle.dart';
+import 'profile_pin_service.dart';
 import 'profile_portable_files.dart';
 import 'profile_preferences.dart';
 import 'profile_registry.dart';
@@ -142,6 +143,7 @@ class ProfileRestoreCoordinator {
     );
     var published = false;
     var publicationUncertain = false;
+    var pinResetsRequired = 0;
     final avatarStages = <ProfilePortableAvatarStage>[];
     final avatarMutationProfiles = <String>{};
     try {
@@ -193,12 +195,21 @@ class ProfileRestoreCoordinator {
         );
         if (avatarStage != null) avatarStages.add(avatarStage);
         if (profile.wasPinProtected) {
+          // A carried PIN record restores the working PIN (and its recovery
+          // code); anything missing or malformed falls back to the old
+          // contract — locked until an Admin assigns a new PIN — rather
+          // than failing the restore or importing a bogus credential.
+          final carried = _parseCarriedPinRecord(sourceRecord['pinRecord']);
+          if (carried == null) pinResetsRequired++;
           await registry.setPinRecord(
             profileId: profile.id,
-            hash: null,
-            salt: null,
-            paramsJson: null,
-            resetRequired: true,
+            hash: carried?.hash,
+            salt: carried?.salt,
+            paramsJson: carried?.paramsJson,
+            recoveryHash: carried?.recoveryHash,
+            recoverySalt: carried?.recoverySalt,
+            recoveryParamsJson: carried?.recoveryParamsJson,
+            resetRequired: carried == null,
             actingProfileId: authorization.profileId,
             actingAuthorizationRevision: authorization.authorizationRevision,
             actingSessionEpoch: authorization.sessionEpoch,
@@ -407,9 +418,7 @@ class ProfileRestoreCoordinator {
         resourcesImported: stagedResources.length,
         grantsImported: grantCount,
         bindingsImported: bindingCount,
-        pinResetsRequired: parsedProfiles
-            .where((profile) => profile.wasPinProtected)
-            .length,
+        pinResetsRequired: pinResetsRequired,
       );
     } catch (_) {
       if (!published && !publicationUncertain) {
@@ -1110,6 +1119,78 @@ class ProfileRestoreCoordinator {
 
   static String _bindingSlot(ConnectionResourceType type, String backupId) =>
       type.singletonCredentialBindingSlot ?? 'import.${type.name}.$backupId';
+
+  /// Bounded parse of a carried PIN record. Mirrors the verifier's own
+  /// sanity checks (32-byte hash, 8-64 byte salt, KDF params inside the safe
+  /// envelope); the recovery trio is all-or-none. Returns null on ANY
+  /// deviation — the caller falls back to admin-reset, never fails the
+  /// restore.
+  static ({
+    List<int> hash,
+    List<int> salt,
+    String paramsJson,
+    List<int>? recoveryHash,
+    List<int>? recoverySalt,
+    String? recoveryParamsJson,
+  })?
+  _parseCarriedPinRecord(Object? raw) {
+    if (raw is! Map) return null;
+    List<int>? decode(Object? value, int min, int max) {
+      if (value is! String) return null;
+      try {
+        final bytes = base64Decode(value);
+        if (bytes.length < min || bytes.length > max) return null;
+        return bytes;
+      } on FormatException {
+        return null;
+      }
+    }
+
+    String? boundedParams(Object? value) {
+      if (value is! Map) return null;
+      try {
+        PinKdfParams.fromJson(Map<String, dynamic>.from(value));
+      } catch (_) {
+        return null;
+      }
+      return jsonEncode(value);
+    }
+
+    final hash = decode(raw['hash'], 32, 32);
+    final salt = decode(raw['salt'], 8, 64);
+    final paramsJson = boundedParams(raw['params']);
+    if (hash == null || salt == null || paramsJson == null) return null;
+
+    final hasRecovery =
+        raw.containsKey('recoveryHash') ||
+        raw.containsKey('recoverySalt') ||
+        raw.containsKey('recoveryParams');
+    List<int>? recoveryHash;
+    List<int>? recoverySalt;
+    String? recoveryParamsJson;
+    if (hasRecovery) {
+      recoveryHash = decode(raw['recoveryHash'], 32, 32);
+      recoverySalt = decode(raw['recoverySalt'], 8, 64);
+      recoveryParamsJson = boundedParams(raw['recoveryParams']);
+      if (recoveryHash == null ||
+          recoverySalt == null ||
+          recoveryParamsJson == null) {
+        // A broken recovery trio degrades to PIN-only rather than dropping
+        // the whole carried credential.
+        recoveryHash = null;
+        recoverySalt = null;
+        recoveryParamsJson = null;
+      }
+    }
+    return (
+      hash: hash,
+      salt: salt,
+      paramsJson: paramsJson,
+      recoveryHash: recoveryHash,
+      recoverySalt: recoverySalt,
+      recoveryParamsJson: recoveryParamsJson,
+    );
+  }
 
   static String _newId(String prefix) {
     final random = Random.secure();

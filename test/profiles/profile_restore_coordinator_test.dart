@@ -16,6 +16,7 @@ import 'package:debrify/services/profiles/profile_avatar_storage.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_data_generation.dart';
 import 'package:debrify/services/profiles/profile_package_service.dart';
+import 'package:debrify/services/profiles/profile_pin_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_restore_coordinator.dart';
@@ -422,6 +423,140 @@ void main() {
         profileId: stagedProfileId,
       ),
       throwsStateError,
+    );
+  });
+
+  test('a carried PIN and its recovery code survive graph restore', () async {
+    final pins = ProfilePinService(
+      registry: registry,
+      params: const PinKdfParams(memory: 64, iterations: 1),
+    );
+    final recoveryCode = await pins.setPinAsAdmin(
+      actor: await ProfileAuthorizationContext.capture(registry),
+      targetProfileId: profileId,
+      pin: '4826',
+    );
+
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final service = ProfilePackageService(
+      registry: registry,
+      resources: ConnectionResourceService(registry: registry, cipher: cipher),
+    );
+    final package = await service.exportAllProfiles(
+      context: authorization,
+      includeSecrets: true,
+    );
+    final report = await ProfileRestoreCoordinator(
+      registry: registry,
+      cipher: cipher,
+    ).restoreDeviceGraph(package: package, authorization: authorization);
+
+    // The PIN traveled: nothing to reset, and the imported profile opens
+    // with the ORIGINAL pin and honors the ORIGINAL recovery code.
+    expect(report.pinResetsRequired, 0);
+    final imported = (await registry.listProfiles()).singleWhere(
+      (profile) => profile.id != profileId,
+    );
+    expect(
+      (await pins.verify(imported.id, '4826')).result,
+      ProfilePinResult.verified,
+    );
+    expect(
+      await pins.verifyRecoveryCode(imported.id, recoveryCode),
+      ProfileRecoveryResult.cleared,
+    );
+  });
+
+  test('a broken carried recovery trio degrades to PIN-only', () async {
+    final pins = ProfilePinService(
+      registry: registry,
+      params: const PinKdfParams(memory: 64, iterations: 1),
+    );
+    final recoveryCode = await pins.setPinAsAdmin(
+      actor: await ProfileAuthorizationContext.capture(registry),
+      targetProfileId: profileId,
+      pin: '4826',
+    );
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final package = await ProfilePackageService(
+      registry: registry,
+      resources: ConnectionResourceService(registry: registry, cipher: cipher),
+    ).exportAllProfiles(context: authorization, includeSecrets: true);
+    (package.profiles.single['pinRecord'] as Map)['recoveryHash'] = 'broken';
+
+    final report = await ProfileRestoreCoordinator(
+      registry: registry,
+      cipher: cipher,
+    ).restoreDeviceGraph(package: package, authorization: authorization);
+
+    // The PIN still travels; only the recovery code is dropped.
+    expect(report.pinResetsRequired, 0);
+    final imported = (await registry.listProfiles()).singleWhere(
+      (profile) => profile.id != profileId,
+    );
+    expect(
+      (await pins.verify(imported.id, '4826')).result,
+      ProfilePinResult.verified,
+    );
+    expect(
+      await pins.verifyRecoveryCode(imported.id, recoveryCode),
+      ProfileRecoveryResult.notConfigured,
+    );
+  });
+
+  test('a reset-required profile exports no PIN record', () async {
+    final pins = ProfilePinService(
+      registry: registry,
+      params: const PinKdfParams(memory: 64, iterations: 1),
+    );
+    await pins.setPinAsAdmin(
+      actor: await ProfileAuthorizationContext.capture(registry),
+      targetProfileId: profileId,
+      pin: '4826',
+    );
+    await pins.requireAdminReset(profileId);
+
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final package = await ProfilePackageService(
+      registry: registry,
+      resources: ConnectionResourceService(registry: registry, cipher: cipher),
+    ).exportAllProfiles(context: authorization, includeSecrets: true);
+
+    // A backup taken during a lockdown must not carry a credential that
+    // could undo it — only the protected flag travels.
+    expect(package.profiles.single.containsKey('pinRecord'), isFalse);
+    expect(package.profiles.single['wasPinProtected'], isTrue);
+  });
+
+  test('a malformed carried PIN degrades to admin reset', () async {
+    final pins = ProfilePinService(
+      registry: registry,
+      params: const PinKdfParams(memory: 64, iterations: 1),
+    );
+    await pins.setPinAsAdmin(
+      actor: await ProfileAuthorizationContext.capture(registry),
+      targetProfileId: profileId,
+      pin: '4826',
+    );
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    final package = await ProfilePackageService(
+      registry: registry,
+      resources: ConnectionResourceService(registry: registry, cipher: cipher),
+    ).exportAllProfiles(context: authorization, includeSecrets: true);
+    (package.profiles.single['pinRecord'] as Map)['hash'] = 'tampered';
+
+    final report = await ProfileRestoreCoordinator(
+      registry: registry,
+      cipher: cipher,
+    ).restoreDeviceGraph(package: package, authorization: authorization);
+
+    expect(report.pinResetsRequired, 1);
+    final imported = (await registry.listProfiles()).singleWhere(
+      (profile) => profile.id != profileId,
+    );
+    expect(
+      (await pins.verify(imported.id, '4826')).result,
+      ProfilePinResult.resetRequired,
     );
   });
 

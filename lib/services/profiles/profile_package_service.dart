@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/profiles/profile_policy.dart';
@@ -33,6 +35,7 @@ class ProfilePackageService {
       throw StateError('Profile is not allowed to export backups');
     }
     final preferences = await _exportPreferences(scope, sanitized: sanitized);
+    final pinRecord = sanitized ? null : await _exportPinRecord(profile.id);
     final databaseExport = sanitized
         ? null
         : await ProfileDatabaseSnapshot.export(scope);
@@ -86,6 +89,7 @@ class ProfilePackageService {
           if (!sanitized) 'role': profile.role.name,
           if (!sanitized) 'policy': profile.policy.encode(),
           if (!sanitized) 'wasPinProtected': profile.hasPin,
+          if (pinRecord != null) 'pinRecord': pinRecord,
           if (portableAvatar != null) 'avatarFile': portableAvatar,
           'preferencesSection': 'profile-0-preferences',
           if (databaseSnapshots.isNotEmpty)
@@ -147,6 +151,7 @@ class ProfilePackageService {
       final backupId = 'profile-$index';
       final sectionId = '$backupId-preferences';
       profileBackupIds[profile.id] = backupId;
+      final pinRecord = await _exportPinRecord(profile.id);
       profileRecords.add(<String, dynamic>{
         'backupId': backupId,
         'name': profile.name,
@@ -154,6 +159,7 @@ class ProfilePackageService {
         'role': profile.role.name,
         'policy': profile.policy.encode(),
         'wasPinProtected': profile.hasPin || profile.pinResetRequired,
+        if (pinRecord != null) 'pinRecord': pinRecord,
         'setupComplete': profile.setupComplete,
         'disabled': !profile.isEnabled,
         'preferencesSection': sectionId,
@@ -253,6 +259,35 @@ class ProfilePackageService {
     );
     await context.validate(registry);
     return package;
+  }
+
+  /// PIN hashes travel with the profile (product call 2026-08-17: restored
+  /// profiles keep their PINs instead of arriving locked behind an Admin
+  /// reset). Only ever hashes — the clear PIN does not exist anywhere — and
+  /// only in non-sanitized packages, which are passphrase-encrypted by
+  /// construction. The reset flag deliberately does NOT travel: a backup
+  /// predating a lockdown must not undo it, and one taken during it carries
+  /// no hash at all.
+  Future<Map<String, Object?>?> _exportPinRecord(String profileId) async {
+    final record = await registry.getPinRecord(profileId);
+    if (record == null || !record.hasPin || record.resetRequired) return null;
+    try {
+      return <String, Object?>{
+        'hash': base64Encode(record.hash!),
+        'salt': base64Encode(record.salt!),
+        'params': jsonDecode(record.paramsJson!),
+        if (record.hasRecoveryCode) ...<String, Object?>{
+          'recoveryHash': base64Encode(record.recoveryHash!),
+          'recoverySalt': base64Encode(record.recoverySalt!),
+          'recoveryParams': jsonDecode(record.recoveryParamsJson!),
+        },
+      };
+    } on FormatException {
+      // Locally corrupt params — the same state verify() survives by
+      // degrading to admin reset. The PIN just doesn't travel; the backup
+      // itself must never fail over it.
+      return null;
+    }
   }
 
   static Future<Map<String, Object?>> _exportPreferences(

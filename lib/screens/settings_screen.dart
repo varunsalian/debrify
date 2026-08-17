@@ -3240,7 +3240,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actor.role == UserProfileRole.admin &&
         actor.allows(ProfileFeature.manageProfiles);
     final passphrase = TextEditingController();
-    var sanitized = false;
     var allProfiles = false;
     final confirmed = await showSettingsDialog<bool>(
       context: context,
@@ -3252,7 +3251,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Creates a portable profile package. Downloads, recordings, active jobs, device paths, PINs, and remote pairings are not included.',
+                'Creates an encrypted profile package. Downloads, recordings, '
+                'active jobs, device paths, and remote pairings are not '
+                'included.',
               ),
               const SizedBox(height: 12),
               if (canExportAll)
@@ -3263,24 +3264,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'Admin-only graph backup. Imported profile and resource IDs are remapped on restore.',
                   ),
                   value: allProfiles,
-                  onChanged: (value) => setDialogState(() {
-                    allProfiles = value;
-                    if (value) sanitized = false;
-                  }),
+                  onChanged: (value) =>
+                      setDialogState(() => allProfiles = value),
                 ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Sanitized settings only'),
-                subtitle: const Text(
-                  'Allows an unencrypted export but omits identity, accounts, URLs, activity, and content-sensitive settings.',
-                ),
-                value: sanitized,
-                onChanged: allProfiles
-                    ? null
-                    : (value) => setDialogState(() => sanitized = value),
-              ),
-              if (!sanitized)
-                TvTextField(
+              TvTextField(
                   controller: passphrase,
                   obscureText: true,
                   autofocus: true,
@@ -3304,7 +3291,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: sanitized || passphrase.text.length >= 8
+              onPressed: passphrase.text.length >= 8
                   ? () => Navigator.of(dialogContext).pop(true)
                   : null,
               child: const Text('Create backup'),
@@ -3340,16 +3327,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             : await service.exportProfile(
                 context: authorization,
                 scope: ProfileRuntime.capture(),
-                includeSecrets: !sanitized,
-                sanitized: sanitized,
+                includeSecrets: true,
+                sanitized: false,
               );
         packageOmissions = package.omissions;
-        if (!sanitized) {
-          setStage('Encrypting backup — this can take a minute…');
-        }
-        return sanitized
-            ? PortableProfilePackage.encodePlainBytes(package)
-            : PortableProfilePackage.encodeEncryptedBytes(package, password);
+        setStage('Encrypting backup — this can take a minute…');
+        return PortableProfilePackage.encodeEncryptedBytes(package, password);
       },
     );
     final stamp = DateTime.now().toUtc().toIso8601String().substring(0, 10);
@@ -3609,7 +3592,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         content: Text(
           graphRestore
-              ? 'The profiles and their shared connection graph are staged under new IDs, then made visible together. Your current Admin remains the recovery profile. Existing profiles are not overwritten. Protected profiles require new PINs. Media, jobs, paths, and remote pairings are not restored.'
+              ? 'The profiles and their shared connection graph are staged under new IDs, then made visible together. Your current Admin remains the recovery profile. Existing profiles are not overwritten. Profiles keep their PINs when the backup carries them. Media, jobs, paths, and remote pairings are not restored.'
               : 'Destination: ${profile.name}\n\nA complete shadow generation will be verified first. Existing data remains visible if staging fails. Imported accounts become new resources; downloads, recordings, jobs, PINs, paths, and pairings are not restored.',
         ),
         actions: [
@@ -3650,8 +3633,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           content: Text(
             'Imported ${report.profilesImported} profiles, '
             '${report.resourcesImported} connections and '
-            '${report.grantsImported} grants. '
-            '${report.pinResetsRequired} profile(s) require a new PIN.',
+            '${report.grantsImported} grants.'
+            '${report.pinResetsRequired == 0 ? '' : ' ${report.pinResetsRequired} profile(s) require a new PIN.'}',
           ),
           duration: const Duration(seconds: 7),
         ),
