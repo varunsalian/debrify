@@ -3,8 +3,10 @@ import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/webdav_item.dart';
+import '../../models/profiles/profile_policy.dart';
 import '../../services/analytics_service.dart';
 import '../../services/main_page_bridge.dart';
+import '../../services/profiles/profile_async_authorization.dart';
 import '../../services/storage_service.dart';
 import '../../services/webdav_service.dart';
 import '../../utils/platform_util.dart';
@@ -56,6 +58,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   bool _obscure = true;
   List<WebDavConfig> _servers = [];
   String? _editingId;
+  bool _editingReadOnly = false;
 
   @override
   void initState() {
@@ -81,8 +84,10 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   }
 
   Future<void> _load() async {
-    final servers = await StorageService.getWebDavServers();
-    final selected = await StorageService.getSelectedWebDavServer();
+    final servers = await StorageService.getWebDavServers(forSettings: true);
+    final selected = await StorageService.getSelectedWebDavServer(
+      forSettings: true,
+    );
     final enabled = await StorageService.getWebDavEnabled();
     final hidden = await StorageService.getWebDavHiddenFromNav();
     final showVideosOnly = await StorageService.getWebDavShowVideosOnly();
@@ -90,6 +95,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
     setState(() {
       _servers = servers;
       _editingId = selected?.id;
+      _editingReadOnly = selected?.connectionReadOnly ?? false;
       _nameController.text = selected?.name ?? '';
       _urlController.text = selected?.baseUrl ?? '';
       _usernameController.text = selected?.username ?? '';
@@ -126,6 +132,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   }
 
   Future<void> _save() async {
+    if (_editingReadOnly) return;
     final url = _urlController.text.trim();
     if (url.isEmpty) {
       _snack('Enter your WebDAV server URL', error: true);
@@ -143,37 +150,58 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
       password: _passwordController.text,
     );
     try {
-      await WebDavService.testConnection(config);
-      await StorageService.upsertWebDavServer(config);
-      final servers = await StorageService.getWebDavServers();
+      final authorization = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.cloud,
+      );
+      final WebDavConfig savedConfig;
+      if (authorization == null) {
+        await WebDavService.testConnection(config);
+        savedConfig = await StorageService.upsertWebDavServer(config);
+      } else {
+        await authorization.runIfCurrent(
+          () => WebDavService.testConnection(config),
+        );
+        // Revalidate after the network await and execute the write inside the
+        // initiating profile scope. A profile switch/revocation cannot redirect
+        // this credential into the newly visible profile.
+        savedConfig = await authorization.runIfCurrent(
+          () => StorageService.upsertWebDavServer(config),
+        );
+      }
+      final servers = await StorageService.getWebDavServers(forSettings: true);
       if (!mounted) return;
       setState(() {
         _servers = servers;
-        _editingId = config.id;
+        _editingId = savedConfig.id;
+        _editingReadOnly = savedConfig.connectionReadOnly;
         _enabled = true;
         _saving = false;
       });
       MainPageBridge.notifyIntegrationChanged();
       _snack('WebDAV connected');
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _saving = false);
-      _snack(e.toString().replaceFirst('Exception: ', ''), error: true);
+      _snack('Could not connect to this WebDAV server', error: true);
     }
   }
 
   Future<void> _disconnect() async {
+    if (_editingReadOnly) return;
     if (_editingId != null) {
       await StorageService.deleteWebDavServer(_editingId!);
     }
-    final servers = await StorageService.getWebDavServers();
-    final selected = await StorageService.getSelectedWebDavServer();
+    final servers = await StorageService.getWebDavServers(forSettings: true);
+    final selected = await StorageService.getSelectedWebDavServer(
+      forSettings: true,
+    );
     if (!mounted) return;
     setState(() {
       _servers = servers;
       _enabled = servers.isNotEmpty;
       _hiddenFromNav = false;
       _editingId = selected?.id;
+      _editingReadOnly = selected?.connectionReadOnly ?? false;
       _nameController.text = selected?.name ?? '';
       _urlController.text = selected?.baseUrl ?? '';
       _usernameController.text = selected?.username ?? '';
@@ -193,6 +221,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   void _editServer(WebDavConfig server) {
     setState(() {
       _editingId = server.id;
+      _editingReadOnly = server.connectionReadOnly;
       _nameController.text = server.name;
       _urlController.text = server.baseUrl;
       _usernameController.text = server.username;
@@ -203,6 +232,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
   void _newServer() {
     setState(() {
       _editingId = null;
+      _editingReadOnly = false;
       _nameController.clear();
       _urlController.clear();
       _usernameController.clear();
@@ -257,6 +287,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                   children: [
                     TvTextField(
                       controller: _nameController,
+                      enabled: !_editingReadOnly,
                       focusNode: _nameFocusNode,
                       labelText: 'Server name',
                       hintText: 'Seedbox',
@@ -268,6 +299,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                     const SizedBox(height: 12),
                     TvTextField(
                       controller: _urlController,
+                      enabled: !_editingReadOnly,
                       focusNode: _urlFocusNode,
                       keyboardType: TextInputType.url,
                       labelText: 'Server URL',
@@ -281,6 +313,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                     const SizedBox(height: 12),
                     TvTextField(
                       controller: _usernameController,
+                      enabled: !_editingReadOnly,
                       focusNode: _usernameFocusNode,
                       labelText: 'Username',
                       hintText: 'Optional username',
@@ -293,6 +326,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                     const SizedBox(height: 12),
                     TvTextField(
                       controller: _passwordController,
+                      enabled: !_editingReadOnly,
                       focusNode: _passwordFocusNode,
                       obscureText: _obscure,
                       labelText: 'Password or app token',
@@ -323,7 +357,9 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                           focusNode: _saveFocusNode,
                           // Keep enabled with a no-op while saving: disabling
                           // the focused button drops DPAD focus mid-save.
-                          onPressed: _saving ? () {} : _save,
+                          onPressed: _editingReadOnly
+                              ? null
+                              : (_saving ? () {} : _save),
                           icon: _saving
                               ? const SizedBox(
                                   width: 18,
@@ -358,9 +394,15 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                                   : t.dim,
                             ),
                             title: Text(server.name),
-                            subtitle: Text(server.baseUrl),
+                            subtitle: Text(
+                              server.credentialsRedacted
+                                  ? 'Shared connection • credentials hidden'
+                                  : server.baseUrl,
+                            ),
                             trailing: IconButton(
-                              onPressed: () => _editServer(server),
+                              onPressed: server.connectionReadOnly
+                                  ? null
+                                  : () => _editServer(server),
                               icon: const Icon(Icons.edit_rounded),
                               // Visible DPAD focus for the bare icon action.
                               style: ButtonStyle(
@@ -368,9 +410,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                                     WidgetStateProperty.resolveWith(
                                       (states) =>
                                           states.contains(WidgetState.focused)
-                                          ? t.accent.withValues(
-                                              alpha: 0.35,
-                                            )
+                                          ? t.accent.withValues(alpha: 0.35)
                                           : null,
                                     ),
                               ),
@@ -433,7 +473,7 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                   _FocusRing(
                     child: OutlinedButton.icon(
                       focusNode: _disconnectFocusNode,
-                      onPressed: _disconnect,
+                      onPressed: _editingReadOnly ? null : _disconnect,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: t.danger,
                         side: BorderSide(
@@ -441,7 +481,11 @@ class _WebDavSettingsPageState extends State<WebDavSettingsPage> {
                         ),
                       ),
                       icon: const Icon(Icons.logout_rounded),
-                      label: const Text('Disconnect WebDAV'),
+                      label: Text(
+                        _editingReadOnly
+                            ? 'Shared connection managed by owner'
+                            : 'Disconnect WebDAV',
+                      ),
                     ),
                   ),
                 ],
@@ -481,7 +525,21 @@ class _FocusRing extends StatefulWidget {
 }
 
 class _FocusRingState extends State<_FocusRing> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -491,14 +549,13 @@ class _FocusRingState extends State<_FocusRing> {
       canRequestFocus: false,
       // hasFocus includes descendants, so this fires when the wrapped
       // control receives DPAD focus (same pattern as ConnectionCard).
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       child: Container(
         decoration: BoxDecoration(
           color: _focused ? t.panel2 : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: _focused ? t.accent : Colors.transparent,
-          ),
+          border: Border.all(color: _focused ? t.accent : Colors.transparent),
         ),
         child: widget.child,
       ),

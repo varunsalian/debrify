@@ -10,9 +10,10 @@ import android.os.SystemClock
  *
  * Every recovery source feeds this machine and nothing else re-tunes on its
  * own: clean EOF (STATE_ENDED), fatal player errors, the pre-READY tune
- * watchdog, the post-READY stall detector, lifecycle rejoin, and the user's
- * play-press retry. One machine means one ladder — no two sources can ever
- * schedule competing re-tunes.
+ * watchdog, the post-READY stall detector, the video-render stall detector
+ * (frames frozen under an advancing audio clock — see [onVideoFrames]),
+ * lifecycle rejoin, and the user's play-press retry. One machine means one
+ * ladder — no two sources can ever schedule competing re-tunes.
  *
  * Shape of a recovery episode:
  *  - something fails → [requestRecovery] → re-tune attempts at 0/1/3/5s,
@@ -98,6 +99,23 @@ class IptvLiveRecovery(
 
         /** See [lastRetuneRealtime]. */
         private const val RETUNE_DEBOUNCE_MS = 300L
+
+        /** Rendered-frame count static for this long, while the position
+         *  clock stays fresh, = video-render stall (see [onVideoFrames]).
+         *  Judged from READY, and generous enough that still-frame channels
+         *  which repaint every few seconds never trip it. */
+        private const val VIDEO_STALL_WINDOW_MS = 8_000L
+
+        /** Plain re-tune first (transient decoder wedges heal on a codec
+         *  reset), strict-demux re-tune second (the owner drops the
+         *  aggressive TS join flags on attempt 2), then latch off. */
+        private const val VIDEO_STALL_MAX_ATTEMPTS = 2
+
+        /** The position clock must have advanced within this window for a
+         *  frozen frame count to mean anything — a stopped clock is the
+         *  stall/tune watchdogs' business, not the video detector's. Just
+         *  over one 5s progress tick. */
+        private const val POSITION_FRESH_MS = 6_000L
     }
 
     /** True after the machine gave up; cleared by [userRetry] or a real zap. */
@@ -120,6 +138,12 @@ class IptvLiveRecovery(
     private var lastAdvanceRealtime = 0L
     private var stableSinceRealtime = 0L
 
+    // Video-render stall state (see [onVideoFrames]).
+    private var lastRenderedFrames = -1
+    private var framesBaselineRealtime = 0L
+    private var videoStallAttempts = 0
+    private var videoStallLatched = false
+
     /** Set (and cleared) by the owner around a machine-driven re-tune so
      *  [onTuneStarted] can tell a recovery re-tune from a real zap. */
     var expectRetune = false
@@ -135,6 +159,11 @@ class IptvLiveRecovery(
         lastPositionMs = Long.MIN_VALUE
         lastAdvanceRealtime = now
         stableSinceRealtime = 0L
+        // A fresh prepare replaces the decoder, and with it the counters —
+        // re-baseline unconditionally so a video-stall's own re-tune is
+        // judged on the NEW decoder's output, not the wedged one's.
+        lastRenderedFrames = -1
+        framesBaselineRealtime = now
         if (expectRetune) {
             expectRetune = false
             return // recovery's own re-tune: the episode continues
@@ -146,14 +175,20 @@ class IptvLiveRecovery(
         decoderAttempts = 0
         isSurrendered = false
         deferredSource = null
+        videoStallAttempts = 0
+        videoStallLatched = false
     }
 
     fun onReady() {
         readySeen = true
+        // Frames are judged from READY, not from tune start: nothing renders
+        // pre-READY, so counting the tune's setup time against the video-
+        // stall window would punish slow joins twice.
+        framesBaselineRealtime = SystemClock.elapsedRealtime()
         if (episodeActive) callbacks.onRecovered()
     }
 
-    /** Fed by the 1s progress ticker. [wantsPlayback] must be playWhenReady,
+    /** Fed by the 5s progress ticker. [wantsPlayback] must be playWhenReady,
      *  NOT isPlaying — a buffering wedge reports isPlaying=false, and a user
      *  pause is exactly what must NOT look like a stall. */
     fun onProgress(positionMs: Long, wantsPlayback: Boolean) {
@@ -185,6 +220,97 @@ class IptvLiveRecovery(
         if (now - lastAdvanceRealtime >= STALL_WINDOW_MS) {
             requestRecovery("stall")
         }
+    }
+
+    /** Fed by the same progress ticker as [onProgress], from the video
+     *  renderer's decoder counters. Closes the machine's structural blind
+     *  spot (review finding #13): a wedged video decoder under live audio
+     *  keeps the position clock advancing — audio is the clock master — so
+     *  neither the stall detector nor the tune watchdog above ever fires,
+     *  and the screen freezes while the sound carries on (the Google TV
+     *  Streamer report, 2026-08-15: strict MediaTek decoders wedging on
+     *  mid-GOP joins under the aggressive TS flags). A frame count that
+     *  hasn't moved for [VIDEO_STALL_WINDOW_MS] while the clock stays fresh
+     *  is that exact state.
+     *
+     *  The response is deliberately NOT a generic episode: that ladder ends
+     *  in a "Stream lost" surrender pill, which is wrong while audio is
+     *  audibly fine. Instead: one plain re-tune (transient wedges heal on a
+     *  codec reset), one strict-demux re-tune ([Callbacks.performRetune]
+     *  receives source "video-stall" and the attempt number; the owner drops
+     *  the aggressive TS join flags at attempt 2), then a latch — a channel
+     *  whose video STILL hasn't moved is static content (radio cover art) or
+     *  beyond re-tuning, and audio plays on unbothered.
+     *
+     *  [renderedFrames] < 0 or [hasVideoTrack] false (audio-only entries)
+     *  disarm the detector: zero frames is those channels' normal. Idle
+     *  while an episode is active — the generic ladder owns the player then,
+     *  and a frame gap mid-recovery is expected. */
+    fun onVideoFrames(renderedFrames: Int, hasVideoTrack: Boolean, wantsPlayback: Boolean) {
+        if (!hasVideoTrack || renderedFrames < 0) {
+            lastRenderedFrames = -1
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (lastRenderedFrames < 0 || renderedFrames < lastRenderedFrames) {
+            // First sight of this decoder's counters — or a decoder swap
+            // reset them. Baseline, don't judge.
+            lastRenderedFrames = renderedFrames
+            framesBaselineRealtime = now
+            return
+        }
+        if (renderedFrames > lastRenderedFrames) {
+            lastRenderedFrames = renderedFrames
+            framesBaselineRealtime = now
+            if (videoStallAttempts > 0 || videoStallLatched) {
+                videoStallAttempts = 0
+                videoStallLatched = false
+                // Frames flow again: stand down, and take the attempt-2 pill
+                // down too — unless a generic episode is running, in which
+                // case the pill is ITS narration and stays until it closes.
+                // (onRecovered with no pill up is just a harmless re-arm of
+                // the zap frame-hold.)
+                if (!episodeActive) callbacks.onRecovered()
+            }
+            return
+        }
+        // Count unchanged.
+        if (videoStallLatched || episodeActive || isSurrendered || pending != null) return
+        if (offline || !wantsPlayback || !readySeen) return
+        // A stopped clock is the position detectors' business, not ours.
+        if (now - lastAdvanceRealtime > POSITION_FRESH_MS) return
+        if (now - framesBaselineRealtime < VIDEO_STALL_WINDOW_MS) return
+        if (now - lastRetuneRealtime < RETUNE_DEBOUNCE_MS) return
+        if (!callbacks.isEligible()) return
+        videoStallAttempts++
+        framesBaselineRealtime = now // one judgment per window
+        if (videoStallAttempts > VIDEO_STALL_MAX_ATTEMPTS) {
+            videoStallLatched = true
+            callbacks.onRecovered()
+            return
+        }
+        if (videoStallAttempts >= VIDEO_STALL_MAX_ATTEMPTS) {
+            // The first attempt stays invisible (the machine's own idiom: an
+            // instant heal that works shouldn't narrate). Still frozen by
+            // the second, the user deserves to know we're on it.
+            callbacks.onEpisodeVisible(videoStallAttempts)
+        }
+        // Post rather than call: the progress ticker is on the stack here, and
+        // a synchronous performRetune would restartProgressUpdates from INSIDE
+        // the tick — that post plus the tick's own tail post leaves two 5s
+        // ticker chains running until the next zap. Parking the attempt in
+        // [pending] also gives it the ladder's cancellation story (a real
+        // zap's cancelPending kills it) and keeps the one-pending-retune
+        // invariant literal.
+        val attemptNow = videoStallAttempts
+        val runnable = Runnable {
+            pending = null
+            if (isSurrendered || offline || !callbacks.isEligible()) return@Runnable
+            lastRetuneRealtime = SystemClock.elapsedRealtime()
+            callbacks.performRetune("video-stall", attemptNow)
+        }
+        pending = runnable
+        handler.post(runnable)
     }
 
     /** STATE_ENDED on a live stream = the origin closed the connection.
@@ -226,6 +352,8 @@ class IptvLiveRecovery(
         episodeVisible = false
         attempt = 0
         decoderAttempts = 0
+        videoStallAttempts = 0
+        videoStallLatched = false
         fire(source, immediate = true)
     }
 
@@ -238,6 +366,9 @@ class IptvLiveRecovery(
         decoderAttempts = 0
         isSurrendered = false
         deferredSource = null
+        videoStallAttempts = 0
+        videoStallLatched = false
+        lastRenderedFrames = -1
     }
 
     /** Connectivity gate: offline idles the ladder (one attempt parked, not

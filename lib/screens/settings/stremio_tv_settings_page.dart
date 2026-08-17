@@ -50,12 +50,10 @@ class _StremioTvSettingsPageState extends State<StremioTvSettingsPage> {
 
       // Detect which providers are configured
       final providers = <MapEntry<String, String>>[];
-      final rdKey = await StorageService.getApiKey();
-      if (rdKey != null && rdKey.isNotEmpty) {
+      if (await StorageService.hasRealDebridCredential()) {
         providers.add(const MapEntry('realdebrid', 'Real-Debrid'));
       }
-      final tbKey = await StorageService.getTorboxApiKey();
-      if (tbKey != null && tbKey.isNotEmpty) {
+      if (await StorageService.hasTorboxCredential()) {
         providers.add(const MapEntry('torbox', 'TorBox'));
       }
       final pikpakEnabled = await StorageService.getPikPakEnabled();

@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/alldebrid_file.dart';
 import '../models/playlist_view_mode.dart';
 import '../models/premiumize_file.dart';
+import '../models/profiles/profile_policy.dart';
 import '../models/quick_play_rules.dart';
 import '../models/rd_torrent.dart';
 import '../models/torbox_file.dart';
@@ -41,6 +42,7 @@ import 'local_bound_source_service.dart';
 import 'main_page_bridge.dart';
 import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
+import 'profiles/profile_policy_guard.dart';
 import 'series_source_fetcher.dart';
 import 'series_source_service.dart';
 import 'storage_service.dart';
@@ -204,6 +206,12 @@ class TorrentPlaybackService {
     // directUrl.
     if (torrent.streamType == StreamType.externalUrl &&
         (torrent.directUrl?.isNotEmpty ?? false)) {
+      if (!await ProfilePolicyGuard.allows(ProfileFeature.externalPlayers)) {
+        if (context.mounted) {
+          _snack(context, 'External players are disabled for this profile.');
+        }
+        return;
+      }
       final uri = Uri.tryParse(torrent.directUrl!);
       if (uri == null) {
         _snack(context, 'Invalid stream URL.');
@@ -308,7 +316,7 @@ class TorrentPlaybackService {
         }
         break;
       case 'download':
-        await _download(context, resolved, torrent);
+        await _download(context, resolved, torrent, provider);
         break;
       case 'playlist':
         await _addToPlaylist(context, resolved, torrent, provider, meta: meta);
@@ -4343,7 +4351,9 @@ class TorrentPlaybackService {
     BuildContext context,
     _Resolved r,
     Torrent torrent,
+    String provider,
   ) async {
+    final credentialKey = _credentialKeyForProvider(provider);
     // Multi-file pack: let the user choose which files (parity with the old
     // per-file download dialog), then queue each — unlocking lazy debrid entries
     // on demand (RD/TorBox/AllDebrid resolve only the start file up front;
@@ -4357,6 +4367,7 @@ class TorrentPlaybackService {
         if (url == null || url.isEmpty) continue;
         try {
           await DownloadService.instance.enqueueDownload(
+            credentialKey: credentialKey,
             url: url,
             fileName: e.title,
             torrentName: torrent.displayTitle,
@@ -4381,6 +4392,7 @@ class TorrentPlaybackService {
       if (url != null && url.isNotEmpty) {
         try {
           await DownloadService.instance.enqueueDownload(
+            credentialKey: credentialKey,
             url: url,
             fileName: r.playlist!.first.title,
             torrentName: torrent.displayTitle,
@@ -4403,6 +4415,7 @@ class TorrentPlaybackService {
     }
     try {
       await DownloadService.instance.enqueueDownload(
+        credentialKey: credentialKey,
         url: url,
         fileName: r.fileName ?? torrent.displayTitle,
         torrentName: torrent.displayTitle,
@@ -4542,14 +4555,17 @@ class TorrentPlaybackService {
             ),
           ),
         ),
-        DebridActionItem(
-          icon: Icons.download_rounded,
-          color: const Color(0xFF3B82F6),
-          title: 'Download to device',
-          subtitle: 'Grab the file(s) via ${_label(provider)}.',
-          pillLabel: 'Download',
-          onTap: () => unawaited(_download(context, r, torrent)),
-        ),
+        // The service refuses anyway, but a profile that can't download
+        // shouldn't be offered a button that only fails.
+        if (ProfilePolicyGuard.allowsSync(ProfileFeature.downloads))
+          DebridActionItem(
+            icon: Icons.download_rounded,
+            color: const Color(0xFF3B82F6),
+            title: 'Download to device',
+            subtitle: 'Grab the file(s) via ${_label(provider)}.',
+            pillLabel: 'Download',
+            onTap: () => unawaited(_download(context, r, torrent, provider)),
+          ),
         DebridActionItem(
           icon: Icons.playlist_add_rounded,
           color: const Color(0xFF8B5CF6),
@@ -4666,6 +4682,7 @@ class TorrentPlaybackService {
     final zipLink = TorboxService.createZipPermalink(apiKey, torrentId);
     try {
       await DownloadService.instance.enqueueDownload(
+        credentialKey: 'torbox_api_key',
         url: zipLink,
         fileName: '$torrentName.zip',
         torrentName: torrentName,
@@ -4742,6 +4759,7 @@ class TorrentPlaybackService {
         }
       } else {
         await DownloadService.instance.enqueueDownload(
+          credentialKey: 'premiumize_api_key',
           url: zipUrl,
           fileName: '$torrentName.zip',
           torrentName: torrentName,
@@ -4757,6 +4775,17 @@ class TorrentPlaybackService {
         );
       }
     }
+  }
+
+  static String? _credentialKeyForProvider(String provider) {
+    return switch (provider) {
+      'debrid' || 'realdebrid' => 'real_debrid_api_key',
+      'torbox' => 'torbox_api_key',
+      'premiumize' => 'premiumize_api_key',
+      'alldebrid' => 'alldebrid_api_key',
+      'pikpak' => 'pikpak_email',
+      _ => null,
+    };
   }
 
   static List<Color> _providerGradient(String provider) {

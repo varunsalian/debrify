@@ -1582,7 +1582,11 @@ class _TvFocusableCard extends StatefulWidget {
 }
 
 class _TvFocusableCardState extends State<_TvFocusableCard> {
-  bool _isFocused = false;
+  /// Live, never cached — Flutter can skip the falling edge of a focus
+  /// notification, and a remembered flag then survives the change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `widgets/settings_widgets.dart`.
+  bool get _isFocused => widget.focusNode?.hasFocus ?? false;
 
   @override
   void initState() {
@@ -1607,9 +1611,7 @@ class _TvFocusableCardState extends State<_TvFocusableCard> {
 
   void _handleFocusChange() {
     if (mounted) {
-      setState(() {
-        _isFocused = widget.focusNode?.hasFocus ?? false;
-      });
+      setState(() {});
     }
   }
 
@@ -1702,7 +1704,10 @@ class _EnginePillButton extends StatefulWidget {
 }
 
 class _EnginePillButtonState extends State<_EnginePillButton> {
-  bool _focused = false;
+  /// Live, never cached — a remembered flag survives the focus change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  bool get _focused => widget.focusNode.hasFocus;
 
   @override
   void initState() {
@@ -1711,12 +1716,21 @@ class _EnginePillButtonState extends State<_EnginePillButton> {
   }
 
   @override
+  void didUpdateWidget(_EnginePillButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode.removeListener(_onFocus);
+      widget.focusNode.addListener(_onFocus);
+    }
+  }
+
+  @override
   void dispose() {
     widget.focusNode.removeListener(_onFocus);
     super.dispose();
   }
 
-  void _onFocus() => setState(() => _focused = widget.focusNode.hasFocus);
+  void _onFocus() => setState(() {});
 
   @override
   Widget build(BuildContext context) {

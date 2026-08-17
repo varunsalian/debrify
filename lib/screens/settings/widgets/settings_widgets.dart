@@ -5,10 +5,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../services/main_page_bridge.dart';
 import '../../../services/storage_service.dart';
+import '../../../theme/app_focus.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/app_surface.dart';
 import '../../../theme/app_theme_scope.dart';
+import '../../../theme/widgets/parallax_focus.dart';
 import '../../../widgets/shimmer.dart';
 
 /// Shared visual tokens for the Settings screens.
@@ -89,6 +91,25 @@ abstract final class SettingsRows {
     icon: Icons.phonelink_rounded,
     title: 'Remote',
     subtitle: 'Control another device, send or receive setup',
+  );
+  // The Profiles hub replaced the bare switch action: switching lives on the
+  // hub beside the roster, so this row is now the one front door. It heads
+  // the Profiles SECTION now (its own card, not a Devices tenant), with the
+  // two most-wanted actions surfaced beside it as rows of their own.
+  static const switchProfile = SettingsRowContent(
+    icon: Icons.switch_account_rounded,
+    title: 'Profiles',
+    subtitle: 'Who can use this device',
+  );
+  static const addProfile = SettingsRowContent(
+    icon: Icons.person_add_alt_rounded,
+    title: 'Add a profile',
+    subtitle: 'Admin, Member or Kid',
+  );
+  static const editProfile = SettingsRowContent(
+    icon: Icons.edit_rounded,
+    title: 'Edit this profile',
+    subtitle: 'Name, avatar, PIN & access',
   );
   static const navigationStyle = SettingsRowContent(
     icon: Icons.call_to_action_rounded,
@@ -193,6 +214,12 @@ abstract final class SettingsRows {
   static const iptvAppearance = SettingsRowContent(
     icon: Icons.style_rounded,
     title: 'IPTV Appearance',
+    subtitle: '',
+  );
+  // Subtitle is dynamic (the chosen style) — passed per call site.
+  static const debrifyTvAppearance = SettingsRowContent(
+    icon: Icons.connected_tv_rounded,
+    title: 'Debrify TV',
     subtitle: '',
   );
   // Subtitle is dynamic (style + palette) — passed per call site.
@@ -780,8 +807,11 @@ class SettingsInfoBanner extends StatelessWidget {
   }
 }
 
-/// Full-bleed Stremio-dark background with two soft purple radial washes,
-/// matching the Discover board's ambience.
+/// Full-bleed settings room.
+///
+/// The vertical ground-to-pane walk is the same stage used by onboarding.
+/// A restrained accent bloom gives themed Looks their identity without
+/// returning to the old purple wash that sat behind every theme.
 class SettingsBackground extends StatelessWidget {
   final Widget child;
   const SettingsBackground({super.key, required this.child});
@@ -790,8 +820,51 @@ class SettingsBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
     final t = app.settings;
-    return Container(
-      color: t.bg,
+    if (app.id != 'spotlight') {
+      return Container(
+        color: t.bg,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(0.85, -1.0),
+                    radius: 1.2,
+                    colors: [
+                      app.fade(t.accent, 0x29 / 0xFF),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment(-0.9, 1.1),
+                    radius: 1.0,
+                    colors: [Color(0x1F4632A0), Colors.transparent],
+                  ),
+                ),
+              ),
+            ),
+            child,
+          ],
+        ),
+      );
+    }
+    final bottom = Color.lerp(t.bg, app.core.pane, 0.34)!.withValues(alpha: 1);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [t.bg.withValues(alpha: 1), bottom],
+        ),
+      ),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -799,20 +872,9 @@ class SettingsBackground extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: RadialGradient(
-                  center: const Alignment(0.85, -1.0),
-                  radius: 1.2,
-                  colors: [app.fade(t.accent, 0x29 / 0xFF), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-          const IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment(-0.9, 1.1),
-                  radius: 1.0,
-                  colors: [Color(0x1F4632A0), Colors.transparent],
+                  center: const Alignment(0.92, -1.08),
+                  radius: 1.05,
+                  colors: [app.fade(t.accent, 0.13), Colors.transparent],
                 ),
               ),
             ),
@@ -824,33 +886,64 @@ class SettingsBackground extends StatelessWidget {
   }
 }
 
-/// Flat page header: bold title + quiet subtitle. Replaces the old gradient
-/// hero card.
+/// Backwards-compatible root header used by loading and search surfaces.
+/// New responsive roots use [SettingsRootHeader] from the Spotlight shell.
 class SettingsHeader extends StatelessWidget {
   const SettingsHeader({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
+    if (app.id != 'spotlight') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Settings',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Manage connections, search & playback',
+            style: TextStyle(fontSize: 13, color: t.dim),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          'YOUR SPACE',
+          style: TextStyle(
+            fontFamily: 'JetBrainsMono',
+            fontSize: 9.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2.1,
+            color: t.accent.withValues(alpha: 0.88),
+          ),
+        ),
+        const SizedBox(height: 10),
         const Text(
           'Settings',
           // No color: inherits onSurface via the ambient DefaultTextStyle,
           // so it follows Appearance → Text Brightness.
           style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.3,
+            fontSize: 30,
+            height: 1,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.8,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 8),
         Text(
-          'Manage connections, search & playback',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppThemeScope.of(context).settings.dim,
-          ),
+          'Services, screens and playback—tuned in one place.',
+          style: TextStyle(fontSize: 12, height: 1.45, color: t.dim),
         ),
       ],
     );
@@ -865,15 +958,18 @@ class SettingsSectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final spotlight = app.id == 'spotlight';
     return Padding(
       padding: const EdgeInsets.only(left: 2, bottom: 10),
       child: Text(
         title.toUpperCase(),
         style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.7,
-          color: color ?? AppThemeScope.of(context).settings.dim,
+          fontFamily: spotlight ? 'JetBrainsMono' : null,
+          fontSize: spotlight ? 9 : 12,
+          fontWeight: spotlight ? FontWeight.w700 : FontWeight.w800,
+          letterSpacing: spotlight ? 1.55 : 0.7,
+          color: color ?? app.settings.dim,
         ),
       ),
     );
@@ -895,6 +991,24 @@ class ConnectionInfo {
     required this.onTap,
   });
 }
+
+/// Whether a configured connection is explicitly reporting a degraded state.
+///
+/// Providers use a few healthy labels (for example `Active` and `Configured`),
+/// so treating every non-`Active` value as an error incorrectly marks Jackett
+/// and Prowlarr as unhealthy. Only known negative states need intervention.
+bool settingsConnectionNeedsAttention(ConnectionInfo info) {
+  if (!info.connected) return false;
+  final status = info.status.toLowerCase();
+  return status.contains('inactive') ||
+      status.contains('expired') ||
+      status.contains('error') ||
+      status.contains('failed') ||
+      status.contains('attention');
+}
+
+bool settingsConnectionIsReady(ConnectionInfo info) =>
+    info.connected && !settingsConnectionNeedsAttention(info);
 
 class ConnectionsSummary extends StatefulWidget {
   final ConnectionInfo realDebrid;
@@ -1232,8 +1346,16 @@ class ConnectionCard extends StatefulWidget {
 }
 
 class _ConnectionCardState extends State<ConnectionCard> {
-  bool _focused = false;
+  /// The wrapper's own node, so focus can be read rather than remembered —
+  /// see the note on `_SettingsTileState._focused`.
+  final FocusNode _wrapNode = FocusNode(debugLabel: 'ConnectionCard');
+
   bool _hovered = false;
+
+  /// Live, never cached. `hasFocus` is DESCENDANT-inclusive, so this wrapper
+  /// reads true while the card's own InkWell below it holds focus — which is
+  /// the intent, and the same value `Focus.onFocusChange` used to deliver.
+  bool get _focused => _wrapNode.hasFocus;
 
   /// The theme's tempo, resolved in the one hook that may depend on inherited
   /// widgets and still re-runs when they change. The reveal below fires from a
@@ -1244,6 +1366,12 @@ class _ConnectionCardState extends State<ConnectionCard> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _motion = AppMotion.of(context);
+  }
+
+  @override
+  void dispose() {
+    _wrapNode.dispose();
+    super.dispose();
   }
 
   // Helper to focus and scroll into view
@@ -1296,129 +1424,175 @@ class _ConnectionCardState extends State<ConnectionCard> {
     final app = AppThemeScope.of(context);
     final t = app.settings;
     final info = widget.info;
-    final String statusLower = info.status.toLowerCase();
-    final bool active = info.connected && statusLower == 'active';
+    final bool active = settingsConnectionIsReady(info);
     // One color for both the dot and the status text so they can't disagree.
-    final Color stateColor = info.connected
+    final Color baseStateColor = info.connected
         ? (active ? t.success : t.danger)
         : t.dim2;
     final bool lit = _focused || _hovered;
+    final bool spotlight = app.id == 'spotlight';
+    final bool inverse =
+        spotlight && lit && app.focus.expression == FocusExpression.parallax;
+    final Color foreground = inverse ? app.inkOn(app.core.tx) : app.core.tx;
+    final Color stateColor = inverse
+        ? Color.lerp(baseStateColor, foreground, 0.42)!
+        : baseStateColor;
+    final radius = spotlight ? app.shape.br(13) : BorderRadius.circular(14);
 
-    return Focus(
-      onKeyEvent: _onKeyEvent,
-      // hasFocus includes the InkWell child node, so this lights up when the
-      // card's InkWell receives DPAD focus.
-      onFocusChange: (f) => setState(() => _focused = f),
-      child: MouseRegion(
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        // Plain Container (snap, no tween): animating a blurred BoxShadow
-        // re-rasterizes per frame and janks weak TV GPUs (see
-        // tv_sidebar_nav.dart for the same rule).
-        child: Container(
-          decoration: BoxDecoration(
-            color: lit ? t.panel2 : t.panel,
-            borderRadius: app.shape.br(14),
-            border: Border.all(color: _focused ? t.accent : t.line, width: 1),
-            boxShadow: _focused
-                ? [
-                    BoxShadow(
-                      color: t.accent.withValues(alpha: 0.28),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: app.shape.br(14),
-            child: InkWell(
-              focusNode: widget.focusNode,
-              borderRadius: app.shape.br(14),
-              onTap: () async {
-                await info.onTap();
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 13,
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: app.fade(app.core.tx, 0.055),
-                        borderRadius: app.shape.br(11),
-                        border: Border.all(color: t.line),
+    return ParallaxFocus(
+      focused: _focused,
+      shape: ParallaxShape.settingsRow,
+      radius: radius,
+      child: Focus(
+        focusNode: _wrapNode,
+        onKeyEvent: _onKeyEvent,
+        // hasFocus includes the InkWell child node, so this lights up when the
+        // card's InkWell receives DPAD focus.
+        onFocusChange: (_) => setState(() {}),
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          // Plain Container (snap, no tween): animating a blurred BoxShadow
+          // re-rasterizes per frame and janks weak TV GPUs (see
+          // tv_sidebar_nav.dart for the same rule).
+          child: Container(
+            decoration: BoxDecoration(
+              color: inverse
+                  ? app.core.tx
+                  : (lit
+                        ? t.panel2
+                        : spotlight
+                        ? app.fade(app.core.tx, 0.047)
+                        : t.panel),
+              borderRadius: radius,
+              border: Border.all(
+                color: inverse ? app.core.tx : (_focused ? t.accent : t.line),
+                width: 1,
+              ),
+              boxShadow: _focused && !inverse
+                  ? [
+                      BoxShadow(
+                        color: t.accent.withValues(alpha: 0.28),
+                        blurRadius: 18,
+                        offset: const Offset(0, 6),
                       ),
-                      child: Text(
-                        settingsInitialsFor(info.title),
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.3,
-                          color: lit ? t.accent2 : t.dim,
+                    ]
+                  : null,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: radius,
+              child: InkWell(
+                focusNode: widget.focusNode,
+                borderRadius: radius,
+                onTap: () async {
+                  await info.onTap();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 13,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: inverse
+                              ? foreground.withValues(alpha: 0.08)
+                              : app.fade(
+                                  app.core.tx,
+                                  spotlight ? 0.065 : 0.055,
+                                ),
+                          borderRadius: app.shape.br(11),
+                          border: Border.all(
+                            color: inverse
+                                ? foreground.withValues(alpha: 0.1)
+                                : t.line,
+                          ),
+                        ),
+                        child: Text(
+                          settingsInitialsFor(info.title),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                            color: inverse
+                                ? foreground
+                                : (lit ? t.accent2 : t.dim),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            info.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            // No color: inherits onSurface (Text Brightness).
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              info.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: spotlight
+                                    ? foreground
+                                    : Theme.of(context).colorScheme.onSurface,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            info.caption,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 11.5, color: t.dim),
-                          ),
-                        ],
+                            const SizedBox(height: 3),
+                            Text(
+                              info.caption,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: inverse
+                                    ? foreground.withValues(alpha: 0.5)
+                                    : t.dim,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: stateColor,
-                        shape: BoxShape.circle,
-                        boxShadow: active
-                            ? [
-                                BoxShadow(
-                                  color: stateColor.withValues(alpha: 0.55),
-                                  blurRadius: 7,
-                                ),
-                              ]
-                            : null,
+                      const SizedBox(width: 10),
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: stateColor,
+                          shape: BoxShape.circle,
+                          boxShadow: active
+                              ? [
+                                  BoxShadow(
+                                    color: stateColor.withValues(alpha: 0.55),
+                                    blurRadius: 7,
+                                  ),
+                                ]
+                              : null,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 7),
-                    Text(
-                      info.status,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: stateColor,
+                      const SizedBox(width: 7),
+                      Text(
+                        info.status,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: stateColor,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(Icons.chevron_right_rounded, size: 20, color: t.dim2),
-                  ],
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 20,
+                        color: inverse
+                            ? foreground.withValues(alpha: 0.42)
+                            : t.dim2,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1465,6 +1639,7 @@ class SettingsSection extends StatelessWidget {
     final rule =
         app.surface.modelFor(SurfaceFamily.settingsGroup) ==
         SeparationModel.rule;
+    final spotlight = app.id == 'spotlight';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1482,8 +1657,14 @@ class SettingsSection extends StatelessWidget {
             // A rule look keeps the border — that IS its separation — and
             // loses only the fill. The border width is unchanged either way,
             // which is what keeps the row geometry identical.
-            color: rule ? Colors.transparent : t.panel,
-            borderRadius: BorderRadius.circular(16),
+            color: rule
+                ? Colors.transparent
+                : spotlight
+                ? app.fade(app.core.tx, app.isLight ? 0.035 : 0.047)
+                : t.panel,
+            borderRadius: spotlight
+                ? app.shape.br(13)
+                : BorderRadius.circular(16),
             border: Border.all(color: t.line, width: 1),
           ),
           clipBehavior: Clip.antiAlias,
@@ -1499,6 +1680,190 @@ class SettingsSection extends StatelessWidget {
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// Prominent active-Look row used at the top of Appearance.
+///
+/// A Look changes several downstream controls at once, so presenting it as
+/// one more 52dp row understated its effect and made Appearance read as an
+/// arbitrary list. The swatches are derived from the active theme itself.
+class SettingsLookHero extends StatefulWidget {
+  const SettingsLookHero({
+    super.key,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+    this.focusNode,
+  });
+
+  final String label;
+  final String subtitle;
+  final Future<void> Function() onTap;
+  final FocusNode? focusNode;
+
+  @override
+  State<SettingsLookHero> createState() => _SettingsLookHeroState();
+}
+
+class _SettingsLookHeroState extends State<SettingsLookHero> {
+  FocusNode? _ownNode;
+  FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
+
+  bool _hovered = false;
+
+  /// Live, never cached — see the note on `_SettingsTileState._focused`.
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _ownNode?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
+    final lit = _focused || _hovered;
+    final inverse = lit && app.focus.expression == FocusExpression.parallax;
+    final foreground = inverse ? app.inkOn(app.core.tx) : app.core.tx;
+    final radius = app.shape.br(13);
+    return ParallaxFocus(
+      focused: _focused,
+      shape: ParallaxShape.settingsRow,
+      radius: radius,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          focusNode: _node,
+          onFocusChange: (_) => setState(() {}),
+          onHover: (value) => setState(() => _hovered = value),
+          onTap: () async => await widget.onTap(),
+          borderRadius: radius,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 116),
+            padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 18),
+            decoration: BoxDecoration(
+              color: inverse
+                  ? app.core.tx
+                  : Color.alphaBlend(
+                      t.accent.withValues(alpha: 0.1),
+                      app.fade(app.core.tx, 0.04),
+                    ),
+              borderRadius: radius,
+              border: Border.all(
+                color: inverse ? app.core.tx : t.accent.withValues(alpha: 0.24),
+              ),
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final showSwatches = constraints.maxWidth >= 390;
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ACTIVE LOOK',
+                            style: TextStyle(
+                              fontFamily: 'JetBrainsMono',
+                              fontSize: 8,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.55,
+                              color: inverse
+                                  ? foreground.withValues(alpha: 0.6)
+                                  : t.accent2,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            widget.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 20,
+                              height: 1,
+                              fontWeight: FontWeight.w700,
+                              color: foreground,
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          Text(
+                            widget.subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              height: 1.4,
+                              color: inverse
+                                  ? foreground.withValues(alpha: 0.5)
+                                  : t.dim,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (showSwatches) ...[
+                      const SizedBox(width: 20),
+                      _SettingsSwatches(inverse: inverse),
+                    ],
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: inverse
+                          ? foreground.withValues(alpha: 0.42)
+                          : t.dim2,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsSwatches extends StatelessWidget {
+  const _SettingsSwatches({required this.inverse});
+
+  final bool inverse;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    final colors = [
+      app.core.ground,
+      app.core.pane,
+      app.settings.accent,
+      app.core.tx,
+    ];
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < colors.length; i++) ...[
+          Container(
+            width: 25,
+            height: 42,
+            decoration: BoxDecoration(
+              color: colors[i],
+              borderRadius: app.shape.br(7),
+              border: Border.all(
+                color: inverse
+                    ? app.inkOn(app.core.tx).withValues(alpha: 0.12)
+                    : app.settings.line,
+              ),
+            ),
+          ),
+          if (i != colors.length - 1) const SizedBox(width: 6),
+        ],
       ],
     );
   }
@@ -1573,109 +1938,186 @@ class SettingsTile extends StatefulWidget {
 }
 
 class _SettingsTileState extends State<SettingsTile> {
-  bool _focused = false;
+  /// Owned only when the caller did not supply one.
+  FocusNode? _ownNode;
+  FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
+
   bool _hovered = false;
+
+  /// Read LIVE from the node, never cached from `onFocusChange`.
+  ///
+  /// A cached bool is only as good as the callback that maintains it, and
+  /// Flutter does not guarantee the falling edge: pop a route that was opened
+  /// with OK and focus is restored to the MODAL SCOPE rather than to a row, so
+  /// the rows that were focus-walked on the way in are never told they lost
+  /// it. They keep their cached `true`, and under the Spotlight look that is
+  /// not a faint stale highlight — every one of them paints a solid white
+  /// plate, so the list comes back from a sub-page with two or three cursors
+  /// on it and no way to tell which row OK will open.
+  ///
+  /// Derived state cannot go stale the way a remembered one does: the value is
+  /// re-read on every build, so it is only ever as old as the last rebuild
+  /// rather than as old as the last callback that arrived.
+  ///
+  /// Being precise about what that does and does not buy, because the
+  /// difference matters if this is ever revisited: the repaint trigger is
+  /// still the same `onFocusChange` the bug rides on, so a silently-missed
+  /// notification leaves the WRONG PIXELS up until something rebuilds this
+  /// row — it does not repaint it the instant focus leaves. What reliably
+  /// rebuilds it is the row's own `onTap` being awaited below: callers
+  /// setState when the pushed page returns, which rebuilds the list with
+  /// fresh values. (A route transition alone would NOT do it — ModalScope
+  /// caches the page subtree behind its AnimatedBuilder's `child`.)
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _ownNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
+    final spotlight = app.id == 'spotlight';
     final bool lit = widget.enabled && (_focused || _hovered);
+    final bool inverse =
+        spotlight && lit && app.focus.expression == FocusExpression.parallax;
+    final Color foreground = inverse ? app.inkOn(app.core.tx) : app.core.tx;
     final Color iconColor = widget.destructive
-        ? t.danger
-        : (lit ? t.accent2 : t.dim);
+        ? (inverse ? Color.lerp(t.danger, foreground, 0.38)! : t.danger)
+        : (inverse ? foreground : (lit ? t.accent2 : t.dim));
+    final radius = app.shape.br(12);
     // Snap, don't tween — per-keypress decoration lerps add cost on TV.
-    return Container(
-      decoration: BoxDecoration(
-        color: lit ? t.panel2 : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _focused ? t.accent : Colors.transparent,
-          width: 1,
+    return ParallaxFocus(
+      focused: _focused,
+      shape: ParallaxShape.settingsRow,
+      radius: radius,
+      child: Container(
+        decoration: BoxDecoration(
+          color: inverse ? app.core.tx : (lit ? t.panel2 : Colors.transparent),
+          borderRadius: radius,
+          border: Border.all(
+            color: inverse
+                ? app.core.tx
+                : (_focused ? t.accent : Colors.transparent),
+            width: 1,
+          ),
         ),
-      ),
-      child: InkWell(
-        focusNode: widget.focusNode,
-        // Also drops the row out of DPAD traversal — an unfocusable node
-        // never enters the traversal ring, so no remote step is eaten.
-        canRequestFocus: widget.enabled,
-        onFocusChange: (f) => setState(() => _focused = f),
-        onHover: (h) => setState(() => _hovered = h),
-        onTap: widget.enabled
-            ? () async {
-                await widget.onTap();
-              }
-            : null,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-          // One veil for the whole anatomy (icon, tag chip, chevron) rather
-          // than per-part disabled colors that would drift out of sync.
-          child: Opacity(
-            opacity: widget.enabled ? 1 : 0.45,
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 34,
-                  child: Icon(widget.icon, color: iconColor, size: 22),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              widget.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: widget.destructive
-                                    ? t.danger
-                                    : Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          ),
-                          if (widget.tag != null) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 7,
-                                vertical: 2.5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: t.accent.withValues(alpha: 0.16),
-                                borderRadius: BorderRadius.circular(7),
-                              ),
+        child: InkWell(
+          focusNode: _node,
+          // Also drops the row out of DPAD traversal — an unfocusable node
+          // never enters the traversal ring, so no remote step is eaten.
+          canRequestFocus: widget.enabled,
+          onFocusChange: (_) => setState(() {}),
+          onHover: (h) => setState(() => _hovered = h),
+          onTap: widget.enabled
+              ? () async {
+                  await widget.onTap();
+                }
+              : null,
+          borderRadius: radius,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            // One veil for the whole anatomy (icon, tag chip, chevron) rather
+            // than per-part disabled colors that would drift out of sync.
+            child: Opacity(
+              opacity: widget.enabled ? 1 : 0.45,
+              child: Row(
+                children: [
+                  if (spotlight)
+                    Container(
+                      width: 34,
+                      height: 34,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: inverse
+                            ? foreground.withValues(alpha: 0.08)
+                            : app.fade(app.core.tx, 0.055),
+                        borderRadius: app.shape.br(10),
+                      ),
+                      child: Icon(widget.icon, color: iconColor, size: 20),
+                    )
+                  else
+                    SizedBox(
+                      width: 34,
+                      child: Icon(widget.icon, color: iconColor, size: 22),
+                    ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
                               child: Text(
-                                widget.tag!,
+                                widget.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  color: t.accent2,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 9.5,
-                                  letterSpacing: 0.4,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: widget.destructive
+                                      ? t.danger
+                                      : spotlight
+                                      ? foreground
+                                      : Theme.of(context).colorScheme.onSurface,
                                 ),
                               ),
                             ),
+                            if (widget.tag != null) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: t.accent.withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(7),
+                                ),
+                                child: Text(
+                                  widget.tag!,
+                                  style: TextStyle(
+                                    color: inverse
+                                        ? Color.lerp(t.accent, foreground, 0.25)
+                                        : t.accent2,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 9.5,
+                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        widget.subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 11.5, color: t.dim),
-                      ),
-                    ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          widget.subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: inverse
+                                ? foreground.withValues(alpha: 0.5)
+                                : t.dim,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                widget.trailing ??
-                    Icon(Icons.chevron_right_rounded, size: 20, color: t.dim2),
-              ],
+                  widget.trailing ??
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 20,
+                        color: inverse
+                            ? foreground.withValues(alpha: 0.42)
+                            : t.dim2,
+                      ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1731,73 +2173,122 @@ class SettingsToggleTile extends StatefulWidget {
 }
 
 class _SettingsToggleTileState extends State<SettingsToggleTile> {
-  bool _focused = false;
+  FocusNode? _ownNode;
+  FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
+
   bool _hovered = false;
+
+  /// Live, never cached — see the note on `_SettingsTileState._focused`.
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _ownNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
+    final app = AppThemeScope.of(context);
+    final t = app.settings;
+    final spotlight = app.id == 'spotlight';
     final bool lit = _focused || _hovered;
+    final bool inverse =
+        spotlight && lit && app.focus.expression == FocusExpression.parallax;
+    final foreground = inverse ? app.inkOn(app.core.tx) : app.core.tx;
+    final radius = app.shape.br(12);
     // Snap, don't tween — per-keypress decoration lerps add cost on TV.
-    return Container(
-      decoration: BoxDecoration(
-        color: lit ? t.panel2 : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _focused ? t.accent : Colors.transparent,
-          width: 1,
+    return ParallaxFocus(
+      focused: _focused,
+      shape: ParallaxShape.settingsRow,
+      radius: radius,
+      child: Container(
+        decoration: BoxDecoration(
+          color: inverse ? app.core.tx : (lit ? t.panel2 : Colors.transparent),
+          borderRadius: radius,
+          border: Border.all(
+            color: inverse
+                ? app.core.tx
+                : (_focused ? t.accent : Colors.transparent),
+            width: 1,
+          ),
         ),
-      ),
-      child: InkWell(
-        focusNode: widget.focusNode,
-        onFocusChange: (f) => setState(() => _focused = f),
-        onHover: (h) => setState(() => _hovered = h),
-        onTap: () => widget.onChanged(!widget.value),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 34,
-                child: Icon(
-                  widget.icon,
-                  color: lit ? t.accent2 : t.dim,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.title,
-                      // No color: inherits onSurface (Text Brightness).
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
+        child: InkWell(
+          focusNode: _node,
+          onFocusChange: (_) => setState(() {}),
+          onHover: (h) => setState(() => _hovered = h),
+          onTap: () => widget.onChanged(!widget.value),
+          borderRadius: radius,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+            child: Row(
+              children: [
+                if (spotlight)
+                  Container(
+                    width: 34,
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: inverse
+                          ? foreground.withValues(alpha: 0.08)
+                          : app.fade(app.core.tx, 0.055),
+                      borderRadius: app.shape.br(10),
+                    ),
+                    child: Icon(
+                      widget.icon,
+                      color: inverse ? foreground : (lit ? t.accent2 : t.dim),
+                      size: 20,
+                    ),
+                  )
+                else
+                  SizedBox(
+                    width: 34,
+                    child: Icon(
+                      widget.icon,
+                      color: lit ? t.accent2 : t.dim,
+                      size: 22,
+                    ),
+                  ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: spotlight
+                              ? foreground
+                              : Theme.of(context).colorScheme.onSurface,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      widget.subtitle,
-                      maxLines: widget.subtitleMaxLines,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11.5, color: t.dim),
-                    ),
-                  ],
+                      const SizedBox(height: 3),
+                      Text(
+                        widget.subtitle,
+                        maxLines: widget.subtitleMaxLines,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: inverse
+                              ? foreground.withValues(alpha: 0.5)
+                              : t.dim,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              // The row's InkWell is the single DPAD stop; a focusable Switch
-              // would make every toggle cost two presses on TV.
-              ExcludeFocus(
-                child: Switch.adaptive(
-                  value: widget.value,
-                  onChanged: widget.onChanged,
+                // The row's InkWell is the single DPAD stop; a focusable
+                // Switch would make every toggle cost two presses on TV.
+                ExcludeFocus(
+                  child: Switch.adaptive(
+                    value: widget.value,
+                    onChanged: widget.onChanged,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1920,7 +2411,7 @@ class SettingsSelectDropdown extends StatelessWidget {
           focusNode: focusNode,
           // A stale stored value (e.g. removed option) renders as an empty
           // field instead of tripping DropdownButton's value assert.
-          value: selected?.value,
+          initialValue: selected?.value,
           isExpanded: true,
           // Variable item heights so subtitles fit in the open menu.
           itemHeight: null,

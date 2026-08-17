@@ -413,8 +413,8 @@ class _KeyStepState extends State<KeyStep> {
       _MethodChip(
         controller: widget.focusController,
         cell: OnboardCell(0, widget.clipboardCandidate != null ? 2 : 1),
-        icon: Icons.phone_iphone_rounded,
-        label: 'Send everything from my phone',
+        icon: Icons.devices_rounded,
+        label: 'Send everything from another device',
         enabled: !_validating,
         onPressed: widget.onImport,
       ),

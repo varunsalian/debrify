@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import '../../utils/app_storage.dart';
+import '../profiles/profile_storage_paths.dart';
 
 /// Metadata for an imported engine
 class ImportedEngineMetadata {
@@ -100,8 +100,8 @@ class LocalEngineStorage {
   Future<void> initialize() async {
     if (_enginesDir != null) return;
 
-    final appDir = await AppStorage.documents();
-    _enginesDir = Directory('${appDir.path}/$_enginesDirName');
+    final appDir = await ProfileStoragePaths.documentsDirectory();
+    _enginesDir = Directory('$appDir/$_enginesDirName');
 
     if (!await _enginesDir!.exists()) {
       await _enginesDir!.create(recursive: true);
@@ -118,6 +118,11 @@ class LocalEngineStorage {
   Future<String> getEnginesDirectoryPath() async {
     await initialize();
     return _enginesDir!.path;
+  }
+
+  void resetProfileScope() {
+    _enginesDir = null;
+    _metadata = null;
   }
 
   /// Load metadata from disk

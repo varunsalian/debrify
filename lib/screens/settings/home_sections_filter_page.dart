@@ -239,6 +239,10 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
             if (!m.isFavorites)
               opt(HomeExtraRowIds.iptvList(m.id), m.name, badge: 'LIST'),
         ]),
+      _Group('My Watchlist', [
+        _Item('watchlist:movies', 'Movies', on('watchlist:movies')),
+        _Item('watchlist:series', 'Series', on('watchlist:series')),
+      ]),
       _Group('Favorites', [
         _Item('fav:playlist', 'Playlist', on('fav:playlist')),
         _Item('fav:debrify', 'Debrify TV', on('fav:debrify')),
@@ -328,6 +332,8 @@ class _HomeSectionsFilterPageState extends State<HomeSectionsFilterPage> {
       'simkl:shows',
       'iptv:movies',
       'iptv:series',
+      'watchlist:movies',
+      'watchlist:series',
       'fav:playlist',
       'fav:debrify',
       'fav:stremio',

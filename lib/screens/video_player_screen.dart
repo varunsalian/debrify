@@ -14,6 +14,8 @@ import 'package:screen_brightness/screen_brightness.dart';
 // Removed volume_controller; using media_kit player volume instead
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/storage_service.dart';
+import '../models/profiles/profile_policy.dart';
+import '../services/profiles/profile_policy_guard.dart';
 import '../services/skip_segment_service.dart';
 import '../services/analytics_service.dart';
 import '../services/pip_service.dart';
@@ -22,6 +24,8 @@ import '../services/tvos_decode_remedy.dart';
 import '../services/android_native_downloader.dart';
 import '../services/desktop_recording_service.dart';
 import '../services/live_recording_service.dart';
+import '../services/profiles/profile_lock_controller.dart';
+import '../services/profiles/profile_runtime.dart';
 import '../widgets/recording_limit_dialogs.dart';
 import '../services/debrid_service.dart';
 import '../services/premiumize_service.dart';
@@ -84,6 +88,7 @@ import '../widgets/iptv/styles/iptv_style.dart';
 import 'video_player/widgets/source_sheet.dart';
 import 'video_player/widgets/stremio_tv_guide_sheet.dart';
 import 'video_player/models/channel_entry.dart';
+import 'video_player/services/network_tuning.dart';
 import 'video_player/services/subtitle_settings_service.dart';
 import 'video_player/services/playback_ui_clock.dart';
 import 'video_player/services/skip_segment_ui_controller.dart';
@@ -380,6 +385,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _audioPassthroughEnabled = false;
   bool _systemAudioEffectsEnabled = false;
   bool _appleMultichannelEnabled = false;
+  int _tvosRouteOutputChannels = 0;
+  bool _tvosForceStereoAudio = false;
+  bool _tvosLegacyAudioOutput = false;
   int _playerInstanceGeneration = 0;
   bool _playerPresentationInitialized = false;
 
@@ -478,7 +486,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     return _cachedSeriesPlaylist;
   }
-
 
   Timer? _hideTimer;
 
@@ -584,6 +591,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // IPTV channel sheet state
   bool _showIptvChannelSheet = false;
   int _currentIptvIndex = 0;
+
   /// Phase 0 of the IPTV resilience plan: per-tune debugPrint diagnostics,
   /// same log grammar as the native player's IptvTuneDiagnostics.kt. Inert
   /// for non-IPTV playback (nothing calls onTuneStart there).
@@ -657,9 +665,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // ticket + machine bookkeeping run before any await), so no real zap
       // can pick the flag up instead.
       _iptvLiveRecovery.expectRetune = true;
-      unawaited(
-        _switchToIptvChannel(_currentIptvIndex, quietRecovery: true),
-      );
+      unawaited(_switchToIptvChannel(_currentIptvIndex, quietRecovery: true));
       return;
     }
     // Direct reopen path. The ticket pins this retune to the channel the
@@ -2178,13 +2184,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // arrive rather than handing it back: this player IS alive and holding a
       // video output, so releasing would leave it untracked and let a trailer
       // build a second one beside it.
-      unawaited(pending.then((late) {
-        if (_screenDisposed || _outputLease != null) {
-          late.release();
-        } else {
-          _outputLease = late;
-        }
-      }));
+      unawaited(
+        pending.then((late) {
+          if (_screenDisposed || _outputLease != null) {
+            late.release();
+          } else {
+            _outputLease = late;
+          }
+        }),
+      );
     }
     if (_screenDisposed) {
       handle?.release();
@@ -2261,9 +2269,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       if (platform is! mk.NativePlayer) return;
       for (final (property, value)
           in PlayerAudioConfig.androidLiveToggleProperties(
-        passthroughEnabled: enabled,
-        systemAudioEffects: _systemAudioEffectsEnabled,
-      )) {
+            passthroughEnabled: enabled,
+            systemAudioEffects: _systemAudioEffectsEnabled,
+          )) {
         await platform.setProperty(property, value);
       }
       final aid = await platform.getProperty('aid');
@@ -2287,6 +2295,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final props = PlayerAudioConfig.audioProperties(
       isAndroid: !kIsWeb && Platform.isAndroid,
       isApple: PlatformUtil.isTvOS || PlatformUtil.isIosMobile,
+      isTvOS: PlatformUtil.isTvOS,
+      routeOutputChannels: _tvosRouteOutputChannels,
+      tvosForceStereo: _tvosForceStereoAudio,
+      tvosLegacyAudioOutput: _tvosLegacyAudioOutput,
       passthroughEnabled: _audioPassthroughEnabled,
       systemAudioEffects: _systemAudioEffectsEnabled,
       multichannelEnabled: _appleMultichannelEnabled,
@@ -2334,9 +2346,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _armPipAutoEnter();
     if (PlatformUtil.isTelevision && _controlsVisible.value) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Never while a guide/sheet is up: on tvOS IPTV the instance becomes
+        // ready SECONDS after a zap (and again on remedy-ladder restarts), so
+        // this fired after the sheet's one-shot focus claim and silently
+        // yanked the remote off it — the guide's focus went dead at random.
         if (mounted &&
             instanceGeneration == _playerInstanceGeneration &&
             _controlsVisible.value &&
+            !_anyPlayerOverlayOpen &&
             !_tvBarScope.hasFocus) {
           _tvPlayPauseFocus.requestFocus();
         }
@@ -2527,8 +2544,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // an API 21–28 device shows Record, and a tap in that window starts a
     // recording whose Stop button the probe then hides.
     final nativeBackend = _player.platform is mk.NativePlayer;
-    _recordingSupported = nativeBackend && !Platform.isAndroid;
-    if (nativeBackend && Platform.isAndroid) {
+    // A profile without the recordings feature never sees Record — the
+    // platform probe below must not be able to flip it back on.
+    final recordingsAllowed = ProfilePolicyGuard.allowsSync(
+      ProfileFeature.recordings,
+    );
+    _recordingSupported = recordingsAllowed && nativeBackend && !Platform.isAndroid;
+    if (recordingsAllowed && nativeBackend && Platform.isAndroid) {
       unawaited(
         AndroidNativeDownloader.canPublishRecordings().then((canPublish) {
           if (!canPublish || !mounted) return;
@@ -2540,8 +2562,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       unawaited(
         LiveRecordingService.engineEnabled().then((on) {
           if (!mounted) return;
-          _engineFlagOn = on;
-          if (on) unawaited(_refreshEngineRecordingState());
+          _engineFlagOn = on || ProfileRuntime.isProfileCommitted;
+          if (_engineFlagOn) unawaited(_refreshEngineRecordingState());
         }),
       );
     }
@@ -2734,6 +2756,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       final wasPlaying = _isPlaying;
       _isPlaying = p;
+      ProfileLockController.instance.setPlaybackActive(p);
       _syncWakelock(p);
       _pushPipState();
       if (p) _noteLiveChannelPlaying();
@@ -3195,8 +3218,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         decoder = await platform.getProperty('hwdec-current');
         output = await platform.getProperty('current-vo');
         aoName = await platform.getProperty('current-ao');
-        audioChannels =
-            await platform.getProperty('audio-out-params/channel-count');
+        audioChannels = await platform.getProperty(
+          'audio-out-params/channel-count',
+        );
         final outputReady = output.isNotEmpty && output != 'null';
         final decoderReady = decoder.isNotEmpty;
         if (decoderReady &&
@@ -3221,8 +3245,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       codec = await platform.getProperty('video-codec');
       audioCodec = await platform.getProperty('audio-codec-name');
-      decodedChannels =
-          await platform.getProperty('audio-params/channel-count');
+      decodedChannels = await platform.getProperty(
+        'audio-params/channel-count',
+      );
       audioFormat = await platform.getProperty('audio-out-params/format');
     } catch (_) {
       if (!mounted || generation != _decoderProbeGeneration) return;
@@ -3269,9 +3294,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         ? 'pending'
         : switch (remedy.state) {
             TvosRemedyState.none => 'none',
-            TvosRemedyState.nv12 ||
-            TvosRemedyState.software =>
-              'confirmed',
+            TvosRemedyState.nv12 || TvosRemedyState.software => 'confirmed',
             TvosRemedyState.gaveUp => 'failed',
           };
     final remedyFields = remedy == null
@@ -3331,6 +3354,80 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _activeSkipSegmentUi.clear();
   }
 
+  /// The user's Network & Buffering presets, loaded once per screen. A
+  /// mid-session settings change applies on the next playback — accurate
+  /// today because Settings isn't reachable without popping the player; an
+  /// in-player settings entry point would have to re-read this.
+  NetworkTuning? _networkTuning;
+
+  /// Stock values of exactly the player-global properties [_networkTuning]
+  /// has overridden, captured before the first override. A later live open
+  /// on the same player (mixed playlist) restores these, so the tuned live
+  /// IPTV pipeline can never inherit VOD tuning. Null until tuning has
+  /// actually touched the player — the Standard path never populates it and
+  /// so never sets a single property.
+  Map<String, String>? _networkTuningDefaults;
+
+  /// Serializes tuning applies: a rapid zap starts a newer [_openMedia]
+  /// while an older one is suspended mid-capture, and interleaved property
+  /// writes could land VOD tuning on the newer open's live stream. Each
+  /// apply runs WHOLE, in order, and bails via its generation check when a
+  /// newer open owns the player.
+  Future<void> _networkTuningChain = Future<void>.value();
+
+  Future<void> _applyNetworkTuning(
+    mk.NativePlayer platform,
+    NetworkTuning tuning, {
+    required bool liveStream,
+    required int generation,
+  }) {
+    return _networkTuningChain = _networkTuningChain.then(
+      (_) => _applyNetworkTuningInner(
+        platform,
+        tuning,
+        liveStream: liveStream,
+        generation: generation,
+      ),
+    );
+  }
+
+  Future<void> _applyNetworkTuningInner(
+    mk.NativePlayer platform,
+    NetworkTuning tuning, {
+    required bool liveStream,
+    required int generation,
+  }) async {
+    final want = liveStream ? const <String, String>{} : tuning.mpvProperties;
+    // Standard (and live-before-any-tuning): nothing was ever applied,
+    // nothing to restore — the player is untouched.
+    if (want.isEmpty && _networkTuningDefaults == null) return;
+    if (generation != _decoderProbeGeneration) return; // superseded in queue
+    try {
+      if (want.isNotEmpty && _networkTuningDefaults == null) {
+        final defaults = <String, String>{};
+        for (final key in want.keys) {
+          final value = await platform.getProperty(key);
+          // The vendored getProperty returns '' instead of throwing when mpv
+          // has no value. An empty "default" would silently fail to restore
+          // later — refuse to tune rather than capture poison.
+          if (value.isEmpty) {
+            debugPrint('Player: network tuning skipped — $key unreadable');
+            return;
+          }
+          defaults[key] = value;
+        }
+        if (generation != _decoderProbeGeneration) return;
+        _networkTuningDefaults = defaults;
+      }
+      for (final entry in _networkTuningDefaults!.entries) {
+        if (generation != _decoderProbeGeneration) return;
+        await platform.setProperty(entry.key, want[entry.key] ?? entry.value);
+      }
+    } catch (e) {
+      debugPrint('Player: network tuning apply failed: $e');
+    }
+  }
+
   Future<void> _openMedia(
     mk.Media media, {
     required bool play,
@@ -3350,6 +3447,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // for finite files (mpv's own defaults handle those).
     final platform = _player.platform;
     if (platform is mk.NativePlayer) {
+      final tuningGeneration = _decoderProbeGeneration;
+      NetworkTuning tuning;
+      try {
+        tuning = _networkTuning ??= await NetworkTuning.load();
+      } catch (e) {
+        // Profile storage refusing a read must degrade to "no tuning", never
+        // block playback — this line is on the Standard path too.
+        debugPrint('Player: network tuning load failed: $e');
+        tuning = _networkTuning = const NetworkTuning(
+          patience: NetworkTuning.standard,
+          buffer: NetworkTuning.standard,
+        );
+      }
       try {
         await platform.setProperty(
           'stream-lavf-o',
@@ -3358,16 +3468,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           // answer every time — must surface), and not 429 (a comma-list
           // value can't ride mpv's key-value list safely, and escalating a
           // rate limit to the slower ladder is politer to the origin).
+          //
+          // VOD opens carry the user's Network & Buffering patience preset
+          // ('' at Standard — today's exact behavior).
           liveStream
               ? 'reconnect=1,reconnect_streamed=1,'
                     'reconnect_on_network_error=1,'
                     'reconnect_on_http_error=5xx,'
                     'reconnect_delay_max=5'
-              : '',
+              : tuning.vodLavfOptions,
         );
       } catch (e) {
         debugPrint('Player: stream-lavf-o set failed: $e');
       }
+      await _applyNetworkTuning(
+        platform,
+        tuning,
+        liveStream: liveStream,
+        generation: tuningGeneration,
+      );
     }
     final remedy = _tvosDecodeRemedy;
     if (remedy != null) {
@@ -4429,6 +4548,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _appleMultichannelEnabled =
           await StorageService.getAppleMultichannelAudio();
     }
+    if (PlatformUtil.isTvOS) {
+      _tvosForceStereoAudio = await StorageService.getTvosForceStereoAudio();
+      _tvosLegacyAudioOutput = await StorageService.getTvosLegacyAudioOutput();
+      // What the CURRENT output route can take. ao_avfoundation passes the
+      // file's native layout through, so a 5.1 track on a two-channel route
+      // (AirPods, Bluetooth, stereo TV) folds badly; PlayerAudioConfig caps
+      // those to stereo. 0 means "unknown" and leaves mpv's default alone.
+      try {
+        _tvosRouteOutputChannels =
+            await _tvReleaseLogChannel.invokeMethod<int>('outputChannelCount') ??
+            0;
+      } catch (_) {
+        _tvosRouteOutputChannels = 0;
+      }
+    }
 
     debugPrint('VideoPlayer: Loaded defaults - aspect=$_aspectMode');
   }
@@ -5290,9 +5424,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // is all we have — best-effort match) skip the ladder entirely: a
     // 401/403/404 repeats deterministically, so say so NOW instead of
     // retrying for 75 seconds (mirror of the TV policy's AUTH class).
-    final looksAuthError = RegExp(
-      r'\b(401|403|404)\b',
-    ).hasMatch(error);
+    final looksAuthError = RegExp(r'\b(401|403|404)\b').hasMatch(error);
     if (_currentIptvChannel?.isLive == true &&
         !looksAuthError &&
         _iptvLiveRecovery.onError()) {
@@ -5676,11 +5808,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         // the one-time notification ask lives here explicitly — fire-and-
         // forget, so an unanswered dialog can't delay the capture.
         unawaited(LiveRecordingService.ensureNotificationPermission());
+        final resource = _currentRecordingResource();
         final result = await LiveRecordingService.start(
           url: recordUrl,
           fileName: _recordingFileName(channel.name),
           channelName: channel.name,
           headers: channel.playbackHeaders,
+          connectionResourceId: resource?.id,
+          resourceAuthorizationRevision: resource?.revision,
         );
         if (!mounted) return;
         if (result.ok) {
@@ -5702,9 +5837,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
               ),
             ),
           );
-        } else if (result.errorCode == 'engine_unsupported' ||
-            result.errorCode == 'fgs_not_allowed' ||
-            result.errorCode == 'missing_plugin') {
+        } else if (!ProfileRuntime.isProfileCommitted &&
+            (result.errorCode == 'engine_unsupported' ||
+                result.errorCode == 'fgs_not_allowed' ||
+                result.errorCode == 'missing_plugin')) {
           // Engine unreachable: the tee still works, with its semantics.
           await _startRecording();
         } else {
@@ -5716,6 +5852,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       }
       // recordUrl == null: true segmented stream (no Xtream twin) — only the
       // tee can capture what mpv is demuxing. Fall through.
+      if (ProfileRuntime.isProfileCommitted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This stream cannot be recorded safely'),
+          ),
+        );
+        return;
+      }
     }
     // Desktop: the raw HTTP capture is the ONLY recorder that works — the mpv
     // tee is dead on media_kit's stock libs (no muxers in its FFmpeg). Never
@@ -5749,11 +5893,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // main(), which is still alive when this screen isn't, and the revision
       // listener repaints the button. A screen-scoped callback would only
       // duplicate the toast while the player happens to be open.
-      final capture = DesktopRecordingService.instance.start(
+      final capture = await DesktopRecordingService.instance.start(
         url: recordUrl,
         path: path,
         channelName: channel.name,
         headers: channel.playbackHeaders,
+        connectionResourceId: _currentRecordingResource()?.id,
+        resourceAuthorizationRevision: _currentRecordingResource()?.revision,
       );
       if (!mounted) return;
       if (capture == null) {
@@ -5873,6 +6019,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         '${now.year}${two(now.month)}${two(now.day)}_'
         '${two(now.hour)}${two(now.minute)}${two(now.second)}';
     return '${base}_$stamp.ts';
+  }
+
+  ({String id, int revision})? _currentRecordingResource() {
+    final channel = _currentIptvChannel;
+    final sourceId =
+        channel?.attributes['source_playlist_id'] ??
+        channel?.attributes['series_playlist_id'] ??
+        widget.iptvSourceId;
+    if (sourceId == null) return null;
+    for (final source in widget.iptvSources ?? const <Map<String, dynamic>>[]) {
+      if (source['id'] != sourceId) continue;
+      final id = source['connectionResourceId']?.toString();
+      final revision = (source['connectionResourceRevision'] as num?)?.toInt();
+      if (id != null && id.isNotEmpty && revision != null) {
+        return (id: id, revision: revision);
+      }
+    }
+    return null;
   }
 
   /// Print mpv log lines that matter while a tee recording runs.
@@ -6268,7 +6432,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // the channel rather than widget.httpHeaders.
       _setIptvSources(null, null);
       try {
-        _iptvDiag.onTuneStart(channel.name, channel.url, isLive: channel.isLive);
+        _iptvDiag.onTuneStart(
+          channel.name,
+          channel.url,
+          isLive: channel.isLive,
+        );
         final media = mk.Media(
           channel.url,
           httpHeaders: channel.playbackHeaders,
@@ -8418,6 +8586,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   @override
   void dispose() {
+    ProfileLockController.instance.setPlaybackActive(false);
     _iptvDiag.onSessionEnd();
     _iptvLiveRecovery.cancel();
     _iptvReconnectText.dispose();
@@ -9152,6 +9321,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _scheduleAutoHide();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_controlsVisible.value) return;
+      // An open overlay owns the remote — the bar must not pull focus out
+      // from under it.
+      if (_anyPlayerOverlayOpen) return;
       if (!_tvBarScope.hasFocus) _tvPlayPauseFocus.requestFocus();
     });
   }
@@ -9160,7 +9332,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// half the focused control is excluded from the tree and the remote dies.
   void _tvHideBar() {
     _controlsVisible.value = false;
-    _tvRootFocus.requestFocus();
+    // With an overlay up, focus belongs to the overlay (its claim may still
+    // be a frame away) — grabbing the root here would strand its DPAD.
+    if (!_anyPlayerOverlayOpen) _tvRootFocus.requestFocus();
   }
 
   /// Cinema scrub: hold LEFT/RIGHT to pause and preview a destination, OK to
@@ -9215,7 +9389,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _traktScrobbleSeek(target);
     _simklScrobbleSeek(target);
     if (_tvScrubWasPlaying) _player.play();
-    _tvPlayPauseFocus.requestFocus();
+    if (!_anyPlayerOverlayOpen) _tvPlayPauseFocus.requestFocus();
     // Fresh interval: the countdown that was running belonged to the scrub,
     // and inheriting its remainder could drop the bar the instant OK lands.
     _scheduleAutoHide();
@@ -9235,7 +9409,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     setState(() => _tvScrubTarget = null);
     _tvScrubRepeats = 0;
     if (_tvScrubWasPlaying) _player.play();
-    _tvPlayPauseFocus.requestFocus();
+    if (!_anyPlayerOverlayOpen) _tvPlayPauseFocus.requestFocus();
     _scheduleAutoHide();
   }
 
@@ -9559,7 +9733,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
-
   /// Adopt [channel] as the banner's subject and start its guide lookup.
   ///
   /// Called on the first tune and on every zap, whatever is on screen at the
@@ -9704,7 +9877,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _iptvZapEpgLoading = false;
     });
   }
-
 
   Future<void> _handleDoubleTap(TapDownDetails details) async {
     final box = context.findRenderObject() as RenderBox?;
@@ -10251,7 +10423,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     );
   }
 
-
   /// One truth for "is this playback being recorded right now", shared by
   /// the dock's Record button and the styled zap banner's REC tag — the
   /// three mechanisms are libmpv stream-record, the Android recording
@@ -10296,8 +10467,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void _syncPlaybackClockVisibility() {
     _playbackUiClock.setVisible(
       _controlsVisible.value ||
-          (_showDebrifyBanner && _debrifyTvOwnsIdentity &&
-              !widget.hideSeekbar),
+          (_showDebrifyBanner && _debrifyTvOwnsIdentity && !widget.hideSeekbar),
     );
   }
 
@@ -11274,9 +11444,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         // re-laying out for the rest of the session.
                         onEnd: () {
                           if (!mounted || _showDebrifyBanner) return;
-                          setState(
-                            () => _debrifyBannerFloatingMounted = false,
-                          );
+                          setState(() => _debrifyBannerFloatingMounted = false);
                         },
                         child:
                             _buildDebrifyTvInfoPanel(flush: false) ??

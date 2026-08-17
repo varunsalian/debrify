@@ -1,7 +1,9 @@
 package com.debrify.app.util
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.Typeface
+import com.debrify.app.profiles.ProfilePreferenceProjection
 import java.io.File
 
 /**
@@ -29,6 +31,8 @@ object SubtitleFontManager {
     private const val KEY_FONT_INDEX = "subtitle_font_index"
     private const val KEY_CUSTOM_FONT_PATH = "subtitle_custom_font_path"
     private const val KEY_CUSTOM_FONT_NAME = "subtitle_custom_font_name"
+    private const val KEY_PROFILE_MIGRATION = "subtitle_font_profile_migration_v1"
+    private const val MIGRATED_ADMIN_PROFILE_ID = "legacy-admin-v1"
 
     const val DEFAULT_FONT_INDEX = 0
 
@@ -53,8 +57,37 @@ object SubtitleFontManager {
     private var cachedCustomFontPath: String? = null
     private val cachedBundledTypefaces = mutableMapOf<String, Typeface>()
 
-    private fun getPrefs(context: Context) =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private fun getPrefs(context: Context): SharedPreferences {
+        val scoped = ProfilePreferenceProjection.scopedPreferences(context, PREFS_NAME)
+        if (!ProfilePreferenceProjection.isCommitted(context)) return scoped
+
+        val active = ProfilePreferenceProjection.activeJobContext(context)
+        if (active.profileId != MIGRATED_ADMIN_PROFILE_ID ||
+            scoped.getBoolean(KEY_PROFILE_MIGRATION, false)
+        ) {
+            return scoped
+        }
+
+        // The pre-profiles build stored these values globally. Only the
+        // deterministic migrated Admin owns that legacy state; copying it to
+        // every newly-created profile would recreate the cross-profile leak.
+        synchronized(this) {
+            if (scoped.getBoolean(KEY_PROFILE_MIGRATION, false)) return scoped
+            val legacy = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val editor = scoped.edit()
+            if (!scoped.contains(KEY_FONT_INDEX) && legacy.contains(KEY_FONT_INDEX)) {
+                editor.putInt(KEY_FONT_INDEX, legacy.getInt(KEY_FONT_INDEX, DEFAULT_FONT_INDEX))
+            }
+            if (!scoped.contains(KEY_CUSTOM_FONT_PATH) && legacy.contains(KEY_CUSTOM_FONT_PATH)) {
+                editor.putString(KEY_CUSTOM_FONT_PATH, legacy.getString(KEY_CUSTOM_FONT_PATH, null))
+            }
+            if (!scoped.contains(KEY_CUSTOM_FONT_NAME) && legacy.contains(KEY_CUSTOM_FONT_NAME)) {
+                editor.putString(KEY_CUSTOM_FONT_NAME, legacy.getString(KEY_CUSTOM_FONT_NAME, null))
+            }
+            editor.putBoolean(KEY_PROFILE_MIGRATION, true).commit()
+        }
+        return scoped
+    }
 
     /**
      * Get current font index.

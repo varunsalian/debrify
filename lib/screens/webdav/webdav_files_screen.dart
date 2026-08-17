@@ -551,6 +551,8 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
       'sizeBytes': file.sizeBytes,
     });
     await DownloadService.instance.enqueueDownload(
+      connectionResourceId: config.connectionResourceId,
+      resourceAuthorizationRevision: config.connectionResourceRevision,
       url: WebDavService.directUrl(config, file.path),
       fileName: file.name,
       headers: WebDavService.authHeaders(config),
@@ -613,9 +615,7 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
           children: [
             const CircularProgressIndicator(),
             const SizedBox(width: 16),
-            Expanded(
-              child: Text(text),
-            ),
+            Expanded(child: Text(text)),
           ],
         ),
       ),
@@ -745,25 +745,17 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
         decoration: InputDecoration(
           hintText: 'Search $_currentTitle',
           hintStyle: TextStyle(color: app.fade(app.core.tx, 0.38)),
-          prefixIcon: Icon(
-            Icons.search_rounded,
-            color: app.cloud.accent,
-          ),
+          prefixIcon: Icon(Icons.search_rounded, color: app.cloud.accent),
           filled: true,
           fillColor: app.fade(app.core.tx, 0.06),
           border: OutlineInputBorder(borderRadius: app.shape.br(10)),
           enabledBorder: OutlineInputBorder(
             borderRadius: app.shape.br(10),
-            borderSide: BorderSide(
-              color: app.fade(app.core.tx, 0.10),
-            ),
+            borderSide: BorderSide(color: app.fade(app.core.tx, 0.10)),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: app.shape.br(10),
-            borderSide: BorderSide(
-              color: app.cloud.accent,
-              width: 1.6,
-            ),
+            borderSide: BorderSide(color: app.cloud.accent, width: 1.6),
           ),
         ),
       );
@@ -803,22 +795,15 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
                 fillColor: app.fade(app.core.tx, 0.06),
                 border: OutlineInputBorder(
                   borderRadius: app.shape.br(10),
-                  borderSide: BorderSide(
-                    color: app.fade(app.core.tx, 0.12),
-                  ),
+                  borderSide: BorderSide(color: app.fade(app.core.tx, 0.12)),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: app.shape.br(10),
-                  borderSide: BorderSide(
-                    color: app.fade(app.core.tx, 0.10),
-                  ),
+                  borderSide: BorderSide(color: app.fade(app.core.tx, 0.10)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: app.shape.br(10),
-                  borderSide: BorderSide(
-                    color: app.cloud.accent,
-                    width: 1.6,
-                  ),
+                  borderSide: BorderSide(color: app.cloud.accent, width: 1.6),
                 ),
               ),
               items: [
@@ -985,15 +970,15 @@ class _WebDavFilesScreenState extends State<WebDavFilesScreen> {
       kind: item.isDirectory
           ? CloudRowKind.folder
           : isVideo
-              ? CloudRowKind.video
-              : CloudRowKind.file,
+          ? CloudRowKind.video
+          : CloudRowKind.file,
       title: item.name,
       meta: _subtitleFor(item),
       onTap: item.isDirectory
           ? () => _openFolder(item)
           : isVideo
-              ? () => _playItem(item)
-              : null,
+          ? () => _playItem(item)
+          : null,
       actions: actions,
       focusNode: index == 0 ? _firstItemFocusNode : null,
       upFocusNode: index == 0 ? _serverDropdownFocusNode : null,

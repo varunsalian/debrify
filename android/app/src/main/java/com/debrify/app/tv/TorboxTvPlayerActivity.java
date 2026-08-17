@@ -1392,16 +1392,15 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
      */
     private void loadPlayerDefaults() {
         try {
-            android.content.SharedPreferences prefs = getSharedPreferences(
-                "FlutterSharedPreferences", android.content.Context.MODE_PRIVATE);
-
             // Load aspect index for TV (separate from mobile)
             // TV only: 0=Fit, 1=Fill, 2=Zoom (default: 0=Fit)
-            resizeModeIndex = (int) prefs.getLong("flutter.player_default_aspect_index_tv", 0);
+            resizeModeIndex = (int) com.debrify.app.profiles.ProfilePreferenceProjection
+                .getLong(this, "player_default_aspect_index_tv", 0);
             resizeModeIndex = Math.max(0, Math.min(resizeModeIndex, resizeModes.length - 1));
 
             // Load night mode index (default: 0 = Off)
-            nightModeIndex = (int) prefs.getLong("flutter.player_night_mode_index", 0);
+            nightModeIndex = (int) com.debrify.app.profiles.ProfilePreferenceProjection
+                .getLong(this, "player_night_mode_index", 0);
             nightModeIndex = Math.max(0, Math.min(nightModeIndex, nightModeGains.length - 1));
 
             android.util.Log.d("TorboxTvPlayer", "Loaded defaults - aspect=" + resizeModeIndex + ", nightMode=" + nightModeIndex);

@@ -6,7 +6,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
-import '../../../services/android_native_downloader.dart';
 import '../../../services/desktop_schedule_service.dart';
 import '../../../services/iptv_epg_service.dart';
 import '../../../services/live_recording_service.dart';
@@ -189,6 +188,13 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _keyboardFocusNode.requestFocus();
     });
+    // …and keep it for as long as the sheet is up. The player promises to
+    // ignore every key while this overlay is open, so the sheet losing real
+    // focus to ANYTHING outside itself (a late instance-ready refocus, a bar
+    // raise) leaves the whole guide deaf — the virtual white focus freezes
+    // and the DPAD appears dead. The sheet's own legitimate holders (search
+    // field, schedule pane, filter pickers) are exempt.
+    _keyboardFocusNode.addListener(_onKeyboardFocusChanged);
 
     _channels = List.from(widget.channels);
     _filteredChannels = List.from(_channels);
@@ -278,6 +284,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _keyboardFocusNode.removeListener(_onKeyboardFocusChanged);
     _keyboardFocusNode.dispose();
     _scheduleScope.dispose();
     _scrollController.dispose();
@@ -341,6 +348,20 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
       channel.attributes['source_playlist_id'] ??
       channel.attributes['series_playlist_id'] ??
       _sourceId;
+
+  ({String id, int revision})? _recordingResource(IptvChannel channel) {
+    final sourceId = _originSourceId(channel);
+    if (sourceId == null) return null;
+    for (final source in _sources) {
+      if (source['id'] != sourceId) continue;
+      final id = source['connectionResourceId']?.toString();
+      final revision = (source['connectionResourceRevision'] as num?)?.toInt();
+      if (id != null && id.isNotEmpty && revision != null) {
+        return (id: id, revision: revision);
+      }
+    }
+    return null;
+  }
 
   Future<void> _toggleFavorite(IptvChannel channel) async {
     final next = !_favoriteUrls.contains(channel.url);
@@ -597,6 +618,29 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   }
 
   // ─── Scrolling ───────────────────────────────────────────────────────
+
+  /// True while one of the sheet's own picker dialogs holds focus — the
+  /// re-claim below must not fight a route the sheet itself opened.
+  bool _pickerOpen = false;
+
+  void _onKeyboardFocusChanged() {
+    if (_keyboardFocusNode.hasFocus) return;
+    if (_focusHeldElsewhereLegitimately) return;
+    // Re-checked post-frame: focus hops through transient states inside one
+    // update (e.g. keyboard → schedule row), and only a loss that SETTLED
+    // outside the sheet is theft.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _keyboardFocusNode.hasFocus ||
+          _focusHeldElsewhereLegitimately) {
+        return;
+      }
+      _keyboardFocusNode.requestFocus();
+    });
+  }
+
+  bool get _focusHeldElsewhereLegitimately =>
+      _pickerOpen || _searchFocusNode.hasFocus || _scheduleScope.hasFocus;
 
   void _scrollToFocused() {
     if (_filteredChannels.isEmpty || !_scrollController.hasClients) return;
@@ -1545,15 +1589,21 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
   /// unreachable. A source can carry hundreds of categories, so a picker with
   /// its own search is the only shape that fits them all on any input.
   Future<void> _openCategoryPicker() async {
-    final choice = await showDialog<_CategoryChoice>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.6),
-      builder: (_) => _CategoryPickerDialog(
-        categories: _categories,
-        selected: _favoritesOnly ? null : _selectedCategory,
-        tokens: _t,
-      ),
-    );
+    _pickerOpen = true;
+    final _CategoryChoice? choice;
+    try {
+      choice = await showDialog<_CategoryChoice>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.6),
+        builder: (_) => _CategoryPickerDialog(
+          categories: _categories,
+          selected: _favoritesOnly ? null : _selectedCategory,
+          tokens: _t,
+        ),
+      );
+    } finally {
+      _pickerOpen = false;
+    }
     if (!mounted) return;
     // The dialog route held focus — take the DPAD back either way.
     _keyboardFocusNode.requestFocus();
@@ -1574,16 +1624,22 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
         ),
     ];
     if (options.isEmpty) return;
-    final choice = await showDialog<Map<String, dynamic>>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.6),
-      builder: (_) => _GuideSelectDialog(
-        icon: Icons.dns_rounded,
-        title: _sourceName,
-        options: options,
-        tokens: _t,
-      ),
-    );
+    _pickerOpen = true;
+    final Map<String, dynamic>? choice;
+    try {
+      choice = await showDialog<Map<String, dynamic>>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.6),
+        builder: (_) => _GuideSelectDialog(
+          icon: Icons.dns_rounded,
+          title: _sourceName,
+          options: options,
+          tokens: _t,
+        ),
+      );
+    } finally {
+      _pickerOpen = false;
+    }
     if (!mounted) return;
     _keyboardFocusNode.requestFocus();
     if (choice != null) unawaited(_selectSource(choice));
@@ -1747,26 +1803,26 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
             // still on the channel list.
             descendantsAreFocusable: _compactPane == _CompactPane.schedule,
             child: EpgScheduleList(
-            key: ValueKey('schedule-${channel.url}'),
-            channel: channel,
-            isTelevision: PlatformUtil.isTelevision,
-            tokens: t,
-            onPlayProgramme: widget.onPlayProgramme == null
-                ? null
-                : (programme) {
-                    unawaited(widget.onPlayProgramme!(channel, programme));
-                  },
-            // isSchedulableUrl, not engineRecordableUrl: with nobody watching
-            // at alarm time there is no player probe, so only URLs KNOWN to be
-            // progressive TS may be scheduled (an extensionless HLS URL would
-            // record playlist text and call it saved).
-            onRecordProgramme:
-                !_recordSchedulingAvailable ||
-                    !LiveRecordingService.isSchedulableUrl(channel.url)
-                ? null
-                : (programme) {
-                    unawaited(_confirmScheduleRecording(channel, programme));
-                  },
+              key: ValueKey('schedule-${channel.url}'),
+              channel: channel,
+              isTelevision: PlatformUtil.isTelevision,
+              tokens: t,
+              onPlayProgramme: widget.onPlayProgramme == null
+                  ? null
+                  : (programme) {
+                      unawaited(widget.onPlayProgramme!(channel, programme));
+                    },
+              // isSchedulableUrl, not engineRecordableUrl: with nobody watching
+              // at alarm time there is no player probe, so only URLs KNOWN to be
+              // progressive TS may be scheduled (an extensionless HLS URL would
+              // record playlist text and call it saved).
+              onRecordProgramme:
+                  !_recordSchedulingAvailable ||
+                      !LiveRecordingService.isSchedulableUrl(channel.url)
+                  ? null
+                  : (programme) {
+                      unawaited(_confirmScheduleRecording(channel, programme));
+                    },
             ),
           ),
         ),
@@ -1833,6 +1889,7 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
       ),
     );
     if (confirmed != true || !mounted) return;
+    final resource = _recordingResource(channel);
     final result = DesktopScheduleService.instance.isSupported
         ? await DesktopScheduleService.instance.add(
             url: recordUrl,
@@ -1841,6 +1898,8 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
             startMs: programme.start.millisecondsSinceEpoch,
             endMs: programme.stop.millisecondsSinceEpoch,
             headers: channel.playbackHeaders,
+            connectionResourceId: resource?.id,
+            resourceAuthorizationRevision: resource?.revision,
           )
         : await LiveRecordingService.schedule(
             url: recordUrl,
@@ -1849,6 +1908,8 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
             startMs: programme.start.millisecondsSinceEpoch,
             endMs: programme.stop.millisecondsSinceEpoch,
             headers: channel.playbackHeaders,
+            connectionResourceId: resource?.id,
+            resourceAuthorizationRevision: resource?.revision,
           );
     if (!mounted) return;
     if (result.errorCode == 'exact_alarms_required') {
@@ -2088,15 +2149,18 @@ class _GuideMenuButton extends StatelessWidget {
           constraints: const BoxConstraints(minWidth: 92, maxWidth: 170),
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           decoration: BoxDecoration(
-            color: fill ??
-                (t == null ? Colors.white.withValues(alpha: 0.06) : t.focusTint),
+            color:
+                fill ??
+                (t == null
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : t.focusTint),
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(
               color: dpadFocused && fill == null
                   ? (t == null ? Colors.white : t.accent)
                   : t == null
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : t.hairline,
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : t.hairline,
               width: dpadFocused && fill == null ? 1.5 : 1,
             ),
           ),
@@ -2105,7 +2169,8 @@ class _GuideMenuButton extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                color: ink?.withValues(alpha: 0.7) ??
+                color:
+                    ink?.withValues(alpha: 0.7) ??
                     (t == null ? Colors.white54 : t.fgDim),
                 size: 15,
               ),
@@ -2127,7 +2192,8 @@ class _GuideMenuButton extends StatelessWidget {
                 const SizedBox(width: 5),
                 Icon(
                   Icons.keyboard_arrow_down_rounded,
-                  color: ink?.withValues(alpha: 0.55) ??
+                  color:
+                      ink?.withValues(alpha: 0.55) ??
                       (t == null ? Colors.white38 : t.fgFaint),
                   size: 16,
                 ),
@@ -2281,7 +2347,8 @@ class _GuideDropdownButton extends StatelessWidget {
     final fill = dpadFocused ? t?.focusFill : null;
     final ink = fill != null ? t!.focusInk! : null;
     return Material(
-      color: fill ??
+      color:
+          fill ??
           (t == null
               ? (selected
                     ? const Color(0xFF7C5CFF)
@@ -2300,10 +2367,10 @@ class _GuideDropdownButton extends StatelessWidget {
               color: dpadFocused && fill == null
                   ? (t == null ? Colors.white : t.accent)
                   : t == null
-                      ? (selected
-                            ? Colors.transparent
-                            : Colors.white.withValues(alpha: 0.06))
-                      : (selected ? t.accent : t.hairline),
+                  ? (selected
+                        ? Colors.transparent
+                        : Colors.white.withValues(alpha: 0.06))
+                  : (selected ? t.accent : t.hairline),
               width: dpadFocused && fill == null ? 1.5 : 1,
             ),
           ),
@@ -2312,7 +2379,8 @@ class _GuideDropdownButton extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                color: ink?.withValues(alpha: 0.7) ??
+                color:
+                    ink?.withValues(alpha: 0.7) ??
                     (t == null
                         ? (selected ? Colors.white : Colors.white54)
                         : (selected ? t.accent : t.fgDim)),
@@ -2325,7 +2393,8 @@ class _GuideDropdownButton extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: ink ??
+                    color:
+                        ink ??
                         (t == null
                             ? (selected ? Colors.white : Colors.white70)
                             : (selected ? t.accent : t.fgMid)),
@@ -2338,7 +2407,8 @@ class _GuideDropdownButton extends StatelessWidget {
               const SizedBox(width: 5),
               Icon(
                 Icons.keyboard_arrow_down_rounded,
-                color: ink?.withValues(alpha: 0.55) ??
+                color:
+                    ink?.withValues(alpha: 0.55) ??
                     (t == null
                         ? (selected ? Colors.white70 : Colors.white38)
                         : (selected ? t.fgMid : t.fgFaint)),
@@ -2634,7 +2704,8 @@ class _FilterChip extends StatelessWidget {
     final fill = dpadFocused ? t?.focusFill : null;
     final ink = fill != null ? t!.focusInk! : null;
     return Material(
-      color: fill ??
+      color:
+          fill ??
           (t == null
               ? (selected
                     ? const Color(0xFF7C5CFF)
@@ -2653,8 +2724,8 @@ class _FilterChip extends StatelessWidget {
                     width: 1.5,
                   )
                 : t == null
-                    ? null
-                    : Border.all(color: selected ? t.accent : t.hairline),
+                ? null
+                : Border.all(color: selected ? t.accent : t.hairline),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           child: Row(
@@ -2664,7 +2735,8 @@ class _FilterChip extends StatelessWidget {
                 Icon(
                   icon,
                   size: 14,
-                  color: ink?.withValues(alpha: 0.7) ??
+                  color:
+                      ink?.withValues(alpha: 0.7) ??
                       (t == null
                           ? (selected ? Colors.white : Colors.white54)
                           : (selected ? t.accent : t.fgDim)),
@@ -2674,7 +2746,8 @@ class _FilterChip extends StatelessWidget {
               Text(
                 upperLabels ? label.toUpperCase() : label,
                 style: TextStyle(
-                  color: ink ??
+                  color:
+                      ink ??
                       (t == null
                           ? (selected ? Colors.white : Colors.white60)
                           : (selected ? t.accent : t.fgMid)),
@@ -3510,7 +3583,8 @@ class _TileSubLineState extends State<_TileSubLine> {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        color: widget.inkOverride ??
+        color:
+            widget.inkOverride ??
             (t == null
                 ? (now != null
                       ? const Color(

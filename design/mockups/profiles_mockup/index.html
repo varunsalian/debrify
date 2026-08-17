@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en" data-view="wide" data-concept="wall" data-surface="gate">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Debrify Profiles — gate + settings mockup</title>
+<style>
+  @font-face{font-family:SpaceGrotesk;src:url('../../../assets/fonts/SpaceGrotesk-Medium.ttf') format('truetype');font-weight:500}
+  @font-face{font-family:SpaceGrotesk;src:url('../../../assets/fonts/SpaceGrotesk-Bold.ttf') format('truetype');font-weight:700}
+  @font-face{font-family:JetBrainsMono;src:url('../../../assets/fonts/JetBrainsMono-Regular.ttf') format('truetype');font-weight:400}
+  @font-face{font-family:JetBrainsMono;src:url('../../../assets/fonts/JetBrainsMono-Bold.ttf') format('truetype');font-weight:700}
+
+  :root{
+    --ground:#0D1420; --sunken:#080D16; --raised:#151D2A; --ink:#FFFFFF;
+    --accent:#E23D4C; --success:#39D98A; --warning:#F4B860; --danger:#FF6673;
+    --dim:rgba(255,255,255,.58); --dimmer:rgba(255,255,255,.36); --hair:rgba(255,255,255,.075);
+    --sans:SpaceGrotesk,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:JetBrainsMono,"SFMono-Regular",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:#070B12;color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  body{margin:0;min-width:320px;background:radial-gradient(circle at 82% -16%,rgba(226,61,76,.11),transparent 31rem),#070B12}
+  button,input{font:inherit} button{color:inherit}
+
+  /* ─── doc chrome ─────────────────────────────────────────────────── */
+  .docbar{position:sticky;top:0;z-index:90;display:flex;align-items:center;gap:18px;padding:14px 24px;
+    background:rgba(7,11,18,.86);border-bottom:1px solid var(--hair);backdrop-filter:blur(18px)}
+  .docbrand{font:700 11px/1 var(--mono);letter-spacing:.19em;text-transform:uppercase;color:#FF7A86}
+  .docnote{font-size:12px;color:var(--dimmer)}
+  .viewtabs{display:flex;gap:6px;margin-left:auto;padding:4px;border-radius:999px;background:rgba(255,255,255,.05)}
+  .viewtabs button{border:0;background:transparent;padding:8px 13px;border-radius:999px;cursor:pointer;
+    font:700 10px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dimmer)}
+  .viewtabs button.on{background:#fff;color:#0B1019}
+
+  main{width:min(1240px,calc(100% - 44px));margin:0 auto;padding:44px 0 110px}
+  .intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,410px);gap:44px;align-items:end;margin-bottom:30px}
+  .eyebrow{font:700 10px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:#FF7A86;margin-bottom:13px}
+  h1{font-size:34px;line-height:1.03;letter-spacing:-1.1px;margin:0 0 12px}
+  .lede{max-width:720px;font-size:14px;line-height:1.65;color:var(--dim);margin:0}
+  .principles{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+  .principles span{padding:8px 11px;border-radius:999px;background:rgba(255,255,255,.055);border:1px solid var(--hair);
+    font:700 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dimmer)}
+
+  .framebar{display:flex;align-items:center;gap:8px;margin:34px 0 11px;flex-wrap:wrap}
+  .framebar .label{font:700 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer)}
+  .framebar .hint{margin-left:auto;font:400 10px/1 var(--mono);color:rgba(255,255,255,.24)}
+  .segbar{display:flex;gap:5px;padding:4px;border-radius:999px;background:rgba(255,255,255,.05)}
+  .segbar button{border:0;background:transparent;padding:7px 12px;border-radius:999px;cursor:pointer;
+    font:700 9px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dimmer)}
+  .segbar button.on{background:var(--accent);color:#fff}
+
+  .stage-shell{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:var(--sunken);
+    border:1px solid rgba(255,255,255,.10);box-shadow:0 34px 100px rgba(0,0,0,.46)}
+  html[data-view="phone"] .stage-shell{width:min(392px,100%);margin:0 auto;aspect-ratio:9/19.2;border-radius:30px}
+
+  /* ─── the stage ──────────────────────────────────────────────────── */
+  .stage{position:absolute;inset:0;overflow:hidden;background:var(--ground);outline:none}
+  .stage::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.18;z-index:6;
+    background:linear-gradient(115deg,transparent 0 42%,rgba(255,255,255,.018) 49%,transparent 57%)}
+
+  /* Ambient wash: a blurred bloom of the FOCUSED avatar's own colour.
+     This is the single move that makes the screen feel alive. */
+  .wash{position:absolute;inset:-22%;z-index:0;filter:blur(78px) saturate(1.5);opacity:.5;
+    transition:background-image .55s ease,opacity .55s ease;background-repeat:no-repeat;background-size:cover}
+  .vignette{position:absolute;inset:0;z-index:1;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 38%,transparent 34%,rgba(6,10,17,.72) 100%),
+               linear-gradient(180deg,rgba(6,10,17,.42),transparent 30% 62%,rgba(6,10,17,.86))}
+
+  .appmark{position:absolute;left:34px;top:29px;z-index:5;display:flex;align-items:center;gap:10px}
+  .appmark-logo{width:24px;height:24px;border-radius:7px;background:var(--accent);display:grid;place-items:center;
+    box-shadow:0 0 26px rgba(226,61,76,.22)}
+  .appmark-logo svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:2.4}
+  .appmark-name{font:700 13px/1 var(--sans);letter-spacing:.01em}
+  html[data-view="phone"] .appmark{left:22px;top:22px}
+
+  .gatehead{position:absolute;z-index:4;left:0;right:0;top:96px;text-align:center;pointer-events:none}
+  .gatehead .mini{font:700 9px/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;color:#FF7A86;margin-bottom:11px}
+  .gatehead h2{margin:0;font-size:34px;line-height:1;letter-spacing:-1px}
+  html[data-view="phone"] .gatehead{top:86px}
+  html[data-view="phone"] .gatehead h2{font-size:25px}
+
+  /* ─── avatar art ─────────────────────────────────────────────────── */
+  /* Every avatar animates ONLY while focused — see .tile.on .art. */
+  .art{position:absolute;inset:0;background-size:cover;background-position:center}
+  .art.anim{animation-play-state:paused}
+  .tile.on .art.anim,.stagecard .art.anim,.railcard.on .art.anim,
+  .hitem.on .art.anim{animation-play-state:running}
+
+  .art-mesh{background:
+    radial-gradient(circle at 24% 22%,#5B8CFF,transparent 46%),
+    radial-gradient(circle at 78% 30%,#B14BE8,transparent 44%),
+    radial-gradient(circle at 52% 82%,#2BD9C4,transparent 52%),
+    linear-gradient(150deg,#1B2740,#0E1523)}
+  .art-aurora{background:
+    linear-gradient(115deg,#0A1F2E 0%,#12475C 26%,#1E8E7E 48%,#7BD9A8 62%,#12475C 82%,#0A1F2E 100%);
+    background-size:340% 340%;animation:aurora 7s ease-in-out infinite}
+  @keyframes aurora{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+  .art-toon{background:radial-gradient(circle at 50% 34%,#FFD36E,#FF8A4C 38%,#E2456B 72%,#7A2352);}
+  .art-toon::after{content:"";position:absolute;inset:0;
+    background:radial-gradient(circle at 38% 40%,rgba(255,255,255,.92) 0 5%,transparent 6%),
+               radial-gradient(circle at 62% 40%,rgba(255,255,255,.92) 0 5%,transparent 6%),
+               radial-gradient(ellipse at 50% 64%,rgba(255,255,255,.88) 0 12%,transparent 13%);
+    animation:blink 3.4s steps(1,end) infinite}
+  @keyframes blink{0%,92%,100%{opacity:1}95%{opacity:.15}}
+  .art-pulse{background:conic-gradient(from 210deg,#E23D4C,#F4B860,#39D98A,#5B8CFF,#E23D4C);
+    animation:spin 9s linear infinite}
+  @keyframes spin{to{transform:rotate(1turn)}}
+  .art-mono{background:linear-gradient(155deg,#2A3550,#141B29)}
+  .art-icon{background:linear-gradient(155deg,#3A2340,#1A1020)}
+  .glyph{position:absolute;inset:0;display:grid;place-items:center;font:700 var(--gsize,40px)/1 var(--sans);
+    color:rgba(255,255,255,.94);letter-spacing:-.02em;text-shadow:0 3px 18px rgba(0,0,0,.4)}
+  .glyph svg{width:var(--gsize,40px);height:var(--gsize,40px);stroke:rgba(255,255,255,.9);fill:none;stroke-width:1.7}
+  .grain{position:absolute;inset:0;opacity:.16;mix-blend-mode:overlay;
+    background-image:radial-gradient(rgba(255,255,255,.7) .5px,transparent .5px);background-size:3px 3px}
+
+  .badge{position:absolute;z-index:3;display:flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:7px;
+    background:rgba(6,10,17,.72);backdrop-filter:blur(9px);border:1px solid rgba(255,255,255,.14);
+    font:700 8px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.86)}
+  .badge svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2.2}
+  .badge.tl{left:9px;top:9px} .badge.tr{right:9px;top:9px}
+  .badge.gif{color:#0B1019;background:#7BD9A8;border-color:transparent}
+
+  /* ─── concept A: portrait wall ───────────────────────────────────── */
+  .wall{position:absolute;z-index:3;left:0;right:0;bottom:0;top:0;display:flex;align-items:center;justify-content:center;
+    gap:20px;padding:0 52px}
+  .tile{position:relative;flex:0 0 auto;width:150px;aspect-ratio:3/4;border-radius:15px;overflow:hidden;cursor:pointer;
+    border:0;padding:0;background:var(--raised);box-shadow:0 14px 34px rgba(0,0,0,.42);
+    transition:transform .26s cubic-bezier(.2,.9,.25,1.06),box-shadow .26s,filter .26s;
+    filter:saturate(.62) brightness(.72)}
+  .tile .scrim{position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,transparent 42%,rgba(5,9,15,.9))}
+  .tile .cap{position:absolute;z-index:3;left:12px;right:12px;bottom:11px;text-align:left}
+  .tile .cap b{display:block;font-size:14px;line-height:1.15;letter-spacing:-.2px}
+  .tile .cap small{display:block;margin-top:3px;font:700 7.5px/1 var(--mono);letter-spacing:.15em;
+    text-transform:uppercase;color:rgba(255,255,255,.52)}
+  .tile.on{transform:translateY(-16px) scale(1.13);filter:none;z-index:4;
+    box-shadow:0 30px 62px rgba(0,0,0,.6),0 0 0 3px #fff,0 0 44px var(--halo,rgba(226,61,76,.5))}
+  .tile.add{display:grid;place-items:center;background:rgba(255,255,255,.045);
+    border:1px dashed rgba(255,255,255,.2);filter:none;box-shadow:none;width:118px}
+  .tile.add .plus{display:grid;place-items:center;gap:9px;color:rgba(255,255,255,.5)}
+  .tile.add svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.7}
+  .tile.add span{font:700 8px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase}
+  .tile.add.on{background:#fff;border-style:solid;border-color:#fff;transform:translateY(-10px) scale(1.06)}
+  .tile.add.on .plus{color:var(--sunken)}
+
+  /* ─── concept B: spotlight stage ─────────────────────────────────── */
+  .sstage{position:absolute;z-index:3;inset:0;display:none;grid-template-columns:minmax(0,1fr) 268px;
+    gap:38px;align-items:center;padding:0 52px 0 62px}
+  .sleft{display:flex;align-items:center;gap:30px;min-width:0}
+  .stagecard{position:relative;flex:0 0 auto;width:210px;aspect-ratio:1;border-radius:26px;overflow:hidden;
+    box-shadow:0 30px 70px rgba(0,0,0,.6),0 0 0 3px rgba(255,255,255,.9),0 0 56px var(--halo,rgba(226,61,76,.45))}
+  .smeta{min-width:0}
+  .smeta .mini{font:700 8.5px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:#FF7A86;margin-bottom:10px}
+  .smeta h3{margin:0 0 9px;font-size:40px;line-height:.98;letter-spacing:-1.3px}
+  .smeta .sub{font-size:12px;color:rgba(255,255,255,.56);margin:0 0 15px}
+  .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .chip{height:27px;padding:0 11px;border-radius:14px;background:rgba(255,255,255,.07);border:1px solid var(--hair);
+    display:flex;align-items:center;gap:6px;font:700 8.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;
+    color:rgba(255,255,255,.66)}
+  .chip svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.1}
+  .chip.go{background:#fff;color:var(--sunken);border-color:transparent}
+  .srail{display:flex;flex-direction:column;gap:9px}
+  .railcard{position:relative;display:flex;align-items:center;gap:11px;padding:7px;border:0;border-radius:13px;cursor:pointer;
+    background:rgba(255,255,255,.05);text-align:left;color:inherit;transition:background .17s,transform .2s cubic-bezier(.2,.9,.25,1.06)}
+  .railthumb{position:relative;width:42px;height:42px;border-radius:11px;overflow:hidden;flex:0 0 auto}
+  .railcard b{display:block;font-size:12px;line-height:1.15}
+  .railcard small{display:block;margin-top:2px;font:700 7px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;
+    color:rgba(255,255,255,.36)}
+  .railcard.on{background:#fff;color:var(--sunken);transform:translateX(-7px) scale(1.035);
+    box-shadow:0 14px 30px rgba(0,0,0,.42)}
+  .railcard.on small{color:rgba(8,13,22,.5)}
+  .railcard .lk{margin-left:auto;margin-right:5px;width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;opacity:.5}
+  html[data-concept="stage"] .wall{display:none}
+  html[data-concept="stage"] .sstage{display:grid}
+  html[data-concept="stage"] .gatehead{display:none}
+
+  /* ─── concept C: halo row ────────────────────────────────────────── */
+  .halo{position:absolute;z-index:3;inset:0;display:none;align-items:center;justify-content:center;gap:34px;padding:0 52px}
+  .hitem{position:relative;border:0;background:transparent;cursor:pointer;padding:0;display:grid;justify-items:center;gap:14px;
+    transition:transform .26s cubic-bezier(.2,.9,.25,1.06)}
+  .hring{position:relative;width:132px;height:132px;border-radius:50%;overflow:hidden;
+    box-shadow:0 0 0 2px rgba(255,255,255,.12),0 16px 34px rgba(0,0,0,.42);
+    transition:box-shadow .26s,filter .26s;filter:saturate(.6) brightness(.7)}
+  .hitem b{font-size:13px;letter-spacing:-.1px;color:rgba(255,255,255,.55);transition:color .2s}
+  .hitem.on{transform:translateY(-12px) scale(1.1)}
+  .hitem.on .hring{filter:none;box-shadow:0 0 0 3px #fff,0 0 46px var(--halo,rgba(226,61,76,.55)),0 22px 44px rgba(0,0,0,.55)}
+  .hitem.on b{color:#fff}
+  html[data-concept="halo"] .wall{display:none}
+  html[data-concept="halo"] .halo{display:flex}
+
+  .gatefoot{position:absolute;z-index:4;left:0;right:0;bottom:26px;display:flex;justify-content:center;gap:9px}
+  .gatefoot .chip{cursor:pointer}
+  html[data-concept="stage"] .gatefoot{display:none}
+
+  /* ─── phone reflow ───────────────────────────────────────────────── */
+  html[data-view="phone"] .wall{flex-wrap:wrap;align-content:center;gap:14px;padding:0 26px}
+  html[data-view="phone"] .tile{width:calc(50% - 7px);aspect-ratio:4/5}
+  html[data-view="phone"] .tile.on{transform:scale(1.04);box-shadow:0 20px 40px rgba(0,0,0,.55),0 0 0 3px #fff}
+  html[data-view="phone"] .tile.add{width:calc(50% - 7px)}
+  html[data-view="phone"] .sstage{grid-template-columns:minmax(0,1fr);padding:0 26px;align-content:center;gap:20px}
+  html[data-view="phone"] .sleft{flex-direction:column;align-items:flex-start;gap:18px}
+  html[data-view="phone"] .stagecard{width:150px}
+  html[data-view="phone"] .smeta h3{font-size:28px}
+  html[data-view="phone"] .srail{flex-direction:row;overflow:auto;gap:8px}
+  html[data-view="phone"] .railcard{flex:0 0 auto}
+  html[data-view="phone"] .railcard b,html[data-view="phone"] .railcard small{display:none}
+  html[data-view="phone"] .halo{flex-wrap:wrap;gap:22px;padding:0 30px}
+  html[data-view="phone"] .hring{width:96px;height:96px}
+
+  /* ─── settings surface ───────────────────────────────────────────── */
+  .setwrap,.editwrap{position:absolute;inset:0;z-index:3;display:none}
+  html[data-surface="settings"] .setwrap{display:block}
+  html[data-surface="edit"] .editwrap{display:block}
+  html:not([data-surface="gate"]) .wall,html:not([data-surface="gate"]) .sstage,
+  html:not([data-surface="gate"]) .halo,html:not([data-surface="gate"]) .gatehead,
+  html:not([data-surface="gate"]) .gatefoot{display:none}
+  html:not([data-surface="gate"]) .wash{opacity:.22}
+
+  .rail{position:absolute;left:26px;top:74px;bottom:25px;width:250px;padding-right:16px;border-right:1px solid var(--hair);
+    display:flex;flex-direction:column;gap:3px}
+  .rail-heading{padding:3px 8px 14px}
+  .rail-heading .mini{font:700 8px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.37);margin-bottom:7px}
+  .rail-heading h2{font-size:23px;letter-spacing:-.6px;line-height:1;margin:0}
+  .ri-item{min-height:38px;width:100%;border:0;border-radius:10px;background:transparent;cursor:pointer;
+    display:grid;grid-template-columns:26px minmax(0,1fr) 8px;align-items:center;gap:9px;padding:5px 9px;text-align:left;
+    color:rgba(255,255,255,.45);transition:background .16s,color .16s}
+  .ri-item .ic{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;background:rgba(255,255,255,.055)}
+  .ri-item svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  .ri-item b{font-size:10.5px;font-weight:700;color:rgba(255,255,255,.74)}
+  .ri-item .pip{width:5px;height:5px;border-radius:50%;background:transparent}
+  .ri-item.active{background:rgba(255,255,255,.10)}
+  .ri-item.active .ic{background:rgba(226,61,76,.18);color:#FF7A86}
+  .ri-item.active b{color:#fff}
+  .ri-item.active .pip{background:var(--accent);box-shadow:0 0 12px rgba(226,61,76,.65)}
+
+  .pane{position:absolute;left:300px;right:38px;top:52px;bottom:28px;display:flex;flex-direction:column}
+  .pane-head{margin-bottom:15px}
+  .pane-head .mini{font:700 8px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:#FF7A86;margin-bottom:8px}
+  .pane-head h3{font-size:26px;line-height:1.04;letter-spacing:-.8px;margin:0 0 6px}
+  .pane-head p{font-size:10.5px;line-height:1.45;color:rgba(255,255,255,.49);margin:0;max-width:560px}
+  .pane-scroll{min-height:0;overflow:auto;scrollbar-width:none;padding:3px 6px 22px}
+  .pane-scroll::-webkit-scrollbar{display:none}
+  .slabel{margin:16px 2px 9px;font:700 8px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.34)}
+  .slabel:first-child{margin-top:0}
+
+  .whoami{display:flex;align-items:center;gap:15px;padding:13px;border-radius:14px;
+    background:linear-gradient(120deg,rgba(226,61,76,.14),rgba(255,255,255,.05));border:1px solid rgba(255,255,255,.1)}
+  .whoami .av{position:relative;width:58px;height:58px;border-radius:15px;overflow:hidden;flex:0 0 auto}
+  .whoami .who{min-width:0;flex:1}
+  .whoami .who b{display:block;font-size:17px;letter-spacing:-.35px}
+  .whoami .who small{display:block;margin-top:4px;font:700 8px/1 var(--mono);letter-spacing:.14em;
+    text-transform:uppercase;color:rgba(255,255,255,.45)}
+  .row{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 12px;border-radius:11px;
+    background:rgba(255,255,255,.038);border:1px solid transparent;margin-bottom:5px}
+  .row:hover{background:rgba(255,255,255,.06)}
+  .row .ric{width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.06);display:grid;place-items:center;flex:0 0 auto}
+  .row svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  .row .txt{min-width:0;flex:1}
+  .row .txt b{display:block;font-size:11.5px;font-weight:700}
+  .row .txt small{display:block;margin-top:2px;font-size:9px;line-height:1.35;color:rgba(255,255,255,.42)}
+  .row .val{font:700 9px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.5)}
+  .sw{width:38px;height:22px;border-radius:11px;background:rgba(255,255,255,.14);position:relative;flex:0 0 auto;cursor:pointer}
+  .sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .18s}
+  .sw.on{background:var(--accent)} .sw.on::after{left:19px}
+  .plist{display:grid;grid-template-columns:repeat(auto-fill,minmax(146px,1fr));gap:9px}
+  .pcard{position:relative;display:flex;align-items:center;gap:10px;padding:9px;border-radius:12px;
+    background:rgba(255,255,255,.045);border:1px solid var(--hair)}
+  .pcard .av{position:relative;width:38px;height:38px;border-radius:10px;overflow:hidden;flex:0 0 auto}
+  .pcard b{display:block;font-size:11.5px}
+  .pcard small{display:block;margin-top:2px;font:700 7px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.36)}
+  .libstrip{display:flex;gap:8px;flex-wrap:wrap}
+  .libtile{position:relative;width:54px;height:54px;border-radius:12px;overflow:hidden;border:1px solid var(--hair)}
+  .libtile.addnew{display:grid;place-items:center;background:rgba(255,255,255,.045);border-style:dashed;color:rgba(255,255,255,.42)}
+  .libtile.addnew svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8}
+  .danger{border-color:rgba(255,102,115,.3);background:rgba(255,102,115,.07)}
+  .danger .ric{background:rgba(255,102,115,.16);color:#FF8A94}
+
+  /* ─── edit profile ───────────────────────────────────────────────── */
+  .editpane{position:absolute;left:38px;right:38px;top:52px;bottom:28px;display:flex;flex-direction:column}
+  .edittop{display:flex;align-items:center;gap:18px;margin-bottom:16px}
+  .avbig{position:relative;width:92px;height:92px;border-radius:22px;overflow:hidden;flex:0 0 auto;
+    box-shadow:0 18px 40px rgba(0,0,0,.5),0 0 0 3px rgba(255,255,255,.9)}
+  .edittop .mini{font:700 8px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:#FF7A86;margin-bottom:8px}
+  .edittop h3{margin:0 0 7px;font-size:27px;letter-spacing:-.8px;line-height:1}
+  .edittop p{margin:0;font-size:10.5px;color:rgba(255,255,255,.47)}
+  .avpick{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:10px}
+  .avopt{position:relative;width:62px;height:62px;border-radius:14px;overflow:hidden;cursor:pointer;border:0;padding:0;
+    background:var(--raised);box-shadow:0 0 0 1px var(--hair);transition:transform .2s,box-shadow .2s;filter:saturate(.7) brightness(.8)}
+  .avopt.sel{filter:none;transform:scale(1.06);box-shadow:0 0 0 3px #fff,0 10px 24px rgba(0,0,0,.45)}
+  .srcbtns{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:4px}
+  .srcbtn{height:34px;padding:0 13px;border:1px solid var(--hair);border-radius:17px;background:rgba(255,255,255,.055);
+    display:flex;align-items:center;gap:8px;cursor:pointer;font:700 9px/1 var(--mono);letter-spacing:.1em;
+    text-transform:uppercase;color:rgba(255,255,255,.72)}
+  .srcbtn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.9}
+  .srcbtn.key{background:#fff;color:var(--sunken);border-color:transparent}
+  .fieldrow{display:flex;gap:10px;margin-bottom:5px}
+  .field{flex:1;min-width:0;padding:9px 12px;border-radius:11px;background:rgba(255,255,255,.038);border:1px solid var(--hair)}
+  .field small{display:block;font:700 7.5px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
+    color:rgba(255,255,255,.34);margin-bottom:6px}
+  .field b{font-size:13px;font-weight:700}
+  .rolepick{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+  .roleopt{text-align:left;padding:11px 13px;border-radius:12px;cursor:pointer;
+    background:rgba(255,255,255,.038);border:1px solid var(--hair);color:inherit;transition:background .16s,border-color .16s}
+  .roleopt b{display:block;font-size:12.5px;margin-bottom:4px}
+  .roleopt small{display:block;font-size:9px;line-height:1.4;color:rgba(255,255,255,.42)}
+  .roleopt.sel{background:#fff;border-color:transparent;color:var(--sunken)}
+  .roleopt.sel small{color:rgba(8,13,22,.55)}
+  .grouphead{display:flex;align-items:center;gap:9px;margin:13px 2px 7px}
+  .grouphead b{font-size:10.5px}
+  .grouphead .cnt{font:700 7.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.34)}
+  .grouphead .acts{margin-left:auto;display:flex;gap:5px}
+  .tiny{padding:5px 8px;border-radius:7px;background:rgba(255,255,255,.06);border:1px solid var(--hair);cursor:pointer;
+    font:700 7.5px/1 var(--mono);letter-spacing:.11em;text-transform:uppercase;color:rgba(255,255,255,.55)}
+  .conn{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:11px;
+    background:rgba(255,255,255,.038);margin-bottom:4px}
+  .conn .ric{width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.06);display:grid;place-items:center;flex:0 0 auto}
+  .conn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  .conn .txt{flex:1;min-width:0}
+  .conn .txt b{display:block;font-size:11.5px}
+  .conn .txt small{display:block;margin-top:2px;font-size:9px;color:rgba(255,255,255,.42)}
+  .owned{font:700 7px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:#7BD9A8;flex:0 0 auto}
+  .xfer{width:24px;height:24px;border-radius:7px;border:1px solid var(--hair);background:rgba(255,255,255,.05);
+    display:grid;place-items:center;cursor:pointer;flex:0 0 auto;color:rgba(255,255,255,.5)}
+  .grants{display:flex;gap:5px;flex-wrap:wrap;margin:-1px 0 8px 47px}
+  .grant{padding:5px 8px;border-radius:7px;background:rgba(255,255,255,.05);border:1px solid var(--hair);cursor:pointer;
+    font:700 7.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,.45)}
+  .grant.on{background:#fff;color:var(--sunken);border-color:transparent}
+  .grant.fixed{opacity:.5;cursor:default}
+  html[data-view="phone"] .editpane{left:20px;right:20px;top:60px;bottom:16px}
+  html[data-view="phone"] .rolepick{grid-template-columns:1fr}
+  html[data-view="phone"] .grants{margin-left:12px}
+  html[data-view="phone"] .avbig{width:66px;height:66px}
+  html[data-view="phone"] .edittop h3{font-size:21px}
+
+  html[data-view="phone"] .rail{display:none}
+  html[data-view="phone"] .pane{left:20px;right:20px;top:64px;bottom:16px}
+  html[data-view="phone"] .pane-head h3{font-size:21px}
+  html[data-view="phone"] .plist{grid-template-columns:1fr}
+
+  /* ─── notes ──────────────────────────────────────────────────────── */
+  .notes{margin-top:52px;display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:16px}
+  .note{padding:18px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid var(--hair)}
+  .note h4{margin:0 0 9px;font-size:13px;letter-spacing:-.2px}
+  .note p{margin:0;font-size:12px;line-height:1.6;color:var(--dim)}
+  .note .tag{display:inline-block;margin-bottom:10px;padding:5px 9px;border-radius:6px;background:rgba(226,61,76,.16);
+    font:700 8px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:#FF9098}
+  table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+  th{font:700 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer)}
+  td{color:var(--dim);line-height:1.55} td:first-child{color:rgba(255,255,255,.8)}
+</style>
+</head>
+<body>
+
+<div class="docbar">
+  <span class="docbrand">Debrify · Profiles</span>
+  <span class="docnote">Gate + Settings — design artifact, no production code</span>
+  <div class="viewtabs">
+    <button data-view-btn="wide" class="on">TV / Desktop</button>
+    <button data-view-btn="phone">Phone</button>
+  </div>
+</div>
+
+<main>
+  <div class="intro">
+    <div>
+      <div class="eyebrow">First screen · Settings</div>
+      <h1>Who's watching — with actual faces on it.</h1>
+      <p class="lede">Today the gate is a Material card grid with six built-in icons, and there is no Profiles
+        page in Settings at all — management hides behind a button on the picker. This replaces both: a
+        cinematic gate that carries real images and GIFs, and a top-level Settings → Profiles hub that owns
+        startup, locking, avatars, permissions and per-profile data.</p>
+    </div>
+    <div class="principles">
+      <span>Images + GIF</span><span>Focused animates only</span><span>DPAD first</span>
+      <span>Spotlight palette</span><span>Phone reflow</span>
+    </div>
+  </div>
+
+  <div class="framebar">
+    <span class="label">Surface</span>
+    <div class="segbar">
+      <button data-surface-btn="gate" class="on">The gate</button>
+      <button data-surface-btn="settings">Settings → Profiles</button>
+      <button data-surface-btn="edit">Edit profile</button>
+    </div>
+    <span class="label" style="margin-left:14px" data-only-gate>Gate concept</span>
+    <div class="segbar" data-only-gate>
+      <button data-concept-btn="wall" class="on">A · Portrait Wall</button>
+      <button data-concept-btn="stage">B · Spotlight Stage</button>
+      <button data-concept-btn="halo">C · Halo Row</button>
+    </div>
+    <span class="hint">← → to move focus · Enter to pick</span>
+  </div>
+
+  <div class="stage-shell">
+    <div class="stage" id="stage" tabindex="0">
+      <div class="wash" id="wash"></div>
+      <div class="vignette"></div>
+
+      <div class="appmark">
+        <span class="appmark-logo"><svg viewBox="0 0 24 24"><path d="M5 4h8a7 7 0 0 1 0 14H5z"/></svg></span>
+        <span class="appmark-name">Debrify</span>
+      </div>
+
+      <div class="gatehead">
+        <div class="mini">Debrify</div>
+        <h2>Who's watching?</h2>
+      </div>
+
+      <!-- A · portrait wall -->
+      <div class="wall" id="wall"></div>
+
+      <!-- B · spotlight stage -->
+      <div class="sstage" id="sstage">
+        <div class="sleft">
+          <div class="stagecard" id="stagecard"></div>
+          <div class="smeta">
+            <div class="mini" id="s-eyebrow">Profile</div>
+            <h3 id="s-name">—</h3>
+            <p class="sub" id="s-sub">—</p>
+            <div class="chips">
+              <span class="chip go">Enter · OK</span>
+              <span class="chip" id="s-lock" hidden>
+                <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+                PIN
+              </span>
+              <span class="chip">Manage</span>
+            </div>
+          </div>
+        </div>
+        <div class="srail" id="srail"></div>
+      </div>
+
+      <!-- C · halo row -->
+      <div class="halo" id="halo"></div>
+
+      <div class="gatefoot">
+        <span class="chip">Manage profiles</span>
+        <span class="chip">Add profile</span>
+      </div>
+
+      <!-- Settings → Profiles -->
+      <div class="setwrap">
+        <div class="rail">
+          <div class="rail-heading"><div class="mini">Settings</div><h2>Categories</h2></div>
+          <button class="ri-item"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span><b>General</b><span class="pip"></span></button>
+          <button class="ri-item active"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></span><b>Profiles</b><span class="pip"></span></button>
+          <button class="ri-item"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/></svg></span><b>Appearance</b><span class="pip"></span></button>
+          <button class="ri-item"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg></span><b>Connections</b><span class="pip"></span></button>
+          <button class="ri-item"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg></span><b>Playback</b><span class="pip"></span></button>
+          <button class="ri-item"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H4z"/><path d="M8 20h8"/></svg></span><b>Live TV</b><span class="pip"></span></button>
+        </div>
+
+        <div class="pane">
+          <div class="pane-head">
+            <div class="mini">Settings</div>
+            <h3>Profiles</h3>
+            <p>Who can use this device. Everything about one person — avatar, PIN, role —
+              lives in that profile, not here.</p>
+          </div>
+          <div class="pane-scroll">
+            <div class="whoami">
+              <div class="av"><div class="art art-mesh"></div><div class="grain"></div></div>
+              <div class="who"><b>Varun</b><small>Admin · signed in · no PIN</small></div>
+              <span class="chip">Edit</span>
+              <span class="chip go">Switch profile</span>
+            </div>
+
+            <div class="slabel">Profiles on this device</div>
+            <div class="plist" id="plist"></div>
+            <div class="row" style="margin-top:9px"><span class="ric"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="txt"><b>Create a profile</b><small>Admin, Member or Kid</small></span></div>
+
+            <div class="slabel">On this device</div>
+            <div class="row" data-tvos><span class="ric"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/></svg></span>
+              <span class="txt"><b>Personalized Top Shelf</b><small>Apple TV only · home row follows the active profile</small></span><span class="sw on"></span></div>
+            <p style="margin:10px 2px 0;font-size:10px;line-height:1.5;color:rgba(255,255,255,.34)">
+              Deliberately absent: a launch pref (none exists today — auto-enter is hardcoded, so adding
+              one would be a new setting) and lock-after-sleep (already per-profile in Edit → Lock).</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Edit profile — where the per-person depth went -->
+      <div class="editwrap">
+        <div class="editpane">
+          <div class="edittop">
+            <div class="avbig"><div class="art art-aurora anim" style="animation-play-state:running"></div><div class="grain"></div>
+              <span class="badge tl gif">GIF</span></div>
+            <div>
+              <div class="mini">Settings › Profiles</div>
+              <h3>Meera</h3>
+              <p>Member · PIN on · joined 12 Mar</p>
+            </div>
+            <div style="margin-left:auto;display:flex;gap:7px">
+              <span class="chip">Delete</span><span class="chip go">Done</span>
+            </div>
+          </div>
+
+          <div class="pane-scroll">
+            <div class="slabel">Avatar</div>
+            <div class="avpick">
+              <button class="avopt"><div class="art art-mesh"></div><div class="grain"></div></button>
+              <button class="avopt sel"><div class="art art-aurora anim" style="animation-play-state:running"></div><div class="grain"></div><span class="badge tl gif">GIF</span></button>
+              <button class="avopt"><div class="art art-toon"></div><div class="grain"></div></button>
+              <button class="avopt"><div class="art art-pulse anim" style="animation-play-state:running"></div><div class="grain"></div></button>
+              <button class="avopt"><div class="art art-mono"></div><div class="glyph" style="--gsize:22px">M</div></button>
+              <button class="avopt"><div class="art art-icon"></div><div class="glyph" style="--gsize:24px"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></div></button>
+            </div>
+            <div class="srcbtns">
+              <button class="srcbtn key"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 20h16"/></svg>Send from phone</button>
+              <button class="srcbtn"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4 4 3 3-2 4 3"/></svg>Choose image or GIF</button>
+              <button class="srcbtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>Built-in art</button>
+            </div>
+            <div class="row" style="margin-top:6px"><span class="ric"><svg viewBox="0 0 24 24"><path d="M4 12h4l3-7 3 14 3-7h3"/></svg></span>
+              <span class="txt"><b>Animate on the gate</b><small>Plays only while this profile is focused</small></span><span class="sw on"></span></div>
+
+            <div class="slabel">Identity</div>
+            <div class="fieldrow">
+              <div class="field"><small>Name</small><b>Meera</b></div>
+            </div>
+            <div class="row"><span class="ric"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></span>
+              <span class="txt"><b>Copy appearance and playback defaults</b><small>New profiles only · starts from your settings instead of factory</small></span><span class="sw on"></span></div>
+
+            <!-- Role IS the access control. The per-feature policy editor is
+                 switched off in the shipped app pending its own redesign, so
+                 role is the only thing that decides what a profile reaches. -->
+            <div class="slabel">Role · decides what this profile can reach</div>
+            <div class="rolepick">
+              <button class="roleopt"><b>Admin</b><small>Everything, including managing profiles and connections</small></button>
+              <button class="roleopt sel"><b>Member</b><small>Everything except managing profiles</small></button>
+              <button class="roleopt"><b>Kid</b><small>Curated rows only · no adult content, no settings</small></button>
+            </div>
+
+            <div class="slabel">Lock</div>
+            <div class="row"><span class="ric"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>
+              <span class="txt"><b>Require a PIN</b><small>Asked at the gate and when switching to this profile</small></span><span class="sw on"></span></div>
+            <div class="row"><span class="ric"><svg viewBox="0 0 24 24"><path d="M12 15v2M8 11V8a4 4 0 0 1 8 0v3"/><rect x="5" y="11" width="14" height="10" rx="2"/></svg></span>
+              <span class="txt"><b>Change PIN</b></span><span class="val">••••</span></div>
+            <div class="row"><span class="ric"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 8-8"/><path d="M4 5v4h4"/></svg></span>
+              <span class="txt"><b>Lock when the app resumes</b></span><span class="sw on"></span></div>
+            <div class="row"><span class="ric"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span>
+              <span class="txt"><b>Auto-lock</b><small>Never · 5 · 15 · 30 minutes · 1 hour</small></span><span class="val">After 15 min</span></div>
+
+            <!-- The heart of the screen: what this profile may actually reach.
+                 Addons, debrid accounts, trackers, indexers and IPTV are all
+                 connection resources; engines are copied per profile. -->
+            <div class="slabel">Access</div>
+
+            <div class="grouphead"><b>Torrent engines</b><span class="cnt">2 of 4 copied</span>
+              <span class="acts"><button class="tiny">All</button><button class="tiny">None</button></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></span>
+              <span class="txt"><b>1337x</b><small>Independent copy · own settings</small></span><span class="sw on"></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></span>
+              <span class="txt"><b>YTS</b><small>Independent copy · own settings</small></span><span class="sw on"></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></span>
+              <span class="txt"><b>Nyaa</b><small>Independent copy · own settings</small></span><span class="sw"></span></div>
+
+            <div class="grouphead"><b>Debrid &amp; cloud</b><span class="cnt">1 of 3 shared</span>
+              <span class="acts"><button class="tiny">All</button><button class="tiny">None</button></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1 0-8 5.5 5.5 0 0 1 10.6-1.5A3.8 3.8 0 0 1 18 18z"/></svg></span>
+              <span class="txt"><b>Real-Debrid</b><small>Can modify the upstream account</small></span><span class="sw on"></span></div>
+            <div class="grants">
+              <span class="grant on fixed">Use</span><span class="grant on">Download</span>
+              <span class="grant">Write remote</span><span class="grant">Manage</span>
+              <span class="grant">Reveal secret</span><span class="grant">Share</span>
+            </div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1 0-8 5.5 5.5 0 0 1 10.6-1.5A3.8 3.8 0 0 1 18 18z"/></svg></span>
+              <span class="txt"><b>TorBox</b><small>Owned by Varun</small></span>
+              <button class="xfer" title="Transfer ownership"><svg viewBox="0 0 24 24"><path d="M4 9h13l-3-3M20 15H7l3 3"/></svg></button>
+              <span class="sw"></span></div>
+
+            <div class="grouphead"><b>Addons</b><span class="cnt">3 of 5 shared</span>
+              <span class="acts"><button class="tiny">All</button><button class="tiny">None</button></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/></svg></span>
+              <span class="txt"><b>Torrentio</b><small>Streams</small></span><span class="owned">Owned</span><span class="sw on"></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/></svg></span>
+              <span class="txt"><b>Cinemeta</b><small>Catalogue · metadata</small></span><span class="sw on"></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/></svg></span>
+              <span class="txt"><b>OpenSubtitles v3</b><small>Subtitles</small></span><span class="sw on"></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/></svg></span>
+              <span class="txt"><b>MediaFusion</b><small>Streams</small></span><span class="sw"></span></div>
+
+            <div class="grouphead"><b>Trackers</b><span class="cnt">1 of 2 shared</span>
+              <span class="acts"><button class="tiny">All</button><button class="tiny">None</button></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><path d="M5 12l5 5L19 7"/></svg></span>
+              <span class="txt"><b>Trakt</b><small>Can write to the upstream account</small></span><span class="sw on"></span></div>
+            <div class="grants">
+              <span class="grant on fixed">Use</span><span class="grant on">Write remote</span>
+              <span class="grant">Manage</span><span class="grant">Share</span>
+            </div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><path d="M5 12l5 5L19 7"/></svg></span>
+              <span class="txt"><b>Simkl</b></span><span class="sw"></span></div>
+
+            <div class="grouphead"><b>Live TV, indexers &amp; storage</b><span class="cnt">1 of 4 shared</span>
+              <span class="acts"><button class="tiny">All</button><button class="tiny">None</button></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/></svg></span>
+              <span class="txt"><b>Xtream · Main</b><small>Live TV playlist</small></span><span class="sw on"></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/></svg></span>
+              <span class="txt"><b>M3U · Backup</b><small>Live TV playlist</small></span><span class="sw"></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></span>
+              <span class="txt"><b>Prowlarr</b><small>Indexer manager</small></span><span class="sw"></span></div>
+            <div class="conn"><span class="ric"><svg viewBox="0 0 24 24"><path d="M4 7h16v13H4z"/><path d="M9 7V4h6v3"/></svg></span>
+              <span class="txt"><b>WebDAV · NAS</b><small>Storage</small></span><span class="sw"></span></div>
+
+            <div class="slabel">Data</div>
+            <div class="row"><span class="ric"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+              <span class="txt"><b>Diagnostics</b><small>Registry, generation and lease state</small></span></div>
+            <div class="row danger"><span class="ric"><svg viewBox="0 0 24 24"><path d="M6 7h12l-1 13H7z"/><path d="M9 7V4h6v3"/></svg></span>
+              <span class="txt"><b>Reset this profile</b><small>Clears its data; other profiles are untouched</small></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><span class="tag">The one big move</span>
+      <h4>Only the focused avatar animates</h4>
+      <p>Every tile holds a still frame; the focused one plays. A wall of looping GIFs would be noise on a
+        phone and a decoder storm on a weak TV box. One moving thing is also how the eye finds focus from
+        across a room — the animation IS the focus indicator, so it earns its cost.</p></div>
+    <div class="note"><span class="tag">Colour</span>
+      <h4>The room takes the avatar's colour</h4>
+      <p>A blurred bloom of the focused avatar washes the backdrop and tints its halo. Moving along the row
+        repaints the whole screen, so a five-second decision feels designed rather than transactional.</p></div>
+    <div class="note"><span class="tag">Settings</span>
+      <h4>The hub is a roster, not a control panel</h4>
+      <p>Profiles becomes a top-level category — but it holds only the roster and the two genuinely
+        device-wide choices. Everything about one person lives in that person's profile. Three rows here,
+        not fourteen.</p></div>
+    <div class="note"><span class="tag">Getting pictures onto a TV</span>
+      <h4>Three ways in</h4>
+      <p>Built-in art, a file pick, or send-from-phone over the pairing channel that already exists. The last
+        one matters most: nobody wants to type a URL or browse a filesystem with a D-pad.</p></div>
+  </div>
+
+  <table>
+    <tr><th>Today</th><th>This mock</th></tr>
+    <tr><td>Material <code>Card</code> grid, gradient circle, one of six fixed icons</td>
+        <td>Portrait tiles carrying real images, GIFs, art packs or a monogram</td></tr>
+    <tr><td>Flat lilac-on-grey; no relationship to the shipped Spotlight look</td>
+        <td>Spotlight ground, inverse-white focus, avatar-derived ambient wash</td></tr>
+    <tr><td>Every tile equally lit; focus reads as a thin ripple</td>
+        <td>Unfocused tiles desaturate and recede; focus lifts, rings and animates</td></tr>
+    <tr><td>No Profiles page in Settings at all</td>
+        <td>Top-level category holding the roster plus two device-wide rows</td></tr>
+    <tr><td>Avatar choice is six <code>ChoiceChip</code>s labelled with raw keys</td>
+        <td>Picker inside Edit profile: built-in art, image or GIF, send-from-phone</td></tr>
+    <tr><td>Lock state is a small grey padlock glyph under the name</td>
+        <td>Padlock badge on the tile and a PIN chip on the focused profile</td></tr>
+  </table>
+</main>
+
+<script>
+  const PROFILES = [
+    {name:'Varun',  role:'Admin',  art:'art-mesh',   anim:false, kind:'Image', lock:false, halo:'rgba(91,140,255,.55)',  wash:'radial-gradient(circle at 30% 40%,#5B8CFF,transparent 55%),radial-gradient(circle at 70% 60%,#B14BE8,transparent 55%)', sub:'Last watched · Dune: Part Two'},
+    {name:'Meera',  role:'Member', art:'art-aurora', anim:true,  kind:'GIF',   lock:true,  halo:'rgba(43,217,196,.55)',  wash:'radial-gradient(circle at 40% 50%,#1E8E7E,transparent 58%),radial-gradient(circle at 70% 40%,#7BD9A8,transparent 52%)', sub:'Locked · PIN required'},
+    {name:'Kiddo',  role:'Kid',    art:'art-toon',   anim:true,  kind:'Art',   lock:true,  halo:'rgba(255,138,76,.6)',   wash:'radial-gradient(circle at 50% 45%,#FF8A4C,transparent 58%),radial-gradient(circle at 30% 70%,#E2456B,transparent 52%)', sub:'Kids mode · curated rows only'},
+    {name:'Guest',  role:'Member', art:'art-mono',   anim:false, kind:'Initial',lock:false,halo:'rgba(120,140,190,.45)', wash:'radial-gradient(circle at 50% 50%,#2A3550,transparent 60%)', sub:'Temporary · clears on exit', glyph:'G'},
+    {name:'Studio', role:'Admin',  art:'art-pulse',  anim:true,  kind:'GIF',   lock:false, halo:'rgba(226,61,76,.6)',    wash:'radial-gradient(circle at 45% 45%,#E23D4C,transparent 55%),radial-gradient(circle at 65% 60%,#F4B860,transparent 50%)', sub:'Last watched · The Bear'},
+  ];
+
+  const LOCK = '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+  const html = document.documentElement;
+  let idx = 0;
+
+  const artHTML = (p, gsize) =>
+    `<div class="art ${p.art}${p.anim?' anim':''}"></div>` +
+    (p.glyph?`<div class="glyph" style="--gsize:${gsize||34}px">${p.glyph}</div>`:'') +
+    `<div class="grain"></div>`;
+
+  function buildWall(){
+    const wall = document.getElementById('wall');
+    wall.innerHTML = PROFILES.map((p,i)=>`
+      <button class="tile" data-i="${i}" style="--halo:${p.halo}">
+        ${artHTML(p,44)}
+        <span class="scrim"></span>
+        ${p.lock?`<span class="badge tr">${LOCK}</span>`:''}
+        ${p.kind==='GIF'?'<span class="badge tl gif">GIF</span>':''}
+        <span class="cap"><b>${p.name}</b><small>${p.role}</small></span>
+      </button>`).join('') +
+      `<button class="tile add" data-i="${PROFILES.length}">
+        <span class="plus"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></span>
+      </button>`;
+  }
+
+  function buildHalo(){
+    document.getElementById('halo').innerHTML = PROFILES.map((p,i)=>`
+      <button class="hitem" data-i="${i}" style="--halo:${p.halo}">
+        <span class="hring">${artHTML(p,40)}${p.kind==='GIF'?'<span class="badge tl gif">GIF</span>':''}</span>
+        <b>${p.name}</b>
+      </button>`).join('');
+  }
+
+  function buildRail(){
+    document.getElementById('srail').innerHTML = PROFILES.map((p,i)=>`
+      <button class="railcard" data-i="${i}">
+        <span class="railthumb">${artHTML(p,18)}</span>
+        <span><b>${p.name}</b><small>${p.role}</small></span>
+        ${p.lock?`<svg class="lk" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`:''}
+      </button>`).join('');
+  }
+
+  function buildPlist(){
+    document.getElementById('plist').innerHTML = PROFILES.map(p=>`
+      <div class="pcard">
+        <span class="av">${artHTML(p,16)}</span>
+        <span><b>${p.name}</b><small>${p.role}${p.lock?' · PIN':''}</small></span>
+      </div>`).join('');
+  }
+
+  function paint(){
+    const p = PROFILES[Math.min(idx, PROFILES.length-1)];
+    const onAdd = idx === PROFILES.length;
+
+    document.querySelectorAll('.tile').forEach(t=>t.classList.toggle('on', +t.dataset.i===idx));
+    document.querySelectorAll('.hitem').forEach(t=>t.classList.toggle('on', +t.dataset.i===idx));
+    document.querySelectorAll('.railcard').forEach(t=>t.classList.toggle('on', +t.dataset.i===idx));
+
+    document.getElementById('wash').style.backgroundImage = onAdd ? 'none' : p.wash;
+
+    const card = document.getElementById('stagecard');
+    card.style.setProperty('--halo', p.halo);
+    card.innerHTML = artHTML(p,62) + (p.kind==='GIF'?'<span class="badge tl gif">GIF</span>':'');
+    document.getElementById('s-eyebrow').textContent = p.role;
+    document.getElementById('s-name').textContent = p.name;
+    document.getElementById('s-sub').textContent = p.sub;
+    document.getElementById('s-lock').hidden = !p.lock;
+  }
+
+  const max = () => html.dataset.concept === 'wall' ? PROFILES.length : PROFILES.length - 1;
+  function move(d){ idx = Math.max(0, Math.min(max(), idx + d)); paint(); }
+
+  document.addEventListener('keydown', e=>{
+    if(html.dataset.surface !== 'gate') return;
+    const vertical = html.dataset.concept === 'stage' || html.dataset.view === 'phone';
+    if(e.key==='ArrowRight'||(vertical&&e.key==='ArrowDown')){ move(1); e.preventDefault(); }
+    if(e.key==='ArrowLeft'||(vertical&&e.key==='ArrowUp')){ move(-1); e.preventDefault(); }
+  });
+
+  document.getElementById('stage').addEventListener('click', e=>{
+    const hit = e.target.closest('[data-i]');
+    if(hit){ idx = +hit.dataset.i; paint(); }
+  });
+
+  document.querySelectorAll('[data-view-btn]').forEach(b=>b.addEventListener('click',()=>{
+    html.dataset.view = b.dataset.viewBtn;
+    document.querySelectorAll('[data-view-btn]').forEach(x=>x.classList.toggle('on',x===b));
+  }));
+  document.querySelectorAll('[data-concept-btn]').forEach(b=>b.addEventListener('click',()=>{
+    html.dataset.concept = b.dataset.conceptBtn;
+    document.querySelectorAll('[data-concept-btn]').forEach(x=>x.classList.toggle('on',x===b));
+    idx = Math.min(idx, max()); paint();
+  }));
+  document.querySelectorAll('[data-surface-btn]').forEach(b=>b.addEventListener('click',()=>{
+    html.dataset.surface = b.dataset.surfaceBtn;
+    document.querySelectorAll('[data-surface-btn]').forEach(x=>x.classList.toggle('on',x===b));
+    document.querySelectorAll('[data-only-gate]').forEach(x=>{
+      x.style.visibility = b.dataset.surfaceBtn === 'gate' ? 'visible' : 'hidden';
+    });
+  }));
+  document.querySelectorAll('.sw').forEach(s=>s.addEventListener('click',()=>s.classList.toggle('on')));
+  document.querySelectorAll('.grant:not(.fixed)').forEach(g=>g.addEventListener('click',()=>g.classList.toggle('on')));
+  document.querySelectorAll('.roleopt').forEach(r=>r.addEventListener('click',()=>{
+    document.querySelectorAll('.roleopt').forEach(x=>x.classList.toggle('sel',x===r));
+  }));
+  document.querySelectorAll('.avopt').forEach(a=>a.addEventListener('click',()=>{
+    document.querySelectorAll('.avopt').forEach(x=>x.classList.toggle('sel',x===a));
+  }));
+
+  buildWall(); buildHalo(); buildRail(); buildPlist(); paint();
+  document.getElementById('stage').focus();
+</script>
+</body>
+</html>

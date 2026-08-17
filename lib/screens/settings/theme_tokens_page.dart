@@ -419,7 +419,21 @@ class _RescueRow extends StatefulWidget {
 }
 
 class _RescueRowState extends State<_RescueRow> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -427,7 +441,8 @@ class _RescueRowState extends State<_RescueRow> {
     const surface = Color(0xFFF2F2F4);
     return Focus(
       canRequestFocus: widget.enabled,
-      onFocusChange: (v) => setState(() => _focused = v),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       onKeyEvent: (_, e) {
         if (!widget.enabled || e is! KeyDownEvent) return KeyEventResult.ignored;
         final k = e.logicalKey;
@@ -629,12 +644,27 @@ class _SwatchTile extends StatefulWidget {
 }
 
 class _SwatchTileState extends State<_SwatchTile> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Focus(
-      onFocusChange: (v) => setState(() => _focused = v),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       // `GestureDetector.onTap` never fires for a remote, so a swatch built
       // only from a gesture would be visible, focusable and completely inert
       // on a television.

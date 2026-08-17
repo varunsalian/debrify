@@ -12,6 +12,7 @@ import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/focus_expression.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/dominant_color.dart';
+import 'row_tag_pill.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/wide_touch_scale.dart';
 
@@ -83,10 +84,31 @@ class SpotlightShelf {
   /// stay the same length eventually will not be.
   final List<FocusNode> nodes;
 
+  /// Opens this row's See-All destination. Null when the row leads nowhere
+  /// (the favourites rails browse in place), and the heading then draws no
+  /// chevron — the reference's own rule, not an oversight.
+  final VoidCallback? onSeeAll;
+
+  /// The row's provenance — the addon or tracker filling it ("Cinemeta",
+  /// "Trakt") — worn as a small [RowTagPill] beside the heading on every
+  /// device. Null draws no pill (the favourites rails ARE their source).
+  final String? tag;
+
+  /// Whether this shelf's cards keep their captions off TV. Catalog rows say
+  /// false — the art is the label, and a caption repeating the poster's own
+  /// title is the noise the reference never has. Rows whose caption carries
+  /// INFORMATION keep true: Continue Watching (which title, how far),
+  /// channels (a logo tile without its name is a guess), playlists. TV keeps
+  /// captions regardless — this flag is a non-TV presentation choice.
+  final bool captions;
+
   const SpotlightShelf({
     required this.title,
     required this.items,
     required this.nodes,
+    this.onSeeAll,
+    this.tag,
+    this.captions = true,
   });
 }
 
@@ -300,19 +322,23 @@ class _M {
   double get k => (dpad || compact) ? 1.0 : wideTouchScale(w);
 
   /// Compact values are MEASURED off the Apple TV phone app on the reference
-  /// device (see design/mockups/spotlight_responsive_mockup/): gutter 4.8%, posters 24.3%
-  /// with 4.6% gaps (~2.9 per screen plus a peek), fixed type. Mid is the
-  /// tablet tier — the TV fractions with the posters bumped for fingers.
-  /// Wide is the TV mock's 1920-scale table, byte-for-byte what shipped.
+  /// device (see design/mockups/spotlight_responsive_mockup/, re-measured
+  /// 2026-08-16 for the home_rows_mockup pass): gutter 4.8%, posters 25.7%
+  /// with 3.4% gaps — three cards and a real sliver of the fourth, the peek
+  /// that says "this scrolls". The earlier 24.3%/4.6% pairing spent the
+  /// difference on gaps and read smaller than the reference next to it.
+  /// Mid is the tablet tier — the TV fractions with the posters bumped for
+  /// fingers. Wide is the TV mock's 1920-scale table, byte-for-byte what
+  /// shipped.
   double get gutter => compact ? w * 0.048 : w * (84 / 1920);
   double get poster => switch (tier) {
-        _Tier.compact => w * 0.243,
+        _Tier.compact => w * 0.257,
         _Tier.mid => w * 0.16,
         _Tier.wide => w * (260 / 1920),
       };
   double get posterH => poster * (390 / 260);
   double get gap => switch (tier) {
-        _Tier.compact => w * 0.046,
+        _Tier.compact => w * 0.034,
         _Tier.mid => w * 0.026,
         _Tier.wide => w * (40 / 1920),
       };
@@ -386,6 +412,16 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// it to decide "scrolled away", and a listener has no BuildContext to
   /// measure with.
   double _heroBandH = 0;
+
+  /// The extent the veil rebuild below was last run for.
+  ///
+  /// `ScrollMetricsNotification` is dispatched once per SCROLLED FRAME, not
+  /// only when the extent moves — `_isMetricsChanged` compares `extentBefore`,
+  /// which is `pixels - minScrollExtent`. Rebuilding the board on each one is
+  /// a full rebuild of every shelf and every visible card per frame, which is
+  /// what made touch scrolling lag. The offset ramp does not need it: the veil
+  /// listens to `_scroll` directly. Only an extent CHANGE does.
+  double _lastMaxExtent = -1;
 
   /// True once the board is scrolled far enough that the pinned hero is
   /// effectively covered. Owns the trailer's lifecycle for SCROLLING, which
@@ -1038,13 +1074,23 @@ class SpotlightBoardState extends State<SpotlightBoard> {
           // Always re-run the crossing detector — a clamped offset never
           // notifies the controller (cheap: no rebuild of its own).
           _onBoardScrolled();
-          // The rebuild exists ONLY for the touch veil, whose ramp reads
-          // the clamped offset. The TV veil snaps off the cursor row and
-          // never reads the offset — and on TV every board-entry batch
-          // append changes the extent, so this setState was a second full
-          // rebuild per append, stacked on the append's own, during the
-          // exact seconds a MiBox is busiest.
-          if (!widget.dpad && mounted) setState(() {});
+          // The rebuild exists ONLY for the touch veil, and only for the
+          // case the controller cannot report: a board reload that SHRINKS
+          // the list under a parked scroll is clamped during layout without
+          // notifying it. The continuous offset ramp is already covered —
+          // the veil's own `AnimatedBuilder` listens to `_scroll`.
+          //
+          // Gated on the EXTENT, because this notification arrives once per
+          // scrolled frame (see [_lastMaxExtent]). Ungated it rebuilt the
+          // hero and every shelf and card on the board every frame of every
+          // touch scroll, which is exactly the lag it was meant to avoid on
+          // TV — where it is skipped, so that path is unchanged.
+          if (!widget.dpad &&
+              mounted &&
+              n.metrics.maxScrollExtent != _lastMaxExtent) {
+            _lastMaxExtent = n.metrics.maxScrollExtent;
+            setState(() {});
+          }
         }
         return false;
       },
@@ -1646,9 +1692,77 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         ],
       );
 
+  /// The row heading. Off TV it takes the reference's measure — larger,
+  /// brighter, bolder than the TV board's quiet labels (there the hero
+  /// carries the weight) — and wears the inline chevron when the row has
+  /// somewhere to go; DPAD keeps the heading bare of chrome, because a TV
+  /// rail paginates as focus walks it — there is nothing to tap. The
+  /// provenance pill is the one piece BOTH inputs wear: which addon fills a
+  /// row is a fact on every device.
+  Widget _shelfTitle(SpotlightShelf section, _M m) {
+    final fontSize = widget.dpad
+        ? m.title
+        : m.compact
+            ? 22.0
+            : (m.title < 24.0 ? 24.0 : m.title);
+    final style = TextStyle(
+      fontSize: fontSize,
+      fontWeight: widget.dpad ? FontWeight.w600 : FontWeight.w700,
+      letterSpacing: widget.dpad ? 0.0 : -0.2,
+      // The one label on this board that sits on the PAGE rather than
+      // on artwork, so it is the one that has to follow the ink. The
+      // hero's text, the dots and the card captions all sit over a
+      // photograph and stay white whatever the ground is.
+      color: AppThemeScope.of(context)
+          .core
+          .tx
+          .withValues(alpha: widget.dpad ? 0.84 : 0.96),
+    );
+    final onSeeAll = section.onSeeAll;
+    final Widget heading = (widget.dpad || onSeeAll == null)
+        ? Text(
+            section.title,
+            style: style,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          )
+        : _ShelfTitleLink(
+            title: section.title,
+            style: style,
+            fontSize: fontSize,
+            onTap: onSeeAll,
+          );
+    final tag = section.tag;
+    if (tag == null || tag.isEmpty) return heading;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Only the HEADING flexes. Two Flexibles would split the row 50/50 as
+        // max constraints and wrap a heading the pill never needed the room
+        // of ("Featured Movies" broke onto two lines exactly that way). The
+        // pill takes its intrinsic width under a hard cap instead, so a
+        // long addon name ellipsizes inside the pill rather than squeezing
+        // the words that matter.
+        Flexible(child: heading),
+        const SizedBox(width: 9),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 150),
+          child: RowTagPill(
+            tag,
+            fontSize: widget.dpad ? m.title * 0.72 : 10,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _shelf(int i, _M m) {
     final section = widget.sections[i];
     final nodes = section.nodes;
+    // Caption-free rows off TV (see [SpotlightShelf.captions]); TV keeps its
+    // overlay captions everywhere — a non-TV presentation choice only.
+    final captions = widget.dpad || section.captions;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -1656,22 +1770,15 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         Padding(
           // The gap under the title is `liftUp`, supplied by the row below —
           // reserved space that is empty at rest and consumed by the lift.
-          padding: EdgeInsets.fromLTRB(m.gutter, 20, m.gutter, 0),
-          child: Text(
-            section.title,
-            style: TextStyle(
-              fontSize: m.title,
-              fontWeight: FontWeight.w600,
-              // The one label on this board that sits on the PAGE rather than
-              // on artwork, so it is the one that has to follow the ink. The
-              // hero's text, the dots and the card captions all sit over a
-              // photograph and stay white whatever the ground is.
-              color: AppThemeScope.of(context)
-                  .core
-                  .tx
-                  .withValues(alpha: 0.84),
-            ),
+          // Off TV the rows breathe more — the reference's air is half of
+          // what makes its rows read as considered rather than stacked.
+          padding: EdgeInsets.fromLTRB(
+            m.gutter,
+            widget.dpad ? 20 : 34,
+            m.gutter,
+            0,
           ),
+          child: _shelfTitle(section, m),
         ),
         Padding(
           // The room the lift needs sits OUTSIDE the viewport, as padding.
@@ -1689,7 +1796,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             // caption strip below the art is part of the card, and the
             // viewport grows by exactly that strip — the art box itself stays
             // posterH, so the ratio guard still holds.
-            height: m.posterH + m.captionBlock,
+            height: m.posterH + (captions ? m.captionBlock : 0),
             child: ListView.separated(
               // The lift paints into the padding above and below rather than
               // being sliced off at the viewport edge.
@@ -1707,14 +1814,93 @@ class SpotlightBoardState extends State<SpotlightBoard> {
                 height: m.posterH,
                 caption: m.caption,
                 radius: m.radius,
-                captionBelow: m.compact,
-                captionBlock: m.captionBlock,
+                captionBelow: m.compact && captions,
+                captionBlock: captions ? m.captionBlock : 0,
+                showCaption: captions,
                 hoverable: !widget.dpad,
               ),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// A row heading that leads somewhere: the title with the reference's chevron
+/// set immediately after the words, the pair acting as one tap target.
+///
+/// The placement is the whole point. Our other boards park a "See All" pill
+/// out at the row's trailing edge, where it reads as a button laid across the
+/// row; Apple hangs a chevron off the last word, so the heading itself becomes
+/// the door. It is also quieter than the words it follows — the heading is
+/// already held at 0.84 of the ink, and this sits under that again — so it
+/// points somewhere without competing with the posters beneath it.
+///
+/// Sized off the heading rather than fixed: the icon box has to run larger
+/// than the type for the drawn chevron to match its cap height, since the
+/// glyph fills a little over half its box.
+///
+/// Pointer surfaces only. TV never builds this (see [SpotlightBoard.dpad]),
+/// and a shelf with no See-All draws a plain heading — the reference leaves
+/// its own dead-end rows bare too.
+class _ShelfTitleLink extends StatefulWidget {
+  final String title;
+  final TextStyle style;
+  final double fontSize;
+  final VoidCallback onTap;
+
+  const _ShelfTitleLink({
+    required this.title,
+    required this.style,
+    required this.fontSize,
+    required this.onTap,
+  });
+
+  @override
+  State<_ShelfTitleLink> createState() => _ShelfTitleLinkState();
+}
+
+class _ShelfTitleLinkState extends State<_ShelfTitleLink> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    // Rests under the heading and comes up to meet it on hover — the whole
+    // hover story, since a fill or an underline here would put chrome back
+    // on a heading whose point is that it has none.
+    final chevron = app.core.tx.withValues(alpha: _hover ? 0.84 : 0.5);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Flexible + one line: a long row title ellipsizes instead of
+            // wrapping under itself or shoving the chevron off the gutter.
+            Flexible(
+              child: Text(
+                widget.title,
+                style: widget.style,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            SizedBox(width: widget.fontSize * 0.18),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: widget.fontSize * 1.25,
+              color: chevron,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1849,6 +2035,11 @@ class _Card extends StatefulWidget {
   final bool captionBelow;
   final double captionBlock;
 
+  /// False = no caption in EITHER position (and no caption gradient bed) —
+  /// the caption-free catalog card off TV, where the art is the label. The
+  /// progress bar is independent of this and always paints.
+  final bool showCaption;
+
   /// Pointer hover lifts the card — desktop only. OFF on TV: an Apple TV
   /// trackpad delivers pointer events (see main.dart), and a hover lift
   /// independent of DPAD focus would put two cursors on a board that had
@@ -1863,6 +2054,7 @@ class _Card extends StatefulWidget {
     this.radius = 7,
     this.captionBelow = false,
     this.captionBlock = 0,
+    this.showCaption = true,
     this.hoverable = false,
   });
 
@@ -1885,10 +2077,70 @@ class _CardState extends State<_Card> {
     final w = widget.height * c.shape.aspect;
     final url = c.image;
     final contained = c.shape.fit == BoxFit.contain;
+    final hasSubtitle = (c.subtitle ?? '').isNotEmpty;
+
+    // The gradient remains part of the artwork so it covers and clips to the
+    // whole poster as that poster grows. Only the glyph layer is counter-
+    // scaled. 1.2 is Flutter's normal line box; 33 is the existing 26 + 7
+    // vertical padding around those lines.
+    final captionBedHeight = 33 +
+        widget.caption * 1.2 *
+            (hasSubtitle ? 1 + 0.85 : 1);
+
+    // Apple platforms map this Flutter family token to SF Pro Text. Android
+    // TV keeps Debrify's Inter face, but shares the same optical treatment.
+    // The caption is supplied to ParallaxFocus as a fixed-scale foreground:
+    // it stays attached to the physical card without scaling its small glyphs
+    // or letting the travelling glare wash through them.
+    final tvCaptionFamily = PlatformUtil.isTvOS ? 'CupertinoSystemText' : null;
+    final overlayCaption = widget.captionBelow || !widget.showCaption
+        ? null
+        : IgnorePointer(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                width: double.infinity,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(7, 26, 7, 7),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        c.title,
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: tvCaptionFamily,
+                          fontSize: widget.caption,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.96),
+                        ),
+                      ),
+                      if (hasSubtitle)
+                        Text(
+                          c.subtitle!,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: tvCaptionFamily,
+                            fontSize: widget.caption * 0.85,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.72),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
 
     final art = ParallaxFocus(
       focused: _f || _h,
       radius: BorderRadius.circular(widget.radius),
+      fixedScaleForeground: overlayCaption,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(widget.radius),
         child: SizedBox(
@@ -1942,6 +2194,26 @@ class _CardState extends State<_Card> {
                     errorWidget: (_, __, ___) => const SizedBox.shrink(),
                   ),
                 ),
+              // Keep the gradient with the art: it must still grow to the
+              // poster's full width and remain inside its rounded clip. The
+              // text itself is the fixed-scale foreground above. No caption,
+              // no bed — a gradient under nothing just dims the art.
+              if (!widget.captionBelow && widget.showCaption)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: captionBedHeight,
+                  child: const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [Color(0xDB000000), Color(0x00000000)],
+                      ),
+                    ),
+                  ),
+                ),
               if ((c.progress ?? 0) > 0 && (c.progress ?? 0) < 100)
                 Positioned(
                   left: 0,
@@ -1952,53 +2224,6 @@ class _CardState extends State<_Card> {
                     minHeight: 2,
                     backgroundColor: Colors.black.withValues(alpha: 0.45),
                     valueColor: const AlwaysStoppedAnimation(Colors.white),
-                  ),
-                ),
-              // The caption sits INSIDE over a gradient bed on wide — below
-              // the card on compact, where the art is too small to spare its
-              // bottom quarter.
-              if (!widget.captionBelow)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [Color(0xDB000000), Color(0x00000000)],
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(7, 26, 7, 7),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            c.title,
-                            maxLines: 1,
-                            textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: widget.caption,
-                              color: Colors.white.withValues(alpha: 0.86),
-                            ),
-                          ),
-                          if ((c.subtitle ?? '').isNotEmpty)
-                            Text(
-                              c.subtitle!,
-                              maxLines: 1,
-                              textAlign: TextAlign.center,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: widget.caption * 0.85,
-                                color: Colors.white.withValues(alpha: 0.58),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
                   ),
                 ),
             ],

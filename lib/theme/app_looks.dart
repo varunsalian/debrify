@@ -17,7 +17,7 @@ import 'app_theme_controller.dart';
 /// them a new protocol to serve a cosmetic feature would be a much larger and
 /// riskier change than the feature is worth.
 ///
-/// So the coordination lives here, over the twelve keys a Look can name.
+/// So the coordination lives here, over the thirteen keys a Look can name.
 @immutable
 class LookKey {
   /// Stable id used in a bundle and in the generation map.
@@ -138,6 +138,15 @@ abstract final class LookKeys {
     write: StorageService.setIptvStyle,
   );
 
+  static final debrifyTvStyle = LookKey(
+    id: 'debrify_tv_style',
+    label: 'Debrify TV',
+    read: () => StorageService.debrifyTvStyleCached,
+    write: StorageService.setDebrifyTvStyle,
+    // No notify, like iptv_style: tabs are keyed by index and rebuilt on
+    // switch, so the page re-reads the pref in initState.
+  );
+
   static final textBrightness = LookKey(
     id: 'text_brightness',
     label: 'Text Brightness',
@@ -162,6 +171,7 @@ abstract final class LookKeys {
     desktopSidebarStyle,
     discoverLayout,
     iptvStyle,
+    debrifyTvStyle,
     textBrightness,
   ];
 
@@ -258,6 +268,11 @@ abstract final class AppLooks {
         'tv_home_style': 'canvas',
         'tv_sidebar_style': 'ghost',
         'desktop_sidebar_style': 'rail',
+        // Pinned for Look coherence first, migration second: isActive only
+        // checks keys a bundle names, so a Classic that said nothing here
+        // would report itself active while Debrify TV drew the Spotlight
+        // rail.
+        'debrify_tv_style': 'grid',
       },
     ),
     AppLook(
@@ -271,6 +286,7 @@ abstract final class AppLooks {
         'tv_home_style': 'spotlight',
         'tv_sidebar_style': 'pill',
         'desktop_sidebar_style': 'pill',
+        'debrify_tv_style': 'spotlight',
         'text_brightness': 'bright',
       },
     ),

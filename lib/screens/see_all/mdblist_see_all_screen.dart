@@ -405,13 +405,10 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
       final cloneId = _savedCloneId;
       final ok = cloneId == null
           ? false
-          : await MdblistService.instance.deleteList(cloneId);
-      // Clear the local record BEFORE the mounted check — the delete already
-      // committed server-side (or the list was already gone), so the map must
-      // not keep pointing at a dead clone even if we navigated away.
-      if (ok) {
-        await StorageService.removeMdblistSavedClone(list.id);
-      }
+          : await MdblistService.instance.deleteSavedClone(
+              sourceListId: list.id,
+              cloneListId: cloneId,
+            );
       if (!mounted) return;
       setState(() {
         _saveBusy = false;
@@ -429,12 +426,6 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
       sourceListId: list.id,
       name: list.name,
     );
-    // Persist the map BEFORE the mounted check: the clone is already on the
-    // server, so record it even if we navigated away during the (possibly long)
-    // copy — otherwise it's an untracked orphan that a re-save would duplicate.
-    if (newId != null) {
-      await StorageService.setMdblistSavedClone(list.id, newId);
-    }
     if (!mounted) return;
     setState(() {
       _saveBusy = false;
@@ -456,7 +447,9 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (!ok) {
       msg = saved ? "Couldn't save the list" : "Couldn't remove the list";
     } else {
-      msg = saved ? 'Saved "$name" to My Lists' : 'Removed "$name" from My Lists';
+      msg = saved
+          ? 'Saved "$name" to My Lists'
+          : 'Removed "$name" from My Lists';
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -490,7 +483,10 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (widget.embedded) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [_buildFilterBar(), Expanded(child: _buildBody())],
+        children: [
+          _buildFilterBar(),
+          Expanded(child: _buildBody()),
+        ],
       );
     }
     final n = _visible.length;
@@ -630,7 +626,11 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
     if (random == null) return like;
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: [like, SizedBox(width: _quiet ? 6 : 8), random],
+      children: [
+        like,
+        SizedBox(width: _quiet ? 6 : 8),
+        random,
+      ],
     );
   }
 
@@ -693,7 +693,8 @@ class _MdblistSeeAllScreenState extends State<MdblistSeeAllScreen> {
 
   String _emptyMessage() {
     if (!_connected) return 'Connect MDBList in Settings to browse your lists';
-    if (_error) return "Couldn't load \"${_selected?.label ?? ''}\" from MDBList";
+    if (_error)
+      return "Couldn't load \"${_selected?.label ?? ''}\" from MDBList";
     if (_selected == null) {
       if (_category == 'top') return 'No top lists available right now';
       return 'You have no MDBList lists yet';

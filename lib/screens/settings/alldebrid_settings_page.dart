@@ -39,20 +39,20 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
   }
 
   Future<void> _load() async {
-    final apiKey = await StorageService.getAllDebridApiKey();
+    final configured = await StorageService.hasAllDebridCredential();
     final integrationEnabled =
         await StorageService.getAllDebridIntegrationEnabled();
     final postAction = await StorageService.getAllDebridPostTorrentAction();
     final hiddenFromNav = await StorageService.getAllDebridHiddenFromNav();
     setState(() {
-      _savedApiKey = apiKey;
+      _savedApiKey = configured ? '' : null;
       _integrationEnabled = integrationEnabled;
       _postTorrentAction = postAction;
       _hiddenFromNav = hiddenFromNav;
       _loading = false;
     });
 
-    if (integrationEnabled && apiKey != null && apiKey.isNotEmpty) {
+    if (integrationEnabled && configured) {
       await AllDebridAccountService.refreshUserInfo();
       if (mounted) {
         setState(() {});
@@ -106,10 +106,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
     if (!mounted) return;
     final t = AppThemeScope.of(context).settings;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: err ? t.danger : null,
-      ),
+      SnackBar(content: Text(message), backgroundColor: err ? t.danger : null),
     );
   }
 
@@ -136,21 +133,27 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
     }
 
     setState(() {
-      _savedApiKey = txt;
+      _savedApiKey = '';
       _isEditing = false;
       _saving = false;
       _apiKeyController.clear();
     });
     _refocusOnTv(_logoutButtonFocusNode);
-    AnalyticsService.integrationConnected('alldebrid', {
-      'surface': 'settings',
-    });
+    AnalyticsService.integrationConnected('alldebrid', {'surface': 'settings'});
     _snack('AllDebrid connected successfully');
     MainPageBridge.notifyIntegrationChanged();
   }
 
   Future<void> _deleteKey() async {
-    await StorageService.deleteAllDebridApiKey();
+    try {
+      await StorageService.deleteAllDebridApiKey();
+    } catch (_) {
+      _snack(
+        'This connection is shared. Revoke or transfer profile access before disconnecting.',
+        err: true,
+      );
+      return;
+    }
     await StorageService.clearAllDebridHiddenFromNav();
     AllDebridAccountService.clearUserInfo();
     if (mounted) {
@@ -214,7 +217,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
     await StorageService.setAllDebridIntegrationEnabled(value);
     MainPageBridge.notifyIntegrationChanged();
     if (!mounted) return;
-    if (value && _savedApiKey != null && _savedApiKey!.isNotEmpty) {
+    if (value && _savedApiKey != null) {
       await AllDebridAccountService.refreshUserInfo();
       if (!mounted) return;
       setState(() {});
@@ -347,22 +350,20 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
                                       obscureText: _obscure,
                                       enabled: !_saving,
                                       textInputAction: TextInputAction.done,
-                                      onDownArrow: () => FocusScope.of(
-                                        context,
-                                      ).nextFocus(),
+                                      onDownArrow: () =>
+                                          FocusScope.of(context).nextFocus(),
                                       onUpArrow: () => FocusScope.of(
                                         context,
                                       ).previousFocus(),
                                       decoration: InputDecoration(
                                         labelText: 'AllDebrid API Key',
-                                        prefixIcon: const Icon(
-                                          Icons.security,
-                                        ),
+                                        prefixIcon: const Icon(Icons.security),
                                         suffixIcon: IconButton(
                                           // Default focus highlight is
                                           // invisible on TV.
-                                          focusColor: t.accent
-                                              .withValues(alpha: 0.4),
+                                          focusColor: t.accent.withValues(
+                                            alpha: 0.4,
+                                          ),
                                           icon: Icon(
                                             _obscure
                                                 ? Icons.visibility
@@ -432,18 +433,14 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
                                           borderRadius: BorderRadius.circular(
                                             8,
                                           ),
-                                          border: Border.all(
-                                            color: t.line,
-                                          ),
+                                          border: Border.all(color: t.line),
                                         ),
                                         child: Row(
                                           children: [
                                             Expanded(
                                               child: Text(
                                                 '••••••••••••••••••••••••••••••••',
-                                                style: TextStyle(
-                                                  color: t.dim,
-                                                ),
+                                                style: TextStyle(color: t.dim),
                                               ),
                                             ),
                                             Icon(
@@ -532,9 +529,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
                                       _hiddenFromNav
                                           ? Icons.visibility_off
                                           : Icons.visibility,
-                                      color: _hiddenFromNav
-                                          ? t.warning
-                                          : null,
+                                      color: _hiddenFromNav ? t.warning : null,
                                     ),
                                     contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 20,
@@ -689,10 +684,7 @@ class _AllDebridSettingsPageState extends State<AllDebridSettingsPage> {
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodyMedium
-                                        ?.copyWith(
-                                          color: t.dim,
-                                          height: 1.5,
-                                        ),
+                                        ?.copyWith(color: t.dim, height: 1.5),
                                   ),
                                 ],
                               ),
@@ -728,7 +720,21 @@ class _FocusRing extends StatefulWidget {
 }
 
 class _FocusRingState extends State<_FocusRing> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -738,7 +744,8 @@ class _FocusRingState extends State<_FocusRing> {
     return Focus(
       skipTraversal: true,
       canRequestFocus: false,
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       child: Container(
         decoration: BoxDecoration(
           color: (_focused && widget.fill) ? t.panel2 : null,

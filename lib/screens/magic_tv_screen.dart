@@ -12,11 +12,13 @@ import 'package:collection/collection.dart';
 
 import '../models/torrent.dart';
 import '../models/torrent_filter_state.dart';
+import '../widgets/torrent_result_row.dart' show qualityTierForName;
 import '../models/debrify_tv_cache.dart';
 import '../models/torbox_file.dart';
 import '../models/torbox_torrent.dart';
 import '../models/debrify_tv_channel_record.dart';
 import '../models/debrify_tv/channel.dart';
+import '../models/debrify_tv/channel_stats.dart';
 import '../models/debrify_tv/prepared_torrents.dart';
 import '../models/debrify_tv/cache_results.dart';
 import '../models/debrify_tv/import_results.dart';
@@ -44,6 +46,8 @@ import '../services/community/magnet_yaml_service.dart';
 import '../services/community/community_channel_model.dart';
 import '../services/community/community_channels_service.dart';
 import '../services/main_page_bridge.dart';
+import '../models/profiles/profile_policy.dart';
+import '../services/profiles/profile_policy_guard.dart';
 import '../theme/app_surfaces.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/overlay_theme.dart';
@@ -55,7 +59,8 @@ import '../utils/series_parser.dart';
 import '../utils/tv_keys.dart';
 import '../widgets/tv_text_field.dart';
 import 'video_player_screen.dart';
-import 'debrify_tv/widgets/focus_highlight_wrapper.dart';
+import 'debrify_tv/layouts/debrify_tv_view.dart';
+import 'debrify_tv/layouts/spotlight_layout.dart';
 import 'debrify_tv/widgets/random_start_slider.dart';
 import 'debrify_tv/widgets/switch_row.dart';
 import 'debrify_tv/widgets/tv_focusable_button.dart';
@@ -183,6 +188,17 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _isBusy = false;
   String _status = '';
   List<DebrifyTvChannel> _channels = <DebrifyTvChannel>[];
+
+  /// `debrify_tv_style`, read once per mount from the mirror warmed in
+  /// `main()`: tabs are keyed by index and rebuilt on switch, so a picker
+  /// change is picked up on the next entry — no bridge, like `iptv_style`.
+  final String _debrifyTvStyle = StorageService.debrifyTvStyleCached;
+
+  // ── Spotlight stage data (rail cheap, stage lazy — plan §7) ─────────
+  Map<String, DebrifyTvRailHealth> _spotlightRailHealth = const {};
+  final Map<String, DebrifyTvChannelStats> _spotlightStats = {};
+  Timer? _spotlightStatsDebounce;
+  String? _spotlightFocusedId;
   final Map<String, DebrifyTvChannelCacheEntry> _channelCache = {};
   List<Torrent>? _pikpakCandidatePool;
   final Map<String, bool> _tvEngineStates = <String, bool>{};
@@ -226,6 +242,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   bool _quickHideOptions = false;
   bool _quickHideBackButton = false;
   bool _quickAvoidNsfw = true;
+
+  /// The viewer-scoped, role-locked NSFW rail: forced for a child profile
+  /// regardless of any channel's stored flag or dialog toggle. Evaluated
+  /// live so a profile switch retunes filtering without a rebuild dance.
+  bool get _viewerForcesNsfw =>
+      !ProfilePolicyGuard.allowsSync(ProfileFeature.allowAdultContent);
   bool _rdSkipBlockedTorrents = true;
   String _quickProvider = _providerRealDebrid;
 
@@ -304,7 +326,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugLabel: 'DebrifyTVChannelSearch',
     );
     _loadSettings();
-    _loadChannels();
+    _loadChannels(); // also warms the Spotlight rail health, once per reload
     _loadFavoriteChannels();
 
     // Register watch channel handler for external calls (e.g., from home screen)
@@ -324,6 +346,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
   @override
   void dispose() {
+    _spotlightStatsDebounce?.cancel();
     // Clear watch channel handler
     MainPageBridge.watchDebrifyTvChannel = null;
     if (_tvContentFocusHandler != null) {
@@ -660,6 +683,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _rdSkipBlockedTorrents = rdSkipBlocked;
         _quickProvider = defaultProvider;
         _tvFilters = tvFilters;
+        // The filter is an INPUT to the memoised stage numbers: anything
+        // computed before this load landed used the empty default.
+        _spotlightStats.clear();
 
         // Update search settings
         _tvEngineStates
@@ -679,6 +705,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         _minTorrentsPerKeyword = minTorrentsPerKeyword;
         _quickPlayMaxKeywords = quickPlayMaxKeywords;
       });
+      // Outside the setState callback: recomputing the focused channel's
+      // numbers schedules its own rebuild.
+      _refreshSpotlightStatsIfFocused(_spotlightFocusedId);
     }
 
     if (await StorageService.getDebrifyTvHideSeekbar() != hideOptions) {
@@ -838,6 +867,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           .map(DebrifyTvChannel.fromRecord)
           .toList(growable: false);
     });
+    // Every path that reloads channels (create, edit, delete-all, ZIP/YAML/
+    // community imports) has fresh pools too, so the rail's pips ride along
+    // here rather than each call site remembering to refresh them.
+    if (_debrifyTvStyle == 'spotlight') {
+      await _loadSpotlightRailHealth();
+    }
   }
 
   Future<void> _loadFavoriteChannels() async {
@@ -902,8 +937,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     DebrifyTvChannelCacheEntry? baseline,
     Set<String>? keywordsToSearch,
   }) async {
-    // Use channel's own NSFW setting
-    final channelAvoidNsfw = channel.avoidNsfw;
+    // The channel's own NSFW setting, FLOORED by the viewer: filtering is
+    // role-locked for a child profile no matter who authored the channel or
+    // what its stored flag says (the rail is viewer-scoped, evaluated at
+    // search/play — never only at creation).
+    final channelAvoidNsfw = channel.avoidNsfw || _viewerForcesNsfw;
     final registry = EngineRegistry.instance;
     await registry.initialize();
     final enabledTvEngines = _enabledTvKeywordEngines(registry);
@@ -1164,6 +1202,11 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     await DebrifyTvRepository.instance.deleteChannel(id);
     setState(() {
       _channelCache.remove(id);
+      _spotlightStats.remove(id);
+      _spotlightRailHealth = Map.of(_spotlightRailHealth)..remove(id);
+      // The layout's staged-channel repair fires onChannelFocused for its
+      // replacement; a dangling id here would make that look like a no-move.
+      if (_spotlightFocusedId == id) _spotlightFocusedId = null;
     });
   }
 
@@ -1585,6 +1628,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   Widget _tvFilterChips({StateSetter? dialogSetState}) {
     void applyFilters(DebrifyTvFilters next) {
       setState(() => _tvFilters = next);
+      // "At your quality" is computed WITH the filter; stale memos would
+      // keep the old filter's count while playback uses the new one.
+      _invalidateSpotlightStats();
       dialogSetState?.call(() {});
     }
 
@@ -2142,10 +2188,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                         const SizedBox(height: 12),
                         SwitchRow(
                           title: 'Avoid NSFW content',
-                          subtitle:
-                              'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
-                          value: avoidNsfw,
+                          subtitle: _viewerForcesNsfw
+                              ? 'Always on for this profile'
+                              : 'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
+                          value: _viewerForcesNsfw || avoidNsfw,
                           onChanged: (v) {
+                            // Role-locked: a child session cannot loosen it.
+                            if (_viewerForcesNsfw) return;
                             setModalState(() {
                               avoidNsfw =
                                   v; // Only update local channel setting
@@ -3744,11 +3793,14 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         if (isEdit && baseline != null) {
           setState(() {
             _channelCache[channel.id] = baseline;
+            _spotlightStats.remove(channel.id);
           });
+          _refreshSpotlightStatsIfFocused(channel.id);
           await DebrifyTvCacheService.saveEntry(baseline);
         } else {
           setState(() {
             _channelCache.remove(channel.id);
+            _spotlightStats.remove(channel.id);
           });
           await DebrifyTvCacheService.removeEntry(channel.id);
         }
@@ -3773,6 +3825,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           _channels = next;
         }
         _channelCache[displayChannel.id] = entry;
+        _spotlightStats.remove(displayChannel.id);
       });
 
       await DebrifyTvRepository.instance.upsertChannel(
@@ -3780,6 +3833,9 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       );
       await DebrifyTvCacheService.saveEntry(entry);
       await _loadChannels();
+      // Memo removal alone would leave the stage on its placeholder: only a
+      // focus MOVE computes, and editing from the stage doesn't move focus.
+      _refreshSpotlightStatsIfFocused(displayChannel.id);
 
       final successMsg = isEdit
           ? 'Channel "${updatedChannel.name}" updated'
@@ -3801,7 +3857,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     }
   }
 
-  Future<void> _watchChannel(DebrifyTvChannel channel) async {
+  /// [leadWith] (the Spotlight stage's play-one-title): that torrent plays
+  /// FIRST, with the rest of the shuffled selection behind it. NEVER a
+  /// single-element queue — the pick may not be cached at the provider, and
+  /// a one-item queue has nothing to fall back to, which would make a
+  /// deliberate choice fail exactly where Tune in would have succeeded.
+  Future<void> _watchChannel(
+    DebrifyTvChannel channel, {
+    CachedTorrent? leadWith,
+  }) async {
     debugPrint('🎬 [WATCH] Starting for channel: ${channel.name}');
     _qualityFallbackNotified = false;
     _rdSizeRejections = 0;
@@ -3885,6 +3949,23 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       cacheEntry,
       normalizedKeywords,
     );
+    if (leadWith != null) {
+      // The chosen title to the front; behaviour after it ends is unchanged.
+      playbackSelection.removeWhere((t) => t.infohash == leadWith.infohash);
+      playbackSelection.insert(0, leadWith);
+      if (playbackSelection.length == 1 && cacheEntry.torrents.length > 1) {
+        // The filter narrowed the selection to the pick alone while the pool
+        // holds more: refill behind it from the wider pool (same cap the
+        // selector uses), or an uncached pick would have nothing to fall
+        // through to — the single-element queue the plan forbids.
+        final rest =
+            cacheEntry.torrents
+                .where((t) => t.infohash != leadWith.infohash)
+                .toList()
+              ..shuffle(Random());
+        playbackSelection.addAll(rest.take(_playbackTorrentThreshold));
+      }
+    }
     final cachedTorrents = playbackSelection
         .map((cached) => cached.toTorrent())
         .toList();
@@ -3920,7 +4001,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugPrint('🎬 [WATCH] Launching AllDebrid flow...');
       await _watchAllDebridWithCachedTorrents(
         cachedTorrents,
-        applyNsfwFilter: channel.avoidNsfw,
+        applyNsfwFilter: channel.avoidNsfw || _viewerForcesNsfw,
         channelName: channel.name,
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
@@ -3929,7 +4010,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       debugPrint('🎬 [WATCH] Launching RealDebrid flow...');
       await _watchWithCachedTorrents(
         cachedTorrents,
-        applyNsfwFilter: channel.avoidNsfw,
+        applyNsfwFilter: channel.avoidNsfw || _viewerForcesNsfw,
         channelName: channel.name,
         channelId: channel.id,
         channelNumber: resolvedChannelNumber,
@@ -4484,7 +4565,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
           // Apply NSFW filter if enabled
           List<Torrent> torrentsToProcess = torrents;
-          if (_quickAvoidNsfw) {
+          if (_quickAvoidNsfw || _viewerForcesNsfw) {
             final beforeCount = torrents.length;
             torrentsToProcess = torrents.where((torrent) {
               if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
@@ -5076,7 +5157,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         // Apply NSFW filter if enabled
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw) {
+        if (_quickAvoidNsfw || _viewerForcesNsfw) {
           final beforeCount = torrents.length;
           torrentsToProcess = torrents.where((torrent) {
             if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
@@ -5453,7 +5534,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
 
         // Apply NSFW filter if enabled
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw) {
+        if (_quickAvoidNsfw || _viewerForcesNsfw) {
           final beforeCount = torrents.length;
           torrentsToProcess = torrents.where((torrent) {
             if (NsfwFilter.shouldFilter(torrent.category, torrent.name)) {
@@ -7692,8 +7773,146 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    // Use grid layout on all devices for consistency
+    if (_debrifyTvStyle == 'spotlight') {
+      return SpotlightLayout(
+        view: _buildSpotlightView(),
+        bottomInset: bottomInset,
+        entryFocusNode: _quickPlayFocusNode,
+      );
+    }
+    // The historical layout, byte-identical under `grid` — the branch calls
+    // it unchanged, never a re-implementation.
     return _buildTvGridLayout(bottomInset);
+  }
+
+  /// The Spotlight layout's window onto this state. Paint only: every
+  /// callback is an existing method, every playback path is shared verbatim.
+  DebrifyTvView _buildSpotlightView() {
+    return DebrifyTvView(
+      channels: _channels,
+      favoriteIds: _favoriteChannelIds,
+      railHealth: _spotlightRailHealth,
+      stats: _spotlightFocusedId == null
+          ? null
+          : _spotlightStats[_spotlightFocusedId],
+      busy: _isBusy,
+      onQuickPlay: _showQuickPlayDialog,
+      onAdd: _handleAddChannel,
+      onImport: _handleImportChannels,
+      onSettings: _showGlobalSettingsDialog,
+      onWatch: _watchChannel,
+      onEdit: _handleEditChannel,
+      onShare: _handleShareChannelAsMagnet,
+      onDelete: _handleDeleteChannel,
+      onToggleFavorite: _toggleChannelFavorite,
+      onChannelFocused: _onSpotlightChannelFocused,
+      onWatchOne: (channel, torrent) =>
+          _watchChannel(channel, leadWith: torrent),
+    );
+  }
+
+  Future<void> _loadSpotlightRailHealth() async {
+    final health = await DebrifyTvCacheService.loadRailHealth();
+    if (!mounted) return;
+    setState(() => _spotlightRailHealth = health);
+  }
+
+  /// Focus moved to a channel row. The stage's numbers need a per-row name
+  /// classify over the pool, so: debounced (a DPAD glide crosses many rows),
+  /// computed only for the channel that focus RESTS on, and memoised — a
+  /// pool does not change while you are looking at it.
+  void _onSpotlightChannelFocused(DebrifyTvChannel channel) {
+    // Cancel FIRST, unconditionally: a memo hit must still kill a pending
+    // timer for the previous channel, or gliding B→A (A memoised) classifies
+    // B off-focus.
+    _spotlightStatsDebounce?.cancel();
+    _spotlightFocusedId = channel.id;
+    // Rebuild NOW either way. On a miss the view's stats go null and the
+    // stage draws placeholders — never another channel's numbers, which a
+    // plate press would turn into another channel's torrent.
+    setState(() {});
+    if (_spotlightStats.containsKey(channel.id)) return;
+    _spotlightStatsDebounce = Timer(
+      const Duration(milliseconds: 250),
+      () => _computeSpotlightStats(channel),
+    );
+  }
+
+  /// Wipe every memoised stage snapshot and recompute the focused channel's.
+  /// For when the numbers' INPUTS change — the quality filter — rather than
+  /// one channel's pool.
+  void _invalidateSpotlightStats() {
+    if (_debrifyTvStyle != 'spotlight') return;
+    _spotlightStats.clear();
+    _refreshSpotlightStatsIfFocused(_spotlightFocusedId);
+  }
+
+  /// A channel's pool (or the filter over it) changed; if it is the one the
+  /// stage is showing, schedule fresh numbers — memo removal alone leaves
+  /// the stage on its placeholder forever, since only a focus MOVE computes.
+  void _refreshSpotlightStatsIfFocused(String? channelId) {
+    if (_debrifyTvStyle != 'spotlight' || channelId == null) return;
+    if (_spotlightFocusedId != channelId) return;
+    final channel = _channels.firstWhereOrNull((c) => c.id == channelId);
+    if (channel != null) _onSpotlightChannelFocused(channel);
+  }
+
+  Future<void> _computeSpotlightStats(DebrifyTvChannel channel) async {
+    if (!mounted || _spotlightStats.containsKey(channel.id)) return;
+    final entry = await _ensureCacheEntry(channel.id);
+    // Focus may have moved during the read; bail rather than classify an
+    // off-focus pool. The entry stays in _channelCache, so a return visit
+    // pays only the classify.
+    if (!mounted || _spotlightFocusedId != channel.id) return;
+    final torrents = entry?.torrents ?? const <CachedTorrent>[];
+
+    // ONE pass classifies every name: the quality count and the mix buckets
+    // share it. Quality only — size is a per-file rule the pool rows cannot
+    // answer, and counting it here would promise what playback can't keep.
+    final hasQuality = _tvFilters.hasQuality;
+    int uhd = 0, fhd = 0, rest = 0, atQuality = 0;
+    for (final t in torrents) {
+      switch (qualityTierForName(t.name)) {
+        case QualityTier.ultraHd:
+          uhd++;
+        case QualityTier.fullHd:
+          fhd++;
+        case QualityTier.hd:
+        case QualityTier.sd:
+          rest++;
+      }
+      if (!hasQuality || _tvFilters.qualityMatchesName(t.name)) {
+        atQuality++;
+      }
+    }
+
+    final keywordYield = <String, int>{
+      for (final kw in entry?.normalizedKeywords ?? const <String>[])
+        kw: entry?.keywordStats[kw]?.totalFetched ?? 0,
+    };
+    final dead = [
+      for (final e in keywordYield.entries)
+        if (e.value == 0) e.key,
+    ];
+
+    final sample = [...torrents]..shuffle(Random());
+
+    final stats = DebrifyTvChannelStats(
+      channelId: channel.id,
+      pooled: torrents.length,
+      atYourQuality: atQuality,
+      qualityMix: [uhd, fhd, rest],
+      deadKeywords: dead,
+      keywordYield: keywordYield,
+      fetchedAt: (entry?.fetchedAt ?? 0) > 0
+          ? DateTime.fromMillisecondsSinceEpoch(entry!.fetchedAt)
+          : null,
+      status: entry?.status ?? DebrifyTvCacheStatus.warming,
+      sample: sample.take(4).toList(),
+    );
+    setState(() {
+      _spotlightStats[channel.id] = stats;
+    });
   }
 
   void _toggleChannelSearchBar() {
@@ -8822,10 +9041,13 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               const SizedBox(height: 8),
               SwitchRow(
                 title: 'Avoid NSFW content',
-                subtitle:
-                    'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
-                value: _quickAvoidNsfw,
+                subtitle: _viewerForcesNsfw
+                    ? 'Always on for this profile'
+                    : 'Filter adult/inappropriate torrents • Best effort, not 100% accurate',
+                value: _viewerForcesNsfw || _quickAvoidNsfw,
                 onChanged: (v) {
+                  // Role-locked: a child session cannot loosen it.
+                  if (_viewerForcesNsfw) return;
                   setState(() {
                     _quickAvoidNsfw = v;
                   });
@@ -8877,6 +9099,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                     // them from either one.
                     _tvFilters = const DebrifyTvFilters.empty();
                   });
+                  _invalidateSpotlightStats();
                   dialogSetState?.call(() {});
 
                   await StorageService.setDebrifyTvFilterQualities(const []);
@@ -8917,239 +9140,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildChannelsTab(double bottomInset) {
-    final appTheme = AppThemeScope.of(context);
-    final tvTokens = appTheme.debrifyTv;
-    final searchTerm = _channelSearchTerm.trim().toLowerCase();
-    final filteredChannels = searchTerm.isEmpty
-        ? _channels
-        : _channels
-              .where(
-                (channel) => channel.name.toLowerCase().contains(searchTerm),
-              )
-              .toList();
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 24),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final app = AppThemeScope.of(context);
-              final tv = app.debrifyTv;
-              final width = constraints.maxWidth;
-
-              double horizontal = 20;
-              double vertical = 14;
-              double iconEdge = 46;
-              double gapMain = 12;
-              double gapActions = 8;
-
-              if (width < 620) {
-                horizontal = 18;
-              }
-              if (width < 560) {
-                horizontal = 16;
-                gapMain = 10;
-              }
-              if (width < 520) {
-                horizontal = 14;
-                vertical = 12;
-                iconEdge = 42;
-                gapActions = 6;
-              }
-              if (width < 470) {
-                horizontal = 12;
-                vertical = 10;
-                iconEdge = 40;
-                gapMain = 8;
-                gapActions = 4;
-              }
-              if (width < 430) {
-                horizontal = 10;
-                vertical = 9;
-                iconEdge = 38;
-              }
-              if (width < 390) {
-                horizontal = 8;
-                vertical = 8;
-                iconEdge = 36;
-                gapMain = 6;
-              }
-
-              final buttonPadding = EdgeInsets.symmetric(
-                horizontal: horizontal,
-                vertical: vertical,
-              );
-              final iconSize = Size.square(iconEdge);
-
-              final leftRow = Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FilledButton.icon(
-                    onPressed: _isBusy ? null : _showQuickPlayDialog,
-                    icon: const Icon(Icons.play_arrow_rounded),
-                    label: const Text('Play'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: tv.accent,
-                      foregroundColor: app.inkOn(tv.accent),
-                      padding: buttonPadding,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: app.shape.br(14),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: gapMain),
-                  FilledButton.icon(
-                    onPressed: _isBusy ? null : _handleImportChannels,
-                    icon: const Icon(Icons.cloud_download_rounded),
-                    label: const Text('Import'),
-                    style: FilledButton.styleFrom(
-                      // The "import" action tone: deliberately literal (see
-                      // DebrifyTvTokens' header).
-                      backgroundColor: const Color(0xFF2563EB),
-                      // Ink on a FILLED swatch, scored against that swatch —
-                      // the rule every other fill on this screen already runs.
-                      // Page ink was wrong here: on a paper theme `core.tx` is
-                      // near-black and scores 3.83 on this blue, on Phosphor
-                      // its amber scores 2.7. White clears it at 5.17, so
-                      // `inkOn` returns `core.tx` unchanged under legacy and
-                      // every dark theme — today's pixel does not move.
-                      foregroundColor: app.inkOn(const Color(0xFF2563EB)),
-                      padding: buttonPadding,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: app.shape.br(14),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-
-              final actionsRow = Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton.filled(
-                    onPressed: _handleAddChannel,
-                    icon: const Icon(Icons.add_rounded),
-                    style: IconButton.styleFrom(
-                      backgroundColor: tv.fillWeak,
-                      foregroundColor: app.core.tx,
-                      minimumSize: iconSize,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: app.shape.br(14),
-                      ),
-                    ),
-                    tooltip: 'Add Channel',
-                  ),
-                  SizedBox(width: gapActions),
-                  IconButton.filled(
-                    onPressed: _isBusy || _channels.isEmpty
-                        ? null
-                        : _handleDeleteAllChannels,
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    style: IconButton.styleFrom(
-                      backgroundColor: app.core.tx.withAlpha(20),
-                      foregroundColor: Colors.redAccent,
-                      minimumSize: iconSize,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: app.shape.br(14),
-                      ),
-                    ),
-                    tooltip: 'Delete all channels',
-                  ),
-                  SizedBox(width: gapActions),
-                  IconButton.filled(
-                    onPressed: _showGlobalSettingsDialog,
-                    icon: const Icon(Icons.settings_rounded),
-                    style: IconButton.styleFrom(
-                      backgroundColor: app.core.tx.withAlpha(20),
-                      foregroundColor: tv.textDim,
-                      minimumSize: iconSize,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: app.shape.br(14),
-                      ),
-                    ),
-                    tooltip: 'Global settings',
-                  ),
-                ],
-              );
-
-              return Row(
-                children: [
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: leftRow,
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: gapMain),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: actionsRow,
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          TvTextField(
-            controller: _channelSearchController,
-            focusNode: _isAndroidTv ? _channelSearchFocusNode : null,
-            // Shared TV shell/keyboard chrome — settings.accent, with the
-            // keyboard's own panel ground and ink.
-            accent: appTheme.settings.accent,
-            keyboardGround: appTheme.youtube.keyboardPanel,
-            keyboardInk: appTheme.core.tx,
-            keyboardInkOnAccent: appTheme.inkOn(appTheme.settings.accent),
-            onChanged: (value) {
-              setState(() {
-                _channelSearchTerm = value;
-              });
-            },
-            decoration: InputDecoration(
-              hintText: 'Search channels...',
-              hintStyle: TextStyle(color: tvTokens.textFaint),
-              prefixIcon: Icon(
-                Icons.search_rounded,
-                color: tvTokens.textMeta,
-              ),
-              filled: true,
-              fillColor: appTheme.core.tx.withAlpha(20),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-            ),
-            style: TextStyle(color: appTheme.core.tx),
-          ),
-          const SizedBox(height: 24),
-          Expanded(
-            child: filteredChannels.isEmpty
-                ? (_channels.isEmpty
-                      ? _buildEmptyChannelsState()
-                      : _buildNoChannelResultsState())
-                : ListView.separated(
-                    padding: EdgeInsets.zero,
-                    itemCount: filteredChannels.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final channel = filteredChannels[index];
-                      return _buildChannelCard(channel);
-                    },
-                  ),
-          ),
-        ],
       ),
     );
   }
@@ -9225,11 +9215,15 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       contentPadding: EdgeInsets.zero,
                       activeColor: tv.accent,
                       title: const Text('Avoid NSFW content'),
-                      subtitle: const Text(
-                        'Applies a best-effort filter while searching',
+                      subtitle: Text(
+                        _viewerForcesNsfw
+                            ? 'Always on for this profile'
+                            : 'Applies a best-effort filter while searching',
                       ),
-                      value: avoidNsfw,
+                      value: _viewerForcesNsfw || avoidNsfw,
                       onChanged: (value) {
+                        // Role-locked: a child session cannot loosen it.
+                        if (_viewerForcesNsfw) return;
                         setDialogState(() => avoidNsfw = value);
                       },
                     ),
@@ -9321,261 +9315,6 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
           },
         );
       },
-    );
-  }
-
-  Widget _buildEmptyChannelsState() {
-    final app = AppThemeScope.of(context);
-    final tv = app.debrifyTv;
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: app.core.tx.withAlpha(10),
-          borderRadius: app.shape.br(16),
-          border: Border.all(color: tv.hairline, width: 1),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.tv_rounded, color: tv.textFaint, size: 36),
-            const SizedBox(height: 12),
-            Text(
-              'No channels yet',
-              style: TextStyle(
-                color: app.core.tx,
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Save your favorite keyword combos so Debrify TV can play them on demand.',
-              style: TextStyle(color: tv.textDim, fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNoChannelResultsState() {
-    final app = AppThemeScope.of(context);
-    final tv = app.debrifyTv;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.search_off_rounded, color: tv.textFaint, size: 36),
-          const SizedBox(height: 12),
-          Text(
-            'No channels match your search',
-            style: TextStyle(
-              color: app.core.tx,
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Try a different name or clear the filter to see all channels.',
-            style: TextStyle(color: tv.textDim, fontSize: 13),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChannelCard(DebrifyTvChannel channel) {
-    final app = AppThemeScope.of(context);
-    final tv = app.debrifyTv;
-    final cacheEntry = _channelCache[channel.id];
-    final int cachedCount = cacheEntry?.torrents.length ?? 0;
-    final String? channelNumberLabel = channel.channelNumber > 0
-        ? 'Channel ${channel.channelNumber.toString().padLeft(2, '0')}'
-        : null;
-
-    final gestureKey = ValueKey('channel-card-${channel.id}');
-
-    final cardContent = Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        // LEFT LITERAL: 0xFF101010 is this list card's ground and no role
-        // holds it (`dialogBg` is 0xFF0F0F0F, one step off).
-        color: const Color(0xFF101010),
-        borderRadius: app.shape.br(16),
-        border: Border.all(color: tv.hairline, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      channel.name,
-                      style: TextStyle(
-                        color: app.core.tx,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                      ),
-                    ),
-                    if (channelNumberLabel != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        channelNumberLabel,
-                        style: TextStyle(
-                          color: tv.textMeta,
-                          fontSize: 11,
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Wrap action buttons to absorb hits and prevent outer InkWell from receiving them
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {}, // Absorb taps that miss buttons
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FilledButton(
-                      onPressed: _isBusy ? null : () => _watchChannel(channel),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: tv.accent,
-                        foregroundColor: app.inkOn(tv.accent),
-                        padding: const EdgeInsets.all(12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: app.shape.br(12),
-                        ),
-                      ),
-                      child: const Icon(Icons.play_arrow_rounded),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      tooltip: 'Edit channel',
-                      onPressed: () => _handleEditChannel(channel),
-                      icon: Icon(Icons.edit_rounded, color: tv.textDim),
-                    ),
-                    IconButton(
-                      tooltip: 'Delete channel',
-                      onPressed: () => _handleDeleteChannel(channel),
-                      icon: const Icon(
-                        Icons.delete_outline_rounded,
-                        color: Colors.redAccent,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (cacheEntry != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  Icon(
-                    cachedCount > 0
-                        ? Icons.cloud_done_rounded
-                        : Icons.cloud_download_rounded,
-                    color: cachedCount > 0
-                        ? Colors.greenAccent
-                        : Colors.blueAccent,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      cachedCount > 0
-                          ? '$cachedCount cached torrent${cachedCount == 1 ? '' : 's'} ready'
-                          : 'Cache will refresh on edit.',
-                      style: TextStyle(
-                        color: tv.textDim,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-    Widget interactive = InkWell(
-      key: gestureKey,
-      borderRadius: app.shape.br(16),
-      onTap: _isBusy ? null : () => _watchChannel(channel),
-      child: cardContent,
-    );
-
-    if (_isAndroidTv) {
-      interactive = FocusHighlightWrapper(
-        enabled: true,
-        borderRadius: app.shape.br(20),
-        debugLabel: 'debrify-tv-channel-card-${channel.id}',
-        child: interactive,
-      );
-    }
-
-    return interactive;
-  }
-
-  Widget _buildKeywordChip(String keyword) {
-    final app = AppThemeScope.of(context);
-    final tv = app.debrifyTv;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: app.core.tx.withAlpha(20),
-        borderRadius: app.shape.br(12),
-        border: Border.all(color: tv.hairline, width: 1),
-      ),
-      child: Text(
-        keyword,
-        style: TextStyle(color: app.core.tx, fontSize: 13),
-      ),
-    );
-  }
-
-  Widget _buildOptionChip(IconData icon, String label) {
-    final app = AppThemeScope.of(context);
-    final tv = app.debrifyTv;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: app.core.tx.withAlpha(15),
-        borderRadius: app.shape.br(12),
-        border: Border.all(color: tv.hairline, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: tv.textDim, size: 14),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(color: tv.textDim, fontSize: 12),
-          ),
-        ],
-      ),
     );
   }
 
@@ -10266,7 +10005,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
 
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw) {
+        if (_quickAvoidNsfw || _viewerForcesNsfw) {
           torrentsToProcess = torrents.where((t) {
             return !NsfwFilter.shouldFilter(t.category, t.name);
           }).toList();
@@ -10555,7 +10294,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
             (result['torrents'] as List<Torrent>? ?? const <Torrent>[]);
 
         List<Torrent> torrentsToProcess = torrents;
-        if (_quickAvoidNsfw) {
+        if (_quickAvoidNsfw || _viewerForcesNsfw) {
           torrentsToProcess = torrents.where((t) {
             return !NsfwFilter.shouldFilter(t.category, t.name);
           }).toList();

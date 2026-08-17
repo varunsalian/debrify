@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:http/http.dart' as http;
@@ -7,9 +5,20 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'debrid_service.dart';
 import 'iptv_media_store.dart';
+import 'profiles/profile_preferences.dart';
+import 'profiles/profile_credential_facade.dart';
+import 'profiles/profile_collection_resource_facade.dart';
+import 'profiles/connection_resource_service.dart';
+import 'profiles/profile_authorization.dart';
+import 'profiles/profile_bootstrap.dart';
+import 'profiles/profile_runtime.dart';
+import '../models/profiles/connection_resource.dart';
+import '../models/profiles/profile_policy.dart';
+import 'secret_vault.dart';
 import '../models/iptv_playlist.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/quick_play_rules.dart';
+import '../models/stremio_addon.dart';
 import '../models/webdav_item.dart';
 import '../models/android_video_renderer_mode.dart';
 import '../models/tv_hero_artwork_quality.dart';
@@ -39,6 +48,21 @@ enum TvRenderQuality {
 }
 
 class StorageService {
+  static Future<bool> profileAllowsAdultContent() async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return true;
+    }
+    try {
+      final scope = ProfileRuntime.capture();
+      final profile = await ProfileBootstrap.registry.getProfile(
+        scope.profileId,
+      );
+      return profile?.allows(ProfileFeature.allowAdultContent) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ── Update-aware defaults ─────────────────────────────────────────────
   //
   // "Default" in this app has always meant "what an unset pref falls back
@@ -55,15 +79,25 @@ class StorageService {
   // (text_brightness is deliberately absent: its unset default is already
   // the Look's value.)
   //
+  // Generation 2 (2026-08): ambient trailers on, everywhere. Both surfaces
+  // used to default by form factor — the hero off on phones and tablets,
+  // the detail backdrop off on televisions — so most installs only ever saw
+  // one of them. Both now default on for every device, and this generation
+  // carries that to installs already in the field.
+  //
+  // Generation 3 (2026-08): Debrify TV joins the flagship bundle. Installs
+  // wearing the Spotlight THEME (via the Look or a custom mix) adopt the
+  // rail+stage layout; every other install keeps the grid it has always had.
+  //
   // To roll out a future flagship look: bump the generation, append its
   // bundle under a `gen < N` block below.
-  static const int _currentDefaultsGeneration = 1;
+  static const int _currentDefaultsGeneration = 3;
   static const String _defaultsGenerationKey = 'defaults_generation';
 
   /// MUST run before [TextBrightnessController.warm] / theme warms in
   /// `main()`: the first frame has to already be the migrated look.
   static Future<void> migrateDefaultsGeneration() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final gen = prefs.getInt(_defaultsGenerationKey) ?? 0;
     if (gen >= _currentDefaultsGeneration) return;
     if (gen < 1) {
@@ -92,6 +126,44 @@ class StorageService {
         if (!prefs.containsKey(entry.key)) {
           await prefs.setString(entry.key, entry.value);
         }
+      }
+    }
+    if (gen < 2) {
+      // Both ambient trailer surfaces, for installs whose form factor used to
+      // default one of them off. An explicit off — the toggles write
+      // unconditionally, so a stored `false` is always a real choice — is left
+      // alone: this turns trailers on for people who never had an opinion, not
+      // for people who said no.
+      const trailers = <String, bool>{
+        'home_hero_trailer_enabled': true,
+        'detail_trailer_autoplay_enabled': true,
+      };
+      for (final entry in trailers.entries) {
+        if (!prefs.containsKey(entry.key)) {
+          await prefs.setBool(entry.key, entry.value);
+        }
+      }
+    }
+    if (gen < 3) {
+      // Debrify TV joins the flagship bundle. Raw prefs only — this runs
+      // before any mirror is warmed, so `app_theme` is read directly rather
+      // than through `appThemeCached`. The gen<1 block above has already
+      // written `app_theme` for anyone who never chose, including a fresh
+      // install, so this read is never against an absent key on a migrated
+      // install.
+      //
+      // NOT unconditional the way generation 1 was: this key has never
+      // existed, so `!containsKey` is true for every install on earth, and a
+      // blanket 'spotlight' would restyle every Classic user AND flip their
+      // Presets picker to Custom (Classic pins this key). The proxy is the
+      // THEME, not Look activity — a Custom mix that kept the Spotlight
+      // theme adopts the layout the theme implies; everyone else keeps grid.
+      if (!prefs.containsKey(_debrifyTvStyleKey)) {
+        final theme = prefs.getString(_appThemeKey);
+        await prefs.setString(
+          _debrifyTvStyleKey,
+          theme == 'spotlight' ? 'spotlight' : 'grid',
+        );
       }
     }
     await prefs.setInt(_defaultsGenerationKey, _currentDefaultsGeneration);
@@ -219,6 +291,10 @@ class StorageService {
   static const String _lemmyDefaultCommunityKey = 'lemmy_default_community';
   // YouTube settings
   static const String _youtubeMaxHeightKey = 'youtube_max_height';
+  // Network tuning (Debrify player). 'standard' = leave the player's own
+  // defaults completely untouched — see NetworkTuning.
+  static const String _networkConnectPatienceKey = 'network_connect_patience';
+  static const String _networkBufferSizeKey = 'network_buffer_size';
   static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
   static const String _updateIgnoredVersionKey = 'update_ignored_version';
 
@@ -262,6 +338,10 @@ class StorageService {
   static const String _audioPassthroughKey = 'player_audio_passthrough';
   static const String _appleMultichannelAudioKey =
       'player_apple_multichannel_audio';
+  static const String _tvosForceStereoAudioKey =
+      'tvos_force_stereo_audio_v1';
+  static const String _tvosLegacyAudioOutputKey =
+      'tvos_legacy_audio_output_v1';
   static const String _uiSoundsKey = 'ui_sounds';
   static const String _uiHapticsKey = 'ui_haptics';
   static const String _subtitleAutoSyncKey = 'subtitle_auto_sync_enabled';
@@ -357,6 +437,7 @@ class StorageService {
   static const String _playlistKey = 'user_playlist_v1';
   static const String _playlistViewModesKey = 'playlist_view_modes_v1';
   static const String _playlistFavoritesKey = 'playlist_favorites_v1';
+  static const String _myWatchlistKey = 'my_watchlist_v1';
   static const String _onboardingCompleteKey = 'initial_setup_complete_v1';
 
   // Torrent Search History
@@ -434,64 +515,86 @@ class StorageService {
   static const int _debrifyTvRandomStartPercentMin = 10;
   static const int _debrifyTvRandomStartPercentMax = 90;
 
-  // Note: Plain text storage is fine for API key since they're stored locally on user's device
-  // and can be easily regenerated if compromised
-  static Future<String?> getApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_apiKeyKey);
+  static Future<String?> getApiKey({bool forRemoteTransfer = false}) async {
+    if (forRemoteTransfer) {
+      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
+        _apiKeyKey,
+      );
+      if (credential.handled) return credential.value;
+    }
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _apiKeyKey);
   }
 
+  static Future<bool> hasRealDebridCredential() =>
+      _credentialConfigured(_apiKeyKey, () => getApiKey());
+
   static Future<void> saveApiKey(String apiKey) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_apiKeyKey, apiKey);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _apiKeyKey, apiKey);
   }
 
   static Future<void> deleteApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_apiKeyKey);
+    final prefs = await ProfilePreferences.instance();
+    if (!await ProfileCredentialFacade.disconnect(_apiKeyKey)) {
+      await prefs.remove(_apiKeyKey);
+    }
   }
 
   // Real-Debrid endpoint preference (for fallback to backup endpoint)
   static Future<String> getRdEndpoint() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     // Default to primary endpoint
     return prefs.getString(_rdEndpointKey) ??
         'https://api.real-debrid.com/rest/1.0';
   }
 
   static Future<void> saveRdEndpoint(String endpoint) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_rdEndpointKey, endpoint);
   }
 
   static Future<void> deleteRdEndpoint() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_rdEndpointKey);
   }
 
   // Torbox API key helpers
-  static Future<String?> getTorboxApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_torboxApiKey);
+  static Future<String?> getTorboxApiKey({
+    bool forRemoteTransfer = false,
+  }) async {
+    if (forRemoteTransfer) {
+      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
+        _torboxApiKey,
+      );
+      if (credential.handled) return credential.value;
+    }
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _torboxApiKey);
   }
 
+  static Future<bool> hasTorboxCredential() =>
+      _credentialConfigured(_torboxApiKey, () => getTorboxApiKey());
+
   static Future<void> saveTorboxApiKey(String apiKey) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_torboxApiKey, apiKey);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _torboxApiKey, apiKey);
   }
 
   static Future<void> deleteTorboxApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_torboxApiKey);
+    final prefs = await ProfilePreferences.instance();
+    if (!await ProfileCredentialFacade.disconnect(_torboxApiKey)) {
+      await prefs.remove(_torboxApiKey);
+    }
   }
 
   static Future<bool> getSeriesBrowserDenseView() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool('series_browser_dense_view') ?? false;
   }
 
   static Future<void> setSeriesBrowserDenseView(bool dense) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool('series_browser_dense_view', dense);
   }
 
@@ -499,12 +602,12 @@ class StorageService {
   /// single screen) instead of the separate detail → episodes flow. On by
   /// default; can be turned off per-device via [setMergedSeriesPageEnabled].
   static Future<bool> getMergedSeriesPageEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool('merged_series_page_enabled') ?? true;
   }
 
   static Future<void> setMergedSeriesPageEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool('merged_series_page_enabled', enabled);
   }
 
@@ -519,13 +622,13 @@ class StorageService {
   static bool tvKeyboardEnabledCached = true;
 
   static Future<bool> getTvKeyboardEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     tvKeyboardEnabledCached = prefs.getBool('tv_keyboard_enabled') ?? true;
     return tvKeyboardEnabledCached;
   }
 
   static Future<void> setTvKeyboardEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool('tv_keyboard_enabled', enabled);
     tvKeyboardEnabledCached = enabled;
   }
@@ -553,13 +656,13 @@ class StorageService {
   static const int kTvUiScaleDefault = 90;
 
   static Future<int> getTvUiScalePercent() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final stored = prefs.getInt('tv_ui_scale_percent');
     return kTvUiScaleOptions.contains(stored) ? stored! : kTvUiScaleDefault;
   }
 
   static Future<void> setTvUiScalePercent(int percent) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt('tv_ui_scale_percent', percent);
   }
 
@@ -585,14 +688,14 @@ class StorageService {
   static const String _tvRenderQualityKey = 'tv_low_res_render';
 
   static Future<TvRenderQuality> getTvRenderQuality() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final stored = prefs.getBool(_tvRenderQualityKey);
     if (stored == null) return TvRenderQuality.auto;
     return stored ? TvRenderQuality.fast : TvRenderQuality.sharp;
   }
 
   static Future<void> setTvRenderQuality(TvRenderQuality quality) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     switch (quality) {
       case TvRenderQuality.auto:
         await prefs.remove(_tvRenderQualityKey);
@@ -614,8 +717,8 @@ class StorageService {
   /// `false`, not null. Null means MainActivity never ran at all: iOS, macOS,
   /// desktop. Callers must treat null as "unknown", never as "full res".
   static Future<bool?> getTvLowResRenderActive() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('tv_low_res_render_active');
+    final device = await DevicePreferences.instance();
+    return device.getBool(DevicePreferences.tvLowResRenderActiveKey);
   }
 
   static const String _tvHeroArtworkQualityKey = 'tv_hero_artwork_quality';
@@ -624,7 +727,7 @@ class StorageService {
   /// tvOS. Unknown values coerce to Automatic so a removed experimental mode
   /// can never strand an installation on an unsupported policy.
   static Future<TvHeroArtworkQuality> getTvHeroArtworkQuality() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return TvHeroArtworkQuality.fromStorage(
       prefs.getString(_tvHeroArtworkQualityKey),
     );
@@ -633,7 +736,7 @@ class StorageService {
   static Future<void> setTvHeroArtworkQuality(
     TvHeroArtworkQuality quality,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_tvHeroArtworkQualityKey, quality.storageValue);
   }
 
@@ -642,74 +745,52 @@ class StorageService {
   /// Addons screen. On by default; can be turned off per-device via
   /// [setStremioAddonHubEnabled].
   static Future<bool> getStremioAddonHubEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool('stremio_addon_hub_enabled') ?? true;
   }
 
   static Future<void> setStremioAddonHubEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool('stremio_addon_hub_enabled', enabled);
   }
 
-  /// "Is this a television?" for the ambient-trailer split below.
-  ///
-  /// The split is by FORM FACTOR, not by OS — Apple TV renders the very same
-  /// Home hero and Discover stage that Android TV does. [PlatformUtil.isAndroidTV]
-  /// short-circuits to false whenever the platform isn't Android, so tvOS has to
-  /// be added explicitly; it stays awaited (rather than reading the cached flag)
-  /// so this keeps warming the probe exactly as it did before.
-  static Future<bool> _isTelevision() async =>
-      await PlatformUtil.isAndroidTV() || PlatformUtil.isTvOS;
-
   /// Autoplay a trailer behind the detail-page backdrop (OTT-style), when the
-  /// metadata addon provides one. Exactly ONE ambient-trailer surface exists
-  /// per platform, and this is the non-TV one: OFF on any television always
-  /// (the Home hero spotlight owns ambient there — [getHomeHeroTrailerEnabled]),
-  /// default ON everywhere else. The TV case is hard-off rather than a
-  /// default, so a value stored before this split — or by a phone install
-  /// whose prefs were restored onto a TV box — can't switch the detail
-  /// backdrop back on. Settings only offers the toggle off-TV to match.
+  /// metadata addon provides one.
   ///
-  /// **No longer hard-off on TV.** The Showcase detail page is built around the
-  /// reference's behaviour, where the key art gives way to a trailer in place —
-  /// so a television now has two ambient surfaces, not one, and the "exactly
-  /// one per platform" rule above is retired. What made that rule necessary was
-  /// the process's single video output; that is now enforced directly by
-  /// [VideoOutputLease] plus a covered trailer releasing its decoder, which is
-  /// a guarantee rather than an assumption. Defaults OFF on TV so an existing
-  /// box does not start playing trailers on a page that never did.
+  /// **Defaults ON everywhere** (generation 2). Two earlier rules are retired
+  /// here, and neither should be reintroduced without the reason returning:
+  /// "exactly one ambient surface per platform" existed because the process
+  /// has a single video output, which [VideoOutputLease] plus a covered
+  /// trailer releasing its decoder now enforces directly; and the later
+  /// hold-back of OFF-on-TV existed only so an existing box wouldn't start
+  /// playing trailers on a page that never did, which the generation
+  /// migration now handles deliberately rather than by omission.
   static Future<bool> getDetailTrailerAutoplayEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('detail_trailer_autoplay_enabled') ??
-        !(await _isTelevision());
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('detail_trailer_autoplay_enabled') ?? true;
   }
 
   static Future<void> setDetailTrailerAutoplayEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool('detail_trailer_autoplay_enabled', enabled);
   }
 
   /// Ambient trailer in the hero surfaces — the Home board's spotlight and
   /// the Discover rail.
   ///
-  /// **No longer hard-off off-TV.** That rule dated from when no other
-  /// platform rendered a hero; the Spotlight home layout now runs on phones,
-  /// tablets and desktop, so the hard-off becomes a platform DEFAULT:
-  /// on for televisions (unchanged) and desktop (wall power, wifi), off for
-  /// phones and tablets — autoplaying video on a battery over cellular is an
-  /// opt-in, not a surprise. The stored value, once written, wins everywhere.
+  /// **Defaults ON everywhere** (generation 2). This was once hard-off
+  /// anywhere but a television, then a form-factor default that kept phones
+  /// and tablets opted out on battery-and-cellular grounds. The hero is the
+  /// Spotlight layout's centrepiece on every device now, so it starts on and
+  /// the toggle in Settings is where a phone user turns it off. The stored
+  /// value, once written, wins everywhere.
   static Future<bool> getHomeHeroTrailerEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getBool('home_hero_trailer_enabled');
-    if (stored != null) return stored;
-    if (await _isTelevision()) return true;
-    final desktop =
-        Platform.isMacOS || Platform.isWindows || Platform.isLinux;
-    return desktop;
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool('home_hero_trailer_enabled') ?? true;
   }
 
   static Future<void> setHomeHeroTrailerEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool('home_hero_trailer_enabled', enabled);
   }
 
@@ -749,7 +830,7 @@ class StorageService {
   static Future<bool> getAmbientTrailerAudioEnabled(
     AmbientTrailerSurface surface,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_ambientTrailerKeyFor(surface, 'audio_enabled')) ??
         true;
   }
@@ -758,7 +839,7 @@ class StorageService {
     AmbientTrailerSurface surface,
     bool enabled,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(
       _ambientTrailerKeyFor(surface, 'audio_enabled'),
       enabled,
@@ -771,7 +852,7 @@ class StorageService {
   static Future<int> getAmbientTrailerVolume(
     AmbientTrailerSurface surface,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final v = prefs.getInt(_ambientTrailerKeyFor(surface, 'volume')) ?? 70;
     return v.clamp(10, 100);
   }
@@ -780,7 +861,7 @@ class StorageService {
     AmbientTrailerSurface surface,
     int percent,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(
       _ambientTrailerKeyFor(surface, 'volume'),
       percent.clamp(10, 100),
@@ -795,12 +876,12 @@ class StorageService {
   /// surface mode is fixed at activity creation), so changes take effect on
   /// the next app start.
   static Future<bool> getTvTrailerUnderlayEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool('tv_trailer_underlay_enabled') ?? true;
   }
 
   static Future<void> setTvTrailerUnderlayEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool('tv_trailer_underlay_enabled', enabled);
   }
 
@@ -816,29 +897,40 @@ class StorageService {
   static bool? _tvTrailerUnderlaySession;
   static Future<bool> getTvTrailerUnderlayEnabledAtLaunch() async {
     if (_tvTrailerUnderlaySession != null) return _tvTrailerUnderlaySession!;
-    final prefs = await SharedPreferences.getInstance();
+    final device = await DevicePreferences.instance();
+    final effective = device.getBool(
+      DevicePreferences.tvTrailerUnderlayEffectiveKey,
+    );
+    if (effective != null) {
+      return _tvTrailerUnderlaySession = effective;
+    }
+    final prefs = await ProfilePreferences.instance();
     return _tvTrailerUnderlaySession =
-        prefs.getBool('tv_trailer_underlay_effective') ??
-        (prefs.getBool('tv_trailer_underlay_enabled') ?? true);
+        prefs.getBool('tv_trailer_underlay_enabled') ?? true;
+  }
+
+  @visibleForTesting
+  static void debugResetTvTrailerUnderlaySession() {
+    _tvTrailerUnderlaySession = null;
   }
 
   static Future<bool> getTorboxCacheCheckEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_torboxCacheCheckPref) ?? false;
   }
 
   static Future<void> setTorboxCacheCheckEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_torboxCacheCheckPref, enabled);
   }
 
   static Future<bool> getRealDebridIntegrationEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_realDebridIntegrationEnabledKey) ?? true;
   }
 
   static Future<void> setRealDebridIntegrationEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_realDebridIntegrationEnabledKey, enabled);
   }
 
@@ -848,13 +940,13 @@ class StorageService {
   /// Phone navigation chrome: 'classic' (bottom bar, the default) or
   /// 'floating' (the glass button menu). TV and wide-desktop never read it.
   static Future<String> getPhoneNavStyle() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_phoneNavStyleKey);
     return raw == 'floating' ? 'floating' : 'classic';
   }
 
   static Future<void> setPhoneNavStyle(String style) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(
       _phoneNavStyleKey,
       style == 'floating' ? 'floating' : 'classic',
@@ -888,7 +980,7 @@ class StorageService {
   static String tvHomeStyleCached = 'canvas';
 
   static Future<String> getTvHomeStyle() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_tvHomeStyleKey);
     return tvHomeStyleCached = kTvHomeStyles.contains(raw) ? raw! : 'canvas';
   }
@@ -898,8 +990,41 @@ class StorageService {
     // Mirror BEFORE the await, so anything reading synchronously on the next
     // frame sees the choice. Existing async readers are unaffected.
     tvHomeStyleCached = normalized;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_tvHomeStyleKey, normalized);
+  }
+
+  static const String _debrifyTvStyleKey = 'debrify_tv_style';
+
+  /// Every shipping Debrify TV layout. 'grid' is the historical default — the
+  /// channel wall `build()` has always drawn; 'spotlight' is the standing
+  /// rail + stage (list + sheet on phone). One key covers every device class:
+  /// the style resolves its own layout per device, like `detail_page_style`.
+  ///
+  /// Coercion is TOTAL and both ways: a value written by a newer build and
+  /// read by an older one lands on 'grid' rather than rendering nothing.
+  static const Set<String> kDebrifyTvStyles = {'grid', 'spotlight'};
+
+  /// Synchronous mirror of `debrify_tv_style`, kept so a Look can read the
+  /// current value without an await. Every existing caller still goes through
+  /// the async getter, which also refreshes this.
+  static String debrifyTvStyleCached = 'grid';
+
+  static Future<String> getDebrifyTvStyle() async {
+    final prefs = await ProfilePreferences.instance();
+    final raw = prefs.getString(_debrifyTvStyleKey);
+    return debrifyTvStyleCached = kDebrifyTvStyles.contains(raw)
+        ? raw!
+        : 'grid';
+  }
+
+  static Future<void> setDebrifyTvStyle(String style) async {
+    final normalized = kDebrifyTvStyles.contains(style) ? style : 'grid';
+    // Mirror BEFORE the await, so anything reading synchronously on the next
+    // frame sees the choice. Existing async readers are unaffected.
+    debrifyTvStyleCached = normalized;
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_debrifyTvStyleKey, normalized);
   }
 
   static const String _detailPageStyleKey = 'detail_page_style';
@@ -955,7 +1080,7 @@ class StorageService {
   static String detailPageStyleCached = kDetailPageStyleDefault;
 
   static Future<String> getDetailPageStyle() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_detailPageStyleKey);
     detailPageStyleCached = kDetailPageStyles.contains(value)
         ? value!
@@ -964,7 +1089,7 @@ class StorageService {
   }
 
   static Future<void> setDetailPageStyle(String value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final normalized = kDetailPageStyles.contains(value)
         ? value
         : kDetailPageStyleDefault;
@@ -1013,7 +1138,7 @@ class StorageService {
     'hearth',
     'console',
     'reel',
-  
+
     'spotlight',
   };
 
@@ -1023,14 +1148,14 @@ class StorageService {
   static String detailThemeCached = 'signal';
 
   static Future<String> getDetailTheme() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_detailThemeKey);
     detailThemeCached = kDetailThemes.contains(value) ? value! : 'signal';
     return detailThemeCached;
   }
 
   static Future<void> setDetailTheme(String value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final normalized = kDetailThemes.contains(value) ? value : 'signal';
     await prefs.setString(_detailThemeKey, normalized);
     detailThemeCached = normalized;
@@ -1053,7 +1178,7 @@ class StorageService {
   static String appThemeCached = 'legacy';
 
   static Future<String> getAppTheme() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_appThemeKey);
     appThemeCached = (value == 'legacy' || kDetailThemes.contains(value))
         ? value!
@@ -1062,7 +1187,7 @@ class StorageService {
   }
 
   static Future<void> setAppTheme(String value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final normalized = (value == 'legacy' || kDetailThemes.contains(value))
         ? value
         : 'legacy';
@@ -1081,13 +1206,13 @@ class StorageService {
   static String themeOverridesCached = '';
 
   static Future<String> getThemeOverrides() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     themeOverridesCached = prefs.getString(_themeOverridesKey) ?? '';
     return themeOverridesCached;
   }
 
   static Future<void> setThemeOverrides(String raw) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     // Publish the mirror BEFORE the await, like every other live-applied
     // preference here: the controller has already recomputed and notified off
     // this value, and a rebuild that raced the write must not read the old one.
@@ -1107,7 +1232,7 @@ class StorageService {
   static String parentsGuideStyleCached = 'compass';
 
   static Future<String> getParentsGuideStyle() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_parentsGuideStyleKey);
     parentsGuideStyleCached = kParentsGuideStyles.contains(value)
         ? value!
@@ -1116,7 +1241,7 @@ class StorageService {
   }
 
   static Future<void> setParentsGuideStyle(String value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final normalized = kParentsGuideStyles.contains(value) ? value : 'compass';
     await prefs.setString(_parentsGuideStyleKey, normalized);
     parentsGuideStyleCached = normalized;
@@ -1138,7 +1263,7 @@ class StorageService {
   static String iptvStyleCached = 'command';
 
   static Future<String> getIptvStyle() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_iptvStyleKey);
     return iptvStyleCached = _iptvStyles.contains(raw) ? raw! : 'command';
   }
@@ -1146,7 +1271,7 @@ class StorageService {
   static Future<void> setIptvStyle(String style) async {
     final normalized = _iptvStyles.contains(style) ? style : 'command';
     iptvStyleCached = normalized;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_iptvStyleKey, normalized);
   }
 
@@ -1173,14 +1298,14 @@ class StorageService {
   };
 
   static Future<String> getPlayerDockStyle() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_playerDockStyleKey);
     return _playerDockStyles.contains(raw) ? raw! : 'classic';
   }
 
   static Future<void> setPlayerDockStyle(String style) async {
     final normalized = _playerDockStyles.contains(style) ? style : 'classic';
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_playerDockStyleKey, normalized);
   }
 
@@ -1193,15 +1318,16 @@ class StorageService {
   };
 
   static Future<String> getPlayerDockPalette() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_playerDockPaletteKey);
     return _playerDockPalettes.contains(raw) ? raw! : 'ultraviolet';
   }
 
   static Future<void> setPlayerDockPalette(String palette) async {
-    final normalized =
-        _playerDockPalettes.contains(palette) ? palette : 'ultraviolet';
-    final prefs = await SharedPreferences.getInstance();
+    final normalized = _playerDockPalettes.contains(palette)
+        ? palette
+        : 'ultraviolet';
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_playerDockPaletteKey, normalized);
   }
 
@@ -1214,14 +1340,14 @@ class StorageService {
   };
 
   static Future<String> getPlayerDockSize() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_playerDockSizeKey);
     return _playerDockSizes.contains(raw) ? raw! : 'auto';
   }
 
   static Future<void> setPlayerDockSize(String size) async {
     final normalized = _playerDockSizes.contains(size) ? size : 'auto';
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_playerDockSizeKey, normalized);
   }
 
@@ -1243,7 +1369,7 @@ class StorageService {
   /// BOTH read and write, so an old build downgrading past a newer value can
   /// never pin a look the reader treats as the exception.
   static Future<String> getIptvPlayerGuideStyle() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_iptvPlayerGuideStyleKey);
     if (_iptvPlayerGuideStyles.contains(raw)) return raw!;
     // Never chosen: Apple TV gets its native idiom, everything else keeps
@@ -1252,7 +1378,7 @@ class StorageService {
   }
 
   static Future<void> setIptvPlayerGuideStyle(String style) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(
       _iptvPlayerGuideStyleKey,
       _iptvPlayerGuideStyles.contains(style) ? style : 'classic',
@@ -1278,7 +1404,7 @@ class StorageService {
   static String discoverLayoutCached = 'stage';
 
   static Future<String> getDiscoverLayout() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return discoverLayoutCached = prefs.getString(_discoverLayoutKey) == 'grid'
         ? 'grid'
         : 'stage';
@@ -1290,18 +1416,19 @@ class StorageService {
   static Future<void> setDiscoverLayout(String layout) async {
     final normalized = layout == 'grid' ? 'grid' : 'stage';
     discoverLayoutCached = normalized;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_discoverLayoutKey, normalized);
   }
 
   static const String _launchAnimationKey = 'launch_animation';
   // MUST stay in step with kLaunchIdents — an id missing here is silently
-  // normalized back to 'horizon', so the picker would appear not to save.
+  // normalized back to the default, so the picker would appear not to save.
   static const Set<String> _launchAnimationValues = {
     'drop',
     'marquee',
     'prism',
     'horizon',
+    'collider',
     'neon',
     'chrome',
     'monogram',
@@ -1323,31 +1450,34 @@ class StorageService {
   static Set<String> get launchAnimationValues => _launchAnimationValues;
 
   /// Which launch ident the splash plays (Appearance → Launch Animation).
-  /// Values are the ids in `widgets/launch/launch_ident.dart`; 'horizon'
-  /// (Event Horizon) is the default, 'drop' is the original splash.
+  /// Values are the ids in `widgets/launch/launch_ident.dart`; 'collider'
+  /// (Collider) is the default, 'horizon' is the ident it replaced as such,
+  /// and 'drop' is the original splash.
   ///
   /// [launchAnimationCached] mirrors it for SYNCHRONOUS reads: AppInitializer
   /// builds its splash in initState, before any async pref read could land.
   /// Warmed in main() before runApp and kept in sync by the setter.
   ///
-  /// Normalizes toward 'horizon' on BOTH sides — an unrecognized value has
-  /// to mean the default for the reader and the writer alike.
-  static String launchAnimationCached = 'horizon';
+  /// Normalizes toward the default on BOTH sides — an unrecognized value has
+  /// to mean the default for the reader and the writer alike. Only installs
+  /// that never CHOSE move when this changes: an explicit 'horizon' is a
+  /// stored value and keeps playing Horizon.
+  static String launchAnimationCached = 'collider';
 
   static Future<String> getLaunchAnimation() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_launchAnimationKey);
     launchAnimationCached = _launchAnimationValues.contains(value)
         ? value!
-        : 'horizon';
+        : 'collider';
     return launchAnimationCached;
   }
 
   static Future<void> setLaunchAnimation(String value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final normalized = _launchAnimationValues.contains(value)
         ? value
-        : 'horizon';
+        : 'collider';
     await prefs.setString(_launchAnimationKey, normalized);
     launchAnimationCached = normalized;
   }
@@ -1369,7 +1499,7 @@ class StorageService {
   static String launchIdentPaletteCached = 'ident';
 
   static Future<String> getLaunchIdentPalette() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_launchIdentPaletteKey);
     launchIdentPaletteCached = _launchIdentPalettes.contains(value)
         ? value!
@@ -1378,7 +1508,7 @@ class StorageService {
   }
 
   static Future<void> setLaunchIdentPalette(String value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final normalized = _launchIdentPalettes.contains(value) ? value : 'ident';
     // Mirror BEFORE the await: the picker rebuilds on the next frame and the
     // splash reads the mirror synchronously.
@@ -1400,13 +1530,13 @@ class StorageService {
   /// mean the default for the reader and the writer alike, or writing one
   /// would silently pin a preset the reader treats as the exception.
   static Future<String> getTextBrightness() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_textBrightnessKey);
     return _textBrightnessValues.contains(value) ? value! : 'bright';
   }
 
   static Future<void> setTextBrightness(String value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(
       _textBrightnessKey,
       _textBrightnessValues.contains(value) ? value : 'bright',
@@ -1437,7 +1567,7 @@ class StorageService {
   static String tvSidebarStyleCached = 'ghost';
 
   static Future<String> getTvSidebarStyle() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_tvSidebarStyleKey);
     return tvSidebarStyleCached =
         (raw != null && _tvSidebarStyles.contains(raw)) ? raw : 'ghost';
@@ -1446,7 +1576,7 @@ class StorageService {
   static Future<void> setTvSidebarStyle(String style) async {
     final normalized = _tvSidebarStyles.contains(style) ? style : 'ghost';
     tvSidebarStyleCached = normalized;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_tvSidebarStyleKey, normalized);
   }
 
@@ -1463,7 +1593,7 @@ class StorageService {
   static String desktopSidebarStyleCached = 'rail';
 
   static Future<String> getDesktopSidebarStyle() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_desktopSidebarStyleKey);
     return desktopSidebarStyleCached =
         (raw != null && _desktopSidebarStyles.contains(raw)) ? raw : 'rail';
@@ -1474,7 +1604,7 @@ class StorageService {
         ? style
         : 'rail';
     final normalized = _desktopSidebarStyles.contains(style) ? style : 'rail';
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_desktopSidebarStyleKey, normalized);
   }
 
@@ -1483,7 +1613,7 @@ class StorageService {
   /// (defaults apply); an explicit short list is a deliberate choice and the
   /// bar respects its length.
   static Future<List<int>?> getPhoneNavBarIndices() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getStringList(_phoneNavBarIndicesKey);
     if (raw == null) return null;
     return [
@@ -1493,137 +1623,184 @@ class StorageService {
   }
 
   static Future<void> setPhoneNavBarIndices(List<int> indices) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setStringList(_phoneNavBarIndicesKey, [
       for (final i in indices) '$i',
     ]);
   }
 
   static Future<bool> getRealDebridHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_realDebridHiddenFromNavKey) ?? false;
   }
 
   static Future<void> setRealDebridHiddenFromNav(bool hidden) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_realDebridHiddenFromNavKey, hidden);
   }
 
   static Future<void> clearRealDebridHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_realDebridHiddenFromNavKey);
   }
 
   static Future<bool> getRdSkipBlockedTorrents() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_rdSkipBlockedTorrentsKey) ?? true;
   }
 
   static Future<void> setRdSkipBlockedTorrents(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_rdSkipBlockedTorrentsKey, enabled);
   }
 
   static Future<bool> getTorboxIntegrationEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_torboxIntegrationEnabledKey) ?? true;
   }
 
   static Future<void> setTorboxIntegrationEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_torboxIntegrationEnabledKey, enabled);
   }
 
   static Future<bool> getTorboxHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_torboxHiddenFromNavKey) ?? false;
   }
 
   static Future<void> setTorboxHiddenFromNav(bool hidden) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_torboxHiddenFromNavKey, hidden);
   }
 
   static Future<void> clearTorboxHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_torboxHiddenFromNavKey);
   }
 
   // Premiumize API key helpers
-  static Future<String?> getPremiumizeApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_premiumizeApiKey);
+  static Future<String?> getPremiumizeApiKey({
+    bool forRemoteTransfer = false,
+  }) async {
+    if (forRemoteTransfer) {
+      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
+        _premiumizeApiKey,
+      );
+      if (credential.handled) return credential.value;
+    }
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _premiumizeApiKey);
   }
 
+  static Future<bool> hasPremiumizeCredential() =>
+      _credentialConfigured(_premiumizeApiKey, () => getPremiumizeApiKey());
+
   static Future<void> savePremiumizeApiKey(String apiKey) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_premiumizeApiKey, apiKey);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _premiumizeApiKey, apiKey);
   }
 
   static Future<void> deletePremiumizeApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_premiumizeApiKey);
+    final prefs = await ProfilePreferences.instance();
+    if (!await ProfileCredentialFacade.disconnect(_premiumizeApiKey)) {
+      await prefs.remove(_premiumizeApiKey);
+    }
   }
 
   static Future<bool> getPremiumizeIntegrationEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_premiumizeIntegrationEnabledKey) ?? true;
   }
 
   static Future<void> setPremiumizeIntegrationEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_premiumizeIntegrationEnabledKey, enabled);
   }
 
   static Future<bool> getPremiumizeHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_premiumizeHiddenFromNavKey) ?? false;
   }
 
   static Future<void> setPremiumizeHiddenFromNav(bool hidden) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_premiumizeHiddenFromNavKey, hidden);
   }
 
   static Future<void> clearPremiumizeHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_premiumizeHiddenFromNavKey);
   }
 
   // AllDebrid API key helpers
-  static Future<String?> getAllDebridApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_allDebridApiKey);
+  static Future<String?> getAllDebridApiKey({
+    bool forRemoteTransfer = false,
+  }) async {
+    if (forRemoteTransfer) {
+      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
+        _allDebridApiKey,
+      );
+      if (credential.handled) return credential.value;
+    }
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _allDebridApiKey);
   }
 
+  static Future<bool> hasAllDebridCredential() =>
+      _credentialConfigured(_allDebridApiKey, () => getAllDebridApiKey());
+
   static Future<void> saveAllDebridApiKey(String apiKey) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_allDebridApiKey, apiKey);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _allDebridApiKey, apiKey);
   }
 
   static Future<void> deleteAllDebridApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_allDebridApiKey);
+    final prefs = await ProfilePreferences.instance();
+    if (!await ProfileCredentialFacade.disconnect(_allDebridApiKey)) {
+      await prefs.remove(_allDebridApiKey);
+    }
   }
 
   // MDBList API key + cached username helpers
-  static Future<String?> getMdblistApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_mdblistApiKeyKey);
+  static Future<String?> getMdblistApiKey({
+    bool forRemoteTransfer = false,
+  }) async {
+    if (forRemoteTransfer) {
+      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
+        _mdblistApiKeyKey,
+      );
+      if (credential.handled) return credential.value;
+    }
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _mdblistApiKeyKey);
+  }
+
+  static Future<bool> hasMdblistCredential() =>
+      _credentialConfigured(_mdblistApiKeyKey, () => getMdblistApiKey());
+
+  static Future<bool> _credentialConfigured(
+    String key,
+    Future<String?> Function() legacyRead,
+  ) async {
+    final presence = await ProfileCredentialFacade.isConfigured(key);
+    if (presence.handled) return presence.configured;
+    final value = await legacyRead();
+    return value != null && value.isNotEmpty;
   }
 
   static Future<void> saveMdblistApiKey(String apiKey) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_mdblistApiKeyKey, apiKey);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _mdblistApiKeyKey, apiKey);
   }
 
   static Future<String?> getMdblistUsername() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_mdblistUsernameKey);
   }
 
   static Future<void> setMdblistUsername(String? username) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (username == null || username.isEmpty) {
       await prefs.remove(_mdblistUsernameKey);
     } else {
@@ -1633,8 +1810,10 @@ class StorageService {
 
   /// Clears all stored MDBList auth (key + cached username).
   static Future<void> clearMdblistAuth() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_mdblistApiKeyKey);
+    final prefs = await ProfilePreferences.instance();
+    if (!await ProfileCredentialFacade.disconnect(_mdblistApiKeyKey)) {
+      await prefs.remove(_mdblistApiKeyKey);
+    }
     await prefs.remove(_mdblistUsernameKey);
     await prefs.remove(_mdblistSavedClonesKey);
   }
@@ -1646,7 +1825,7 @@ class StorageService {
   static const String _mdblistSavedClonesKey = 'mdblist_saved_clones';
 
   static Future<Map<int, int>> getMdblistSavedClones() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_mdblistSavedClonesKey);
     if (raw == null || raw.isEmpty) return {};
     try {
@@ -1665,7 +1844,7 @@ class StorageService {
   }
 
   static Future<void> setMdblistSavedClone(int sourceId, int clonedId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final map = await getMdblistSavedClones();
     map[sourceId] = clonedId;
     await prefs.setString(
@@ -1675,7 +1854,7 @@ class StorageService {
   }
 
   static Future<void> removeMdblistSavedClone(int sourceId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final map = await getMdblistSavedClones();
     map.remove(sourceId);
     await prefs.setString(
@@ -1685,126 +1864,190 @@ class StorageService {
   }
 
   static Future<bool> getAllDebridIntegrationEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_allDebridIntegrationEnabledKey) ?? true;
   }
 
   static Future<void> setAllDebridIntegrationEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_allDebridIntegrationEnabledKey, enabled);
   }
 
   // AllDebrid post-torrent action methods
   static Future<String> getAllDebridPostTorrentAction() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_allDebridPostTorrentActionKey) ?? 'choose';
   }
 
   static Future<void> saveAllDebridPostTorrentAction(String action) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_allDebridPostTorrentActionKey, action);
   }
 
   // AllDebrid hide-from-navigation
   static Future<bool> getAllDebridHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_allDebridHiddenFromNavKey) ?? false;
   }
 
   static Future<void> setAllDebridHiddenFromNav(bool hidden) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_allDebridHiddenFromNavKey, hidden);
   }
 
   static Future<void> clearAllDebridHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_allDebridHiddenFromNavKey);
   }
 
   static Future<bool> isInitialSetupComplete() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_onboardingCompleteKey) ?? false;
+    final prefs = await ProfilePreferences.instance();
+    if (!ProfileRuntime.isProfileCommitted) {
+      return prefs.getBool(_onboardingCompleteKey) ?? false;
+    }
+
+    final scope = ProfileRuntime.capture();
+    final profile = await ProfileBootstrap.registry.getProfile(scope.profileId);
+    if (profile == null ||
+        !profile.isEnabled ||
+        profile.visibleDataGeneration != scope.dataGeneration) {
+      throw StateError('Active profile onboarding state is unavailable');
+    }
+
+    // Builds that first introduced profiles wrote onboarding state to two
+    // places. Honor an explicitly stored value once (notably `false` from a
+    // profile reset), reconcile it into the registry, then remove the
+    // compatibility value. If the key is absent, the registry was already
+    // correct for migrated Admins and Admin-created profiles.
+    if (!prefs.containsKey(_onboardingCompleteKey)) {
+      return profile.setupComplete;
+    }
+    final compatibilityValue = prefs.getBool(_onboardingCompleteKey);
+    if (compatibilityValue == null) {
+      throw const FormatException('Invalid onboarding completion state');
+    }
+    if (compatibilityValue != profile.setupComplete) {
+      final authorization = await ProfileAuthorizationContext.capture(
+        ProfileBootstrap.registry,
+      );
+      if (ProfileRuntime.capture() != scope ||
+          authorization.profileId != scope.profileId) {
+        throw StateError('Active profile onboarding session has changed');
+      }
+      await ProfileBootstrap.registry.setActiveProfileSetupComplete(
+        profileId: authorization.profileId,
+        setupComplete: compatibilityValue,
+        actingAuthorizationRevision: authorization.authorizationRevision,
+        actingSessionEpoch: authorization.sessionEpoch,
+      );
+    }
+    if (!await prefs.remove(_onboardingCompleteKey)) {
+      throw StateError('Could not retire compatibility onboarding state');
+    }
+    return compatibilityValue;
   }
 
   static Future<void> setInitialSetupComplete(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_onboardingCompleteKey, value);
+    final prefs = await ProfilePreferences.instance();
+    if (!ProfileRuntime.isProfileCommitted) {
+      await prefs.setBool(_onboardingCompleteKey, value);
+      return;
+    }
+
+    final authorization = await ProfileAuthorizationContext.capture(
+      ProfileBootstrap.registry,
+    );
+    final profile = await authorization.validate(ProfileBootstrap.registry);
+    // Remove the retired compatibility value before the canonical write. If
+    // authority changes, the stale scoped wrapper fails and no other profile
+    // can be mutated. A later retry safely starts from the registry value.
+    if (prefs.containsKey(_onboardingCompleteKey) &&
+        !await prefs.remove(_onboardingCompleteKey)) {
+      throw StateError('Could not retire compatibility onboarding state');
+    }
+    if (profile.setupComplete == value) return;
+    await ProfileBootstrap.registry.setActiveProfileSetupComplete(
+      profileId: authorization.profileId,
+      setupComplete: value,
+      actingAuthorizationRevision: authorization.authorizationRevision,
+      actingSessionEpoch: authorization.sessionEpoch,
+    );
   }
 
   // File Selection methods
   static Future<String> getFileSelection() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_fileSelectionKey) ??
         'smart'; // Default to smart selection
   }
 
   static Future<void> saveFileSelection(String selection) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_fileSelectionKey, selection);
   }
 
   // Post-torrent action methods
   static Future<String> getPostTorrentAction() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_postTorrentActionKey) ?? 'choose';
   }
 
   static Future<void> savePostTorrentAction(String action) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_postTorrentActionKey, action);
   }
 
   // TorBox post-torrent action methods
   static Future<String> getTorboxPostTorrentAction() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_torboxPostTorrentActionKey) ?? 'choose';
   }
 
   static Future<void> saveTorboxPostTorrentAction(String action) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_torboxPostTorrentActionKey, action);
   }
 
   // PikPak post-torrent action methods
   static Future<String> getPikPakPostTorrentAction() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_pikpakPostTorrentActionKey) ?? 'choose';
   }
 
   static Future<void> savePikPakPostTorrentAction(String action) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_pikpakPostTorrentActionKey, action);
   }
 
   // Premiumize post-torrent action methods
   static Future<String> getPremiumizePostTorrentAction() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_premiumizePostTorrentActionKey) ?? 'choose';
   }
 
   static Future<void> savePremiumizePostTorrentAction(String action) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_premiumizePostTorrentActionKey, action);
   }
 
   static Future<bool> getPremiumizeCacheCheckEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_premiumizeCacheCheckPref) ?? false;
   }
 
   static Future<void> setPremiumizeCacheCheckEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_premiumizeCacheCheckPref, enabled);
   }
 
   // Battery optimization status
   static Future<String> getBatteryOptimizationStatus() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_batteryOptStatusKey) ?? 'unknown';
   }
 
   static Future<void> setBatteryOptimizationStatus(String status) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_batteryOptStatusKey, status);
   }
 
@@ -1824,13 +2067,13 @@ class StorageService {
   /// The persisted SAF tree URI for the user-chosen download folder, or null
   /// when downloads go to the default location (Downloads/Debrify).
   static Future<String?> getDownloadTreeUri() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final v = prefs.getString(_downloadTreeUriKey);
     return (v == null || v.isEmpty) ? null : v;
   }
 
   static Future<String?> getDownloadTreeDisplayName() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final v = prefs.getString(_downloadTreeNameKey);
     return (v == null || v.isEmpty) ? null : v;
   }
@@ -1839,13 +2082,13 @@ class StorageService {
     String treeUri,
     String displayName,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_downloadTreeUriKey, treeUri);
     await prefs.setString(_downloadTreeNameKey, displayName);
   }
 
   static Future<void> clearDownloadTreeUri() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_downloadTreeUriKey);
     await prefs.remove(_downloadTreeNameKey);
   }
@@ -1859,18 +2102,18 @@ class StorageService {
   /// The persisted absolute directory for the user-chosen download folder on
   /// desktop, or null when downloads go to the platform default.
   static Future<String?> getDownloadDirPath() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final v = prefs.getString(_downloadDirPathKey);
     return (v == null || v.isEmpty) ? null : v;
   }
 
   static Future<void> setDownloadDirPath(String dirPath) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_downloadDirPathKey, dirPath);
   }
 
   static Future<void> clearDownloadDirPath() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_downloadDirPathKey);
   }
 
@@ -1878,7 +2121,7 @@ class StorageService {
 
   /// Get all continue watching items, sorted by most recent first.
   static Future<List<Map<String, dynamic>>> getContinueWatchingItems() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_continueWatchingKey);
     if (raw == null || raw.isEmpty) return [];
     try {
@@ -1908,7 +2151,7 @@ class StorageService {
     String? addonId,
     String? year,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (!(prefs.getBool(_homeContinueWatchingEnabledKey) ?? true)) return;
     final raw = prefs.getString(_continueWatchingKey);
     List<Map<String, dynamic>> items = [];
@@ -1944,7 +2187,7 @@ class StorageService {
 
   /// Remove a continue watching entry by IMDB ID.
   static Future<void> removeContinueWatchingItem(String imdbId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_continueWatchingKey);
     if (raw == null || raw.isEmpty) return;
     try {
@@ -1960,13 +2203,13 @@ class StorageService {
 
   /// Clear all continue watching items.
   static Future<void> clearContinueWatching() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_continueWatchingKey);
   }
 
   // Enhanced Playback State methods
   static Future<Map<String, dynamic>> _getPlaybackStateMap() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_playbackStateKey);
     if (raw == null || raw.isEmpty) return {};
     try {
@@ -1999,7 +2242,7 @@ class StorageService {
   }
 
   static Future<void> _savePlaybackStateMap(Map<String, dynamic> map) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_playbackStateKey, jsonEncode(map));
   }
 
@@ -2285,7 +2528,7 @@ class StorageService {
     required String imdbId,
   }) async {
     if (imdbId.isEmpty) return {};
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_episodeTraktProgressKey);
     if (raw == null || raw.isEmpty) return {};
     try {
@@ -2311,7 +2554,7 @@ class StorageService {
     required Map<String, double> percents,
   }) async {
     if (imdbId.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_episodeTraktProgressKey);
     Map<String, dynamic> all = {};
     if (raw != null && raw.isNotEmpty) {
@@ -2339,7 +2582,7 @@ class StorageService {
     required String imdbId,
   }) async {
     if (imdbId.isEmpty) return {};
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_episodeSimklProgressKey);
     if (raw == null || raw.isEmpty) return {};
     try {
@@ -2365,7 +2608,7 @@ class StorageService {
     required Map<String, double> percents,
   }) async {
     if (imdbId.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_episodeSimklProgressKey);
     Map<String, dynamic> all = {};
     if (raw != null && raw.isNotEmpty) {
@@ -2806,7 +3049,7 @@ class StorageService {
 
   /// Clear all playback-related data (series and video states, track prefs, legacy resume)
   static Future<void> clearAllPlaybackData() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_playbackStateKey);
     // Resume lives in the DB now; the prefs key only still exists for users
     // who wipe before the one-time import has run.
@@ -3038,27 +3281,27 @@ class StorageService {
 
   // Debrify TV settings methods
   static Future<String> getDebrifyTvProvider() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_debrifyTvProviderKey) ?? 'real_debrid';
   }
 
   static Future<void> saveDebrifyTvProvider(String value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_debrifyTvProviderKey, value);
   }
 
   static Future<bool> hasDebrifyTvProvider() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.containsKey(_debrifyTvProviderKey);
   }
 
   static Future<bool> getDebrifyTvStartRandom() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_debrifyTvStartRandomKey) ?? true;
   }
 
   static Future<void> saveDebrifyTvStartRandom(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_debrifyTvStartRandomKey, value);
   }
 
@@ -3074,79 +3317,83 @@ class StorageService {
   }
 
   static Future<int> getDebrifyTvRandomStartPercent() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final stored = prefs.getInt(_debrifyTvRandomStartPercentKey);
     return _normalizeDebrifyTvRandomStartPercent(stored);
   }
 
   static Future<void> saveDebrifyTvRandomStartPercent(int value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final normalized = _normalizeDebrifyTvRandomStartPercent(value);
     await prefs.setInt(_debrifyTvRandomStartPercentKey, normalized);
   }
 
   static Future<bool> getDebrifyTvHideSeekbar() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_debrifyTvHideSeekbarKey) ?? true;
   }
 
   static Future<void> saveDebrifyTvHideSeekbar(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_debrifyTvHideSeekbarKey, value);
   }
 
   static Future<bool> getDebrifyTvShowChannelName() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_debrifyTvShowChannelNameKey) ?? true;
   }
 
   static Future<void> saveDebrifyTvShowChannelName(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_debrifyTvShowChannelNameKey, value);
   }
 
   static Future<bool> getDebrifyTvShowVideoTitle() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_debrifyTvShowVideoTitleKey) ?? true;
   }
 
   static Future<void> saveDebrifyTvShowVideoTitle(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_debrifyTvShowVideoTitleKey, value);
   }
 
   static Future<bool> getDebrifyTvHideOptions() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_debrifyTvHideOptionsKey) ?? true;
   }
 
   static Future<void> saveDebrifyTvHideOptions(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_debrifyTvHideOptionsKey, value);
   }
 
   static Future<bool> getDebrifyTvHideBackButton() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_debrifyTvHideBackButtonKey) ?? true;
   }
 
   static Future<void> saveDebrifyTvHideBackButton(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_debrifyTvHideBackButtonKey, value);
   }
 
   static Future<bool> getDebrifyTvAvoidNsfw() async {
-    final prefs = await SharedPreferences.getInstance();
+    if (!await profileAllowsAdultContent()) return true;
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_debrifyTvAvoidNsfwKey) ?? true; // Default enabled
   }
 
   static Future<void> saveDebrifyTvAvoidNsfw(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_debrifyTvAvoidNsfwKey, value);
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(
+      _debrifyTvAvoidNsfwKey,
+      await profileAllowsAdultContent() ? value : true,
+    );
   }
 
   static Future<List<Map<String, dynamic>>> getDebrifyTvChannels() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_debrifyTvChannelsKey);
     if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
     try {
@@ -3163,13 +3410,13 @@ class StorageService {
   static Future<void> saveDebrifyTvChannels(
     List<Map<String, dynamic>> channels,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_debrifyTvChannelsKey, jsonEncode(channels));
   }
 
   // Playlist storage (local-only MVP)
   static Future<List<Map<String, dynamic>>> getPlaylistItemsRaw() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_playlistKey);
     if (raw == null || raw.isEmpty) return <Map<String, dynamic>>[];
     try {
@@ -3186,7 +3433,7 @@ class StorageService {
   static Future<void> savePlaylistItemsRaw(
     List<Map<String, dynamic>> items,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_playlistKey, jsonEncode(items));
   }
 
@@ -3310,38 +3557,40 @@ class StorageService {
           final String? hash = torrentInfo['hash'] as String?;
           if (hash != null && hash.isNotEmpty) {
             enriched['torrent_hash'] = hash;
-            print(
+            debugPrint(
               '✅ Torrent hash fetched and stored: $hash for torrent ID: $rdTorrentId',
             );
           } else {
-            print(
+            debugPrint(
               '⚠️ No hash found in torrent info for torrent ID: $rdTorrentId',
             );
           }
         } else {
-          print(
+          debugPrint(
             '❌ Failed to fetch torrent info. Status code: ${response.statusCode} for torrent ID: $rdTorrentId',
           );
         }
       } catch (e) {
-        print(
+        debugPrint(
           '❌ Error fetching torrent hash for torrent ID: $rdTorrentId - $e',
         );
         // Silently continue without hash if fetch fails
         // This ensures playlist addition doesn't fail due to hash fetch issues
       }
     } else {
-      print('ℹ️ Skipping torrent hash fetch - missing rdTorrentId or API key');
+      debugPrint(
+        'ℹ️ Skipping torrent hash fetch - missing rdTorrentId or API key',
+      );
     }
 
     // Log what's being saved to database
-    print('📝 Adding playlist item to database:');
-    print('   Title: ${enriched['title']}');
-    print('   Kind: ${enriched['kind']}');
-    print('   rdTorrentId: ${enriched['rdTorrentId']}');
-    print('   torrent_hash: ${enriched['torrent_hash'] ?? 'null'}');
-    print('   restrictedLink: ${enriched['restrictedLink'] ?? 'null'}');
-    print(
+    debugPrint('📝 Adding playlist item to database:');
+    debugPrint('   Title: ${enriched['title']}');
+    debugPrint('   Kind: ${enriched['kind']}');
+    debugPrint('   rdTorrentId: ${enriched['rdTorrentId']}');
+    debugPrint('   torrent_hash: ${enriched['torrent_hash'] ?? 'null'}');
+    debugPrint('   restrictedLink: ${enriched['restrictedLink'] ?? 'null'}');
+    debugPrint(
       '   addedAt: ${DateTime.fromMillisecondsSinceEpoch(enriched['addedAt']).toIso8601String()}',
     );
 
@@ -3395,13 +3644,13 @@ class StorageService {
   }
 
   static Future<void> clearPlaylist() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_playlistKey);
   }
 
   /// Clear all playlist-related metadata (view modes, favorites, poster overrides)
   static Future<void> clearAllPlaylistMetadata() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_playlistViewModesKey);
     await prefs.remove(_playlistFavoritesKey);
     await prefs.remove(_playlistPosterOverridesKey);
@@ -3410,7 +3659,7 @@ class StorageService {
 
   /// Clear all startup settings (auto-launch, channel/playlist references)
   static Future<void> clearAllStartupSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_startupAutoLaunchEnabledKey);
     await prefs.remove(_startupChannelIdKey);
     await prefs.remove(_startupStremioTvChannelIdKey);
@@ -3428,7 +3677,7 @@ class StorageService {
 
   /// Clear integration enabled states (RD, TorBox)
   static Future<void> clearAllIntegrationStates() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_realDebridIntegrationEnabledKey);
     await prefs.remove(_realDebridHiddenFromNavKey);
     await prefs.remove(_torboxIntegrationEnabledKey);
@@ -3443,14 +3692,14 @@ class StorageService {
 
   /// Clear Debrify TV provider and legacy channels key
   static Future<void> clearDebrifyTvProviderAndLegacy() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_debrifyTvProviderKey);
     await prefs.remove(_debrifyTvChannelsKey);
   }
 
   /// Clear filter settings (qualities, rip sources, languages)
   static Future<void> clearAllFilterSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_defaultFilterQualitiesKey);
     await prefs.remove(_defaultFilterRipSourcesKey);
     await prefs.remove(_defaultFilterLanguagesKey);
@@ -3461,7 +3710,7 @@ class StorageService {
 
   /// Clear torrent engine toggles and limits
   static Future<void> clearAllTorrentEngineSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final keys = prefs.getKeys().where(
       (key) =>
           (key.startsWith('engine_') && !key.startsWith('engine_tv_')) ||
@@ -3475,7 +3724,7 @@ class StorageService {
 
   /// Clear post-torrent action preferences
   static Future<void> clearAllPostTorrentActions() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_postTorrentActionKey);
     await prefs.remove(_torboxPostTorrentActionKey);
     await prefs.remove(_pikpakPostTorrentActionKey);
@@ -3485,7 +3734,7 @@ class StorageService {
 
   /// Clear all Debrify TV display and engine settings
   static Future<void> clearAllDebrifyTvSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     // Display settings
     await prefs.remove(_debrifyTvStartRandomKey);
     await prefs.remove(_debrifyTvHideSeekbarKey);
@@ -3530,16 +3779,16 @@ class StorageService {
     String? webDavBaseUrl,
     String? webDavPath,
   }) async {
-    print('🎨 updatePlaylistItemPoster called with:');
-    print('  posterUrl: $posterUrl');
-    print('  rdTorrentId: $rdTorrentId');
-    print('  torboxTorrentId: $torboxTorrentId');
-    print('  pikpakCollectionId: $pikpakCollectionId');
-    print('  webDavServerId: $webDavServerId');
-    print('  webDavPath: $webDavPath');
+    debugPrint('🎨 updatePlaylistItemPoster called with:');
+    debugPrint('  posterUrl: $posterUrl');
+    debugPrint('  rdTorrentId: $rdTorrentId');
+    debugPrint('  torboxTorrentId: $torboxTorrentId');
+    debugPrint('  pikpakCollectionId: $pikpakCollectionId');
+    debugPrint('  webDavServerId: $webDavServerId');
+    debugPrint('  webDavPath: $webDavPath');
 
     final items = await getPlaylistItemsRaw();
-    print('  Total playlist items: ${items.length}');
+    debugPrint('  Total playlist items: ${items.length}');
 
     int itemIndex = -1;
 
@@ -3549,7 +3798,7 @@ class StorageService {
         (item) => (item['rdTorrentId'] as String?) == rdTorrentId,
       );
       if (itemIndex != -1) {
-        print('  ✅ Found item by rdTorrentId at index $itemIndex');
+        debugPrint('  ✅ Found item by rdTorrentId at index $itemIndex');
       }
     }
 
@@ -3557,17 +3806,17 @@ class StorageService {
     if (itemIndex == -1 &&
         torboxTorrentId != null &&
         torboxTorrentId.isNotEmpty) {
-      print('  Searching for torboxTorrentId: $torboxTorrentId');
+      debugPrint('  Searching for torboxTorrentId: $torboxTorrentId');
       for (int i = 0; i < items.length; i++) {
         final item = items[i];
         final torboxId = item['torboxTorrentId'];
-        print(
+        debugPrint(
           '    Item[$i] torboxTorrentId: $torboxId (type: ${torboxId.runtimeType})',
         );
         if (torboxId != null &&
             torboxId.toString() == torboxTorrentId.toString()) {
           itemIndex = i;
-          print('  ✅ Found item by torboxTorrentId at index $itemIndex');
+          debugPrint('  ✅ Found item by torboxTorrentId at index $itemIndex');
           break;
         }
       }
@@ -3596,7 +3845,7 @@ class StorageService {
         return false;
       });
       if (itemIndex != -1) {
-        print('  ✅ Found item by pikpakCollectionId at index $itemIndex');
+        debugPrint('  ✅ Found item by pikpakCollectionId at index $itemIndex');
       }
     }
 
@@ -3611,7 +3860,7 @@ class StorageService {
                 premiumizeHash.toLowerCase(),
       );
       if (itemIndex != -1) {
-        print('  ✅ Found item by premiumizeHash at index $itemIndex');
+        debugPrint('  ✅ Found item by premiumizeHash at index $itemIndex');
       }
     }
 
@@ -3626,7 +3875,7 @@ class StorageService {
             (item['premiumizeItemId']?.toString() == premiumizeItemId),
       );
       if (itemIndex != -1) {
-        print('  ✅ Found item by premiumizeItemId at index $itemIndex');
+        debugPrint('  ✅ Found item by premiumizeItemId at index $itemIndex');
       }
     }
 
@@ -3639,7 +3888,7 @@ class StorageService {
                 allDebridHash.toLowerCase(),
       );
       if (itemIndex != -1) {
-        print('  ✅ Found item by allDebridHash at index $itemIndex');
+        debugPrint('  ✅ Found item by allDebridHash at index $itemIndex');
       }
     }
 
@@ -3660,19 +3909,19 @@ class StorageService {
         (item) => computePlaylistDedupeKey(item) == webDavKey,
       );
       if (itemIndex != -1) {
-        print('  ✅ Found item by WebDAV key at index $itemIndex');
+        debugPrint('  ✅ Found item by WebDAV key at index $itemIndex');
       }
     }
 
     if (itemIndex == -1) {
-      print('  ❌ Item not found in playlist!');
+      debugPrint('  ❌ Item not found in playlist!');
       return false;
     }
 
-    print('  💾 Saving poster to item at index $itemIndex');
+    debugPrint('  💾 Saving poster to item at index $itemIndex');
     items[itemIndex]['posterUrl'] = posterUrl;
     await savePlaylistItemsRaw(items);
-    print('  ✅ Poster saved successfully!');
+    debugPrint('  ✅ Poster saved successfully!');
     return true;
   }
 
@@ -3772,7 +4021,7 @@ class StorageService {
   static Future<String?> getPlaylistItemViewMode(
     Map<String, dynamic> item,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final viewModesJson = prefs.getString(_playlistViewModesKey);
 
     if (viewModesJson == null) return null;
@@ -3782,7 +4031,7 @@ class StorageService {
       final dedupeKey = computePlaylistDedupeKey(item);
       return viewModes[dedupeKey] as String?;
     } catch (e) {
-      print('Error reading playlist view modes: $e');
+      debugPrint('Error reading playlist view modes: $e');
       return null;
     }
   }
@@ -3792,7 +4041,7 @@ class StorageService {
     Map<String, dynamic> item,
     String viewMode,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final viewModesJson = prefs.getString(_playlistViewModesKey);
 
     Map<String, dynamic> viewModes = {};
@@ -3800,7 +4049,7 @@ class StorageService {
       try {
         viewModes = jsonDecode(viewModesJson) as Map<String, dynamic>;
       } catch (e) {
-        print('Error parsing playlist view modes: $e');
+        debugPrint('Error parsing playlist view modes: $e');
       }
     }
 
@@ -3812,7 +4061,7 @@ class StorageService {
 
   /// Check if a playlist item is favorited
   static Future<bool> isPlaylistItemFavorited(Map<String, dynamic> item) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final favoritesJson = prefs.getString(_playlistFavoritesKey);
 
     if (favoritesJson == null) return false;
@@ -3832,7 +4081,7 @@ class StorageService {
     Map<String, dynamic> item,
     bool isFavorited,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final favoritesJson = prefs.getString(_playlistFavoritesKey);
 
     Map<String, dynamic> favorites = {};
@@ -3856,7 +4105,7 @@ class StorageService {
 
   /// Get all favorite dedupe keys
   static Future<Set<String>> getPlaylistFavoriteKeys() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final favoritesJson = prefs.getString(_playlistFavoritesKey);
 
     if (favoritesJson == null) return {};
@@ -3870,13 +4119,166 @@ class StorageService {
     }
   }
 
+  // ========================================================================
+  // My Watchlist (movies + series)
+  // ========================================================================
+
+  /// Stable identity for Debrify's local movie/series watchlist. Prefer IMDb
+  /// so the same title coming from two addons is one entry; fall back to the
+  /// source addon + its content id for titles that do not expose IMDb metadata.
+  /// Addon ids are part of that fallback because content ids are addon-local.
+  static bool supportsMyWatchlistItem(StremioMeta item) {
+    final type = item.type.trim().toLowerCase();
+    return type == 'movie' || type == 'series';
+  }
+
+  /// Returns the identity-bearing item used by both watchlist reads and
+  /// writes. A stored source is authoritative for non-IMDb ids; [fallback]
+  /// only fills in a source for a newly opened source-less item.
+  static StremioMeta withMyWatchlistSource(
+    StremioMeta item,
+    StremioAddon fallback,
+  ) => item.sourceAddon == null ? item.withSourceAddon(fallback) : item;
+
+  static String myWatchlistItemKey(StremioMeta item) {
+    if (!supportsMyWatchlistItem(item)) {
+      throw ArgumentError.value(
+        item.type,
+        'item.type',
+        'My Watchlist supports only movies and series',
+      );
+    }
+    final type = item.type.trim().toLowerCase();
+    final imdbId = item.effectiveImdbId?.trim();
+    if (imdbId != null && imdbId.isNotEmpty) return '$type:$imdbId';
+
+    final sourceId = item.sourceAddon?.id.trim();
+    final namespace = (sourceId == null || sourceId.isEmpty)
+        ? 'unknown'
+        : sourceId;
+    return '$type:addon:${Uri.encodeComponent(namespace)}:'
+        '${Uri.encodeComponent(item.id)}';
+  }
+
+  static int _myWatchlistAddedAt(Map<String, dynamic> row) {
+    final raw = row['addedAt'];
+    if (raw is num) return raw.toInt();
+    if (raw is String) return int.tryParse(raw) ?? 0;
+    return 0;
+  }
+
+  /// Recomputes keys from stored metadata so rows written by the original
+  /// un-namespaced fallback scheme migrate in memory immediately. The next
+  /// mutation persists the canonical key.
+  static void _canonicalizeMyWatchlistRowKey(Map<String, dynamic> row) {
+    final raw = row['item'];
+    if (raw is! Map) return;
+    try {
+      final item = StremioMeta.fromJson(Map<String, dynamic>.from(raw));
+      if (supportsMyWatchlistItem(item)) {
+        row['key'] = myWatchlistItemKey(item);
+      }
+    } catch (_) {
+      // The item loader below will ignore the malformed row.
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> _readMyWatchlistRows() async {
+    final prefs = await ProfilePreferences.instance();
+    final encoded = prefs.getString(_myWatchlistKey);
+    if (encoded == null) return <Map<String, dynamic>>[];
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is! List) return <Map<String, dynamic>>[];
+      final rows = [
+        for (final row in decoded)
+          if (row is Map) Map<String, dynamic>.from(row),
+      ];
+      for (final row in rows) {
+        _canonicalizeMyWatchlistRowKey(row);
+      }
+      return rows;
+    } catch (e) {
+      debugPrint('Error reading My Watchlist: $e');
+      return <Map<String, dynamic>>[];
+    }
+  }
+
+  /// Saved titles, newest first. Corrupt individual rows are ignored so one
+  /// bad addon payload cannot make the whole shelf disappear.
+  static Future<List<StremioMeta>> getMyWatchlistItems() async {
+    final rows = await _readMyWatchlistRows();
+    rows.sort(
+      (a, b) => _myWatchlistAddedAt(b).compareTo(_myWatchlistAddedAt(a)),
+    );
+    final items = <StremioMeta>[];
+    for (final row in rows) {
+      final raw = row['item'];
+      if (raw is! Map) continue;
+      try {
+        final item = StremioMeta.fromJson(Map<String, dynamic>.from(raw));
+        if (item.id.isEmpty || !supportsMyWatchlistItem(item)) {
+          continue;
+        }
+        items.add(item);
+      } catch (_) {
+        // Skip only the malformed row.
+      }
+    }
+    return items;
+  }
+
+  static Future<bool> isInMyWatchlist(StremioMeta item) async {
+    if (!supportsMyWatchlistItem(item)) return false;
+    final key = myWatchlistItemKey(item);
+    final rows = await _readMyWatchlistRows();
+    return rows.any((row) => row['key'] == key);
+  }
+
+  /// Adds, refreshes, or removes a title. Adding stores the full presentation
+  /// metadata needed by Home, not just an id, so My Watchlist paints instantly
+  /// offline and can route back through the source addon when it is installed.
+  static Future<void> setMyWatchlistItem(StremioMeta item, bool saved) async {
+    if (!supportsMyWatchlistItem(item)) {
+      throw ArgumentError.value(
+        item.type,
+        'item.type',
+        'My Watchlist supports only movies and series',
+      );
+    }
+    final prefs = await ProfilePreferences.instance();
+    final rows = await _readMyWatchlistRows();
+    final key = myWatchlistItemKey(item);
+    final existing = rows.where((row) => row['key'] == key).firstOrNull;
+    rows.removeWhere((row) => row['key'] == key);
+    if (saved) {
+      rows.insert(0, {
+        'key': key,
+        'addedAt': existing == null
+            ? DateTime.now().millisecondsSinceEpoch
+            : _myWatchlistAddedAt(existing),
+        'item': item.toJson(),
+      });
+    }
+    if (rows.isEmpty) {
+      await prefs.remove(_myWatchlistKey);
+    } else {
+      await prefs.setString(_myWatchlistKey, jsonEncode(rows));
+    }
+  }
+
+  static Future<void> clearMyWatchlist() async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.remove(_myWatchlistKey);
+  }
+
   // ==========================================================================
   // Debrify TV Channel Favorites
   // ==========================================================================
 
   /// Check if a Debrify TV channel is favorited
   static Future<bool> isDebrifyTvChannelFavorited(String channelId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final favoritesJson = prefs.getString(_debrifyTvFavoriteChannelsKey);
 
     if (favoritesJson == null) return false;
@@ -3895,7 +4297,7 @@ class StorageService {
     String channelId,
     bool isFavorited,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final favoritesJson = prefs.getString(_debrifyTvFavoriteChannelsKey);
 
     Map<String, dynamic> favorites = {};
@@ -3916,7 +4318,7 @@ class StorageService {
 
   /// Get all favorite Debrify TV channel IDs
   static Future<Set<String>> getDebrifyTvFavoriteChannelIds() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final favoritesJson = prefs.getString(_debrifyTvFavoriteChannelsKey);
 
     if (favoritesJson == null) return {};
@@ -4123,12 +4525,12 @@ class StorageService {
       'iptv_track_continue_watching';
 
   static Future<bool> getIptvTrackContinueWatching() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_iptvTrackContinueWatchingKey) ?? true;
   }
 
   static Future<void> setIptvTrackContinueWatching(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_iptvTrackContinueWatchingKey, value);
   }
 
@@ -4586,12 +4988,12 @@ class StorageService {
 
   // Home Page Default Settings
   static Future<String?> getHomeDefaultSourceType() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_homeDefaultSourceTypeKey);
   }
 
   static Future<void> setHomeDefaultSourceType(String? value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (value == null) {
       await prefs.remove(_homeDefaultSourceTypeKey);
     } else {
@@ -4600,12 +5002,12 @@ class StorageService {
   }
 
   static Future<String?> getHomeDefaultAddonUrl() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_homeDefaultAddonUrlKey);
   }
 
   static Future<void> setHomeDefaultAddonUrl(String? value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (value == null) {
       await prefs.remove(_homeDefaultAddonUrlKey);
     } else {
@@ -4614,12 +5016,12 @@ class StorageService {
   }
 
   static Future<String?> getHomeDefaultCatalogId() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_homeDefaultCatalogIdKey);
   }
 
   static Future<void> setHomeDefaultCatalogId(String? value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (value == null) {
       await prefs.remove(_homeDefaultCatalogIdKey);
     } else {
@@ -4628,12 +5030,12 @@ class StorageService {
   }
 
   static Future<String?> getHomeDefaultTraktListType() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_homeDefaultTraktListTypeKey);
   }
 
   static Future<void> setHomeDefaultTraktListType(String? value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (value == null) {
       await prefs.remove(_homeDefaultTraktListTypeKey);
     } else {
@@ -4642,12 +5044,12 @@ class StorageService {
   }
 
   static Future<String?> getHomeDefaultTraktContentType() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_homeDefaultTraktContentTypeKey);
   }
 
   static Future<void> setHomeDefaultTraktContentType(String? value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (value == null) {
       await prefs.remove(_homeDefaultTraktContentTypeKey);
     } else {
@@ -4656,37 +5058,37 @@ class StorageService {
   }
 
   static Future<bool> getHomeHideProviderCards() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_homeHideProviderCardsKey) ?? true;
   }
 
   static Future<void> setHomeHideProviderCards(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_homeHideProviderCardsKey, value);
   }
 
   static Future<bool> getHomeContinueWatchingEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_homeContinueWatchingEnabledKey) ?? true;
   }
 
   static Future<void> setHomeContinueWatchingEnabled(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_homeContinueWatchingEnabledKey, value);
   }
 
   static Future<String> getHomeFavoritesTapAction() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_homeFavoritesOpenFolderKey) ?? 'choose';
   }
 
   static Future<void> setHomeFavoritesTapAction(String value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_homeFavoritesOpenFolderKey, value);
   }
 
   static Future<void> clearAllHomePageSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_homeDefaultSourceTypeKey);
     await prefs.remove(_homeDefaultAddonUrlKey);
     await prefs.remove(_homeDefaultCatalogIdKey);
@@ -4697,206 +5099,253 @@ class StorageService {
 
   // Reddit Settings
   static Future<String?> getRedditAccessToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_redditAccessTokenKey);
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _redditAccessTokenKey);
   }
 
   static Future<void> setRedditAccessToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_redditAccessTokenKey, token);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _redditAccessTokenKey, token);
   }
 
   static Future<String?> getRedditRefreshToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_redditRefreshTokenKey);
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _redditRefreshTokenKey);
   }
 
   static Future<void> setRedditRefreshToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_redditRefreshTokenKey, token);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _redditRefreshTokenKey, token);
   }
 
   static Future<String?> getRedditUsername() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_redditUsernameKey);
   }
 
   static Future<void> setRedditUsername(String username) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_redditUsernameKey, username);
   }
 
   static Future<bool> getRedditEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_redditEnabledKey) ?? true; // Default enabled
   }
 
   static Future<void> setRedditEnabled(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_redditEnabledKey, value);
   }
 
   static Future<bool> getRedditHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_redditHiddenFromNavKey) ?? false;
   }
 
   static Future<void> setRedditHiddenFromNav(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_redditHiddenFromNavKey, value);
   }
 
   static Future<String?> getRedditLastSubreddit() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_redditLastSubredditKey);
   }
 
   static Future<void> setRedditLastSubreddit(String subreddit) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_redditLastSubredditKey, subreddit);
   }
 
   static Future<void> clearRedditAuth() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_redditAccessTokenKey);
-    await prefs.remove(_redditRefreshTokenKey);
+    final prefs = await ProfilePreferences.instance();
+    if (!await ProfileCredentialFacade.disconnect(_redditAccessTokenKey)) {
+      await prefs.remove(_redditAccessTokenKey);
+      await prefs.remove(_redditRefreshTokenKey);
+    }
     await prefs.remove(_redditUsernameKey);
   }
 
   // Trakt Settings
   static Future<bool> getTraktSyncCatalogItems() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool('trakt_sync_catalog_items') ?? false;
   }
 
   static Future<void> setTraktSyncCatalogItems(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool('trakt_sync_catalog_items', value);
   }
 
-  static Future<String?> getTraktAccessToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_traktAccessTokenKey);
+  static Future<String?> getTraktAccessToken({
+    bool forRemoteTransfer = false,
+  }) async {
+    if (forRemoteTransfer) {
+      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
+        _traktAccessTokenKey,
+      );
+      if (credential.handled) return credential.value;
+    }
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _traktAccessTokenKey);
   }
+
+  static Future<bool> hasTraktCredential() =>
+      _credentialConfigured(_traktAccessTokenKey, () => getTraktAccessToken());
 
   static Future<void> setTraktAccessToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_traktAccessTokenKey, token);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _traktAccessTokenKey, token);
   }
 
-  static Future<String?> getTraktRefreshToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_traktRefreshTokenKey);
+  static Future<String?> getTraktRefreshToken({
+    bool forRemoteTransfer = false,
+  }) async {
+    if (forRemoteTransfer) {
+      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
+        _traktRefreshTokenKey,
+      );
+      if (credential.handled) return credential.value;
+    }
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _traktRefreshTokenKey);
   }
 
   static Future<void> setTraktRefreshToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_traktRefreshTokenKey, token);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _traktRefreshTokenKey, token);
   }
 
   static Future<String?> getTraktUsername() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_traktUsernameKey);
   }
 
   static Future<void> setTraktUsername(String username) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_traktUsernameKey, username);
   }
 
   static Future<int?> getTraktTokenExpiry() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_traktTokenExpiryKey);
   }
 
   static Future<void> setTraktTokenExpiry(int expiryMs) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_traktTokenExpiryKey, expiryMs);
   }
 
-  static Future<void> clearTraktAuth() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_traktAccessTokenKey);
-    await prefs.remove(_traktRefreshTokenKey);
+  /// Clears the local Trakt connection first and reports whether this profile
+  /// was its unshared owner. Only that disposition may revoke the upstream
+  /// token; a borrower must never invalidate the account for other profiles.
+  static Future<bool> clearTraktAuth() async {
+    final prefs = await ProfilePreferences.instance();
+    final disposition = await ProfileCredentialFacade.disconnectWithDisposition(
+      _traktAccessTokenKey,
+    );
+    if (!disposition.handled) {
+      await prefs.remove(_traktAccessTokenKey);
+      await prefs.remove(_traktRefreshTokenKey);
+    }
     await prefs.remove(_traktUsernameKey);
     await prefs.remove(_traktTokenExpiryKey);
+    return !disposition.handled || disposition.shouldRevokeRemote;
   }
 
   static Future<void> setSimklSyncCatalogItems(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool('simkl_sync_catalog_items', value);
   }
 
   static Future<bool> getSimklSyncCatalogItems() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool('simkl_sync_catalog_items') ?? false;
   }
 
-  static Future<String?> getSimklAccessToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_simklAccessTokenKey);
+  static Future<String?> getSimklAccessToken({
+    bool forRemoteTransfer = false,
+  }) async {
+    if (forRemoteTransfer) {
+      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
+        _simklAccessTokenKey,
+      );
+      if (credential.handled) return credential.value;
+    }
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _simklAccessTokenKey);
   }
 
+  static Future<bool> hasSimklCredential() =>
+      _credentialConfigured(_simklAccessTokenKey, () => getSimklAccessToken());
+
   static Future<void> setSimklAccessToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_simklAccessTokenKey, token);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _simklAccessTokenKey, token);
   }
 
   static Future<String?> getSimklUsername() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_simklUsernameKey);
   }
 
   static Future<void> setSimklUsername(String username) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_simklUsernameKey, username);
   }
 
   static Future<void> clearSimklAuth() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_simklAccessTokenKey);
+    final prefs = await ProfilePreferences.instance();
+    if (!await ProfileCredentialFacade.disconnect(_simklAccessTokenKey)) {
+      await prefs.remove(_simklAccessTokenKey);
+    }
     await prefs.remove(_simklUsernameKey);
   }
 
   static Future<List<String>> getRedditRecentSubreddits() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getStringList(_redditRecentSubredditsKey) ?? [];
   }
 
   static Future<void> setRedditRecentSubreddits(List<String> subreddits) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setStringList(_redditRecentSubredditsKey, subreddits);
   }
 
   static Future<bool> getRedditAllowNsfw() async {
-    final prefs = await SharedPreferences.getInstance();
+    if (!await profileAllowsAdultContent()) return false;
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_redditAllowNsfwKey) ?? false;
   }
 
   static Future<void> setRedditAllowNsfw(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_redditAllowNsfwKey, value);
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(
+      _redditAllowNsfwKey,
+      await profileAllowsAdultContent() && value,
+    );
   }
 
   static Future<List<String>> getRedditFavoriteSubreddits() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getStringList(_redditFavoriteSubredditsKey) ?? [];
   }
 
   static Future<void> setRedditFavoriteSubreddits(
     List<String> subreddits,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setStringList(_redditFavoriteSubredditsKey, subreddits);
   }
 
   static Future<String?> getRedditDefaultSubreddit() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_redditDefaultSubredditKey);
   }
 
   static Future<void> setRedditDefaultSubreddit(String? subreddit) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (subreddit == null || subreddit.isEmpty) {
       await prefs.remove(_redditDefaultSubredditKey);
     } else {
@@ -4906,45 +5355,49 @@ class StorageService {
 
   // Lemmy Settings
   static Future<String> getLemmyInstance() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final value = prefs.getString(_lemmyInstanceKey);
     return (value != null && value.isNotEmpty) ? value : 'https://lemmy.world';
   }
 
   static Future<void> setLemmyInstance(String instance) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_lemmyInstanceKey, instance);
   }
 
   static Future<bool> getLemmyAllowNsfw() async {
-    final prefs = await SharedPreferences.getInstance();
+    if (!await profileAllowsAdultContent()) return false;
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_lemmyAllowNsfwKey) ?? false;
   }
 
   static Future<void> setLemmyAllowNsfw(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_lemmyAllowNsfwKey, value);
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(
+      _lemmyAllowNsfwKey,
+      await profileAllowsAdultContent() && value,
+    );
   }
 
   static Future<List<String>> getLemmyFavoriteCommunities() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getStringList(_lemmyFavoriteCommunitiesKey) ?? [];
   }
 
   static Future<void> setLemmyFavoriteCommunities(
     List<String> communities,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setStringList(_lemmyFavoriteCommunitiesKey, communities);
   }
 
   static Future<String?> getLemmyDefaultCommunity() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_lemmyDefaultCommunityKey);
   }
 
   static Future<void> setLemmyDefaultCommunity(String? community) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (community == null || community.isEmpty) {
       await prefs.remove(_lemmyDefaultCommunityKey);
     } else {
@@ -4955,76 +5408,109 @@ class StorageService {
   // YouTube Settings
   /// Preferred max playback height for YouTube (1080/720/480/360). Default 1080.
   static Future<int> getYoutubeMaxHeight() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final v = prefs.getInt(_youtubeMaxHeightKey);
     return (v != null && v > 0) ? v : 1080;
   }
 
   static Future<void> setYoutubeMaxHeight(int height) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_youtubeMaxHeightKey, height);
+  }
+
+  // Network tuning (Debrify player)
+  /// 'standard' | 'extended' | 'patient'. Standard = player defaults untouched.
+  static Future<String> getNetworkConnectPatience() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getString(_networkConnectPatienceKey) ?? 'standard';
+  }
+
+  static Future<void> setNetworkConnectPatience(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_networkConnectPatienceKey, value);
+  }
+
+  /// 'standard' | 'large' | 'huge'. Standard = player defaults untouched.
+  static Future<String> getNetworkBufferSize() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getString(_networkBufferSizeKey) ?? 'standard';
+  }
+
+  static Future<void> setNetworkBufferSize(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_networkBufferSizeKey, value);
   }
 
   // PikPak API Settings
   static Future<bool> getPikPakEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_pikpakEnabledKey) ?? false;
   }
 
   static Future<void> setPikPakEnabled(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_pikpakEnabledKey, value);
   }
 
-  static Future<String?> getPikPakEmail() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakEmailKey);
+  static Future<String?> getPikPakEmail({
+    bool forRemoteTransfer = false,
+  }) async {
+    if (forRemoteTransfer) {
+      final credential = await ProfileCredentialFacade.readForRemoteTransfer(
+        _pikpakEmailKey,
+      );
+      if (credential.handled) return credential.value;
+    }
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _pikpakEmailKey);
   }
 
   static Future<void> setPikPakEmail(String email) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakEmailKey, email);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _pikpakEmailKey, email);
   }
 
   static Future<String?> getPikPakPassword() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakPasswordKey);
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _pikpakPasswordKey);
   }
 
   static Future<void> setPikPakPassword(String password) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakPasswordKey, password);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _pikpakPasswordKey, password);
   }
 
   static Future<String?> getPikPakAccessToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakAccessTokenKey);
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _pikpakAccessTokenKey);
   }
 
   static Future<void> setPikPakAccessToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakAccessTokenKey, token);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _pikpakAccessTokenKey, token);
   }
 
   static Future<String?> getPikPakRefreshToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakRefreshTokenKey);
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _pikpakRefreshTokenKey);
   }
 
   static Future<void> setPikPakRefreshToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakRefreshTokenKey, token);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _pikpakRefreshTokenKey, token);
   }
 
   static Future<void> clearPikPakAuth() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_pikpakEmailKey);
-    await prefs.remove(_pikpakPasswordKey);
-    await prefs.remove(_pikpakAccessTokenKey);
-    await prefs.remove(_pikpakRefreshTokenKey);
-    await prefs.remove(_pikpakDeviceIdKey);
-    await prefs.remove(_pikpakCaptchaTokenKey);
-    await prefs.remove(_pikpakUserIdKey);
+    final prefs = await ProfilePreferences.instance();
+    if (!await ProfileCredentialFacade.disconnect(_pikpakEmailKey)) {
+      await prefs.remove(_pikpakEmailKey);
+      await prefs.remove(_pikpakPasswordKey);
+      await prefs.remove(_pikpakAccessTokenKey);
+      await prefs.remove(_pikpakRefreshTokenKey);
+      await prefs.remove(_pikpakDeviceIdKey);
+      await prefs.remove(_pikpakCaptchaTokenKey);
+      await prefs.remove(_pikpakUserIdKey);
+    }
     await prefs.setBool(_pikpakEnabledKey, false);
 
     // Also clear restricted folder settings and cached subfolder IDs
@@ -5035,71 +5521,76 @@ class StorageService {
 
   // PikPak Device ID and Captcha Token
   static Future<void> setPikPakDeviceId(String deviceId) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakDeviceIdKey, deviceId);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _pikpakDeviceIdKey, deviceId);
   }
 
   static Future<String?> getPikPakDeviceId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakDeviceIdKey);
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _pikpakDeviceIdKey);
+  }
+
+  static Future<void> deletePikPakDeviceId() async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.remove(_pikpakDeviceIdKey);
   }
 
   static Future<void> setPikPakCaptchaToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakCaptchaTokenKey, token);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _pikpakCaptchaTokenKey, token);
   }
 
   static Future<String?> getPikPakCaptchaToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakCaptchaTokenKey);
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _pikpakCaptchaTokenKey);
   }
 
   static Future<void> clearPikPakCaptchaToken() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_pikpakCaptchaTokenKey);
   }
 
   static Future<void> setPikPakUserId(String userId) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pikpakUserIdKey, userId);
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _pikpakUserIdKey, userId);
   }
 
   static Future<String?> getPikPakUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_pikpakUserIdKey);
+    final prefs = await ProfilePreferences.instance();
+    return SecretVault.getString(prefs, _pikpakUserIdKey);
   }
 
   // PikPak Show Videos Only
   static Future<bool> getPikPakShowVideosOnly() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_pikpakShowVideosOnlyKey) ?? true; // Default to true
   }
 
   static Future<void> setPikPakShowVideosOnly(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_pikpakShowVideosOnlyKey, value);
   }
 
   // PikPak Ignore Small Videos (under 100MB)
   static Future<bool> getPikPakIgnoreSmallVideos() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_pikpakIgnoreSmallVideosKey) ??
         true; // Default to true
   }
 
   static Future<void> setPikPakIgnoreSmallVideos(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_pikpakIgnoreSmallVideosKey, value);
   }
 
   // PikPak Restricted Folder
   static Future<String?> getPikPakRestrictedFolderId() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_pikpakRestrictedFolderIdKey);
   }
 
   static Future<String?> getPikPakRestrictedFolderName() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_pikpakRestrictedFolderNameKey);
   }
 
@@ -5107,7 +5598,7 @@ class StorageService {
     String? folderId,
     String? folderName,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (folderId == null) {
       await prefs.remove(_pikpakRestrictedFolderIdKey);
       await prefs.remove(_pikpakRestrictedFolderNameKey);
@@ -5127,118 +5618,212 @@ class StorageService {
 
   // PikPak Subfolder ID caching (for debrify-torrents and debrify-tv folders)
   static Future<String?> getPikPakTorrentsFolderId() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_pikpakTorrentsFolderIdKey);
   }
 
   static Future<void> setPikPakTorrentsFolderId(String folderId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_pikpakTorrentsFolderIdKey, folderId);
   }
 
   static Future<String?> getPikPakTvFolderId() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_pikpakTvFolderIdKey);
   }
 
   static Future<void> setPikPakTvFolderId(String folderId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_pikpakTvFolderIdKey, folderId);
   }
 
   static Future<void> clearPikPakSubfolderCaches() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_pikpakTorrentsFolderIdKey);
     await prefs.remove(_pikpakTvFolderIdKey);
   }
 
   // PikPak Hidden from Navigation
   static Future<bool> getPikPakHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_pikpakHiddenFromNavKey) ?? false;
   }
 
   static Future<void> setPikPakHiddenFromNav(bool hidden) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_pikpakHiddenFromNavKey, hidden);
   }
 
   static Future<void> clearPikPakHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_pikpakHiddenFromNavKey);
   }
 
   // WebDAV Settings
   static Future<bool> getWebDavEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_webDavEnabledKey) ?? false;
   }
 
   static Future<void> setWebDavEnabled(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_webDavEnabledKey, value);
   }
 
   static Future<bool> getWebDavHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_webDavHiddenFromNavKey) ?? false;
   }
 
   static Future<void> setWebDavHiddenFromNav(bool hidden) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_webDavHiddenFromNavKey, hidden);
   }
 
   static Future<void> clearWebDavHiddenFromNav() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_webDavHiddenFromNavKey);
   }
 
   static Future<String?> getWebDavBaseUrl() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final selected = await getSelectedWebDavServer();
-    return selected?.baseUrl ?? prefs.getString(_webDavBaseUrlKey);
+    return selected?.baseUrl ??
+        await SecretVault.getString(prefs, _webDavBaseUrlKey);
   }
 
   static Future<void> setWebDavBaseUrl(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_webDavBaseUrlKey, value);
+    if (ProfileCollectionResourceFacade.active) {
+      final selected = await getSelectedWebDavServer(forSettings: false);
+      if (selected != null) {
+        if (selected.connectionReadOnly) {
+          throw const ResourceAuthorizationException(
+            'Shared WebDAV connections cannot be edited',
+          );
+        }
+        final all = await getWebDavServers(forSettings: false);
+        await saveWebDavServers([
+          for (final item in all)
+            item.id == selected.id
+                ? WebDavConfig(
+                    id: item.id,
+                    name: item.name,
+                    baseUrl: value,
+                    username: item.username,
+                    password: item.password,
+                    connectionResourceId: item.connectionResourceId,
+                    connectionResourceRevision: item.connectionResourceRevision,
+                    connectionReadOnly: item.connectionReadOnly,
+                    credentialsRedacted: item.credentialsRedacted,
+                  )
+                : item,
+        ]);
+      }
+      return;
+    }
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _webDavBaseUrlKey, value);
   }
 
   static Future<String?> getWebDavUsername() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final selected = await getSelectedWebDavServer();
-    return selected?.username ?? prefs.getString(_webDavUsernameKey);
+    return selected?.username ??
+        await SecretVault.getString(prefs, _webDavUsernameKey);
   }
 
   static Future<void> setWebDavUsername(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_webDavUsernameKey, value);
+    if (ProfileCollectionResourceFacade.active) {
+      final selected = await getSelectedWebDavServer(forSettings: false);
+      if (selected != null) {
+        if (selected.connectionReadOnly) {
+          throw const ResourceAuthorizationException(
+            'Shared WebDAV connections cannot be edited',
+          );
+        }
+        final all = await getWebDavServers(forSettings: false);
+        await saveWebDavServers([
+          for (final item in all)
+            item.id == selected.id
+                ? WebDavConfig(
+                    id: item.id,
+                    name: item.name,
+                    baseUrl: item.baseUrl,
+                    username: value,
+                    password: item.password,
+                    connectionResourceId: item.connectionResourceId,
+                    connectionResourceRevision: item.connectionResourceRevision,
+                    connectionReadOnly: item.connectionReadOnly,
+                    credentialsRedacted: item.credentialsRedacted,
+                  )
+                : item,
+        ]);
+      }
+      return;
+    }
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _webDavUsernameKey, value);
   }
 
   static Future<String?> getWebDavPassword() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final selected = await getSelectedWebDavServer();
-    return selected?.password ?? prefs.getString(_webDavPasswordKey);
+    return selected?.password ??
+        await SecretVault.getString(prefs, _webDavPasswordKey);
   }
 
   static Future<void> setWebDavPassword(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_webDavPasswordKey, value);
+    if (ProfileCollectionResourceFacade.active) {
+      final selected = await getSelectedWebDavServer(forSettings: false);
+      if (selected != null) {
+        if (selected.connectionReadOnly) {
+          throw const ResourceAuthorizationException(
+            'Shared WebDAV connections cannot be edited',
+          );
+        }
+        final all = await getWebDavServers(forSettings: false);
+        await saveWebDavServers([
+          for (final item in all)
+            item.id == selected.id
+                ? WebDavConfig(
+                    id: item.id,
+                    name: item.name,
+                    baseUrl: item.baseUrl,
+                    username: item.username,
+                    password: value,
+                    connectionResourceId: item.connectionResourceId,
+                    connectionResourceRevision: item.connectionResourceRevision,
+                    connectionReadOnly: item.connectionReadOnly,
+                    credentialsRedacted: item.credentialsRedacted,
+                  )
+                : item,
+        ]);
+      }
+      return;
+    }
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(prefs, _webDavPasswordKey, value);
   }
 
   static Future<bool> getWebDavShowVideosOnly() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_webDavShowVideosOnlyKey) ?? true;
   }
 
   static Future<void> setWebDavShowVideosOnly(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_webDavShowVideosOnlyKey, value);
   }
 
   static Future<void> clearWebDav() async {
-    final prefs = await SharedPreferences.getInstance();
+    if (ProfileCollectionResourceFacade.active) {
+      await ProfileCollectionResourceFacade.replace(
+        types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
+        feature: ProfileFeature.cloud,
+        items: const <ResourceCollectionItem>[],
+      );
+    }
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_webDavBaseUrlKey);
     await prefs.remove(_webDavUsernameKey);
     await prefs.remove(_webDavPasswordKey);
@@ -5248,9 +5833,27 @@ class StorageService {
     await prefs.setBool(_webDavEnabledKey, false);
   }
 
-  static Future<List<WebDavConfig>> getWebDavServers() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_webDavServersKey);
+  static Future<List<WebDavConfig>> getWebDavServers({
+    bool forSettings = true,
+    bool forRemoteTransfer = false,
+  }) async {
+    if (ProfileCollectionResourceFacade.active) {
+      final rows = await ProfileCollectionResourceFacade.read(
+        types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
+        feature: ProfileFeature.cloud,
+        forSettings: forSettings,
+        forRemoteTransfer: forRemoteTransfer,
+      );
+      return rows
+          .map(WebDavConfig.fromJson)
+          .where(
+            (config) =>
+                config.baseUrl.trim().isNotEmpty || config.credentialsRedacted,
+          )
+          .toList(growable: false);
+    }
+    final prefs = await ProfilePreferences.instance();
+    final raw = await SecretVault.getString(prefs, _webDavServersKey);
     final servers = <WebDavConfig>[];
     if (raw != null && raw.isNotEmpty) {
       try {
@@ -5269,14 +5872,16 @@ class StorageService {
     }
 
     if (servers.isEmpty) {
-      final legacyUrl = prefs.getString(_webDavBaseUrlKey);
+      final legacyUrl = await SecretVault.getString(prefs, _webDavBaseUrlKey);
       if (legacyUrl != null && legacyUrl.trim().isNotEmpty) {
         final config = WebDavConfig(
           id: 'legacy-${legacyUrl.hashCode}',
           name: Uri.tryParse(legacyUrl)?.host ?? 'WebDAV',
           baseUrl: legacyUrl,
-          username: prefs.getString(_webDavUsernameKey) ?? '',
-          password: prefs.getString(_webDavPasswordKey) ?? '',
+          username:
+              await SecretVault.getString(prefs, _webDavUsernameKey) ?? '',
+          password:
+              await SecretVault.getString(prefs, _webDavPasswordKey) ?? '',
         );
         servers.add(config);
         await saveWebDavServers(servers);
@@ -5287,22 +5892,58 @@ class StorageService {
     return servers;
   }
 
-  static Future<void> saveWebDavServers(List<WebDavConfig> servers) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
+  static Future<List<WebDavConfig>> saveWebDavServers(
+    List<WebDavConfig> servers,
+  ) async {
+    if (ProfileCollectionResourceFacade.active) {
+      final expectedScope = ProfileRuntime.scope.value;
+      if (expectedScope == null) throw StateError('No visible profile scope');
+      // Capture the preference namespace before the registry mutation. If a
+      // profile switch races this operation, this handle can only write the
+      // initiating namespace (or fail); it can never write the new profile.
+      final prefs = await ProfilePreferences.instance();
+      final rows = await ProfileCollectionResourceFacade.replaceAndRead(
+        types: const <ConnectionResourceType>{ConnectionResourceType.webDav},
+        feature: ProfileFeature.cloud,
+        items: <ResourceCollectionItem>[
+          for (final server in servers)
+            ResourceCollectionItem(
+              type: ConnectionResourceType.webDav,
+              label: server.name,
+              publicConfig: <String, dynamic>{'accountLabel': server.name},
+              secretConfig: server.toJson(),
+              sourceResourceId: server.connectionResourceId,
+            ),
+        ],
+        forSettings: true,
+      );
+      final saved = rows.map(WebDavConfig.fromJson).toList(growable: false);
+      if (ProfileRuntime.scope.value != expectedScope) {
+        throw StateError('Profile changed while saving WebDAV connections');
+      }
+      await prefs.setBool(_webDavEnabledKey, saved.isNotEmpty);
+      if (ProfileRuntime.scope.value != expectedScope) {
+        throw StateError('Profile changed while saving WebDAV settings');
+      }
+      return saved;
+    }
+    final prefs = await ProfilePreferences.instance();
+    await SecretVault.setString(
+      prefs,
       _webDavServersKey,
       jsonEncode(servers.map((server) => server.toJson()).toList()),
     );
     await prefs.setBool(_webDavEnabledKey, servers.isNotEmpty);
+    return List<WebDavConfig>.unmodifiable(servers);
   }
 
   static Future<String?> getSelectedWebDavServerId() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_webDavSelectedServerIdKey);
   }
 
   static Future<void> setSelectedWebDavServerId(String? id) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (id == null || id.isEmpty) {
       await prefs.remove(_webDavSelectedServerIdKey);
     } else {
@@ -5310,8 +5951,10 @@ class StorageService {
     }
   }
 
-  static Future<WebDavConfig?> getSelectedWebDavServer() async {
-    final servers = await getWebDavServers();
+  static Future<WebDavConfig?> getSelectedWebDavServer({
+    bool forSettings = true,
+  }) async {
+    final servers = await getWebDavServers(forSettings: forSettings);
     if (servers.isEmpty) return null;
     final selectedId = await getSelectedWebDavServerId();
     if (selectedId != null && selectedId.isNotEmpty) {
@@ -5323,30 +5966,91 @@ class StorageService {
     return servers.first;
   }
 
-  static Future<void> upsertWebDavServer(WebDavConfig config) async {
-    final servers = await getWebDavServers();
+  static Future<WebDavConfig> upsertWebDavServer(WebDavConfig config) async {
+    final expectedScope = ProfileCollectionResourceFacade.active
+        ? ProfileRuntime.scope.value
+        : null;
+    final selectionPrefs = await ProfilePreferences.instance();
+    final servers = (await getWebDavServers()).toList();
+    final priorResourceIds = <String>{
+      for (final server in servers)
+        if (server.connectionResourceId != null) server.connectionResourceId!,
+    };
     final index = servers.indexWhere((server) => server.id == config.id);
+    var persisted = config;
     if (index == -1) {
-      servers.add(config);
+      servers.add(persisted);
     } else {
-      servers[index] = config;
+      final source = servers[index];
+      if (source.connectionReadOnly) {
+        throw const ResourceAuthorizationException(
+          'Shared WebDAV connections cannot be edited',
+        );
+      }
+      persisted = WebDavConfig(
+        id: config.id,
+        name: config.name,
+        baseUrl: config.baseUrl,
+        username: config.username,
+        password: config.password,
+        connectionResourceId: source.connectionResourceId,
+        connectionResourceRevision: source.connectionResourceRevision,
+      );
+      servers[index] = persisted;
     }
-    await saveWebDavServers(servers);
-    await setSelectedWebDavServerId(config.id);
+    final saved = await saveWebDavServers(servers);
+    final WebDavConfig canonical;
+    final sourceResourceId = persisted.connectionResourceId;
+    if (sourceResourceId != null) {
+      canonical = saved.singleWhere(
+        (server) => server.connectionResourceId == sourceResourceId,
+      );
+    } else if (ProfileCollectionResourceFacade.active) {
+      canonical = saved.singleWhere(
+        (server) =>
+            server.connectionResourceId != null &&
+            !priorResourceIds.contains(server.connectionResourceId),
+      );
+    } else {
+      canonical = saved.singleWhere((server) => server.id == persisted.id);
+    }
+    if (expectedScope != null && ProfileRuntime.scope.value != expectedScope) {
+      throw StateError('Profile changed while selecting a WebDAV connection');
+    }
+    await selectionPrefs.setString(_webDavSelectedServerIdKey, canonical.id);
+    if (expectedScope != null && ProfileRuntime.scope.value != expectedScope) {
+      throw StateError('Profile changed while selecting a WebDAV connection');
+    }
+    return canonical;
   }
 
   static Future<void> deleteWebDavServer(String id) async {
-    final servers = await getWebDavServers();
-    servers.removeWhere((server) => server.id == id);
-    await saveWebDavServers(servers);
-    final selected = await getSelectedWebDavServerId();
-    if (selected == id) {
-      await setSelectedWebDavServerId(
-        servers.isEmpty ? null : servers.first.id,
-      );
+    final expectedScope = ProfileCollectionResourceFacade.active
+        ? ProfileRuntime.scope.value
+        : null;
+    final selectionPrefs = await ProfilePreferences.instance();
+    final servers = (await getWebDavServers()).toList();
+    if (expectedScope != null && ProfileRuntime.scope.value != expectedScope) {
+      throw StateError('Profile changed while deleting a WebDAV connection');
     }
-    if (servers.isEmpty) {
-      await setWebDavHiddenFromNav(false);
+    servers.removeWhere((server) => server.id == id);
+    final saved = await saveWebDavServers(servers);
+    final selected = selectionPrefs.getString(_webDavSelectedServerIdKey);
+    if (selected == id) {
+      if (saved.isEmpty) {
+        await selectionPrefs.remove(_webDavSelectedServerIdKey);
+      } else {
+        await selectionPrefs.setString(
+          _webDavSelectedServerIdKey,
+          saved.first.id,
+        );
+      }
+    }
+    if (saved.isEmpty) {
+      await selectionPrefs.setBool(_webDavHiddenFromNavKey, false);
+    }
+    if (expectedScope != null && ProfileRuntime.scope.value != expectedScope) {
+      throw StateError('Profile changed while deleting a WebDAV connection');
     }
   }
 
@@ -5390,7 +6094,7 @@ class StorageService {
     required int tvmazeShowId,
     required String showName,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final mappingsJson = prefs.getString(_tvMazeSeriesMappingKey);
 
     Map<String, dynamic> mappings = {};
@@ -5398,7 +6102,7 @@ class StorageService {
       try {
         mappings = jsonDecode(mappingsJson) as Map<String, dynamic>;
       } catch (e) {
-        print('Error parsing TVMaze series mappings: $e');
+        debugPrint('Error parsing TVMaze series mappings: $e');
       }
     }
 
@@ -5410,7 +6114,7 @@ class StorageService {
     };
 
     await prefs.setString(_tvMazeSeriesMappingKey, jsonEncode(mappings));
-    print(
+    debugPrint(
       '✅ Saved TVMaze mapping for $key -> Show ID: $tvmazeShowId ($showName)',
     );
   }
@@ -5419,7 +6123,7 @@ class StorageService {
   static Future<Map<String, dynamic>?> getTVMazeSeriesMapping(
     Map<String, dynamic> playlistItem,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final mappingsJson = prefs.getString(_tvMazeSeriesMappingKey);
 
     if (mappingsJson == null) return null;
@@ -5430,13 +6134,13 @@ class StorageService {
       final mapping = mappings[key];
 
       if (mapping != null && mapping is Map<String, dynamic>) {
-        print(
+        debugPrint(
           '✅ Found TVMaze mapping for $key -> Show ID: ${mapping['tvmazeShowId']} (${mapping['showName']})',
         );
         return mapping;
       }
     } catch (e) {
-      print('Error reading TVMaze series mappings: $e');
+      debugPrint('Error reading TVMaze series mappings: $e');
     }
 
     return null;
@@ -5446,7 +6150,7 @@ class StorageService {
   static Future<void> clearTVMazeSeriesMapping(
     Map<String, dynamic> playlistItem,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final mappingsJson = prefs.getString(_tvMazeSeriesMappingKey);
 
     if (mappingsJson == null) return;
@@ -5458,18 +6162,18 @@ class StorageService {
       if (mappings.containsKey(key)) {
         mappings.remove(key);
         await prefs.setString(_tvMazeSeriesMappingKey, jsonEncode(mappings));
-        print('✅ Cleared TVMaze mapping for $key');
+        debugPrint('✅ Cleared TVMaze mapping for $key');
       }
     } catch (e) {
-      print('Error clearing TVMaze series mapping: $e');
+      debugPrint('Error clearing TVMaze series mapping: $e');
     }
   }
 
   /// Clear all TVMaze series mappings
   static Future<void> clearAllTVMazeSeriesMappings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_tvMazeSeriesMappingKey);
-    print('✅ Cleared all TVMaze series mappings');
+    debugPrint('✅ Cleared all TVMaze series mappings');
   }
 
   // Playlist Poster Override Methods
@@ -5480,7 +6184,7 @@ class StorageService {
     required Map<String, dynamic> playlistItem,
     required String posterUrl,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final overridesJson = prefs.getString(_playlistPosterOverridesKey);
 
     Map<String, dynamic> overrides = {};
@@ -5488,7 +6192,7 @@ class StorageService {
       try {
         overrides = jsonDecode(overridesJson) as Map<String, dynamic>;
       } catch (e) {
-        print('Error parsing playlist poster overrides: $e');
+        debugPrint('Error parsing playlist poster overrides: $e');
       }
     }
 
@@ -5499,7 +6203,7 @@ class StorageService {
     };
 
     await prefs.setString(_playlistPosterOverridesKey, jsonEncode(overrides));
-    print('✅ Saved poster override for $key -> $posterUrl');
+    debugPrint('✅ Saved poster override for $key -> $posterUrl');
   }
 
   /// Get poster URL override for a playlist item
@@ -5507,7 +6211,7 @@ class StorageService {
   static Future<String?> getPlaylistPosterOverride(
     Map<String, dynamic> playlistItem,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final overridesJson = prefs.getString(_playlistPosterOverridesKey);
 
     if (overridesJson == null) return null;
@@ -5524,7 +6228,7 @@ class StorageService {
         }
       }
     } catch (e) {
-      print('Error reading playlist poster override: $e');
+      debugPrint('Error reading playlist poster override: $e');
     }
 
     return null;
@@ -5533,7 +6237,7 @@ class StorageService {
   /// Get all poster overrides as a map of item unique key → poster URL.
   /// Reads and parses the overrides blob once for batch lookups.
   static Future<Map<String, String>> getAllPlaylistPosterOverrides() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final overridesJson = prefs.getString(_playlistPosterOverridesKey);
     if (overridesJson == null) return {};
 
@@ -5564,7 +6268,7 @@ class StorageService {
   static Future<void> clearPlaylistPosterOverride(
     Map<String, dynamic> playlistItem,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final overridesJson = prefs.getString(_playlistPosterOverridesKey);
 
     if (overridesJson == null) return;
@@ -5579,18 +6283,18 @@ class StorageService {
           _playlistPosterOverridesKey,
           jsonEncode(overrides),
         );
-        print('✅ Cleared poster override for $key');
+        debugPrint('✅ Cleared poster override for $key');
       }
     } catch (e) {
-      print('Error clearing playlist poster override: $e');
+      debugPrint('Error clearing playlist poster override: $e');
     }
   }
 
   /// Clear all playlist poster overrides
   static Future<void> clearAllPlaylistPosterOverrides() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_playlistPosterOverridesKey);
-    print('✅ Cleared all playlist poster overrides');
+    debugPrint('✅ Cleared all playlist poster overrides');
   }
 
   // ============================================================================
@@ -5600,7 +6304,7 @@ class StorageService {
   /// Get torrent search history
   /// Returns list of maps containing torrent JSON + service + timestamp
   static Future<List<Map<String, dynamic>>> getTorrentSearchHistory() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_torrentSearchHistoryKey);
     if (raw == null || raw.isEmpty) return [];
     try {
@@ -5618,7 +6322,7 @@ class StorageService {
     Map<String, dynamic> torrentJson,
     String service,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final history = await getTorrentSearchHistory();
 
     final infohash = torrentJson['infohash'] as String?;
@@ -5647,26 +6351,26 @@ class StorageService {
 
   /// Clear all search history
   static Future<void> clearTorrentSearchHistory() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_torrentSearchHistoryKey);
   }
 
   /// Get whether search history tracking is enabled
   static Future<bool> getTorrentSearchHistoryEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_torrentSearchHistoryEnabledKey) ?? true;
   }
 
   /// Set whether search history tracking is enabled
   static Future<void> setTorrentSearchHistoryEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_torrentSearchHistoryEnabledKey, enabled);
   }
 
   /// Whether quick-play ranks candidates by the default filters (the
   /// FilterLadder). ON by default — the ladder only reorders, never drops.
   static Future<bool> getQuickPlayHonorsFilters() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_quickPlayHonorsFiltersKey) ?? true;
   }
 
@@ -5674,25 +6378,25 @@ class StorageService {
   /// The Quick Play page owns the independent Movie and Series `useFilters`
   /// values; a global write must never silently rewrite either profile.
   static Future<void> setQuickPlayHonorsFilters(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_quickPlayHonorsFiltersKey, value);
   }
 
   // Default Torrent Filter Settings
   static Future<List<String>> getDefaultFilterQualities() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_defaultFilterQualitiesKey);
     if (json == null) return [];
     return List<String>.from(jsonDecode(json));
   }
 
   static Future<void> setDefaultFilterQualities(List<String> qualities) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_defaultFilterQualitiesKey, jsonEncode(qualities));
   }
 
   static Future<List<String>> getDefaultFilterRipSources() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_defaultFilterRipSourcesKey);
     if (json == null) return [];
     return List<String>.from(jsonDecode(json));
@@ -5701,43 +6405,43 @@ class StorageService {
   static Future<void> setDefaultFilterRipSources(
     List<String> ripSources,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_defaultFilterRipSourcesKey, jsonEncode(ripSources));
   }
 
   static Future<List<String>> getDefaultFilterLanguages() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_defaultFilterLanguagesKey);
     if (json == null) return [];
     return List<String>.from(jsonDecode(json));
   }
 
   static Future<void> setDefaultFilterLanguages(List<String> languages) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_defaultFilterLanguagesKey, jsonEncode(languages));
   }
 
   static Future<List<String>> getDefaultFilterSizes() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_defaultFilterSizesKey);
     if (json == null) return [];
     return List<String>.from(jsonDecode(json));
   }
 
   static Future<void> setDefaultFilterSizes(List<String> sizes) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_defaultFilterSizesKey, jsonEncode(sizes));
   }
 
   static Future<List<String>> getDefaultFilterDynamicRanges() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_defaultFilterDynamicRangesKey);
     if (json == null) return [];
     return List<String>.from(jsonDecode(json));
   }
 
   static Future<void> setDefaultFilterDynamicRanges(List<String> ranges) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_defaultFilterDynamicRangesKey, jsonEncode(ranges));
   }
 
@@ -5745,7 +6449,7 @@ class StorageService {
   // separate from the Search tab's default filters above so tuning a channel
   // feed never changes search behaviour (and vice versa).
   static Future<List<String>> getDebrifyTvFilterQualities() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_debrifyTvFilterQualitiesKey);
     if (json == null) return [];
     return List<String>.from(jsonDecode(json));
@@ -5754,53 +6458,71 @@ class StorageService {
   static Future<void> setDebrifyTvFilterQualities(
     List<String> qualities,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_debrifyTvFilterQualitiesKey, jsonEncode(qualities));
   }
 
   static Future<List<String>> getDebrifyTvFilterSizes() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_debrifyTvFilterSizesKey);
     if (json == null) return [];
     return List<String>.from(jsonDecode(json));
   }
 
   static Future<void> setDebrifyTvFilterSizes(List<String> sizes) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_debrifyTvFilterSizesKey, jsonEncode(sizes));
   }
 
   /// Whether the user dismissed the Debrify TV external-player notice forever.
   static Future<bool> getDebrifyTvExternalNoticeDismissed() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_debrifyTvExternalNoticeDismissedKey) ?? false;
   }
 
   static Future<void> setDebrifyTvExternalNoticeDismissed(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_debrifyTvExternalNoticeDismissedKey, value);
   }
 
   // Default Torrent Provider methods
   // Returns: 'none' (ask every time), 'torbox', 'debrid', or 'pikpak'
   static Future<String> getDefaultTorrentProvider() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_defaultTorrentProviderKey) ?? 'none';
   }
 
   static Future<void> setDefaultTorrentProvider(String provider) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_defaultTorrentProviderKey, provider);
   }
 
   static Future<void> clearDefaultTorrentProvider() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_defaultTorrentProviderKey);
   }
 
-  static Future<List<IndexerManagerConfig>> getIndexerManagerConfigs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final rawList = prefs.getStringList(_indexerManagerConfigsKey) ?? [];
+  static Future<List<IndexerManagerConfig>> getIndexerManagerConfigs({
+    bool forSettings = true,
+    bool forRemoteTransfer = false,
+  }) async {
+    if (ProfileCollectionResourceFacade.active) {
+      final rows = await ProfileCollectionResourceFacade.read(
+        types: const <ConnectionResourceType>{
+          ConnectionResourceType.jackett,
+          ConnectionResourceType.prowlarr,
+        },
+        feature: ProfileFeature.torrentSearch,
+        forSettings: forSettings,
+        forRemoteTransfer: forRemoteTransfer,
+      );
+      return rows.map(IndexerManagerConfig.fromJson).toList(growable: false);
+    }
+    final prefs = await ProfilePreferences.instance();
+    final rawList = await SecretVault.getStringList(
+      prefs,
+      _indexerManagerConfigsKey,
+    );
     return rawList
         .map((raw) {
           try {
@@ -5816,33 +6538,59 @@ class StorageService {
         .toList();
   }
 
-  static Future<void> setIndexerManagerConfigs(
+  static Future<List<IndexerManagerConfig>> setIndexerManagerConfigs(
     List<IndexerManagerConfig> configs,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    if (ProfileCollectionResourceFacade.active) {
+      final rows = await ProfileCollectionResourceFacade.replaceAndRead(
+        types: const <ConnectionResourceType>{
+          ConnectionResourceType.jackett,
+          ConnectionResourceType.prowlarr,
+        },
+        feature: ProfileFeature.torrentSearch,
+        items: <ResourceCollectionItem>[
+          for (final config in configs)
+            ResourceCollectionItem(
+              type: config.type == IndexerManagerType.prowlarr
+                  ? ConnectionResourceType.prowlarr
+                  : ConnectionResourceType.jackett,
+              label: config.displayName,
+              publicConfig: <String, dynamic>{
+                'managerName': config.displayName,
+              },
+              secretConfig: config.toJson(),
+              sourceResourceId: config.connectionResourceId,
+            ),
+        ],
+        forSettings: true,
+      );
+      return rows.map(IndexerManagerConfig.fromJson).toList(growable: false);
+    }
+    final prefs = await ProfilePreferences.instance();
     final rawList = configs
         .map((config) => jsonEncode(config.toJson()))
         .toList();
-    await prefs.setStringList(_indexerManagerConfigsKey, rawList);
+    await SecretVault.setStringList(prefs, _indexerManagerConfigsKey, rawList);
+    return List<IndexerManagerConfig>.unmodifiable(configs);
   }
 
   static Future<String?> getSupportRemoteConfigCache() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     return prefs.getString(_supportRemoteConfigCacheKey);
   }
 
   static Future<void> setSupportRemoteConfigCache(String json) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     await prefs.setString(_supportRemoteConfigCacheKey, json);
   }
 
   static Future<List<String>> getDismissedDonationCampaignIds() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     return prefs.getStringList(_dismissedDonationCampaignIdsKey) ?? <String>[];
   }
 
   static Future<void> dismissDonationCampaign(String campaignId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     final ids =
         prefs.getStringList(_dismissedDonationCampaignIdsKey) ?? <String>[];
     if (ids.contains(campaignId)) return;
@@ -5854,62 +6602,62 @@ class StorageService {
 
   /// Get VR player mode: 'disabled', 'auto', or 'always'
   static Future<String> getQuickPlayVrMode() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_quickPlayVrModeKey) ?? 'disabled';
   }
 
   static Future<void> setQuickPlayVrMode(String mode) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_quickPlayVrModeKey, mode);
   }
 
   /// Get default VR screen type (dome, sphere, flat, fisheye, mkx200, rf52)
   static Future<String> getQuickPlayVrDefaultScreenType() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_quickPlayVrDefaultScreenTypeKey) ?? 'dome';
   }
 
   static Future<void> setQuickPlayVrDefaultScreenType(String screenType) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_quickPlayVrDefaultScreenTypeKey, screenType);
   }
 
   /// Get default VR stereo mode (sbs, tb, off)
   static Future<String> getQuickPlayVrDefaultStereoMode() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_quickPlayVrDefaultStereoModeKey) ?? 'sbs';
   }
 
   static Future<void> setQuickPlayVrDefaultStereoMode(String stereoMode) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_quickPlayVrDefaultStereoModeKey, stereoMode);
   }
 
   /// Get whether to auto-detect VR format from filename
   static Future<bool> getQuickPlayVrAutoDetectFormat() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_quickPlayVrAutoDetectFormatKey) ?? true;
   }
 
   static Future<void> setQuickPlayVrAutoDetectFormat(bool autoDetect) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_quickPlayVrAutoDetectFormatKey, autoDetect);
   }
 
   /// Get whether to show VR format selection dialog before launching DeoVR
   static Future<bool> getQuickPlayVrShowDialog() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_quickPlayVrShowDialogKey) ?? true;
   }
 
   static Future<void> setQuickPlayVrShowDialog(bool showDialog) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_quickPlayVrShowDialogKey, showDialog);
   }
 
   /// Clear all Quick Play VR settings
   static Future<void> clearQuickPlayVrSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_quickPlayVrModeKey);
     await prefs.remove(_quickPlayVrDefaultScreenTypeKey);
     await prefs.remove(_quickPlayVrDefaultStereoModeKey);
@@ -5926,7 +6674,7 @@ class StorageService {
   static Future<QuickPlayRules> getQuickPlayRules({
     required bool isMovie,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return _quickPlayRulesFromPrefs(prefs, isMovie: isMovie);
   }
 
@@ -5971,7 +6719,7 @@ class StorageService {
     QuickPlayRules rules, {
     required bool isMovie,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final siblingIsMovie = !isMovie;
     final siblingKey = siblingIsMovie
         ? _quickPlayMovieRulesKey
@@ -6012,43 +6760,43 @@ class StorageService {
       QuickPlayRules.debrifyDefault(isMovie: false),
       isMovie: false,
     );
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_quickPlayHonorsFiltersKey, true);
   }
 
   /// Get whether to try multiple torrents if first is not cached
   /// Default: true (try next torrent on failure)
   static Future<bool> getQuickPlayTryMultipleTorrents() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_quickPlayTryMultipleTorrentsKey) ?? true;
   }
 
   static Future<void> setQuickPlayTryMultipleTorrents(bool tryMultiple) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_quickPlayTryMultipleTorrentsKey, tryMultiple);
   }
 
   /// Whether series plays should search packs first and pin whatever source
   /// plays. Defaults ON. See [_autoBindSeriesPacksKey].
   static Future<bool> getAutoBindSeriesPacksOnPlay() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_autoBindSeriesPacksKey) ?? true;
   }
 
   static Future<void> setAutoBindSeriesPacksOnPlay(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_autoBindSeriesPacksKey, enabled);
   }
 
   /// Get max number of torrents to try before giving up
   /// Default: 5, Range: 2-10
   static Future<int> getQuickPlayMaxRetries() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_quickPlayMaxRetriesKey) ?? 5;
   }
 
   static Future<void> setQuickPlayMaxRetries(int maxRetries) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     // Clamp between 2 and 10
     await prefs.setInt(_quickPlayMaxRetriesKey, maxRetries.clamp(2, 10));
   }
@@ -6056,30 +6804,30 @@ class StorageService {
   static const String _quickPlaySearchTimeoutKey = 'quick_play_search_timeout';
 
   static Future<int> getQuickPlaySearchTimeout() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_quickPlaySearchTimeoutKey) ?? 5;
   }
 
   static Future<void> setQuickPlaySearchTimeout(int seconds) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_quickPlaySearchTimeoutKey, seconds);
   }
 
   static const String _stremioSourcesTimeoutKey = 'stremio_sources_timeout';
 
   static Future<int> getStremioSourcesTimeout() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_stremioSourcesTimeoutKey) ?? 15;
   }
 
   static Future<void> setStremioSourcesTimeout(int seconds) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_stremioSourcesTimeoutKey, seconds);
   }
 
   /// Clear all Quick Play Cache Fallback settings
   static Future<void> clearQuickPlayCacheFallbackSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_quickPlayTryMultipleTorrentsKey);
     await prefs.remove(_quickPlayMaxRetriesKey);
     await prefs.remove(_quickPlayMovieRulesKey);
@@ -6092,39 +6840,39 @@ class StorageService {
   /// Returns 'debrify' (built-in player) by default
   /// Valid values: 'debrify', 'external', 'deovr'
   static Future<String> getDefaultPlayerMode() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_defaultPlayerModeKey) ?? 'debrify';
   }
 
   /// Set default player mode
   /// Valid values: 'debrify', 'external', 'deovr'
   static Future<void> setDefaultPlayerMode(String mode) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_defaultPlayerModeKey, mode);
   }
 
   /// Get preferred external player key
   /// Returns 'system_default' if not set
   static Future<String> getPreferredExternalPlayer() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_externalPlayerPreferredKey) ?? 'system_default';
   }
 
   /// Set preferred external player key
   static Future<void> setPreferredExternalPlayer(String playerKey) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_externalPlayerPreferredKey, playerKey);
   }
 
   /// Get custom external player path (for custom player option)
   static Future<String?> getCustomExternalPlayerPath() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_externalPlayerCustomPathKey);
   }
 
   /// Set custom external player path
   static Future<void> setCustomExternalPlayerPath(String? path) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (path == null || path.isEmpty) {
       await prefs.remove(_externalPlayerCustomPathKey);
     } else {
@@ -6134,13 +6882,13 @@ class StorageService {
 
   /// Get custom external player display name
   static Future<String?> getCustomExternalPlayerName() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_externalPlayerCustomNameKey);
   }
 
   /// Set custom external player display name
   static Future<void> setCustomExternalPlayerName(String? name) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (name == null || name.isEmpty) {
       await prefs.remove(_externalPlayerCustomNameKey);
     } else {
@@ -6151,13 +6899,13 @@ class StorageService {
   /// Get custom external player command template
   /// Should contain {url} placeholder, optionally {title}
   static Future<String?> getCustomExternalPlayerCommand() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_externalPlayerCustomCommandKey);
   }
 
   /// Set custom external player command template
   static Future<void> setCustomExternalPlayerCommand(String? command) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (command == null || command.isEmpty) {
       await prefs.remove(_externalPlayerCustomCommandKey);
     } else {
@@ -6171,26 +6919,26 @@ class StorageService {
 
   /// Get preferred iOS external player key
   static Future<String> getPreferredIOSExternalPlayer() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_iosExternalPlayerPreferredKey) ?? 'vlc';
   }
 
   /// Set preferred iOS external player key
   static Future<void> setPreferredIOSExternalPlayer(String playerKey) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_iosExternalPlayerPreferredKey, playerKey);
   }
 
   /// Get iOS custom URL scheme template
   /// Should contain {url} placeholder, e.g., "myplayer://play?url={url}"
   static Future<String?> getIOSCustomSchemeTemplate() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_iosCustomSchemeTemplateKey);
   }
 
   /// Set iOS custom URL scheme template
   static Future<void> setIOSCustomSchemeTemplate(String? template) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (template == null || template.isEmpty) {
       await prefs.remove(_iosCustomSchemeTemplateKey);
     } else {
@@ -6204,27 +6952,27 @@ class StorageService {
 
   /// Get preferred Linux external player key
   static Future<String> getPreferredLinuxExternalPlayer() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_linuxExternalPlayerPreferredKey) ??
         'system_default';
   }
 
   /// Set preferred Linux external player key
   static Future<void> setPreferredLinuxExternalPlayer(String playerKey) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_linuxExternalPlayerPreferredKey, playerKey);
   }
 
   /// Get Linux custom command template
   /// Should contain {url} placeholder, e.g., "vlc --fullscreen {url}"
   static Future<String?> getLinuxCustomCommand() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_linuxCustomCommandKey);
   }
 
   /// Set Linux custom command template
   static Future<void> setLinuxCustomCommand(String? command) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (command == null || command.isEmpty) {
       await prefs.remove(_linuxCustomCommandKey);
     } else {
@@ -6238,7 +6986,7 @@ class StorageService {
 
   /// Get preferred Windows external player key
   static Future<String> getPreferredWindowsExternalPlayer() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_windowsExternalPlayerPreferredKey) ??
         'system_default';
   }
@@ -6247,20 +6995,20 @@ class StorageService {
   static Future<void> setPreferredWindowsExternalPlayer(
     String playerKey,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_windowsExternalPlayerPreferredKey, playerKey);
   }
 
   /// Get Windows custom command template
   /// Should contain {url} placeholder, e.g., "vlc --fullscreen {url}"
   static Future<String?> getWindowsCustomCommand() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_windowsCustomCommandKey);
   }
 
   /// Set Windows custom command template
   static Future<void> setWindowsCustomCommand(String? command) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (command == null || command.isEmpty) {
       await prefs.remove(_windowsCustomCommandKey);
     } else {
@@ -6270,7 +7018,7 @@ class StorageService {
 
   /// Clear all external player settings
   static Future<void> clearExternalPlayerSettings() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_defaultPlayerModeKey);
     await prefs.remove(_externalPlayerPreferredKey);
     await prefs.remove(_externalPlayerCustomPathKey);
@@ -6284,13 +7032,13 @@ class StorageService {
   /// 0=Contain, 1=Cover, 2=FitWidth, 3=FitHeight, 4=16:9, 5=4:3, 6=21:9, 7=1:1, 8=3:2, 9=5:4
   /// Default: 2 (Fit Width)
   static Future<int> getPlayerDefaultAspectIndex() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_playerDefaultAspectIndexKey) ?? 2;
   }
 
   /// Set default aspect ratio index for Flutter/mobile player
   static Future<void> setPlayerDefaultAspectIndex(int index) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_playerDefaultAspectIndexKey, index);
   }
 
@@ -6298,13 +7046,13 @@ class StorageService {
   /// 0=Fit, 1=Fill, 2=Zoom
   /// Default: 0 (Fit)
   static Future<int> getPlayerDefaultAspectIndexTv() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_playerDefaultAspectIndexTvKey) ?? 0;
   }
 
   /// Set default aspect ratio index for Android TV player
   static Future<void> setPlayerDefaultAspectIndexTv(int index) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_playerDefaultAspectIndexTvKey, index);
   }
 
@@ -6312,13 +7060,13 @@ class StorageService {
   /// 0=Off, 1=Low, 2=Medium, 3=High, 4=Higher, 5=Extreme, 6=Max, 7=Sleeping Baby
   /// Default: 0 (Off)
   static Future<int> getPlayerNightModeIndex() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_playerNightModeIndexKey) ?? 0;
   }
 
   /// Set night mode index (Android TV only)
   static Future<void> setPlayerNightModeIndex(int index) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_playerNightModeIndexKey, index);
   }
 
@@ -6327,13 +7075,13 @@ class StorageService {
   /// Android only. Default: false — off changes nothing about how audio is
   /// output today, since enabling it switches the phone player's audio backend.
   static Future<bool> getPlayerSystemAudioEffects() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_playerSystemAudioEffectsKey) ?? false;
   }
 
   /// Set whether system audio effect apps may process our playback.
   static Future<void> setPlayerSystemAudioEffects(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_playerSystemAudioEffectsKey, enabled);
   }
 
@@ -6342,12 +7090,12 @@ class StorageService {
   /// false — passthrough is fail-loud on routes that misreport support,
   /// so only the user can turn it on.
   static Future<bool> getAudioPassthroughEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_audioPassthroughKey) ?? false;
   }
 
   static Future<void> setAudioPassthroughEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_audioPassthroughKey, enabled);
   }
 
@@ -6356,13 +7104,43 @@ class StorageService {
   /// multichannel LPCM. Default false until route-safety is field-proven
   /// (AUDIO_FIDELITY_PLAN.md rev 2).
   static Future<bool> getAppleMultichannelAudio() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_appleMultichannelAudioKey) ?? false;
   }
 
   static Future<void> setAppleMultichannelAudio(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_appleMultichannelAudioKey, enabled);
+  }
+
+  /// Apple TV diagnostics. The player picks `ao=avfoundation,audiounit` and
+  /// caps `audio-channels` to stereo on a route that reports two channels;
+  /// these two override that automatic choice from either direction, so a
+  /// reporter can narrow an audio problem without a custom build.
+  ///
+  /// Force stereo: cap regardless of what the route claims. Use when a
+  /// multichannel route folds badly.
+  static Future<bool> getTvosForceStereoAudio() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_tvosForceStereoAudioKey) ?? false;
+  }
+
+  static Future<void> setTvosForceStereoAudio(bool enabled) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_tvosForceStereoAudioKey, enabled);
+  }
+
+  /// Legacy output: go back to `ao=audiounit`, the pre-2026-08 behaviour.
+  /// It is silent on Dolby Atmos routes — which is why avfoundation is now
+  /// the default — but it is the escape hatch if the new output misbehaves.
+  static Future<bool> getTvosLegacyAudioOutput() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getBool(_tvosLegacyAudioOutputKey) ?? false;
+  }
+
+  static Future<void> setTvosLegacyAudioOutput(bool enabled) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setBool(_tvosLegacyAudioOutputKey, enabled);
   }
 
   /// Apple TV only: force the media-kit player to software video decoding.
@@ -6370,19 +7148,19 @@ class StorageService {
   /// PLAYER_TVOS_10BIT_PLAN.md) — for files whose formats read clean but
   /// render wrong. Default false: hardware decoding, today's behavior.
   static Future<bool> getTvosForceSoftwareDecode() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_tvosForceSoftwareDecodeKey) ?? false;
   }
 
   static Future<void> setTvosForceSoftwareDecode(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_tvosForceSoftwareDecodeKey, enabled);
   }
 
   /// Renderer used by the Flutter media-kit player on Android phones/tablets.
   /// Android TV ignores this and keeps its native Media3 SurfaceView backend.
   static Future<AndroidVideoRendererMode> getAndroidVideoRendererMode() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return AndroidVideoRendererMode.fromStorage(
       prefs.getString(_androidVideoRendererModeKey),
     );
@@ -6391,7 +7169,7 @@ class StorageService {
   static Future<void> setAndroidVideoRendererMode(
     AndroidVideoRendererMode mode,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_androidVideoRendererModeKey, mode.storageKey);
   }
 
@@ -6399,19 +7177,19 @@ class StorageService {
   /// manual skip buttons. Manual buttons are enabled by default; this setting
   /// never authorizes automatic seeking.
   static Future<bool> getSkipSegmentsEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_skipSegmentsEnabledKey) ?? true;
   }
 
   static Future<void> setSkipSegmentsEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_skipSegmentsEnabledKey, enabled);
   }
 
   /// Timestamp source used by the Debrify Player. Unknown stored values fall
   /// back safely so removing a provider cannot strand the feature.
   static Future<String> getSkipSegmentProvider() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final provider = prefs.getString(_skipSegmentProviderKey);
     return _supportedSkipSegmentProviders.contains(provider)
         ? provider!
@@ -6419,7 +7197,7 @@ class StorageService {
   }
 
   static Future<void> setSkipSegmentProvider(String provider) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final supported = _supportedSkipSegmentProviders.contains(provider)
         ? provider
         : skipSegmentProviderAuto;
@@ -6442,13 +7220,13 @@ class StorageService {
   static bool playerStartPortraitCached = false;
 
   static Future<bool> getPlayerStartPortrait() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     playerStartPortraitCached = prefs.getBool(_playerStartPortraitKey) ?? false;
     return playerStartPortraitCached;
   }
 
   static Future<void> setPlayerStartPortrait(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_playerStartPortraitKey, enabled);
     playerStartPortraitCached = enabled;
   }
@@ -6468,7 +7246,7 @@ class StorageService {
   static bool uiHapticsCached = true;
 
   static Future<bool> getUiSounds() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     uiSoundsCached = prefs.getBool(_uiSoundsKey) ?? true;
     return uiSoundsCached;
   }
@@ -6478,19 +7256,19 @@ class StorageService {
     // cannot await, so publishing after the platform write leaves a window in
     // which a user who has just switched sound off still hears the next tick.
     uiSoundsCached = enabled;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_uiSoundsKey, enabled);
   }
 
   static Future<bool> getUiHaptics() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     uiHapticsCached = prefs.getBool(_uiHapticsKey) ?? true;
     return uiHapticsCached;
   }
 
   static Future<void> setUiHaptics(bool enabled) async {
     uiHapticsCached = enabled;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_uiHapticsKey, enabled);
   }
 
@@ -6502,26 +7280,26 @@ class StorageService {
   /// toggle is the opt-in. The NATIVE read's default must stay in lock-step
   /// or an untouched toggle would mean different things on the two sides.
   static Future<bool> getSubtitleAutoSyncEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_subtitleAutoSyncKey) ?? false;
   }
 
   static Future<void> setSubtitleAutoSyncEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_subtitleAutoSyncKey, enabled);
   }
 
   /// Get default subtitle language code
   /// Returns language code (e.g., 'en', 'es') or 'off' for disabled, null for no preference
   static Future<String?> getDefaultSubtitleLanguage() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_playerDefaultSubtitleLanguageKey);
   }
 
   /// Set default subtitle language code
   /// Pass language code (e.g., 'en', 'es'), 'off' for disabled, or null to clear preference
   static Future<void> setDefaultSubtitleLanguage(String? languageCode) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (languageCode == null) {
       await prefs.remove(_playerDefaultSubtitleLanguageKey);
     } else {
@@ -6532,14 +7310,14 @@ class StorageService {
   /// Get default audio language code
   /// Returns language code (e.g., 'en', 'es') or null for no preference
   static Future<String?> getDefaultAudioLanguage() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_playerDefaultAudioLanguageKey);
   }
 
   /// Set default audio language code
   /// Pass language code (e.g., 'en', 'es') or null to clear preference
   static Future<void> setDefaultAudioLanguage(String? languageCode) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (languageCode == null) {
       await prefs.remove(_playerDefaultAudioLanguageKey);
     } else {
@@ -6554,7 +7332,7 @@ class StorageService {
   /// separate files whose track ordering differs, so an ordinal wouldn't
   /// carry. Null when the series has no remembered choice.
   static Future<String?> getIptvSeriesAudioLanguage(String seriesKey) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_iptvSeriesAudioLangKey);
     if (raw == null) return null;
     try {
@@ -6572,7 +7350,7 @@ class StorageService {
     String languageCode,
   ) async {
     if (seriesKey.isEmpty || languageCode.isEmpty) return;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     Map<String, dynamic> map = {};
     final raw = prefs.getString(_iptvSeriesAudioLangKey);
     if (raw != null) {
@@ -6586,22 +7364,96 @@ class StorageService {
 
   // IPTV Playlist Settings
 
+  /// Credential-bearing fields of a stored playlist. Encrypted field-level
+  /// rather than sealing the whole element: `content` can be a multi-megabyte
+  /// raw M3U body and this getter sits on hot paths, so blob-level AES would
+  /// cost real time on TV hardware for data that arrived as a plaintext file
+  /// the user chose. Residual: URLs embedded inside a file-imported `content`
+  /// body stay plaintext — accepted.
+  static const List<String> _iptvPlaylistSecretFields = [
+    'url', 'serverUrl', 'username', 'password', 'epgUrl', //
+  ];
+
+  /// Restores the `url` key the legacy→profile migration erased.
+  ///
+  /// An Xtream provider legitimately stores `url: ''` — its endpoint is
+  /// [IptvPlaylist.serverUrl]. The migration's shared resource writer stripped
+  /// every empty value before sealing, so an Xtream resource migrated by an
+  /// affected build carries no `url` key at all, and `IptvPlaylist.fromJson`
+  /// threw on the required cast. That took out the ENTIRE playlist list — and
+  /// with it the IPTV page — rather than the one provider.
+  ///
+  /// Fixing the migration cannot help these devices: migration is a one-way
+  /// door that never re-runs. Repairing on read is what brings them back, and
+  /// it keeps working for anyone who migrated on an affected build and updates
+  /// later.
+  ///
+  /// TWO provider kinds legitimately carry an empty `url`, and both are
+  /// repaired: an Xtream login (endpoint in `serverUrl`) and a playlist
+  /// imported from a file (body in `content` — see the IPTV settings page,
+  /// which writes `url: ''` for exactly that reason). Neither field is
+  /// stripped by the migration, so either one identifies a record whose empty
+  /// `url` was real rather than missing.
+  ///
+  /// Still deliberately narrow: a row with none of the three is genuinely
+  /// malformed and keeps throwing, because papering over that would turn real
+  /// corruption into a silent blank provider.
+  static Map<String, dynamic> _repairMigratedIptvRow(Map<String, dynamic> row) {
+    if (row['url'] != null) return row;
+    if (!_hasText(row['serverUrl']) && !_hasText(row['content'])) return row;
+    return <String, dynamic>{...row, 'url': ''};
+  }
+
+  static bool _hasText(Object? value) =>
+      value is String && value.trim().isNotEmpty;
+
   /// Get all saved IPTV playlists
-  static Future<List<IptvPlaylist>> getIptvPlaylists() async {
-    final prefs = await SharedPreferences.getInstance();
+  static Future<List<IptvPlaylist>> getIptvPlaylists({
+    bool forSettings = true,
+    bool forRemoteTransfer = false,
+  }) async {
+    if (ProfileCollectionResourceFacade.active) {
+      final rows = await ProfileCollectionResourceFacade.read(
+        types: const <ConnectionResourceType>{
+          ConnectionResourceType.iptvM3u,
+          ConnectionResourceType.iptvXtream,
+        },
+        feature: ProfileFeature.iptv,
+        forSettings: forSettings,
+        forRemoteTransfer: forRemoteTransfer,
+      );
+      return rows
+          .map(_repairMigratedIptvRow)
+          .map(IptvPlaylist.fromJson)
+          .toList(growable: false);
+    }
+    final prefs = await ProfilePreferences.instance();
     final jsonList = prefs.getStringList(_iptvPlaylistsKey) ?? [];
-    return jsonList
-        .map((json) {
-          try {
-            return IptvPlaylist.fromJson(
-              Map<String, dynamic>.from(jsonDecode(json) as Map),
-            );
-          } catch (e) {
-            return null;
-          }
-        })
-        .whereType<IptvPlaylist>()
-        .toList();
+    var legacySeen = false;
+    var anyDropped = false;
+    final playlists = <IptvPlaylist>[];
+    for (final json in jsonList) {
+      try {
+        final opened = await SecretVault.openFields(
+          Map<String, dynamic>.from(jsonDecode(json) as Map),
+          _iptvPlaylistSecretFields,
+        );
+        if (opened.wasLegacy) legacySeen = true;
+        // A playlist whose url failed to decrypt throws in fromJson and is
+        // dropped here — same signed-out semantics as the standalone keys.
+        playlists.add(IptvPlaylist.fromJson(opened.map));
+      } catch (e) {
+        // Skip malformed entries FOR THIS READ only.
+        anyDropped = true;
+      }
+    }
+    // Migrate lazily, but never off a lossy read: rewriting while an entry
+    // failed (possibly a transient vault-key hiccup) would turn a one-launch
+    // read error into permanent deletion. A later clean read migrates.
+    if (legacySeen && !anyDropped) {
+      await setIptvPlaylists(playlists);
+    }
+    return playlists;
   }
 
   /// Save IPTV playlists.
@@ -6613,23 +7465,81 @@ class StorageService {
   /// on the next load — two entries with the same id, where id-only equality
   /// makes lookups resolve the stale copy.
   static Future<void> setIptvPlaylists(List<IptvPlaylist> playlists) async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonList = playlists
-        .where((p) => !p.isVirtual)
-        .map((p) => jsonEncode(p.toJson()))
-        .toList();
+    if (ProfileCollectionResourceFacade.active) {
+      final stored = playlists.where((playlist) => !playlist.isVirtual);
+      await ProfileCollectionResourceFacade.replace(
+        types: const <ConnectionResourceType>{
+          ConnectionResourceType.iptvM3u,
+          ConnectionResourceType.iptvXtream,
+        },
+        feature: ProfileFeature.iptv,
+        items: <ResourceCollectionItem>[
+          for (final playlist in stored)
+            ResourceCollectionItem(
+              type: playlist.isXtreamCodes
+                  ? ConnectionResourceType.iptvXtream
+                  : ConnectionResourceType.iptvM3u,
+              label: playlist.name,
+              publicConfig: <String, dynamic>{
+                'playlistName': playlist.name,
+                'providerKind': playlist.isXtreamCodes ? 'xtream' : 'm3u',
+              },
+              secretConfig: playlist.toJson(),
+              sourceResourceId: playlist.connectionResourceId,
+            ),
+        ],
+      );
+      return;
+    }
+    final prefs = await ProfilePreferences.instance();
+    final jsonList = <String>[];
+    for (final p in playlists.where((p) => !p.isVirtual)) {
+      jsonList.add(
+        jsonEncode(
+          await SecretVault.sealFields(p.toJson(), _iptvPlaylistSecretFields),
+        ),
+      );
+    }
     await prefs.setStringList(_iptvPlaylistsKey, jsonList);
+  }
+
+  /// Persists an IPTV collection and returns the authoritative records.
+  ///
+  /// In profile mode a collection write can mint or rotate connection
+  /// resources, so the caller's input objects are deliberately not execution
+  /// capabilities. UI code that keeps using those objects would have no
+  /// resource ID for a new playlist, or a stale revision for an existing one.
+  static Future<List<IptvPlaylist>> setIptvPlaylistsAndReload(
+    List<IptvPlaylist> playlists, {
+    required bool forSettings,
+  }) async {
+    final expectedScope = ProfileCollectionResourceFacade.active
+        ? ProfileRuntime.scope.value
+        : null;
+    await setIptvPlaylists(playlists);
+    if (expectedScope != null &&
+        (!ProfileCollectionResourceFacade.active ||
+            ProfileRuntime.scope.value != expectedScope)) {
+      throw StateError('Profile changed while saving IPTV playlists');
+    }
+    final saved = await getIptvPlaylists(forSettings: forSettings);
+    if (expectedScope != null &&
+        (!ProfileCollectionResourceFacade.active ||
+            ProfileRuntime.scope.value != expectedScope)) {
+      throw StateError('Profile changed while loading IPTV playlists');
+    }
+    return saved;
   }
 
   /// Get default IPTV playlist ID
   static Future<String?> getIptvDefaultPlaylist() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_iptvDefaultPlaylistKey);
   }
 
   /// Set default IPTV playlist ID
   static Future<void> setIptvDefaultPlaylist(String? playlistId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (playlistId == null || playlistId.isEmpty) {
       await prefs.remove(_iptvDefaultPlaylistKey);
     } else {
@@ -6639,13 +7549,13 @@ class StorageService {
 
   /// Check if IPTV defaults have been initialized (to avoid re-adding after user deletes)
   static Future<bool> getIptvDefaultsInitialized() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_iptvDefaultsInitializedKey) ?? false;
   }
 
   /// Mark IPTV defaults as initialized
   static Future<void> setIptvDefaultsInitialized(bool initialized) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_iptvDefaultsInitializedKey, initialized);
   }
 
@@ -6703,8 +7613,10 @@ class StorageService {
         // lookup still stores a usable entry keyed by playlist id.
       }
     }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
+    final prefs = await ProfilePreferences.instance();
+    // Sealed whole: the stored Xtream `url` embeds the account password.
+    await SecretVault.setString(
+      prefs,
       _iptvLastLiveChannelKey,
       jsonEncode({
         'url': url,
@@ -6725,8 +7637,8 @@ class StorageService {
 
   /// The last live channel that reached a playing state, or null.
   static Future<Map<String, dynamic>?> getIptvLastLiveChannel() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_iptvLastLiveChannelKey);
+    final prefs = await ProfilePreferences.instance();
+    final raw = await SecretVault.getString(prefs, _iptvLastLiveChannelKey);
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -6739,7 +7651,7 @@ class StorageService {
   }
 
   static Future<void> clearIptvLastLiveChannel() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_iptvLastLiveChannelKey);
   }
 
@@ -6763,13 +7675,13 @@ class StorageService {
   static const String startupIptvFirstAvailable = 'firstAvailable';
 
   static Future<bool> getStartupIptvEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return (prefs.getBool(_startupAutoLaunchEnabledKey) ?? false) &&
         prefs.getString(_startupModeKey) == 'iptv';
   }
 
   static Future<void> setStartupIptvEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_startupAutoLaunchEnabledKey, enabled);
     if (enabled) {
       await prefs.setString(_startupModeKey, 'iptv');
@@ -6781,7 +7693,7 @@ class StorageService {
   }
 
   static Future<String> getStartupIptvMode() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final mode = prefs.getString(_startupIptvModeKey);
     return mode == startupIptvModePinned
         ? startupIptvModePinned
@@ -6789,7 +7701,7 @@ class StorageService {
   }
 
   static Future<void> setStartupIptvMode(String mode) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(
       _startupIptvModeKey,
       mode == startupIptvModePinned
@@ -6801,8 +7713,8 @@ class StorageService {
   /// The pinned startup channel. Same blob shape as [setIptvLastLiveChannel],
   /// so both modes resolve through one code path at launch.
   static Future<Map<String, dynamic>?> getStartupIptvChannel() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_startupIptvChannelKey);
+    final prefs = await ProfilePreferences.instance();
+    final raw = await SecretVault.getString(prefs, _startupIptvChannelKey);
     if (raw == null || raw.isEmpty) return null;
     try {
       final decoded = jsonDecode(raw);
@@ -6839,8 +7751,11 @@ class StorageService {
         }
       } catch (_) {}
     }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
+    final prefs = await ProfilePreferences.instance();
+    // Sealed whole for the same reason as the last-live-channel blob: the
+    // Xtream `url` embeds the account password.
+    await SecretVault.setString(
+      prefs,
       _startupIptvChannelKey,
       jsonEncode({
         'url': url,
@@ -6859,7 +7774,7 @@ class StorageService {
   }
 
   static Future<void> clearStartupIptvChannel() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove(_startupIptvChannelKey);
   }
 
@@ -6914,29 +7829,29 @@ class StorageService {
 
   /// Get whether remote control feature is enabled
   static Future<bool> getRemoteControlEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     return prefs.getBool(_remoteControlEnabledKey) ?? true;
   }
 
   static Future<bool> getUpdateAutoCheckEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     return prefs.getBool(_updateAutoCheckEnabledKey) ?? true;
   }
 
   static Future<void> setUpdateAutoCheckEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     await prefs.setBool(_updateAutoCheckEnabledKey, enabled);
   }
 
   static Future<String?> getIgnoredUpdateVersion() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     final value = prefs.getString(_updateIgnoredVersionKey);
     if (value == null || value.trim().isEmpty) return null;
     return value;
   }
 
   static Future<void> setIgnoredUpdateVersion(String? version) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     if (version == null || version.trim().isEmpty) {
       await prefs.remove(_updateIgnoredVersionKey);
     } else {
@@ -6946,37 +7861,37 @@ class StorageService {
 
   /// Set whether remote control feature is enabled
   static Future<void> setRemoteControlEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     await prefs.setBool(_remoteControlEnabledKey, enabled);
   }
 
   /// Get whether remote intro dialog has been shown
   static Future<bool> getRemoteIntroShown() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     return prefs.getBool(_remoteIntroShownKey) ?? false;
   }
 
   /// Set whether remote intro dialog has been shown
   static Future<void> setRemoteIntroShown(bool shown) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     await prefs.setBool(_remoteIntroShownKey, shown);
   }
 
   /// Get TV device name for remote control (TV only)
   static Future<String?> getRemoteTvDeviceName() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     return prefs.getString(_remoteTvDeviceNameKey);
   }
 
   /// Set TV device name for remote control (TV only)
   static Future<void> setRemoteTvDeviceName(String name) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     await prefs.setString(_remoteTvDeviceNameKey, name);
   }
 
   /// Get last connected device info (Mobile only)
   static Future<Map<String, dynamic>?> getRemoteLastDevice() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     final raw = prefs.getString(_remoteLastDeviceKey);
     if (raw == null) return null;
     try {
@@ -6988,13 +7903,13 @@ class StorageService {
 
   /// Save last connected device info (Mobile only)
   static Future<void> setRemoteLastDevice(Map<String, dynamic> device) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     await prefs.setString(_remoteLastDeviceKey, jsonEncode(device));
   }
 
   /// Clear last connected device info
   static Future<void> clearRemoteLastDevice() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await DevicePreferences.instance();
     await prefs.remove(_remoteLastDeviceKey);
   }
 
@@ -7004,108 +7919,108 @@ class StorageService {
 
   /// Get the Stremio TV rotation interval in minutes (default: 90)
   static Future<int> getStremioTvRotationMinutes() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_stremioTvRotationMinutesKey) ?? 90;
   }
 
   /// Save the Stremio TV rotation interval in minutes
   static Future<void> setStremioTvRotationMinutes(int value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_stremioTvRotationMinutesKey, value);
   }
 
   /// Get the Stremio TV series rotation interval in minutes (default: 45)
   static Future<int> getStremioTvSeriesRotationMinutes() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_stremioTvSeriesRotationMinutesKey) ?? 45;
   }
 
   /// Save the Stremio TV series rotation interval in minutes
   static Future<void> setStremioTvSeriesRotationMinutes(int value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_stremioTvSeriesRotationMinutesKey, value);
   }
 
   /// Get whether Stremio TV picks a random episode each time (default: false)
   static Future<bool> getStremioTvRandomEpisodes() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_stremioTvRandomEpisodesKey) ?? false;
   }
 
   /// Save whether Stremio TV picks a random episode each time
   static Future<void> setStremioTvRandomEpisodes(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_stremioTvRandomEpisodesKey, value);
   }
 
   /// Get whether Stremio TV auto-refreshes catalogs (default: true)
   static Future<bool> getStremioTvAutoRefresh() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_stremioTvAutoRefreshKey) ?? true;
   }
 
   /// Save whether Stremio TV auto-refreshes catalogs
   static Future<void> setStremioTvAutoRefresh(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_stremioTvAutoRefreshKey, value);
   }
 
   /// Get whether Stremio TV hides now-playing details (default: false)
   static Future<bool> getStremioTvHideNowPlaying() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_stremioTvHideNowPlayingKey) ?? false;
   }
 
   /// Save whether Stremio TV hides now-playing details
   static Future<void> setStremioTvHideNowPlaying(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_stremioTvHideNowPlayingKey, value);
   }
 
   static Future<bool> getStremioTvTorrentsFirst() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getBool(_stremioTvTorrentsFirstKey) ?? true;
   }
 
   static Future<void> setStremioTvTorrentsFirst(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setBool(_stremioTvTorrentsFirstKey, value);
   }
 
   /// Get preferred quality for Stremio TV streams (default: 'auto')
   /// Values: 'auto', '720p', '1080p', '2160p'
   static Future<String> getStremioTvPreferredQuality() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_stremioTvPreferredQualityKey) ?? 'auto';
   }
 
   /// Save preferred quality for Stremio TV streams
   static Future<void> setStremioTvPreferredQuality(String value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_stremioTvPreferredQualityKey, value);
   }
 
   /// Get preferred debrid provider for Stremio TV (auto = first available)
   static Future<String> getStremioTvDebridProvider() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getString(_stremioTvDebridProviderKey) ?? 'auto';
   }
 
   /// Save preferred debrid provider for Stremio TV
   static Future<void> setStremioTvDebridProvider(String value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setString(_stremioTvDebridProviderKey, value);
   }
 
   /// Get max start position percent for Stremio TV (0 = always from beginning, -1 = no limit)
   static Future<int> getStremioTvMaxStartPercent() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getInt(_stremioTvMaxStartPercentKey) ?? -1;
   }
 
   /// Save max start position percent for Stremio TV
   static Future<void> setStremioTvMaxStartPercent(int value) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_stremioTvMaxStartPercentKey, value);
   }
 
@@ -7115,7 +8030,7 @@ class StorageService {
 
   /// Check if a Stremio TV channel is favorited
   static Future<bool> isStremioTvChannelFavorited(String channelId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final favoritesJson = prefs.getString(_stremioTvFavoriteChannelsKey);
 
     if (favoritesJson == null) return false;
@@ -7134,7 +8049,7 @@ class StorageService {
     String channelId,
     bool isFavorited,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final favoritesJson = prefs.getString(_stremioTvFavoriteChannelsKey);
 
     Map<String, dynamic> favorites = {};
@@ -7155,7 +8070,7 @@ class StorageService {
 
   /// Get all favorite Stremio TV channel IDs
   static Future<Set<String>> getStremioTvFavoriteChannelIds() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final favoritesJson = prefs.getString(_stremioTvFavoriteChannelsKey);
 
     if (favoritesJson == null) return {};
@@ -7175,7 +8090,7 @@ class StorageService {
 
   /// Get all locally imported catalogs for Stremio TV.
   static Future<List<Map<String, dynamic>>> getStremioTvLocalCatalogs() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_stremioTvLocalCatalogsKey);
     if (json == null) return [];
 
@@ -7192,7 +8107,7 @@ class StorageService {
   static Future<void> setStremioTvLocalCatalogs(
     List<Map<String, dynamic>> catalogs,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (catalogs.isEmpty) {
       await prefs.remove(_stremioTvLocalCatalogsKey);
     } else {
@@ -7241,13 +8156,13 @@ class StorageService {
 
   /// Get saved catalog repository URLs.
   static Future<List<String>> getStremioTvCatalogRepoUrls() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     return prefs.getStringList(_stremioTvCatalogRepoUrlsKey) ?? [];
   }
 
   /// Set catalog repository URLs.
   static Future<void> setStremioTvCatalogRepoUrls(List<String> urls) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.setStringList(_stremioTvCatalogRepoUrlsKey, urls);
   }
 
@@ -7276,7 +8191,7 @@ class StorageService {
 
   /// Get set of disabled channel filter IDs (addon, catalog, or genre level).
   static Future<Set<String>> getStremioTvDisabledFilters() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_stremioTvDisabledChannelFiltersKey);
     if (json == null) return {};
 
@@ -7291,7 +8206,7 @@ class StorageService {
 
   /// Save set of disabled channel filter IDs.
   static Future<void> setStremioTvDisabledFilters(Set<String> disabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (disabled.isEmpty) {
       await prefs.remove(_stremioTvDisabledChannelFiltersKey);
     } else {
@@ -7308,7 +8223,7 @@ class StorageService {
   /// Get the set of addon IDs the user has DISABLED for catalog search on the
   /// Search tab (empty = every searchable addon is queried).
   static Future<Set<String>> getCatalogSearchDisabledAddons() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_catalogSearchDisabledAddonsKey);
     if (json == null) return {};
     try {
@@ -7324,7 +8239,7 @@ class StorageService {
   static Future<void> setCatalogSearchDisabledAddons(
     Set<String> disabled,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (disabled.isEmpty) {
       await prefs.remove(_catalogSearchDisabledAddonsKey);
     } else {
@@ -7341,7 +8256,7 @@ class StorageService {
   /// (empty = every row shown). IDs are fixed-section leaves (e.g. `cw:movies`,
   /// `trakt:shows`, `fav:iptv`) and catalog leaves (`addonId:type:catalogId`).
   static Future<Set<String>> getHomeDisabledSections() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_homeDisabledSectionsKey);
     if (json == null) return {};
     try {
@@ -7355,7 +8270,7 @@ class StorageService {
 
   /// Save the set of hidden Home-row IDs.
   static Future<void> setHomeDisabledSections(Set<String> disabled) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (disabled.isEmpty) {
       await prefs.remove(_homeDisabledSectionsKey);
     } else {
@@ -7377,7 +8292,7 @@ class StorageService {
   /// the Home Rows manager through an API outage; built-in rows ignore it.
   /// Order is NOT meaningful — the board renders extras in canonical order.
   static Future<List<HomeExtraRow>> getHomeExtraRows() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_homeExtraRowsKey);
     if (json == null) return const [];
     try {
@@ -7400,7 +8315,7 @@ class StorageService {
 
   /// Save the opted-in extra Home rows (empty = key removed).
   static Future<void> setHomeExtraRows(List<HomeExtraRow> rows) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (rows.isEmpty) {
       await prefs.remove(_homeExtraRowsKey);
     } else {
@@ -7420,7 +8335,7 @@ class StorageService {
   /// reconnecting a tracker or reinstalling an addon restores its old slot.
   /// An empty list means the board's canonical order.
   static Future<List<String>> getHomeRowOrder() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_homeRowOrderKey);
     if (json == null) return const [];
     try {
@@ -7439,7 +8354,7 @@ class StorageService {
 
   /// Save the user's global Home-row order. Empty restores canonical order.
   static Future<void> setHomeRowOrder(List<String> order) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final seen = <String>{};
     final normalized = [
       for (final id in order)
@@ -7465,7 +8380,7 @@ class StorageService {
   /// explicit choice now, so it is STORED — only the default removes the key.
   static Future<HomeHeroSource> getHomeHeroSource() async {
     const fallback = (mode: HomeHeroSourceMode.random, ids: <String>[]);
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final json = prefs.getString(_homeHeroSourceKey);
     if (json == null) return fallback;
     try {
@@ -7493,7 +8408,7 @@ class StorageService {
   /// Save the Spotlight hero source (the default `random` + no ids = key
   /// removed; `auto` is stored, or it would read back as the default).
   static Future<void> setHomeHeroSource(HomeHeroSource source) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (source.mode == HomeHeroSourceMode.random && source.ids.isEmpty) {
       await prefs.remove(_homeHeroSourceKey);
     } else {
@@ -7502,6 +8417,29 @@ class StorageService {
         jsonEncode({'mode': source.mode.name, 'ids': source.ids}),
       );
     }
+  }
+
+  /// Clears synchronous mirrors before a profile activation is published.
+  /// The target bootstrap immediately warms them from its captured scope.
+  static void resetProfileCaches() {
+    tvKeyboardEnabledCached = true;
+    tvHomeStyleCached = 'canvas';
+    debrifyTvStyleCached = 'grid';
+    detailPageStyleCached = kDetailPageStyleDefault;
+    detailThemeCached = 'signal';
+    appThemeCached = 'legacy';
+    themeOverridesCached = '';
+    parentsGuideStyleCached = 'compass';
+    iptvStyleCached = 'command';
+    discoverLayoutCached = 'stage';
+    launchAnimationCached = 'collider';
+    launchIdentPaletteCached = 'ident';
+    tvSidebarStyleCached = 'ghost';
+    desktopSidebarStyleCached = 'rail';
+    playerStartPortraitCached = false;
+    uiSoundsCached = true;
+    uiHapticsCached = true;
+    _startupIptvChannelCached = null;
   }
 }
 

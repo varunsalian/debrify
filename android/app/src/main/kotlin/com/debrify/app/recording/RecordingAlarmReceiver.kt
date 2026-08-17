@@ -146,6 +146,10 @@ class RecordingAlarmReceiver : BroadcastReceiver() {
 			headers = schedule.headers,
 			maxDurationMs = maxDuration,
 			fromSchedule = true,
+			ownerProfileId = schedule.ownerProfileId,
+			connectionResourceId = schedule.connectionResourceId,
+			profileAuthorizationRevision = schedule.profileAuthorizationRevision,
+			resourceAuthorizationRevision = schedule.resourceAuthorizationRevision,
 		)
 		try {
 			ContextCompat.startForegroundService(context, start)
@@ -165,10 +169,11 @@ class RecordingAlarmReceiver : BroadcastReceiver() {
 					("rec-sched-fail-$scheduleId").hashCode(),
 					NotificationCompat.Builder(context, LiveRecordingService.NOTIFICATION_CHANNEL_ID)
 						.setContentTitle("Scheduled recording couldn't start")
-						.setContentText(
-							"${schedule.channelName} — ${schedule.programmeTitle}".trim(' ', '—'),
-						)
+						// The alarm may fire while another profile owns the UI.
+						// Keep its channel/programme identity inside Debrify.
+						.setContentText("Open Debrify for details")
 						.setSmallIcon(com.debrify.app.R.mipmap.ic_launcher)
+						.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
 						.setPriority(NotificationCompat.PRIORITY_DEFAULT)
 						.build(),
 				)

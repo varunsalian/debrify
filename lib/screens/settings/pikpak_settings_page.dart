@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/storage_service.dart';
 import '../../services/pikpak_api_service.dart';
 import '../../services/analytics_service.dart';
@@ -79,7 +78,6 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
     final enabled = await StorageService.getPikPakEnabled();
     final showVideosOnly = await StorageService.getPikPakShowVideosOnly();
     final ignoreSmallVideos = await StorageService.getPikPakIgnoreSmallVideos();
-    final email = await StorageService.getPikPakEmail();
     final isAuth = await PikPakApiService.instance.isAuthenticated();
     final restrictedId = await StorageService.getPikPakRestrictedFolderId();
     final restrictedName = await StorageService.getPikPakRestrictedFolderName();
@@ -92,7 +90,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       _pikpakEnabled = enabled;
       _showVideosOnly = showVideosOnly;
       _ignoreSmallVideos = ignoreSmallVideos;
-      _emailController.text = email ?? '';
+      // A connected shared account is usable without exposing its credential
+      // fields to this screen. Replacement login always starts empty.
+      _emailController.clear();
       _isConnected = isAuth;
       _restrictedFolderId = restrictedId;
       _restrictedFolderName = restrictedName;
@@ -251,10 +251,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       } else {
         _showSnackBar('Login failed. Please check your credentials.');
       }
-    } catch (e) {
-      print('Error logging in: $e');
+    } catch (_) {
       if (!mounted) return;
-      _showSnackBar('Login error: $e');
+      _showSnackBar('Login failed. Please check your credentials and retry.');
     } finally {
       if (mounted) {
         setState(() {
@@ -292,10 +291,11 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
       if (mounted) {
         Navigator.of(context).pop(true);
       }
-    } catch (e) {
-      print('Error logging out: $e');
+    } catch (_) {
       if (!mounted) return;
-      _showSnackBar('Logout error: $e');
+      _showSnackBar(
+        'This connection is shared. Revoke or transfer profile access before disconnecting.',
+      );
     }
   }
 
@@ -399,9 +399,7 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                   decoration: BoxDecoration(
                     color: t.warning.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: t.warning.withValues(alpha: 0.3),
-                    ),
+                    border: Border.all(color: t.warning.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     children: [
@@ -699,8 +697,9 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                               const SizedBox(height: 8),
                               Text(
                                 'Choose what happens after adding a torrent to PikPak',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: t.dim),
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.bodySmall?.copyWith(color: t.dim),
                               ),
                               const SizedBox(height: 12),
                               SettingsSelectDropdown(
@@ -867,15 +866,13 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                           title: Text(
                             _isConnected ? 'Connected' : 'Not Connected',
                             style: TextStyle(
-                              color: _isConnected
-                                  ? t.success
-                                  : app.core.tx,
+                              color: _isConnected ? t.success : app.core.tx,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                           subtitle: Text(
                             _isConnected
-                                ? 'Connected as: ${_emailController.text}'
+                                ? 'Connected account'
                                 : 'Login with your PikPak account below',
                             style: TextStyle(color: t.dim),
                           ),
@@ -936,16 +933,13 @@ class _PikPakSettingsPageState extends State<PikPakSettingsPage> {
                           child: TextButton.icon(
                             focusNode: _resetDeviceIdButtonFocusNode,
                             onPressed: () async {
-                              final prefs =
-                                  await SharedPreferences.getInstance();
-                              final currentDeviceId = prefs.getString(
-                                'pikpak_device_id',
-                              );
+                              final currentDeviceId =
+                                  await StorageService.getPikPakDeviceId();
                               debugPrint(
                                 'PikPak: Current device ID: $currentDeviceId',
                               );
-                              await prefs.remove('pikpak_device_id');
-                              await prefs.remove('pikpak_captcha_token');
+                              await StorageService.deletePikPakDeviceId();
+                              await StorageService.clearPikPakCaptchaToken();
                               debugPrint('PikPak: Device ID cleared');
                               if (mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -1041,7 +1035,21 @@ class _FocusRing extends StatefulWidget {
 }
 
 class _FocusRingState extends State<_FocusRing> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1051,14 +1059,13 @@ class _FocusRingState extends State<_FocusRing> {
       canRequestFocus: false,
       // hasFocus includes descendants, so this fires when the wrapped
       // control receives DPAD focus (same pattern as ConnectionCard).
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       child: Container(
         decoration: BoxDecoration(
           color: _focused ? t.panel2 : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _focused ? t.accent : Colors.transparent,
-          ),
+          border: Border.all(color: _focused ? t.accent : Colors.transparent),
         ),
         child: widget.child,
       ),

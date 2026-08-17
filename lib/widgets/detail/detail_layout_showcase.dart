@@ -89,6 +89,26 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   final GlobalKey _identityKey = GlobalKey();
   final GlobalKey _seasonsKey = GlobalKey();
   final GlobalKey _episodesKey = GlobalKey();
+
+  /// Compact episodes rail: which card sits at the reading position. Touch
+  /// has no cursor, so "focus" is what the scroll has settled on — the IPTV
+  /// centered-selector grammar. The settled card wears the same parallax
+  /// lift the TV cursor grants, and the highlight hops cell to cell live as
+  /// the rail is dragged, so the row reads as alive rather than as a flat
+  /// strip. DPAD never consults this — its focus is real.
+  late final ScrollController _epScroll = ScrollController()
+    ..addListener(_onEpScroll);
+  int _epSettled = 0;
+
+  void _onEpScroll() {
+    final m = _m;
+    if (m == null || !m.compact || !_epScroll.hasClients) return;
+    final extent = m.epCell + m.epGap;
+    if (extent <= 0) return;
+    final settled = (_epScroll.offset / extent).round();
+    final clamped = settled < 0 ? 0 : settled;
+    if (clamped != _epSettled) setState(() => _epSettled = clamped);
+  }
   final GlobalKey _castKey = GlobalKey();
   final GlobalKey _guideKey = GlobalKey();
   final GlobalKey _sourcesKey = GlobalKey();
@@ -180,6 +200,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   @override
   void dispose() {
     _scroll.dispose();
+    _epScroll.dispose();
     for (final n in [
       ..._actionNodes,
       ..._seasonNodes,
@@ -910,6 +931,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
 
   int _actionCount(DetailModel m) {
     var n = 0;
+    if (m.onToggleMyWatchlist != null) n++;
     if (m.onTrackers != null) n++;
     if (m.onTrackersSecondary != null) n++;
     if (m.hasTrailer) n++;
@@ -936,6 +958,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
           // The lift, its 7px rise and its 25px shadow all paint outside the
           // cell; a clipping viewport slices exactly the effect off.
           clipBehavior: Clip.none,
+          controller: _epScroll,
           scrollDirection: Axis.horizontal,
           padding: EdgeInsets.symmetric(horizontal: m.gutter),
           itemCount: view.episodes.length,
@@ -963,7 +986,9 @@ class _DetailShowcaseState extends State<DetailShowcase> {
               builder: (context, focused) => m.compact
                   ? ShowcaseEpisodeCardCompact(
                       episode: ep,
-                      focused: focused,
+                      // Real focus (a phone with a keyboard exists) OR the
+                      // scroll-settled reading position — see [_epSettled].
+                      focused: focused || i == _epSettled,
                       progress: view.progressOf(ep),
                       isNext: view.isNext(ep),
                       fallbackImage: view.showImageUrl,

@@ -18,6 +18,8 @@ class IptvStartupChannelChoice {
   final String? group;
   final String? logoUrl;
   final Map<String, String> httpHeaders;
+  final String? connectionResourceId;
+  final int? connectionResourceRevision;
 
   /// Which list this row was shown under — display only, never identity.
   final String listName;
@@ -30,6 +32,8 @@ class IptvStartupChannelChoice {
     required this.group,
     required this.logoUrl,
     required this.httpHeaders,
+    required this.connectionResourceId,
+    required this.connectionResourceRevision,
     required this.listName,
   });
 
@@ -49,6 +53,10 @@ Future<IptvStartupChannelChoice?> showIptvStartupChannelPicker(
 }) async {
   final lists = await StorageService.getIptvLists();
   final snapshot = await StorageService.getIptvMembershipSnapshot();
+  final playlists = await StorageService.getIptvPlaylists(forSettings: false);
+  final playlistById = {
+    for (final playlist in playlists) playlist.id: playlist,
+  };
   final choices = <IptvStartupChannelChoice>[];
   final seen = <Object>{};
 
@@ -68,6 +76,7 @@ Future<IptvStartupChannelChoice?> showIptvStartupChannelPicker(
       // fallback for rows saved before origins were tracked.
       final origin =
           snapshot.origins[(list.id, url)] ?? meta['playlistId'] as String?;
+      final playlist = origin == null ? null : playlistById[origin];
       final choice = IptvStartupChannelChoice(
         url: url,
         name: (meta['name'] as String?)?.trim().isNotEmpty == true
@@ -78,6 +87,8 @@ Future<IptvStartupChannelChoice?> showIptvStartupChannelPicker(
         group: meta['group'] as String?,
         logoUrl: meta['logoUrl'] as String?,
         httpHeaders: StorageService.iptvFavoriteHeaders(meta),
+        connectionResourceId: playlist?.connectionResourceId,
+        connectionResourceRevision: playlist?.connectionResourceRevision,
         listName: list.name,
       );
       // The same channel starred AND in a list appears once; a duplicate URL

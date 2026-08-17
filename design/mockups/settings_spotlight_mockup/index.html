@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en" data-view="wide">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Debrify Settings — Spotlight mockup</title>
+  <style>
+    @font-face{font-family:SpaceGrotesk;src:url('../../../assets/fonts/SpaceGrotesk-Medium.ttf') format('truetype');font-weight:500}
+    @font-face{font-family:SpaceGrotesk;src:url('../../../assets/fonts/SpaceGrotesk-Bold.ttf') format('truetype');font-weight:700}
+    @font-face{font-family:JetBrainsMono;src:url('../../../assets/fonts/JetBrainsMono-Regular.ttf') format('truetype');font-weight:400}
+    @font-face{font-family:JetBrainsMono;src:url('../../../assets/fonts/JetBrainsMono-Bold.ttf') format('truetype');font-weight:700}
+
+    :root{
+      --ground:#0D1420;
+      --sunken:#080D16;
+      --raised:#151D2A;
+      --ink:#FFFFFF;
+      --accent:#E23D4C;
+      --success:#39D98A;
+      --warning:#F4B860;
+      --danger:#FF6673;
+      --dim:rgba(255,255,255,.58);
+      --dimmer:rgba(255,255,255,.36);
+      --hair:rgba(255,255,255,.075);
+      --sans:SpaceGrotesk,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      --mono:JetBrainsMono,"SFMono-Regular",Consolas,monospace;
+    }
+
+    *{box-sizing:border-box}
+    html{background:#070B12;color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+    body{margin:0;min-width:320px;background:
+      radial-gradient(circle at 82% -16%,rgba(226,61,76,.11),transparent 31rem),
+      #070B12}
+    button,input{font:inherit}
+    button{color:inherit}
+
+    .docbar{position:sticky;top:0;z-index:90;display:flex;align-items:center;gap:18px;padding:14px 24px;
+      background:rgba(7,11,18,.86);border-bottom:1px solid var(--hair);backdrop-filter:blur(18px)}
+    .docbrand{font:700 11px/1 var(--mono);letter-spacing:.19em;text-transform:uppercase;color:#FF7A86}
+    .docnote{font-size:12px;color:var(--dimmer)}
+    .viewtabs{display:flex;gap:6px;margin-left:auto;padding:4px;border-radius:999px;background:rgba(255,255,255,.05)}
+    .viewtabs button{border:0;background:transparent;padding:8px 13px;border-radius:999px;cursor:pointer;
+      font:700 10px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dimmer)}
+    .viewtabs button.on{background:#fff;color:#0B1019}
+
+    main{width:min(1240px,calc(100% - 44px));margin:0 auto;padding:44px 0 110px}
+    .intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,410px);gap:44px;align-items:end;margin-bottom:28px}
+    .eyebrow{font:700 10px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:#FF7A86;margin-bottom:13px}
+    h1{font-size:34px;line-height:1.03;letter-spacing:-1.1px;margin:0 0 12px}
+    .lede{max-width:720px;font-size:14px;line-height:1.65;color:var(--dim);margin:0}
+    .principles{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+    .principles span{padding:8px 11px;border-radius:999px;background:rgba(255,255,255,.055);border:1px solid var(--hair);
+      font:700 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dimmer)}
+
+    .framebar{display:flex;align-items:center;gap:8px;margin:0 0 11px}
+    .framebar .label{font:700 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer)}
+    .frame-phone{display:none}
+    .framebar .hint{margin-left:auto;font:400 10px/1 var(--mono);color:rgba(255,255,255,.24)}
+    .stage-shell{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:var(--sunken);
+      border:1px solid rgba(255,255,255,.10);box-shadow:0 34px 100px rgba(0,0,0,.46)}
+    .wide-stage{position:absolute;inset:0;overflow:hidden;background:var(--ground);outline:none}
+    .wide-stage::before{content:"";position:absolute;inset:0;pointer-events:none;background:
+      radial-gradient(circle at 94% -12%,rgba(226,61,76,.13),transparent 38%),
+      linear-gradient(180deg,var(--ground),#101722 64%,#0C121D)}
+    .wide-stage::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.18;
+      background:linear-gradient(115deg,transparent 0 42%,rgba(255,255,255,.018) 49%,transparent 57%)}
+
+    .appmark{position:absolute;left:34px;top:29px;z-index:2;display:flex;align-items:center;gap:10px}
+    .appmark-logo{width:24px;height:24px;border-radius:7px;background:var(--accent);display:grid;place-items:center;
+      box-shadow:0 0 26px rgba(226,61,76,.22)}
+    .appmark-logo svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:2.4}
+    .appmark-name{font:700 13px/1 var(--sans);letter-spacing:.01em}
+
+    .settings-rail{position:absolute;z-index:3;left:26px;top:74px;bottom:25px;width:306px;padding:0 20px 0 8px;
+      border-right:1px solid var(--hair);display:flex;flex-direction:column}
+    .rail-heading{padding:3px 8px 16px}
+    .rail-heading .mini{font:700 8px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.37);margin-bottom:8px}
+    .rail-heading h2{font-size:26px;letter-spacing:-.65px;line-height:1;margin:0 0 8px}
+    .rail-heading p{font-size:10.5px;line-height:1.45;color:rgba(255,255,255,.48);margin:0;max-width:230px}
+    .search-entry{height:43px;margin:0 5px 12px;border:0;border-radius:22px;background:rgba(255,255,255,.07);
+      display:flex;align-items:center;gap:10px;padding:0 14px;cursor:pointer;color:rgba(255,255,255,.61);font-size:10.5px;text-align:left}
+    .search-entry svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.9}
+    .search-entry .key{margin-left:auto;border:1px solid rgba(255,255,255,.11);border-radius:5px;padding:3px 6px;
+      font:700 8px/1 var(--mono);color:rgba(255,255,255,.31)}
+    .search-entry:focus-visible,.search-entry:hover{outline:0;background:#fff;color:var(--sunken);transform:scale(1.018)}
+    .rail-list{display:flex;flex-direction:column;gap:3px;min-height:0;overflow:auto;scrollbar-width:none;padding:0 4px 8px}
+    .rail-list::-webkit-scrollbar{display:none}
+    .rail-item{position:relative;min-height:43px;width:100%;border:0;border-radius:10px;background:transparent;cursor:pointer;
+      display:grid;grid-template-columns:31px minmax(0,1fr) 10px;align-items:center;gap:10px;padding:5px 9px;text-align:left;color:rgba(255,255,255,.45);
+      transition:background .16s,color .16s,transform .18s cubic-bezier(.2,.9,.25,1.06)}
+    .rail-item .ri{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:rgba(255,255,255,.055)}
+    .rail-item svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+    .rail-item b{display:block;font-size:10.5px;line-height:1.15;font-weight:700;color:rgba(255,255,255,.74)}
+    .rail-item small{display:block;font-size:7.5px;line-height:1.2;margin-top:2px;color:rgba(255,255,255,.31);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .rail-item .pip{width:5px;height:5px;border-radius:50%;background:transparent}
+    .rail-item.active{background:rgba(255,255,255,.10);color:#fff}
+    .rail-item.active .ri{background:rgba(226,61,76,.18);color:#FF7A86}
+    .rail-item.active b{color:#fff}.rail-item.active small{color:rgba(255,255,255,.48)}
+    .rail-item.active .pip{background:var(--accent);box-shadow:0 0 12px rgba(226,61,76,.65)}
+    .rail-item.focused,.rail-item:focus-visible{outline:0;background:#fff;color:var(--sunken);transform:scale(1.027);z-index:4;
+      box-shadow:0 12px 26px rgba(0,0,0,.38)}
+    .rail-item.focused .ri,.rail-item:focus-visible .ri{background:rgba(13,20,32,.08);color:var(--sunken)}
+    .rail-item.focused b,.rail-item:focus-visible b{color:var(--sunken)}
+    .rail-item.focused small,.rail-item:focus-visible small{color:rgba(8,13,22,.48)}
+
+    .content-pane{position:absolute;z-index:2;left:358px;right:42px;top:48px;bottom:30px;display:flex;flex-direction:column}
+    .pane-head{display:flex;align-items:flex-end;gap:28px;min-height:100px;margin-bottom:18px}
+    .pane-title{min-width:0;flex:1}
+    .pane-title .mini{font:700 8px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:#FF7A86;margin-bottom:9px}
+    .pane-title h3{font-size:29px;line-height:1.04;letter-spacing:-.85px;margin:0 0 7px}
+    .pane-title p{font-size:11px;line-height:1.42;color:rgba(255,255,255,.49);margin:0;max-width:570px}
+    .health{display:flex;gap:7px;flex:0 0 auto;padding-bottom:2px}
+    .health-chip{height:35px;border-radius:18px;background:rgba(255,255,255,.06);border:1px solid var(--hair);
+      padding:0 13px;display:flex;align-items:center;gap:8px;font-size:9px;color:rgba(255,255,255,.5)}
+    .health-chip b{font-size:10px;color:#fff}.health-dot{width:6px;height:6px;border-radius:50%;background:var(--success)}
+    .health-dot.warn{background:var(--warning)}
+
+    .pane-scroll{min-height:0;overflow:auto;scrollbar-width:none;padding:5px 6px 28px}
+    .pane-scroll::-webkit-scrollbar{display:none}
+    .section-label{display:flex;align-items:center;margin:1px 2px 11px;font:700 8px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.34)}
+    .section-label span{margin-left:auto;color:rgba(255,255,255,.23);letter-spacing:.05em;text-transform:none}
+
+    .connection-grid,.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .provider-card,.setting-card,.look-hero{position:relative;border:1px solid var(--hair);background:rgba(255,255,255,.047);border-radius:12px;
+      cursor:pointer;overflow:hidden;transition:transform .2s cubic-bezier(.2,.9,.25,1.06),background .18s,box-shadow .2s,border-color .18s}
+    .provider-card{height:104px;display:grid;grid-template-columns:48px minmax(0,1fr) 18px;align-items:center;gap:14px;padding:13px 16px;text-align:left}
+    .provider-card::after,.setting-card::after,.look-hero::after{content:"";position:absolute;inset:-70%;pointer-events:none;opacity:0;
+      background:radial-gradient(circle at 50% 50%,rgba(255,255,255,.28),rgba(255,255,255,.07) 28%,transparent 61%);transition:opacity .2s}
+    .provider-card .monogram{width:46px;height:46px;border-radius:13px;background:rgba(255,255,255,.08);display:grid;place-items:center;
+      font:700 12px/1 var(--mono);letter-spacing:-.04em;color:rgba(255,255,255,.84)}
+    .provider-card .name{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
+    .statusline{display:flex;align-items:center;gap:6px;font-size:9px;color:var(--success);margin-bottom:4px}
+    .statusline .dot{width:5px;height:5px;border-radius:50%;background:currentColor}.statusline.off{color:rgba(255,255,255,.39)}
+    .provider-card .caption{display:block;font-size:8.5px;color:rgba(255,255,255,.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .provider-card .chev,.setting-card .chev{font-size:19px;color:rgba(255,255,255,.22)}
+    .provider-card.attention{border-color:rgba(244,184,96,.22)}
+    .provider-card.attention .statusline{color:var(--warning)}
+    .provider-card:hover,.provider-card.focused,.provider-card:focus-visible,
+    .setting-card:hover,.setting-card.focused,.setting-card:focus-visible,.look-hero:focus-visible{
+      outline:0;background:#fff;color:var(--sunken);border-color:#fff;transform:translateY(-4px) scale(1.018);z-index:4;
+      box-shadow:0 18px 36px rgba(0,0,0,.42)}
+    .provider-card:hover::after,.provider-card.focused::after,.provider-card:focus-visible::after,
+    .setting-card:hover::after,.setting-card.focused::after,.setting-card:focus-visible::after,.look-hero:focus-visible::after{opacity:1}
+    .provider-card:hover .monogram,.provider-card.focused .monogram,.provider-card:focus-visible .monogram{background:rgba(13,20,32,.08);color:var(--sunken)}
+    .provider-card:hover .caption,.provider-card.focused .caption,.provider-card:focus-visible .caption{color:rgba(8,13,22,.47)}
+    .provider-card:hover .chev,.provider-card.focused .chev,.provider-card:focus-visible .chev{color:rgba(8,13,22,.54)}
+    .provider-card:hover .statusline,.provider-card.focused .statusline,.provider-card:focus-visible .statusline{color:#08794B}
+    .provider-card.attention:hover .statusline,.provider-card.attention.focused .statusline,.provider-card.attention:focus-visible .statusline{color:#8A5900}
+    .provider-card .badge{position:absolute;top:10px;right:11px;border-radius:999px;padding:4px 7px;background:rgba(226,61,76,.14);
+      color:#FF8A94;font:700 7px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+
+    .pane-footer{height:28px;display:flex;align-items:center;border-top:1px solid var(--hair);font:400 8px/1 var(--mono);color:rgba(255,255,255,.26)}
+    .pane-footer span{display:flex;align-items:center;gap:6px;margin-right:17px}.pane-footer kbd{border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:3px 6px;color:rgba(255,255,255,.44)}
+    .pane-footer .saved{margin-left:auto;color:rgba(57,217,138,.66)}
+
+    .look-hero{min-height:117px;padding:18px 19px;margin-bottom:11px;display:grid;grid-template-columns:1fr 228px;gap:18px;align-items:center;
+      background:linear-gradient(112deg,rgba(226,61,76,.15),rgba(255,255,255,.035) 42%,rgba(255,255,255,.065));border-color:rgba(226,61,76,.22)}
+    .look-hero .look-kicker{font:700 8px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:#FF7A86;margin-bottom:8px}
+    .look-hero h4{font-size:22px;line-height:1;margin:0 0 7px}.look-hero p{font-size:9.5px;line-height:1.45;color:rgba(255,255,255,.48);margin:0;max-width:500px}
+    .swatches{display:flex;justify-content:flex-end;gap:8px}.swatch{width:37px;height:58px;border-radius:9px;border:1px solid rgba(255,255,255,.1);box-shadow:0 8px 20px rgba(0,0,0,.18)}
+    .swatch:nth-child(1){background:#0D1420}.swatch:nth-child(2){background:#151D2A}.swatch:nth-child(3){background:#E23D4C}.swatch:nth-child(4){background:#fff}
+    .setting-card{height:79px;display:grid;grid-template-columns:38px minmax(0,1fr) auto 16px;align-items:center;gap:11px;padding:11px 14px;text-align:left}
+    .setting-card .si{width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.07);display:grid;place-items:center;color:rgba(255,255,255,.64)}
+    .setting-card svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+    .setting-card .name{display:block;font-size:11px;font-weight:700;margin-bottom:4px}.setting-card .desc{display:block;font-size:8.2px;color:rgba(255,255,255,.36);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .setting-card .value{font:700 8px/1 var(--mono);color:#FF828D;background:rgba(226,61,76,.13);padding:6px 8px;border-radius:999px;max-width:112px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .setting-card:hover .si,.setting-card.focused .si,.setting-card:focus-visible .si{background:rgba(13,20,32,.08);color:var(--sunken)}
+    .setting-card:hover .desc,.setting-card.focused .desc,.setting-card:focus-visible .desc{color:rgba(8,13,22,.46)}
+    .setting-card:hover .value,.setting-card.focused .value,.setting-card:focus-visible .value{background:rgba(226,61,76,.12);color:#B51F2D}
+    .setting-card:hover .chev,.setting-card.focused .chev,.setting-card:focus-visible .chev{color:rgba(8,13,22,.5)}
+    .toggle{width:31px;height:18px;padding:2px;border-radius:999px;background:rgba(255,255,255,.15);display:flex;justify-content:flex-start}.toggle i{width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.54)}
+    .toggle.on{background:var(--accent);justify-content:flex-end}.toggle.on i{background:#fff}
+    .setting-card:hover .toggle:not(.on),.setting-card.focused .toggle:not(.on),.setting-card:focus-visible .toggle:not(.on){background:rgba(13,20,32,.15)}
+
+    .search-overlay{position:absolute;z-index:20;inset:0;display:none;background:rgba(8,13,22,.76);backdrop-filter:blur(18px);padding:64px 108px}
+    .search-overlay.open{display:block;animation:fadein .18s ease-out}@keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    .search-panel{max-width:840px;margin:0 auto}.search-label{font:700 9px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:#FF7A86;margin-bottom:14px}
+    .search-box{height:70px;border-radius:35px;background:#fff;color:var(--sunken);display:flex;align-items:center;gap:15px;padding:0 24px;box-shadow:0 24px 70px rgba(0,0,0,.45)}
+    .search-box svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.8}.search-box input{flex:1;border:0;outline:0;background:transparent;color:inherit;font-size:20px}
+    .search-close{border:0;background:rgba(13,20,32,.08);border-radius:999px;padding:8px 11px;cursor:pointer;font:700 9px/1 var(--mono);color:rgba(13,20,32,.55)}
+    .search-results{margin-top:18px;border-radius:15px;background:rgba(21,29,42,.94);border:1px solid var(--hair);overflow:hidden}
+    .search-result{height:68px;display:grid;grid-template-columns:40px 1fr auto;align-items:center;gap:13px;padding:0 18px;border-bottom:1px solid var(--hair)}
+    .search-result:last-child{border:0}.search-result .si{width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.07);display:grid;place-items:center}
+    .search-result svg{width:16px;height:16px;stroke:#fff;fill:none}.search-result b{display:block;font-size:11px;margin-bottom:4px}.search-result small{display:block;font-size:8px;color:var(--dimmer)}
+    .search-result em{font:700 7px/1 var(--mono);font-style:normal;letter-spacing:.1em;text-transform:uppercase;color:#FF7A86}
+    .mock-toast{position:absolute;z-index:30;right:42px;bottom:38px;min-width:230px;max-width:340px;padding:13px 16px;border-radius:12px;
+      background:#fff;color:var(--sunken);box-shadow:0 18px 48px rgba(0,0,0,.44);font-size:10px;font-weight:700;opacity:0;transform:translateY(10px);pointer-events:none;
+      transition:opacity .18s,transform .22s cubic-bezier(.2,.9,.25,1.06)}
+    .mock-toast.show{opacity:1;transform:none}.mock-toast small{display:block;margin-top:4px;color:rgba(13,20,32,.5);font-size:8px;font-weight:500}
+
+    .phone-area{display:none;justify-content:center;padding:9px 0 2px}
+    .phone{position:relative;width:390px;height:844px;border-radius:38px;overflow:hidden;background:linear-gradient(180deg,var(--ground),#101722 72%,#0C121D);
+      border:1px solid rgba(255,255,255,.11);box-shadow:0 34px 90px rgba(0,0,0,.54)}
+    .phone::before{content:"";position:absolute;width:370px;height:300px;right:-190px;top:-140px;border-radius:50%;background:rgba(226,61,76,.12);filter:blur(55px)}
+    .phone-status{height:44px;padding:15px 24px 0;display:flex;justify-content:space-between;font:700 11px/1 var(--sans)}
+    .phone-status span:last-child{letter-spacing:3px}
+    .phone-scroll{position:absolute;inset:44px 0 0;overflow:auto;scrollbar-width:none;padding:18px 20px 38px}.phone-scroll::-webkit-scrollbar{display:none}
+    .phone .p-mini{font:700 9px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:#FF7A86;margin-bottom:10px}
+    .phone h2{font-size:31px;line-height:1;margin:0 0 7px;letter-spacing:-.8px}.phone .p-sub{font-size:12px;line-height:1.45;color:rgba(255,255,255,.47);margin:0 0 19px}
+    .phone-search{height:48px;border:0;width:100%;border-radius:24px;background:rgba(255,255,255,.075);display:flex;align-items:center;gap:11px;padding:0 15px;color:rgba(255,255,255,.55);font-size:12px;margin-bottom:17px}
+    .phone-search svg{width:17px;height:17px;stroke:currentColor;fill:none}.phone-search kbd{margin-left:auto;font:700 8px/1 var(--mono);color:rgba(255,255,255,.24)}
+    .attention-card{position:relative;overflow:hidden;border-radius:17px;padding:17px;background:linear-gradient(112deg,rgba(226,61,76,.18),rgba(255,255,255,.055));border:1px solid rgba(226,61,76,.2);margin-bottom:22px}
+    .attention-card::after{content:"";position:absolute;width:140px;height:140px;right:-54px;top:-71px;border-radius:50%;border:1px solid rgba(255,255,255,.1)}
+    .attention-card .topline{display:flex;align-items:center;gap:8px;font:700 8px/1 var(--mono);letter-spacing:.11em;text-transform:uppercase;color:#FF8B95;margin-bottom:10px}
+    .attention-card h3{font-size:17px;margin:0 0 5px}.attention-card p{font-size:10px;line-height:1.45;color:rgba(255,255,255,.48);margin:0 0 14px;max-width:270px}.attention-card button{border:0;border-radius:999px;background:#fff;color:var(--sunken);padding:9px 13px;font-size:10px;font-weight:700}
+    .phone-label{font:700 9px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.34);margin:0 2px 10px}
+    .phone-categories{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+    .phone-category{min-height:104px;border:1px solid var(--hair);border-radius:15px;background:rgba(255,255,255,.047);padding:14px;text-align:left;cursor:pointer}
+    .phone-category .pci{width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,.075);display:grid;place-items:center;margin-bottom:14px;color:#FF7A86}
+    .phone-category svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}.phone-category b{font-size:12px;display:block;margin-bottom:4px}.phone-category small{font-size:8.5px;line-height:1.35;color:rgba(255,255,255,.34)}
+    .phone-category.wide{grid-column:span 2;min-height:72px;display:grid;grid-template-columns:36px 1fr 18px;align-items:center;gap:10px}.phone-category.wide .pci{margin:0}.phone-category.wide .arr{color:var(--dimmer)}
+    .phone-detail{position:absolute;z-index:10;inset:44px 0 0;background:linear-gradient(180deg,var(--ground),#0C121D);padding:18px 20px 38px;transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);overflow:auto}
+    .phone-detail.open{transform:none}.phone-back{width:39px;height:39px;border:0;border-radius:50%;background:rgba(255,255,255,.075);display:grid;place-items:center;margin-bottom:21px;color:#fff;font-size:18px}
+    .phone-detail-list{display:flex;flex-direction:column;gap:9px;margin-top:18px}.phone-detail .setting-card{height:76px;grid-template-columns:38px 1fr auto 14px}.phone-detail .look-hero{display:block;padding:17px;min-height:122px}.phone-detail .swatches{position:absolute;right:15px;top:17px}.phone-detail .swatch{width:22px;height:37px;border-radius:7px}.phone-detail .look-hero p{max-width:220px}
+
+    .rationale{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:27px}.rationale article{border:1px solid var(--hair);border-radius:14px;padding:18px;background:rgba(255,255,255,.025)}
+    .rationale .num{font:700 9px/1 var(--mono);letter-spacing:.15em;color:#FF7A86;margin-bottom:11px}.rationale h3{font-size:14px;margin:0 0 7px}.rationale p{font-size:11px;line-height:1.55;color:var(--dimmer);margin:0}
+
+    html[data-view="phone"] .stage-shell{aspect-ratio:auto;min-height:890px;background:transparent;border:0;box-shadow:none}
+    html[data-view="phone"] .wide-stage{display:none}
+    html[data-view="phone"] .phone-area{display:flex}
+    html[data-view="phone"] .framebar .hint{display:none}
+    html[data-view="phone"] .frame-wide{display:none}
+    html[data-view="phone"] .frame-phone{display:inline}
+    @media(max-width:780px){
+      .docbar{padding:12px 16px}.docnote,.viewtabs{display:none}main{width:min(100% - 28px,1240px);padding-top:28px}.intro{display:block}.principles{justify-content:flex-start;margin-top:18px}
+      .stage-shell{aspect-ratio:auto;min-height:880px;background:transparent;border:0;box-shadow:none}.wide-stage{display:none}.phone-area{display:flex}.framebar .hint{display:none}.rationale{grid-template-columns:1fr}
+      .frame-wide{display:none}.frame-phone{display:inline}
+    }
+    @media(max-width:430px){.phone{width:100%;height:812px;border-radius:28px}.stage-shell{min-height:840px}.viewtabs{display:none}.intro h1{font-size:29px}}
+  </style>
+</head>
+<body>
+  <header class="docbar">
+    <div class="docbrand">Debrify · Settings</div>
+    <div class="docnote">Spotlight direction · rooted in the new onboarding flow</div>
+    <div class="viewtabs" role="group" aria-label="Preview size">
+      <button class="on" data-view="wide">TV / desktop</button>
+      <button data-view="phone">Phone</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="intro">
+      <div>
+        <div class="eyebrow">Design mock · 0.8.2 alpha</div>
+        <h1>Settings, brought into the Spotlight room.</h1>
+        <p class="lede">The information stays familiar; the presentation adopts onboarding's stable hierarchy, quiet surfaces, mono wayfinding, and hueless inverse focus. The phone becomes category-first instead of one continuous wall of controls.</p>
+      </div>
+      <div class="principles" aria-label="Design principles">
+        <span>Category first</span><span>One room</span><span>Health at a glance</span><span>Inverse focus</span>
+      </div>
+    </section>
+
+    <div class="framebar"><span class="label frame-wide">TV / desktop · interactive</span><span class="label frame-phone">Phone · category first</span><span class="hint">Click the frame · arrows move · Enter opens · / searches</span></div>
+    <section class="stage-shell">
+      <div class="wide-stage" id="wideStage" tabindex="0" aria-label="Interactive TV settings mockup">
+        <div class="appmark">
+          <span class="appmark-logo" data-icon="play"></span>
+          <span class="appmark-name">Debrify</span>
+        </div>
+        <aside class="settings-rail">
+          <div class="rail-heading">
+            <div class="mini">Your space</div>
+            <h2>Settings</h2>
+            <p>Services, screens and playback—tuned in one place.</p>
+          </div>
+          <button class="search-entry" id="searchEntry"><span data-icon="search"></span><span>Search settings</span><span class="key">/</span></button>
+          <nav class="rail-list" id="railList" aria-label="Settings categories"></nav>
+        </aside>
+        <section class="content-pane">
+          <header class="pane-head">
+            <div class="pane-title"><div class="mini" id="paneEyebrow">Connections</div><h3 id="paneTitle"></h3><p id="paneSubtitle"></p></div>
+            <div class="health" id="paneHealth"></div>
+          </header>
+          <div class="pane-scroll" id="paneScroll"></div>
+          <footer class="pane-footer"><span><kbd>←</kbd> categories</span><span><kbd>↑ ↓</kbd> move</span><span><kbd>OK</kbd> open</span><span class="saved">● All changes save automatically</span></footer>
+        </section>
+        <div class="search-overlay" id="searchOverlay" aria-hidden="true">
+          <div class="search-panel">
+            <div class="search-label">Find anything</div>
+            <div class="search-box"><span data-icon="search"></span><input id="searchInput" aria-label="Search settings" placeholder="Try “subtitles”, “Trakt”, or “home layout”"><button class="search-close" id="searchClose">ESC</button></div>
+            <div class="search-results" id="searchResults"></div>
+          </div>
+        </div>
+        <div class="mock-toast" id="mockToast" role="status"></div>
+      </div>
+
+      <div class="phone-area">
+        <div class="phone">
+          <div class="phone-status"><span>9:41</span><span>••• ᯤ</span></div>
+          <div class="phone-scroll">
+            <div class="p-mini">Your space</div><h2>Settings</h2><p class="p-sub">Services, screens and playback—tuned in one place.</p>
+            <button class="phone-search" id="phoneSearch"><span data-icon="search"></span><span>Search settings</span><kbd>23 destinations</kbd></button>
+            <article class="attention-card"><div class="topline"><span>●</span><span>Connection check</span></div><h3>Almost everything is ready.</h3><p>Real Debrid is active. Torbox needs attention before it can be used for playback.</p><button data-phone-category="connections">Review connections</button></article>
+            <div class="phone-label">Browse by category</div><div class="phone-categories" id="phoneCategories"></div>
+          </div>
+          <section class="phone-detail" id="phoneDetail"><button class="phone-back" id="phoneBack" aria-label="Back">←</button><div class="p-mini" id="phoneEyebrow"></div><h2 id="phoneTitle"></h2><p class="p-sub" id="phoneSubtitle"></p><div id="phoneDetailBody"></div></section>
+        </div>
+      </div>
+    </section>
+
+    <section class="rationale">
+      <article><div class="num">01 · HIERARCHY</div><h3>Categories become the anchor.</h3><p>The TV rail stays put like onboarding's progress ladder. On phone, the same categories form a scan-friendly dashboard rather than a very long settings document.</p></article>
+      <article><div class="num">02 · SPOTLIGHT</div><h3>Focus is a material change.</h3><p>The focused object lifts and turns white, with dark text and a soft glare. Crimson marks state and wayfinding; it does not become a border around every item.</p></article>
+      <article><div class="num">03 · SIGNAL</div><h3>Status earns visual priority.</h3><p>The connection summary and active Look appear before ordinary rows. Everything else stays deliberately quiet until focused.</p></article>
+    </section>
+  </main>
+
+  <script>
+    const iconPaths={
+      play:'<path d="M7 5.2 19 12 7 18.8Z"/>',
+      search:'<circle cx="10.8" cy="10.8" r="6.2"/><path d="m15.4 15.4 4.1 4.1"/>',
+      link:'<path d="M9.4 14.6 7.7 16.3a3.5 3.5 0 0 1-5-5l3-3a3.5 3.5 0 0 1 5 0"/><path d="m14.6 9.4 1.7-1.7a3.5 3.5 0 0 1 5 5l-3 3a3.5 3.5 0 0 1-5 0"/><path d="m8.8 15.2 6.4-6.4"/>',
+      sync:'<path d="M20 7h-5V2"/><path d="M20 7a8 8 0 0 0-13.7-2.2L4.8 6.3"/><path d="M4 17h5v5"/><path d="M4 17a8 8 0 0 0 13.7 2.2l1.5-1.5"/>',
+      home:'<path d="m3.5 10.5 8.5-7 8.5 7"/><path d="M5.5 9.2V21h13V9.2M9.5 21v-7h5v7"/>',
+      sparkle:'<path d="m12 2 1.6 5.1L19 9l-5.4 1.9L12 16l-1.6-5.1L5 9l5.4-1.9Z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z"/>',
+      screen:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+      playback:'<circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4Z"/>',
+      tune:'<path d="M4 6h10M18 6h2M4 12h3M11 12h9M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="14" cy="18" r="2"/>',
+      tv:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="m9 2 3 4 3-4M8 11h4v4H8zM15 11h3M15 15h3"/>',
+      devices:'<rect x="2.5" y="4" width="13" height="16" rx="2"/><rect x="17" y="8" width="5" height="11" rx="1.5"/><path d="M7 17h4"/>',
+      storage:'<path d="M4 5c0-1.1 3.6-2 8-2s8 .9 8 2-3.6 2-8 2-8-.9-8-2Z"/><path d="M4 5v7c0 1.1 3.6 2 8 2s8-.9 8-2V5M4 12v7c0 1.1 3.6 2 8 2s8-.9 8-2v-7"/>',
+      info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>',
+      warning:'<path d="m12 3 10 18H2Z"/><path d="M12 9v5M12 17h.01"/>',
+      text:'<path d="M4 5h16M9 5v14M15 5v14M6 19h6M12 19h6"/>',
+      rocket:'<path d="M13 4c3.6-2.1 7-1 7-1s1.1 3.4-1 7l-5 5-5-5Z"/><path d="m9 10-4 1-2 2 6 2M14 15l-1 4-2 2-2-6M15 6l3 3"/>',
+      layout:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M9 10h12"/>',
+      palette:'<path d="M12 3a9 9 0 1 0 0 18h1.5a1.5 1.5 0 0 0 0-3H12a2 2 0 0 1 0-4h3a6 6 0 0 0 6-6c0-2.8-4-5-9-5Z"/><circle cx="7.5" cy="10" r="1"/><circle cx="10" cy="6.5" r="1"/><circle cx="15" cy="7" r="1"/>',
+      captions:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h3M14 11h3M7 15h10"/>',
+      audio:'<path d="M5 9v6h4l5 4V5L9 9Z"/><path d="M17 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/>',
+      bolt:'<path d="m13 2-8 12h7l-1 8 8-12h-7Z"/>',
+      filter:'<path d="M3 5h18l-7 8v6l-4 2v-8Z"/>',
+      cloud:'<path d="M7 18h11a4 4 0 0 0 .3-8A6.5 6.5 0 0 0 6 8.5 4.8 4.8 0 0 0 7 18Z"/>',
+      remote:'<rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="7" r="2"/><path d="M10 13h4M12 11v4M10 18h.01M14 18h.01"/>',
+      folder:'<path d="M3 6h7l2 2h9v11H3Z"/>',
+      download:'<path d="M12 3v12m-4-4 4 4 4-4M4 20h16"/>',
+      backup:'<path d="M4 4h13l3 3v13H4Z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/>',
+      update:'<path d="M20 7v5h-5"/><path d="M19 12a7 7 0 1 0-2 5"/>',
+      community:'<path d="M21 12a8 8 0 0 1-9 8 10 10 0 0 1-4 1l1-3a8 8 0 1 1 12-6Z"/>'
+    };
+    const svg=name=>`<svg viewBox="0 0 24 24" aria-hidden="true">${iconPaths[name]||iconPaths.tune}</svg>`;
+
+    const categories=[
+      {id:'connections',icon:'link',label:'Connections',short:'Debrid, cloud, IPTV & more',title:'Services, all in one place.',subtitle:'See what is ready, what needs attention, and where playback will go before opening a provider.',kind:'connections'},
+      {id:'trackers',icon:'sync',label:'Trackers',short:'Trakt & Simkl watch history',title:'Keep every watch in sync.',subtitle:'Connect watch-history services and see their health without digging through account screens.',rows:[['Trakt','Active as varun','sync','Connected'],['Simkl','Not connected','sync','Connect'],['Scrobbling','Movies and episodes','playback','On'],['History conflict policy','Prefer newest activity','tune','Newest']]},
+      {id:'home',icon:'home',label:'Home & Display',short:'Rows, artwork & keyboard',title:'Shape the room you come home to.',subtitle:'Arrange the home screen, tune artwork quality, and set the display for this device.',rows:[['Home Screen','Layout, rows and continue watching','home','Spotlight'],['Screen Size','UI scale for this television','screen','100%'],['Rendering','Resolution used for the interface','screen','Automatic'],['Hero Artwork Quality','Backdrop download quality','sparkle','High'],['Debrify Keyboard','Remote-friendly text entry','tune','On']]},
+      {id:'appearance',icon:'sparkle',label:'Appearance',short:'Look, text, motion & layouts',title:'Make the interface feel like yours.',subtitle:'A Look sets the room. Individual controls below let you adjust only what matters.',kind:'appearance',rows:[['Text Brightness','Legibility across every surface','text','Bright'],['Launch Animation','The opening ident','rocket','Horizon'],['Details Page','Movie and series presentation','layout','Showcase'],['IPTV Appearance','Guide and channel presentation','tv','Command'],['Player Controls','Dock style and palette','tune','Classic'],['Parents Guide','Ratings and advisory layout','info','Compass']]},
+      {id:'playback',icon:'playback',label:'Playback',short:'Player, subtitles & audio',title:'Playback without surprises.',subtitle:'Player behavior, language choices, skip actions, and output live together here.',rows:[['Player','Internal or external playback','playback','Internal'],['Subtitles','Language, size and styling','captions','English'],['Audio','Preferred tracks and passthrough','audio','Automatic'],['Skip Segments','Intros, recaps and credits','bolt','On'],['VR & Display','Aspect, refresh rate and VR','screen','Automatic']]},
+      {id:'search',icon:'tune',label:'Search',short:'Engines, filters & providers',title:'Find the right source faster.',subtitle:'Search engines, default filters, and provider routing form one clear pipeline.',rows:[['Engines','Search engine defaults and indexers','search','8 enabled'],['Filters','Quality, source and language','filter','4K first'],['Default Provider','Where added torrents go','cloud','Real Debrid'],['Quick Play','Timeouts and cache fallback','bolt','Balanced']]},
+      {id:'livetv',icon:'tv',label:'Live TV & DVR',short:'Channels, guide & recordings',title:'Live television, organized.',subtitle:'Manage channel sources, recordings, and the guide from one focused area.',rows:[['Debrify TV','Limits, channels and playback','tv','Ready'],['Recordings','Schedules and recording library','storage','3 scheduled'],['IPTV Playlists','Playlists, lists and startup channel','layout','2 active'],['Player Guide','Guide shown over playback','tv','Classic']]},
+      {id:'devices',icon:'devices',label:'Devices',short:'Remote & setup transfer',title:'Let your devices work together.',subtitle:'Control another screen or move this setup without re-entering every service.',rows:[['Remote Control','Use this device as a remote','remote','Open'],['Send Setup','Transfer services and preferences','devices','Send'],['Receive Setup','Listen for another Debrify device','download','Receive']]},
+      {id:'data',icon:'storage',label:'Data & Backup',short:'Downloads, backup & restore',title:'Your data, under your control.',subtitle:'Downloads, playback state, and portable backups are separated into clear actions.',rows:[['Download Location','Where offline files are saved','folder','Default'],['Clear Download Data','Queue history and active entries','download','Review'],['Clear Playback Data','Resume points and sessions','playback','Review'],['Create Backup','Export services and settings','backup','Create'],['Restore from Backup','Import a Debrify backup','update','Restore']]},
+      {id:'about',icon:'info',label:'About',short:'Updates, version & community',title:'Debrify, up to date.',subtitle:'Version, release checks, and the places where the community meets.',rows:[['Auto Check for Updates','Notify on startup','update','On'],['Check for Updates','Latest GitHub release','update','Up to date'],['Reddit Community','Questions, tips and discussion','community','Open'],['Discord','Help, updates and discussion','community','Open'],['GitHub','Source code and contributions','backup','Open'],['Version','Current installed build','info','0.8.2 alpha']]},
+      {id:'danger',icon:'warning',label:'Danger Zone',short:'Reset Debrify',title:'Start over, deliberately.',subtitle:'Destructive actions stay isolated and explain exactly what they remove.',rows:[['Reset Debrify','Connections, preferences and caches','warning','Review']]}
+    ];
+    const providers=[
+      ['RD','Real Debrid','Active','Premium · expires 24 Sep 2026',''],
+      ['TB','Torbox','Needs attention','Authentication expired','attention'],
+      ['PM','Premiumize','Not connected','Add a Premiumize account','off'],
+      ['AD','AllDebrid','Active','Premium · expires 08 Oct 2026',''],
+      ['PP','PikPak','Active','Cloud library ready',''],
+      ['WD','WebDAV','Not connected','Add a storage server','off'],
+      ['IP','IPTV','Active','2 playlists · 846 channels',''],
+      ['JP','Jackett & Prowlarr','Configured','3 search endpoints','']
+    ];
+
+    const rail=document.getElementById('railList');
+    const paneScroll=document.getElementById('paneScroll');
+    const paneTitle=document.getElementById('paneTitle');
+    const paneSubtitle=document.getElementById('paneSubtitle');
+    const paneEyebrow=document.getElementById('paneEyebrow');
+    const paneHealth=document.getElementById('paneHealth');
+    const wideStage=document.getElementById('wideStage');
+    let activeIndex=0,zone='rail',paneIndex=0;
+    let toastTimer;
+
+    function hydrateIcons(root=document){root.querySelectorAll('[data-icon]').forEach(n=>n.innerHTML=svg(n.dataset.icon))}
+    function renderRail(){
+      rail.innerHTML=categories.map((c,i)=>`<button class="rail-item ${i===activeIndex?'active':''}" data-index="${i}" tabindex="-1"><span class="ri">${svg(c.icon)}</span><span><b>${c.label}</b><small>${c.short}</small></span><i class="pip"></i></button>`).join('');
+      rail.querySelectorAll('.rail-item').forEach(btn=>btn.addEventListener('click',()=>selectCategory(+btn.dataset.index)));
+      updateFocus();
+    }
+    function rowCard(r,i){
+      const toggle=['On','Off'].includes(r[3]);
+      return `<button class="setting-card pane-focus" data-pane-index="${i}" tabindex="-1"><span class="si">${svg(r[2])}</span><span><span class="name">${r[0]}</span><span class="desc">${r[1]}</span></span>${toggle?`<span class="toggle ${r[3]==='On'?'on':''}"><i></i></span>`:`<span class="value">${r[3]}</span>`}<span class="chev">›</span></button>`;
+    }
+    function renderConnections(){
+      paneHealth.innerHTML='<span class="health-chip"><i class="health-dot"></i><b>6</b> ready</span><span class="health-chip"><i class="health-dot warn"></i><b>1</b> attention</span>';
+      paneScroll.innerHTML=`<div class="section-label">Playback & cloud services <span>8 configured destinations</span></div><div class="connection-grid">${providers.map((p,i)=>`<button class="provider-card pane-focus ${p[4]==='attention'?'attention':''}" data-pane-index="${i}" tabindex="-1"><span class="monogram">${p[0]}</span><span><span class="name">${p[1]}</span><span class="statusline ${p[4]==='off'?'off':''}"><i class="dot"></i>${p[2]}</span><span class="caption">${p[3]}</span></span><span class="chev">›</span>${p[4]==='attention'?'<span class="badge">Fix</span>':''}</button>`).join('')}</div>`;
+    }
+    function renderRows(c){
+      paneHealth.innerHTML=c.id==='about'?'<span class="health-chip"><i class="health-dot"></i><b>Current</b> alpha channel</span>':'';
+      const hero=c.kind==='appearance'?`<button class="look-hero pane-focus" data-pane-index="0" tabindex="-1"><span><span class="look-kicker">Active Look</span><h4>Spotlight</h4><p>Full-bleed art, borderless focus, ambient detail. Applied to every themed surface.</p></span><span class="swatches"><i class="swatch"></i><i class="swatch"></i><i class="swatch"></i><i class="swatch"></i></span></button>`:'';
+      const offset=c.kind==='appearance'?1:0;
+      paneScroll.innerHTML=`${hero}<div class="section-label">${c.kind==='appearance'?'Fine tune':'Settings'} <span>${c.rows.length} destinations</span></div><div class="settings-grid">${c.rows.map((r,i)=>rowCard(r,i+offset)).join('')}</div>`;
+    }
+    function selectCategory(index){
+      activeIndex=Math.max(0,Math.min(categories.length-1,index));paneIndex=0;
+      const c=categories[activeIndex];paneEyebrow.textContent=c.label;paneTitle.textContent=c.title;paneSubtitle.textContent=c.subtitle;
+      c.kind==='connections'?renderConnections():renderRows(c);renderRail();paneScroll.scrollTop=0;
+      history.replaceState(null,'',`#${c.id}`);
+    }
+    function paneItems(){return [...paneScroll.querySelectorAll('.pane-focus')]}
+    function openMockItem(item){
+      const label=item.querySelector('.name,h4')?.textContent||'Setting';
+      const toast=document.getElementById('mockToast');toast.innerHTML=`${label}<small>This mock would open the existing settings destination.</small>`;
+      toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),1800);
+    }
+    function updateFocus(){
+      document.querySelectorAll('.focused').forEach(n=>n.classList.remove('focused'));
+      if(zone==='rail'){const n=rail.querySelector(`[data-index="${activeIndex}"]`);if(n){n.classList.add('focused');n.scrollIntoView({block:'nearest'})}}
+      else{const items=paneItems();paneIndex=Math.max(0,Math.min(items.length-1,paneIndex));if(items[paneIndex]){items[paneIndex].classList.add('focused');items[paneIndex].scrollIntoView({block:'nearest'})}}
+    }
+    function keyNav(e){
+      if(document.getElementById('searchOverlay').classList.contains('open')){if(e.key==='Escape')closeSearch();return}
+      if(e.key==='/'){e.preventDefault();openSearch();return}
+      if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter'].includes(e.key))return;e.preventDefault();
+      if(zone==='rail'){
+        if(e.key==='ArrowUp')activeIndex=Math.max(0,activeIndex-1);
+        if(e.key==='ArrowDown')activeIndex=Math.min(categories.length-1,activeIndex+1);
+        if(e.key==='ArrowRight'||e.key==='Enter'){selectCategory(activeIndex);zone='pane';paneIndex=0}
+        else selectCategory(activeIndex);
+      }else{
+        const cols=2,items=paneItems();
+        if(e.key==='ArrowLeft'&&paneIndex%cols===0){zone='rail'}else if(e.key==='ArrowLeft')paneIndex--;
+        if(e.key==='ArrowRight'&&paneIndex%cols===0&&paneIndex+1<items.length)paneIndex++;
+        if(e.key==='ArrowUp')paneIndex=Math.max(0,paneIndex-cols);
+        if(e.key==='ArrowDown')paneIndex=Math.min(items.length-1,paneIndex+cols);
+        if(e.key==='Enter'&&items[paneIndex])openMockItem(items[paneIndex]);
+      }
+      renderRail();updateFocus();
+    }
+    wideStage.addEventListener('keydown',keyNav);wideStage.addEventListener('click',()=>wideStage.focus());
+    paneScroll.addEventListener('click',e=>{const item=e.target.closest('.pane-focus');if(item)openMockItem(item)});
+
+    const overlay=document.getElementById('searchOverlay'),searchInput=document.getElementById('searchInput'),searchResults=document.getElementById('searchResults');
+    function allSearchRows(){return categories.flatMap(c=>(c.rows||[]).map(r=>({title:r[0],subtitle:r[1],category:c.label,icon:r[2]}))).concat(providers.map(p=>({title:p[1],subtitle:p[3],category:'Connections',icon:'link'})))}
+    function drawSearch(){const q=searchInput.value.toLowerCase().trim();const found=allSearchRows().filter(r=>!q||`${r.title} ${r.subtitle} ${r.category}`.toLowerCase().includes(q)).slice(0,5);searchResults.innerHTML=found.map(r=>`<div class="search-result"><span class="si">${svg(r.icon)}</span><span><b>${r.title}</b><small>${r.subtitle}</small></span><em>${r.category}</em></div>`).join('')||'<div class="search-result"><span class="si">?</span><span><b>No settings found</b><small>Try a service, screen, or behavior</small></span></div>'}
+    function openSearch(){overlay.classList.add('open');overlay.setAttribute('aria-hidden','false');drawSearch();searchInput.focus()}
+    function closeSearch(){overlay.classList.remove('open');overlay.setAttribute('aria-hidden','true');searchInput.value='';wideStage.focus()}
+    document.getElementById('searchEntry').addEventListener('click',openSearch);document.getElementById('searchClose').addEventListener('click',closeSearch);searchInput.addEventListener('input',drawSearch);
+
+    function renderPhoneCategories(){
+      const shown=categories.filter(c=>c.id!=='danger');
+      document.getElementById('phoneCategories').innerHTML=shown.map((c,i)=>`<button class="phone-category ${i===shown.length-1?'wide':''}" data-phone-category="${c.id}"><span class="pci">${svg(c.icon)}</span><span><b>${c.label}</b><small>${c.short}</small></span>${i===shown.length-1?'<span class="arr">›</span>':''}</button>`).join('');
+      document.querySelectorAll('[data-phone-category]').forEach(b=>b.addEventListener('click',()=>openPhoneCategory(b.dataset.phoneCategory)));
+    }
+    function openPhoneCategory(id){
+      const c=categories.find(x=>x.id===id)||categories[0];document.getElementById('phoneEyebrow').textContent=c.label;document.getElementById('phoneTitle').textContent=c.title;document.getElementById('phoneSubtitle').textContent=c.subtitle;
+      if(c.kind==='connections'){document.getElementById('phoneDetailBody').innerHTML=`<div class="phone-detail-list">${providers.slice(0,6).map((p,i)=>`<button class="provider-card ${p[4]==='attention'?'attention':''}" style="width:100%"><span class="monogram">${p[0]}</span><span><span class="name">${p[1]}</span><span class="statusline ${p[4]==='off'?'off':''}"><i class="dot"></i>${p[2]}</span><span class="caption">${p[3]}</span></span><span class="chev">›</span></button>`).join('')}</div>`}
+      else{const hero=c.kind==='appearance'?`<button class="look-hero"><span><span class="look-kicker">Active Look</span><h4>Spotlight</h4><p>Full-bleed art, borderless focus, ambient detail.</p></span><span class="swatches"><i class="swatch"></i><i class="swatch"></i><i class="swatch"></i><i class="swatch"></i></span></button>`:'';document.getElementById('phoneDetailBody').innerHTML=`${hero}<div class="phone-detail-list">${c.rows.map((r,i)=>rowCard(r,i)).join('')}</div>`}
+      document.getElementById('phoneDetail').classList.add('open');
+    }
+    document.getElementById('phoneBack').addEventListener('click',()=>document.getElementById('phoneDetail').classList.remove('open'));
+
+    document.querySelectorAll('.viewtabs button').forEach(button=>button.addEventListener('click',()=>{
+      document.documentElement.dataset.view=button.dataset.view;document.querySelectorAll('.viewtabs button').forEach(b=>b.classList.toggle('on',b===button));
+    }));
+    const requested=location.hash.slice(1);const start=Math.max(0,categories.findIndex(c=>c.id===requested));
+    activeIndex=start;hydrateIcons();renderPhoneCategories();selectCategory(activeIndex);
+  </script>
+</body>
+</html>

@@ -6,6 +6,7 @@ import '../../services/remote_control/remote_control_state.dart';
 import '../../services/storage_service.dart';
 import '../../utils/platform_util.dart';
 import 'remote_control_screen.dart';
+import 'remote_pairing_dialog.dart';
 import 'remote_receive_screen.dart';
 
 /// Entry point for the Remote feature. Lets the user pick whether this
@@ -216,6 +217,22 @@ class _RemoteRolePickerScreenState extends State<RemoteRolePickerScreen> {
                       ],
                       const SizedBox(height: 24),
                       _NetworkHint(),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: () => showPairedDevicesDialog(context),
+                          icon: const Icon(
+                            Icons.phonelink_lock_rounded,
+                            size: 18,
+                          ),
+                          label: const Text('Paired remote devices'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white.withValues(
+                              alpha: 0.7,
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   );
                 },

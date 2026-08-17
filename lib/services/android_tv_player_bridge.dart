@@ -1238,6 +1238,23 @@ class AndroidTvPlayerBridge {
         payloadWithFont['customFontName'] = fontInfo['customFontName'];
       }
 
+      // Network & Buffering presets (Settings → Playback) ride every launch.
+      // Sent only when non-standard; the activity treats absence exactly as
+      // 'standard' = stock configuration untouched. A prefs failure must not
+      // block a launch — tuning is strictly optional.
+      try {
+        final patience = await StorageService.getNetworkConnectPatience();
+        final buffer = await StorageService.getNetworkBufferSize();
+        if (patience != 'standard') {
+          payloadWithFont['networkPatience'] = patience;
+        }
+        if (buffer != 'standard') {
+          payloadWithFont['networkBuffer'] = buffer;
+        }
+      } catch (e) {
+        debugPrint('AndroidTvPlayerBridge: network tuning read failed: $e');
+      }
+
       final bool? launched = await _channel.invokeMethod<bool>(
         'launchTorrentPlayback',
         {'payload': payloadWithFont},

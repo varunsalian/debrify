@@ -55,7 +55,7 @@ import '../../screens/settings/recordings_page.dart';
 import '../../services/desktop_recording_service.dart';
 import '../../services/desktop_schedule_service.dart';
 import '../../services/iptv_source_stats.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/profiles/profile_preferences.dart';
 
 import '../../services/live_recording_service.dart';
 import '../recording_limit_dialogs.dart';
@@ -151,6 +151,13 @@ class IptvResultsViewState extends State<IptvResultsView>
       'iptv_ios_recording_notice_dismissed';
   IptvPlaylist? _selectedPlaylist;
   bool _settingsLoaded = false;
+
+  /// Why the settings pass failed, if it did. [_loadSettings] is the gate in
+  /// front of the whole page: it sets [_settingsLoaded] on its LAST line, so
+  /// any throw on the way there used to leave the bare spinner up forever with
+  /// no error, no Retry and nothing on screen to name the failure — the same
+  /// silent-spinner trap [_loadPlaylist] already guards against one level down.
+  String? _settingsError;
 
   /// The cockpit's visual style (`iptv_style` pref). Only the TV/desktop
   /// cockpit branch consults it — classic and touch-tablet layouts ignore it.
@@ -557,8 +564,15 @@ class IptvResultsViewState extends State<IptvResultsView>
     StremioService.instance.addAddonsChangedListener(_onStremioAddonsChanged);
     // Chained, not fire-and-forget: the startup launch needs the playlist list
     // to exist before it can pick the target's provider.
+    // Guarded on the error too, not just mounted: _loadSettings now SWALLOWS
+    // its failures (it renders them instead), so this callback runs on a path
+    // that used to skip it entirely. _maybeRunStartupLaunch consumes the
+    // one-shot startup payload, and burning it against an empty playlist set
+    // would cancel a boot-to-channel request that Retry could still honour.
     _loadSettings().then((_) {
-      if (mounted) unawaited(_maybeRunStartupLaunch());
+      if (mounted && _settingsError == null) {
+        unawaited(_maybeRunStartupLaunch());
+      }
     });
     _loadFavorites();
     // Stage cockpit: recording availability + the rail's Scheduled badge.
@@ -566,7 +580,7 @@ class IptvResultsViewState extends State<IptvResultsView>
     unawaited(_initRecordingSupport());
     if (!kIsWeb && Platform.isIOS) {
       unawaited(
-        SharedPreferences.getInstance().then((prefs) {
+        DevicePreferences.instance().then((prefs) {
           if (!mounted) return;
           if (!(prefs.getBool(_iosNoticeDismissedPref) ?? false)) {
             setState(() => _showIosRecordingNotice = true);
@@ -636,6 +650,17 @@ class IptvResultsViewState extends State<IptvResultsView>
       return _continuePlaylistIds[channel.url];
     }
     return playlist?.id;
+  }
+
+  IptvPlaylist? _recordingResourceFor(IptvChannel channel) {
+    final originId = _originPlaylistIdFor(channel);
+    if (originId == null) return null;
+    for (final playlist in _playlists) {
+      if (playlist.id == originId && playlist.connectionResourceId != null) {
+        return playlist;
+      }
+    }
+    return null;
   }
 
   /// Attribute carrying a list row's originating provider through the
@@ -766,8 +791,24 @@ class IptvResultsViewState extends State<IptvResultsView>
     await _loadPlaylist(playlist);
   }
 
+  /// Guarded entry point — see [_settingsError]. Every caller (initState, the
+  /// addon-changed listener, returning from Settings, Retry) goes through here
+  /// so no path can reintroduce the silent spinner.
   Future<void> _loadSettings({bool forceReload = false}) async {
-    var playlists = await StorageService.getIptvPlaylists();
+    try {
+      await _loadSettingsInner(forceReload: forceReload);
+    } catch (e, st) {
+      debugPrint('IPTV: settings load failed: $e\n$st');
+      if (!mounted) return;
+      // Deliberately NOT setting _settingsLoaded: the page below this gate
+      // assumes a loaded playlist set. Failing here keeps the failure
+      // contained to the gate, which now renders the reason and a Retry.
+      setState(() => _settingsError = '$e');
+    }
+  }
+
+  Future<void> _loadSettingsInner({bool forceReload = false}) async {
+    var playlists = await StorageService.getIptvPlaylists(forSettings: false);
     final defaultPlaylistId = await StorageService.getIptvDefaultPlaylist();
     // Cockpit look. Read on every pass so returning from Settings (which
     // re-enters here) adopts a changed style in the same setState as
@@ -792,7 +833,10 @@ class IptvResultsViewState extends State<IptvResultsView>
       playlists = [starterPlaylist, ...playlists];
 
       // Save the starter playlist and mark as initialized
-      await StorageService.setIptvPlaylists(playlists);
+      playlists = await StorageService.setIptvPlaylistsAndReload(
+        playlists,
+        forSettings: false,
+      );
       await StorageService.setIptvDefaultsInitialized(true);
     }
 
@@ -1931,7 +1975,9 @@ class IptvResultsViewState extends State<IptvResultsView>
 
     // Guide rebind against the CURRENT stored configuration, mirroring the
     // materialized revalidate. No snapshot write — the DB is the store.
-    final storedPlaylists = await StorageService.getIptvPlaylists();
+    final storedPlaylists = await StorageService.getIptvPlaylists(
+      forSettings: false,
+    );
     if (_revalidateSuperseded(playlist, contentType, ticket)) return;
     IptvPlaylist? storedPlaylist;
     for (final p in storedPlaylists) {
@@ -1988,6 +2034,8 @@ class IptvResultsViewState extends State<IptvResultsView>
           username,
           password,
           onPhase: report,
+          connectionResourceId: playlist.connectionResourceId,
+          connectionResourceRevision: playlist.connectionResourceRevision,
         );
       }
       if (contentType == 'series') {
@@ -1996,6 +2044,8 @@ class IptvResultsViewState extends State<IptvResultsView>
           username,
           password,
           onPhase: report,
+          connectionResourceId: playlist.connectionResourceId,
+          connectionResourceRevision: playlist.connectionResourceRevision,
         );
       }
       return xcService.fetchLiveStreams(
@@ -2004,12 +2054,16 @@ class IptvResultsViewState extends State<IptvResultsView>
         password,
         numberingSourceKey: playlist.id,
         onPhase: report,
+        connectionResourceId: playlist.connectionResourceId,
+        connectionResourceRevision: playlist.connectionResourceRevision,
       );
     }
     return _iptvService.fetchPlaylist(
       playlist.url,
       numberingSourceKey: playlist.id,
       onPhase: report,
+      connectionResourceId: playlist.connectionResourceId,
+      connectionResourceRevision: playlist.connectionResourceRevision,
     );
   }
 
@@ -2863,6 +2917,10 @@ class IptvResultsViewState extends State<IptvResultsView>
           'isXtream': playlist.isXtreamCodes,
           'isList': playlist.isCustomList,
           if (playlist.customListId != null) 'listId': playlist.customListId,
+          if (playlist.connectionResourceId != null)
+            'connectionResourceId': playlist.connectionResourceId,
+          if (playlist.connectionResourceRevision != null)
+            'connectionResourceRevision': playlist.connectionResourceRevision,
         },
   ];
 
@@ -3065,6 +3123,8 @@ class IptvResultsViewState extends State<IptvResultsView>
         episodeSource.username ?? '',
         episodeSource.password ?? '',
         seriesId,
+        connectionResourceId: episodeSource.connectionResourceId,
+        connectionResourceRevision: episodeSource.connectionResourceRevision,
       );
       if (!mounted || info == null) return null;
       final episodes = [
@@ -4496,6 +4556,12 @@ class IptvResultsViewState extends State<IptvResultsView>
         fileName: _stageRecordingFileName(channel.name),
         channelName: channel.name,
         headers: channel.playbackHeaders,
+        connectionResourceId: _recordingResourceFor(
+          channel,
+        )?.connectionResourceId,
+        resourceAuthorizationRevision: _recordingResourceFor(
+          channel,
+        )?.connectionResourceRevision,
       );
       if (!mounted) return;
       if (result.ok) {
@@ -4528,11 +4594,17 @@ class IptvResultsViewState extends State<IptvResultsView>
     // No onFinished: the revision listener already flips Stop back to Record,
     // and endings are announced app-wide by the reporter in main() — which,
     // unlike this widget, is still around when the capture outlives the page.
-    final capture = DesktopRecordingService.instance.start(
+    final capture = await DesktopRecordingService.instance.start(
       url: recordUrl,
       path: path,
       channelName: channel.name,
       headers: channel.playbackHeaders,
+      connectionResourceId: _recordingResourceFor(
+        channel,
+      )?.connectionResourceId,
+      resourceAuthorizationRevision: _recordingResourceFor(
+        channel,
+      )?.connectionResourceRevision,
     );
     if (!mounted) return;
     if (capture != null) setState(() {}); // show Stop immediately
@@ -4635,6 +4707,7 @@ class IptvResultsViewState extends State<IptvResultsView>
       ),
     );
     if (confirmed != true || !mounted) return null;
+    final resource = _recordingResourceFor(channel);
     final result = (!kIsWeb && Platform.isAndroid)
         ? await LiveRecordingService.schedule(
             url: recordUrl,
@@ -4643,6 +4716,8 @@ class IptvResultsViewState extends State<IptvResultsView>
             startMs: programme.start.millisecondsSinceEpoch,
             endMs: programme.stop.millisecondsSinceEpoch,
             headers: channel.playbackHeaders,
+            connectionResourceId: resource?.connectionResourceId,
+            resourceAuthorizationRevision: resource?.connectionResourceRevision,
           )
         : await DesktopScheduleService.instance.add(
             url: recordUrl,
@@ -4651,6 +4726,8 @@ class IptvResultsViewState extends State<IptvResultsView>
             startMs: programme.start.millisecondsSinceEpoch,
             endMs: programme.stop.millisecondsSinceEpoch,
             headers: channel.playbackHeaders,
+            connectionResourceId: resource?.connectionResourceId,
+            resourceAuthorizationRevision: resource?.connectionResourceRevision,
           );
     unawaited(_refreshScheduledCount());
     if (result.errorCode == 'exact_alarms_required') {
@@ -4743,7 +4820,48 @@ class IptvResultsViewState extends State<IptvResultsView>
   @override
   Widget build(BuildContext context) {
     if (!_settingsLoaded) {
-      return const Center(child: CircularProgressIndicator());
+      final settingsError = _settingsError;
+      if (settingsError == null) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Could not open IPTV',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                settingsError,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                autofocus: true,
+                onPressed: () {
+                  setState(() => _settingsError = null);
+                  unawaited(_loadSettings(forceReload: true));
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     // TV: focus selects the embedded preview. Desktop: hover selects and click
@@ -4849,7 +4967,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   void _dismissIosRecordingNotice() {
     setState(() => _showIosRecordingNotice = false);
     unawaited(
-      SharedPreferences.getInstance().then(
+      DevicePreferences.instance().then(
         (prefs) => prefs.setBool(_iosNoticeDismissedPref, true),
       ),
     );
@@ -5327,9 +5445,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               decoration: t == null
                   ? BoxDecoration(
                       borderRadius: app.shape.br(8),
-                      border: Border.all(
-                        color: app.iptv.hairline,
-                      ),
+                      border: Border.all(color: app.iptv.hairline),
                       color: Color.alphaBlend(
                         brand.withValues(alpha: 0.18),
                         const Color(0xFF171B19),
@@ -5590,7 +5706,7 @@ class IptvResultsViewState extends State<IptvResultsView>
   /// tab body with no app bar of its own, so pushing it would strand the user
   /// with no way back.
   void _navigateToAddons() {
-    MainPageBridge.switchTab?.call(7); // 7 = Addons (see main.dart _pages)
+    MainPageBridge.switchTab?.call(MainTab.addons);
   }
 
   /// Stage LEFT-exit: land on the exact row the stage was opened from — the
@@ -6798,9 +6914,7 @@ class _IptvFocusStageInfo extends StatelessWidget {
                       height: logoSize,
                       decoration: BoxDecoration(
                         borderRadius: app.shape.brImg(8),
-                        border: Border.all(
-                          color: app.iptv.hairline,
-                        ),
+                        border: Border.all(color: app.iptv.hairline),
                         color: Color.alphaBlend(
                           brand.withValues(alpha: 0.18),
                           const Color(0xFF171B19),

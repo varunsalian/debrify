@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../models/engine_config/engine_config.dart';
 import '../../../services/engine/settings_manager.dart';
 import '../../../services/engine/engine_registry.dart';
+import '../../../services/profiles/profile_preferences.dart';
 import 'settings_widgets.dart';
 import '../../../theme/app_theme_scope.dart';
 
@@ -61,9 +62,7 @@ Widget _stepDropdown(
           ),
         ),
     ],
-    style: Theme.of(
-      context,
-    ).textTheme.bodyMedium?.copyWith(color: app.core.tx),
+    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: app.core.tx),
     dropdownColor: t.panel2,
     borderRadius: app.shape.br(14),
     icon: Icon(Icons.arrow_drop_down, color: t.dim),
@@ -104,7 +103,7 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
       _engineConfigs = configs.values.toList();
 
       // Load current setting values for each engine
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       for (final config in _engineConfigs) {
         final engineId = config.metadata.id;
         final settingsConfig = config.settings;
@@ -343,16 +342,12 @@ class _DynamicSettingsBuilderState extends State<DynamicSettingsBuilder> {
       builder: (context, focused) => Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: currentValue
-              ? t.accent.withValues(alpha: 0.1)
-              : t.panel2,
+          color: currentValue ? t.accent.withValues(alpha: 0.1) : t.panel2,
           borderRadius: app.shape.br(8),
           border: Border.all(
             color: focused
                 ? t.accent
-                : (currentValue
-                      ? t.accent.withValues(alpha: 0.3)
-                      : t.line),
+                : (currentValue ? t.accent.withValues(alpha: 0.3) : t.line),
           ),
         ),
         child: Row(
@@ -817,11 +812,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                     color: t.accent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(
-                    Icons.tv_rounded,
-                    size: 22,
-                    color: t.accent2,
-                  ),
+                  child: Icon(Icons.tv_rounded, size: 22, color: t.accent2),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1046,16 +1037,12 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
       builder: (context, focused) => Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: value
-              ? t.accent.withValues(alpha: 0.1)
-              : t.panel2,
+          color: value ? t.accent.withValues(alpha: 0.1) : t.panel2,
           borderRadius: app.shape.br(8),
           border: Border.all(
             color: focused
                 ? t.accent
-                : (value
-                      ? t.accent.withValues(alpha: 0.3)
-                      : t.line),
+                : (value ? t.accent.withValues(alpha: 0.3) : t.line),
           ),
         ),
         child: Row(
@@ -1068,11 +1055,7 @@ class DynamicTvSettingsBuilderState extends State<DynamicTvSettingsBuilder> {
                     : app.fade(app.core.tx, 0.08),
                 borderRadius: app.shape.br(6),
               ),
-              child: Icon(
-                icon,
-                size: 18,
-                color: value ? t.accent2 : t.dim,
-              ),
+              child: Icon(icon, size: 18, color: value ? t.accent2 : t.dim),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1408,7 +1391,21 @@ class _FocusHighlight extends StatefulWidget {
 }
 
 class _FocusHighlightState extends State<_FocusHighlight> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1417,7 +1414,8 @@ class _FocusHighlightState extends State<_FocusHighlight> {
       skipTraversal: true,
       // hasFocus includes descendants, so this fires when the child's
       // Switch/dropdown receives DPAD focus.
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       child: widget.builder(context, _focused),
     );
   }

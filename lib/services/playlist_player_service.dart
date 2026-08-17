@@ -38,15 +38,15 @@ class PlaylistPlayerService {
   /// The ground is `cloud.dialogSurface` — a MODAL ground, which is what this
   /// is — and not `playlist.card`, though legacy spells both `#1E293B`.
   static Widget _preparingDialog(AppTheme app, String message) => AlertDialog(
-        backgroundColor: app.cloud.dialogSurface,
-        content: Row(
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(width: 16),
-            Text(message, style: TextStyle(color: app.core.tx)),
-          ],
-        ),
-      );
+    backgroundColor: app.cloud.dialogSurface,
+    content: Row(
+      children: [
+        const CircularProgressIndicator(),
+        const SizedBox(width: 16),
+        Text(message, style: TextStyle(color: app.core.tx)),
+      ],
+    ),
+  );
 
   /// Play a playlist item. Routes to the correct provider handler.
   /// When [playRandom] is true and the item is a multi-file collection, the
@@ -375,8 +375,9 @@ class PlaylistPlayerService {
           return;
         }
 
-        final int rdStartIndex =
-            (playRandom && firstIndex < entries.length) ? firstIndex : 0;
+        final int rdStartIndex = (playRandom && firstIndex < entries.length)
+            ? firstIndex
+            : 0;
         String initialVideoUrl = '';
         if (entries[rdStartIndex].url.isNotEmpty) {
           initialVideoUrl = entries[rdStartIndex].url;
@@ -554,8 +555,9 @@ class PlaylistPlayerService {
       return;
     }
 
-    final videoFiles =
-        result.files.where((f) => FileUtils.isVideoFile(f.fileName)).toList();
+    final videoFiles = result.files
+        .where((f) => FileUtils.isVideoFile(f.fileName))
+        .toList();
     if (videoFiles.isEmpty) {
       if (context.mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
@@ -627,13 +629,15 @@ class PlaylistPlayerService {
     }
     if (!context.mounted) return;
     MainPageBridge.notifyPlayerLaunching();
-    final savedViewModeString =
-        await StorageService.getPlaylistItemViewMode(item);
+    final savedViewModeString = await StorageService.getPlaylistItemViewMode(
+      item,
+    );
     final viewMode = PlaylistViewModeStorage.fromStorageString(
       savedViewModeString,
     );
-    final int startIndex =
-        (firstIndex >= 0 && firstIndex < entries.length) ? firstIndex : 0;
+    final int startIndex = (firstIndex >= 0 && firstIndex < entries.length)
+        ? firstIndex
+        : 0;
     await VideoPlayerLauncher.push(
       context,
       VideoPlayerLaunchArgs(
@@ -1323,7 +1327,8 @@ class PlaylistPlayerService {
 
     // Items saved from the Premiumize cloud browser carry cloud item ids
     // instead of a torrent hash — route them to the cloud-item player.
-    final bool hasCloudIds = (item['premiumizeItemId'] != null &&
+    final bool hasCloudIds =
+        (item['premiumizeItemId'] != null &&
             item['premiumizeItemId'].toString().isNotEmpty) ||
         (item['premiumizeItemIds'] is List &&
             (item['premiumizeItemIds'] as List).isNotEmpty);
@@ -1340,7 +1345,9 @@ class PlaylistPlayerService {
     if (infohash == null || infohash.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Missing Premiumize torrent information.')),
+        const SnackBar(
+          content: Text('Missing Premiumize torrent information.'),
+        ),
       );
       return;
     }
@@ -1454,8 +1461,9 @@ class PlaylistPlayerService {
 
       if (savedViewModeString == 'sortedAZ') {
         candidates.sort(
-          (a, b) =>
-              a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+          (a, b) => a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          ),
         );
       } else if (isSeriesCollection) {
         candidates.sort((a, b) {
@@ -1473,8 +1481,9 @@ class PlaylistPlayerService {
         });
       } else {
         candidates.sort(
-          (a, b) =>
-              a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+          (a, b) => a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          ),
         );
       }
 
@@ -1523,10 +1532,7 @@ class PlaylistPlayerService {
         );
       }
 
-      final totalBytes = candidates.fold<int>(
-        0,
-        (sum, c) => sum + c.file.size,
-      );
+      final totalBytes = candidates.fold<int>(0, (sum, c) => sum + c.file.size);
       final subtitle =
           '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
 
@@ -1558,7 +1564,9 @@ class PlaylistPlayerService {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to prepare Premiumize playlist: ${e.toString()}'),
+          content: Text(
+            'Failed to prepare Premiumize playlist: ${e.toString()}',
+          ),
         ),
       );
     } finally {
@@ -1613,23 +1621,28 @@ class PlaylistPlayerService {
     }
 
     try {
-      final savedViewModeString =
-          await StorageService.getPlaylistItemViewMode(item);
+      final savedViewModeString = await StorageService.getPlaylistItemViewMode(
+        item,
+      );
 
       if (kind == 'single') {
         final fileMeta = item['premiumizeFile'] as Map<String, dynamic>?;
-        final String? itemId =
-            (item['premiumizeItemId'] ?? fileMeta?['id'])?.toString();
+        final String? itemId = (item['premiumizeItemId'] ?? fileMeta?['id'])
+            ?.toString();
         if (itemId == null || itemId.isEmpty) {
           closeDialog();
           if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Missing Premiumize file information.')),
+            const SnackBar(
+              content: Text('Missing Premiumize file information.'),
+            ),
           );
           return;
         }
-        final resolved =
-            await PremiumizeService.resolveItemById(apiKey, itemId);
+        final resolved = await PremiumizeService.resolveItemById(
+          apiKey,
+          itemId,
+        );
         if (resolved == null || resolved.link.isEmpty) {
           closeDialog();
           if (!context.mounted) return;
@@ -1642,8 +1655,8 @@ class PlaylistPlayerService {
         }
         final String resolvedTitle =
             (item['title'] as String?)?.isNotEmpty == true
-                ? item['title'] as String
-                : (fileMeta?['name']?.toString() ?? fallbackTitle);
+            ? item['title'] as String
+            : (fileMeta?['name']?.toString() ?? fallbackTitle);
         final int? sizeBytes = resolved.size > 0
             ? resolved.size
             : int.tryParse(fileMeta?['size']?.toString() ?? '');
@@ -1651,15 +1664,17 @@ class PlaylistPlayerService {
         closeDialog();
         if (!context.mounted) return;
         MainPageBridge.notifyPlayerLaunching();
-        final viewMode =
-            PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+        final viewMode = PlaylistViewModeStorage.fromStorageString(
+          savedViewModeString,
+        );
         await VideoPlayerLauncher.push(
           context,
           VideoPlayerLaunchArgs(
             videoUrl: resolved.link,
             title: resolvedTitle,
-            subtitle:
-                sizeBytes != null ? Formatters.formatFileSize(sizeBytes) : null,
+            subtitle: sizeBytes != null
+                ? Formatters.formatFileSize(sizeBytes)
+                : null,
             playlist: [
               PlaylistEntry(
                 url: resolved.link,
@@ -1712,15 +1727,18 @@ class PlaylistPlayerService {
         return;
       }
 
-      final candidates = videoMetas.map((m) {
-        final name = m['name']?.toString() ?? '';
-        return _PremiumizeCloudCandidate(
-          id: m['id']?.toString() ?? '',
-          displayName: name.isNotEmpty ? name : 'File ${m['id']}',
-          sizeBytes: int.tryParse(m['size']?.toString() ?? '') ?? 0,
-          info: SeriesParser.parseFilename(name),
-        );
-      }).where((c) => c.id.isNotEmpty).toList();
+      final candidates = videoMetas
+          .map((m) {
+            final name = m['name']?.toString() ?? '';
+            return _PremiumizeCloudCandidate(
+              id: m['id']?.toString() ?? '',
+              displayName: name.isNotEmpty ? name : 'File ${m['id']}',
+              sizeBytes: int.tryParse(m['size']?.toString() ?? '') ?? 0,
+              info: SeriesParser.parseFilename(name),
+            );
+          })
+          .where((c) => c.id.isNotEmpty)
+          .toList();
 
       if (candidates.isEmpty) {
         closeDialog();
@@ -1739,32 +1757,37 @@ class PlaylistPlayerService {
 
       if (savedViewModeString == 'sortedAZ') {
         candidates.sort(
-          (a, b) =>
-              a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+          (a, b) => a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          ),
         );
       } else if (isSeriesCollection) {
         candidates.sort((a, b) {
-          final seasonCompare =
-              (a.info.season ?? 0).compareTo(b.info.season ?? 0);
+          final seasonCompare = (a.info.season ?? 0).compareTo(
+            b.info.season ?? 0,
+          );
           if (seasonCompare != 0) return seasonCompare;
-          final episodeCompare =
-              (a.info.episode ?? 0).compareTo(b.info.episode ?? 0);
+          final episodeCompare = (a.info.episode ?? 0).compareTo(
+            b.info.episode ?? 0,
+          );
           if (episodeCompare != 0) return episodeCompare;
           return a.displayName.toLowerCase().compareTo(
-                b.displayName.toLowerCase(),
-              );
+            b.displayName.toLowerCase(),
+          );
         });
       } else {
         candidates.sort(
-          (a, b) =>
-              a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()),
+          (a, b) => a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          ),
         );
       }
 
       int startIndex = 0;
       if (isSeriesCollection) {
-        startIndex =
-            _findFirstEpisodeIndex(candidates.map((c) => c.info).toList());
+        startIndex = _findFirstEpisodeIndex(
+          candidates.map((c) => c.info).toList(),
+        );
       }
       if (startIndex < 0 || startIndex >= candidates.length) startIndex = 0;
       if (playRandom && candidates.length > 1) {
@@ -1772,8 +1795,10 @@ class PlaylistPlayerService {
       }
 
       // Resolve only the starting item's URL up front; the rest resolve lazily.
-      final resolvedStart =
-          await PremiumizeService.resolveItemById(apiKey, candidates[startIndex].id);
+      final resolvedStart = await PremiumizeService.resolveItemById(
+        apiKey,
+        candidates[startIndex].id,
+      );
       if (resolvedStart == null || resolvedStart.link.isEmpty) {
         closeDialog();
         if (!context.mounted) return;
@@ -1810,16 +1835,16 @@ class PlaylistPlayerService {
         );
       }
 
-      final totalBytes =
-          candidates.fold<int>(0, (sum, c) => sum + c.sizeBytes);
+      final totalBytes = candidates.fold<int>(0, (sum, c) => sum + c.sizeBytes);
       final subtitle =
           '${playlistEntries.length} ${isSeriesCollection ? 'episodes' : 'files'} • ${Formatters.formatFileSize(totalBytes)}';
 
       closeDialog();
       if (!context.mounted) return;
       MainPageBridge.notifyPlayerLaunching();
-      final viewMode =
-          PlaylistViewModeStorage.fromStorageString(savedViewModeString);
+      final viewMode = PlaylistViewModeStorage.fromStorageString(
+        savedViewModeString,
+      );
       await VideoPlayerLauncher.push(
         context,
         VideoPlayerLaunchArgs(
@@ -1839,8 +1864,9 @@ class PlaylistPlayerService {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text('Failed to prepare Premiumize playlist: ${e.toString()}'),
+          content: Text(
+            'Failed to prepare Premiumize playlist: ${e.toString()}',
+          ),
         ),
       );
     } finally {
@@ -2102,7 +2128,7 @@ class PlaylistPlayerService {
   ) async {
     final serverId = (item['webdavServerId'] ?? '').toString();
     final baseUrl = (item['webdavBaseUrl'] ?? '').toString();
-    final servers = await StorageService.getWebDavServers();
+    final servers = await StorageService.getWebDavServers(forSettings: false);
     for (final server in servers) {
       if (serverId.isNotEmpty && server.id == serverId) return server;
     }

@@ -18,7 +18,12 @@ enum ParallaxShape {
   sourceCard(1.10),
   episodeStill(1.055),
   castCircle(1.08),
-  pill(1.06);
+  pill(1.06),
+
+  /// A full-width settings row or category cell. It needs the same lift and
+  /// travelling glare as Spotlight cards, but only enough scale to separate
+  /// from its neighbours without colliding with the dense list around it.
+  settingsRow(1.018);
 
   const ParallaxShape(this.scale);
 
@@ -102,6 +107,16 @@ class ParallaxFocus extends StatelessWidget {
   final Widget child;
   final ParallaxShape shape;
 
+  /// A visual layer that follows the card but keeps its resting scale.
+  ///
+  /// Poster captions are the motivating case: scaling a small TV label with
+  /// the artwork makes its glyphs look soft, while leaving it outside the
+  /// transform makes it visibly detach from the lifted card. Counter-scaling
+  /// this layer about the card's bottom edge preserves both attachment and
+  /// optical sharpness. It is also painted above the specular glare so the
+  /// highlight cannot wash through text.
+  final Widget? fixedScaleForeground;
+
   /// Clips the glare. Should match the child's own corner radius, or the
   /// highlight paints over the corners the artwork rounded off.
   final BorderRadius? radius;
@@ -112,6 +127,7 @@ class ParallaxFocus extends StatelessWidget {
     required this.child,
     this.shape = ParallaxShape.poster,
     this.radius,
+    this.fixedScaleForeground,
   });
 
   /// Animated bodies currently mounted. Zero under every expression but
@@ -123,7 +139,13 @@ class ParallaxFocus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
-    if (app.focus.expression != FocusExpression.parallax) return child;
+    if (app.focus.expression != FocusExpression.parallax) {
+      return _withFixedScaleForeground(
+        child: child,
+        foreground: fixedScaleForeground,
+        scale: 1,
+      );
+    }
     return _ParallaxBody(
       focused: focused,
       shape: shape,
@@ -131,9 +153,34 @@ class ParallaxFocus extends StatelessWidget {
       spring: app.motion.focusSpring,
       curve: app.motion.emphasized,
       duration: app.motion.base,
+      fixedScaleForeground: fixedScaleForeground,
       child: child,
     );
   }
+}
+
+Widget _withFixedScaleForeground({
+  required Widget child,
+  required Widget? foreground,
+  required double scale,
+}) {
+  if (foreground == null) return child;
+
+  final layer = scale == 1
+      ? foreground
+      : Transform.scale(
+          alignment: Alignment.bottomCenter,
+          scale: 1 / scale,
+          child: foreground,
+        );
+
+  return Stack(
+    fit: StackFit.passthrough,
+    children: [
+      child,
+      Positioned.fill(child: layer),
+    ],
+  );
 }
 
 class _ParallaxBody extends StatefulWidget {
@@ -144,6 +191,7 @@ class _ParallaxBody extends StatefulWidget {
   final SpringDescription? spring;
   final Curve curve;
   final Duration duration;
+  final Widget? fixedScaleForeground;
 
   const _ParallaxBody({
     required this.focused,
@@ -153,6 +201,7 @@ class _ParallaxBody extends StatefulWidget {
     required this.spring,
     required this.curve,
     required this.duration,
+    required this.fixedScaleForeground,
   });
 
   @override
@@ -196,7 +245,9 @@ class _ParallaxBodyState extends State<_ParallaxBody>
 
   /// UNBOUNDED. A bounded controller clamps at 1.0 and an under-damped spring
   /// would lose exactly the overshoot this whole widget exists for.
-  late final AnimationController _c = AnimationController.unbounded(vsync: this);
+  late final AnimationController _c = AnimationController.unbounded(
+    vsync: this,
+  );
 
   /// The lean's decay, driven off the same controller rather than a second
   /// one: it is a function of how far the lift has progressed, so two springs
@@ -261,22 +312,17 @@ class _ParallaxBodyState extends State<_ParallaxBody>
 
     final spring = widget.spring;
     if (spring == null) {
-      _c.animateTo(
-        target,
-        duration: widget.duration,
-        curve: widget.curve,
-      );
+      _c.animateTo(target, duration: widget.duration, curve: widget.curve);
       return;
     }
     // Seeded with the CURRENT velocity, which is what lets an interrupted
     // move continue rather than restart.
-    _c
-        .animateWith(SpringSimulation(spring, _c.value, target, _c.velocity))
-        // A spring stops when it is within tolerance of its target, not ON it
-        // — measured ~2% high, which leaves a settled card permanently that
-        // much oversized. Land it exactly, and only if this is still the move
-        // that was started (a later one will have set its own target).
-        .whenCompleteOrCancel(() {
+    _c.animateWith(SpringSimulation(spring, _c.value, target, _c.velocity))
+    // A spring stops when it is within tolerance of its target, not ON it
+    // — measured ~2% high, which leaves a settled card permanently that
+    // much oversized. Land it exactly, and only if this is still the move
+    // that was started (a later one will have set its own target).
+    .whenCompleteOrCancel(() {
       if (mounted && _c.value != target && !_c.isAnimating) {
         _c.value = target;
       }
@@ -321,7 +367,13 @@ class _ParallaxBodyState extends State<_ParallaxBody>
           final v = _c.value;
           final lift = v.clamp(0.0, 1.4);
           final unit = lift.clamp(0.0, 1.0);
-          if (lift <= 0.0001 && _c.velocity.abs() < 0.01) return child!;
+          if (lift <= 0.0001 && _c.velocity.abs() < 0.01) {
+            return _withFixedScaleForeground(
+              child: child!,
+              foreground: widget.fixedScaleForeground,
+              scale: 1,
+            );
+          }
 
           final scale = 1 + (widget.shape.scale - 1) * lift;
 
@@ -351,7 +403,11 @@ class _ParallaxBodyState extends State<_ParallaxBody>
                     ),
                   ],
                 ),
-                child: child!,
+                child: _withFixedScaleForeground(
+                  child: child!,
+                  foreground: widget.fixedScaleForeground,
+                  scale: scale,
+                ),
               ),
             );
           }
@@ -388,46 +444,53 @@ class _ParallaxBodyState extends State<_ParallaxBody>
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.45 * unit),
-                    offset: Offset(-ry * _shadowPerDeg, 16 + rx * _shadowPerDeg),
+                    offset: Offset(
+                      -ry * _shadowPerDeg,
+                      16 + rx * _shadowPerDeg,
+                    ),
                     blurRadius: 25,
                   ),
                 ],
               ),
               child: ClipRRect(
                 borderRadius: radius,
-                child: Stack(
-                  fit: StackFit.passthrough,
-                  children: [
-                    child!,
-                    // The specular highlight: a blurry white disc ~1.7× the
-                    // card, parked above its top edge so only the lower arc
-                    // catches the face, sliding with the tilt.
-                    //
-                    // Painted as a gradient whose own stops carry the alpha —
-                    // an Opacity here would be a saveLayer per frame, which is
-                    // the one thing a TV cursor cannot afford.
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: RadialGradient(
-                              center: Alignment(
-                                (-ry * 0.042).clamp(-1.0, 1.0),
-                                (-1.05 + rx * 0.042).clamp(-2.0, 1.0),
+                child: _withFixedScaleForeground(
+                  scale: scale,
+                  foreground: widget.fixedScaleForeground,
+                  child: Stack(
+                    fit: StackFit.passthrough,
+                    children: [
+                      child!,
+                      // The specular highlight: a blurry white disc ~1.7× the
+                      // card, parked above its top edge so only the lower arc
+                      // catches the face, sliding with the tilt.
+                      //
+                      // Painted as a gradient whose own stops carry the alpha —
+                      // an Opacity here would be a saveLayer per frame, which is
+                      // the one thing a TV cursor cannot afford.
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: RadialGradient(
+                                center: Alignment(
+                                  (-ry * 0.042).clamp(-1.0, 1.0),
+                                  (-1.05 + rx * 0.042).clamp(-2.0, 1.0),
+                                ),
+                                radius: 0.85,
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.31 * unit),
+                                  Colors.white.withValues(alpha: 0.14 * unit),
+                                  Colors.white.withValues(alpha: 0),
+                                ],
+                                stops: const [0, 0.26, 0.58],
                               ),
-                              radius: 0.85,
-                              colors: [
-                                Colors.white.withValues(alpha: 0.31 * unit),
-                                Colors.white.withValues(alpha: 0.14 * unit),
-                                Colors.white.withValues(alpha: 0),
-                              ],
-                              stops: const [0, 0.26, 0.58],
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

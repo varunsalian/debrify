@@ -4,6 +4,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import '../utils/app_storage.dart';
+import '../models/profiles/profile_policy.dart';
+import 'profiles/device_job_store.dart';
+import 'profiles/profile_bootstrap.dart';
+import 'profiles/profile_runtime.dart';
 
 import 'live_recording_service.dart'
     show LiveRecordingService, RecordingLibraryEntry;
@@ -59,12 +63,22 @@ class DesktopRecordingCapture {
     required this.path,
     required this.channelName,
     required Map<String, String> headers,
+    required this.jobId,
+    required this.ownerProfileId,
+    required this.profileAuthorizationRevision,
+    this.connectionResourceId,
+    this.resourceAuthorizationRevision,
     this.onFinished,
   }) : _headers = headers;
 
   final String url;
   final String path;
   final String channelName;
+  final String jobId;
+  final String ownerProfileId;
+  final int profileAuthorizationRevision;
+  final String? connectionResourceId;
+  final int? resourceAuthorizationRevision;
   final Map<String, String> _headers;
 
   /// Called exactly once when the capture ends, however it ends. May fire on
@@ -87,6 +101,23 @@ class DesktopRecordingCapture {
   static const _maxDeadReconnects = 3;
   static const _stallTimeout = Duration(seconds: 60);
   static const _reconnectBackoff = Duration(seconds: 2);
+  DateTime _lastAuthorizationCheck = DateTime.fromMillisecondsSinceEpoch(0);
+
+  Future<bool> _authorizationStillValid({bool force = false}) async {
+    final now = DateTime.now();
+    if (!force &&
+        now.difference(_lastAuthorizationCheck) < const Duration(seconds: 5)) {
+      return true;
+    }
+    _lastAuthorizationCheck = now;
+    return DeviceJobStore.validateAuthorization(
+      profileId: ownerProfileId,
+      profileAuthorizationRevision: profileAuthorizationRevision,
+      feature: ProfileFeature.recordings,
+      resourceId: connectionResourceId,
+      resourceAuthorizationRevision: resourceAuthorizationRevision,
+    );
+  }
 
   /// Ask the capture to end and force a blocked read out now. Resolves with
   /// the byte count once the file is flushed and closed.
@@ -111,10 +142,12 @@ class DesktopRecordingCapture {
 
       capture:
       while (!_stopRequested && !capReached) {
+        if (!await _authorizationStillValid(force: true)) break;
         HttpClient? client;
         var gotBytesThisAttempt = false;
         try {
-          client = HttpClient()..connectionTimeout = const Duration(seconds: 30);
+          client = HttpClient()
+            ..connectionTimeout = const Duration(seconds: 30);
           _client = client;
           final request = await client.getUrl(Uri.parse(url));
           _headers.forEach((k, v) => request.headers.set(k, v));
@@ -124,7 +157,7 @@ class DesktopRecordingCapture {
             request.headers.set(
               'User-Agent',
               'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-              '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                  '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             );
           }
           final response = await request.close();
@@ -135,6 +168,7 @@ class DesktopRecordingCapture {
           // surfaces as a TimeoutException and rolls into a reconnect.
           await for (final chunk in response.timeout(_stallTimeout)) {
             if (_stopRequested) break capture;
+            if (!await _authorizationStillValid()) break capture;
             if (chunk.isEmpty) continue;
             // First bytes of the whole capture: an HLS playlist wearing a
             // progressive URL would loop-append manifest text forever.
@@ -208,9 +242,7 @@ class DesktopRecordingCapture {
     }
 
     _done = true;
-    debugPrint(
-      'DesktopRecording: ended ($end) — $_bytes bytes at $path',
-    );
+    debugPrint('DesktopRecording: ended ($end) — $_bytes bytes at $path');
     // In the capture itself, NOT an onFinished wrapper: callers may null
     // onFinished (the player does at dispose), and the UI revision must bump
     // for every ending regardless. Same for the report — the whole point is
@@ -223,6 +255,7 @@ class DesktopRecordingCapture {
       path: path,
       bytes: _bytes,
     );
+    unawaited(service._captureEnded(this));
     if (!_completion.isCompleted) _completion.complete(_bytes);
     try {
       onFinished?.call(end, _bytes);
@@ -253,63 +286,142 @@ class DesktopRecordingService {
       ValueNotifier<DesktopRecordingReport?>(null);
 
   final List<DesktopRecordingCapture> _captures = [];
+  int _jobSequence = 0;
 
   /// The running captures (finished ones are pruned on read), oldest first.
   List<DesktopRecordingCapture> get captures {
     _captures.removeWhere((c) => !c.isActive);
-    return List.unmodifiable(_captures);
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return List.unmodifiable(_captures);
+    }
+    final owner = ProfileRuntime.capture().profileId;
+    return List.unmodifiable(
+      _captures.where((capture) => capture.ownerProfileId == owner),
+    );
   }
 
-  int get activeCount => captures.length;
+  List<DesktopRecordingCapture> get _allActive {
+    _captures.removeWhere((capture) => !capture.isActive);
+    return _captures;
+  }
+
+  int get activeCount => _allActive.length;
 
   /// The running capture of [url], or null. Callers match a channel by its
   /// own URL and, for Xtream channels, the `.ts` twin they record under.
-  DesktopRecordingCapture? captureForUrl(String url) {
-    for (final capture in captures) {
-      if (capture.url == url) return capture;
+  DesktopRecordingCapture? captureForUrl(String url, {String? ownerProfileId}) {
+    final owner =
+        ownerProfileId ??
+        (ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted
+            ? ProfileRuntime.capture().profileId
+            : null);
+    for (final capture in _allActive) {
+      if (capture.url == url &&
+          (owner == null || capture.ownerProfileId == owner)) {
+        return capture;
+      }
     }
     return null;
   }
 
   bool get isSupported =>
-      !kIsWeb &&
-      (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+      !kIsWeb && (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
 
   /// Begin capturing [url] to [path]. Returns the already-running capture if
   /// this URL is being recorded (never two connections for one channel), and
   /// null when the simultaneous-recordings limit is reached.
-  DesktopRecordingCapture? start({
+  Future<DesktopRecordingCapture?> start({
     required String url,
     required String path,
     required String channelName,
     required Map<String, String> headers,
+    String? ownerProfileId,
+    int? profileAuthorizationRevision,
+    String? connectionResourceId,
+    int? resourceAuthorizationRevision,
     void Function(DesktopRecordingEnd end, int bytes)? onFinished,
-  }) {
-    final existing = captureForUrl(url);
+  }) async {
+    final authorization = ownerProfileId == null
+        ? await DeviceJobStore.authorize(ProfileFeature.recordings)
+        : null;
+    final owner =
+        ownerProfileId ?? authorization?.profileId ?? 'legacy-admin-v1';
+    final authorizationRevision =
+        profileAuthorizationRevision ??
+        authorization?.profileAuthorizationRevision ??
+        1;
+    if (!await DeviceJobStore.validateAuthorization(
+      profileId: owner,
+      profileAuthorizationRevision: authorizationRevision,
+      resourceId: connectionResourceId,
+      resourceAuthorizationRevision: resourceAuthorizationRevision,
+      feature: ProfileFeature.recordings,
+    )) {
+      return null;
+    }
+    final existing = captureForUrl(url, ownerProfileId: owner);
     if (existing != null) return existing;
     if (activeCount >= LiveRecordingService.maxConcurrentCached) return null;
     // Two same-second starts of identically-named channels would compute the
     // same target path (the exists() probe sees neither file yet) and write
     // into one file — something the old one-at-a-time rule made impossible.
-    if (captures.any((c) => c.path == path)) return null;
+    if (_allActive.any((c) => c.path == path)) return null;
+    final jobId =
+        'drec-${DateTime.now().microsecondsSinceEpoch}-${_jobSequence++}';
     final capture = DesktopRecordingCapture._(
       url: url,
       path: path,
       channelName: channelName,
       headers: headers,
+      jobId: jobId,
+      ownerProfileId: owner,
+      profileAuthorizationRevision: authorizationRevision,
+      connectionResourceId: connectionResourceId,
+      resourceAuthorizationRevision: resourceAuthorizationRevision,
       onFinished: onFinished,
     );
     _captures.add(capture);
     revision.value++;
+    if (ProfileRuntime.isProfileCommitted) {
+      await DeviceJobStore.registerSnapshot(
+        backend: 'desktopRecording',
+        externalJobId: jobId,
+        kind: DeviceJobKind.recording,
+        ownerProfileId: owner,
+        profileAuthorizationRevision: authorizationRevision,
+        resourceId: connectionResourceId,
+        resourceAuthorizationRevision: resourceAuthorizationRevision,
+      );
+    }
     unawaited(capture._run());
     return capture;
+  }
+
+  Future<void> _captureEnded(DesktopRecordingCapture capture) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return;
+    }
+    await DeviceJobStore.markTerminal(
+      backend: 'desktopRecording',
+      externalJobId: capture.jobId,
+    );
+    final file = File(capture.path);
+    if (capture.bytes > 0 && await file.exists()) {
+      await ProfileBootstrap.registry.upsertOwnedArtifact(
+        kind: 'recording',
+        ownerProfileId: capture.ownerProfileId,
+        canonicalPath: file.absolute.path,
+        sizeBytes: capture.bytes,
+        modifiedAtMs: (await file.lastModified()).millisecondsSinceEpoch,
+      );
+    }
   }
 
   /// Stop every running capture; resolves once their files are closed. Called
   /// on app exit — the HTTP pipe lives in this process, so quitting without
   /// this truncates whatever was mid-write.
   Future<void> stopAll() async {
-    for (final capture in captures) {
+    for (final capture in List<DesktopRecordingCapture>.from(_allActive)) {
       await capture.stop();
     }
   }
@@ -319,8 +431,7 @@ class DesktopRecordingService {
   /// created here — captures create it on first write.
   static Future<Directory> recordingsDir() async {
     final base =
-        (await getDownloadsDirectory()) ??
-        await AppStorage.documents();
+        (await getDownloadsDirectory()) ?? await AppStorage.documents();
     final sep = Platform.pathSeparator;
     return Directory('${base.path}${sep}Debrify${sep}Recordings');
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../services/subtitle_font_service.dart';
+import '../../../services/profiles/profile_preferences.dart';
 
 /// Subtitle size options
 class SubtitleSize {
@@ -32,35 +33,35 @@ class SubtitleStyle {
   const SubtitleStyle(this.label, {this.shadows, this.foregroundPaint});
 
   static List<SubtitleStyle> get options => [
-        const SubtitleStyle('None'),
-        SubtitleStyle('Outline', shadows: _outlineShadows),
-        SubtitleStyle('Shadow', shadows: _dropShadow),
-        SubtitleStyle('Raised', shadows: _raisedShadows),
-        SubtitleStyle('Depressed', shadows: _depressedShadows),
-      ];
+    const SubtitleStyle('None'),
+    SubtitleStyle('Outline', shadows: _outlineShadows),
+    SubtitleStyle('Shadow', shadows: _dropShadow),
+    SubtitleStyle('Raised', shadows: _raisedShadows),
+    SubtitleStyle('Depressed', shadows: _depressedShadows),
+  ];
 
   static const int defaultIndex = 1; // Outline
 
   static List<Shadow> get _outlineShadows => [
-        const Shadow(offset: Offset(-1.5, -1.5), color: Colors.black),
-        const Shadow(offset: Offset(1.5, -1.5), color: Colors.black),
-        const Shadow(offset: Offset(-1.5, 1.5), color: Colors.black),
-        const Shadow(offset: Offset(1.5, 1.5), color: Colors.black),
-      ];
+    const Shadow(offset: Offset(-1.5, -1.5), color: Colors.black),
+    const Shadow(offset: Offset(1.5, -1.5), color: Colors.black),
+    const Shadow(offset: Offset(-1.5, 1.5), color: Colors.black),
+    const Shadow(offset: Offset(1.5, 1.5), color: Colors.black),
+  ];
 
   static List<Shadow> get _dropShadow => [
-        const Shadow(offset: Offset(2, 2), blurRadius: 4, color: Colors.black87),
-      ];
+    const Shadow(offset: Offset(2, 2), blurRadius: 4, color: Colors.black87),
+  ];
 
   static List<Shadow> get _raisedShadows => [
-        const Shadow(offset: Offset(-1, -1), color: Colors.white24),
-        const Shadow(offset: Offset(2, 2), blurRadius: 2, color: Colors.black),
-      ];
+    const Shadow(offset: Offset(-1, -1), color: Colors.white24),
+    const Shadow(offset: Offset(2, 2), blurRadius: 2, color: Colors.black),
+  ];
 
   static List<Shadow> get _depressedShadows => [
-        const Shadow(offset: Offset(1, 1), color: Colors.white24),
-        const Shadow(offset: Offset(-1, -1), blurRadius: 2, color: Colors.black),
-      ];
+    const Shadow(offset: Offset(1, 1), color: Colors.white24),
+    const Shadow(offset: Offset(-1, -1), blurRadius: 2, color: Colors.black),
+  ];
 }
 
 /// Subtitle text color options
@@ -179,7 +180,12 @@ class SubtitleSettingsService {
   int _syncOffsetMs = 0;
 
   Future<void> _ensurePrefs() async {
-    _prefs ??= await SharedPreferences.getInstance();
+    _prefs ??= await ProfilePreferences.instance();
+  }
+
+  void resetProfileScope() {
+    _prefs = null;
+    _syncOffsetMs = 0;
   }
 
   // Getters
@@ -211,8 +217,7 @@ class SubtitleSettingsService {
 
   Future<int> getElevationIndex() async {
     await _ensurePrefs();
-    return _prefs!.getInt(_keyElevationIndex) ??
-        SubtitleElevation.defaultIndex;
+    return _prefs!.getInt(_keyElevationIndex) ?? SubtitleElevation.defaultIndex;
   }
 
   Future<bool> getBold() async {
@@ -224,37 +229,49 @@ class SubtitleSettingsService {
   Future<void> setSizeIndex(int index) async {
     await _ensurePrefs();
     await _prefs!.setInt(
-        _keySizeIndex, index.clamp(0, SubtitleSize.options.length - 1));
+      _keySizeIndex,
+      index.clamp(0, SubtitleSize.options.length - 1),
+    );
   }
 
   Future<void> setStyleIndex(int index) async {
     await _ensurePrefs();
     await _prefs!.setInt(
-        _keyStyleIndex, index.clamp(0, SubtitleStyle.options.length - 1));
+      _keyStyleIndex,
+      index.clamp(0, SubtitleStyle.options.length - 1),
+    );
   }
 
   Future<void> setColorIndex(int index) async {
     await _ensurePrefs();
     await _prefs!.setInt(
-        _keyColorIndex, index.clamp(0, SubtitleColor.options.length - 1));
+      _keyColorIndex,
+      index.clamp(0, SubtitleColor.options.length - 1),
+    );
   }
 
   Future<void> setBgIndex(int index) async {
     await _ensurePrefs();
     await _prefs!.setInt(
-        _keyBgIndex, index.clamp(0, SubtitleBackground.options.length - 1));
+      _keyBgIndex,
+      index.clamp(0, SubtitleBackground.options.length - 1),
+    );
   }
 
   Future<void> setOutlineColorIndex(int index) async {
     await _ensurePrefs();
-    await _prefs!.setInt(_keyOutlineColorIndex,
-        index.clamp(0, SubtitleOutlineColor.options.length - 1));
+    await _prefs!.setInt(
+      _keyOutlineColorIndex,
+      index.clamp(0, SubtitleOutlineColor.options.length - 1),
+    );
   }
 
   Future<void> setElevationIndex(int index) async {
     await _ensurePrefs();
-    await _prefs!.setInt(_keyElevationIndex,
-        index.clamp(0, SubtitleElevation.options.length - 1));
+    await _prefs!.setInt(
+      _keyElevationIndex,
+      index.clamp(0, SubtitleElevation.options.length - 1),
+    );
   }
 
   Future<void> setBold(bool value) async {
@@ -283,30 +300,42 @@ class SubtitleSettingsService {
 
   Future<SubtitleStyle> getCurrentStyle() async {
     final idx = await getStyleIndex();
-    return SubtitleStyle.options[idx.clamp(0, SubtitleStyle.options.length - 1)];
+    return SubtitleStyle.options[idx.clamp(
+      0,
+      SubtitleStyle.options.length - 1,
+    )];
   }
 
   Future<SubtitleColor> getCurrentColor() async {
     final idx = await getColorIndex();
-    return SubtitleColor.options[idx.clamp(0, SubtitleColor.options.length - 1)];
+    return SubtitleColor.options[idx.clamp(
+      0,
+      SubtitleColor.options.length - 1,
+    )];
   }
 
   Future<SubtitleBackground> getCurrentBg() async {
     final idx = await getBgIndex();
-    return SubtitleBackground
-        .options[idx.clamp(0, SubtitleBackground.options.length - 1)];
+    return SubtitleBackground.options[idx.clamp(
+      0,
+      SubtitleBackground.options.length - 1,
+    )];
   }
 
   Future<SubtitleOutlineColor> getCurrentOutlineColor() async {
     final idx = await getOutlineColorIndex();
-    return SubtitleOutlineColor
-        .options[idx.clamp(0, SubtitleOutlineColor.options.length - 1)];
+    return SubtitleOutlineColor.options[idx.clamp(
+      0,
+      SubtitleOutlineColor.options.length - 1,
+    )];
   }
 
   Future<SubtitleElevation> getCurrentElevation() async {
     final idx = await getElevationIndex();
-    return SubtitleElevation
-        .options[idx.clamp(0, SubtitleElevation.options.length - 1)];
+    return SubtitleElevation.options[idx.clamp(
+      0,
+      SubtitleElevation.options.length - 1,
+    )];
   }
 
   /// Load all settings at once
@@ -322,10 +351,11 @@ class SubtitleSettingsService {
       styleIndex: _prefs!.getInt(_keyStyleIndex) ?? SubtitleStyle.defaultIndex,
       colorIndex: _prefs!.getInt(_keyColorIndex) ?? SubtitleColor.defaultIndex,
       bgIndex: _prefs!.getInt(_keyBgIndex) ?? SubtitleBackground.defaultIndex,
-      outlineColorIndex: _prefs!.getInt(_keyOutlineColorIndex) ??
+      outlineColorIndex:
+          _prefs!.getInt(_keyOutlineColorIndex) ??
           SubtitleOutlineColor.defaultIndex,
-      elevationIndex: _prefs!.getInt(_keyElevationIndex) ??
-          SubtitleElevation.defaultIndex,
+      elevationIndex:
+          _prefs!.getInt(_keyElevationIndex) ?? SubtitleElevation.defaultIndex,
       bold: _prefs!.getBool(_keyBold) ?? defaultBold,
       syncOffsetMs: _syncOffsetMs,
       fontIndex: fontIndex,
@@ -342,7 +372,9 @@ class SubtitleSettingsService {
     await _prefs!.setInt(_keyColorIndex, SubtitleColor.defaultIndex);
     await _prefs!.setInt(_keyBgIndex, SubtitleBackground.defaultIndex);
     await _prefs!.setInt(
-        _keyOutlineColorIndex, SubtitleOutlineColor.defaultIndex);
+      _keyOutlineColorIndex,
+      SubtitleOutlineColor.defaultIndex,
+    );
     await _prefs!.setInt(_keyElevationIndex, SubtitleElevation.defaultIndex);
     await _prefs!.setBool(_keyBold, defaultBold);
     // Sync offset is in-memory and per-subtitle, not a persisted style.
@@ -396,20 +428,35 @@ class SubtitleSettingsData {
   SubtitleSize get size =>
       SubtitleSize.options[sizeIndex.clamp(0, SubtitleSize.options.length - 1)];
 
-  SubtitleStyle get style => SubtitleStyle
-      .options[styleIndex.clamp(0, SubtitleStyle.options.length - 1)];
+  SubtitleStyle get style =>
+      SubtitleStyle.options[styleIndex.clamp(
+        0,
+        SubtitleStyle.options.length - 1,
+      )];
 
-  SubtitleColor get color => SubtitleColor
-      .options[colorIndex.clamp(0, SubtitleColor.options.length - 1)];
+  SubtitleColor get color =>
+      SubtitleColor.options[colorIndex.clamp(
+        0,
+        SubtitleColor.options.length - 1,
+      )];
 
-  SubtitleBackground get background => SubtitleBackground
-      .options[bgIndex.clamp(0, SubtitleBackground.options.length - 1)];
+  SubtitleBackground get background =>
+      SubtitleBackground.options[bgIndex.clamp(
+        0,
+        SubtitleBackground.options.length - 1,
+      )];
 
-  SubtitleOutlineColor get outlineColor => SubtitleOutlineColor
-      .options[outlineColorIndex.clamp(0, SubtitleOutlineColor.options.length - 1)];
+  SubtitleOutlineColor get outlineColor =>
+      SubtitleOutlineColor.options[outlineColorIndex.clamp(
+        0,
+        SubtitleOutlineColor.options.length - 1,
+      )];
 
-  SubtitleElevation get elevation => SubtitleElevation
-      .options[elevationIndex.clamp(0, SubtitleElevation.options.length - 1)];
+  SubtitleElevation get elevation =>
+      SubtitleElevation.options[elevationIndex.clamp(
+        0,
+        SubtitleElevation.options.length - 1,
+      )];
 
   /// Get shadows with outline color applied (null color = auto/keep original)
   List<Shadow>? get resolvedShadows {
@@ -418,15 +465,17 @@ class SubtitleSettingsData {
     final oc = outlineColor.color;
     if (oc == null) return shadows; // Auto
     return shadows
-        .map((s) => Shadow(offset: s.offset, blurRadius: s.blurRadius, color: oc))
+        .map(
+          (s) => Shadow(offset: s.offset, blurRadius: s.blurRadius, color: oc),
+        )
         .toList();
   }
 
   SubtitleFont get font => SubtitleFont(
-      id: fontIndex.toString(),
-      label: fontLabel,
-      fontFamily: fontFamily,
-    );
+    id: fontIndex.toString(),
+    label: fontLabel,
+    fontFamily: fontFamily,
+  );
 
   String get syncOffsetLabel {
     if (syncOffsetMs == 0) return '0';
@@ -517,7 +566,10 @@ class SubtitleSettingsData {
   /// themselves (the tracks-sheet preview wraps the sample in a chip of that
   /// colour). The background alphas are TRANSLUCENT, so painting the same
   /// colour twice darkens the band behind the glyphs relative to the chip.
-  TextStyle buildTextStyle({double? fontSizePx, bool includeBackground = true}) {
+  TextStyle buildTextStyle({
+    double? fontSizePx,
+    bool includeBackground = true,
+  }) {
     final resolvedSize = fontSizePx ?? size.sizePx;
     final embolden = bold && !hasRealBoldFace;
     final stroke = embolden ? _emboldenStroke(resolvedSize) : 0.0;

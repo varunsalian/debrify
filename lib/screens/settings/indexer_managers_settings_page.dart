@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/indexer_manager_config.dart';
 import '../../services/indexer_manager_service.dart';
+import '../../services/profiles/profile_async_authorization.dart';
 import '../../services/storage_service.dart';
 import '../../services/torrent_service.dart';
 import '../../services/analytics_service.dart';
@@ -9,6 +10,7 @@ import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
+import '../../models/profiles/profile_policy.dart';
 
 /// Focused IconButtons get the accent outline + lit fill — the stock
 /// Material focus overlay is invisible on the dark settings theme (TV DPAD).
@@ -55,7 +57,9 @@ class _IndexerManagersSettingsPageState
   }
 
   Future<void> _loadConfigs() async {
-    final configs = await StorageService.getIndexerManagerConfigs();
+    final configs = await StorageService.getIndexerManagerConfigs(
+      forSettings: true,
+    );
     if (!mounted) return;
     setState(() {
       _configs = configs;
@@ -76,26 +80,67 @@ class _IndexerManagersSettingsPageState
     }
   }
 
-  Future<void> _saveConfigs(List<IndexerManagerConfig> configs) async {
-    await StorageService.setIndexerManagerConfigs(configs);
-    if (!mounted) return;
-    setState(() => _configs = configs);
+  Future<List<IndexerManagerConfig>> _saveConfigs(
+    List<IndexerManagerConfig> configs, {
+    ProfileAsyncAuthorization? authorization,
+  }) async {
+    Future<List<IndexerManagerConfig>> save() =>
+        StorageService.setIndexerManagerConfigs(configs);
+    final List<IndexerManagerConfig> saved;
+    if (authorization == null) {
+      saved = await save();
+    } else {
+      saved = await authorization.runIfCurrent(save);
+    }
+    if (mounted) setState(() => _configs = saved);
+    return saved;
   }
 
   Future<void> _toggleEnabled(IndexerManagerConfig config, bool enabled) async {
+    if (config.connectionReadOnly) return;
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
+    if (!mounted) return;
     final updated = config.copyWith(enabled: enabled);
-    await _replaceConfig(updated);
-    await TorrentService.setEngineEnabled(updated.engineId, enabled);
+    final canonical = await _replaceConfig(
+      updated,
+      authorization: authorization,
+    );
+    await _setEngineEnabled(canonical.engineId, enabled);
   }
 
-  Future<void> _replaceConfig(IndexerManagerConfig updated) async {
+  Future<IndexerManagerConfig> _replaceConfig(
+    IndexerManagerConfig updated, {
+    ProfileAsyncAuthorization? authorization,
+  }) async {
     final configs = _configs
         .map((config) => config.id == updated.id ? updated : config)
         .toList();
-    await _saveConfigs(configs);
+    final saved = await _saveConfigs(configs, authorization: authorization);
+    final resourceId = updated.connectionResourceId;
+    if (resourceId != null) {
+      return saved.singleWhere(
+        (config) => config.connectionResourceId == resourceId,
+      );
+    }
+    final idMatch = saved.where((config) => config.id == updated.id);
+    if (idMatch.length == 1) return idMatch.single;
+    return saved.singleWhere(
+      (config) =>
+          config.type == updated.type &&
+          config.normalizedBaseUrl == updated.normalizedBaseUrl &&
+          config.apiKey == updated.apiKey &&
+          config.displayName == updated.displayName,
+    );
   }
 
   Future<void> _deleteConfig(IndexerManagerConfig config) async {
+    if (config.connectionReadOnly) return;
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
+    if (!mounted) return;
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -121,8 +166,11 @@ class _IndexerManagersSettingsPageState
         ],
       ),
     );
-    if (shouldDelete != true) return;
-    await _saveConfigs(_configs.where((item) => item.id != config.id).toList());
+    if (shouldDelete != true || !mounted) return;
+    await _saveConfigs(
+      _configs.where((item) => item.id != config.id).toList(),
+      authorization: authorization,
+    );
     // The deleted row unmounted under the focused Delete button — reseed
     // DPAD focus on a surviving row (or Add when the list empties).
     if (PlatformUtil.isTelevision) {
@@ -134,18 +182,51 @@ class _IndexerManagersSettingsPageState
   }
 
   Future<void> _openEditor([IndexerManagerConfig? config]) async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
+    if (!mounted) return;
     final result = await showDialog<IndexerManagerConfig>(
       context: context,
       builder: (context) => _IndexerManagerEditorDialog(config: config),
     );
-    if (result == null) return;
+    if (result == null || !mounted) return;
 
+    final IndexerManagerConfig canonical;
     if (config == null) {
-      await _saveConfigs([..._configs, result]);
-      await TorrentService.setEngineEnabled(result.engineId, result.enabled);
+      final priorResourceIds = <String>{
+        for (final item in _configs)
+          if (item.connectionResourceId != null) item.connectionResourceId!,
+      };
+      final saved = await _saveConfigs([
+        ..._configs,
+        result,
+      ], authorization: authorization);
+      canonical = saved.singleWhere(
+        (item) =>
+            item.id == result.id ||
+            (item.connectionResourceId != null &&
+                !priorResourceIds.contains(item.connectionResourceId)),
+      );
     } else {
-      await _replaceConfig(result);
-      await TorrentService.setEngineEnabled(result.engineId, result.enabled);
+      canonical = await _replaceConfig(result, authorization: authorization);
+    }
+    await _setEngineEnabled(canonical.engineId, canonical.enabled);
+  }
+
+  Future<void> _setEngineEnabled(String engineId, bool enabled) async {
+    // A collection write rotates the profile authorization revision, so the
+    // capability captured before the editor opened is intentionally stale.
+    // Capture the post-save authority before publishing the engine toggle.
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
+    if (authorization == null) {
+      await TorrentService.setEngineEnabled(engineId, enabled);
+    } else {
+      await authorization.runIfCurrent(
+        () => TorrentService.setEngineEnabled(engineId, enabled),
+      );
     }
   }
 
@@ -292,7 +373,9 @@ class _IndexerManagersSettingsPageState
         ),
         const SizedBox(height: 2),
         Text(
-          '${config.type.label} • ${config.normalizedBaseUrl}',
+          config.credentialsRedacted
+              ? '${config.type.label} • Shared connection • credentials hidden'
+              : '${config.type.label} • ${config.normalizedBaseUrl}',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
@@ -310,27 +393,35 @@ class _IndexerManagersSettingsPageState
           child: Switch(
             focusNode: isFirst ? _firstRowFocus : null,
             value: config.enabled,
-            onChanged: (value) => _toggleEnabled(config, value),
+            onChanged: config.connectionReadOnly
+                ? null
+                : (value) => _toggleEnabled(config, value),
           ),
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
           style: _focusableIconStyle,
-          onPressed: () => _testConfig(config),
+          onPressed: config.connectionReadOnly
+              ? null
+              : () => _testConfig(config),
           icon: const Icon(Icons.network_check_rounded),
           tooltip: 'Test connection',
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
           style: _focusableIconStyle,
-          onPressed: () => _openEditor(config),
+          onPressed: config.connectionReadOnly
+              ? null
+              : () => _openEditor(config),
           icon: const Icon(Icons.edit_rounded),
           tooltip: 'Edit',
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
           style: _focusableIconStyle,
-          onPressed: () => _deleteConfig(config),
+          onPressed: config.connectionReadOnly
+              ? null
+              : () => _deleteConfig(config),
           icon: const Icon(Icons.delete_outline_rounded),
           tooltip: 'Delete',
         ),
@@ -475,6 +566,10 @@ class _IndexerManagerEditorDialogState
             ? 'all'
             : _jackettIndexerController.text.trim(),
         categories: categories,
+        connectionResourceId: config?.connectionResourceId,
+        connectionResourceRevision: config?.connectionResourceRevision,
+        connectionReadOnly: config?.connectionReadOnly ?? false,
+        credentialsRedacted: config?.credentialsRedacted ?? false,
       ),
     );
   }
@@ -719,9 +814,7 @@ InputDecoration _engineFieldDecoration(
         ),
     errorBorder:
         decoration.errorBorder ??
-        border.copyWith(
-          borderSide: BorderSide(color: theme.colorScheme.error),
-        ),
+        border.copyWith(borderSide: BorderSide(color: theme.colorScheme.error)),
     focusedErrorBorder:
         decoration.focusedErrorBorder ??
         border.copyWith(
@@ -756,7 +849,21 @@ class _FocusRing extends StatefulWidget {
 }
 
 class _FocusRingState extends State<_FocusRing> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -765,7 +872,8 @@ class _FocusRingState extends State<_FocusRing> {
       skipTraversal: true,
       // hasFocus includes descendants, so this fires when the child control
       // receives DPAD focus.
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(widget.borderRadius),

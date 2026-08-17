@@ -112,21 +112,29 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
   List<PremiumizeFolderItem> _searchResults = [];
 
   // Focus nodes for TV/D-pad navigation.
-  final FocusNode _refreshButtonFocusNode =
-      FocusNode(debugLabel: 'pm-refresh');
+  final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'pm-refresh');
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'pm-back');
   final FocusNode _retryButtonFocusNode = FocusNode(debugLabel: 'pm-retry');
-  final FocusNode _settingsButtonFocusNode = FocusNode(debugLabel: 'pm-settings');
-  final FocusNode _viewModeDropdownFocusNode =
-      FocusNode(debugLabel: 'pm-view-mode');
-  final FocusNode _addLinkButtonFocusNode = FocusNode(debugLabel: 'pm-add-link');
+  final FocusNode _settingsButtonFocusNode = FocusNode(
+    debugLabel: 'pm-settings',
+  );
+  final FocusNode _viewModeDropdownFocusNode = FocusNode(
+    debugLabel: 'pm-view-mode',
+  );
+  final FocusNode _addLinkButtonFocusNode = FocusNode(
+    debugLabel: 'pm-add-link',
+  );
   final FocusNode _firstItemFocusNode = FocusNode(debugLabel: 'pm-first-item');
-  final FocusNode _deleteButtonFocusNode = FocusNode(debugLabel: 'pm-delete-btn');
+  final FocusNode _deleteButtonFocusNode = FocusNode(
+    debugLabel: 'pm-delete-btn',
+  );
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'pm-search');
-  final FocusNode _searchButtonFocusNode =
-      FocusNode(debugLabel: 'pm-search-button');
-  final FocusNode _searchClearFocusNode =
-      FocusNode(debugLabel: 'pm-search-clear');
+  final FocusNode _searchButtonFocusNode = FocusNode(
+    debugLabel: 'pm-search-button',
+  );
+  final FocusNode _searchClearFocusNode = FocusNode(
+    debugLabel: 'pm-search-clear',
+  );
 
   bool get _isAtRoot => _currentFolderId == null;
 
@@ -139,7 +147,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     if (widget.isPushedRoute) {
       MainPageBridge.pushRouteBackHandler(_handleBackNavigation);
     } else {
-      MainPageBridge.registerTabBackHandler('premiumize', _handleBackNavigation);
+      MainPageBridge.registerTabBackHandler(
+        'premiumize',
+        _handleBackNavigation,
+      );
       _tvContentFocusHandler = () {
         _shouldFocusOnLoad = true;
         _focusFirstItemOrFallback();
@@ -222,8 +233,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     });
 
     try {
-      final listing =
-          await PremiumizeService.listFolder(apiKey, folderId: _currentFolderId);
+      final listing = await PremiumizeService.listFolder(
+        apiKey,
+        folderId: _currentFolderId,
+      );
       if (!mounted) return;
 
       final mode = _getCurrentViewMode();
@@ -311,8 +324,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     // folder never inherits the old offset.
     if (_scrollController.hasClients) _scrollController.jumpTo(0);
     setState(() {
-      _navigationStack
-          .add((id: _currentFolderId, name: _currentFolderName));
+      _navigationStack.add((id: _currentFolderId, name: _currentFolderName));
       _currentFolderId = folder.id;
       _currentFolderName = folder.name;
       // Clear stale rows so the loading skeleton shows instead of the
@@ -362,7 +374,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     }
     if (MainPageBridge.returnToTorrentSearchOnBack) {
       MainPageBridge.returnToTorrentSearchOnBack = false;
-      MainPageBridge.switchTab?.call(0);
+      MainPageBridge.switchTab?.call(MainTab.legacyTorrentSearch);
       return true;
     }
     return false;
@@ -401,8 +413,12 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     final files = items.where((i) => !i.isFolder).toList();
 
     int cmp(String a, String b, {bool seasonAware = false}) {
-      final aNum = seasonAware ? _extractSeasonNumber(a) : _extractLeadingNumber(a);
-      final bNum = seasonAware ? _extractSeasonNumber(b) : _extractLeadingNumber(b);
+      final aNum = seasonAware
+          ? _extractSeasonNumber(a)
+          : _extractLeadingNumber(a);
+      final bNum = seasonAware
+          ? _extractSeasonNumber(b)
+          : _extractLeadingNumber(b);
       if (aNum != null && bNum != null) return aNum.compareTo(bNum);
       if (aNum != null) return -1;
       if (bNum != null) return 1;
@@ -474,8 +490,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     if (_isAtRoot) {
       _searchDebounce?.cancel();
       setState(() => _isSearching = true);
-      _searchDebounce =
-          Timer(const Duration(milliseconds: 350), () => _runCloudSearch(q));
+      _searchDebounce = Timer(
+        const Duration(milliseconds: 350),
+        () => _runCloudSearch(q),
+      );
       return;
     }
 
@@ -523,6 +541,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       checkingDialogOpen = false;
       _dismissDialog();
     }
+
     try {
       if (item.isFolder) {
         final files = await PremiumizeService.listFolderRecursive(
@@ -537,13 +556,16 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           return;
         }
         final first = videos.first;
-        final firstReady = first.playableUrl?.isNotEmpty == true ||
+        final firstReady =
+            first.playableUrl?.isNotEmpty == true ||
             await PremiumizeService.resolveItemById(apiKey, first.id) != null;
         if (!mounted) return;
         if (!firstReady) {
           closeCheckingDialog();
-          _showSnackBar('This folder has no ready video streams',
-              isError: true);
+          _showSnackBar(
+            'This folder has no ready video streams',
+            isError: true,
+          );
           return;
         }
       } else {
@@ -581,8 +603,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     } catch (e) {
       closeCheckingDialog();
       if (mounted) {
-        _showSnackBar('Could not bind this Premiumize source: $e',
-            isError: true);
+        _showSnackBar(
+          'Could not bind this Premiumize source: $e',
+          isError: true,
+        );
       }
     }
   }
@@ -593,7 +617,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     if ((url == null || url.isEmpty) &&
         _apiKey != null &&
         _apiKey!.isNotEmpty) {
-      final resolved = await PremiumizeService.resolveItemById(_apiKey!, file.id);
+      final resolved = await PremiumizeService.resolveItemById(
+        _apiKey!,
+        file.id,
+      );
       url = resolved?.link;
     }
     if (url == null || url.isEmpty) {
@@ -608,7 +635,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       VideoPlayerLaunchArgs(
         videoUrl: url,
         title: file.name,
-        subtitle: sizeBytes != null ? Formatters.formatFileSize(sizeBytes) : null,
+        subtitle: sizeBytes != null
+            ? Formatters.formatFileSize(sizeBytes)
+            : null,
         playlist: [
           PlaylistEntry(
             url: url,
@@ -630,8 +659,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
     _showLoadingDialog('Scanning folder for videos...');
     try {
-      final all =
-          await PremiumizeService.listFolderRecursive(apiKey, folder.id);
+      final all = await PremiumizeService.listFolderRecursive(
+        apiKey,
+        folder.id,
+      );
       _dismissDialog();
       if (!mounted) return;
 
@@ -669,8 +700,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         VideoPlayerLaunchArgs(
           videoUrl: url,
           title: v.name,
-          subtitle:
-              sizeBytes != null ? Formatters.formatFileSize(sizeBytes) : null,
+          subtitle: sizeBytes != null
+              ? Formatters.formatFileSize(sizeBytes)
+              : null,
           playlist: [
             PlaylistEntry(
               url: url,
@@ -688,8 +720,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     }
 
     // Collection.
-    final infos =
-        videos.map((v) => SeriesParser.parseFilename(v.name)).toList();
+    final infos = videos
+        .map((v) => SeriesParser.parseFilename(v.name))
+        .toList();
     final filenames = videos.map((v) => v.name).toList();
     final bool isSeries =
         videos.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
@@ -701,13 +734,15 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         if (sa != sb) return sa.compareTo(sb);
         final ea = infos[a].episode ?? 0, eb = infos[b].episode ?? 0;
         if (ea != eb) return ea.compareTo(eb);
-        return videos[a].name.toLowerCase().compareTo(videos[b].name.toLowerCase());
+        return videos[a].name.toLowerCase().compareTo(
+          videos[b].name.toLowerCase(),
+        );
       });
     } else {
       indexed.sort(
         (a, b) => videos[a].name.toLowerCase().compareTo(
-              videos[b].name.toLowerCase(),
-            ),
+          videos[b].name.toLowerCase(),
+        ),
       );
     }
 
@@ -773,6 +808,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     }
     try {
       await DownloadService.instance.enqueueDownload(
+        credentialKey: 'premiumize_api_key',
         url: url,
         fileName: file.name,
         context: mounted ? context : null,
@@ -789,8 +825,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
     _showLoadingDialog('Scanning folder for files...');
     try {
-      final all =
-          await PremiumizeService.listFolderRecursive(apiKey, folder.id);
+      final all = await PremiumizeService.listFolderRecursive(
+        apiKey,
+        folder.id,
+      );
       _dismissDialog();
       if (!mounted) return;
 
@@ -846,6 +884,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           continue;
         }
         await DownloadService.instance.enqueueDownload(
+          credentialKey: 'premiumize_api_key',
           url: url,
           fileName: target.name,
           torrentName: folderName,
@@ -858,8 +897,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     }
     if (!mounted) return;
     if (success > 0 && fail == 0) {
-      _showSnackBar('Queued $success file${success == 1 ? '' : 's'}',
-          isError: false);
+      _showSnackBar(
+        'Queued $success file${success == 1 ? '' : 's'}',
+        isError: false,
+      );
     } else if (success > 0) {
       _showSnackBar('Queued $success, $fail failed', isError: true);
     } else {
@@ -887,15 +928,13 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       'title': FileUtils.cleanPlaylistTitle(file.name),
       'kind': 'single',
       'premiumizeItemId': file.id,
-      'premiumizeFile': {
-        'id': file.id,
-        'name': file.name,
-        'size': file.size,
-      },
+      'premiumizeFile': {'id': file.id, 'name': file.name, 'size': file.size},
       'sizeBytes': file.size > 0 ? file.size : null,
     });
-    _showSnackBar(added ? 'Added to playlist' : 'Already in playlist',
-        isError: !added);
+    _showSnackBar(
+      added ? 'Added to playlist' : 'Already in playlist',
+      isError: !added,
+    );
   }
 
   Future<void> _addFolderToPlaylist(PremiumizeFolderItem folder) async {
@@ -904,8 +943,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
     _showLoadingDialog('Scanning folder for videos...');
     try {
-      final all =
-          await PremiumizeService.listFolderRecursive(apiKey, folder.id);
+      final all = await PremiumizeService.listFolderRecursive(
+        apiKey,
+        folder.id,
+      );
       _dismissDialog();
       if (!mounted) return;
 
@@ -925,8 +966,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           'premiumizeFile': {'id': v.id, 'name': v.name, 'size': v.size},
           'sizeBytes': v.size > 0 ? v.size : null,
         });
-        _showSnackBar(added ? 'Added to playlist' : 'Already in playlist',
-            isError: !added);
+        _showSnackBar(
+          added ? 'Added to playlist' : 'Already in playlist',
+          isError: !added,
+        );
         return;
       }
 
@@ -986,8 +1029,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   Future<void> _handleDeleteSelected() async {
     if (_selectedIds.isEmpty) return;
-    final selected =
-        _items.where((i) => _selectedIds.contains(i.id)).toList();
+    final selected = _items.where((i) => _selectedIds.contains(i.id)).toList();
     final count = selected.length;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1051,8 +1093,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         isError: false,
       );
     } else {
-      _showSnackBar('Deleted ${deletedIds.length}, $fail failed',
-          isError: true);
+      _showSnackBar(
+        'Deleted ${deletedIds.length}, $fail failed',
+        isError: true,
+      );
     }
   }
 
@@ -1154,8 +1198,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                     borderRadius: BorderRadius.circular(8),
                     borderSide: const BorderSide(color: Color(0xFFFB923C)),
                   ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                 ),
                 maxLines: 3,
                 minLines: 1,
@@ -1177,8 +1223,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: const Color(0xFFFB923C)),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFFB923C),
+            ),
             onPressed: _isAddingLink ? null : _addLink,
             child: const Text('Add', style: TextStyle(color: Colors.black)),
           ),
@@ -1317,7 +1364,11 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
     });
   }
 
-  void _showSnackBar(String message, {bool isError = true, Duration? duration}) {
+  void _showSnackBar(
+    String message, {
+    bool isError = true,
+    Duration? duration,
+  }) {
     if (!mounted) return;
     final app = AppThemeScope.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1389,8 +1440,8 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       final desc = info.episodeTitle?.trim().isNotEmpty == true
           ? info.episodeTitle!.trim()
           : info.title?.trim().isNotEmpty == true
-              ? info.title!.trim()
-              : fallback;
+          ? info.title!.trim()
+          : fallback;
       return 'S${s}E$e · $desc';
     }
     return fallback;
@@ -1418,7 +1469,8 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       final episode = info.episode;
       if (!info.isSeries || season == null || episode == null) continue;
       final betterSeason = bestSeason == null || season < bestSeason;
-      final betterEpisode = bestSeason != null &&
+      final betterEpisode =
+          bestSeason != null &&
           season == bestSeason &&
           (bestEpisode == null || episode < bestEpisode);
       if (betterSeason || betterEpisode) {
@@ -1458,9 +1510,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
-    if (_errorMessage.isNotEmpty &&
-        _items.isEmpty &&
-        _transfers.isEmpty) {
+    if (_errorMessage.isNotEmpty && _items.isEmpty && _transfers.isEmpty) {
       return _buildError();
     }
 
@@ -1472,8 +1522,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
     final bool isCompact = MediaQuery.sizeOf(context).width < 500;
     final double iconSize = isCompact ? 20 : 24;
-    final EdgeInsets iconPadding =
-        isCompact ? const EdgeInsets.all(6) : const EdgeInsets.all(8);
+    final EdgeInsets iconPadding = isCompact
+        ? const EdgeInsets.all(6)
+        : const EdgeInsets.all(8);
     final BoxConstraints iconConstraints = isCompact
         ? const BoxConstraints(minWidth: 36, minHeight: 36)
         : const BoxConstraints(minWidth: 48, minHeight: 48);
@@ -1501,12 +1552,12 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             // At the browse root (pushed from the Cloud hub with no folder
             // target) there's no folder-up back — offer a Back-to-hub instead.
             : (_isBrowsePush
-                ? IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    tooltip: 'Back',
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  )
-                : null),
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    )
+                  : null),
         title: Text(
           widget.selectSourceMode
               ? 'Select Premiumize Source'
@@ -1522,7 +1573,8 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
               !widget.selectSourceMode)
             IconButton(
               icon: Icon(
-                  _isSelectionMode ? Icons.close : Icons.checklist_outlined),
+                _isSelectionMode ? Icons.close : Icons.checklist_outlined,
+              ),
               onPressed: _toggleSelectionMode,
               tooltip: _isSelectionMode ? 'Exit selection' : 'Select items',
               color: _isSelectionMode
@@ -1569,9 +1621,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       ),
       body: Column(
         children: [
-          if (_isAtRoot &&
-              !_isSearchActive &&
-              !widget.selectSourceMode)
+          if (_isAtRoot && !_isSearchActive && !widget.selectSourceMode)
             _buildViewSelector(),
           if (_isSelectionMode) _buildSelectionBar(),
           if (showViewModeDropdown) _buildViewModeDropdown(),
@@ -1579,10 +1629,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           Expanded(
             child: FocusTraversalGroup(
               policy: OrderedTraversalPolicy(),
-              child: RefreshIndicator(
-                onRefresh: _refresh,
-                child: _buildBody(),
-              ),
+              child: RefreshIndicator(onRefresh: _refresh, child: _buildBody()),
             ),
           ),
         ],
@@ -1592,7 +1639,8 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
 
   Widget _buildBody() {
     if (_isSearchActive) return _buildSearchResults();
-    if (_selectedView == _PremiumizeView.transfers) return _buildTransfersList();
+    if (_selectedView == _PremiumizeView.transfers)
+      return _buildTransfersList();
     // Folder navigation clears _items, so a fetch with nothing to show gets
     // the shimmer skeleton. Pull-to-refresh keeps its items and never hits
     // this branch — the RefreshIndicator spinner covers it.
@@ -1606,10 +1654,12 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
       child: CloudSegmentedTabs<_PremiumizeView>(
         segments: const [
+          CloudSegment(_PremiumizeView.files, 'My Files', Icons.folder_rounded),
           CloudSegment(
-              _PremiumizeView.files, 'My Files', Icons.folder_rounded),
-          CloudSegment(
-              _PremiumizeView.transfers, 'Transfers', Icons.swap_vert_rounded),
+            _PremiumizeView.transfers,
+            'Transfers',
+            Icons.swap_vert_rounded,
+          ),
         ],
         selected: _selectedView,
         onSelected: _switchView,
@@ -1625,9 +1675,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         border: Border(
-          bottom: BorderSide(
-            color: theme.dividerColor.withValues(alpha: 0.1),
-          ),
+          bottom: BorderSide(color: theme.dividerColor.withValues(alpha: 0.1)),
         ),
       ),
       child: Focus(
@@ -1652,18 +1700,22 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                   : Icons.sort_by_alpha,
               color: theme.colorScheme.primary,
             ),
-            border:
-                OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             filled: true,
-            fillColor:
-                theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.3,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
           ),
           items: const [
             DropdownMenuItem(value: _FolderViewMode.raw, child: Text('Raw')),
             DropdownMenuItem(
-                value: _FolderViewMode.sortedAZ, child: Text('Sort (A-Z)')),
+              value: _FolderViewMode.sortedAZ,
+              child: Text('Sort (A-Z)'),
+            ),
           ],
           onChanged: (value) {
             if (value != null) _setViewMode(value);
@@ -1682,8 +1734,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       decoration: BoxDecoration(
         color: theme.colorScheme.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border:
-            Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+        ),
       ),
       child: Row(
         children: [
@@ -1707,8 +1760,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             label: const Text('Delete'),
             style: FilledButton.styleFrom(
               backgroundColor: theme.colorScheme.error,
-              disabledBackgroundColor:
-                  theme.colorScheme.error.withValues(alpha: 0.3),
+              disabledBackgroundColor: theme.colorScheme.error.withValues(
+                alpha: 0.3,
+              ),
             ),
           ),
         ],
@@ -1735,8 +1789,9 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                   _searchFocusNode.focusInDirection(TraversalDirection.up),
               onDownArrow: () =>
                   _searchFocusNode.focusInDirection(TraversalDirection.down),
-              onRightArrow:
-                  hasText ? () => _searchClearFocusNode.requestFocus() : null,
+              onRightArrow: hasText
+                  ? () => _searchClearFocusNode.requestFocus()
+                  : null,
               decoration: InputDecoration(
                 hintText: _isAtRoot
                     ? 'Search your Premiumize cloud...'
@@ -1748,8 +1803,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                   borderRadius: app.shape.br(8),
                   borderSide: BorderSide.none,
                 ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
               onChanged: _performSearch,
               onSubmitted: (_) => _searchFocusNode.unfocus(),
@@ -1874,8 +1931,8 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
         kind: item.isFolder
             ? CloudRowKind.folder
             : isVideo
-                ? CloudRowKind.video
-                : CloudRowKind.file,
+            ? CloudRowKind.video
+            : CloudRowKind.file,
         title: item.name,
         meta: metaParts.isEmpty ? null : metaParts.join(' · '),
         onTap: (item.isFolder || isVideo)
@@ -1890,8 +1947,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                 ),
               ]
             : const [],
-        focusNode:
-            (autofocusFirst && index == 0) ? _firstItemFocusNode : null,
+        focusNode: (autofocusFirst && index == 0) ? _firstItemFocusNode : null,
       );
     }
 
@@ -1944,15 +2000,15 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
       kind: item.isFolder
           ? CloudRowKind.folder
           : isVideo
-              ? CloudRowKind.video
-              : CloudRowKind.file,
+          ? CloudRowKind.video
+          : CloudRowKind.file,
       title: item.name,
       meta: metaParts.isEmpty ? null : metaParts.join(' · '),
       onTap: item.isFolder
           ? () => _navigateIntoFolder(item)
           : isVideo
-              ? () => _playFile(item)
-              : null,
+          ? () => _playFile(item)
+          : null,
       actions: actions,
       selectionMode: _isSelectionMode,
       selected: _selectedIds.contains(item.id),
@@ -1972,11 +2028,16 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
           Center(
             child: Column(
               children: [
-                Icon(Icons.swap_vert_rounded,
-                    size: 64, color: Colors.grey.shade400),
+                Icon(
+                  Icons.swap_vert_rounded,
+                  size: 64,
+                  color: Colors.grey.shade400,
+                ),
                 const SizedBox(height: 16),
-                Text('No Transfers',
-                    style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  'No Transfers',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'Magnets you add appear here while they download.',
@@ -2052,14 +2113,19 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                   child: Text(
                     transfer.name,
                     style: const TextStyle(
-                        fontWeight: FontWeight.w500, fontSize: 14),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline,
-                      size: 20, color: Colors.red),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: Colors.red,
+                  ),
                   tooltip: 'Delete transfer',
                   onPressed: () => _deleteTransfer(transfer),
                 ),
@@ -2083,8 +2149,8 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
                   (transfer.isFinished
                       ? 'Finished'
                       : transfer.isError
-                          ? 'Error'
-                          : '${transfer.progressPercent}%'),
+                      ? 'Error'
+                      : '${transfer.progressPercent}%'),
               style: TextStyle(color: statusColor, fontSize: 12),
             ),
           ],
@@ -2103,8 +2169,7 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             padding: const EdgeInsets.all(32),
             child: Column(
               children: [
-                Icon(Icons.folder_open,
-                    size: 64, color: Colors.grey.shade400),
+                Icon(Icons.folder_open, size: 64, color: Colors.grey.shade400),
                 const SizedBox(height: 24),
                 Text(
                   isInFolder ? 'Folder is Empty' : 'No Files Yet',
@@ -2139,8 +2204,10 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
               children: [
                 Icon(Icons.cloud_off, size: 64, color: Colors.grey.shade400),
                 const SizedBox(height: 24),
-                Text('Premiumize Not Configured',
-                    style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  'Premiumize Not Configured',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'Add your Premiumize API key in Settings to view and manage your cloud.',
@@ -2177,11 +2244,12 @@ class _PremiumizeFilesScreenState extends State<PremiumizeFilesScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error_outline,
-                    size: 64, color: Colors.red.shade400),
+                Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
                 const SizedBox(height: 24),
-                Text('Failed to Load',
-                    style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  'Failed to Load',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   _errorMessage,

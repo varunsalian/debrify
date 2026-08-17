@@ -76,8 +76,10 @@ class IptvCwRouter {
     for (final item in items) {
       final seriesId = item['seriesId'] as String?;
       final isSeries = seriesId != null && seriesId.isNotEmpty;
-      final progress =
-          ((item['progress'] as num?)?.toDouble() ?? 0.0).clamp(0.0, 1.0);
+      final progress = ((item['progress'] as num?)?.toDouble() ?? 0.0).clamp(
+        0.0,
+        1.0,
+      );
 
       if (isSeries) {
         final originId = (item['playlistId'] as String?) ?? '';
@@ -89,11 +91,12 @@ class IptvCwRouter {
         series.add(
           IptvCwEntry(
             routeKey: 'xtream-series://$originId/$seriesId',
-            title: _firstNonEmpty([
-              item['seriesName'] as String?,
-              item['group'] as String?,
-              item['name'] as String?,
-            ]) ??
+            title:
+                _firstNonEmpty([
+                  item['seriesName'] as String?,
+                  item['group'] as String?,
+                  item['name'] as String?,
+                ]) ??
                 'Series',
             posterUrl: _nonEmpty(item['logoUrl'] as String?),
             subtitle: 'IPTV',
@@ -148,7 +151,7 @@ class IptvCwRouter {
     // Resolve the series' real Xtream provider from the stored origin id — the
     // shelf entry is provider-agnostic, so we can't assume any "selected"
     // playlist like the IPTV page can.
-    final playlists = await StorageService.getIptvPlaylists();
+    final playlists = await StorageService.getIptvPlaylists(forSettings: false);
     if (!context.mounted) return;
     IptvPlaylist? origin;
     for (final p in playlists) {
@@ -241,8 +244,7 @@ class IptvCwRouter {
     return out.isEmpty ? null : out;
   }
 
-  static String? _nonEmpty(String? s) =>
-      (s == null || s.isEmpty) ? null : s;
+  static String? _nonEmpty(String? s) => (s == null || s.isEmpty) ? null : s;
 
   static String? _firstNonEmpty(List<String?> candidates) {
     for (final c in candidates) {

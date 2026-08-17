@@ -4,10 +4,13 @@ import 'dart:typed_data' show BytesBuilder, Uint8List;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
+import '../models/profiles/connection_resource.dart';
+import '../models/profiles/profile_policy.dart';
 import '../utils/m3u_parser.dart';
 import 'iptv_catalog_key.dart';
 import 'iptv_catalog_db.dart';
 import 'iptv_load_phase.dart';
+import 'profiles/profile_collection_resource_facade.dart';
 
 /// Service for fetching and managing IPTV M3U playlists
 class IptvService {
@@ -40,23 +43,52 @@ class IptvService {
     bool forceRefresh = false,
     String? numberingSourceKey,
     IptvLoadPhase? onPhase,
+    String? connectionResourceId,
+    int? connectionResourceRevision,
+    bool allowUnbound = false,
+  }) async {
+    Future<void> authorize() =>
+        ProfileCollectionResourceFacade.authorizeExecution(
+          resourceId: connectionResourceId,
+          resourceRevision: connectionResourceRevision,
+          acceptedTypes: const <ConnectionResourceType>{
+            ConnectionResourceType.iptvM3u,
+          },
+          feature: ProfileFeature.iptv,
+          allowUnbound: allowUnbound,
+        );
+    await authorize();
+    final result = await _fetchPlaylistAuthorized(
+      url,
+      forceRefresh: forceRefresh,
+      numberingSourceKey: numberingSourceKey,
+      onPhase: onPhase,
+    );
+    await authorize();
+    return result;
+  }
+
+  Future<IptvParseResult> _fetchPlaylistAuthorized(
+    String url, {
+    bool forceRefresh = false,
+    String? numberingSourceKey,
+    IptvLoadPhase? onPhase,
   }) async {
     // With the catalog database open, the parse worker ingests straight
     // into it and this service's in-memory cache is bypassed — freshness
     // policy moves to the caller (snapshot.ingestedAt).
-    final ingestToDb =
-        IptvCatalogDb.isOpen;
+    final ingestToDb = IptvCatalogDb.isOpen;
 
     // Check cache
     if (!ingestToDb && !forceRefresh && _cache.containsKey(url)) {
       final cached = _cache[url]!;
       if (DateTime.now().difference(cached.fetchedAt) < _cacheDuration) {
-        debugPrint('IptvService: Using cached playlist for $url');
+        debugPrint('IptvService: Using cached playlist');
         return cached.result;
       }
     }
 
-    debugPrint('IptvService: Fetching playlist from $url');
+    debugPrint('IptvService: Fetching playlist');
 
     onPhase?.call(IptvLoadPhases.contacting);
     final client = http.Client();
@@ -64,8 +96,9 @@ class IptvService {
       final request = http.Request('GET', Uri.parse(url));
       request.headers['User-Agent'] = 'Debrify/1.0';
       request.headers['Accept'] = '*/*';
-      final streamed =
-          await client.send(request).timeout(const Duration(seconds: 30));
+      final streamed = await client
+          .send(request)
+          .timeout(const Duration(seconds: 30));
 
       if (streamed.statusCode != 200) {
         return IptvParseResult(
@@ -95,8 +128,9 @@ class IptvService {
         bytes: 0,
         totalBytes: declaredLength,
       );
-      await for (final chunk
-          in streamed.stream.timeout(const Duration(seconds: 60))) {
+      await for (final chunk in streamed.stream.timeout(
+        const Duration(seconds: 60),
+      )) {
         builder.add(chunk);
         // Fired per chunk; the page stores it and repaints on its own 1Hz
         // tick, so this never costs a frame.
@@ -150,12 +184,12 @@ class IptvService {
       );
 
       return result;
-    } catch (e) {
-      debugPrint('IptvService: Error fetching playlist: $e');
+    } catch (error) {
+      debugPrint('IptvService: Error fetching playlist (${error.runtimeType})');
       return IptvParseResult(
         channels: [],
         categories: [],
-        error: 'Failed to fetch playlist: $e',
+        error: 'Failed to fetch playlist',
       );
     } finally {
       client.close();
@@ -165,9 +199,7 @@ class IptvService {
   /// Drop expired entries, then the oldest beyond the cap.
   void _evictCache() {
     final now = DateTime.now();
-    _cache.removeWhere(
-      (_, c) => now.difference(c.fetchedAt) >= _cacheDuration,
-    );
+    _cache.removeWhere((_, c) => now.difference(c.fetchedAt) >= _cacheDuration);
     while (_cache.length > _maxCachedPlaylists) {
       String? oldestKey;
       DateTime? oldestAt;
@@ -182,7 +214,10 @@ class IptvService {
   }
 
   /// Filter channels by category
-  List<IptvChannel> filterByCategory(List<IptvChannel> channels, String? category) {
+  List<IptvChannel> filterByCategory(
+    List<IptvChannel> channels,
+    String? category,
+  ) {
     if (category == null || category.isEmpty) {
       return channels;
     }
@@ -228,9 +263,13 @@ class IptvService {
 
   /// Parse M3U content directly (for file-based playlists)
   Future<IptvParseResult> parseContent(String content) async {
-    debugPrint('IptvService: Parsing content directly (${content.length} chars)');
+    debugPrint(
+      'IptvService: Parsing content directly (${content.length} chars)',
+    );
     final result = await _parse(content);
-    debugPrint('IptvService: Parsed ${result.channels.length} channels, ${result.categories.length} categories');
+    debugPrint(
+      'IptvService: Parsed ${result.channels.length} channels, ${result.categories.length} categories',
+    );
     return result;
   }
 
@@ -366,8 +405,5 @@ class _CachedPlaylist {
   final IptvParseResult result;
   final DateTime fetchedAt;
 
-  _CachedPlaylist({
-    required this.result,
-    required this.fetchedAt,
-  });
+  _CachedPlaylist({required this.result, required this.fetchedAt});
 }

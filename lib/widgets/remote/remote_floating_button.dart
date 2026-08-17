@@ -7,10 +7,7 @@ import '../../services/remote_control/remote_control_state.dart';
 class RemoteFloatingButton extends StatefulWidget {
   final VoidCallback onTap;
 
-  const RemoteFloatingButton({
-    super.key,
-    required this.onTap,
-  });
+  const RemoteFloatingButton({super.key, required this.onTap});
 
   @override
   State<RemoteFloatingButton> createState() => _RemoteFloatingButtonState();
@@ -30,10 +27,7 @@ class _RemoteFloatingButtonState extends State<RemoteFloatingButton>
     );
 
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
     // Listen to state changes
@@ -75,9 +69,7 @@ class _RemoteFloatingButtonState extends State<RemoteFloatingButton>
         : const [Color(0xFF6366F1), Color(0xFF8B5CF6)]; // Purple for scanning
 
     // Icon based on state
-    final IconData icon = state.isConnected
-        ? Icons.tv
-        : Icons.cast_connected;
+    final IconData icon = state.isConnected ? Icons.tv : Icons.cast_connected;
 
     return Positioned(
       bottom: 80, // Above MobileFloatingNav
@@ -86,10 +78,7 @@ class _RemoteFloatingButtonState extends State<RemoteFloatingButton>
         animation: _pulseAnimation,
         builder: (context, child) {
           final scale = state.isScanning ? _pulseAnimation.value : 1.0;
-          return Transform.scale(
-            scale: scale,
-            child: child,
-          );
+          return Transform.scale(scale: scale, child: child);
         },
         child: GestureDetector(
           onTap: () {
@@ -120,11 +109,7 @@ class _RemoteFloatingButtonState extends State<RemoteFloatingButton>
                 ),
               ],
             ),
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 24,
-            ),
+            child: Icon(icon, color: Colors.white, size: 24),
           ),
         ),
       ),

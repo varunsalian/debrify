@@ -107,7 +107,10 @@ object SubtitleSettings {
     )
 
     private fun getPrefs(context: Context): SharedPreferences {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return com.debrify.app.profiles.ProfilePreferenceProjection.scopedPreferences(
+            context,
+            PREFS_NAME,
+        )
     }
 
     private fun getFlutterPrefs(context: Context): SharedPreferences {
@@ -120,7 +123,11 @@ object SubtitleSettings {
      */
     @JvmStatic
     fun getDefaultSubtitleLanguage(context: Context): String? {
-        return getFlutterPrefs(context).getString(KEY_DEFAULT_SUBTITLE_LANGUAGE, null)
+        return com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+            context,
+            "player_default_subtitle_language",
+            null,
+        )
     }
 
     /**
@@ -129,7 +136,11 @@ object SubtitleSettings {
      */
     @JvmStatic
     fun getDefaultAudioLanguage(context: Context): String? {
-        return getFlutterPrefs(context).getString(KEY_DEFAULT_AUDIO_LANGUAGE, null)
+        return com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+            context,
+            "player_default_audio_language",
+            null,
+        )
     }
 
     // Getters

@@ -494,7 +494,11 @@ class _DpadFilterChip extends StatefulWidget {
 }
 
 class _DpadFilterChipState extends State<_DpadFilterChip> {
-  bool _isFocused = false;
+  /// Live, never cached — Flutter can skip the falling edge of a focus
+  /// notification, and a remembered flag then survives the change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `widgets/settings_widgets.dart`.
+  bool get _isFocused => widget.focusNode.hasFocus;
 
   @override
   void initState() {
@@ -510,9 +514,7 @@ class _DpadFilterChipState extends State<_DpadFilterChip> {
 
   void _onFocusChange() {
     if (mounted) {
-      setState(() {
-        _isFocused = widget.focusNode.hasFocus;
-      });
+      setState(() {});
     }
   }
 

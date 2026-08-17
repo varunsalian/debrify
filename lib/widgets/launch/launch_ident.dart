@@ -9,6 +9,7 @@ import 'anamorphic_ident.dart';
 import 'aperture_ident.dart';
 import 'blueprint_ident.dart';
 import 'chrome_ident.dart';
+import 'collider_ident.dart';
 import 'constellation_ident.dart';
 import 'drop_bounce_ident.dart';
 import 'ember_ident.dart';
@@ -191,6 +192,10 @@ class IdentPalette {
 /// Registry, in picker order. Ids are stable — they are the stored pref —
 /// and the FIRST entry is the default (what unknown/unset prefs resolve to).
 const List<LaunchIdent> kLaunchIdents = [
+  // Horizon's premise, built out: the collapse becomes a merger, and the
+  // wordmark takes its cadence from the blast front instead of a stagger.
+  // Promoted to first — and therefore to the default — by user call.
+  ColliderIdent(),
   HorizonIdent(),
   DropBounceIdent(),
   MarqueeIdent(),

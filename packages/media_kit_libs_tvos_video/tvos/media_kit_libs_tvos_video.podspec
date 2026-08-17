@@ -64,7 +64,19 @@ Pod::Spec.new do |s|
     # CocoaPods auto-links neither set for the USER target - the bare .a
     # slices get only a -L search path and the .framework-wrapped ffmpeg ones
     # are not propagated - so both are named explicitly.
-    'OTHER_LDFLAGS' => '$(inherited) -framework Libavcodec -framework Libavdevice -framework Libavfilter -framework Libavformat -framework Libavutil -framework Libcrypto -framework Libssl -framework Libswresample -framework Libswscale -lmpv -lass -lbluray -ldav1d -lfreetype -lfribidi -lglslang -lgmp -lgnutls -lharfbuzz -lhogweed -llcms2 -lluajit51 -lMoltenVK -lnettle -lplacebo -lpng -lshaderc_combined -luchardet -Wl,-u,_mpv_create -Wl,-u,_mpv_render_context_create',
+    #
+    # Rebuilt set (TVOS_LIBMPV_UPGRADE_PLAN.md): every slice is now a bare .a
+    # inside its xcframework, so everything is named with -l and nothing needs
+    # -framework. Three deltas from the karelrooted v0.0.1-beta set:
+    #  * TLS is openssl (-lcrypto -lssl), not gnutls: ffmpeg is configured
+    #    --enable-openssl and its configure refuses both at once. So
+    #    -lgnutls -lnettle -lhogweed -lgmp are gone.
+    #  * -lglslang is gone: shaderc_combined already contains glslang and
+    #    SPIRV-Tools, which is the point of the "combined" archive.
+    #  * -lluajit51 is now -lluajit. The archive is shipped dot-free on
+    #    purpose: Xcode's OTHER_LDFLAGS parser splits -lluajit-5.1 at the dot,
+    #    so the linker sees "-lluajit-5" and fails to find it.
+    'OTHER_LDFLAGS' => '$(inherited) -lmpv -lavcodec -lavdevice -lavfilter -lavformat -lavutil -lswresample -lswscale -lass -lbluray -lcrypto -ldav1d -lfreetype -lfribidi -lharfbuzz -llcms2 -lluajit -lMoltenVK -lplacebo -lpng -lshaderc_combined -lssl -luchardet -Wl,-u,_mpv_create -Wl,-u,_mpv_render_context_create',
   }
   # Apple frameworks libmpv's own sources reference. Its audiounit audio
   # output (audio_out_ao_audiounit.m) needs AVFoundation + AudioToolbox; the

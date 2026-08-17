@@ -432,7 +432,8 @@ class StremioMeta {
 
 /// Represents a section of catalog content for homepage display
 class CatalogSection {
-  /// Display title (e.g., "Cinemeta: Popular Movies")
+  /// Display title (e.g., "Popular Movies" — see [rowTitle]; the addon rides
+  /// separately as the row's provenance tag)
   final String title;
 
   /// The addon this section is from
@@ -473,6 +474,38 @@ class CatalogSection {
     this.exhausted = false,
     this.query,
   }) : nextSkip = nextSkip ?? items.length;
+
+  /// The row heading for a catalog: catalog name + content type — "Popular"
+  /// of type movie becomes "Popular Movies". The addon's name is NOT baked
+  /// in any more (it rides separately as the row's provenance tag), which is
+  /// also what un-duplicates rows: the old "Cinemeta: Popular" appeared
+  /// twice — movies and series — with nothing on screen telling them apart.
+  ///
+  /// Catalogs whose name already carries the type word ("New Movies", "MTV")
+  /// keep it un-doubled. A contains() guard rather than endsWith, on
+  /// purpose: skipping the suffix is always safe, doubling never is.
+  ///
+  /// Row-order persistence is untouched by any of this — saved orders key on
+  /// `addon.id:type:id`, never on the display title.
+  static String rowTitle(StremioAddonCatalog catalog) {
+    final name = catalog.name.trim();
+    final type = switch (catalog.type.toLowerCase()) {
+      'movie' => 'Movies',
+      'series' => 'Series',
+      'tv' => 'TV',
+      'channel' => 'Channels',
+      _ => null,
+    };
+    if (type == null) return name;
+    // Nameless catalogs exist in the wild; the type alone beats " Movies".
+    if (name.isEmpty) return type;
+    // Matched on the SINGULAR stem so "Movie Night" and a catalog literally
+    // named "movie" both count as already-typed — "movie Movies" is exactly
+    // the doubling this guard exists to prevent.
+    final stem = type.toLowerCase().replaceFirst(RegExp(r's$'), '');
+    if (name.toLowerCase().contains(stem)) return name;
+    return '$name $type';
+  }
 }
 
 /// Represents a Stremio addon that can be used for torrent search.
@@ -496,6 +529,14 @@ class StremioAddon {
 
   /// Base URL derived from manifest URL (without /manifest.json)
   final String baseUrl;
+
+  /// Profile resource provenance. These fields are deliberately carried by
+  /// compatibility models so a decrypted, borrowed addon can never be
+  /// mistaken for caller-owned input and cloned on the next collection save.
+  final String? connectionResourceId;
+  final int? connectionResourceRevision;
+  final bool connectionResourceReadOnly;
+  final bool connectionResourceCredentialsRedacted;
 
   /// Optional description from manifest
   final String? description;
@@ -529,6 +570,10 @@ class StremioAddon {
     required this.name,
     required this.manifestUrl,
     required this.baseUrl,
+    this.connectionResourceId,
+    this.connectionResourceRevision,
+    this.connectionResourceReadOnly = false,
+    this.connectionResourceCredentialsRedacted = false,
     this.description,
     this.version,
     this.enabled = true,
@@ -539,6 +584,11 @@ class StremioAddon {
     DateTime? addedAt,
     this.lastChecked,
   }) : addedAt = addedAt ?? DateTime.now();
+
+  String get storageKey => connectionResourceId ?? manifestUrl;
+  bool get canManage => !connectionResourceReadOnly;
+  bool get canRevealManifestUrl =>
+      !connectionResourceCredentialsRedacted && manifestUrl.isNotEmpty;
 
   /// Whether this addon supports streaming (has 'stream' resource)
   bool get supportsStreams => resources.contains('stream');
@@ -731,6 +781,12 @@ class StremioAddon {
       name: json['name'] as String,
       manifestUrl: json['manifest_url'] as String,
       baseUrl: json['base_url'] as String,
+      connectionResourceId: json['_connectionResourceId'] as String?,
+      connectionResourceRevision: json['_connectionResourceRevision'] as int?,
+      connectionResourceReadOnly:
+          json['_connectionResourceReadOnly'] as bool? ?? false,
+      connectionResourceCredentialsRedacted:
+          json['_connectionResourceCredentialsRedacted'] as bool? ?? false,
       description: json['description'] as String?,
       version: json['version'] as String?,
       enabled: json['enabled'] as bool? ?? true,
@@ -754,6 +810,15 @@ class StremioAddon {
       'name': name,
       'manifest_url': manifestUrl,
       'base_url': baseUrl,
+      if (connectionResourceId != null)
+        '_connectionResourceId': connectionResourceId,
+      if (connectionResourceRevision != null)
+        '_connectionResourceRevision': connectionResourceRevision,
+      if (connectionResourceReadOnly)
+        '_connectionResourceReadOnly': connectionResourceReadOnly,
+      if (connectionResourceCredentialsRedacted)
+        '_connectionResourceCredentialsRedacted':
+            connectionResourceCredentialsRedacted,
       if (description != null) 'description': description,
       if (version != null) 'version': version,
       'enabled': enabled,
@@ -774,6 +839,10 @@ class StremioAddon {
     String? name,
     String? manifestUrl,
     String? baseUrl,
+    String? connectionResourceId,
+    int? connectionResourceRevision,
+    bool? connectionResourceReadOnly,
+    bool? connectionResourceCredentialsRedacted,
     String? description,
     String? version,
     bool? enabled,
@@ -789,6 +858,14 @@ class StremioAddon {
       name: name ?? this.name,
       manifestUrl: manifestUrl ?? this.manifestUrl,
       baseUrl: baseUrl ?? this.baseUrl,
+      connectionResourceId: connectionResourceId ?? this.connectionResourceId,
+      connectionResourceRevision:
+          connectionResourceRevision ?? this.connectionResourceRevision,
+      connectionResourceReadOnly:
+          connectionResourceReadOnly ?? this.connectionResourceReadOnly,
+      connectionResourceCredentialsRedacted:
+          connectionResourceCredentialsRedacted ??
+          this.connectionResourceCredentialsRedacted,
       description: description ?? this.description,
       version: version ?? this.version,
       enabled: enabled ?? this.enabled,

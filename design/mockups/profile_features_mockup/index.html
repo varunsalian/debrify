@@ -1,0 +1,404 @@
+<title>Profile Features — Questionnaire</title>
+<style>
+  /* Single-theme dark studio wall, matching the house mockup pages. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0B0E14; color: #E9EDF4;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; padding: 56px 32px 96px;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+  .kicker { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: #E23D4C; font-weight: 600; margin-bottom: 10px; }
+  h1 { font-size: 32px; font-weight: 800; letter-spacing: -.02em; }
+  .lede { color: #8A93A6; max-width: 660px; margin-top: 10px; }
+  .lede b { color: #C9D2E0; font-weight: 600; }
+  section { margin-top: 60px; }
+  h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  .sub { color: #8A93A6; font-size: 13.5px; max-width: 660px; margin-bottom: 22px; }
+
+  .strip { display: flex; gap: 28px; overflow-x: auto; padding: 6px 4px 22px; }
+  .concept { flex: 0 0 360px; }
+  .phone {
+    width: 360px; height: 780px; background: linear-gradient(180deg, #0D1420 0%, #111827 100%);
+    border: 1px solid rgba(255,255,255,.09); border-radius: 26px;
+    overflow: hidden; display: flex; flex-direction: column; padding: 26px 22px 22px;
+  }
+  .c-label { display: flex; align-items: baseline; gap: 10px; margin: 14px 2px 4px; }
+  .c-key { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; font-weight: 600; letter-spacing: .18em; color: #E23D4C; text-transform: uppercase; }
+  .c-name { font-size: 15px; font-weight: 700; }
+  .c-notes { color: #8A93A6; font-size: 12.5px; max-width: 352px; }
+  .c-notes b { color: #C9D2E0; font-weight: 600; }
+
+  /* in-frame questionnaire chrome */
+  .step-eyebrow { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 10px; letter-spacing: 2.2px; color: rgba(255,255,255,.42); text-transform: uppercase; font-weight: 600; }
+  .q { font-size: 27px; font-weight: 700; letter-spacing: -0.7px; margin-top: 10px; line-height: 1.06; }
+  .q-sub { font-size: 12.5px; line-height: 1.46; color: rgba(255,255,255,.60); margin-top: 10px; max-width: 340px; }
+  .dots { display: flex; gap: 5px; margin-top: auto; padding-top: 18px; justify-content: center; }
+  .dot { width: 5px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.25); }
+  .dot.on { width: 14px; background: #E23D4C; }
+  .next {
+    margin-top: 14px; background: #FFFFFF; color: #0B0E14; border-radius: 22px;
+    text-align: center; padding: 12px; font-weight: 700; font-size: 14.5px;
+  }
+  .skiplink { text-align: center; font-size: 12px; color: rgba(233,237,244,.45); margin-top: 12px; }
+
+  /* identity step */
+  .field { border: 1.5px solid rgba(255,255,255,.14); border-radius: 14px; padding: 13px 14px; margin-top: 14px; font-size: 16px; font-weight: 600; }
+  .field span { color: rgba(233,237,244,.35); font-weight: 500; }
+  .field .caret { color: #E23D4C; }
+  .avarow { display: flex; gap: 10px; margin-top: 12px; }
+  .ava { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; background: rgba(255,255,255,.06); border: 1.5px solid transparent; }
+  .ava.sel { border-color: rgba(255,255,255,.72); background: rgba(255,255,255,.15); }
+  .ava.more { font-size: 10px; font-weight: 700; color: rgba(233,237,244,.55); text-align: center; line-height: 1.25; }
+  .pinrow { display: flex; align-items: center; gap: 10px; border: 1px dashed rgba(233,237,244,.18); border-radius: 14px; padding: 12px 14px; margin-top: 14px; font-size: 13px; color: rgba(233,237,244,.55); }
+
+  /* sources editor rows */
+  .srch { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; color: rgba(255,255,255,.42); margin: 16px 2px 6px; }
+  .srow { display: flex; align-items: center; gap: 11px; padding: 11px 4px; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .srow .sico { width: 30px; height: 30px; border-radius: 9px; background: rgba(255,255,255,.07); display: flex; align-items: center; justify-content: center; font-size: 15px; }
+  .srow .sname { font-size: 13.5px; font-weight: 600; }
+  .srow .ssub { font-size: 10.5px; color: rgba(233,237,244,.45); margin-top: 1px; }
+  .srow .tick { margin-left: auto; width: 18px; height: 18px; border-radius: 9px; border: 1.5px solid rgba(255,255,255,.25); }
+  .srow.on .tick { background: #E23D4C; border-color: #E23D4C; position: relative; }
+  .srow.on .tick::after { content: '✓'; color: #0B0E14; font-size: 11px; font-weight: 800; position: absolute; top: -1px; left: 3px; }
+  .srow.dim { opacity: .38; }
+  .dimnote { font-size: 11px; color: rgba(233,237,244,.42); margin-top: 8px; }
+
+  /* role cards */
+  .role { background: rgba(255,255,255,.055); border: 1.5px solid rgba(255,255,255,.07); border-radius: 13px; padding: 14px 14px 12px; margin-top: 12px; }
+  .role.sel { border-color: rgba(255,255,255,.72); background: rgba(255,255,255,.15); }
+  .role-head { display: flex; align-items: center; gap: 10px; }
+  .role-ava { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+  .a-admin { background: #24406E; } .a-member { background: #1F4949; } .a-kid { background: #5C3A22; }
+  .role-name { font-weight: 700; font-size: 15px; }
+  .role-tag { margin-left: auto; font-size: 9px; letter-spacing: .1em; font-weight: 800; color: rgba(233,237,244,.45); border: 1px solid rgba(233,237,244,.2); padding: 2px 7px; border-radius: 99px; }
+  .role-desc { font-size: 12px; color: rgba(233,237,244,.55); margin-top: 7px; }
+  .role-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+  .rchip { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; padding: 3px 8px; border-radius: 99px; background: rgba(255,255,255,.07); color: rgba(233,237,244,.6); }
+  .rchip.hot { background: rgba(226,61,76,.18); color: #FF8A94; }
+
+  /* answer cards (binary) */
+  .ans { background: rgba(255,255,255,.055); border: 1.5px solid rgba(255,255,255,.07); border-radius: 13px; padding: 15px; margin-top: 14px; }
+  .ans.sel { border-color: rgba(255,255,255,.72); background: rgba(255,255,255,.15); }
+  .ans-title { font-weight: 700; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+  .ans-title .ico { font-size: 16px; }
+  .ans-desc { font-size: 12px; color: rgba(233,237,244,.55); margin-top: 5px; }
+  .drives { display: flex; gap: 5px; margin-top: 10px; flex-wrap: wrap; }
+  .drives i { font-style: normal; font-size: 9px; letter-spacing: .06em; font-weight: 700; color: rgba(233,237,244,.38); border: 1px solid rgba(233,237,244,.14); padding: 2px 7px; border-radius: 99px; }
+  .preset-note { display: flex; align-items: center; gap: 7px; margin-top: 14px; font-size: 11px; color: #FF7A85; }
+
+  /* source multi-select tiles */
+  .srcgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .src { background: rgba(255,255,255,.055); border: 1.5px solid rgba(255,255,255,.07); border-radius: 13px; padding: 13px 12px; }
+  .src.sel { border-color: rgba(255,255,255,.72); background: rgba(255,255,255,.15); }
+  .src-ico { font-size: 20px; }
+  .src-name { font-weight: 700; font-size: 13px; margin-top: 7px; }
+  .src-sub { font-size: 10.5px; color: rgba(233,237,244,.5); margin-top: 3px; line-height: 1.35; }
+  .src-check { float: right; width: 17px; height: 17px; border-radius: 9px; border: 1.5px solid rgba(255,255,255,.25); }
+  .src.sel .src-check { background: #E23D4C; border-color: #E23D4C; position: relative; }
+  .src.sel .src-check::after { content: '✓'; color: #0B0E14; font-size: 11px; font-weight: 800; position: absolute; top: -1px; left: 3px; }
+
+  /* summary */
+  .prof { display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.28); border-radius: 13px; padding: 13px; margin-top: 14px; }
+  .prof-ava { width: 44px; height: 44px; border-radius: 12px; background: #5C3A22; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .prof-name { font-weight: 800; font-size: 16px; }
+  .prof-sub { font-size: 10px; letter-spacing: .1em; font-weight: 800; color: #E2864A; margin-top: 2px; }
+  .sum-h { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; color: rgba(255,255,255,.42); margin: 18px 2px 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { font-size: 11.5px; font-weight: 600; padding: 6px 11px; border-radius: 99px; }
+  .chip.on { background: rgba(255,255,255,.11); color: rgba(255,255,255,.92); }
+  .chip.off { background: transparent; border: 1px dashed rgba(233,237,244,.2); color: rgba(233,237,244,.35); }
+  .finetune { margin-top: 18px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 12px 14px; }
+  .finetune-head { display: flex; align-items: center; font-size: 13px; font-weight: 700; color: rgba(233,237,244,.75); }
+  .finetune-head span { margin-left: auto; color: rgba(233,237,244,.4); font-size: 15px; }
+  .finetune-sub { font-size: 11px; color: rgba(233,237,244,.42); margin-top: 4px; }
+
+  /* preset matrix */
+  table { border-collapse: collapse; font-size: 13px; background: #11161F; border: 1px solid #1C2330; border-radius: 14px; overflow: hidden; }
+  th, td { padding: 10px 16px; text-align: center; border-bottom: 1px solid #1C2330; }
+  th { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: #55607A; }
+  td:first-child, th:first-child { text-align: left; }
+  td:first-child { color: #C9D2E0; font-weight: 600; }
+  .y { color: #7DD69B; font-weight: 700; } .n { color: rgba(233,237,244,.25); }
+
+  .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; max-width: 1160px; }
+  .note { background: #11161F; border: 1px solid #1C2330; border-radius: 14px; padding: 20px 22px; font-size: 13.5px; color: #A7B0C2; }
+  .note h3 { font-size: 13px; font-weight: 700; color: #E9EDF4; margin-bottom: 8px; }
+  .note ul { margin: 6px 0 0 16px; } .note li { margin-top: 5px; }
+  .note code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: #FF8A94; background: rgba(226,61,76,.10); border-radius: 5px; padding: 1px 5px; }
+</style>
+
+<div class="wrap">
+  <div class="kicker">Debrify · Profiles · feature access</div>
+  <h1>Four questions, not a switch wall</h1>
+  <p class="lede">Feature access becomes a short questionnaire at profile creation (re-runnable from Edit): identity first, then four human questions. The <b>role choice IS the preset</b> — picking Kid pre-answers every following step, so the common path is confirm-confirm-confirm-save. Changing any answer just diverges from the preset. The v1 features hide behind <b>four human questions</b>; the raw switches survive only inside a collapsed Fine-tune drawer. Two things are deliberately NOT questions: <b>catalog search</b> (typing a title and getting posters from the profile's own catalogs is always there), and the <b>admin's curation of any profile's sources</b> — which addons and torrent engines a profile has is set by you on the Review screen, independent of what the profile may touch itself.</p>
+
+  <section>
+    <h2>The flow — shown on the Kid path</h2>
+    <p class="sub">Frames follow a parent creating "Maya". Every selection below is exactly what the Kid preset pre-filled; the parent could tap Next four times and be done.</p>
+    <div class="strip">
+
+      <!-- STEP 1 · IDENTITY -->
+      <div class="concept">
+        <div class="phone">
+          <div class="step-eyebrow">New profile · Step 1 of 5</div>
+          <div class="q">Name them.</div>
+          <div class="field">Maya<span class="caret">|</span></div>
+          <div class="sum-h" style="margin-top:18px;">Look</div>
+          <div class="avarow">
+            <div class="ava sel">🧸</div>
+            <div class="ava">🦊</div>
+            <div class="ava">🚀</div>
+            <div class="ava">🎨</div>
+            <div class="ava more">GIF or<br>photo</div>
+          </div>
+          <div class="dimnote">Living art and GIFs animate on the profile screen.</div>
+          <div class="pinrow">🔒 PIN — off. Add a 4-digit PIN any time from Edit.</div>
+          <div class="dots"><i class="dot on"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+          <div class="next">Next</div>
+        </div>
+        <div class="c-label"><span class="c-key">Step 1</span><span class="c-name">Identity</span></div>
+        <p class="c-notes">Name, avatar (icons, living art, or a GIF/photo — the existing avatar system), optional PIN. Identity isn't a question, so it comes before the questionnaire proper.</p>
+      </div>
+
+      <!-- STEP 2 · ROLE -->
+      <div class="concept">
+        <div class="phone">
+          <div class="step-eyebrow">Maya · Step 2 of 5</div>
+          <div class="q">Who is this for?</div>
+          <div class="q-sub">This picks a starting point — every next step is already filled in and can be changed.</div>
+          <div class="role">
+            <div class="role-head"><div class="role-ava a-admin">🛠️</div><div class="role-name">Admin</div><div class="role-tag">RUNS THE DEVICE</div></div>
+            <div class="role-desc">Everything, including managing services and other profiles.</div>
+            <div class="role-chips"><span class="rchip">All features</span><span class="rchip">Manage services</span><span class="rchip">Manage profiles</span></div>
+          </div>
+          <div class="role">
+            <div class="role-head"><div class="role-ava a-member">🎬</div><div class="role-name">Member</div><div class="role-tag">WATCHES FREELY</div></div>
+            <div class="role-desc">Watches and downloads everything, changes nothing.</div>
+            <div class="role-chips"><span class="rchip">All watch features</span><span class="rchip">Downloads</span><span class="rchip">No cloud files</span><span class="rchip">No admin</span></div>
+          </div>
+          <div class="role sel">
+            <div class="role-head"><div class="role-ava a-kid">🧸</div><div class="role-name">Kid</div><div class="role-tag">CURATED CORNER</div></div>
+            <div class="role-desc">Only shelves and channels you've curated. No search, no live TV, no downloads.</div>
+            <div class="role-chips"><span class="rchip hot">Home shelves</span><span class="rchip hot">Debrify TV</span><span class="rchip">Everything else off</span></div>
+          </div>
+          <div class="dots"><i class="dot"></i><i class="dot on"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+          <div class="next">Next</div>
+        </div>
+        <div class="c-label"><span class="c-key">Step 2</span><span class="c-name">Role = preset</span></div>
+        <p class="c-notes">Three cards, each wearing a chip summary of what it pre-answers. No switches anywhere on this screen.</p>
+      </div>
+
+      <!-- STEP 2 · DISCOVERY -->
+      <div class="concept">
+        <div class="phone">
+          <div class="step-eyebrow">Maya · Kid · Step 3 of 5</div>
+          <div class="q">How can Maya search?</div>
+          <div class="q-sub">Finding by title always works — Maya's catalogs answer with posters. This is only about raw keyword search across torrent engines.</div>
+          <div class="ans sel">
+            <div class="ans-title"><span class="ico">🗂️</span> By title, in their catalogs</div>
+            <div class="ans-desc">Type "Frozen", get the movie — from the sources you curated. No release lists.</div>
+            <div class="drives"><i>KEYWORD SEARCH OFF</i></div>
+          </div>
+          <div class="ans">
+            <div class="ans-title"><span class="ico">🔎</span> Plus keyword search</div>
+            <div class="ans-desc">Raw release search across the profile's torrent engines, ugly names and all.</div>
+            <div class="drives"><i>KEYWORD SEARCH ON</i></div>
+          </div>
+          <div class="preset-note">🧸 Pre-filled by the Kid preset</div>
+          <div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot on"></i><i class="dot"></i><i class="dot"></i></div>
+          <div class="next">Next</div>
+        </div>
+        <div class="c-label"><span class="c-key">Step 3</span><span class="c-name">Search power</span></div>
+        <p class="c-notes">Catalog search is <b>not a permission</b> — everyone finds by title; safety lives in WHICH catalogs the profile has (Review screen). The toggle covers only the raw torrent surface. Drives-chips keep it honest.</p>
+      </div>
+
+      <!-- STEP 3 · SOURCES -->
+      <div class="concept">
+        <div class="phone">
+          <div class="step-eyebrow">Maya · Kid · Step 4 of 5</div>
+          <div class="q">Which TV-style pages can Maya open?</div>
+          <div class="q-sub">Pages that are off simply don't exist for this profile — no tab, no rows, no search results.</div>
+          <div class="srcgrid">
+            <div class="src sel"><span class="src-check"></span><div class="src-ico">📺</div><div class="src-name">Debrify TV</div><div class="src-sub">Channels you curated yourself</div></div>
+            <div class="src"><span class="src-check"></span><div class="src-ico">🌐</div><div class="src-name">Stremio TV</div><div class="src-sub">Addon live channels</div></div>
+            <div class="src"><span class="src-check"></span><div class="src-ico">🛰️</div><div class="src-name">Live TV</div><div class="src-sub">IPTV playlists &amp; guide</div></div>
+            <div class="src"><span class="src-check"></span><div class="src-ico">▶️</div><div class="src-name">YouTube</div><div class="src-sub">The YouTube tab</div></div>
+          </div>
+          <div class="preset-note">🧸 Pre-filled by the Kid preset</div>
+          <div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot on"></i><i class="dot"></i></div>
+          <div class="next">Next</div>
+        </div>
+        <div class="c-label"><span class="c-key">Step 4</span><span class="c-name">Sources pages</span></div>
+        <p class="c-notes">The one multi-select. Four surface tiles instead of four separate yes/no screens — the questionnaire stays four steps for every role.</p>
+      </div>
+
+      <!-- STEP 4 · ABILITIES -->
+      <div class="concept">
+        <div class="phone">
+          <div class="step-eyebrow">Maya · Kid · Step 5 of 5</div>
+          <div class="q">What can Maya do beyond watching?</div>
+          <div class="ans">
+            <div class="ans-title"><span class="ico">⬇️</span> Download &amp; record</div>
+            <div class="ans-desc">Save things offline and use the DVR. Uses this device's storage and your accounts' quotas.</div>
+            <div class="drives"><i>OFF FOR MAYA</i></div>
+          </div>
+          <div class="ans">
+            <div class="ans-title"><span class="ico">📡</span> Remote</div>
+            <div class="ans-desc">Control other Debrify devices and send this setup to them.</div>
+            <div class="drives"><i>OFF FOR MAYA</i></div>
+          </div>
+          <div class="ans">
+            <div class="ans-title"><span class="ico">🧩</span> Manage own sources</div>
+            <div class="ans-desc">Install or remove their own addons and torrent engines. You curate Maya's either way.</div>
+            <div class="drives"><i>OFF FOR MAYA</i></div>
+          </div>
+          <div class="ans">
+            <div class="ans-title"><span class="ico">☁️</span> Cloud files</div>
+            <div class="ans-desc">Browse the raw file lists on connected debrid and cloud accounts — including yours, if shared.</div>
+            <div class="drives"><i>OFF FOR MAYA · ADMIN ONLY BY DEFAULT</i></div>
+          </div>
+          <div class="preset-note">🧸 Pre-filled by the Kid preset — tap a card to allow it</div>
+          <div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot on"></i></div>
+          <div class="next">Review</div>
+        </div>
+        <div class="c-label"><span class="c-key">Step 5</span><span class="c-name">Abilities</span></div>
+        <p class="c-notes">Four toggle-cards close the flow. <b>Cloud files</b> defaults ON only for Admin — a shared debrid account's file list is the owner's viewing history, so Members and Kids start without it. <b>Manage own sources</b> is what "the Addons page" really gated: whether the profile edits its OWN roster — never whether the admin can (you always can, from Review or Edit Profile).</p>
+      </div>
+
+      <!-- SUMMARY -->
+      <div class="concept">
+        <div class="phone">
+          <div class="step-eyebrow">New profile · Review</div>
+          <div class="q">Maya's corner of Debrify</div>
+          <div class="prof"><div class="prof-ava">🧸</div><div><div class="prof-name">Maya</div><div class="prof-sub">KID · PIN OFF</div></div></div>
+          <div class="sum-h">Can</div>
+          <div class="chips">
+            <span class="chip on">Home shelves</span>
+            <span class="chip on">Debrify TV</span>
+            <span class="chip on">Search by title</span>
+          </div>
+          <div class="sum-h">Can't</div>
+          <div class="chips">
+            <span class="chip off">Keyword search</span>
+            <span class="chip off">Stremio TV</span>
+            <span class="chip off">Live TV</span>
+            <span class="chip off">YouTube</span>
+            <span class="chip off">Downloads &amp; recording</span>
+            <span class="chip off">Remote</span>
+            <span class="chip off">Manage own sources</span>
+            <span class="chip off">Cloud files</span>
+          </div>
+          <div class="sum-h">Sources — curated by you</div>
+          <div class="chips">
+            <span class="chip on">All sources enabled</span>
+            <span class="chip off">2 trimmed</span>
+            <span class="chip on" style="background:rgba(226,61,76,.16);color:#FF7A85;">Edit sources ▸</span>
+          </div>
+          <div class="finetune">
+            <div class="finetune-head">Fine-tune <span>▾</span></div>
+            <div class="finetune-sub">The eight switches directly, for the one household the questions don't fit.</div>
+          </div>
+          <div class="dots"><i class="dot on"></i><i class="dot on"></i><i class="dot on"></i><i class="dot on"></i><i class="dot on"></i></div>
+          <div class="next">Create Maya</div>
+        </div>
+        <div class="c-label"><span class="c-key">Review</span><span class="c-name">Can / Can't</span></div>
+        <p class="c-notes">The summary speaks in a parent's words — and <b>Sources</b> is the admin's lever: which addons and engines Maya HAS, editable here and from Edit Profile regardless of their own "manage" toggle. Fine-tune stays the only raw switch list. Editing later lands here, with "Re-run questions" beside it.</p>
+      </div>
+
+      <!-- ADMIN · SOURCES EDITOR -->
+      <div class="concept">
+        <div class="phone" style="height:900px;">
+          <div class="step-eyebrow">Maya · Sources · admin only</div>
+          <div class="q">What feeds Maya's catalogs?</div>
+          <div class="q-sub">Reached from Review ("Edit sources") or Edit Profile. Maya can't open this — Manage own sources is off for them.</div>
+          <div class="srch">Addons</div>
+          <div class="srow on"><div class="sico">🎈</div><div><div class="sname">Kids Catalog</div><div class="ssub">Curated films &amp; series for children</div></div><span class="tick"></span></div>
+          <div class="srow"><div class="sico">🎬</div><div><div class="sname">Cinemeta</div><div class="ssub">Everything — posters for all titles</div></div><span class="tick"></span></div>
+          <div class="srch">Debrid &amp; cloud</div>
+          <div class="srow on"><div class="sico">☁️</div><div><div class="sname">Real-Debrid</div><div class="ssub">Shared from your profile</div></div><span class="tick"></span></div>
+          <div class="srow"><div class="sico">📦</div><div><div class="sname">TorBox</div><div class="ssub">Shared from your profile</div></div><span class="tick"></span></div>
+          <div class="srch">Trackers — off by default</div>
+          <div class="srow"><div class="sico">📈</div><div><div class="sname">Trakt</div><div class="ssub">History is personal — profiles connect their own</div></div><span class="tick"></span></div>
+          <div class="srow"><div class="sico">📊</div><div><div class="sname">Simkl</div><div class="ssub">History is personal — profiles connect their own</div></div><span class="tick"></span></div>
+          <div class="srch">Live TV</div>
+          <div class="srow on"><div class="sico">🛰️</div><div><div class="sname">Home playlist</div><div class="ssub">M3U + XMLTV guide</div></div><span class="tick"></span></div>
+          <div class="srch">Torrent engines &amp; indexers</div>
+          <div class="srow on"><div class="sico">🔍</div><div><div class="sname">1337x</div><div class="ssub">Streams for titles &amp; keyword results</div></div><span class="tick"></span></div>
+          <div class="srow on"><div class="sico">🗄️</div><div><div class="sname">Jackett</div><div class="ssub">Indexer manager</div></div><span class="tick"></span></div>
+          <div class="srow dim"><div class="sico">＋</div><div><div class="sname">PikPak · WebDAV · MDBList · Reddit…</div><div class="ssub">Every connection kind appears here — the page scrolls</div></div></div>
+          <div class="dimnote">Everything starts enabled for every profile — EXCEPT trackers: sharing yours would mix Maya's scrobbles into your watch history, so each profile connects their own (tick to share anyway). Engines also find streams for titles, so they matter even with keyword search off.</div>
+          <div class="dots"></div>
+          <div class="next">Done</div>
+        </div>
+        <div class="c-label"><span class="c-key">Admin</span><span class="c-name">Sources editor</span></div>
+        <p class="c-notes">The page behind "Edit sources": per-profile checklists over installed addons, shared debrid services, and torrent engines — the existing resource grants wearing a human UI. <b>Default is everything ON</b>; restriction is the opt-in act. One section per connection kind — addons, debrid &amp; cloud, trackers (Trakt/Simkl/MDBList), Live TV sources, engines &amp; indexers — mirroring the full <b>ConnectionResourceType</b> roster, so nothing shareable is invisible here. Changes apply to Maya instantly; their surfaces only ever see ticked rows.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>The presets</h2>
+    <p class="sub">What each role pre-answers. Admin/Member differ outside these eight (Manage services / Manage profiles stay role-bound admin features, not questionnaire material).</p>
+    <table>
+      <tr><th>Feature</th><th>Admin 🛠️</th><th>Member 🎬</th><th>Kid 🧸</th></tr>
+      <tr><td>Catalog search (by title)</td><td class="y">always</td><td class="y">always</td><td class="y">always</td></tr>
+      <tr><td>Keyword search</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+      <tr><td>Manage own sources</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+      <tr><td>Debrify TV</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+      <tr><td>Stremio TV</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+      <tr><td>Live TV (IPTV)</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+      <tr><td>YouTube</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+      <tr><td>Downloads &amp; recording</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+      <tr><td>Remote</td><td class="y">✓</td><td class="y">✓</td><td class="n">—</td></tr>
+      <tr><td>Cloud files</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Rules of the design</h2>
+    <div class="notes">
+      <div class="note">
+        <h3>Preset = prefilled, never locked</h3>
+        <ul>
+          <li>Role picks answers; it never removes questions. Every household with a "kid who gets YouTube" is one tap on step 3.</li>
+          <li>Divergence is fine and unceremonious — no "custom profile" mode, no warning. The preset is a starting point, not a contract.</li>
+          <li>Admin/Member paths breeze: all steps arrive pre-answered ON, so creation is four Next taps.</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>Off means invisible — and enforced</h3>
+        <ul>
+          <li>A disabled feature drops every road to it: nav tab, Home rows, settings-search entries, deep links, and remote commands that would open it.</li>
+          <li>UI hiding is the courtesy; the operation boundary (<code>ProfileFeature</code> checks) remains the actual guarantee, per the threat model.</li>
+          <li>Page gates are NOT content safety — the rating ceiling stays its own future feature and gets a line on the Kid card when it exists.</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>Search is two things</h3>
+        <ul>
+          <li><b>Catalog search</b> — type a title, the profile's catalogs answer with posters. Always available to every role; it is how anyone finds anything.</li>
+          <li><b>Keyword search</b> — raw release strings from torrent engines. The only search that is a permission.</li>
+          <li>What makes catalog search safe for a Kid is not a toggle — it is the SOURCE LIST the admin curated.</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>The admin curates every profile's sources</h3>
+        <ul>
+          <li>Which addons, torrent engines and shared connections a profile has is assigned per profile by the admin (Review → "Edit sources", and Edit Profile later) — the existing resource-grant machinery (<code>stremioAddon</code>, <code>jackett</code>, <code>prowlarr</code> resource types) wearing a human UI.</li>
+          <li>"Manage own sources" only decides whether the PROFILE may edit that roster too. Off for Maya ≠ Maya has no addons — it means only you shape theirs.</li>
+          <li>Every profile starts with EVERYTHING enabled — addons, debrid &amp; cloud, engines — except TRACKERS, which default off: watch history is personal, and a shared Trakt/Simkl would interleave two people's scrobbles. Sharing a tracker stays possible, one tick, for the household that wants it.</li>
+        </ul>
+      </div>
+      <div class="note">
+        <h3>Scope &amp; adaptation</h3>
+        <ul>
+          <li>v1 = these ten (pages, actions, Manage own sources, and Cloud files — Admin-only by preset); Backup &amp; transfer remains the fast-follow.</li>
+          <li>TV: identical four steps; cards become the DPAD rows Debrify already speaks. One question per screen is remote-friendly by construction.</li>
+          <li>Editing later opens the Review frame directly — chips first, "Re-run questions" and Fine-tune beneath.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>

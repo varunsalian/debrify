@@ -3,10 +3,12 @@ import 'package:flutter/foundation.dart';
 import '../models/engine_config/engine_config.dart';
 import '../models/indexer_manager_config.dart';
 import '../models/torrent.dart';
+import '../models/profiles/profile_policy.dart';
 import 'engine/engine_registry.dart';
 import 'engine/dynamic_engine.dart';
 import 'engine/settings_manager.dart';
 import 'indexer_manager_service.dart';
+import 'profiles/profile_async_authorization.dart';
 import 'stremio_service.dart';
 
 /// Streaming-search hook: fired once per source (engine / addon batch) that
@@ -79,6 +81,9 @@ class TorrentService {
     String query, {
     String? engineId,
   }) async {
+    final capability = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
     await ensureInitialized();
 
     try {
@@ -96,13 +101,15 @@ class TorrentService {
               engineId,
               indexerConfig.maxResults,
             );
-            return IndexerManagerService.searchKeyword(
+            final results = await IndexerManagerService.searchKeyword(
               indexerConfig,
               query,
               maxResults: maxResults,
             );
+            await capability?.runIfCurrent(() async {});
+            return results;
           }
-          debugPrint('TorrentService: Engine not found: $engineId');
+          debugPrint('TorrentService: Requested engine was not found');
           return [];
         }
       } else {
@@ -119,9 +126,14 @@ class TorrentService {
       final defaultMax = engine.settingsConfig.maxResults?.defaultInt ?? 50;
       final maxResults = await _settings.getMaxResults(engine.name, defaultMax);
 
-      return await engine.executeSearch(query: query, maxResults: maxResults);
-    } catch (e) {
-      debugPrint('TorrentService: searchTorrents error: $e');
+      final results = await engine.executeSearch(
+        query: query,
+        maxResults: maxResults,
+      );
+      await capability?.runIfCurrent(() async {});
+      return results;
+    } catch (_) {
+      debugPrint('TorrentService: search failed');
       return [];
     }
   }
@@ -154,6 +166,9 @@ class TorrentService {
     Map<String, int>? maxResultsOverrides,
     SearchBatchCallback? onBatch,
   }) async {
+    final capability = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
     await ensureInitialized();
 
     final Map<String, int> engineCounts = {};
@@ -209,42 +224,34 @@ class TorrentService {
       if (maxResultsOverrides != null &&
           maxResultsOverrides.containsKey(engineId)) {
         maxResults = maxResultsOverrides[engineId]!;
-        debugPrint(
-          'TorrentService: $engineId - using override maxResults: $maxResults',
-        );
+        debugPrint('TorrentService: Using per-engine result limit');
       } else {
         final maxResultsSetting = engine.settingsConfig.maxResults;
         final defaultMax = maxResultsSetting?.defaultInt ?? 50;
         maxResults = await _settings.getMaxResults(engineId, defaultMax);
-        debugPrint(
-          'TorrentService: $engineId - settingExists: ${maxResultsSetting != null}, '
-          'yamlDefault: ${maxResultsSetting?.defaultValue}, defaultInt: $defaultMax, '
-          'finalMax: $maxResults',
-        );
+        debugPrint('TorrentService: Loaded engine result limit');
       }
 
       futures.add(
         _executeKeywordSearch(engine, effectiveQuery, maxResults)
             .then((results) {
               engineCounts[engineId] = results.length;
-              debugPrint(
-                'TorrentService: $engineId returned ${results.length} results (max: $maxResults)',
-              );
+              debugPrint('TorrentService: Engine search completed');
               // Isolated: a throwing consumer callback must never reject the
               // search future or be misrecorded as an engine failure.
               if (results.isNotEmpty) {
                 try {
                   onBatch?.call(engineId, results);
-                } catch (e) {
-                  debugPrint('TorrentService: onBatch callback threw: $e');
+                } catch (_) {
+                  debugPrint('TorrentService: onBatch callback failed');
                 }
               }
               return results;
             })
             .catchError((error, _) {
               engineCounts[engineId] = 0;
-              engineErrors[engineId] = error.toString();
-              debugPrint('TorrentService: $engineId error: $error');
+              engineErrors[engineId] = 'Search failed';
+              debugPrint('TorrentService: engine search failed');
               return <Torrent>[];
             }),
       );
@@ -254,6 +261,7 @@ class TorrentService {
 
     // Deduplicate and sort
     final torrents = _deduplicateAndSort(allResults);
+    await capability?.runIfCurrent(() async {});
 
     return {
       'torrents': torrents,
@@ -290,6 +298,9 @@ class TorrentService {
     Duration? timeout,
     SearchBatchCallback? onBatch,
   }) async {
+    final capability = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
     await ensureInitialized();
 
     final Map<String, int> engineCounts = {};
@@ -349,24 +360,22 @@ class TorrentService {
               )
               .then((results) {
                 engineCounts[engineId] = results.length;
-                debugPrint(
-                  'TorrentService: $engineId (IMDB) returned ${results.length} results (max: $maxResults)',
-                );
+                debugPrint('TorrentService: IMDB engine search completed');
                 // Isolated: see the keyword path — consumer exceptions must
                 // never alter the awaited search result.
                 if (results.isNotEmpty) {
                   try {
                     onBatch?.call(engineId, results);
-                  } catch (e) {
-                    debugPrint('TorrentService: onBatch callback threw: $e');
+                  } catch (_) {
+                    debugPrint('TorrentService: onBatch callback failed');
                   }
                 }
                 return results;
               })
               .catchError((error, _) {
                 engineCounts[engineId] = 0;
-                engineErrors[engineId] = error.toString();
-                debugPrint('TorrentService: $engineId (IMDB) error: $error');
+                engineErrors[engineId] = 'Search failed';
+                debugPrint('TorrentService: IMDB engine search failed');
                 return <Torrent>[];
               });
       if (timeout != null) {
@@ -375,9 +384,7 @@ class TorrentService {
           onTimeout: () {
             engineCounts[engineId] = 0;
             engineErrors[engineId] = 'Timeout after ${timeout.inSeconds}s';
-            debugPrint(
-              'TorrentService: $engineId (IMDB) timed out after ${timeout.inSeconds}s',
-            );
+            debugPrint('TorrentService: IMDB engine search timed out');
             return <Torrent>[];
           },
         );
@@ -389,6 +396,7 @@ class TorrentService {
 
     // Deduplicate and sort
     final torrents = _deduplicateAndSort(allResults);
+    await capability?.runIfCurrent(() async {});
 
     return {
       'torrents': torrents,
@@ -430,6 +438,9 @@ class TorrentService {
     Duration? engineTimeout,
     SearchBatchCallback? onBatch,
   }) async {
+    final capability = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
     // For non-IMDB content types (TV channels, etc.), skip traditional engine search
     final isNonImdbContent =
         contentType != null &&
@@ -473,8 +484,8 @@ class TorrentService {
           if (streams.isNotEmpty) {
             try {
               onBatch?.call('stremio', streams);
-            } catch (e) {
-              debugPrint('TorrentService: onBatch callback threw: $e');
+            } catch (_) {
+              debugPrint('TorrentService: onBatch callback failed');
             }
           }
           return result;
@@ -521,6 +532,7 @@ class TorrentService {
 
     // Deduplicate and sort all results together
     final torrents = _deduplicateAndSort(allTorrentLists);
+    await capability?.runIfCurrent(() async {});
 
     debugPrint(
       'TorrentService: Total torrents after dedup: ${torrents.length}',
@@ -571,8 +583,11 @@ class TorrentService {
     String? contentType,
     Duration? timeout,
     bool preserveOrder = false,
-  }) {
-    return _searchStremioAddons(
+  }) async {
+    final capability = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.torrentSearch,
+    );
+    final result = await _searchStremioAddons(
       imdbId: imdbId,
       isMovie: isMovie,
       season: season,
@@ -582,6 +597,8 @@ class TorrentService {
       timeout: timeout,
       preserveOrder: preserveOrder,
     );
+    await capability?.runIfCurrent(() async {});
+    return result;
   }
 
   static Future<Map<String, dynamic>> _searchStremioAddons({
@@ -624,12 +641,12 @@ class TorrentService {
         'addonCounts': result['addonCounts'] as Map<String, int>? ?? {},
         'addonErrors': result['addonErrors'] as Map<String, String>? ?? {},
       };
-    } catch (e) {
-      debugPrint('TorrentService: Stremio addon search error: $e');
+    } catch (_) {
+      debugPrint('TorrentService: Stremio addon search failed');
       return {
         'torrents': <Torrent>[],
         'addonCounts': <String, int>{},
-        'addonErrors': <String, String>{'Stremio': e.toString()},
+        'addonErrors': <String, String>{'Stremio': 'Search failed'},
       };
     }
   }

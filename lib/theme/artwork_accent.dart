@@ -170,7 +170,15 @@ class DominantColorCache {
     }).catchError((_) {
       _put(url, null);
       return null;
-    }).whenComplete(() => _inFlight.remove(url));
+    })
+        // Block body, NOT an arrow: the map stores this wrapped future, so an
+        // arrow callback would hand whenComplete the removed value — a future
+        // — which it then awaits: the future deadlocks on itself and the
+        // first awaiter never gets its accent (the cache masks it for
+        // everyone else).
+        .whenComplete(() {
+      _inFlight.remove(url);
+    });
     _inFlight[url] = future;
     return future;
   }

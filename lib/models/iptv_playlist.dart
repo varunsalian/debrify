@@ -16,15 +16,19 @@ class IptvPlaylist {
   final String name;
   final String url;
   final String? content; // Raw M3U content for file-based playlists
-  final String? serverUrl;  // Xtream Codes server URL
-  final String? username;   // Xtream Codes username
-  final String? password;   // Xtream Codes password
+  final String? serverUrl; // Xtream Codes server URL
+  final String? username; // Xtream Codes username
+  final String? password; // Xtream Codes password
 
   /// User-supplied XMLTV guide URL for M3U playlists. Overrides whatever the
   /// playlist's own `#EXTM3U url-tvg=` header declares (most declare none).
   final String? epgUrl;
 
   final DateTime addedAt;
+  final String? connectionResourceId;
+  final int? connectionResourceRevision;
+  final bool connectionReadOnly;
+  final bool credentialsRedacted;
 
   const IptvPlaylist({
     required this.id,
@@ -36,6 +40,10 @@ class IptvPlaylist {
     this.password,
     this.epgUrl,
     required this.addedAt,
+    this.connectionResourceId,
+    this.connectionResourceRevision,
+    this.connectionReadOnly = false,
+    this.credentialsRedacted = false,
   });
 
   /// Returns true if this playlist was imported from a local file
@@ -85,6 +93,12 @@ class IptvPlaylist {
     if (password != null) 'password': password,
     if (epgUrl != null) 'epgUrl': epgUrl,
     'addedAt': addedAt.toIso8601String(),
+    if (connectionResourceId != null)
+      '_connectionResourceId': connectionResourceId,
+    if (connectionResourceRevision != null)
+      '_connectionResourceRevision': connectionResourceRevision,
+    if (connectionReadOnly) '_connectionResourceReadOnly': true,
+    if (credentialsRedacted) '_connectionResourceCredentialsRedacted': true,
   };
 
   factory IptvPlaylist.fromJson(Map<String, dynamic> json) => IptvPlaylist(
@@ -97,6 +111,12 @@ class IptvPlaylist {
     password: json['password'] as String?,
     epgUrl: json['epgUrl'] as String?,
     addedAt: DateTime.parse(json['addedAt'] as String),
+    connectionResourceId: json['_connectionResourceId']?.toString(),
+    connectionResourceRevision: (json['_connectionResourceRevision'] as num?)
+        ?.toInt(),
+    connectionReadOnly: json['_connectionResourceReadOnly'] as bool? ?? false,
+    credentialsRedacted:
+        json['_connectionResourceCredentialsRedacted'] as bool? ?? false,
   );
 
   @override

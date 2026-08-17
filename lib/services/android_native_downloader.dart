@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import '../utils/platform_util.dart';
+import '../models/profiles/profile_policy.dart';
+import 'profiles/device_job_store.dart';
+import 'profiles/profile_runtime.dart';
 
 /// Result of a native start: either a [taskId] on success, or the reason the
 /// start failed (e.g. `fgs_not_allowed` on Android 12+ background starts).
@@ -43,6 +46,8 @@ class AndroidNativeDownloader {
     String mimeType = 'application/octet-stream',
     Map<String, String>? headers,
     String? treeUri,
+    String? connectionResourceId,
+    int? resourceAuthorizationRevision,
   }) async {
     if (!Platform.isAndroid) {
       return const AndroidStartResult(errorCode: 'not_android');
@@ -52,17 +57,49 @@ class AndroidNativeDownloader {
     // reason — swallowing it to null loses e.g. fgs_not_allowed, which the
     // orchestrator handles differently from a dead link.
     try {
-      final id = await _channel.invokeMethod<String>('startMediaStoreDownload', {
-        'url': url,
-        if (taskId != null) 'taskId': taskId,
-        'fileName': fileName,
-        'subDir': subDir,
-        'mimeType': mimeType,
-        'headers': headers ?? <String, String>{},
-        if (treeUri != null) 'treeUri': treeUri,
-      });
+      final authorization = await DeviceJobStore.authorize(
+        ProfileFeature.downloads,
+      );
+      if (authorization != null &&
+          !await DeviceJobStore.validateAuthorization(
+            profileId: authorization.profileId,
+            profileAuthorizationRevision:
+                authorization.profileAuthorizationRevision,
+            feature: ProfileFeature.downloads,
+            resourceId: connectionResourceId,
+            resourceAuthorizationRevision: resourceAuthorizationRevision,
+          )) {
+        return const AndroidStartResult(errorCode: 'resource_not_authorized');
+      }
+      final owner =
+          authorization?.toNativeArguments() ?? const <String, Object?>{};
+      final id = await _channel
+          .invokeMethod<String>('startMediaStoreDownload', {
+            'url': url,
+            if (taskId != null) 'taskId': taskId,
+            'fileName': fileName,
+            'subDir': subDir,
+            'mimeType': mimeType,
+            'headers': headers ?? <String, String>{},
+            if (treeUri != null) 'treeUri': treeUri,
+            ...owner,
+            if (connectionResourceId != null)
+              'connectionResourceId': connectionResourceId,
+            if (resourceAuthorizationRevision != null)
+              'resourceAuthorizationRevision': resourceAuthorizationRevision,
+          });
       if (id == null) {
         return const AndroidStartResult(errorCode: 'no_task_id');
+      }
+      if (authorization != null) {
+        await DeviceJobStore.register(
+          backend: 'androidNativeDownload',
+          externalJobId: id,
+          kind: DeviceJobKind.download,
+          authorization: authorization,
+          resourceId: connectionResourceId,
+          resourceAuthorizationRevision: resourceAuthorizationRevision,
+        );
       }
       return AndroidStartResult(taskId: id);
     } on PlatformException catch (e) {
@@ -139,17 +176,32 @@ class AndroidNativeDownloader {
 
   /// Native truth for reconciliation: every persisted task merged with the
   /// live in-memory registry. Status is one of running/paused/failed.
-  static Future<List<Map<String, dynamic>>> queryTasks() async {
+  static Future<List<Map<String, dynamic>>> queryTasks({
+    bool adminAggregate = false,
+    bool failClosed = false,
+  }) async {
     if (!Platform.isAndroid) return const [];
     try {
-      final raw = await _channel.invokeMethod<List<dynamic>>('queryDownloadTasks');
+      final owner =
+          ProfileRuntime.isInitialized && ProfileRuntime.isProfileCommitted
+          ? ProfileRuntime.capture().profileId
+          : null;
+      final raw = await _channel.invokeMethod<List<dynamic>>(
+        'queryDownloadTasks',
+        <String, Object?>{
+          if (owner != null) 'ownerProfileId': owner,
+          'adminAggregate': adminAggregate,
+        },
+      );
       if (raw == null) return const [];
       return raw
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList(growable: false);
     } on PlatformException {
+      if (failClosed) rethrow;
       return const [];
     } on MissingPluginException {
+      if (failClosed) rethrow;
       return const [];
     }
   }
@@ -166,8 +218,9 @@ class AndroidNativeDownloader {
   static Future<Map<String, dynamic>?> pickDownloadDirectory() async {
     if (!Platform.isAndroid) return null;
     try {
-      final res = await _channel
-          .invokeMethod<Map<dynamic, dynamic>>('pickDownloadDirectory');
+      final res = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'pickDownloadDirectory',
+      );
       if (res == null) return null;
       return Map<String, dynamic>.from(res);
     } on PlatformException {
@@ -181,6 +234,11 @@ class AndroidNativeDownloader {
   static Future<bool> releaseDownloadDirectory(String treeUri) async {
     if (!Platform.isAndroid) return false;
     return _invokeBool('releaseDownloadDirectory', {'treeUri': treeUri});
+  }
+
+  static Future<bool> releaseAllDownloadDirectories() async {
+    if (!Platform.isAndroid) return false;
+    return _invokeBool('releaseAllDownloadDirectories');
   }
 
   /// True when the grant for [treeUri] is still held and the folder is
@@ -199,14 +257,30 @@ class AndroidNativeDownloader {
   }) async {
     if (!Platform.isAndroid) return null;
     try {
-      return await _channel.invokeMethod<String>('startMediaStoreDownload', {
-        'url': url,
-        'fileName': fileName,
-        'subDir': subDir,
-        'mimeType': mimeType,
-        'headers': headers ?? <String, String>{},
-        'markAsUpdate': true,
-      });
+      final authorization = await DeviceJobStore.authorize(
+        ProfileFeature.appUpdates,
+      );
+      final owner =
+          authorization?.toNativeArguments() ?? const <String, Object?>{};
+      final id = await _channel
+          .invokeMethod<String>('startMediaStoreDownload', {
+            'url': url,
+            'fileName': fileName,
+            'subDir': subDir,
+            'mimeType': mimeType,
+            'headers': headers ?? <String, String>{},
+            'markAsUpdate': true,
+            ...owner,
+          });
+      if (id != null && authorization != null) {
+        await DeviceJobStore.register(
+          backend: 'androidNativeDownload',
+          externalJobId: id,
+          kind: DeviceJobKind.download,
+          authorization: authorization,
+        );
+      }
+      return id;
     } on PlatformException {
       return null;
     } on MissingPluginException {

@@ -1,18 +1,28 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../models/indexer_manager_config.dart';
 import '../../models/stremio_addon.dart';
-import '../../models/webdav_item.dart';
 import '../../services/engine/local_engine_storage.dart';
 import '../../services/iptv_transfer_payload.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
+import '../../services/remote_control/remote_session.dart';
+import 'remote_pairing_dialog.dart';
 import '../../services/storage_service.dart';
 import '../../services/stremio_service.dart';
+import '../../services/profiles/profile_async_authorization.dart';
+import '../../services/profiles/profile_authorization.dart';
+import '../../services/profiles/profile_bootstrap.dart';
+import '../../services/profiles/profile_package_service.dart';
+import '../../services/profiles/profile_runtime.dart';
+import '../../services/profiles/connection_resource_service.dart';
+import '../../services/profiles/device_key_provider.dart';
+import '../../services/profiles/portable_profile_package.dart';
+import '../../models/profiles/profile_policy.dart';
 
 /// One-click "Transfer Everything" flow. Pushes all configured services
 /// (debrid keys, Trakt/Simkl sessions, search engines, PikPak, WebDAV,
@@ -47,26 +57,28 @@ class _TransferItem {
 class _RemoteTransferAllState extends State<RemoteTransferAll> {
   bool _loading = true;
   bool _transferring = false;
+
+  /// The credential gate runs BEFORE any item is sent and can take several
+  /// seconds against a TV that never answers the handshake (an old build).
+  /// Without this the button sits inert for that whole window and the
+  /// transfer reads as broken — the refusal dialog only lands afterwards.
+  bool _connecting = false;
   bool _done = false;
 
-  String? _realDebridApiKey;
-  String? _torboxApiKey;
-  String? _premiumizeApiKey;
-  String? _allDebridApiKey;
-  String? _pikpakEmail;
-  String? _traktAccessToken;
-  String? _traktRefreshToken;
-  int? _traktTokenExpiry;
+  /// Admin-only: send the complete profile graph (profiles, connections,
+  /// PINs) instead of merging items into the TV's current profile.
+  bool _canSendProfileGraph = false;
+  bool _includeProfiles = false;
+
   String? _traktUsername;
-  String? _simklAccessToken;
   String? _simklUsername;
-  List<String> _engineIds = [];
-  List<StremioAddon> _addons = [];
-  List<WebDavConfig> _webDavServers = [];
-  List<IndexerManagerConfig> _indexerManagers = [];
-  List<Map<String, dynamic>> _iptvPlaylists = const [];
-  List<Map<String, dynamic>> _iptvFavorites = const [];
-  List<Map<String, dynamic>> _iptvLists = const [];
+  int _engineCount = 0;
+  int _webDavCount = 0;
+  int _indexerManagerCount = 0;
+  int _iptvPlaylistCount = 0;
+  int _iptvFavoriteCount = 0;
+  int _iptvListCount = 0;
+  int _iptvListChannelCount = 0;
   int _iptvFileImported = 0;
 
   final _pikpakPasswordController = TextEditingController();
@@ -90,219 +102,310 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     setState(() => _loading = true);
 
     try {
-      _realDebridApiKey = await StorageService.getApiKey();
+      final realDebridApiKey = await StorageService.getApiKey(
+        forRemoteTransfer: true,
+      );
       final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
-      final hasRd = (_realDebridApiKey?.isNotEmpty ?? false) && rdEnabled;
+      final hasRd = (realDebridApiKey?.isNotEmpty ?? false) && rdEnabled;
 
-      _torboxApiKey = await StorageService.getTorboxApiKey();
+      final torboxApiKey = await StorageService.getTorboxApiKey(
+        forRemoteTransfer: true,
+      );
       final tbEnabled = await StorageService.getTorboxIntegrationEnabled();
-      final hasTb = (_torboxApiKey?.isNotEmpty ?? false) && tbEnabled;
+      final hasTb = (torboxApiKey?.isNotEmpty ?? false) && tbEnabled;
 
-      _premiumizeApiKey = await StorageService.getPremiumizeApiKey();
+      final premiumizeApiKey = await StorageService.getPremiumizeApiKey(
+        forRemoteTransfer: true,
+      );
       final pmEnabled = await StorageService.getPremiumizeIntegrationEnabled();
-      final hasPm = (_premiumizeApiKey?.isNotEmpty ?? false) && pmEnabled;
+      final hasPm = (premiumizeApiKey?.isNotEmpty ?? false) && pmEnabled;
 
-      _allDebridApiKey = await StorageService.getAllDebridApiKey();
+      final allDebridApiKey = await StorageService.getAllDebridApiKey(
+        forRemoteTransfer: true,
+      );
       final adEnabled = await StorageService.getAllDebridIntegrationEnabled();
-      final hasAd = (_allDebridApiKey?.isNotEmpty ?? false) && adEnabled;
+      final hasAd = (allDebridApiKey?.isNotEmpty ?? false) && adEnabled;
 
-      _pikpakEmail = await StorageService.getPikPakEmail();
+      final pikpakEmail = await StorageService.getPikPakEmail(
+        forRemoteTransfer: true,
+      );
       final ppEnabled = await StorageService.getPikPakEnabled();
-      final hasPp = (_pikpakEmail?.isNotEmpty ?? false) && ppEnabled;
+      final hasPp = (pikpakEmail?.isNotEmpty ?? false) && ppEnabled;
 
-      _traktAccessToken = await StorageService.getTraktAccessToken();
-      _traktRefreshToken = await StorageService.getTraktRefreshToken();
-      _traktTokenExpiry = await StorageService.getTraktTokenExpiry();
+      final traktAccessToken = await StorageService.getTraktAccessToken(
+        forRemoteTransfer: true,
+      );
+      final traktRefreshToken = await StorageService.getTraktRefreshToken(
+        forRemoteTransfer: true,
+      );
       _traktUsername = await StorageService.getTraktUsername();
-      final hasTrakt = (_traktAccessToken?.isNotEmpty ?? false) &&
-          (_traktRefreshToken?.isNotEmpty ?? false);
+      final hasTrakt =
+          (traktAccessToken?.isNotEmpty ?? false) &&
+          (traktRefreshToken?.isNotEmpty ?? false);
 
-      _simklAccessToken = await StorageService.getSimklAccessToken();
+      final simklAccessToken = await StorageService.getSimklAccessToken(
+        forRemoteTransfer: true,
+      );
       _simklUsername = await StorageService.getSimklUsername();
-      final hasSimkl = _simklAccessToken?.isNotEmpty ?? false;
+      final hasSimkl = simklAccessToken?.isNotEmpty ?? false;
 
       await LocalEngineStorage.instance.initialize();
-      _engineIds = await LocalEngineStorage.instance.getImportedEngineIds();
-      final hasEngines = _engineIds.isNotEmpty;
+      final engineIds = await LocalEngineStorage.instance
+          .getImportedEngineIds();
+      _engineCount = engineIds.length;
+      final hasEngines = _engineCount > 0;
 
+      var addons = <StremioAddon>[];
       try {
-        _addons = await StremioService.instance.getAddons();
-      } catch (e) {
-        debugPrint('RemoteTransferAll: Failed to load addons: $e');
-        _addons = [];
-      }
-
-      try {
-        _webDavServers = await StorageService.getWebDavServers();
-      } catch (e) {
-        debugPrint('RemoteTransferAll: Failed to load WebDAV servers: $e');
-        _webDavServers = [];
-      }
-
-      try {
-        _indexerManagers = await StorageService.getIndexerManagerConfigs();
-      } catch (e) {
-        debugPrint(
-          'RemoteTransferAll: Failed to load indexer manager configs: $e',
+        addons = await StremioService.instance.getAddons(
+          forRemoteTransfer: true,
         );
-        _indexerManagers = [];
+      } catch (_) {
+        debugPrint('RemoteTransferAll: addon inventory failed');
+      }
+
+      try {
+        final servers = await StorageService.getWebDavServers(
+          forSettings: false,
+          forRemoteTransfer: true,
+        );
+        _webDavCount = servers.length;
+      } catch (_) {
+        debugPrint('RemoteTransferAll: WebDAV inventory failed');
+        _webDavCount = 0;
+      }
+
+      try {
+        final managers = await StorageService.getIndexerManagerConfigs(
+          forSettings: false,
+          forRemoteTransfer: true,
+        );
+        _indexerManagerCount = managers.length;
+      } catch (_) {
+        debugPrint('RemoteTransferAll: indexer inventory failed');
+        _indexerManagerCount = 0;
       }
       try {
-        _iptvPlaylists = await IptvTransferPayload.buildPlaylists();
-        _iptvFavorites = await IptvTransferPayload.buildFavorites();
-        _iptvLists = await IptvTransferPayload.buildCustomLists();
+        final playlists = await IptvTransferPayload.buildPlaylists(
+          forRemoteTransfer: true,
+        );
+        final favorites = await IptvTransferPayload.buildFavorites(
+          forRemoteTransfer: true,
+        );
+        final lists = await IptvTransferPayload.buildCustomLists(
+          forRemoteTransfer: true,
+        );
+        _iptvPlaylistCount = playlists.length;
+        _iptvFavoriteCount = favorites.length;
+        _iptvListCount = lists.length;
+        _iptvListChannelCount = IptvTransferPayload.countListChannels(lists);
         _iptvFileImported =
             (await IptvTransferPayload.countPlaylists()).fileImported;
-      } catch (e) {
-        debugPrint('RemoteTransferAll: Failed to load IPTV setup: $e');
-        _iptvPlaylists = const [];
-        _iptvFavorites = const [];
-        _iptvLists = const [];
+      } catch (_) {
+        debugPrint('RemoteTransferAll: IPTV inventory failed');
+        _iptvPlaylistCount = 0;
+        _iptvFavoriteCount = 0;
+        _iptvListCount = 0;
+        _iptvListChannelCount = 0;
       }
 
-      final hasWebDav = _webDavServers.isNotEmpty;
-      final hasIndexers = _indexerManagers.isNotEmpty;
+      final hasWebDav = _webDavCount > 0;
+      final hasIndexers = _indexerManagerCount > 0;
 
       final items = <_TransferItem>[];
       if (hasRd) {
-        items.add(_TransferItem(
-          key: ConfigCommand.realDebrid,
-          label: 'Real-Debrid',
-          icon: Icons.speed,
-          color: const Color(0xFF10B981),
-        ));
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.realDebrid,
+            label: 'Real-Debrid',
+            icon: Icons.speed,
+            color: const Color(0xFF10B981),
+          ),
+        );
       }
       if (hasTb) {
-        items.add(_TransferItem(
-          key: ConfigCommand.torbox,
-          label: 'Torbox',
-          icon: Icons.inventory_2,
-          color: const Color(0xFFF59E0B),
-        ));
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.torbox,
+            label: 'Torbox',
+            icon: Icons.inventory_2,
+            color: const Color(0xFFF59E0B),
+          ),
+        );
       }
       if (hasPm) {
-        items.add(_TransferItem(
-          key: ConfigCommand.premiumize,
-          label: 'Premiumize',
-          icon: Icons.workspace_premium_rounded,
-          color: const Color(0xFFFB923C),
-        ));
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.premiumize,
+            label: 'Premiumize',
+            icon: Icons.workspace_premium_rounded,
+            color: const Color(0xFFFB923C),
+          ),
+        );
       }
       if (hasAd) {
-        items.add(_TransferItem(
-          key: ConfigCommand.allDebrid,
-          label: 'AllDebrid',
-          icon: Icons.all_inclusive_rounded,
-          color: const Color(0xFF26A69A),
-        ));
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.allDebrid,
+            label: 'AllDebrid',
+            icon: Icons.all_inclusive_rounded,
+            color: const Color(0xFF26A69A),
+          ),
+        );
       }
       if (hasPp) {
-        items.add(_TransferItem(
-          key: ConfigCommand.pikpak,
-          label: 'PikPak',
-          icon: Icons.cloud,
-          color: const Color(0xFF3B82F6),
-        ));
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.pikpak,
+            label: 'PikPak',
+            icon: Icons.cloud,
+            color: const Color(0xFF3B82F6),
+          ),
+        );
       }
       if (hasTrakt) {
-        items.add(_TransferItem(
-          key: ConfigCommand.trakt,
-          label: _traktUsername != null
-              ? 'Trakt (${_traktUsername!})'
-              : 'Trakt',
-          icon: Icons.history_rounded,
-          color: const Color(0xFFED1C24),
-        ));
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.trakt,
+            label: _traktUsername != null
+                ? 'Trakt (${_traktUsername!})'
+                : 'Trakt',
+            icon: Icons.history_rounded,
+            color: const Color(0xFFED1C24),
+          ),
+        );
       }
       if (hasSimkl) {
-        items.add(_TransferItem(
-          key: ConfigCommand.simkl,
-          label: _simklUsername != null
-              ? 'Simkl (${_simklUsername!})'
-              : 'Simkl',
-          icon: Icons.movie_filter_rounded,
-          color: const Color(0xFF22D3EE),
-        ));
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.simkl,
+            label: _simklUsername != null
+                ? 'Simkl (${_simklUsername!})'
+                : 'Simkl',
+            icon: Icons.movie_filter_rounded,
+            color: const Color(0xFF22D3EE),
+          ),
+        );
       }
       if (hasEngines) {
-        items.add(_TransferItem(
-          key: ConfigCommand.searchEngines,
-          label: 'Search Engines (${_engineIds.length})',
-          icon: Icons.search,
-          color: const Color(0xFF8B5CF6),
-        ));
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.searchEngines,
+            label: 'Search Engines ($_engineCount)',
+            icon: Icons.search,
+            color: const Color(0xFF8B5CF6),
+          ),
+        );
       }
       if (hasWebDav) {
-        items.add(_TransferItem(
-          key: ConfigCommand.webDav,
-          label: 'WebDAV (${_webDavServers.length})',
-          icon: Icons.dns_rounded,
-          color: const Color(0xFF0EA5E9),
-        ));
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.webDav,
+            label: 'WebDAV ($_webDavCount)',
+            icon: Icons.dns_rounded,
+            color: const Color(0xFF0EA5E9),
+          ),
+        );
       }
       if (hasIndexers) {
-        items.add(_TransferItem(
-          key: ConfigCommand.indexerManagers,
-          label: 'Jackett/Prowlarr (${_indexerManagers.length})',
-          icon: Icons.manage_search_rounded,
-          color: const Color(0xFFEAB308),
-        ));
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.indexerManagers,
+            label: 'Jackett/Prowlarr ($_indexerManagerCount)',
+            icon: Icons.manage_search_rounded,
+            color: const Color(0xFFEAB308),
+          ),
+        );
       }
       // IPTV in dependency order: a membership names the provider it came
       // from, so the provider has to land first.
-      if (_iptvPlaylists.isNotEmpty) {
-        items.add(_TransferItem(
-          key: ConfigCommand.iptvPlaylists,
-          label: 'IPTV providers (${_iptvPlaylists.length})',
-          icon: Icons.live_tv_rounded,
-          color: const Color(0xFF14B8A6),
-        ));
+      if (_iptvPlaylistCount > 0) {
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.iptvPlaylists,
+            label: 'IPTV providers ($_iptvPlaylistCount)',
+            icon: Icons.live_tv_rounded,
+            color: const Color(0xFF14B8A6),
+          ),
+        );
       }
-      if (_iptvFavorites.isNotEmpty) {
-        items.add(_TransferItem(
-          key: ConfigCommand.iptvFavorites,
-          label: 'IPTV favorites (${_iptvFavorites.length})',
-          icon: Icons.star_rounded,
-          color: const Color(0xFFF472B6),
-        ));
+      if (_iptvFavoriteCount > 0) {
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.iptvFavorites,
+            label: 'IPTV favorites ($_iptvFavoriteCount)',
+            icon: Icons.star_rounded,
+            color: const Color(0xFFF472B6),
+          ),
+        );
       }
-      if (_iptvLists.isNotEmpty) {
-        items.add(_TransferItem(
-          key: ConfigCommand.iptvLists,
-          label: 'IPTV lists (${_iptvLists.length}, '
-              '${IptvTransferPayload.countListChannels(_iptvLists)} channels)',
-          icon: Icons.playlist_play_rounded,
-          color: const Color(0xFFA78BFA),
-        ));
+      if (_iptvListCount > 0) {
+        items.add(
+          _TransferItem(
+            key: ConfigCommand.iptvLists,
+            label:
+                'IPTV lists ($_iptvListCount, '
+                '$_iptvListChannelCount channels)',
+            icon: Icons.playlist_play_rounded,
+            color: const Color(0xFFA78BFA),
+          ),
+        );
       }
-      for (final addon in _addons) {
-        items.add(_TransferItem(
-          key: 'addon:${addon.manifestUrl}',
-          label: 'Addon · ${addon.name}',
-          icon: Icons.extension,
-          color: const Color(0xFF6366F1),
-        ));
+      for (final addon in addons) {
+        items.add(
+          _TransferItem(
+            key: 'addon:${addon.connectionResourceId ?? addon.id}',
+            label: 'Addon · ${addon.name}',
+            icon: Icons.extension,
+            color: const Color(0xFF6366F1),
+          ),
+        );
       }
 
+      final canSendProfileGraph = await _profileGraphEligible();
+      if (!mounted) return;
       setState(() {
         _items
           ..clear()
           ..addAll(items);
+        _canSendProfileGraph = canSendProfileGraph;
         _loading = false;
       });
-    } catch (e) {
-      debugPrint('RemoteTransferAll: Failed to load bundle: $e');
-      setState(() => _loading = false);
+    } catch (_) {
+      debugPrint('RemoteTransferAll: setup inventory failed');
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  bool get _hasPikpak =>
-      _items.any((i) => i.key == ConfigCommand.pikpak);
+  bool get _hasPikpak => _items.any((i) => i.key == ConfigCommand.pikpak);
 
   bool get _canStart {
-    if (_items.isEmpty || _transferring || _done) return false;
+    if (_transferring || _connecting || _done) return false;
+    // A graph send supersedes the item list, PikPak password included —
+    // the package carries the sealed secret store, not re-entered passwords.
+    if (_includeProfiles) return true;
+    if (_items.isEmpty) return false;
     if (_hasPikpak && _pikpakPasswordController.text.isEmpty) return false;
     return true;
+  }
+
+  Future<bool> _profileGraphEligible() async {
+    try {
+      if (!ProfileRuntime.isInitialized ||
+          !ProfileRuntime.isProfileCommitted) {
+        return false;
+      }
+      final registry = ProfileBootstrap.registry;
+      final authorization = await ProfileAuthorizationContext.capture(
+        registry,
+      );
+      final actor = await authorization.validate(registry);
+      return actor.role == UserProfileRole.admin &&
+          actor.allows(ProfileFeature.manageProfiles) &&
+          actor.allows(ProfileFeature.backupRestore);
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _start() async {
@@ -310,6 +413,28 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     final target = state.connectedDevice;
     if (target == null) {
       _toast('Not connected to a device', error: true);
+      return;
+    }
+
+    // Credential gate: encrypted session + pairing code (or remembered
+    // pairing). Old-version TVs are refused with an "update the TV" dialog —
+    // there is no plaintext credential path anymore.
+    // No overall deadline here on purpose: every step inside the gate is
+    // individually bounded (6s handshake probe, 120s pairing-code entry), and
+    // a flat ceiling would abort a first-time pairing while the user is still
+    // typing the code the TV is showing. The spinner covers the wait; the
+    // gate itself owns telling the user what went wrong.
+    setState(() => _connecting = true);
+    final RemoteSession? session;
+    try {
+      session = await ensureAuthorizedSession(context, state, target);
+    } finally {
+      if (mounted) setState(() => _connecting = false);
+    }
+    if (session == null || !mounted) return;
+
+    if (_includeProfiles) {
+      await _startProfileGraph(state, target.ip);
       return;
     }
 
@@ -328,18 +453,37 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
 
       bool ok = false;
       try {
-        if (item.key.startsWith('addon:')) {
-          final url = item.key.substring('addon:'.length);
-          ok = await state.sendAddonCommandToDevice(
-            AddonCommand.install,
-            target.ip,
-            manifestUrl: url,
-          );
-        } else {
-          ok = await _sendConfigItem(state, target.ip, item.key);
+        final authorization = await ProfileAsyncAuthorization.capture(
+          ProfileFeature.remoteTransfer,
+        );
+        Future<bool> sendItem() async {
+          if (item.key.startsWith('addon:')) {
+            final resourceId = item.key.substring('addon:'.length);
+            final currentAddons = await StremioService.instance.getAddons(
+              forRemoteTransfer: true,
+            );
+            StremioAddon? authorizedAddon;
+            for (final addon in currentAddons) {
+              if ((addon.connectionResourceId ?? addon.id) == resourceId) {
+                authorizedAddon = addon;
+                break;
+              }
+            }
+            return authorizedAddon != null &&
+                await state.sendAddonCommandToDevice(
+                  AddonCommand.install,
+                  target.ip,
+                  manifestUrl: authorizedAddon.manifestUrl,
+                );
+          }
+          return _sendConfigItem(state, target.ip, item.key);
         }
-      } catch (e) {
-        debugPrint('RemoteTransferAll: Item ${item.key} threw: $e');
+
+        ok = authorization == null
+            ? await sendItem()
+            : await authorization.runIfCurrentAsOutbound(sendItem);
+      } catch (_) {
+        debugPrint('RemoteTransferAll: setup item send failed');
         ok = false;
       }
 
@@ -358,10 +502,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
 
     if (success > 0) {
       await Future.delayed(const Duration(milliseconds: 400));
-      await state.sendConfigCommandToDevice(
-        ConfigCommand.complete,
-        target.ip,
-      );
+      await state.sendConfigCommandToDevice(ConfigCommand.complete, target.ip);
     }
 
     if (!mounted) return;
@@ -379,115 +520,275 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     }
   }
 
+  /// Sends the complete profile graph as one atomic payload — the file
+  /// restore's package over the sealed session, no passphrase step. The TV
+  /// confirms on-screen before importing, so success here means DELIVERED,
+  /// not yet applied.
+  Future<void> _startProfileGraph(
+    RemoteControlState state,
+    String targetIp,
+  ) async {
+    setState(() {
+      _transferring = true;
+      _done = false;
+    });
+    HapticFeedback.mediumImpact();
+    var ok = false;
+    try {
+      Future<bool> sendGraph() async {
+        final registry = ProfileBootstrap.registry;
+        final authorization = await ProfileAuthorizationContext.capture(
+          registry,
+        );
+        final service = ProfilePackageService(
+          registry: registry,
+          resources: ConnectionResourceService(
+            registry: registry,
+            cipher: DeviceKeyProvider.cipher,
+          ),
+        );
+        var package = await service.exportAllProfiles(
+          context: authorization,
+          includeSecrets: true,
+        );
+        var payload = await PortableProfilePackage.encodeAuthenticatedJson(
+          package,
+        );
+        // Measure WIRE bytes, not UTF-16 units: profile names and settings
+        // can hold non-ASCII that jsonEncode emits unescaped.
+        if (utf8.encode(payload).length > kMaxProfileGraphWireBytes) {
+          // Library databases can outgrow the receiver's reassembly buffer;
+          // send without them — catalogs rebuild from their restored sources.
+          package = await service.exportAllProfiles(
+            context: authorization,
+            includeSecrets: true,
+            includeDatabaseSnapshots: false,
+          );
+          payload = await PortableProfilePackage.encodeAuthenticatedJson(
+            package,
+          );
+          if (utf8.encode(payload).length > kMaxProfileGraphWireBytes) {
+            throw StateError('Profile package too large for remote transfer');
+          }
+        }
+        return sendConfigPayloadToDevice(
+          state,
+          ConfigCommand.profileGraph,
+          targetIp,
+          payload,
+          label: 'All profiles',
+        );
+      }
+
+      // Same outbound barrier every piecemeal item send runs under.
+      final outbound = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.remoteTransfer,
+      );
+      ok = outbound == null
+          ? await sendGraph()
+          : await outbound.runIfCurrentAsOutbound(sendGraph);
+    } catch (_) {
+      debugPrint('RemoteTransferAll: profile graph send failed');
+      ok = false;
+    }
+    if (!mounted) return;
+    if (!ok) {
+      setState(() => _transferring = false);
+      _toast('Profile transfer failed', error: true);
+      return;
+    }
+    // Delivered is not applied: the TV user still confirms, authorization
+    // can refuse, the import can fail. Wait for the receiver's real
+    // outcome instead of declaring victory at the first hop.
+    _toast('Delivered — confirm the import on the TV');
+    try {
+      final result = await state.profileGraphResults.stream.first.timeout(
+        const Duration(seconds: 180),
+      );
+      if (!mounted) return;
+      setState(() {
+        _transferring = false;
+        _done = result.ok;
+      });
+      _toast(result.message, error: !result.ok);
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() => _transferring = false);
+      _toast(
+        'No response from the TV. Open an Admin profile there and resend.',
+        error: true,
+      );
+    }
+  }
+
   Future<bool> _sendConfigItem(
     RemoteControlState state,
     String targetIp,
     String key,
-  ) {
+  ) async {
+    Future<bool> sendScalar(
+      String command,
+      Future<String?> Function() read,
+    ) async {
+      final value = await read();
+      return value != null &&
+          value.isNotEmpty &&
+          await state.sendConfigCommandToDevice(
+            command,
+            targetIp,
+            configData: value,
+          );
+    }
+
     switch (key) {
       case ConfigCommand.realDebrid:
-        return state.sendConfigCommandToDevice(
+        return sendScalar(
           ConfigCommand.realDebrid,
-          targetIp,
-          configData: _realDebridApiKey,
+          () => StorageService.getApiKey(forRemoteTransfer: true),
         );
       case ConfigCommand.torbox:
-        return state.sendConfigCommandToDevice(
+        return sendScalar(
           ConfigCommand.torbox,
-          targetIp,
-          configData: _torboxApiKey,
+          () => StorageService.getTorboxApiKey(forRemoteTransfer: true),
         );
       case ConfigCommand.premiumize:
-        return state.sendConfigCommandToDevice(
+        return sendScalar(
           ConfigCommand.premiumize,
-          targetIp,
-          configData: _premiumizeApiKey,
+          () => StorageService.getPremiumizeApiKey(forRemoteTransfer: true),
         );
       case ConfigCommand.allDebrid:
-        return state.sendConfigCommandToDevice(
+        return sendScalar(
           ConfigCommand.allDebrid,
-          targetIp,
-          configData: _allDebridApiKey,
+          () => StorageService.getAllDebridApiKey(forRemoteTransfer: true),
         );
       case ConfigCommand.pikpak:
+        final email = await StorageService.getPikPakEmail(
+          forRemoteTransfer: true,
+        );
+        if (email == null || email.isEmpty) return false;
         return state.sendConfigCommandToDevice(
           ConfigCommand.pikpak,
           targetIp,
           configData: jsonEncode({
-            'email': _pikpakEmail,
+            'email': email,
             'password': _pikpakPasswordController.text,
           }),
         );
       case ConfigCommand.trakt:
+        final access = await StorageService.getTraktAccessToken(
+          forRemoteTransfer: true,
+        );
+        final refresh = await StorageService.getTraktRefreshToken(
+          forRemoteTransfer: true,
+        );
+        if (access == null ||
+            access.isEmpty ||
+            refresh == null ||
+            refresh.isEmpty) {
+          return false;
+        }
+        final expiry = await StorageService.getTraktTokenExpiry();
+        final username = await StorageService.getTraktUsername();
         return state.sendConfigCommandToDevice(
           ConfigCommand.trakt,
           targetIp,
           configData: jsonEncode({
-            'access_token': _traktAccessToken,
-            'refresh_token': _traktRefreshToken,
-            if (_traktTokenExpiry != null) 'expiry_ms': _traktTokenExpiry,
-            if (_traktUsername != null) 'username': _traktUsername,
+            'access_token': access,
+            'refresh_token': refresh,
+            if (expiry != null) 'expiry_ms': expiry,
+            if (username != null) 'username': username,
           }),
         );
       case ConfigCommand.simkl:
+        final access = await StorageService.getSimklAccessToken(
+          forRemoteTransfer: true,
+        );
+        if (access == null || access.isEmpty) return false;
+        final username = await StorageService.getSimklUsername();
         return state.sendConfigCommandToDevice(
           ConfigCommand.simkl,
           targetIp,
           configData: jsonEncode({
-            'access_token': _simklAccessToken,
-            if (_simklUsername != null) 'username': _simklUsername,
+            'access_token': access,
+            if (username != null) 'username': username,
           }),
         );
       case ConfigCommand.searchEngines:
+        await LocalEngineStorage.instance.initialize();
+        final engineIds = await LocalEngineStorage.instance
+            .getImportedEngineIds();
+        if (engineIds.isEmpty) return false;
         return state.sendConfigCommandToDevice(
           ConfigCommand.searchEngines,
           targetIp,
-          configData: jsonEncode(_engineIds),
+          configData: jsonEncode(engineIds),
         );
       case ConfigCommand.webDav:
+        final servers = await StorageService.getWebDavServers(
+          forSettings: false,
+          forRemoteTransfer: true,
+        );
+        if (servers.isEmpty) return false;
         return state.sendConfigCommandToDevice(
           ConfigCommand.webDav,
           targetIp,
-          configData: jsonEncode(
-            _webDavServers.map((s) => s.toJson()).toList(),
-          ),
+          configData: jsonEncode([
+            for (final server in servers) server.toJson(),
+          ]),
         );
       case ConfigCommand.indexerManagers:
+        final managers = await StorageService.getIndexerManagerConfigs(
+          forSettings: false,
+          forRemoteTransfer: true,
+        );
+        if (managers.isEmpty) return false;
         return state.sendConfigCommandToDevice(
           ConfigCommand.indexerManagers,
           targetIp,
-          configData: jsonEncode(
-            _indexerManagers.map((c) => c.toJson()).toList(),
-          ),
+          configData: jsonEncode([
+            for (final manager in managers) manager.toJson(),
+          ]),
         );
       // The IPTV payloads routinely outgrow a single datagram — a few hundred
       // starred channels is tens of kilobytes — so they take the chunked path.
       case ConfigCommand.iptvPlaylists:
+        final payload = await IptvTransferPayload.buildPlaylists(
+          forRemoteTransfer: true,
+        );
+        if (payload.isEmpty) return false;
         return sendConfigPayloadToDevice(
           state,
           ConfigCommand.iptvPlaylists,
           targetIp,
-          jsonEncode(_iptvPlaylists),
+          jsonEncode(payload),
           label: 'IPTV providers',
         );
       case ConfigCommand.iptvFavorites:
+        final payload = await IptvTransferPayload.buildFavorites(
+          forRemoteTransfer: true,
+        );
+        if (payload.isEmpty) return false;
         return sendConfigPayloadToDevice(
           state,
           ConfigCommand.iptvFavorites,
           targetIp,
-          jsonEncode(_iptvFavorites),
+          jsonEncode(payload),
           label: 'IPTV favorites',
         );
       case ConfigCommand.iptvLists:
+        final payload = await IptvTransferPayload.buildCustomLists(
+          forRemoteTransfer: true,
+        );
+        if (payload.isEmpty) return false;
         return sendConfigPayloadToDevice(
           state,
           ConfigCommand.iptvLists,
           targetIp,
-          jsonEncode(_iptvLists),
+          jsonEncode(payload),
           label: 'IPTV lists',
         );
       default:
-        return Future.value(false);
+        return false;
     }
   }
 
@@ -496,8 +797,8 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
     final color = error
         ? const Color(0xFFEF4444)
         : warning
-            ? const Color(0xFFF59E0B)
-            : const Color(0xFF10B981);
+        ? const Color(0xFFF59E0B)
+        : const Color(0xFF10B981);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
@@ -524,10 +825,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
         const SizedBox(height: 16),
         const Text(
           'Transfer Everything',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Text(
@@ -548,15 +846,18 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
               ),
             ),
           )
-        else if (_items.isEmpty) ...[
+        else if (_items.isEmpty && !_canSendProfileGraph) ...[
           _buildEmpty(),
           // Nothing sendable, but if the reason is a file-only IPTV setup the
           // user deserves to know that rather than "nothing configured".
           if (_iptvFileImported > 0) _buildFileImportedNote(),
         ] else ...[
-          if (_hasPikpak) _buildPikpakPassword(),
-          ..._items.map(_buildItemTile),
-          if (_iptvFileImported > 0) _buildFileImportedNote(),
+          if (_canSendProfileGraph) _buildProfilesToggle(),
+          if (!_includeProfiles) ...[
+            if (_hasPikpak) _buildPikpakPassword(),
+            ..._items.map(_buildItemTile),
+            if (_iptvFileImported > 0) _buildFileImportedNote(),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -564,8 +865,9 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
               onPressed: _canStart ? _start : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF6366F1),
-                disabledBackgroundColor:
-                    const Color(0xFF6366F1).withValues(alpha: 0.3),
+                disabledBackgroundColor: const Color(
+                  0xFF6366F1,
+                ).withValues(alpha: 0.3),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -578,17 +880,33 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(Colors.white),
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(_done ? Icons.check : Icons.send, size: 18),
+                        if (_connecting)
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        else
+                          Icon(_done ? Icons.check : Icons.send, size: 18),
                         const SizedBox(width: 8),
                         Text(
-                          _done ? 'Done' : 'Transfer Everything',
+                          _connecting
+                              ? 'Connecting securely…'
+                              : _done
+                                  ? 'Done'
+                                  : _includeProfiles
+                                      ? 'Send All Profiles'
+                                      : 'Transfer Everything',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -613,6 +931,37 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ],
         ],
       ],
+    );
+  }
+
+  Widget _buildProfilesToggle() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(
+            0xFF6366F1,
+          ).withValues(alpha: _includeProfiles ? 0.6 : 0.15),
+        ),
+      ),
+      child: SwitchListTile(
+        value: _includeProfiles,
+        onChanged: _transferring || _connecting
+            ? null
+            : (value) => setState(() => _includeProfiles = value),
+        title: const Text('Include all profiles'),
+        subtitle: Text(
+          'Recreates every profile on the TV — settings, connections, and '
+          'PINs — instead of merging into its signed-in profile. The TV '
+          'asks before importing.',
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
     );
   }
 
@@ -691,8 +1040,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           children: [
             Row(
               children: [
-                const Icon(Icons.cloud,
-                    color: Color(0xFF3B82F6), size: 18),
+                const Icon(Icons.cloud, color: Color(0xFF3B82F6), size: 18),
                 const SizedBox(width: 8),
                 Text(
                   'PikPak password',
@@ -706,7 +1054,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
             ),
             const SizedBox(height: 4),
             Text(
-              _pikpakEmail ?? '',
+              'Connected account',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.5),
                 fontSize: 12,
@@ -719,8 +1067,9 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
               enabled: !_transferring && !_done,
               decoration: InputDecoration(
                 hintText: 'Enter password',
-                hintStyle:
-                    TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                hintStyle: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.3),
+                ),
                 filled: true,
                 fillColor: const Color(0xFF0F172A),
                 border: OutlineInputBorder(
@@ -810,14 +1159,19 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ),
         );
       case _ItemStatus.success:
-        return const Icon(Icons.check_circle,
-            color: Color(0xFF10B981), size: 18);
+        return const Icon(
+          Icons.check_circle,
+          color: Color(0xFF10B981),
+          size: 18,
+        );
       case _ItemStatus.failure:
-        return const Icon(Icons.error,
-            color: Color(0xFFEF4444), size: 18);
+        return const Icon(Icons.error, color: Color(0xFFEF4444), size: 18);
       case _ItemStatus.skipped:
-        return Icon(Icons.remove_circle_outline,
-            color: Colors.white.withValues(alpha: 0.3), size: 18);
+        return Icon(
+          Icons.remove_circle_outline,
+          color: Colors.white.withValues(alpha: 0.3),
+          size: 18,
+        );
     }
   }
 }

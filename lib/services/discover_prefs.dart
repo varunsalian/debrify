@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart' show visibleForTesting;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'profiles/profile_preferences.dart';
 
 /// Remembered Sort selections for the Discover tab.
 ///
@@ -39,7 +39,7 @@ class DiscoverPrefs {
     if (_warmed) return;
     _warmed = true;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       for (final source in _sources) {
         final id = prefs.getString('$_prefix$source');
         if (id != null) _cache[source] = id;
@@ -70,7 +70,7 @@ class DiscoverPrefs {
   static Future<void> setSort(String source, String id) async {
     _cache[source] = id;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
       await prefs.setString('$_prefix$source', id);
     } catch (_) {
       // Best-effort: the choice still holds for this session.
@@ -82,11 +82,15 @@ class DiscoverPrefs {
   static Future<void> setEnumSort(String source, Enum value) =>
       setSort(source, value.name);
 
+  static void resetProfileScope() {
+    _cache.clear();
+    _warmed = false;
+  }
+
   /// Drop the cache so the next [warmUp] re-reads storage — tests only (it
   /// stands in for an app restart).
   @visibleForTesting
   static void debugReset() {
-    _cache.clear();
-    _warmed = false;
+    resetProfileScope();
   }
 }

@@ -5,26 +5,38 @@ import 'package:http/http.dart' as http;
 import 'package:xml/xml.dart';
 
 import '../models/webdav_item.dart';
+import '../models/profiles/connection_resource.dart';
+import '../models/profiles/profile_policy.dart';
 import '../utils/file_utils.dart';
+import 'profiles/profile_collection_resource_facade.dart';
 import 'storage_service.dart';
 
 class WebDavService {
   WebDavService._();
 
   static Future<WebDavConfig?> getConfig() async {
-    return StorageService.getSelectedWebDavServer();
+    return StorageService.getSelectedWebDavServer(forSettings: false);
   }
 
   static Future<List<WebDavConfig>> getConfigs() {
-    return StorageService.getWebDavServers();
+    return StorageService.getWebDavServers(forSettings: false);
   }
 
   static Future<bool> testConnection(WebDavConfig config) async {
-    final items = await listDirectory(config: config, path: '');
+    await _authorize(config, allowUnbound: true);
+    final items = await _listDirectoryRaw(config: config, path: '');
     return items.isNotEmpty || config.baseUrl.isNotEmpty;
   }
 
   static Future<List<WebDavItem>> listDirectory({
+    required WebDavConfig config,
+    required String path,
+  }) async {
+    await _authorize(config);
+    return _listDirectoryRaw(config: config, path: path);
+  }
+
+  static Future<List<WebDavItem>> _listDirectoryRaw({
     required WebDavConfig config,
     required String path,
   }) async {
@@ -138,6 +150,7 @@ class WebDavService {
     required WebDavConfig config,
     required WebDavItem item,
   }) async {
+    await _authorize(config);
     final response = await http
         .delete(
           _uriForPath(config, item.path, collection: item.isDirectory),
@@ -156,6 +169,19 @@ class WebDavService {
   static Map<String, String> authHeaders(WebDavConfig config) {
     return _headers(config);
   }
+
+  static Future<void> _authorize(
+    WebDavConfig config, {
+    bool allowUnbound = false,
+  }) => ProfileCollectionResourceFacade.authorizeExecution(
+    resourceId: config.connectionResourceId,
+    resourceRevision: config.connectionResourceRevision,
+    acceptedTypes: const <ConnectionResourceType>{
+      ConnectionResourceType.webDav,
+    },
+    feature: ProfileFeature.cloud,
+    allowUnbound: allowUnbound,
+  );
 
   static Uri _baseUri(WebDavConfig config) {
     final parsed = Uri.parse(config.baseUrl.trim());

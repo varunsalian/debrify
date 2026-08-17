@@ -325,9 +325,10 @@ class _TraktCalendarScreenState extends State<TraktCalendarScreen> {
       'poster': entry.posterUrl,
       'season': entry.seasonNumber,
       'episode': entry.episodeNumber,
-      'originTab': 19, // return to the Calendar tab when the detail closes
+      // Return to the Calendar tab when the detail closes.
+      'originTab': MainTab.calendar,
     };
-    MainPageBridge.switchTab?.call(15);
+    MainPageBridge.switchTab?.call(MainTab.home);
   }
 
   @override

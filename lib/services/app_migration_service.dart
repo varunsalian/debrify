@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/app_version_info.dart';
 
+import 'profiles/profile_bootstrap.dart';
+import 'profiles/profile_preferences.dart';
+import 'profiles/profile_runtime.dart';
 import 'stremio_service.dart';
 
 /// Service for running app migrations on fresh install or update.
@@ -24,8 +26,7 @@ class AppMigrationService {
       'essential_addon_opensubtitles_seeded';
   static const String _officialOpenSubtitlesSeededKey =
       'essential_addon_opensubtitles_official_seeded';
-  static const String _watchNextSeededKey =
-      'essential_addon_watch_next_seeded';
+  static const String _watchNextSeededKey = 'essential_addon_watch_next_seeded';
 
   /// Cinemeta addon manifest URL - provides metadata for movies and shows
   static const String cinemetaManifestUrl =
@@ -56,14 +57,14 @@ class AppMigrationService {
   /// Returns true if version-gated migrations were run, false otherwise.
   static Future<bool> runMigrations() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ProfilePreferences.instance();
 
-      // Essential addons are seeded independently of the version gate: a
-      // user whose first launch was offline must still get Cinemeta once
-      // they're back online, even though the version hasn't changed. The
-      // per-addon "seeded" flag (set only once the addon is confirmed
-      // present) stops us from ever re-adding one the user removed.
-      await _ensureEssentialAddons(prefs);
+      // Essential addons belong to the app-created Admin baseline. Secondary
+      // and restored profiles must contain only addons explicitly installed
+      // or shared with them.
+      if (shouldSeedEssentialAddons()) {
+        await _ensureEssentialAddons(prefs);
+      }
 
       // Never a bare fromPlatform() here: this call sits AFTER the essential
       // addon seeding but BEFORE every version-gated migration, so a platform
@@ -97,7 +98,8 @@ class AppMigrationService {
 
       // Check if this is a fresh install or version change
       final isFreshInstall = lastVersion == null;
-      final isVersionChange = lastVersion != currentVersion ||
+      final isVersionChange =
+          lastVersion != currentVersion ||
           lastBuildNumber != currentBuildNumber;
 
       if (!isFreshInstall && !isVersionChange) {
@@ -132,6 +134,16 @@ class AppMigrationService {
     // No version-gated migrations at present.
   }
 
+  @visibleForTesting
+  static bool shouldSeedEssentialAddons() {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return true;
+    }
+    final profileId = ProfileRuntime.capture().profileId;
+    return profileId == ProfileBootstrap.migratedAdminId ||
+        profileId == ProfileBootstrap.freshAdminId;
+  }
+
   /// Seed the essential addons that the app needs to function. Runs on every
   /// launch but is a cheap no-op once each addon has been seeded once.
   static Future<void> _ensureEssentialAddons(SharedPreferences prefs) async {
@@ -154,10 +166,12 @@ class AppMigrationService {
       final addons = await stremioService.getAddons();
 
       // Check if Cinemeta is already installed (by manifest URL or ID)
-      final hasCinemeta = addons.any((addon) =>
-          addon.manifestUrl == cinemetaManifestUrl ||
-          addon.id == 'cinemeta' ||
-          addon.id == 'com.stremio.cinemeta');
+      final hasCinemeta = addons.any(
+        (addon) =>
+            addon.manifestUrl == cinemetaManifestUrl ||
+            addon.id == 'cinemeta' ||
+            addon.id == 'com.stremio.cinemeta',
+      );
 
       if (hasCinemeta) {
         debugPrint('AppMigrationService: Cinemeta addon already installed');
@@ -196,13 +210,17 @@ class AppMigrationService {
       // mean the user chose an OpenSubtitles variant, and matching it would
       // permanently skip PRO if PRO's first add failed while official's
       // succeeded (they're on different servers).
-      final hasOpenSubtitles = addons.any((addon) =>
-          addon.manifestUrl == openSubtitlesManifestUrl ||
-          (addon.id.toLowerCase().contains('opensubtitles') &&
-              addon.id != 'org.stremio.opensubtitlesv3'));
+      final hasOpenSubtitles = addons.any(
+        (addon) =>
+            addon.manifestUrl == openSubtitlesManifestUrl ||
+            (addon.id.toLowerCase().contains('opensubtitles') &&
+                addon.id != 'org.stremio.opensubtitlesv3'),
+      );
 
       if (hasOpenSubtitles) {
-        debugPrint('AppMigrationService: OpenSubtitles addon already installed');
+        debugPrint(
+          'AppMigrationService: OpenSubtitles addon already installed',
+        );
         await prefs.setBool(_openSubtitlesSeededKey, true);
         return;
       }
@@ -210,7 +228,9 @@ class AppMigrationService {
       // Add OpenSubtitles addon
       debugPrint('AppMigrationService: Adding OpenSubtitles addon...');
       final addon = await stremioService.addAddon(openSubtitlesManifestUrl);
-      debugPrint('AppMigrationService: OpenSubtitles addon added: ${addon.name}');
+      debugPrint(
+        'AppMigrationService: OpenSubtitles addon added: ${addon.name}',
+      );
       await prefs.setBool(_openSubtitlesSeededKey, true);
     } catch (e) {
       // Don't fail migration if addon can't be added (network issues, etc.).
@@ -227,7 +247,8 @@ class AppMigrationService {
   /// the PRO addon's id also contains "opensubtitles", and it must NOT satisfy
   /// this check or existing installs would never receive the official addon.
   static Future<void> _ensureOfficialOpenSubtitlesAddon(
-      SharedPreferences prefs) async {
+    SharedPreferences prefs,
+  ) async {
     // Already seeded once — never auto-add again (respects user removal).
     if (prefs.getBool(_officialOpenSubtitlesSeededKey) ?? false) return;
 
@@ -235,28 +256,34 @@ class AppMigrationService {
       final stremioService = StremioService.instance;
       final addons = await stremioService.getAddons();
 
-      final hasOfficial = addons.any((addon) =>
-          addon.manifestUrl == officialOpenSubtitlesManifestUrl ||
-          addon.id == 'org.stremio.opensubtitlesv3');
+      final hasOfficial = addons.any(
+        (addon) =>
+            addon.manifestUrl == officialOpenSubtitlesManifestUrl ||
+            addon.id == 'org.stremio.opensubtitlesv3',
+      );
 
       if (hasOfficial) {
         debugPrint(
-            'AppMigrationService: Official OpenSubtitles addon already installed');
+          'AppMigrationService: Official OpenSubtitles addon already installed',
+        );
         await prefs.setBool(_officialOpenSubtitlesSeededKey, true);
         return;
       }
 
       debugPrint('AppMigrationService: Adding official OpenSubtitles addon...');
-      final addon =
-          await stremioService.addAddon(officialOpenSubtitlesManifestUrl);
+      final addon = await stremioService.addAddon(
+        officialOpenSubtitlesManifestUrl,
+      );
       debugPrint(
-          'AppMigrationService: Official OpenSubtitles addon added: ${addon.name}');
+        'AppMigrationService: Official OpenSubtitles addon added: ${addon.name}',
+      );
       await prefs.setBool(_officialOpenSubtitlesSeededKey, true);
     } catch (e) {
       // Don't fail migration if addon can't be added (network issues, etc.).
       // Leave the seeded flag unset so we retry next launch.
       debugPrint(
-          'AppMigrationService: Failed to add official OpenSubtitles addon: $e');
+        'AppMigrationService: Failed to add official OpenSubtitles addon: $e',
+      );
     }
   }
 
@@ -272,9 +299,11 @@ class AppMigrationService {
       final addons = await stremioService.getAddons();
 
       // Check if Watch Next is already installed (by manifest URL or ID)
-      final hasWatchNext = addons.any((addon) =>
-          addon.manifestUrl == watchNextManifestUrl ||
-          addon.id == 'community.watch.next');
+      final hasWatchNext = addons.any(
+        (addon) =>
+            addon.manifestUrl == watchNextManifestUrl ||
+            addon.id == 'community.watch.next',
+      );
 
       if (hasWatchNext) {
         debugPrint('AppMigrationService: Watch Next addon already installed');

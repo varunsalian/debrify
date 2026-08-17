@@ -197,7 +197,12 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
   }
 
   void _requestLanding() {
-    if (!mounted) return;
+    // TV only. Landing focus is the DPAD cursor's opening position; on touch
+    // there is no cursor, so the same request just made the first card wear
+    // the parallax pop for no one (every step-transition call site funnels
+    // through here, so this is the one gate). Pointer/keyboard users on
+    // desktop reach the cards by click or arrow like any other page.
+    if (!mounted || !_isTelevision) return;
     _focus.focusLanding(_step);
   }
 
@@ -883,9 +888,9 @@ class _InitialSetupFlowState extends State<InitialSetupFlow> {
         footer = step.buildFooter(context);
       case OnboardStep.importing:
         eyebrow = 'Import';
-        title = 'Send it\nfrom your phone.';
+        title = 'Send it\nfrom another device.';
         subtitle =
-            'This device is visible on your network. Follow these three steps on your phone.';
+            'This device is visible on your network. Follow these three steps on the other device.';
         final step = ImportStep(
           layout: layout,
           focusController: _focus,

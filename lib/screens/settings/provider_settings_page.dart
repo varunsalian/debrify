@@ -29,7 +29,17 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
 
   // Focus nodes for D-pad navigation
   final List<FocusNode> _providerFocusNodes = [];
-  int _focusedIndex = -1;
+
+  /// Which row wears the ring, DERIVED rather than remembered.
+  ///
+  /// This used to be a cached index with a hand-written falling edge ("focus
+  /// left this row and no sibling claimed the ring — clear it"), which is the
+  /// same workaround the rest of settings needed and for the same reason:
+  /// Flutter can skip that notification entirely, and then the ghost ring the
+  /// workaround exists to prevent lingers anyway. Asking the nodes is both
+  /// shorter and always true — `indexWhere` already yields -1 for "nobody".
+  int get _focusedIndex =>
+      _providerFocusNodes.indexWhere((node) => node.hasFocus);
 
   @override
   void initState() {
@@ -48,10 +58,10 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
 
   Future<void> _loadSettings() async {
     // Check which providers are available
-    final torboxKey = await StorageService.getTorboxApiKey();
-    final rdKey = await StorageService.getApiKey();
-    final premiumizeKey = await StorageService.getPremiumizeApiKey();
-    final allDebridKey = await StorageService.getAllDebridApiKey();
+    final torboxConfigured = await StorageService.hasTorboxCredential();
+    final rdConfigured = await StorageService.hasRealDebridCredential();
+    final premiumizeConfigured = await StorageService.hasPremiumizeCredential();
+    final allDebridConfigured = await StorageService.hasAllDebridCredential();
     final pikpakAuth = await PikPakApiService.instance.isAuthenticated();
 
     final torboxEnabled = await StorageService.getTorboxIntegrationEnabled();
@@ -61,13 +71,10 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
     final allDebridEnabled =
         await StorageService.getAllDebridIntegrationEnabled();
 
-    final torboxAvailable =
-        torboxEnabled && torboxKey != null && torboxKey.isNotEmpty;
-    final rdAvailable = rdEnabled && rdKey != null && rdKey.isNotEmpty;
-    final premiumizeAvailable =
-        premiumizeEnabled && premiumizeKey != null && premiumizeKey.isNotEmpty;
-    final allDebridAvailable =
-        allDebridEnabled && allDebridKey != null && allDebridKey.isNotEmpty;
+    final torboxAvailable = torboxEnabled && torboxConfigured;
+    final rdAvailable = rdEnabled && rdConfigured;
+    final premiumizeAvailable = premiumizeEnabled && premiumizeConfigured;
+    final allDebridAvailable = allDebridEnabled && allDebridConfigured;
     final pikpakAvailable = pikpakAuth;
 
     // Load current setting
@@ -137,15 +144,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
 
   void _onFocusChange(int index) {
     if (!mounted) return;
-    setState(() {
-      if (_providerFocusNodes[index].hasFocus) {
-        _focusedIndex = index;
-      } else if (_focusedIndex == index) {
-        // Focus left this row and no sibling claimed the ring — clear it so
-        // no ghost accent ring lingers when focus leaves the group.
-        _focusedIndex = -1;
-      }
-    });
+    setState(() {});
   }
 
   Future<void> _selectProvider(String provider) async {
@@ -366,11 +365,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            color: t.danger,
-            size: 32,
-          ),
+          Icon(Icons.warning_amber_rounded, color: t.danger, size: 32),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -474,9 +469,7 @@ class _ProviderOption extends StatelessWidget {
                     ),
                     child: Icon(
                       icon,
-                      color: selected || isFocused
-                          ? t.accent2
-                          : t.dim,
+                      color: selected || isFocused ? t.accent2 : t.dim,
                       size: 22,
                     ),
                   ),

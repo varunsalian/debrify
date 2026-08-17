@@ -182,7 +182,7 @@ drop).
 
 **Accepted, not fixed (5), with reasons:** #13 video-wedge-while-audio-runs
 stall (needs rendered-frame plumbing into the machine — Phase-3 telemetry
-first); #14-TV Stremio EOF re-tunes the winner URL rather than re-laddering
+first) — PAID 2026-08-15, see the field-report section below; #14-TV Stremio EOF re-tunes the winner URL rather than re-laddering
 (fatal errors DO re-ladder; transient-drop-rewinner is defensible); #15 TV
 onStart always resumes playing — that is the TV player's long-standing
 contract (`onStart` has always called `play()`); #18 TS-flags/WAKE_MODE
@@ -194,6 +194,48 @@ into the same ladder; Android-only API on the native side).
 
 Accepted wholesale: post-READY stall detector; classified/bounded/connectivity-aware retry replacing infinite; `entry.isLive` gating mandate; generation-owned unified state machine; reopen-with-full-identity + auth re-resolve; P7 header-drop find; keep-content clear-on-surrender; Phase 0 telemetry + fault injection; `LiveReconnectingDataSource` deferral (TS discontinuity risk); rebuffer-threshold as experiment not assumption; TS-flags CPU caveat; chunkless-prep caveat; test-matrix upgrade; bisectable phase steps; T3/P5 factual corrections (verified in code: `real.dart:2347-2356`).
 Kept against review where it conflicts with house decisions: none — no conflicts arose.
+
+## Field report follow-up — video-render stall (2026-08-15)
+
+Finding #13 stopped being theoretical three days after v0.8.1-alpha.1: a
+Google TV Streamer (MediaTek MT8696) reporter — the same user whose
+"live TV pauses" report drove this plan — hit *frozen video with running
+audio* on entering the fullscreen player, while the browse screen's
+two-pane preview (stock demux, stock ExoPlayer) played the same channels
+perfectly. Diagnosis: strict MediaTek decoders wedge on the mid-GOP joins
+that `FLAG_ALLOW_NON_IDR_KEYFRAMES` invites — the codec accepts input and
+never emits output. Audio decodes (ffmpeg renderer), audio drives the
+position clock, so the stall detector and tune watchdog both stay quiet:
+exactly the blind spot #13 named.
+
+Built in response (native player only):
+
+- **`IptvLiveRecovery.onVideoFrames`** — the rendered-frame plumbing #13
+  asked for. The 5s progress ticker feeds the video renderer's
+  `renderedOutputBufferCount`; a count frozen for 8s (judged from READY)
+  while the position clock stays fresh = video-render stall. Disarmed for
+  audio-only entries (`videoFormat == null` — zero frames is radio's
+  normal) and while a generic episode owns the player.
+- **Capped, latching response, not a generic episode** (a "Stream lost"
+  surrender pill is wrong while audio is audibly fine): attempt 1 = plain
+  re-tune (codec reset heals transient wedges); attempt 2 = re-tune with
+  the aggressive TS flags dropped for that URL (`iptvStrictTsUrls`, the
+  `iptvHlsForcedUrls` idiom) + reconnect pill; still frozen = latch off,
+  audio plays on. Any rendered frame stands the detector down again.
+- **Session escalation**: two distinct URLs earning strict = a strict
+  device; every later tune starts strict (skips the ~20s dance per
+  channel). Strict = pre-0.8.1 stock demux — slower first frame on
+  sparse-IDR streams, nothing else lost; the recovery ladder, loader
+  policy and lifecycle rejoin all still apply.
+
+Deliberately NOT ported to the Dart/mpv player: mpv content-sniffs and
+demuxes through ffmpeg with no aggressive-flags equivalent, so the root
+cause can't arise there (the same reporter's Fold7 "works great" is the
+field evidence); media_kit exposes no reliable rendered-frame property to
+plumb (`estimated-frame-number` derives from time-pos — it would advance
+with the audio clock and see nothing); and the Dart machine already has
+its own pre-frame open watchdog. Revisit only if a phone/desktop report
+ever shows frozen-video-running-audio.
 
 ## Sources
 

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/remote_control/remote_control_state.dart';
 import '../../utils/tv_keys.dart';
+import 'remote_pairing_dialog.dart';
 
 /// Shown when the user picks **Receive** in the role picker. The device is
 /// already in receiver mode (the picker switched roles before navigating
@@ -142,6 +143,14 @@ class _RemoteReceiveScreenState extends State<RemoteReceiveScreen>
                             ),
                             const SizedBox(height: 24),
                             if (_localIp != null) _IpChip(ip: _localIp!),
+                            // Pairing code, when a phone is asking to send
+                            // credentials. Registers as the gate's presenter
+                            // so the router's fallback dialog stays away
+                            // while this screen is up.
+                            if (RemoteControlState().pairingGate != null)
+                              RemotePairingPanel(
+                                gate: RemoteControlState().pairingGate!,
+                              ),
                           ],
                         ),
                         Padding(

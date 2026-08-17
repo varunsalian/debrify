@@ -4,6 +4,8 @@ import '../../services/lemmy_service.dart';
 import '../../services/youtube_service.dart';
 import '../../services/reddit_embed_resolver_service.dart';
 import '../../services/storage_service.dart';
+import '../../models/profiles/profile_policy.dart';
+import '../../services/profiles/profile_policy_guard.dart';
 import '../../services/video_player_launcher.dart';
 import '../../services/download_service.dart';
 import '../../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
@@ -62,7 +64,10 @@ class LemmyResultsViewState extends State<LemmyResultsView> {
   }
 
   Future<void> _loadSettings() async {
-    final allowNsfw = await StorageService.getLemmyAllowNsfw();
+    final allowNsfw =
+        await StorageService.getLemmyAllowNsfw() &&
+        // Viewer-scoped rail: role-locked off for child profiles.
+        ProfilePolicyGuard.allowsSync(ProfileFeature.allowAdultContent);
     final instance = await StorageService.getLemmyInstance();
     final defaultCommunity = await StorageService.getLemmyDefaultCommunity();
 

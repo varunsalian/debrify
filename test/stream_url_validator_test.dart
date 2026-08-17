@@ -21,9 +21,34 @@ List<String> mock(Map<String, (int, Map<String, String>)> routes) {
   return requested;
 }
 
+/// A client that never answers, so the per-hop timeout fires. [before]
+/// optionally serves earlier hops so the stall can be placed mid-chain.
+/// Records every requested url.
+List<String> stallingClient({Map<String, (int, Map<String, String>)> before = const {}}) {
+  final requested = <String>[];
+  StreamUrlValidator.clientFactory = () => MockClient((request) async {
+        final url = request.url.toString();
+        requested.add(url);
+        final early = before[url];
+        if (early != null) return http.Response('', early.$1, headers: early.$2);
+        await Future<void>.delayed(StreamUrlValidator.timeout * 4);
+        return http.Response('', 200, headers: {'content-length': '$_big'});
+      });
+  return requested;
+}
+
 void main() {
+  final realTimeout = StreamUrlValidator.timeout;
+
+  setUp(() {
+    // Timeout cases are real waits, so shrink the per-hop budget rather than
+    // sleeping seconds per test.
+    StreamUrlValidator.timeout = const Duration(milliseconds: 50);
+  });
+
   tearDown(() {
     StreamUrlValidator.clientFactory = http.Client.new;
+    StreamUrlValidator.timeout = realTimeout;
   });
 
   test('2xx with a big content-length is alive', () async {
@@ -147,6 +172,53 @@ void main() {
       expect(
           await StreamUrlValidator.isPlayableVideoUrl('https://x/a.mp4'),
           isFalse); // strict keeps rejecting
+    });
+
+    // A slow-to-first-byte origin (a Plex server waking up behind an addon)
+    // is the case this carve-out exists for: the link plays fine, it just
+    // answers later than the probe waits.
+    test('a timed-out probe is alive (strict still rejects)', () async {
+      stallingClient();
+      expect(
+          await StreamUrlValidator.isPlayableVideoUrl('https://slow/a.mp4',
+              lenient: true),
+          isTrue);
+      expect(
+          await StreamUrlValidator.isPlayableVideoUrl('https://slow/a.mp4'),
+          isFalse);
+    });
+
+    // The timeout is per HOP, so a chain that stalls midway must land in the
+    // same carve-out rather than falling through to the dead path.
+    test('a timeout MID-redirect-chain is alive (strict rejects)', () async {
+      const chain = {
+        'https://x/a': (302, {'location': 'https://slow/b'}),
+      };
+      var requested = stallingClient(before: chain);
+      expect(
+          await StreamUrlValidator.isPlayableVideoUrl('https://x/a',
+              lenient: true),
+          isTrue);
+      // Pins that the redirect was really followed — without this a
+      // regression that stopped following redirects would time out on hop 1
+      // and still return true.
+      expect(requested, ['https://x/a', 'https://slow/b']);
+
+      requested = stallingClient(before: chain);
+      expect(
+          await StreamUrlValidator.isPlayableVideoUrl('https://x/a'), isFalse);
+      expect(requested, ['https://x/a', 'https://slow/b']);
+    });
+
+    // The guard must be narrow: only a timeout is "no signal". A refused
+    // connection is the host answering no, and must still reject.
+    test('transport errors are NOT excused by lenient mode', () async {
+      StreamUrlValidator.clientFactory =
+          () => MockClient((_) async => throw Exception('connection refused'));
+      expect(
+          await StreamUrlValidator.isPlayableVideoUrl('https://x/a.mp4',
+              lenient: true),
+          isFalse);
     });
 
     test('positive evidence of death still rejects', () async {

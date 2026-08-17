@@ -12,11 +12,7 @@ class RemoteCommand {
   final String command;
   final String? data;
 
-  RemoteCommand({
-    required this.action,
-    required this.command,
-    this.data,
-  });
+  RemoteCommand({required this.action, required this.command, this.data});
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{
@@ -40,18 +36,12 @@ class RemoteCommand {
 
   /// Create a navigation command
   factory RemoteCommand.navigate(String direction) {
-    return RemoteCommand(
-      action: RemoteAction.navigate,
-      command: direction,
-    );
+    return RemoteCommand(action: RemoteAction.navigate, command: direction);
   }
 
   /// Create a media command
   factory RemoteCommand.media(String mediaAction) {
-    return RemoteCommand(
-      action: RemoteAction.media,
-      command: mediaAction,
-    );
+    return RemoteCommand(action: RemoteAction.media, command: mediaAction);
   }
 
   /// Create an addon command
@@ -84,9 +74,19 @@ class RemoteCommand {
   @override
   String toString() {
     if (data == null) return 'RemoteCommand($action: $command)';
-    final truncated = data!.length > 80 ? '${data!.substring(0, 80)}...[${data!.length}]' : data;
-    return 'RemoteCommand($action: $command, data: $truncated)';
+    return 'RemoteCommand($action: $command, data: [redacted ${data!.length} bytes])';
   }
+}
+
+/// The last endpoint (address + source port) a peer was actually seen on.
+/// The phone binds an EPHEMERAL port, so replying to the fixed kCommandPort
+/// silently loses every TV→phone message — replies must go to the observed
+/// source port instead (fall back to kCommandPort only for v1 peers that
+/// have never sent us anything).
+class _PeerEndpoint {
+  final int port;
+  final DateTime lastSeen;
+  const _PeerEndpoint(this.port, this.lastSeen);
 }
 
 /// Service for sending/receiving UDP commands
@@ -97,16 +97,33 @@ class UdpCommandService {
   DateTime? _lastHeartbeatReceived;
   final bool _isTv;
   String? _connectedIp;
+  final Map<String, _PeerEndpoint> _peerEndpoints = {};
 
-  // Callbacks
-  void Function(RemoteCommand command)? onCommandReceived;
+  /// v2 session message types that bypass RemoteCommand handling and go to
+  /// the session layer instead.
+  static const Set<String> _sessionTypes = {
+    RemoteMessageType.hs1,
+    RemoteMessageType.hs2,
+    RemoteMessageType.hs3,
+    RemoteMessageType.hs4,
+    RemoteMessageType.ecmd,
+    RemoteMessageType.serr,
+  };
+
+  // Callbacks. The source address rides along: plaintext senders have no
+  // other identity, and the receiver's consent flow is keyed on it.
+  void Function(RemoteCommand command, String sourceIp)? onCommandReceived;
   void Function()? onConnectionLost;
   void Function()? onHeartbeatReceived;
   void Function(String error)? onError;
 
-  UdpCommandService({
-    required bool isTv,
-  }) : _isTv = isTv;
+  /// Raw tap for v2 session traffic (handshakes, encrypted envelopes,
+  /// session errors) with the sender's observed endpoint, so the session
+  /// layer can reply to where the datagram actually came from.
+  void Function(Map<String, dynamic> json, InternetAddress address, int port)?
+  onSessionMessage;
+
+  UdpCommandService({required bool isTv}) : _isTv = isTv;
 
   /// Start the command service
   Future<void> start({String? targetIp}) async {
@@ -125,7 +142,7 @@ class UdpCommandService {
       _socket!.listen(
         _handleDatagram,
         onError: (error) {
-          debugPrint('UdpCommandService: Socket error: $error');
+          debugPrint('UdpCommandService: Socket error (${error.runtimeType})');
           onError?.call(error.toString());
         },
         onDone: () {
@@ -140,9 +157,9 @@ class UdpCommandService {
       _startConnectionCheck();
 
       debugPrint('UdpCommandService: Started ${_isTv ? "TV" : "Mobile"} mode');
-    } catch (e) {
-      debugPrint('UdpCommandService: Failed to start: $e');
-      onError?.call(e.toString());
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to start');
+      onError?.call('Remote connection could not be started');
     }
   }
 
@@ -156,6 +173,7 @@ class UdpCommandService {
     _socket = null;
     _connectedIp = null;
     _lastHeartbeatReceived = null;
+    _peerEndpoints.clear();
   }
 
   /// Send a command to the connected device
@@ -171,16 +189,52 @@ class UdpCommandService {
       _socket!.send(
         utf8.encode(message),
         InternetAddress(_connectedIp!),
-        kCommandPort,
+        portFor(_connectedIp!),
       );
-      debugPrint('UdpCommandService: Sent command: $command');
-    } catch (e) {
-      debugPrint('UdpCommandService: Failed to send command: $e');
+      debugPrint('UdpCommandService: Sent command');
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to send command');
+    }
+  }
+
+  /// The port to reach [ip] on: its AUTHENTICATED source port when the
+  /// session layer has vouched for one, else the fixed command port (v1
+  /// compat — packets to a phone's closed temp port just vanish, which
+  /// matches today's behavior).
+  int portFor(String ip) => _peerEndpoints[ip]?.port ?? kCommandPort;
+
+  /// Record where [ip] actually talks from. Called by the session layer ONLY
+  /// after a message from that endpoint authenticated (opened ecmd, accepted
+  /// handshake) — never straight off a datagram header.
+  void notePeerEndpoint(String ip, int port) {
+    _peerEndpoints[ip] = _PeerEndpoint(port, DateTime.now());
+  }
+
+  /// Send an arbitrary JSON message on the persistent socket. This is the
+  /// session layer's transport — handshakes and encrypted envelopes must ride
+  /// a socket that stays open to receive the reply, never the self-closing
+  /// [sendCommandToIp].
+  bool sendRaw(Map<String, dynamic> json, String ip, {int? port}) {
+    final socket = _socket;
+    if (socket == null) return false;
+    try {
+      socket.send(
+        utf8.encode(jsonEncode(json)),
+        InternetAddress(ip),
+        port ?? portFor(ip),
+      );
+      return true;
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to send raw message');
+      return false;
     }
   }
 
   /// Send a command to a specific IP address (without requiring connection)
-  static Future<bool> sendCommandToIp(RemoteCommand command, String targetIp) async {
+  static Future<bool> sendCommandToIp(
+    RemoteCommand command,
+    String targetIp,
+  ) async {
     RawDatagramSocket? tempSocket;
     try {
       // Create a temporary socket if we don't have one
@@ -193,11 +247,11 @@ class UdpCommandService {
         kCommandPort,
       );
       if (command.command != ConfigCommand.debrifyChannelChunk) {
-        debugPrint('UdpCommandService: Sent command to $targetIp: $command');
+        debugPrint('UdpCommandService: Sent command to peer');
       }
       return true;
-    } catch (e) {
-      debugPrint('UdpCommandService: Failed to send command to $targetIp: $e');
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to send command to peer');
       return false;
     } finally {
       tempSocket?.close();
@@ -218,11 +272,11 @@ class UdpCommandService {
         _socket!.send(
           utf8.encode(message),
           InternetAddress(_connectedIp!),
-          kCommandPort,
+          portFor(_connectedIp!),
         );
       }
-    } catch (e) {
-      debugPrint('UdpCommandService: Failed to send heartbeat: $e');
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to send heartbeat');
     }
   }
 
@@ -241,7 +295,9 @@ class UdpCommandService {
       if (_lastHeartbeatReceived != null) {
         final elapsed = DateTime.now().difference(_lastHeartbeatReceived!);
         if (elapsed > kConnectionTimeout) {
-          debugPrint('UdpCommandService: Connection lost - no heartbeat received');
+          debugPrint(
+            'UdpCommandService: Connection lost - no heartbeat received',
+          );
           onConnectionLost?.call();
         }
       }
@@ -262,21 +318,31 @@ class UdpCommandService {
       // Update connected IP if we receive a message
       if (_connectedIp == null) {
         _connectedIp = datagram.address.address;
-        debugPrint('UdpCommandService: Connected to $_connectedIp');
+        debugPrint('UdpCommandService: Connected to peer');
       }
 
-      if (type == RemoteMessageType.heartbeat) {
+      // Peer endpoints are NOT learned here: any datagram can spoof a type,
+      // and caching a forged packet's source port would redirect replies and
+      // heartbeats to an attacker-chosen (or long-dead one-shot) port. The
+      // session layer calls [notePeerEndpoint] once a message actually
+      // authenticates; until then replies fall back to kCommandPort, which
+      // is correct for the TV (fixed port) and status quo for v1 phones
+      // (whose ephemeral socket never received replies anyway).
+
+      if (type != null && _sessionTypes.contains(type)) {
+        onSessionMessage?.call(json, datagram.address, datagram.port);
+      } else if (type == RemoteMessageType.heartbeat) {
         _lastHeartbeatReceived = DateTime.now();
         onHeartbeatReceived?.call();
       } else if (type == RemoteMessageType.command) {
         final command = RemoteCommand.fromJson(json);
         if (command.command != ConfigCommand.debrifyChannelChunk) {
-          debugPrint('UdpCommandService: Received command: $command');
+          debugPrint('UdpCommandService: Received command');
         }
-        onCommandReceived?.call(command);
+        onCommandReceived?.call(command, datagram.address.address);
       }
-    } catch (e) {
-      debugPrint('UdpCommandService: Failed to parse message: $e');
+    } catch (_) {
+      debugPrint('UdpCommandService: Failed to parse message');
     }
   }
 
@@ -289,5 +355,6 @@ class UdpCommandService {
   bool get isRunning => _socket != null;
 
   /// Check if connected to a device
-  bool get isConnected => _connectedIp != null && _lastHeartbeatReceived != null;
+  bool get isConnected =>
+      _connectedIp != null && _lastHeartbeatReceived != null;
 }

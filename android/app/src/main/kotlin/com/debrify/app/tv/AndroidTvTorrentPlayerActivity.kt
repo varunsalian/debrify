@@ -73,6 +73,8 @@ import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.Extractor
+import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import android.net.ConnectivityManager
 import android.net.Network
@@ -344,6 +346,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val entry = iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive } ?: return
         val url = currentIptvStreamUrl ?: entry.url
         iptvTuneDiagnostics.onRecovery(source, "retune", "attempt=$attempt")
+        // Video-stall attempt 1 was a plain re-tune (transient wedges heal
+        // on a codec reset). Still frozen: drop the aggressive TS join flags
+        // for this channel before going again — mid-GOP joins are exactly
+        // what strict MediaTek decoders wedge on (frozen video, running
+        // audio; the Google TV Streamer report). setIptvMediaItem below
+        // recomputes iptvStrictTsActive from the set. Segmented/HLS streams
+        // never see the progressive extractor factory, so a stall there says
+        // nothing about the flags — recording one would only poison the
+        // two-URLs-means-strict-device session escalation.
+        if (source == "video-stall" && attempt >= 2 &&
+            !isCurrentIptvSegmented() && iptvStrictTsUrls.add(url)
+        ) {
+            iptvTuneDiagnostics.onRecovery(source, "strict-ts")
+        }
         // A same-URL reopen would append a fresh TS connection — reset
         // PCR/PTS, no discontinuity marker — into the active tee file, and
         // setIptvMediaItem's finalize only fires on URL CHANGE. Finalize
@@ -551,6 +567,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // extension-less URLs — jmp2.uk-style — infer as progressive). Session
     // memory so zapping back starts straight in HLS with no failed attempt.
     private val iptvHlsForcedUrls = HashSet<String>()
+
+    /** Channels whose video wedged twice under the aggressive TS join flags
+     *  (see the IPTV media-source factory in setupPlayer): their re-tunes
+     *  and later visits demux strictly — IDR-only sync points, spec AU
+     *  boundaries — the way the browse screen's stock preview player does.
+     *  Session-scoped, like [iptvHlsForcedUrls]. Two distinct URLs earning
+     *  a place means the DEVICE is the strict one (MediaTek boxes refusing
+     *  mid-GOP joins), so from there every tune goes strict. */
+    private val iptvStrictTsUrls = HashSet<String>()
+
+    /** The factory's per-tune switch: written on main before each prepare
+     *  (setIptvMediaItem), read on the extractor's loader thread. */
+    @Volatile private var iptvStrictTsActive = false
     private var currentIptvStreamUrl: String? = null
     private var iptvGuideOverlay: View? = null
     private var iptvGuideList: RecyclerView? = null
@@ -654,6 +683,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var stremioSourceBadgeText: TextView? = null
     private var stremioResolutionToken = 0 // Guards against stale async resolution callbacks
     private var hasPlaylistResolver = false // True when source switching rebuilds entire playlist
+
+    // Network & Buffering presets (Settings → Playback), riding the launch
+    // payload. "standard" = the stock configuration in setupPlayer runs
+    // untouched — the invariant that keeps this feature regression-free.
+    private var networkPatience = "standard"
+    private var networkBuffer = "standard"
     // Series source tabs (payload-gated): torrent sources split into
     // "Season packs" / "Episodes" columns, each offering "Load more sources"
     // until its dedicated fetch has run (a series play arrives with only one
@@ -876,6 +911,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 // exactly what must NOT read as a stall.
                 if (isIptvMode) {
                     iptvLiveRecovery.onProgress(it.currentPosition, it.playWhenReady)
+                    // The renderer's own output counter — the one signal
+                    // that survives a wedged video decoder under a healthy
+                    // audio clock (finding #13; the Streamer report).
+                    val frames = it.videoDecoderCounters?.let { c ->
+                        c.ensureUpdated()
+                        c.renderedOutputBufferCount
+                    } ?: -1
+                    iptvLiveRecovery.onVideoFrames(
+                        renderedFrames = frames,
+                        hasVideoTrack = it.videoFormat != null,
+                        wantsPlayback = it.playWhenReady,
+                    )
                 }
             }
             progressHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
@@ -1668,10 +1715,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // clobbering any per-request User-Agent — which would break IPTV
         // channels that declare their own UA (injected via the resolver's
         // dataSpec headers, which override defaults in the merge).
+        // Connection patience preset: longer connect/read timeouts for slow
+        // origins (Plex-backed addons can take >15s to first byte while the
+        // upstream server wakes). VOD only — IPTV's resilience ladder depends
+        // on failing fast enough to retry, so it keeps the stock 15s.
+        val networkTimeoutMs = if (!isIptvMode) when (networkPatience) {
+            "extended" -> 30_000
+            "patient" -> 60_000
+            else -> 15_000
+        } else 15_000
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(15000)
+            .setConnectTimeoutMs(networkTimeoutMs)
+            .setReadTimeoutMs(networkTimeoutMs)
             .setDefaultRequestProperties(
                 mapOf(
                     "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -1760,10 +1816,29 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         //    UNDER an intact buffer for transient errors, so the common
         //    connection drop heals without the player ever leaving READY.
         val mediaSourceFactory = if (isIptvMode) {
-            val iptvExtractors = DefaultExtractorsFactory().setTsExtractorFlags(
+            val aggressiveTs = DefaultExtractorsFactory().setTsExtractorFlags(
                 DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
                     DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS
             )
+            // The fallback the video-stall detector escalates to (see
+            // performIptvLiveRetune): stock demux — IDR-only sync points —
+            // for channels whose decoder wedges on mid-GOP joins. This is
+            // the pre-0.8.1 behavior, and what the browse screen's preview
+            // player runs with everywhere (which is why the same channel
+            // plays fine in the two-pane stage on those boxes).
+            val strictTs = DefaultExtractorsFactory()
+            val iptvExtractors = object : ExtractorsFactory {
+                override fun createExtractors(): Array<Extractor> =
+                    (if (iptvStrictTsActive) strictTs else aggressiveTs)
+                        .createExtractors()
+
+                override fun createExtractors(
+                    uri: Uri,
+                    responseHeaders: Map<String, List<String>>,
+                ): Array<Extractor> =
+                    (if (iptvStrictTsActive) strictTs else aggressiveTs)
+                        .createExtractors(uri, responseHeaders)
+            }
             DefaultMediaSourceFactory(this, iptvExtractors)
                 .setDataSourceFactory(recordingDataSourceFactory)
                 .setLoadErrorHandlingPolicy(IptvLiveLoadErrorPolicy())
@@ -1805,6 +1880,35 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         2_000,  // bufferForPlaybackAfterRebufferMs (default 5000)
                     )
                     .setPrioritizeTimeOverSizeThresholds(true)
+                    .build()
+            )
+        } else if (!isIptvMode && networkBuffer != "standard") {
+            // Stream buffer preset: wider read-ahead rides over origin
+            // stalls. Start thresholds stay stock (only min/max grow), so
+            // start latency is unchanged; the byte target is the real memory
+            // guard (mirrors the mpv side's demuxer-max-bytes) — loading
+            // stops at whichever target hits first, exactly like stock.
+            val hugeBuffer = networkBuffer == "huge"
+            // Unlike mpv's native-memory demuxer cache, this target is JAVA
+            // heap (DefaultAllocator's byte[] segments) — an uncapped 512 MiB
+            // sails past the heap ceiling of most TV boxes and OOMs
+            // mid-playback on exactly the hardware this preset serves. Clamp
+            // to half the large-heap class so the buffer can never own more
+            // than half the heap; the preset then degrades gracefully on
+            // small boxes instead of crashing them.
+            val activityManager =
+                getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+            val heapCapBytes = activityManager.largeMemoryClass / 2 * 1024 * 1024
+            val requestedBytes = (if (hugeBuffer) 512 else 256) * 1024 * 1024
+            playerBuilder.setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(
+                        if (hugeBuffer) 300_000 else 120_000, // minBufferMs
+                        if (hugeBuffer) 300_000 else 120_000, // maxBufferMs
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+                    )
+                    .setTargetBufferBytes(minOf(requestedBytes, heapCapBytes))
                     .build()
             )
         }
@@ -6273,6 +6377,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 isXtream = source.optBoolean("isXtream"),
                 isList = source.optBoolean("isList"),
                 listId = source.optString("listId").takeIf { it.isNotEmpty() },
+                connectionResourceId = source.optString("connectionResourceId")
+                    .takeIf { it.isNotEmpty() },
+                connectionResourceRevision = if (source.has("connectionResourceRevision"))
+                    source.optLong("connectionResourceRevision") else null,
             )
         }.filterTo(mutableListOf()) { it.id.isNotEmpty() && !it.isContinue }
     }
@@ -6569,8 +6677,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * defaults loaded in onCreate).
      */
     private val recordingEngineEnabled: Boolean by lazy {
-        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-            .getBoolean("flutter.recording_engine_enabled", true)
+        com.debrify.app.profiles.ProfilePreferenceProjection.isCommitted(this) ||
+            com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
+                this,
+                "recording_engine_enabled",
+                true,
+            )
     }
 
     /** Repaints the Record button whenever an engine capture starts or ends —
@@ -6654,6 +6766,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val url = currentIptvStreamUrl ?: return null
         RecordingRegistry.taskIdForUrl(url)?.let { return it }
         return engineRecordableUrl(url)?.let { RecordingRegistry.taskIdForUrl(it) }
+    }
+
+    private fun recordingResourceFor(entry: IptvChannelEntry?): IptvSourceEntry? {
+        val sourceId = entry?.sourceId ?: iptvSourceId
+        return iptvSources.firstOrNull { it.id == sourceId }
     }
 
     /** Record is offered only when the stream AND the OS can support it.
@@ -6809,6 +6926,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         maybeAskNotificationPermission()
         val entry = iptvChannels.getOrNull(currentIptvIndex)
+        val resource = recordingResourceFor(entry)
+        val owner = com.debrify.app.profiles.ProfilePreferenceProjection
+            .activeJobContext(this)
+        if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
+                this, owner.profileId, owner.authorizationRevision, "recordings",
+                resource?.connectionResourceId, resource?.connectionResourceRevision,
+            )
+        ) {
+            Toast.makeText(this, "Recording is disabled for this profile", Toast.LENGTH_SHORT).show()
+            return
+        }
         val fileName = "${sanitizeRecordingName(entry?.name ?: "recording")}_${recordingTimestamp()}.ts"
         try {
             ContextCompat.startForegroundService(
@@ -6821,6 +6949,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     channelName = entry?.name ?: "Live channel",
                     headers = HashMap(currentIptvHttpHeaders),
                     maxDurationMs = LiveRecordingService.MAX_DURATION_DEFAULT_MS,
+                    ownerProfileId = owner.profileId,
+                    connectionResourceId = resource?.connectionResourceId,
+                    profileAuthorizationRevision = owner.authorizationRevision,
+                    resourceAuthorizationRevision = resource?.connectionResourceRevision,
                 ),
             )
             Toast.makeText(
@@ -6904,10 +7036,23 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             .setMessage("${program.title}\n${entry.name} · $range$conflictNote")
             .setPositiveButton("Record") { _, _ ->
                 maybeAskNotificationPermission()
-                RecordingScheduleStore.put(
-                    this,
+                val owner = com.debrify.app.profiles.ProfilePreferenceProjection
+                    .activeJobContext(this)
+                val resource = recordingResourceFor(entry)
+                if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
+                        this, owner.profileId, owner.authorizationRevision, "recordings",
+                        resource?.connectionResourceId, resource?.connectionResourceRevision,
+                    )
+                ) {
+                    Toast.makeText(this, "Recording is disabled for this profile", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                val scheduleId = "sched-${System.currentTimeMillis()}"
+				try {
+				RecordingScheduleStore.put(
+					this,
                     RecordingSchedule(
-                        id = "sched-${System.currentTimeMillis()}",
+                        id = scheduleId,
                         channelName = entry.name,
                         url = recordUrl,
                         headers = HashMap(entry.httpHeaders),
@@ -6915,10 +7060,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         endMs = program.stopMs,
                         programmeTitle = program.title,
                         createdAt = System.currentTimeMillis(),
-                    ),
-                )
-                RecordingAlarmReceiver.registerAll(this)
-                Toast.makeText(this, "Recording scheduled", Toast.LENGTH_SHORT).show()
+                        ownerProfileId = owner.profileId,
+                        connectionResourceId = resource?.connectionResourceId,
+                        profileAuthorizationRevision = owner.authorizationRevision,
+                        resourceAuthorizationRevision = resource?.connectionResourceRevision,
+						sealedExecutionPayload = null,
+					),
+				)
+				RecordingAlarmReceiver.registerAll(this)
+				Toast.makeText(this, "Recording scheduled", Toast.LENGTH_SHORT).show()
+				} catch (_: Exception) {
+					Toast.makeText(this, "Could not save the recording schedule", Toast.LENGTH_SHORT).show()
+				}
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -9741,8 +9894,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // (null tokens) keeps every legacy paint path verbatim.
     private val guideStyle: GuideStyle by lazy {
         GuideStyle.fromPref(
-            getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-                .getString("flutter.iptv_player_guide_style", "classic"),
+            com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+                this,
+                "iptv_player_guide_style",
+                "classic",
+            ),
         )
     }
     private val guideTokens: GuideTokens? by lazy { GuideTokens.of(guideStyle) }
@@ -11239,6 +11395,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // BEFORE the media item so the first playlist fetch already has them.
         currentIptvHttpHeaders = entry.httpHeaders
         currentIptvStreamUrl = streamUrl
+        // Demux mode for this tune: strict for channels that earned it — and
+        // for the whole session once two did (that's a strict-decoder device,
+        // not two odd channels). Read per media-period load by the extractor
+        // factory installed in setupPlayer.
+        iptvStrictTsActive =
+            iptvStrictTsUrls.contains(streamUrl) || iptvStrictTsUrls.size >= 2
         iptvTuneDiagnostics.onTuneStart(
             entry.name,
             streamUrl,
@@ -12279,8 +12441,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * mean different things on the two sides.
      */
     private fun isAutoSyncPrefEnabled(): Boolean =
-        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-            .getBoolean("flutter.subtitle_auto_sync_enabled", false)
+        com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
+            this,
+            "subtitle_auto_sync_enabled",
+            false,
+        )
 
     private fun umSearchRows(): List<UnifiedMenuController.Row> {
         if (pendingSeriesResult != null) {
@@ -13295,25 +13460,28 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      */
     private fun loadPlayerDefaults() {
         try {
-            val prefs = getSharedPreferences("FlutterSharedPreferences", android.content.Context.MODE_PRIVATE)
-
             // Load aspect index for TV (separate from mobile)
             // TV only: 0=Fit, 1=Fill, 2=Zoom (default: 0=Fit)
-            resizeModeIndex = prefs.getLong("flutter.player_default_aspect_index_tv", 0L).toInt()
+            resizeModeIndex = com.debrify.app.profiles.ProfilePreferenceProjection
+                .getLong(this, "player_default_aspect_index_tv", 0L).toInt()
                 .coerceIn(0, resizeModes.lastIndex)
 
             // Load night mode index (default: 0 = Off)
-            nightModeIndex = prefs.getLong("flutter.player_night_mode_index", 0L).toInt()
+            nightModeIndex = com.debrify.app.profiles.ProfilePreferenceProjection
+                .getLong(this, "player_night_mode_index", 0L).toInt()
                 .coerceIn(0, nightModeGains.lastIndex)
 
             // Announce our audio session to system effect apps (default: off)
-            systemAudioEffectsEnabled = prefs.getBoolean("flutter.player_system_audio_effects", false)
+            systemAudioEffectsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
+                .getBoolean(this, "player_system_audio_effects", false)
 
             // Manual community intro/outro buttons. These are the same keys the
             // Flutter Playback settings page writes; enabled never means auto-seek.
-            skipSegmentsEnabled = prefs.getBoolean("flutter.skip_segments_enabled", true)
-            val storedSkipSegmentProvider = prefs.getString(
-                "flutter.skip_segment_provider",
+            skipSegmentsEnabled = com.debrify.app.profiles.ProfilePreferenceProjection
+                .getBoolean(this, "skip_segments_enabled", true)
+            val storedSkipSegmentProvider = com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+                this,
+                "skip_segment_provider",
                 TvSkipSegmentClients.AUTO,
             ) ?: TvSkipSegmentClients.AUTO
             skipSegmentProviderId = if (TvSkipSegmentClients.supports(storedSkipSegmentProvider)) {
@@ -14219,6 +14387,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
             // Parse playlist resolver flag
             hasPlaylistResolver = obj.optBoolean("hasPlaylistResolver", false)
+
+            // Network & Buffering presets. Parsed unconditionally (defaults
+            // "standard") so a relaunch/next-episode payload can never
+            // inherit stale tuning.
+            networkPatience = obj.optString("networkPatience", "standard")
+            networkBuffer = obj.optString("networkBuffer", "standard")
 
             // Series source tabs: pack/episode split + per-tab "Load more"
             // availability. Parsed unconditionally (defaults off) so a
@@ -16619,6 +16793,8 @@ private data class IptvSourceEntry(
     // nav button resolves the source by it) and is NOT flagged as a list.
     val isList: Boolean = false,
     val listId: String? = null,
+    val connectionResourceId: String? = null,
+    val connectionResourceRevision: Long? = null,
 )
 
 /// One of the user's channel lists, for the "add to list" picker.

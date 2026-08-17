@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import '../models/premiumize_user.dart';
 import '../services/storage_service.dart';
 import '../services/premiumize_service.dart';
+import '../models/profiles/profile_policy.dart';
+import 'profiles/profile_async_authorization.dart';
+import 'profiles/connection_resource_service.dart';
 
 class PremiumizeAccountService {
   static PremiumizeUser? _currentUser;
@@ -9,8 +12,9 @@ class PremiumizeAccountService {
   static int _validationToken = 0;
 
   /// Notifier for reactive UI updates when user state changes.
-  static final ValueNotifier<PremiumizeUser?> userNotifier =
-      ValueNotifier(null);
+  static final ValueNotifier<PremiumizeUser?> userNotifier = ValueNotifier(
+    null,
+  );
 
   static PremiumizeUser? get currentUser => _currentUser;
 
@@ -30,51 +34,69 @@ class PremiumizeAccountService {
     _isValidating = true;
     final int token = ++_validationToken;
     try {
+      final capability = await ProfileAsyncAuthorization.capture(
+        ProfileFeature.cloud,
+      );
       debugPrint('PremiumizeAccountService: Validating API key…');
-      final user = await PremiumizeService.getUserInfo(apiKey);
+      final user = capability == null
+          ? await PremiumizeService.getUserInfo(apiKey)
+          : await capability.run(() => PremiumizeService.getUserInfo(apiKey));
       if (_validationToken != token) {
         debugPrint(
           'PremiumizeAccountService: Validation result discarded (token mismatch).',
         );
         return false;
       }
-      _setCurrentUser(user);
-      if (persist) {
-        await StorageService.savePremiumizeApiKey(apiKey);
+      if (capability != null && !capability.isCurrentlyActive) return false;
+      Future<void> commit() async {
+        if (persist) await StorageService.savePremiumizeApiKey(apiKey);
+        if (capability == null || capability.isCurrentlyActive) {
+          _setCurrentUser(user);
+        }
       }
-      debugPrint(
-        'PremiumizeAccountService: Validation successful for customer ${user.customerId}.',
-      );
+
+      if (capability == null) {
+        await commit();
+      } else {
+        await capability.runIfCurrent(commit);
+      }
+      debugPrint('PremiumizeAccountService: Validation successful.');
       return true;
     } catch (e) {
-      debugPrint('PremiumizeAccountService: Validation failed - $e');
-      _setCurrentUser(null);
+      debugPrint('PremiumizeAccountService: Validation failed.');
       return false;
     } finally {
-      _isValidating = false;
+      if (_validationToken == token) _isValidating = false;
     }
   }
 
   static Future<bool> isApiKeyValid() async {
-    final apiKey = await StorageService.getPremiumizeApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
+    try {
+      final apiKey = await StorageService.getPremiumizeApiKey();
+      if (apiKey == null || apiKey.isEmpty) return false;
+      return validateAndGetUserInfo(apiKey, persist: false);
+    } on ResourceAuthorizationException {
       return false;
     }
-    return validateAndGetUserInfo(apiKey, persist: false);
   }
 
   static void clearUserInfo() {
     debugPrint('PremiumizeAccountService: Clearing cached user info.');
     _setCurrentUser(null);
     _validationToken++;
+    _isValidating = false;
   }
 
   static Future<bool> refreshUserInfo() async {
-    final apiKey = await StorageService.getPremiumizeApiKey();
-    if (apiKey == null || apiKey.isEmpty) {
-      _setCurrentUser(null);
+    try {
+      final apiKey = await StorageService.getPremiumizeApiKey();
+      if (apiKey == null || apiKey.isEmpty) {
+        _setCurrentUser(null);
+        return false;
+      }
+      return validateAndGetUserInfo(apiKey, persist: false);
+    } on ResourceAuthorizationException {
       return false;
     }
-    return validateAndGetUserInfo(apiKey, persist: false);
   }
 }

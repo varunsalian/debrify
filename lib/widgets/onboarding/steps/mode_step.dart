@@ -39,7 +39,7 @@ class ModeStep extends StatelessWidget {
           icon: Icons.sync_alt_rounded,
           title: 'Bring it from another device',
           subtitle:
-              'Copy services, addons, channels, and preferences from Debrify on your phone.',
+              'Copy services, addons, channels, and preferences from Debrify on another device.',
           footnote: 'Both devices need to be on the same Wi-Fi.',
           onPressed: onImport,
         ),

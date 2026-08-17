@@ -18,7 +18,12 @@ class MagnetLinkHandler {
   final Function()? onPikPakAdded;
   final Function()? onPremiumizeAdded;
   final Function()? onAllDebridAdded;
-  final Function(Map<String, dynamic> result, String torrentName, String apiKey)? onRealDebridResult;
+  final Function(
+    Map<String, dynamic> result,
+    String torrentName,
+    String apiKey,
+  )?
+  onRealDebridResult;
   final Function(TorboxTorrent torrent)? onTorboxResult;
   final Function(String fileId, String fileName)? onPikPakResult;
   // URL handling callbacks
@@ -50,14 +55,16 @@ class MagnetLinkHandler {
       return;
     }
 
-    final torrentName = DeepLinkService.extractTorrentName(magnetUri) ??
-                       'Magnet Link';
+    final torrentName =
+        DeepLinkService.extractTorrentName(magnetUri) ?? 'Magnet Link';
 
     // Check which services are configured
     final services = await DeepLinkService.getConfiguredServices();
 
     if (!services.hasAny) {
-      _showError('No debrid service configured.\nPlease configure RealDebrid, Torbox, PikPak, Premiumize, or AllDebrid in Settings.');
+      _showError(
+        'No debrid service configured.\nPlease configure RealDebrid, Torbox, PikPak, Premiumize, or AllDebrid in Settings.',
+      );
       return;
     }
 
@@ -97,7 +104,9 @@ class MagnetLinkHandler {
     final services = await DeepLinkService.getConfiguredServices();
 
     if (!services.hasAny) {
-      _showError('No debrid service configured.\nPlease configure RealDebrid, Torbox, PikPak, Premiumize, or AllDebrid in Settings.');
+      _showError(
+        'No debrid service configured.\nPlease configure RealDebrid, Torbox, PikPak, Premiumize, or AllDebrid in Settings.',
+      );
       return;
     }
 
@@ -135,10 +144,7 @@ class MagnetLinkHandler {
             const SizedBox(height: 8),
             Text(
               displayName,
-              style: const TextStyle(
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-              ),
+              style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -259,11 +265,14 @@ class MagnetLinkHandler {
       final success = result['success'] as bool? ?? false;
       if (!success) {
         final error = (result['error'] ?? result['detail'] ?? '').toString();
-        _showError(error.isEmpty ? 'Failed to create web download on Torbox' : error);
+        _showError(
+          error.isEmpty ? 'Failed to create web download on Torbox' : error,
+        );
         return;
       }
 
-      final webDownloadId = (result['data']?['webdownload_id'] as num?)?.toInt();
+      final webDownloadId = (result['data']?['webdownload_id'] as num?)
+          ?.toInt();
       final name = result['data']?['name']?.toString() ?? displayName;
 
       if (webDownloadId == null) {
@@ -314,7 +323,9 @@ class MagnetLinkHandler {
           Navigator.of(context).pop();
           await PikPakApiService.instance.logout();
           if (context.mounted) {
-            _showError('Restricted folder was deleted. You have been logged out.');
+            _showError(
+              'Restricted folder was deleted. You have been logged out.',
+            );
           }
           return;
         }
@@ -356,12 +367,14 @@ class MagnetLinkHandler {
       if (!context.mounted) return;
       Navigator.of(context).pop();
 
-      final folderExists =
-          await PikPakApiService.instance.verifyRestrictedFolderExists();
+      final folderExists = await PikPakApiService.instance
+          .verifyRestrictedFolderExists();
       if (!folderExists) {
         await PikPakApiService.instance.logout();
         if (context.mounted) {
-          _showError('Restricted folder was deleted. You have been logged out.');
+          _showError(
+            'Restricted folder was deleted. You have been logged out.',
+          );
         }
         return;
       }
@@ -385,14 +398,13 @@ class MagnetLinkHandler {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Which service would you like to use for this magnet link?'),
+            const Text(
+              'Which service would you like to use for this magnet link?',
+            ),
             const SizedBox(height: 8),
             Text(
               torrentName,
-              style: const TextStyle(
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-              ),
+              style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -569,7 +581,9 @@ class MagnetLinkHandler {
             );
           }
         } else {
-          _showError(error.isEmpty ? 'Failed to cache torrent on Torbox.' : error);
+          _showError(
+            error.isEmpty ? 'Failed to cache torrent on Torbox.' : error,
+          );
         }
         return;
       }
@@ -595,7 +609,9 @@ class MagnetLinkHandler {
           }
         }
       } else {
-        _showError('Torbox cached the torrent but details are not ready yet. Check the Torbox tab shortly.');
+        _showError(
+          'Torbox cached the torrent but details are not ready yet. Check the Torbox tab shortly.',
+        );
       }
     } catch (e) {
       if (!context.mounted) return;
@@ -632,11 +648,11 @@ class MagnetLinkHandler {
           getCachedId: StorageService.getPikPakTorrentsFolderId,
           setCachedId: StorageService.setPikPakTorrentsFolderId,
         );
-        print('PikPak: Using subfolder ID: $subFolderId');
+        debugPrint('PikPak: Using subfolder ID: $subFolderId');
       } catch (e) {
         // Check if this is the restricted folder deleted error
         if (e.toString().contains('RESTRICTED_FOLDER_DELETED')) {
-          print('PikPak: Detected restricted folder was deleted');
+          debugPrint('PikPak: Detected restricted folder was deleted');
           if (!context.mounted) return;
           Navigator.of(context).pop(); // Close loading dialog
           await PikPakApiService.instance.logout();
@@ -647,7 +663,9 @@ class MagnetLinkHandler {
           }
           return;
         }
-        print('PikPak: Failed to create subfolder, using parent folder: $e');
+        debugPrint(
+          'PikPak: Failed to create subfolder, using parent folder: $e',
+        );
         subFolderId = parentFolderId;
       }
 
@@ -688,12 +706,14 @@ class MagnetLinkHandler {
       Navigator.of(context).pop(); // Close loading dialog
 
       // Check if the error is because the restricted folder was deleted
-      final folderExists =
-          await PikPakApiService.instance.verifyRestrictedFolderExists();
+      final folderExists = await PikPakApiService.instance
+          .verifyRestrictedFolderExists();
       if (!folderExists) {
         await PikPakApiService.instance.logout();
         if (context.mounted) {
-          _showError('Restricted folder was deleted. You have been logged out.');
+          _showError(
+            'Restricted folder was deleted. You have been logged out.',
+          );
         }
         return;
       }

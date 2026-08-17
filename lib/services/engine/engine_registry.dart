@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:synchronized/synchronized.dart';
 
 import '../../models/engine_config/engine_config.dart';
 import '../../models/engine_config/default_config.dart';
+import '../profiles/profile_runtime.dart';
+import '../profiles/profile_scope.dart';
 import 'config_loader.dart';
 import 'dynamic_engine.dart';
 
@@ -38,6 +41,11 @@ class EngineRegistry {
   /// Static accessor for singleton instance
   static EngineRegistry get instance => _instance;
 
+  /// Pauses a completed load immediately before its scope/revision guard.
+  /// Tests use this to prove an outgoing async load cannot publish late.
+  @visibleForTesting
+  static Future<void> Function()? debugBeforePublish;
+
   // Dependencies
   final ConfigLoader _configLoader = ConfigLoader();
 
@@ -45,13 +53,27 @@ class EngineRegistry {
   DefaultConfig? _defaults;
   final Map<String, DynamicEngine> _engines = {};
   final Map<String, EngineConfig> _configs = {};
+  final Lock _loadLock = Lock();
   bool _initialized = false;
+  String? _loadedScopeKey;
 
-  /// Whether the registry has been initialized
-  bool get isInitialized => _initialized;
+  /// The profile scope whose engines are actually in [_engines] right now, or
+  /// null when nothing is loaded. Read-only, for the cache ledger: this is a
+  /// MEASURED scope rather than a stamp, so it can disagree with the lifecycle
+  /// and that disagreement is the thing worth seeing.
+  String? get loadedScopeKey => _initialized ? _loadedScopeKey : null;
+  int _stateRevision = 0;
+
+  /// Whether the registry has been initialized for the authoritative profile
+  /// scope that is active now.
+  ///
+  /// A stale profile's map may exist for a few microtasks while a switch is
+  /// publishing, but it is never observable through this registry.
+  bool get isInitialized =>
+      _initialized && _loadedScopeKey == _EngineRegistryScope.capture().key;
 
   /// Get the default configuration (null if not initialized)
-  DefaultConfig? get defaults => _defaults;
+  DefaultConfig? get defaults => isInitialized ? _defaults : null;
 
   /// Initialize the registry by loading all engine configurations.
   ///
@@ -60,40 +82,74 @@ class EngineRegistry {
   ///
   /// Errors during initialization are logged but not thrown,
   /// leaving the registry in an empty but usable state.
-  Future<void> initialize() async {
-    if (_initialized) {
-      debugPrint('EngineRegistry: Already initialized');
-      return;
-    }
+  Future<void> initialize() {
+    final requestedScope = _EngineRegistryScope.capture();
+    return _loadLock.synchronized(() async {
+      if (!requestedScope.isCurrent) return;
+      if (_initialized && _loadedScopeKey == requestedScope.key) {
+        debugPrint('EngineRegistry: Already initialized');
+        return;
+      }
+      await _loadScope(requestedScope);
+    });
+  }
 
+  Future<void> _loadScope(_EngineRegistryScope requestedScope) async {
+    final revision = ++_stateRevision;
+    _clearState();
+    // ConfigLoader is also process-global. Every registry load owns a fresh
+    // config snapshot so it can never reuse the previous profile's list.
+    _configLoader.clearCache();
     try {
       debugPrint('EngineRegistry: Initializing...');
 
-      // Load defaults first
-      _defaults = await _configLoader.getDefaults();
+      final loaded = await requestedScope.run(() async {
+        final defaults = await _configLoader.getDefaults();
+        final configs = await _configLoader.getEngines();
+        return (defaults: defaults, configs: configs);
+      });
+      await debugBeforePublish?.call();
 
-      // Load all engine configs
-      final configs = await _configLoader.getEngines();
+      // Profile publication and synchronous invalidation can both happen at
+      // an await boundary. An old load is discarded rather than being allowed
+      // to repopulate the singleton after the switch.
+      if (revision != _stateRevision || !requestedScope.isCurrent) return;
+
+      final engines = <String, DynamicEngine>{};
+      final configsById = <String, EngineConfig>{};
 
       // Create DynamicEngine instances for each config
-      for (final config in configs) {
+      for (final config in loaded.configs) {
         final id = config.metadata.id;
         if (id.isNotEmpty) {
-          _configs[id] = config;
-          _engines[id] = DynamicEngine(config);
+          configsById[id] = config;
+          engines[id] = DynamicEngine(config);
           debugPrint('EngineRegistry: Registered engine: $id');
         }
       }
 
+      _defaults = loaded.defaults;
+      _configs.addAll(configsById);
+      _engines.addAll(engines);
+      _loadedScopeKey = requestedScope.key;
       _initialized = true;
-      debugPrint(
-        'EngineRegistry: Initialized with ${_engines.length} engines',
-      );
+      debugPrint('EngineRegistry: Initialized with ${_engines.length} engines');
     } catch (e) {
       debugPrint('EngineRegistry: Initialization failed: $e');
       // Don't crash - leave in empty state
-      _initialized = true;
+      if (revision == _stateRevision && requestedScope.isCurrent) {
+        _loadedScopeKey = requestedScope.key;
+        _initialized = true;
+      }
     }
+  }
+
+  void _clearState() {
+    _engines.clear();
+    _configs.clear();
+    _defaults = null;
+    _initialized = false;
+    _loadedScopeKey = null;
   }
 
   // ==================== Engine Access ====================
@@ -102,7 +158,7 @@ class EngineRegistry {
   ///
   /// Returns an empty list if not initialized or no engines loaded.
   List<DynamicEngine> getAllEngines() {
-    if (!_initialized) {
+    if (!isInitialized) {
       debugPrint('EngineRegistry: getAllEngines called before initialization');
       return [];
     }
@@ -113,7 +169,7 @@ class EngineRegistry {
   ///
   /// Returns an empty map if not initialized.
   Map<String, EngineConfig> getAllConfigs() {
-    if (!_initialized) {
+    if (!isInitialized) {
       return {};
     }
     return Map.unmodifiable(_configs);
@@ -123,7 +179,7 @@ class EngineRegistry {
   ///
   /// Returns null if not found or not initialized.
   DynamicEngine? getEngine(String id) {
-    if (!_initialized) {
+    if (!isInitialized) {
       debugPrint('EngineRegistry: getEngine called before initialization');
       return null;
     }
@@ -134,7 +190,7 @@ class EngineRegistry {
   ///
   /// Returns null if not found or not initialized.
   EngineConfig? getConfig(String id) {
-    if (!_initialized) {
+    if (!isInitialized) {
       return null;
     }
     return _configs[id];
@@ -146,7 +202,7 @@ class EngineRegistry {
   ///
   /// Returns engines where metadata.capabilities.keywordSearch is true.
   List<DynamicEngine> getKeywordSearchEngines() {
-    if (!_initialized) return [];
+    if (!isInitialized) return [];
 
     return _engines.entries
         .where((entry) {
@@ -161,7 +217,7 @@ class EngineRegistry {
   ///
   /// Returns engines where metadata.capabilities.imdbSearch is true.
   List<DynamicEngine> getImdbSearchEngines() {
-    if (!_initialized) return [];
+    if (!isInitialized) return [];
 
     return _engines.entries
         .where((entry) {
@@ -176,7 +232,7 @@ class EngineRegistry {
   ///
   /// Returns engines where metadata.capabilities.seriesSupport is true.
   List<DynamicEngine> getSeriesSearchEngines() {
-    if (!_initialized) return [];
+    if (!isInitialized) return [];
 
     return _engines.entries
         .where((entry) {
@@ -191,7 +247,7 @@ class EngineRegistry {
   ///
   /// Returns engines where tvMode config is defined (not null).
   List<DynamicEngine> getTvModeEngines() {
-    if (!_initialized) return [];
+    if (!isInitialized) return [];
 
     return _engines.entries
         .where((entry) {
@@ -209,7 +265,7 @@ class EngineRegistry {
   /// Returns engines where metadata.categories contains the specified category.
   /// Category matching is case-insensitive.
   List<DynamicEngine> getEnginesByCategory(String category) {
-    if (!_initialized) return [];
+    if (!isInitialized) return [];
 
     final lowerCategory = category.toLowerCase();
     return _engines.entries
@@ -232,7 +288,7 @@ class EngineRegistry {
   ///
   /// Returns an empty list for unknown capabilities.
   List<DynamicEngine> getEnginesWithCapability(String capability) {
-    if (!_initialized) return [];
+    if (!isInitialized) return [];
 
     switch (capability.toLowerCase()) {
       case 'keyword_search':
@@ -259,7 +315,7 @@ class EngineRegistry {
   ///
   /// Returns an empty list if not initialized.
   List<String> getEngineIds() {
-    if (!_initialized) return [];
+    if (!isInitialized) return [];
     return _engines.keys.toList();
   }
 
@@ -267,7 +323,7 @@ class EngineRegistry {
   ///
   /// Returns an empty list if not initialized.
   List<String> getDisplayNames() {
-    if (!_initialized) return [];
+    if (!isInitialized) return [];
 
     return _configs.values
         .map((config) => config.metadata.displayName)
@@ -281,37 +337,79 @@ class EngineRegistry {
   ///
   /// Clears all cached engines and configs, then reloads from YAML files.
   /// Useful for hot-reloading during development.
-  Future<void> reload() async {
+  Future<void> reload() {
+    final requestedScope = _EngineRegistryScope.capture();
     debugPrint('EngineRegistry: Reloading configurations...');
+    return _loadLock.synchronized(() async {
+      if (!requestedScope.isCurrent) return;
+      await _loadScope(requestedScope);
+      debugPrint('EngineRegistry: Reload complete');
+    });
+  }
 
-    // Clear existing state
-    _engines.clear();
-    _configs.clear();
-    _defaults = null;
-    _initialized = false;
-
-    // Clear config loader cache
+  /// Immediately makes the current registry snapshot inaccessible.
+  ///
+  /// Profile switching calls this before its first await. A load already in
+  /// flight is invalidated by [_stateRevision] and cannot resurrect the
+  /// outgoing profile's engines when it completes.
+  void invalidateProfileScope() {
+    _stateRevision++;
+    _clearState();
     _configLoader.clearCache();
-
-    // Re-initialize
-    await initialize();
-
-    debugPrint('EngineRegistry: Reload complete');
+    debugPrint('EngineRegistry: Profile scope invalidated');
   }
 
   // ==================== Debug Helpers ====================
 
   /// Get a summary of the registry state for debugging.
   Map<String, dynamic> getDebugInfo() {
+    final current = isInitialized;
     return {
-      'initialized': _initialized,
-      'engine_count': _engines.length,
-      'engine_ids': _engines.keys.toList(),
+      'initialized': current,
+      'engine_count': current ? _engines.length : 0,
+      'engine_ids': current ? _engines.keys.toList() : <String>[],
       'keyword_search_count': getKeywordSearchEngines().length,
       'imdb_search_count': getImdbSearchEngines().length,
       'series_search_count': getSeriesSearchEngines().length,
       'tv_mode_count': getTvModeEngines().length,
-      'defaults_loaded': _defaults != null,
+      'defaults_loaded': current && _defaults != null,
     };
+  }
+}
+
+/// The process-global engine cache is bound to the authoritative runtime
+/// scope, not to a captured async Zone. A search that began under profile A is
+/// allowed to finish its own authorization check, but it cannot steer this
+/// singleton back to A after profile B has been published.
+class _EngineRegistryScope {
+  const _EngineRegistryScope(this.key, this.scope);
+
+  final String key;
+  final ProfileScope? scope;
+
+  static _EngineRegistryScope capture() {
+    if (!ProfileRuntime.isInitialized) {
+      return const _EngineRegistryScope('runtime:uninitialized', null);
+    }
+    if (ProfileRuntime.mode == ProfileRuntimeMode.legacyCompatibility) {
+      return const _EngineRegistryScope('runtime:legacy', null);
+    }
+    final active = ProfileRuntime.scope.value;
+    if (active == null) {
+      return const _EngineRegistryScope('runtime:committed-unbound', null);
+    }
+    // ProfileScope.cacheKey, not a locally-built string: this key is compared
+    // against ProfileCacheLedger entries by the dev audit screen, and the two
+    // formats silently disagreed until 2026-08-15.
+    return _EngineRegistryScope(active.cacheKey, active);
+  }
+
+  bool get isCurrent => key == capture().key;
+
+  Future<T> run<T>(Future<T> Function() body) {
+    final captured = scope;
+    return captured == null
+        ? body()
+        : ProfileRuntime.withCapturedScope(captured, body);
   }
 }

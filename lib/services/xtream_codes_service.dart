@@ -6,9 +6,12 @@ import 'dart:typed_data' show BytesBuilder;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/iptv_playlist.dart';
+import '../models/profiles/connection_resource.dart';
+import '../models/profiles/profile_policy.dart';
 import 'iptv_catalog_key.dart';
 import 'iptv_catalog_db.dart';
 import 'iptv_load_phase.dart';
+import 'profiles/profile_collection_resource_facade.dart';
 
 /// A panel response crossed the buffering cap — the server's real answer,
 /// deliberately NOT one of the transient network failures the retry loop
@@ -106,7 +109,10 @@ class XtreamCodesService {
           throw _ResponseTooLargeException(uri);
         }
         if (DateTime.now().difference(startedAt) > timeout) {
-          throw TimeoutException('Response exceeded ${timeout.inSeconds}s', timeout);
+          throw TimeoutException(
+            'Response exceeded ${timeout.inSeconds}s',
+            timeout,
+          );
         }
       }
       return http.Response.bytes(
@@ -125,8 +131,10 @@ class XtreamCodesService {
   Future<http.Response?> _tryGet(String url, Duration timeout) async {
     try {
       return await _getCapped(url, timeout);
-    } catch (e) {
-      debugPrint('XtreamCodesService: Optional request failed ($url): $e');
+    } catch (error) {
+      debugPrint(
+        'XtreamCodesService: Optional request failed (${error.runtimeType})',
+      );
       return null;
     }
   }
@@ -150,7 +158,8 @@ class XtreamCodesService {
         // Over-cap is the server's real answer, not a hiccup — retrying
         // would re-download the same oversized payload up to [attempts]
         // times.
-        final transient = e is! _ResponseTooLargeException &&
+        final transient =
+            e is! _ResponseTooLargeException &&
             (e is TimeoutException ||
                 e is SocketException ||
                 e is http.ClientException);
@@ -158,8 +167,8 @@ class XtreamCodesService {
         final backoff = Duration(milliseconds: 500 * (1 << (attempt - 1)));
         debugPrint(
           'XtreamCodesService: transient fetch failure '
-          '(attempt $attempt/$attempts) for $url: $e — '
-          'retrying in ${backoff.inMilliseconds}ms',
+          '(attempt $attempt/$attempts, ${e.runtimeType}); retrying in '
+          '${backoff.inMilliseconds}ms',
         );
         await Future<void>.delayed(backoff);
       }
@@ -195,8 +204,9 @@ class XtreamCodesService {
   /// payload first. Both alternatives are fully anchored so a non-numeric id
   /// (`"12ab"`) doesn't match a truncated prefix and send the probe after a
   /// stream that doesn't exist.
-  static final RegExp _sampleStreamIdExp =
-      RegExp(r'"stream_id"\s*:\s*(?:"(\d+)"|(\d+))');
+  static final RegExp _sampleStreamIdExp = RegExp(
+    r'"stream_id"\s*:\s*(?:"(\d+)"|(\d+))',
+  );
 
   /// How much of a raw streams payload the id probe scans.
   ///
@@ -220,8 +230,10 @@ class XtreamCodesService {
     return _charsetExp.firstMatch(contentType)?.group(1);
   }
 
-  static final RegExp _charsetExp =
-      RegExp(r'charset\s*=\s*"?([^\s";]+)"?', caseSensitive: false);
+  static final RegExp _charsetExp = RegExp(
+    r'charset\s*=\s*"?([^\s";]+)"?',
+    caseSensitive: false,
+  );
 
   /// Resolve a declared charset the way package:http does: unknown or absent
   /// falls back to latin1.
@@ -242,8 +254,7 @@ class XtreamCodesService {
     try {
       decoded = jsonDecode(body);
     } catch (_) {
-      final preview = body.length > 200 ? body.substring(0, 200) : body;
-      return (null, 'Server returned invalid response for $label: $preview');
+      return (null, 'Server returned invalid response for $label');
     }
     return _asJsonList(decoded, label);
   }
@@ -259,7 +270,7 @@ class XtreamCodesService {
     if (decoded is Map<String, dynamic>) {
       final errorMsg = decoded['error'] ?? decoded['message'];
       if (errorMsg != null) {
-        return (null, 'Server error: $errorMsg');
+        return (null, 'Server returned an error');
       }
       return (null, 'Server returned unexpected format for $label');
     }
@@ -274,8 +285,9 @@ class XtreamCodesService {
     String password,
   ) async {
     try {
+      await _authorize(allowUnbound: true);
       final url = _baseUrl(serverUrl, username, password);
-      debugPrint('XtreamCodesService: Authenticating with $serverUrl');
+      debugPrint('XtreamCodesService: Authenticating');
 
       final response = await http
           .get(Uri.parse(url), headers: _headers)
@@ -327,9 +339,9 @@ class XtreamCodesService {
           userInfo['active_cons']?.toString() ?? '',
         ),
       );
-    } catch (e) {
-      debugPrint('XtreamCodesService: Auth error: $e');
-      return XcAuthResult(success: false, error: 'Connection failed: $e');
+    } catch (error) {
+      debugPrint('XtreamCodesService: Auth error (${error.runtimeType})');
+      return const XcAuthResult(success: false, error: 'Connection failed');
     }
   }
 
@@ -340,6 +352,8 @@ class XtreamCodesService {
     String password, {
     String? numberingSourceKey,
     IptvLoadPhase? onPhase,
+    String? connectionResourceId,
+    int? connectionResourceRevision,
   }) {
     return _fetchStreams(
       serverUrl,
@@ -348,6 +362,8 @@ class XtreamCodesService {
       contentType: 'live',
       numberingSourceKey: numberingSourceKey,
       onPhase: onPhase,
+      connectionResourceId: connectionResourceId,
+      connectionResourceRevision: connectionResourceRevision,
     );
   }
 
@@ -357,6 +373,8 @@ class XtreamCodesService {
     String username,
     String password, {
     IptvLoadPhase? onPhase,
+    String? connectionResourceId,
+    int? connectionResourceRevision,
   }) {
     return _fetchStreams(
       serverUrl,
@@ -364,6 +382,8 @@ class XtreamCodesService {
       password,
       contentType: 'vod',
       onPhase: onPhase,
+      connectionResourceId: connectionResourceId,
+      connectionResourceRevision: connectionResourceRevision,
     );
   }
 
@@ -376,6 +396,8 @@ class XtreamCodesService {
     String username,
     String password, {
     IptvLoadPhase? onPhase,
+    String? connectionResourceId,
+    int? connectionResourceRevision,
   }) {
     return _fetchStreams(
       serverUrl,
@@ -383,11 +405,40 @@ class XtreamCodesService {
       password,
       contentType: 'series',
       onPhase: onPhase,
+      connectionResourceId: connectionResourceId,
+      connectionResourceRevision: connectionResourceRevision,
     );
   }
 
   /// Shared fetch pipeline for live and VOD content.
   Future<IptvParseResult> _fetchStreams(
+    String serverUrl,
+    String username,
+    String password, {
+    required String contentType,
+    String? numberingSourceKey,
+    IptvLoadPhase? onPhase,
+    String? connectionResourceId,
+    int? connectionResourceRevision,
+  }) async {
+    Future<void> authorize() => _authorize(
+      resourceId: connectionResourceId,
+      resourceRevision: connectionResourceRevision,
+    );
+    await authorize();
+    final result = await _fetchStreamsAuthorized(
+      serverUrl,
+      username,
+      password,
+      contentType: contentType,
+      numberingSourceKey: numberingSourceKey,
+      onPhase: onPhase,
+    );
+    await authorize();
+    return result;
+  }
+
+  Future<IptvParseResult> _fetchStreamsAuthorized(
     String serverUrl,
     String username,
     String password, {
@@ -404,16 +455,13 @@ class XtreamCodesService {
     // the service's in-memory result cache is bypassed entirely — holding
     // three 55k-object catalogs on the heap is exactly what this mode
     // removes. Freshness policy moves to the caller (snapshot.ingestedAt).
-    final ingestToDb =
-        IptvCatalogDb.isOpen;
+    final ingestToDb = IptvCatalogDb.isOpen;
 
     // Check cache
     if (!ingestToDb && _cache.containsKey(cacheKey)) {
       final cached = _cache[cacheKey]!;
       if (DateTime.now().difference(cached.fetchedAt) < _cacheDuration) {
-        debugPrint(
-          'XtreamCodesService: Using cached $label streams for $serverUrl',
-        );
+        debugPrint('XtreamCodesService: Using cached $label streams');
         return cached.result;
       }
     }
@@ -423,13 +471,13 @@ class XtreamCodesService {
       final categoriesAction = isLive
           ? 'get_live_categories'
           : isSeries
-              ? 'get_series_categories'
-              : 'get_vod_categories';
+          ? 'get_series_categories'
+          : 'get_vod_categories';
       final streamsAction = isLive
           ? 'get_live_streams'
           : isSeries
-              ? 'get_series'
-              : 'get_vod_streams';
+          ? 'get_series'
+          : 'get_vod_streams';
 
       // Kick off both requests in parallel, but only the stream list is
       // required: a category failure (network or malformed body) must not
@@ -471,11 +519,12 @@ class XtreamCodesService {
       // conditions.
       http.Response? usableCategories =
           (categoriesResponse == null || categoriesResponse.statusCode != 200)
-              ? null
-              : categoriesResponse;
+          ? null
+          : categoriesResponse;
       Uint8List? categoriesBytes = usableCategories?.bodyBytes;
-      final categoriesCharset =
-          usableCategories == null ? null : charsetOf(usableCategories);
+      final categoriesCharset = usableCategories == null
+          ? null
+          : charsetOf(usableCategories);
 
       final encodedUser = Uri.encodeComponent(username);
       final encodedPass = Uri.encodeComponent(password);
@@ -542,7 +591,7 @@ class XtreamCodesService {
       // real work to keep off this thread.
       final useIsolate =
           streamsBytes.length + (categoriesBytes?.length ?? 0) >
-              computeDecodeThreshold;
+          computeDecodeThreshold;
       if (useIsolate) isolateBuilds++;
       // Drop every reference to the response bodies BEFORE the worker runs.
       // The transferable inside the job carries its own copy, so keeping
@@ -594,12 +643,15 @@ class XtreamCodesService {
         categories: categoryNames,
         warning: warning,
       );
-    } catch (e) {
-      debugPrint('XtreamCodesService: Error fetching $label streams: $e');
+    } catch (error) {
+      debugPrint(
+        'XtreamCodesService: Error fetching $label streams '
+        '(${error.runtimeType})',
+      );
       return IptvParseResult(
         channels: [],
         categories: [],
-        error: 'Failed to fetch $label streams: $e',
+        error: 'Failed to fetch $label streams',
       );
     }
   }
@@ -615,8 +667,7 @@ class XtreamCodesService {
     String encodedPass,
     String streamId,
     _LiveUrlForm form,
-  ) =>
-      _liveUrlFor(serverUrl, encodedUser, encodedPass, streamId, form);
+  ) => _liveUrlFor(serverUrl, encodedUser, encodedPass, streamId, form);
 
   /// Probe which live URL form this panel serves, in order of preference:
   /// standard /live/ raw TS, standard /live/ HLS (TS-off panels), then the
@@ -644,9 +695,7 @@ class XtreamCodesService {
       if (status >= 200 && status < 300) {
         _liveUrlFormCache[cacheKey] = form;
         if (form != _LiveUrlForm.standardTs) {
-          debugPrint(
-            'XtreamCodesService: Panel $serverUrl uses ${form.name} live URLs',
-          );
+          debugPrint('XtreamCodesService: Panel uses ${form.name} live URLs');
         }
         return form;
       }
@@ -680,8 +729,8 @@ class XtreamCodesService {
       // Cancel the body stream immediately; only the status matters.
       await response.stream.listen((_) {}).cancel();
       return response.statusCode;
-    } catch (e) {
-      debugPrint('XtreamCodesService: Probe failed for $url: $e');
+    } catch (error) {
+      debugPrint('XtreamCodesService: Probe failed (${error.runtimeType})');
       return null;
     } finally {
       client.close();
@@ -698,6 +747,29 @@ class XtreamCodesService {
   /// TTL so the detail page's parallel consumers (episode list, resume state,
   /// Play) share one panel round-trip.
   Future<XtreamSeriesInfo?> fetchSeriesInfo(
+    String serverUrl,
+    String username,
+    String password,
+    String seriesId, {
+    String? connectionResourceId,
+    int? connectionResourceRevision,
+  }) async {
+    Future<void> authorize() => _authorize(
+      resourceId: connectionResourceId,
+      resourceRevision: connectionResourceRevision,
+    );
+    await authorize();
+    final result = await _fetchSeriesInfoAuthorized(
+      serverUrl,
+      username,
+      password,
+      seriesId,
+    );
+    await authorize();
+    return result;
+  }
+
+  Future<XtreamSeriesInfo?> _fetchSeriesInfoAuthorized(
     String serverUrl,
     String username,
     String password,
@@ -770,7 +842,8 @@ class XtreamCodesService {
         // Episode's own season field wins; the map key is the fallback; a
         // panel that supplies neither still keeps its episodes (bucketed
         // into season 1) rather than losing them.
-        final season = (seasonRaw is num
+        final season =
+            (seasonRaw is num
                 ? seasonRaw.toInt()
                 : int.tryParse(seasonRaw?.toString() ?? '') ?? seasonHint) ??
             1;
@@ -795,11 +868,12 @@ class XtreamCodesService {
             plot: epInfo['plot']?.toString(),
             // Real panels use lowercase `releasedate` at episode level (vs
             // camelCase at series level) — try every known spelling.
-            airDate: (epInfo['releasedate'] ??
-                    epInfo['release_date'] ??
-                    epInfo['releaseDate'] ??
-                    epInfo['air_date'])
-                ?.toString(),
+            airDate:
+                (epInfo['releasedate'] ??
+                        epInfo['release_date'] ??
+                        epInfo['releaseDate'] ??
+                        epInfo['air_date'])
+                    ?.toString(),
             durationSecs: _durationSecs(
               epInfo['duration_secs'],
               epInfo['duration'],
@@ -820,10 +894,9 @@ class XtreamCodesService {
         plot: info['plot']?.toString(),
         cast: info['cast']?.toString(),
         genre: info['genre']?.toString(),
-        releaseDate: (info['releaseDate'] ??
-                info['release_date'] ??
-                info['releasedate'])
-            ?.toString(),
+        releaseDate:
+            (info['releaseDate'] ?? info['release_date'] ?? info['releasedate'])
+                ?.toString(),
         rating: double.tryParse(info['rating']?.toString() ?? ''),
         poster: info['cover']?.toString(),
         backdrop: backdrops is List && backdrops.isNotEmpty
@@ -837,8 +910,10 @@ class XtreamCodesService {
       // page's Retry re-serving the same emptiness for 30 minutes.
       if (episodes.isEmpty) return result;
 
-      _seriesInfoCache[cacheKey] =
-          _CachedSeriesInfo(info: result, fetchedAt: DateTime.now());
+      _seriesInfoCache[cacheKey] = _CachedSeriesInfo(
+        info: result,
+        fetchedAt: DateTime.now(),
+      );
       while (_seriesInfoCache.length > _maxCachedSeriesInfo) {
         String? oldestKey;
         DateTime? oldestAt;
@@ -851,11 +926,28 @@ class XtreamCodesService {
         _seriesInfoCache.remove(oldestKey);
       }
       return result;
-    } catch (e) {
-      debugPrint('XtreamCodesService: Error fetching series info: $e');
+    } catch (error) {
+      debugPrint(
+        'XtreamCodesService: Error fetching series info '
+        '(${error.runtimeType})',
+      );
       return null;
     }
   }
+
+  Future<void> _authorize({
+    String? resourceId,
+    int? resourceRevision,
+    bool allowUnbound = false,
+  }) => ProfileCollectionResourceFacade.authorizeExecution(
+    resourceId: resourceId,
+    resourceRevision: resourceRevision,
+    acceptedTypes: const <ConnectionResourceType>{
+      ConnectionResourceType.iptvXtream,
+    },
+    feature: ProfileFeature.iptv,
+    allowUnbound: allowUnbound,
+  );
 
   /// Episode duration in seconds: `duration_secs` (number or numeric string)
   /// when present AND positive, else the `duration` "HH:MM:SS"/"MM:SS" string
@@ -1100,11 +1192,13 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
     warning =
         'Could not load ${job.label} categories — showing channels ungrouped';
   } else {
-    final categoriesBody =
-        XtreamCodesService.encodingForCharset(job.categoriesCharset)
-            .decode(categoriesBytes.materialize().asUint8List());
-    final (categoriesData, catError) =
-        XtreamCodesService.decodeJsonListSync(categoriesBody, 'categories');
+    final categoriesBody = XtreamCodesService.encodingForCharset(
+      job.categoriesCharset,
+    ).decode(categoriesBytes.materialize().asUint8List());
+    final (categoriesData, catError) = XtreamCodesService.decodeJsonListSync(
+      categoriesBody,
+      'categories',
+    );
     if (categoriesData == null) {
       warning =
           'Could not load ${job.label} categories — showing channels ungrouped';
@@ -1148,10 +1242,13 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
   final isSeries = job.contentType == 'series';
 
   // The expensive UTF-8 pass now happens HERE, on the worker.
-  final streamsBody = XtreamCodesService.encodingForCharset(job.streamsCharset)
-      .decode(job.streamsBytes.materialize().asUint8List());
-  final (streamsData, streamsError) =
-      XtreamCodesService.decodeJsonListSync(streamsBody, 'streams');
+  final streamsBody = XtreamCodesService.encodingForCharset(
+    job.streamsCharset,
+  ).decode(job.streamsBytes.materialize().asUint8List());
+  final (streamsData, streamsError) = XtreamCodesService.decodeJsonListSync(
+    streamsBody,
+    'streams',
+  );
   if (streamsError != null) return (null, streamsError);
 
   final channels = <IptvChannel>[];
@@ -1176,10 +1273,11 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
           : null;
       // Panels disagree on the release-date key — resolve the known
       // spellings in order (same alias set other mature clients use).
-      final releaseDate = (stream['releaseDate'] ??
-              stream['release_date'] ??
-              stream['releasedate'])
-          ?.toString();
+      final releaseDate =
+          (stream['releaseDate'] ??
+                  stream['release_date'] ??
+                  stream['releasedate'])
+              ?.toString();
       channels.add(
         IptvChannel(
           name: name,
@@ -1243,7 +1341,8 @@ IptvParseResult _buildXtreamStreams(_StreamsJob job) {
       channels.add(
         IptvChannel(
           name: name,
-          url: '${job.serverUrl}/movie/${job.encodedUser}/${job.encodedPass}/'
+          url:
+              '${job.serverUrl}/movie/${job.encodedUser}/${job.encodedPass}/'
               '$streamId.$extension',
           logoUrl: stream['stream_icon']?.toString(),
           group: group,

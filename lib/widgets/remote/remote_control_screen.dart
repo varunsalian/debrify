@@ -1,6 +1,13 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../models/profiles/profile_policy.dart';
+import '../../services/profiles/profile_policy_guard.dart';
+import '../../services/profiles/profile_avatar_ingest.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/remote_control/remote_control_state.dart';
 import '../../services/remote_control/udp_discovery_service.dart';
@@ -9,6 +16,7 @@ import 'remote_addon_export.dart';
 import 'remote_channel_export.dart';
 import 'remote_config_export.dart';
 import 'remote_keyboard_input.dart';
+import 'remote_pairing_dialog.dart';
 import 'remote_transfer_all.dart';
 
 /// Full remote control UI modal
@@ -24,6 +32,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   String? _activeView;
   // Track if keyboard input is showing
   bool _showKeyboard = false;
+  bool _sendingAvatar = false;
 
   @override
   void initState() {
@@ -43,7 +52,28 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     }
   }
 
-  void _openView(String view) {
+  Future<void> _openView(String view) async {
+    if (view != 'navigate' &&
+        !await ProfilePolicyGuard.allows(ProfileFeature.remoteTransfer)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Setup transfer is disabled for this profile.'),
+        ),
+      );
+      return;
+    }
+    if (view == 'navigate') {
+      if (!mounted) return;
+      final state = RemoteControlState();
+      final device = state.connectedDevice;
+      if (device == null) return;
+      final authorized = await ensureNavigationSession(context, state, device);
+      if (!mounted || !authorized) {
+        return;
+      }
+    }
+    if (!mounted) return;
     setState(() {
       _activeView = view;
     });
@@ -110,14 +140,16 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, bool isConnected, String deviceName) {
+  Widget _buildHeader(
+    BuildContext context,
+    bool isConnected,
+    String deviceName,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withValues(alpha: 0.1),
-          ),
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
       ),
       child: Row(
@@ -134,10 +166,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           Expanded(
             child: Text(
               'Remote Control',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
           ),
 
@@ -269,7 +298,9 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         // Device list or empty state
         if (hasDevices) ...[
           // Device list
-          ...state.discoveredDevices.map((device) => _buildDeviceTile(device, state)),
+          ...state.discoveredDevices.map(
+            (device) => _buildDeviceTile(device, state),
+          ),
         ] else if (!state.isScanning) ...[
           // Empty state
           const SizedBox(height: 40),
@@ -279,9 +310,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: const Color(0xFF1E293B),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1),
-              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: Icon(
               Icons.tv_off,
@@ -329,9 +358,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
         foregroundColor: Colors.white.withValues(alpha: 0.85),
         side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -407,8 +434,12 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     ),
                   ),
                   validator: _validateIpv4,
-                  onFieldSubmitted: (_) =>
-                      _submitManualIp(dialogContext, formKey, controller, state),
+                  onFieldSubmitted: (_) => _submitManualIp(
+                    dialogContext,
+                    formKey,
+                    controller,
+                    state,
+                  ),
                 ),
               ),
             ],
@@ -462,7 +493,8 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
   }
 
   Widget _buildDeviceTile(DiscoveredDevice device, RemoteControlState state) {
-    final isConnecting = state.connectionState == RemoteConnectionState.connecting &&
+    final isConnecting =
+        state.connectionState == RemoteConnectionState.connecting &&
         state.connectedDevice?.ip == device.ip;
 
     return Padding(
@@ -482,9 +514,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFF1E293B),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1),
-              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: Row(
               children: [
@@ -496,11 +526,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     color: const Color(0xFF334155),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
-                    Icons.tv,
-                    color: Colors.white,
-                    size: 24,
-                  ),
+                  child: const Icon(Icons.tv, color: Colors.white, size: 24),
                 ),
 
                 const SizedBox(width: 16),
@@ -536,12 +562,17 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     height: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF6366F1),
+                      ),
                     ),
                   )
                 else
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(16),
@@ -610,6 +641,15 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           onTap: () => _openView('config'),
         ),
 
+        const SizedBox(height: 8),
+
+        _buildMenuItem(
+          icon: Icons.account_circle_outlined,
+          title: _sendingAvatar ? 'Sending Avatar…' : 'Send Profile Avatar',
+          subtitle: 'Apply a photo to the active Admin on TV',
+          onTap: _sendingAvatar ? () {} : () => _pickAndSendAvatar(state),
+        ),
+
         const SizedBox(height: 20),
 
         // Switch TV option
@@ -631,6 +671,83 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
     );
   }
 
+  Future<void> _pickAndSendAvatar(RemoteControlState state) async {
+    if (!await ProfilePolicyGuard.allows(ProfileFeature.remoteTransfer) ||
+        !mounted) {
+      return;
+    }
+    final device = state.connectedDevice;
+    if (device == null) return;
+    try {
+      final pick = await FilePicker.platform.pickFiles(
+        dialogTitle: 'Choose a profile avatar',
+        type: FileType.any,
+        withData: false,
+      );
+      if (pick == null || pick.files.isEmpty || !mounted) return;
+      final picked = pick.files.single;
+      if (picked.size > ProfileAvatarIngest.maxInputBytes) {
+        throw const ProfileAvatarRejected(
+          'That image is too large to send. Choose one under 12 MB.',
+        );
+      }
+      final bytes = await _readAvatarBytes(picked);
+      if (!mounted) return;
+      final session = await ensureAuthorizedSession(context, state, device);
+      if (session == null || !mounted) return;
+      setState(() => _sendingAvatar = true);
+      final applied = await state.sendProfileAvatar(device.ip, bytes);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            applied
+                ? 'Profile avatar updated on TV'
+                : 'The TV did not apply that avatar',
+          ),
+        ),
+      );
+    } on ProfileAvatarRejected catch (rejected) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(rejected.message)));
+    } on PlatformException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('The image picker is not available.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('That avatar could not be sent.')),
+      );
+    } finally {
+      if (mounted) setState(() => _sendingAvatar = false);
+    }
+  }
+
+  Future<Uint8List> _readAvatarBytes(PlatformFile picked) async {
+    final inline = picked.bytes;
+    if (inline != null) return inline;
+    final path = picked.path;
+    if (path == null || path.isEmpty) {
+      throw const ProfileAvatarRejected('That file could not be read.');
+    }
+    final builder = BytesBuilder(copy: false);
+    var length = 0;
+    await for (final chunk in File(path).openRead()) {
+      if (length > ProfileAvatarIngest.maxInputBytes - chunk.length) {
+        throw const ProfileAvatarRejected(
+          'That image is too large to send. Choose one under 12 MB.',
+        );
+      }
+      builder.add(chunk);
+      length += chunk.length;
+    }
+    return builder.takeBytes();
+  }
+
   Widget _buildMenuItem({
     required IconData icon,
     required String title,
@@ -650,9 +767,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFF1E293B).withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
-            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: [
@@ -674,11 +789,7 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
                     ),
                   ],
                 ),
-                child: Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 20,
-                ),
+                child: Icon(icon, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -794,15 +905,15 @@ class _RemoteControlScreenState extends State<RemoteControlScreen> {
               child: OutlinedButton.icon(
                 onPressed: () {
                   HapticFeedback.mediumImpact();
-                  RemoteControlState().sendNavigateCommand(NavigateCommand.back);
+                  RemoteControlState().sendNavigateCommand(
+                    NavigateCommand.back,
+                  );
                 },
                 icon: const Icon(Icons.arrow_back, size: 20),
                 label: const Text('Back'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
-                  side: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.3),
-                  ),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),

@@ -61,7 +61,7 @@ class StremioTvEmptyState extends StatelessWidget {
               onKeyEvent: (node, event) {
                 if (event is! KeyDownEvent) return KeyEventResult.ignored;
                 if (isActivateKey(event.logicalKey)) {
-                  MainPageBridge.switchTab?.call(7);
+                  MainPageBridge.switchTab?.call(MainTab.addons);
                   return KeyEventResult.handled;
                 }
                 return KeyEventResult.ignored;
@@ -70,7 +70,7 @@ class StremioTvEmptyState extends StatelessWidget {
                 builder: (context) {
                   final focused = Focus.of(context).hasFocus;
                   return GestureDetector(
-                    onTap: () => MainPageBridge.switchTab?.call(7),
+                    onTap: () => MainPageBridge.switchTab?.call(MainTab.addons),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 24, vertical: 12),

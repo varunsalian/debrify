@@ -678,6 +678,14 @@ class DetailActionRow extends StatelessWidget {
           icon: Icons.layers_rounded,
           onTap: model.onBrowse!,
         ),
+      if (model.onToggleMyWatchlist != null)
+        DetailGhostButton(
+          label: model.inMyWatchlist ? 'In My Watchlist' : 'My Watchlist',
+          icon: model.inMyWatchlist
+              ? Icons.bookmark_rounded
+              : Icons.bookmark_add_outlined,
+          onTap: model.onToggleMyWatchlist!,
+        ),
       if (model.onSelectSource != null)
         DetailSourcePill(
           count: model.sourceCount,

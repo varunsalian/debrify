@@ -231,7 +231,14 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
   }
 
   Future<void> _logout() async {
-    await TraktService.instance.logout();
+    try {
+      await TraktService.instance.logout();
+    } catch (_) {
+      _showSnackBar(
+        'This connection is shared. Revoke or transfer profile access before disconnecting.',
+      );
+      return;
+    }
 
     if (!mounted) return;
 
@@ -306,9 +313,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                                 _isConnected
                                     ? Icons.check_circle
                                     : Icons.circle_outlined,
-                                color: _isConnected
-                                    ? t.success
-                                    : t.dim2,
+                                color: _isConnected ? t.success : t.dim2,
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -353,9 +358,7 @@ class _TraktSettingsPageState extends State<TraktSettingsPage> {
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: t.danger,
                                     side: BorderSide(
-                                      color: t.danger.withValues(
-                                        alpha: 0.4,
-                                      ),
+                                      color: t.danger.withValues(alpha: 0.4),
                                     ),
                                   ),
                                 ),
@@ -564,7 +567,21 @@ class _FocusRing extends StatefulWidget {
 }
 
 class _FocusRingState extends State<_FocusRing> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -574,7 +591,8 @@ class _FocusRingState extends State<_FocusRing> {
       canRequestFocus: false,
       // hasFocus includes descendants, so this fires when the wrapped
       // control receives DPAD focus.
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       child: Container(
         decoration: BoxDecoration(
           border: Border.all(

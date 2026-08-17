@@ -9,42 +9,54 @@ class DebrifyTvRepository {
 
   static final DebrifyTvRepository instance = DebrifyTvRepository._();
 
-  Future<List<DebrifyTvChannelRecord>> fetchAllChannels() async {
-    final db = await DebrifyTvDatabase.instance.database;
+  Future<List<DebrifyTvChannelRecord>> fetchAllChannels() {
+    return DebrifyTvDatabase.instance.runScoped((db) async {
+      final channels = await db.query(
+        'tv_channels',
+        orderBy: 'channel_number ASC',
+      );
 
-    final channels = await db.query(
-      'tv_channels',
-      orderBy: 'channel_number ASC',
-    );
+      if (channels.isEmpty) {
+        return const [];
+      }
 
-    if (channels.isEmpty) {
-      return const [];
-    }
+      // Keep the channel and keyword reads on one captured profile scope.
+      final List<DebrifyTvChannelRecord> result = [];
+      for (final row in channels) {
+        final channelId = row['channel_id'] as String;
+        final keywords = await _fetchChannelKeywords(db, channelId);
 
-    // Load keywords for all channels
-    final List<DebrifyTvChannelRecord> result = [];
-    for (final row in channels) {
-      final channelId = row['channel_id'] as String;
-      final keywords = await fetchChannelKeywords(channelId);
+        result.add(
+          DebrifyTvChannelRecord(
+            channelId: channelId,
+            name: row['name'] as String,
+            keywords: keywords,
+            avoidNsfw: (row['avoid_nsfw'] as int? ?? 1) == 1,
+            channelNumber: (row['channel_number'] as int? ?? 0),
+            createdAt: DateTime.fromMillisecondsSinceEpoch(
+              row['created_at'] as int? ?? 0,
+            ),
+            updatedAt: DateTime.fromMillisecondsSinceEpoch(
+              row['updated_at'] as int? ?? 0,
+            ),
+          ),
+        );
+      }
 
-      result.add(DebrifyTvChannelRecord(
-        channelId: channelId,
-        name: row['name'] as String,
-        keywords: keywords,
-        avoidNsfw: (row['avoid_nsfw'] as int? ?? 1) == 1,
-        channelNumber: (row['channel_number'] as int? ?? 0),
-        createdAt:
-            DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int? ?? 0),
-        updatedAt:
-            DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int? ?? 0),
-      ));
-    }
-
-    return result;
+      return result;
+    });
   }
 
-  Future<List<String>> fetchChannelKeywords(String channelId) async {
-    final db = await DebrifyTvDatabase.instance.database;
+  Future<List<String>> fetchChannelKeywords(String channelId) {
+    return DebrifyTvDatabase.instance.runScoped(
+      (db) => _fetchChannelKeywords(db, channelId),
+    );
+  }
+
+  Future<List<String>> _fetchChannelKeywords(
+    DatabaseExecutor db,
+    String channelId,
+  ) async {
     final rows = await db.query(
       'tv_channel_keywords',
       where: 'channel_id = ?',
@@ -84,18 +96,14 @@ class DebrifyTvRepository {
         }
       }
 
-      await txn.insert(
-        'tv_channels',
-        {
-          'channel_id': record.channelId,
-          'name': record.name,
-          'avoid_nsfw': record.avoidNsfw ? 1 : 0,
-          'channel_number': channelNumber,
-          'created_at': record.createdAt.millisecondsSinceEpoch,
-          'updated_at': record.updatedAt.millisecondsSinceEpoch,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await txn.insert('tv_channels', {
+        'channel_id': record.channelId,
+        'name': record.name,
+        'avoid_nsfw': record.avoidNsfw ? 1 : 0,
+        'channel_number': channelNumber,
+        'created_at': record.createdAt.millisecondsSinceEpoch,
+        'updated_at': record.updatedAt.millisecondsSinceEpoch,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
 
       await txn.delete(
         'tv_channel_keywords',
@@ -104,27 +112,19 @@ class DebrifyTvRepository {
       );
 
       for (var i = 0; i < record.keywords.length; i++) {
-        await txn.insert(
-          'tv_channel_keywords',
-          {
-            'channel_id': record.channelId,
-            'position': i,
-            'keyword': record.keywords[i],
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+        await txn.insert('tv_channel_keywords', {
+          'channel_id': record.channelId,
+          'position': i,
+          'keyword': record.keywords[i],
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
 
-      await txn.insert(
-        'tv_channel_cache_state',
-        {
-          'channel_id': record.channelId,
-          'status': DebrifyTvCacheStatus.warming,
-          'error_message': null,
-          'fetched_at': 0,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await txn.insert('tv_channel_cache_state', {
+        'channel_id': record.channelId,
+        'status': DebrifyTvCacheStatus.warming,
+        'error_message': null,
+        'fetched_at': 0,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
   }
 

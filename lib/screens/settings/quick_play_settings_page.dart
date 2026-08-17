@@ -208,7 +208,11 @@ class _FocusButton extends StatefulWidget {
 }
 
 class _FocusButtonState extends State<_FocusButton> {
-  bool focused = false;
+  /// Live, never cached — Flutter can skip the falling edge of a focus
+  /// notification, and a remembered flag then survives the change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `widgets/settings_widgets.dart`.
+  bool get focused => widget.node.hasFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -216,7 +220,7 @@ class _FocusButtonState extends State<_FocusButton> {
     final t = app.settings;
     return InkWell(
       focusNode: widget.node,
-      onFocusChange: (v) => setState(() => focused = v),
+      onFocusChange: (_) => setState(() {}),
       onTap: widget.onTap,
       borderRadius: app.shape.br(10),
       child: Container(
@@ -259,7 +263,11 @@ class _PresetCard extends StatefulWidget {
 }
 
 class _PresetCardState extends State<_PresetCard> {
-  bool focused = false;
+  /// Live, never cached — Flutter can skip the falling edge of a focus
+  /// notification, and a remembered flag then survives the change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `widgets/settings_widgets.dart`.
+  bool get focused => widget.node.hasFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -267,7 +275,7 @@ class _PresetCardState extends State<_PresetCard> {
     final t = app.settings;
     return InkWell(
       focusNode: widget.node,
-      onFocusChange: (v) => setState(() => focused = v),
+      onFocusChange: (_) => setState(() {}),
       onTap: widget.onTap,
       borderRadius: app.shape.br(16),
       child: Container(
@@ -485,7 +493,11 @@ class _ActionRow extends StatefulWidget {
 }
 
 class _ActionRowState extends State<_ActionRow> {
-  bool focused = false;
+  /// Live, never cached — Flutter can skip the falling edge of a focus
+  /// notification, and a remembered flag then survives the change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `widgets/settings_widgets.dart`.
+  bool get focused => widget.node.hasFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -493,7 +505,7 @@ class _ActionRowState extends State<_ActionRow> {
     final t = app.settings;
     return InkWell(
       focusNode: widget.node,
-      onFocusChange: (v) => setState(() => focused = v),
+      onFocusChange: (_) => setState(() {}),
       onTap: widget.onTap,
       borderRadius: app.shape.br(14),
       child: Container(

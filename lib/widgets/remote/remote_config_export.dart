@@ -3,14 +3,15 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../models/indexer_manager_config.dart';
-import '../../models/webdav_item.dart';
 import '../../services/storage_service.dart';
 import '../../services/iptv_transfer_payload.dart';
 import '../../services/remote_control/remote_chunked_send.dart';
 import '../../services/remote_control/remote_control_state.dart';
+import 'remote_pairing_dialog.dart';
 import '../../services/remote_control/remote_constants.dart';
 import '../../services/engine/local_engine_storage.dart';
+import '../../services/profiles/profile_async_authorization.dart';
+import '../../models/profiles/profile_policy.dart';
 
 /// Widget for exporting setup/credentials to TV
 class RemoteConfigExport extends StatefulWidget {
@@ -57,39 +58,23 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
   _ConfigItem? _iptvFavorites;
   _ConfigItem? _iptvLists;
 
-  // API keys (loaded from storage)
-  String? _realDebridApiKey;
-  String? _torboxApiKey;
-  String? _premiumizeApiKey;
-  String? _allDebridApiKey;
-  String? _pikpakEmail;
-
-  // Trakt session bundle (loaded from storage)
-  String? _traktAccessToken;
-  String? _traktRefreshToken;
-  int? _traktTokenExpiry;
+  // Non-secret account labels used only for the transfer inventory.
   String? _traktUsername;
-
-  // Simkl session bundle (loaded from storage) — no refresh token/expiry,
-  // Simkl's PIN-issued tokens don't have either.
-  String? _simklAccessToken;
   String? _simklUsername;
 
   // PikPak password (entered by user)
   final _pikpakPasswordController = TextEditingController();
   bool _showPikpakPassword = false;
 
-  // Search engine IDs
-  List<String> _engineIds = [];
-
-  List<WebDavConfig> _webDavServers = const [];
-  List<IndexerManagerConfig> _indexerManagerConfigs = const [];
-
-  // IPTV setup, built once on load so the tiles can show real counts and the
-  // send path doesn't have to re-read the store.
-  List<Map<String, dynamic>> _iptvPlaylistPayload = const [];
-  List<Map<String, dynamic>> _iptvFavoritePayload = const [];
-  List<Map<String, dynamic>> _iptvListPayload = const [];
+  // Inventory state intentionally retains counts, not decrypted transfer
+  // payloads. Every selected item is re-read and re-authorized at send time.
+  int _engineCount = 0;
+  int _webDavCount = 0;
+  int _indexerManagerCount = 0;
+  int _iptvPlaylistCount = 0;
+  int _iptvFavoriteCount = 0;
+  int _iptvListCount = 0;
+  int _iptvListChannelCount = 0;
 
   /// Playlists imported from a file, which can't be sent — their definition
   /// is the raw M3U text. Surfaced so the screen says so instead of quietly
@@ -113,89 +98,121 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
 
     try {
       // Load Real-Debrid
-      _realDebridApiKey = await StorageService.getApiKey();
+      final realDebridApiKey = await StorageService.getApiKey(
+        forRemoteTransfer: true,
+      );
       final rdEnabled = await StorageService.getRealDebridIntegrationEnabled();
       final hasRd =
-          _realDebridApiKey != null &&
-          _realDebridApiKey!.isNotEmpty &&
-          rdEnabled;
+          realDebridApiKey != null && realDebridApiKey.isNotEmpty && rdEnabled;
 
       // Load Torbox
-      _torboxApiKey = await StorageService.getTorboxApiKey();
+      final torboxApiKey = await StorageService.getTorboxApiKey(
+        forRemoteTransfer: true,
+      );
       final tbEnabled = await StorageService.getTorboxIntegrationEnabled();
       final hasTb =
-          _torboxApiKey != null && _torboxApiKey!.isNotEmpty && tbEnabled;
+          torboxApiKey != null && torboxApiKey.isNotEmpty && tbEnabled;
 
       // Load Premiumize
-      _premiumizeApiKey = await StorageService.getPremiumizeApiKey();
+      final premiumizeApiKey = await StorageService.getPremiumizeApiKey(
+        forRemoteTransfer: true,
+      );
       final pmEnabled = await StorageService.getPremiumizeIntegrationEnabled();
       final hasPm =
-          _premiumizeApiKey != null && _premiumizeApiKey!.isNotEmpty && pmEnabled;
+          premiumizeApiKey != null && premiumizeApiKey.isNotEmpty && pmEnabled;
 
       // Load AllDebrid
-      _allDebridApiKey = await StorageService.getAllDebridApiKey();
+      final allDebridApiKey = await StorageService.getAllDebridApiKey(
+        forRemoteTransfer: true,
+      );
       final adEnabled = await StorageService.getAllDebridIntegrationEnabled();
       final hasAd =
-          _allDebridApiKey != null && _allDebridApiKey!.isNotEmpty && adEnabled;
+          allDebridApiKey != null && allDebridApiKey.isNotEmpty && adEnabled;
 
       // Load PikPak
-      _pikpakEmail = await StorageService.getPikPakEmail();
+      final pikpakEmail = await StorageService.getPikPakEmail(
+        forRemoteTransfer: true,
+      );
       final ppEnabled = await StorageService.getPikPakEnabled();
-      final hasPp =
-          _pikpakEmail != null && _pikpakEmail!.isNotEmpty && ppEnabled;
+      final hasPp = pikpakEmail != null && pikpakEmail.isNotEmpty && ppEnabled;
 
       // Load Trakt session
-      _traktAccessToken = await StorageService.getTraktAccessToken();
-      _traktRefreshToken = await StorageService.getTraktRefreshToken();
-      _traktTokenExpiry = await StorageService.getTraktTokenExpiry();
+      final traktAccessToken = await StorageService.getTraktAccessToken(
+        forRemoteTransfer: true,
+      );
+      final traktRefreshToken = await StorageService.getTraktRefreshToken(
+        forRemoteTransfer: true,
+      );
       _traktUsername = await StorageService.getTraktUsername();
       final hasTrakt =
-          _traktAccessToken != null &&
-          _traktAccessToken!.isNotEmpty &&
-          _traktRefreshToken != null &&
-          _traktRefreshToken!.isNotEmpty;
+          traktAccessToken != null &&
+          traktAccessToken.isNotEmpty &&
+          traktRefreshToken != null &&
+          traktRefreshToken.isNotEmpty;
 
       // Load Simkl session
-      _simklAccessToken = await StorageService.getSimklAccessToken();
+      final simklAccessToken = await StorageService.getSimklAccessToken(
+        forRemoteTransfer: true,
+      );
       _simklUsername = await StorageService.getSimklUsername();
-      final hasSimkl =
-          _simklAccessToken != null && _simklAccessToken!.isNotEmpty;
+      final hasSimkl = simklAccessToken != null && simklAccessToken.isNotEmpty;
 
       // Load Search Engines
       await LocalEngineStorage.instance.initialize();
-      _engineIds = await LocalEngineStorage.instance.getImportedEngineIds();
-      final hasEngines = _engineIds.isNotEmpty;
+      final engineIds = await LocalEngineStorage.instance
+          .getImportedEngineIds();
+      _engineCount = engineIds.length;
+      final hasEngines = _engineCount > 0;
 
       // WebDAV / indexer managers: the protocol and the TV have handled these
       // since they were added to "Transfer Everything" — this screen just
       // never offered them.
       try {
-        _webDavServers = await StorageService.getWebDavServers();
-      } catch (e) {
-        debugPrint('RemoteConfigExport: Failed to read WebDAV servers: $e');
-        _webDavServers = const [];
+        final servers = await StorageService.getWebDavServers(
+          forSettings: false,
+          forRemoteTransfer: true,
+        );
+        _webDavCount = servers.length;
+      } catch (_) {
+        debugPrint('RemoteConfigExport: WebDAV inventory failed');
+        _webDavCount = 0;
       }
       try {
-        _indexerManagerConfigs =
-            await StorageService.getIndexerManagerConfigs();
-      } catch (e) {
-        debugPrint('RemoteConfigExport: Failed to read indexer managers: $e');
-        _indexerManagerConfigs = const [];
+        final managers = await StorageService.getIndexerManagerConfigs(
+          forSettings: false,
+          forRemoteTransfer: true,
+        );
+        _indexerManagerCount = managers.length;
+      } catch (_) {
+        debugPrint('RemoteConfigExport: indexer inventory failed');
+        _indexerManagerCount = 0;
       }
 
       try {
-        _iptvPlaylistPayload = await IptvTransferPayload.buildPlaylists();
-        _iptvFavoritePayload = await IptvTransferPayload.buildFavorites();
-        _iptvListPayload = await IptvTransferPayload.buildCustomLists();
+        final playlists = await IptvTransferPayload.buildPlaylists(
+          forRemoteTransfer: true,
+        );
+        final favorites = await IptvTransferPayload.buildFavorites(
+          forRemoteTransfer: true,
+        );
+        final lists = await IptvTransferPayload.buildCustomLists(
+          forRemoteTransfer: true,
+        );
+        _iptvPlaylistCount = playlists.length;
+        _iptvFavoriteCount = favorites.length;
+        _iptvListCount = lists.length;
+        _iptvListChannelCount = IptvTransferPayload.countListChannels(lists);
         _iptvFileImported =
             (await IptvTransferPayload.countPlaylists()).fileImported;
-      } catch (e) {
-        debugPrint('RemoteConfigExport: Failed to read IPTV setup: $e');
-        _iptvPlaylistPayload = const [];
-        _iptvFavoritePayload = const [];
-        _iptvListPayload = const [];
+      } catch (_) {
+        debugPrint('RemoteConfigExport: IPTV inventory failed');
+        _iptvPlaylistCount = 0;
+        _iptvFavoriteCount = 0;
+        _iptvListCount = 0;
+        _iptvListChannelCount = 0;
       }
 
+      if (!mounted) return;
       setState(() {
         _realDebrid = _ConfigItem(
           id: ConfigCommand.realDebrid,
@@ -266,47 +283,47 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           id: ConfigCommand.webDav,
           name: 'WebDAV',
           icon: 'wd',
-          isConfigured: _webDavServers.isNotEmpty,
-          selected: _webDavServers.isNotEmpty,
+          isConfigured: _webDavCount > 0,
+          selected: _webDavCount > 0,
         );
 
         _indexerManagers = _ConfigItem(
           id: ConfigCommand.indexerManagers,
           name: 'Jackett/Prowlarr',
           icon: 'im',
-          isConfigured: _indexerManagerConfigs.isNotEmpty,
-          selected: _indexerManagerConfigs.isNotEmpty,
+          isConfigured: _indexerManagerCount > 0,
+          selected: _indexerManagerCount > 0,
         );
 
         _iptvPlaylists = _ConfigItem(
           id: ConfigCommand.iptvPlaylists,
           name: 'IPTV Providers',
           icon: 'iptv',
-          isConfigured: _iptvPlaylistPayload.isNotEmpty,
-          selected: _iptvPlaylistPayload.isNotEmpty,
+          isConfigured: _iptvPlaylistCount > 0,
+          selected: _iptvPlaylistCount > 0,
         );
 
         _iptvFavorites = _ConfigItem(
           id: ConfigCommand.iptvFavorites,
           name: 'IPTV Favorites',
           icon: 'fav',
-          isConfigured: _iptvFavoritePayload.isNotEmpty,
-          selected: _iptvFavoritePayload.isNotEmpty,
+          isConfigured: _iptvFavoriteCount > 0,
+          selected: _iptvFavoriteCount > 0,
         );
 
         _iptvLists = _ConfigItem(
           id: ConfigCommand.iptvLists,
           name: 'IPTV Lists',
           icon: 'list',
-          isConfigured: _iptvListPayload.isNotEmpty,
-          selected: _iptvListPayload.isNotEmpty,
+          isConfigured: _iptvListCount > 0,
+          selected: _iptvListCount > 0,
         );
 
         _loading = false;
       });
-    } catch (e) {
-      debugPrint('RemoteConfigExport: Failed to load configs: $e');
-      setState(() => _loading = false);
+    } catch (_) {
+      debugPrint('RemoteConfigExport: setup inventory failed');
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -359,6 +376,15 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
       return;
     }
 
+    // Credential gate: encrypted session + pairing code (or remembered
+    // pairing). Old-version TVs are refused with an "update the TV" dialog.
+    final session = await ensureAuthorizedSession(
+      context,
+      RemoteControlState(),
+      connectedDevice,
+    );
+    if (session == null || !mounted) return;
+
     setState(() => _sending = true);
     HapticFeedback.mediumImpact();
 
@@ -369,227 +395,221 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
     final List<String> results = [];
 
     try {
-      // Send Real-Debrid
-      if (_realDebrid?.selected == true && _realDebridApiKey != null) {
-        final success = await state.sendConfigCommandToDevice(
+      Future<void> sendSelected(
+        bool selected,
+        String label,
+        Future<bool> Function() send,
+      ) async {
+        if (!selected) return;
+        final authorization = await ProfileAsyncAuthorization.capture(
+          ProfileFeature.remoteTransfer,
+        );
+        final sent = authorization == null
+            ? await send()
+            : await authorization.runIfCurrentAsOutbound(send);
+        if (sent) {
+          successCount++;
+          results.add(label);
+        } else {
+          failCount++;
+        }
+      }
+
+      Future<bool> sendScalar(
+        String command,
+        Future<String?> Function() read,
+      ) async {
+        final value = await read();
+        return value != null &&
+            value.isNotEmpty &&
+            await state.sendConfigCommandToDevice(
+              command,
+              targetIp,
+              configData: value,
+            );
+      }
+
+      await sendSelected(
+        _realDebrid?.selected == true,
+        'Real-Debrid',
+        () => sendScalar(
           ConfigCommand.realDebrid,
-          targetIp,
-          configData: _realDebridApiKey,
-        );
-        if (success) {
-          successCount++;
-          results.add('Real-Debrid');
-        } else {
-          failCount++;
-        }
-      }
-
-      // Send Torbox
-      if (_torbox?.selected == true && _torboxApiKey != null) {
-        final success = await state.sendConfigCommandToDevice(
+          () => StorageService.getApiKey(forRemoteTransfer: true),
+        ),
+      );
+      await sendSelected(
+        _torbox?.selected == true,
+        'Torbox',
+        () => sendScalar(
           ConfigCommand.torbox,
-          targetIp,
-          configData: _torboxApiKey,
-        );
-        if (success) {
-          successCount++;
-          results.add('Torbox');
-        } else {
-          failCount++;
-        }
-      }
-
-      // Send Premiumize
-      if (_premiumize?.selected == true && _premiumizeApiKey != null) {
-        final success = await state.sendConfigCommandToDevice(
+          () => StorageService.getTorboxApiKey(forRemoteTransfer: true),
+        ),
+      );
+      await sendSelected(
+        _premiumize?.selected == true,
+        'Premiumize',
+        () => sendScalar(
           ConfigCommand.premiumize,
-          targetIp,
-          configData: _premiumizeApiKey,
-        );
-        if (success) {
-          successCount++;
-          results.add('Premiumize');
-        } else {
-          failCount++;
-        }
-      }
-
-      // Send AllDebrid
-      if (_allDebrid?.selected == true && _allDebridApiKey != null) {
-        final success = await state.sendConfigCommandToDevice(
+          () => StorageService.getPremiumizeApiKey(forRemoteTransfer: true),
+        ),
+      );
+      await sendSelected(
+        _allDebrid?.selected == true,
+        'AllDebrid',
+        () => sendScalar(
           ConfigCommand.allDebrid,
-          targetIp,
-          configData: _allDebridApiKey,
+          () => StorageService.getAllDebridApiKey(forRemoteTransfer: true),
+        ),
+      );
+      await sendSelected(_pikpak?.selected == true, 'PikPak', () async {
+        final email = await StorageService.getPikPakEmail(
+          forRemoteTransfer: true,
         );
-        if (success) {
-          successCount++;
-          results.add('AllDebrid');
-        } else {
-          failCount++;
-        }
-      }
-
-      // Send PikPak
-      if (_pikpak?.selected == true && _pikpakEmail != null) {
-        final pikpakData = jsonEncode({
-          'email': _pikpakEmail,
-          'password': _pikpakPasswordController.text,
-        });
-        final success = await state.sendConfigCommandToDevice(
+        if (email == null || email.isEmpty) return false;
+        return state.sendConfigCommandToDevice(
           ConfigCommand.pikpak,
           targetIp,
-          configData: pikpakData,
+          configData: jsonEncode(<String, Object?>{
+            'email': email,
+            'password': _pikpakPasswordController.text,
+          }),
         );
-        if (success) {
-          successCount++;
-          results.add('PikPak');
-        } else {
-          failCount++;
+      });
+      await sendSelected(_trakt?.selected == true, 'Trakt', () async {
+        final access = await StorageService.getTraktAccessToken(
+          forRemoteTransfer: true,
+        );
+        final refresh = await StorageService.getTraktRefreshToken(
+          forRemoteTransfer: true,
+        );
+        if (access == null ||
+            access.isEmpty ||
+            refresh == null ||
+            refresh.isEmpty) {
+          return false;
         }
-      }
-
-      // Send Trakt session
-      if (_trakt?.selected == true &&
-          _traktAccessToken != null &&
-          _traktRefreshToken != null) {
-        final traktData = jsonEncode({
-          'access_token': _traktAccessToken,
-          'refresh_token': _traktRefreshToken,
-          if (_traktTokenExpiry != null) 'expiry_ms': _traktTokenExpiry,
-          if (_traktUsername != null) 'username': _traktUsername,
-        });
-        final success = await state.sendConfigCommandToDevice(
+        final expiry = await StorageService.getTraktTokenExpiry();
+        final username = await StorageService.getTraktUsername();
+        return state.sendConfigCommandToDevice(
           ConfigCommand.trakt,
           targetIp,
-          configData: traktData,
+          configData: jsonEncode(<String, Object?>{
+            'access_token': access,
+            'refresh_token': refresh,
+            if (expiry != null) 'expiry_ms': expiry,
+            if (username != null) 'username': username,
+          }),
         );
-        if (success) {
-          successCount++;
-          results.add('Trakt');
-        } else {
-          failCount++;
-        }
-      }
-
-      // Send Simkl session
-      if (_simkl?.selected == true && _simklAccessToken != null) {
-        final simklData = jsonEncode({
-          'access_token': _simklAccessToken,
-          if (_simklUsername != null) 'username': _simklUsername,
-        });
-        final success = await state.sendConfigCommandToDevice(
+      });
+      await sendSelected(_simkl?.selected == true, 'Simkl', () async {
+        final access = await StorageService.getSimklAccessToken(
+          forRemoteTransfer: true,
+        );
+        if (access == null || access.isEmpty) return false;
+        final username = await StorageService.getSimklUsername();
+        return state.sendConfigCommandToDevice(
           ConfigCommand.simkl,
           targetIp,
-          configData: simklData,
+          configData: jsonEncode(<String, Object?>{
+            'access_token': access,
+            if (username != null) 'username': username,
+          }),
         );
-        if (success) {
-          successCount++;
-          results.add('Simkl');
-        } else {
-          failCount++;
-        }
-      }
-
-      // Send Search Engines
-      if (_searchEngines?.selected == true && _engineIds.isNotEmpty) {
-        final success = await state.sendConfigCommandToDevice(
-          ConfigCommand.searchEngines,
-          targetIp,
-          configData: jsonEncode(_engineIds),
+      });
+      await sendSelected(
+        _searchEngines?.selected == true,
+        'Search Engines',
+        () async {
+          await LocalEngineStorage.instance.initialize();
+          final engineIds = await LocalEngineStorage.instance
+              .getImportedEngineIds();
+          return engineIds.isNotEmpty &&
+              await state.sendConfigCommandToDevice(
+                ConfigCommand.searchEngines,
+                targetIp,
+                configData: jsonEncode(engineIds),
+              );
+        },
+      );
+      await sendSelected(_webDav?.selected == true, 'WebDAV', () async {
+        final servers = await StorageService.getWebDavServers(
+          forSettings: false,
+          forRemoteTransfer: true,
         );
-        if (success) {
-          successCount++;
-          results.add('Search Engines');
-        } else {
-          failCount++;
-        }
-      }
-
-      // Send WebDAV servers
-      if (_webDav?.selected == true && _webDavServers.isNotEmpty) {
-        final success = await state.sendConfigCommandToDevice(
+        if (servers.isEmpty) return false;
+        return state.sendConfigCommandToDevice(
           ConfigCommand.webDav,
           targetIp,
-          configData: jsonEncode(
-            [for (final s in _webDavServers) s.toJson()],
-          ),
+          configData: jsonEncode([
+            for (final server in servers) server.toJson(),
+          ]),
         );
-        if (success) {
-          successCount++;
-          results.add('WebDAV');
-        } else {
-          failCount++;
-        }
-      }
-
-      // Send indexer managers
-      if (_indexerManagers?.selected == true &&
-          _indexerManagerConfigs.isNotEmpty) {
-        final success = await state.sendConfigCommandToDevice(
-          ConfigCommand.indexerManagers,
-          targetIp,
-          configData: jsonEncode(
-            [for (final c in _indexerManagerConfigs) c.toJson()],
-          ),
+      });
+      await sendSelected(
+        _indexerManagers?.selected == true,
+        'Jackett/Prowlarr',
+        () async {
+          final managers = await StorageService.getIndexerManagerConfigs(
+            forSettings: false,
+            forRemoteTransfer: true,
+          );
+          if (managers.isEmpty) return false;
+          return state.sendConfigCommandToDevice(
+            ConfigCommand.indexerManagers,
+            targetIp,
+            configData: jsonEncode([
+              for (final manager in managers) manager.toJson(),
+            ]),
+          );
+        },
+      );
+      await sendSelected(
+        _iptvPlaylists?.selected == true,
+        'IPTV Providers',
+        () async {
+          final payload = await IptvTransferPayload.buildPlaylists(
+            forRemoteTransfer: true,
+          );
+          return payload.isNotEmpty &&
+              await sendConfigPayloadToDevice(
+                state,
+                ConfigCommand.iptvPlaylists,
+                targetIp,
+                jsonEncode(payload),
+                label: 'IPTV providers',
+              );
+        },
+      );
+      await sendSelected(
+        _iptvFavorites?.selected == true,
+        'IPTV Favorites',
+        () async {
+          final payload = await IptvTransferPayload.buildFavorites(
+            forRemoteTransfer: true,
+          );
+          return payload.isNotEmpty &&
+              await sendConfigPayloadToDevice(
+                state,
+                ConfigCommand.iptvFavorites,
+                targetIp,
+                jsonEncode(payload),
+                label: 'IPTV favorites',
+              );
+        },
+      );
+      await sendSelected(_iptvLists?.selected == true, 'IPTV Lists', () async {
+        final payload = await IptvTransferPayload.buildCustomLists(
+          forRemoteTransfer: true,
         );
-        if (success) {
-          successCount++;
-          results.add('Jackett/Prowlarr');
-        } else {
-          failCount++;
-        }
-      }
-
-      // IPTV, providers first: favorites and lists name the provider they
-      // came from, and all three can outgrow a single packet, so they go via
-      // the chunked path.
-      if (_iptvPlaylists?.selected == true && _iptvPlaylistPayload.isNotEmpty) {
-        final success = await sendConfigPayloadToDevice(
-          state,
-          ConfigCommand.iptvPlaylists,
-          targetIp,
-          jsonEncode(_iptvPlaylistPayload),
-          label: 'IPTV providers',
-        );
-        if (success) {
-          successCount++;
-          results.add('IPTV Providers');
-        } else {
-          failCount++;
-        }
-      }
-
-      if (_iptvFavorites?.selected == true && _iptvFavoritePayload.isNotEmpty) {
-        final success = await sendConfigPayloadToDevice(
-          state,
-          ConfigCommand.iptvFavorites,
-          targetIp,
-          jsonEncode(_iptvFavoritePayload),
-          label: 'IPTV favorites',
-        );
-        if (success) {
-          successCount++;
-          results.add('IPTV Favorites');
-        } else {
-          failCount++;
-        }
-      }
-
-      if (_iptvLists?.selected == true && _iptvListPayload.isNotEmpty) {
-        final success = await sendConfigPayloadToDevice(
-          state,
-          ConfigCommand.iptvLists,
-          targetIp,
-          jsonEncode(_iptvListPayload),
-          label: 'IPTV lists',
-        );
-        if (success) {
-          successCount++;
-          results.add('IPTV Lists');
-        } else {
-          failCount++;
-        }
-      }
+        return payload.isNotEmpty &&
+            await sendConfigPayloadToDevice(
+              state,
+              ConfigCommand.iptvLists,
+              targetIp,
+              jsonEncode(payload),
+              label: 'IPTV lists',
+            );
+      });
 
       // Send complete signal to trigger TV restart (only if at least one succeeded)
       if (successCount > 0) {
@@ -627,13 +647,13 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           );
         }
       }
-    } catch (e) {
-      debugPrint('RemoteConfigExport: Failed to send config: $e');
+    } catch (_) {
+      debugPrint('RemoteConfigExport: setup send failed');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: const Color(0xFFEF4444),
+          const SnackBar(
+            content: Text('Failed to send configuration'),
+            backgroundColor: Color(0xFFEF4444),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -665,10 +685,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
         // Title
         const Text(
           'Send Setup to TV',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
 
         const SizedBox(height: 8),
@@ -708,8 +725,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             if (_torbox?.isConfigured == true) _buildConfigTile(_torbox!),
             if (_premiumize?.isConfigured == true)
               _buildConfigTile(_premiumize!),
-            if (_allDebrid?.isConfigured == true)
-              _buildConfigTile(_allDebrid!),
+            if (_allDebrid?.isConfigured == true) _buildConfigTile(_allDebrid!),
             const SizedBox(height: 16),
           ],
 
@@ -726,9 +742,15 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             _buildSectionHeader('TRACKING'),
             const SizedBox(height: 8),
             if (_trakt?.isConfigured == true)
-              _buildConfigTile(_trakt!, subtitle: _traktUsername ?? 'Signed in'),
+              _buildConfigTile(
+                _trakt!,
+                subtitle: _traktUsername ?? 'Signed in',
+              ),
             if (_simkl?.isConfigured == true)
-              _buildConfigTile(_simkl!, subtitle: _simklUsername ?? 'Signed in'),
+              _buildConfigTile(
+                _simkl!,
+                subtitle: _simklUsername ?? 'Signed in',
+              ),
             const SizedBox(height: 16),
           ],
 
@@ -740,14 +762,14 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             if (_searchEngines?.isConfigured == true)
               _buildConfigTile(
                 _searchEngines!,
-                subtitle:
-                    '${_engineIds.length} engine${_engineIds.length != 1 ? 's' : ''}',
+                subtitle: '$_engineCount engine${_engineCount != 1 ? 's' : ''}',
               ),
             if (_indexerManagers?.isConfigured == true)
               _buildConfigTile(
                 _indexerManagers!,
-                subtitle: '${_indexerManagerConfigs.length} '
-                    'manager${_indexerManagerConfigs.length != 1 ? 's' : ''}',
+                subtitle:
+                    '$_indexerManagerCount '
+                    'manager${_indexerManagerCount != 1 ? 's' : ''}',
               ),
             const SizedBox(height: 16),
           ],
@@ -758,8 +780,9 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             const SizedBox(height: 8),
             _buildConfigTile(
               _webDav!,
-              subtitle: '${_webDavServers.length} '
-                  'server${_webDavServers.length != 1 ? 's' : ''}',
+              subtitle:
+                  '$_webDavCount '
+                  'server${_webDavCount != 1 ? 's' : ''}',
             ),
             const SizedBox(height: 16),
           ],
@@ -775,22 +798,24 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             if (_iptvPlaylists?.isConfigured == true)
               _buildConfigTile(
                 _iptvPlaylists!,
-                subtitle: '${_iptvPlaylistPayload.length} '
-                    'provider${_iptvPlaylistPayload.length != 1 ? 's' : ''}',
+                subtitle:
+                    '$_iptvPlaylistCount '
+                    'provider${_iptvPlaylistCount != 1 ? 's' : ''}',
               ),
             if (_iptvFavorites?.isConfigured == true)
               _buildConfigTile(
                 _iptvFavorites!,
-                subtitle: '${_iptvFavoritePayload.length} '
-                    'channel${_iptvFavoritePayload.length != 1 ? 's' : ''}',
+                subtitle:
+                    '$_iptvFavoriteCount '
+                    'channel${_iptvFavoriteCount != 1 ? 's' : ''}',
               ),
             if (_iptvLists?.isConfigured == true)
               _buildConfigTile(
                 _iptvLists!,
-                subtitle: '${_iptvListPayload.length} '
-                    'list${_iptvListPayload.length != 1 ? 's' : ''} · '
-                    '${IptvTransferPayload.countListChannels(_iptvListPayload)} '
-                    'channels',
+                subtitle:
+                    '$_iptvListCount '
+                    'list${_iptvListCount != 1 ? 's' : ''} · '
+                    '$_iptvListChannelCount channels',
               ),
             if (_iptvFileImported > 0)
               Padding(
@@ -1074,7 +1099,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
                               ),
                             ),
                             Text(
-                              _pikpakEmail ?? '',
+                              'Connected account',
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.5),
                                 fontSize: 12,

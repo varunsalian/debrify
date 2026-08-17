@@ -67,7 +67,7 @@ class ImportStep extends StatelessWidget {
             transferComplete
                 ? 'Transfer received'
                 : connected
-                ? 'Receiving from your phone…'
+                ? 'Receiving from the other device…'
                 : 'Waiting for the transfer…',
             style: TextStyle(
               fontSize: 11,
@@ -103,13 +103,13 @@ class _ImportChecklist extends StatelessWidget {
       children: [
         _ChecklistRow(
           number: '1',
-          title: 'Open Remote on the phone',
+          title: 'Open Remote on the other device',
           subtitle: 'Menu › Remote, near the bottom of the list.',
         ),
         _ChecklistRow(
           number: '2',
           title: 'Choose Send',
-          subtitle: 'The phone becomes the sender.',
+          subtitle: 'That device becomes the sender.',
         ),
         _ChecklistRow(
           number: '3',
@@ -239,8 +239,8 @@ class _ImportLivePanel extends StatelessWidget {
             label: transferComplete
                 ? 'Transfer complete'
                 : connected
-                ? 'Phone connected'
-                : 'Waiting for a phone',
+                ? 'Sender connected'
+                : 'Waiting for the sender',
             good: connected || transferComplete,
           ),
           const SizedBox(height: 16),
@@ -251,7 +251,7 @@ class _ImportLivePanel extends StatelessWidget {
             )
           else if (dropped)
             const Text(
-              'Connection dropped. Keep this screen open—the transfer resumes when the phone reconnects.',
+              'Connection dropped. Keep this screen open—the transfer resumes when the sender reconnects.',
               style: TextStyle(
                 color: Color(0xFFFBBF24),
                 fontSize: 10.5,

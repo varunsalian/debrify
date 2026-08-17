@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../storage_service.dart';
+import '../../models/profiles/profile_policy.dart';
+import '../profiles/profile_async_authorization.dart';
+import '../profiles/profile_credential_facade.dart';
 
 /// Feature flag — MDBList is unfinished, so its Settings entry is hidden for
 /// the alpha. Flip to `true` to re-expose it. (Deliberately not `const` so the
@@ -73,6 +76,25 @@ class MdblistService {
     _itemsCache.clear();
   }
 
+  /// Clear account-derived state without modifying the scoped credentials.
+  void resetProfileScope() {
+    currentAccount = null;
+    _clearCache();
+  }
+
+  Future<ProfileAsyncAuthorization?> _captureCapability({
+    bool requireExistingResource = true,
+  }) async {
+    final authority = requireExistingResource
+        ? await ProfileCredentialFacade.boundAuthority('mdblist_api_key')
+        : null;
+    return ProfileAsyncAuthorization.capture(
+      ProfileFeature.trackersAndDiscovery,
+      resourceId: authority?.resourceId,
+      resourceAuthorizationRevision: authority?.resourceAuthorizationRevision,
+    );
+  }
+
   Future<bool> isAuthenticated() async {
     final key = await StorageService.getMdblistApiKey();
     return key != null && key.isNotEmpty;
@@ -85,16 +107,27 @@ class MdblistService {
   /// it. On any failure (rejected key, network error) nothing is persisted and
   /// null is returned.
   Future<MdblistAccount?> connect(String apiKey) async {
+    final capability = await _captureCapability(requireExistingResource: false);
     final key = apiKey.trim();
     if (key.isEmpty) return null;
 
     final snapshot = await _fetchAccount(key);
     if (snapshot == null) return null;
 
-    await StorageService.saveMdblistApiKey(key);
-    await StorageService.setMdblistUsername(snapshot.username);
-    _clearCache();
-    currentAccount = snapshot;
+    Future<void> commit() async {
+      await StorageService.saveMdblistApiKey(key);
+      await StorageService.setMdblistUsername(snapshot.username);
+      if (capability == null || capability.isCurrentlyActive) {
+        _clearCache();
+        currentAccount = snapshot;
+      }
+    }
+
+    if (capability == null) {
+      await commit();
+    } else {
+      await capability.runIfCurrent(commit);
+    }
     return snapshot;
   }
 
@@ -102,29 +135,51 @@ class MdblistService {
   /// settings page's account card). Returns null if not connected or the fetch
   /// fails; a transient failure does NOT clear stored auth.
   Future<MdblistAccount?> refreshAccount() async {
+    final capability = await _captureCapability();
     final key = await StorageService.getMdblistApiKey();
     if (key == null || key.isEmpty) return null;
     final snapshot = await _fetchAccount(key);
     if (snapshot != null) {
-      currentAccount = snapshot;
-      if (snapshot.username != null) {
-        await StorageService.setMdblistUsername(snapshot.username);
+      Future<void> commit() async {
+        if (snapshot.username != null) {
+          await StorageService.setMdblistUsername(snapshot.username);
+        }
+        if (capability == null || capability.isCurrentlyActive) {
+          currentAccount = snapshot;
+        }
+      }
+
+      if (capability == null) {
+        await commit();
+      } else {
+        await capability.runIfCurrent(commit);
       }
     }
     return snapshot;
   }
 
   Future<void> logout() async {
-    currentAccount = null;
-    _clearCache();
-    await StorageService.clearMdblistAuth();
+    final capability = await _captureCapability();
+    Future<void> clear() async {
+      await StorageService.clearMdblistAuth();
+      currentAccount = null;
+      _clearCache();
+    }
+
+    if (capability == null) {
+      await clear();
+    } else {
+      await capability.runIfCurrent(clear);
+    }
   }
 
   /// Fetches the authenticated user's own lists (raw JSON maps from
   /// `GET /lists/user`). Returns `[]` when not connected or on any failure —
   /// callers treat that the same as "no lists".
   Future<List<Map<String, dynamic>>> fetchUserLists() async {
+    final capability = await _captureCapability();
     if (_userListsCache != null && _fresh(_userListsAt)) {
+      await capability?.runIfCurrent(() async {});
       return _userListsCache!;
     }
     final key = await StorageService.getMdblistApiKey();
@@ -140,6 +195,7 @@ class MdblistService {
           for (final e in decoded)
             if (e is Map<String, dynamic>) e,
         ];
+        await capability?.runIfCurrent(() async {});
         _userListsCache = lists;
         _userListsAt = DateTime.now();
         return lists;
@@ -154,7 +210,9 @@ class MdblistService {
   /// Each entry is another user's public list (carries `user_name`). Returns
   /// `[]` when not connected or on any failure.
   Future<List<Map<String, dynamic>>> fetchTopLists() async {
+    final capability = await _captureCapability();
     if (_topListsCache != null && _fresh(_topListsAt)) {
+      await capability?.runIfCurrent(() async {});
       return _topListsCache!;
     }
     final key = await StorageService.getMdblistApiKey();
@@ -170,6 +228,7 @@ class MdblistService {
           for (final e in decoded)
             if (e is Map<String, dynamic>) e,
         ];
+        await capability?.runIfCurrent(() async {});
         _topListsCache = lists;
         _topListsAt = DateTime.now();
         return lists;
@@ -185,6 +244,7 @@ class MdblistService {
   /// cached — every query is different. Returns `[]` when not connected, on
   /// an empty query, or on any failure.
   Future<List<Map<String, dynamic>>> searchLists(String query) async {
+    final capability = await _captureCapability();
     final q = query.trim();
     if (q.isEmpty) return const [];
     final key = await StorageService.getMdblistApiKey();
@@ -200,6 +260,7 @@ class MdblistService {
       if (res.statusCode != 200) return const [];
       final decoded = jsonDecode(res.body);
       if (decoded is List) {
+        await capability?.runIfCurrent(() async {});
         return [
           for (final e in decoded)
             if (e is Map<String, dynamic>) e,
@@ -225,9 +286,13 @@ class MdblistService {
     int listId, {
     bool forceRefresh = false,
   }) async {
+    final capability = await _captureCapability();
     if (!forceRefresh) {
       final cached = _itemsCache[listId];
-      if (cached != null && _fresh(cached.at)) return cached.data;
+      if (cached != null && _fresh(cached.at)) {
+        await capability?.runIfCurrent(() async {});
+        return cached.data;
+      }
     }
     final key = await StorageService.getMdblistApiKey();
     if (key == null || key.isEmpty) return null;
@@ -248,7 +313,9 @@ class MdblistService {
       for (var page = 0; page < maxPages; page++) {
         final res = await http
             .get(
-              Uri.parse('$_base/lists/$listId/items?apikey=$key&offset=$offset'),
+              Uri.parse(
+                '$_base/lists/$listId/items?apikey=$key&offset=$offset',
+              ),
             )
             .timeout(const Duration(seconds: 20));
         if (res.statusCode != 200) {
@@ -300,6 +367,7 @@ class MdblistService {
       'shows': shows,
       'complete': complete,
     };
+    await capability?.runIfCurrent(() async {});
     if (complete) {
       _itemsCache[listId] = (data: data, at: DateTime.now());
     }
@@ -313,10 +381,16 @@ class MdblistService {
 
   /// Create an empty static list on the user's account. Returns the new list id
   /// (or null on failure).
-  Future<int?> createList(String name, {bool private = false}) async {
+  Future<int?> createList(
+    String name, {
+    bool private = false,
+    ProfileAsyncAuthorization? capability,
+  }) async {
+    capability ??= await _captureCapability();
     final key = await StorageService.getMdblistApiKey();
     if (key == null || key.isEmpty) return null;
     try {
+      await capability?.runIfCurrent(() async {});
       final res = await http
           .post(
             Uri.parse('$_base/lists/user/add?apikey=$key'),
@@ -330,6 +404,7 @@ class MdblistService {
           ? decoded.first
           : decoded;
       final id = obj is Map ? obj['id'] : null;
+      await capability?.runIfCurrent(() async {});
       return id is int ? id : (id is num ? id.toInt() : null);
     } catch (_) {
       return null;
@@ -341,11 +416,14 @@ class MdblistService {
     int listId, {
     required List<Map<String, dynamic>> movies,
     required List<Map<String, dynamic>> shows,
+    ProfileAsyncAuthorization? capability,
   }) async {
+    capability ??= await _captureCapability();
     if (movies.isEmpty && shows.isEmpty) return true;
     final key = await StorageService.getMdblistApiKey();
     if (key == null || key.isEmpty) return false;
     try {
+      await capability?.runIfCurrent(() async {});
       final res = await http
           .post(
             Uri.parse('$_base/lists/$listId/items/add?apikey=$key'),
@@ -353,6 +431,7 @@ class MdblistService {
             body: jsonEncode({'movies': movies, 'shows': shows}),
           )
           .timeout(const Duration(seconds: 30));
+      await capability?.runIfCurrent(() async {});
       return res.statusCode == 200 || res.statusCode == 201;
     } catch (_) {
       return false;
@@ -363,18 +442,41 @@ class MdblistService {
   /// bodyless success (204) as success too, so a clone deleted out-of-band (on
   /// the MDBList website) still lets the app clear its saved-state rather than
   /// getting stuck showing "Saved".
-  Future<bool> deleteList(int listId) async {
+  Future<bool> deleteList(
+    int listId, {
+    ProfileAsyncAuthorization? capability,
+  }) async {
+    capability ??= await _captureCapability();
     final key = await StorageService.getMdblistApiKey();
     if (key == null || key.isEmpty) return false;
     try {
+      await capability?.runIfCurrent(() async {});
       final res = await http
           .delete(Uri.parse('$_base/lists/$listId?apikey=$key'))
           .timeout(const Duration(seconds: 15));
       final c = res.statusCode;
+      await capability?.runIfCurrent(() async {});
       return c == 200 || c == 204 || c == 404;
     } catch (_) {
       return false;
     }
+  }
+
+  Future<bool> deleteSavedClone({
+    required int sourceListId,
+    required int cloneListId,
+  }) async {
+    final capability = await _captureCapability();
+    final deleted = await deleteList(cloneListId, capability: capability);
+    if (!deleted) return false;
+    if (capability == null) {
+      await StorageService.removeMdblistSavedClone(sourceListId);
+    } else {
+      await capability.runIfCurrent(
+        () => StorageService.removeMdblistSavedClone(sourceListId),
+      );
+    }
+    return true;
   }
 
   /// Save [sourceListId] into the user's account by cloning it: create a new
@@ -386,6 +488,7 @@ class MdblistService {
     required int sourceListId,
     required String name,
   }) async {
+    final capability = await _captureCapability();
     List<Map<String, dynamic>> extract(List<dynamic> raw) {
       final out = <Map<String, dynamic>>[];
       for (final item in raw) {
@@ -406,15 +509,32 @@ class MdblistService {
     // Abort on a failed OR partial read — cloning a truncated list would
     // silently save a subset. Better to fail loudly (UI shows "Couldn't save").
     if (data == null || data['complete'] != true) return null;
+    await capability?.runIfCurrent(() async {});
     final movies = extract(data['movies'] as List? ?? const []);
     final shows = extract(data['shows'] as List? ?? const []);
 
-    final newId = await createList(name);
+    final newId = await createList(name, capability: capability);
     if (newId == null) return null;
-    final added = await addItemsToList(newId, movies: movies, shows: shows);
+    final added = await addItemsToList(
+      newId,
+      movies: movies,
+      shows: shows,
+      capability: capability,
+    );
     if (!added) {
-      await deleteList(newId); // roll back the empty list
+      await deleteList(
+        newId,
+        capability: capability,
+      ); // roll back the empty list
       return null;
+    }
+    await capability?.runIfCurrent(() async {});
+    if (capability == null) {
+      await StorageService.setMdblistSavedClone(sourceListId, newId);
+    } else {
+      await capability.runIfCurrent(
+        () => StorageService.setMdblistSavedClone(sourceListId, newId),
+      );
     }
     // My Lists now has a new entry — force a refetch on next read.
     _userListsCache = null;

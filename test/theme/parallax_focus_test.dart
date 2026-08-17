@@ -250,6 +250,52 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.hasRunningAnimations, isFalse);
     });
+
+    testWidgets('a fixed-scale caption follows the card without growing',
+        (tester) async {
+      Widget build(bool focused) => host(
+            themeWith(FocusExpression.parallax),
+            ParallaxFocus(
+              focused: focused,
+              fixedScaleForeground: const Align(
+                alignment: Alignment.bottomCenter,
+                child: SizedBox(
+                  key: ValueKey('caption'),
+                  width: 40,
+                  height: 10,
+                ),
+              ),
+              child: const SizedBox(
+                key: ValueKey('art'),
+                width: 100,
+                height: 60,
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(build(false));
+      final restingArt = tester.getRect(find.byKey(const ValueKey('art')));
+      final restingCaption =
+          tester.getRect(find.byKey(const ValueKey('caption')));
+
+      await tester.pumpWidget(build(true));
+      await tester.pumpAndSettle();
+      final liftedArt = tester.getRect(find.byKey(const ValueKey('art')));
+      final liftedCaption =
+          tester.getRect(find.byKey(const ValueKey('caption')));
+
+      expect(liftedArt.width, closeTo(restingArt.width * 1.1, 0.5));
+      expect(
+        liftedCaption.width,
+        closeTo(restingCaption.width, 0.05),
+        reason: 'small TV glyphs must not be raster-scaled with the poster',
+      );
+      expect(
+        liftedCaption.bottom,
+        closeTo(liftedArt.bottom, 0.05),
+        reason: 'counter-scaling must not detach the caption from the card',
+      );
+    });
   });
 
   group('ParallaxTravel', () {

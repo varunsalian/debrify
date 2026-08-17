@@ -71,7 +71,10 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
   String _generateDeviceId() {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
     final random = DateTime.now().millisecondsSinceEpoch;
-    return List.generate(8, (i) => chars[(random + i * 7) % chars.length]).join();
+    return List.generate(
+      8,
+      (i) => chars[(random + i * 7) % chars.length],
+    ).join();
   }
 
   Future<void> _startScan() async {
@@ -123,9 +126,7 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
 
     return Dialog(
       backgroundColor: const Color(0xFF1E293B),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 340),
@@ -150,7 +151,9 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      widget.showThisDevice ? Icons.extension : Icons.settings_remote,
+                      widget.showThisDevice
+                          ? Icons.extension
+                          : Icons.settings_remote,
                       color: Colors.white,
                       size: 20,
                     ),
@@ -189,10 +192,14 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
                 _buildCompactTile(
                   icon: Icons.smartphone,
                   title: 'This device',
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
-                  onTap: () => Navigator.of(context).pop(
-                    AddonInstallChoice(target: 'phone'),
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios,
+                    size: 14,
+                    color: Colors.white38,
                   ),
+                  onTap: () => Navigator.of(
+                    context,
+                  ).pop(AddonInstallChoice(target: 'phone')),
                 ),
                 const SizedBox(height: 16),
               ],
@@ -288,15 +295,21 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
                 ...List.generate(_devices.length, (index) {
                   final device = _devices[index];
                   return Padding(
-                    padding: EdgeInsets.only(bottom: index < _devices.length - 1 ? 8 : 0),
+                    padding: EdgeInsets.only(
+                      bottom: index < _devices.length - 1 ? 8 : 0,
+                    ),
                     child: _buildCompactTile(
                       icon: Icons.tv,
                       title: device.deviceName,
                       subtitle: device.ip,
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
-                      onTap: () => Navigator.of(context).pop(
-                        AddonInstallChoice(target: 'tv', device: device),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 14,
+                        color: Colors.white38,
                       ),
+                      onTap: () => Navigator.of(
+                        context,
+                      ).pop(AddonInstallChoice(target: 'tv', device: device)),
                     ),
                   );
                 }),
@@ -344,9 +357,7 @@ class _AddonInstallDialogState extends State<AddonInstallDialog> {
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
-            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: [

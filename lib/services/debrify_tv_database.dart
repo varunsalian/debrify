@@ -1,10 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import '../utils/app_storage.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:synchronized/synchronized.dart';
+
+import 'profiles/profile_storage_paths.dart';
+import 'profiles/profile_runtime.dart';
+import 'profiles/profile_scope.dart';
+
+typedef _DatabaseScope = ({String key, ProfileScope? scope});
 
 class DebrifyTvDatabase {
   DebrifyTvDatabase._();
@@ -16,21 +20,75 @@ class DebrifyTvDatabase {
   @visibleForTesting
   static Database? debugDatabaseOverride;
 
-  Database? _db;
+  /// Pauses an opened handle before it can become process-global. Race tests
+  /// use this to put profile deactivation precisely inside the open window.
+  @visibleForTesting
+  static Future<void> Function(String scopeKey)? debugBeforeOpenPublish;
 
-  Future<Database> get database async {
+  Database? _db;
+  String? _dbScopeKey;
+  String? _openingScopeKey;
+  final Set<String> _deactivatedScopeKeys = <String>{};
+  final Lock _scopeLock = Lock();
+  final Object _operationZoneKey = Object();
+  int _activeOperations = 0;
+  Completer<void>? _operationsDrained;
+
+  /// Exposes a handle only for lifecycle tests and schema maintenance.
+  /// Production reads must use [runScoped] so [closeScope] cannot close the
+  /// handle while an operation is using it.
+  @visibleForTesting
+  Future<Database> get database {
+    final active = Zone.current[_operationZoneKey] as Database?;
+    if (active != null) return Future<Database>.value(active);
     final override = debugDatabaseOverride;
     if (override != null) {
-      return override;
+      return Future<Database>.value(override);
     }
-    if (_db != null) {
-      return _db!;
+    final requested = _requestedScope();
+    if (_deactivatedScopeKeys.contains(requested.key)) {
+      return Future<Database>.error(
+        StateError('Debrify TV database scope is deactivated'),
+      );
+    }
+    final opened = _db;
+    if (opened != null && _dbScopeKey == requested.key) {
+      return Future<Database>.value(opened);
+    }
+    return _scopeLock.synchronized(() => _databaseLocked(requested));
+  }
+
+  Future<Database> _databaseLocked(_DatabaseScope requested) async {
+    if (_deactivatedScopeKeys.contains(requested.key)) {
+      throw StateError('Debrify TV database scope changed while opening');
     }
 
-    final docsDir = await AppStorage.documents();
-    final dbPath = p.join(docsDir.path, 'debrify_tv.db');
+    final existing = _db;
+    if (existing != null) {
+      if (_dbScopeKey == requested.key) return existing;
+      // A stale handle must never be silently adopted by the next profile.
+      _db = null;
+      _dbScopeKey = null;
+      await existing.close();
+    }
 
-    _db = await openDatabase(
+    _openingScopeKey = requested.key;
+    try {
+      return await _openAndPublishDatabase(requested);
+    } finally {
+      if (_openingScopeKey == requested.key) _openingScopeKey = null;
+    }
+  }
+
+  Future<Database> _openAndPublishDatabase(_DatabaseScope requested) async {
+    final dbPath = requested.scope == null
+        ? await ProfileStoragePaths.documentsFile('debrify_tv.db')
+        : await ProfileRuntime.withCapturedScope(
+            requested.scope!,
+            () => ProfileStoragePaths.documentsFile('debrify_tv.db'),
+          );
+
+    final opened = await openDatabase(
       dbPath,
       version: 5,
       onConfigure: (db) async {
@@ -118,17 +176,131 @@ class DebrifyTvDatabase {
     );
 
     // Ensure index exists for fresh creates (onCreate already runs for v2 DB)
-    await _db!.execute(
+    await opened.execute(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_tv_channels_channel_number ON tv_channels(channel_number)',
     );
+    await debugBeforeOpenPublish?.call(requested.key);
 
-    return _db!;
+    // closeScope marks the authoritative owner and any in-flight captured
+    // scope synchronously, before it waits for this lock. Captured staging
+    // scopes are valid, but a deactivated session can never publish late.
+    if (_deactivatedScopeKeys.contains(requested.key)) {
+      await opened.close();
+      throw StateError('Debrify TV database scope changed while opening');
+    }
+
+    _db = opened;
+    _dbScopeKey = requested.key;
+    return opened;
   }
 
-  Future<T> runTxn<T>(Future<T> Function(Transaction txn) action) async {
-    final db = await database;
-    return db.transaction(action, exclusive: false);
+  Future<void> closeScope([ProfileScope? deactivatingScope]) async {
+    final owner = deactivatingScope == null
+        ? (ProfileRuntime.isInitialized ? _requestedScope() : null)
+        : _scopeOf(deactivatingScope);
+    // Set this before awaiting the lock: callers arriving while an open or
+    // transaction drains must be denied, not queued to reopen the old scope.
+    if (owner != null) _deactivatedScopeKeys.add(owner.key);
+    final opening = _openingScopeKey;
+    if (opening != null) _deactivatedScopeKeys.add(opening);
+    final openedScope = _dbScopeKey;
+    if (openedScope != null) _deactivatedScopeKeys.add(openedScope);
+    while (true) {
+      final drain = await _scopeLock.synchronized<Completer<void>?>(() async {
+        if (_activeOperations > 0) {
+          return _operationsDrained ??= Completer<void>();
+        }
+        final opened = _db;
+        _db = null;
+        _dbScopeKey = null;
+        if (opened != null) await opened.close();
+        return null;
+      });
+      if (drain == null) return;
+      await drain.future;
+    }
   }
+
+  /// Re-enables the authoritative scope after a failed switch rolls back to
+  /// it. Successful switches naturally have a different scope key, but call
+  /// this too so the lifecycle contract stays explicit.
+  void activateScope(ProfileScope scope) {
+    if (ProfileRuntime.scope.value != scope) {
+      throw StateError('Cannot activate a non-authoritative database scope');
+    }
+    final key = _scopeOf(scope).key;
+    _deactivatedScopeKeys.remove(key);
+  }
+
+  /// Runs one complete logical operation against the scope captured at
+  /// admission. Operations may overlap, but profile deactivation waits for
+  /// every admitted operation to drain before closing the handle. Nested
+  /// calls reuse the captured handle so an await can never redirect the
+  /// second half of a read/modify/write operation into a newer profile.
+  Future<T> runScoped<T>(Future<T> Function(Database db) action) async {
+    final active = Zone.current[_operationZoneKey] as Database?;
+    if (active != null) return action(active);
+
+    final override = debugDatabaseOverride;
+    if (override != null) {
+      return runZoned(
+        () => action(override),
+        zoneValues: <Object, Object>{_operationZoneKey: override},
+      );
+    }
+    final requested = _requestedScope();
+    late final Database admitted;
+    await _scopeLock.synchronized(() async {
+      admitted = await _databaseLocked(requested);
+      _activeOperations += 1;
+    });
+    try {
+      return await runZoned(
+        () => action(admitted),
+        zoneValues: <Object, Object>{_operationZoneKey: admitted},
+      );
+    } finally {
+      await _scopeLock.synchronized(() {
+        _activeOperations -= 1;
+        if (_activeOperations == 0) {
+          final drained = _operationsDrained;
+          _operationsDrained = null;
+          if (drained != null && !drained.isCompleted) drained.complete();
+        }
+      });
+    }
+  }
+
+  Future<T> runTxn<T>(Future<T> Function(Transaction txn) action) {
+    return runScoped((db) => db.transaction(action, exclusive: false));
+  }
+
+  _DatabaseScope _requestedScope() {
+    if (!ProfileRuntime.isInitialized) {
+      throw StateError('Profile runtime is not initialized');
+    }
+    if (!ProfileRuntime.isProfileCommitted) {
+      return (key: 'legacy', scope: null);
+    }
+    final scope = ProfileRuntime.capture();
+    return _scopeOf(scope);
+  }
+
+  _DatabaseScope _scopeOf(ProfileScope scope) => (
+    key: '${scope.profileId}:${scope.dataGeneration}:${scope.sessionEpoch}',
+    scope: scope,
+  );
+
+  @visibleForTesting
+  Future<void> debugResetScopeState() => _scopeLock.synchronized(() async {
+    final opened = _db;
+    _db = null;
+    _dbScopeKey = null;
+    _openingScopeKey = null;
+    _deactivatedScopeKeys.clear();
+    debugBeforeOpenPublish = null;
+    if (opened != null) await opened.close();
+  });
 
   /// Schema migrations. Named (rather than an inline closure) so migration
   /// tests can drive it against a database opened at an older version.
@@ -208,14 +380,17 @@ class DebrifyTvDatabase {
     // are backfilled by the reconcile pass the first time each playlist is
     // opened (IptvMediaStore). Until then a migrated VOD favorite keeps
     // presenting as live, exactly as it did before this migration.
-    await db.execute('''
+    await db.execute(
+      '''
       INSERT OR IGNORE INTO iptv_list_channels
         (list_id, url, name, logo_url, channel_group, playlist_id,
          channel_number, content_type, duration, http_headers_json, added_at)
       SELECT ?, url, name, logo_url, channel_group, playlist_id,
              channel_number, NULL, NULL, http_headers_json, added_at
       FROM iptv_favorites
-    ''', [favoritesListId]);
+    ''',
+      [favoritesListId],
+    );
 
     await db.execute('DROP TABLE iptv_favorites');
   }

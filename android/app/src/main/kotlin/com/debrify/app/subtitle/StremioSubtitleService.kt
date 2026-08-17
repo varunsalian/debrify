@@ -192,8 +192,11 @@ class StremioSubtitleService(private val context: Context) {
      * Get all enabled subtitle addons from SharedPreferences.
      */
     fun getSubtitleAddons(): List<StremioAddon> {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val addonsJson = prefs.getString(ADDONS_KEY, null)
+        val addonsJson = com.debrify.app.profiles.ProfilePreferenceProjection.getString(
+            context,
+            "stremio_addons_v1",
+            null,
+        )
 
         if (addonsJson.isNullOrEmpty()) {
             return emptyList()

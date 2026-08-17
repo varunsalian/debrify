@@ -115,13 +115,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   Set<String> get _activeSelectedIds =>
       _selectedView == _DebridDownloadsView.torrents
-          ? _selectedTorrentIds
-          : _selectedDownloadIds;
+      ? _selectedTorrentIds
+      : _selectedDownloadIds;
 
-  int get _activeItemCount =>
-      _selectedView == _DebridDownloadsView.torrents
-          ? _torrents.length
-          : _downloads.length;
+  int get _activeItemCount => _selectedView == _DebridDownloadsView.torrents
+      ? _torrents.length
+      : _downloads.length;
 
   bool get _isAllSelected =>
       _activeSelectedIds.length == _activeItemCount && _activeItemCount > 0;
@@ -129,16 +128,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   // TV/DPAD navigation
   final FocusNode _backButtonFocusNode = FocusNode(debugLabel: 'rd-back');
   final FocusNode _refreshButtonFocusNode = FocusNode(debugLabel: 'rd-refresh');
-  final FocusNode _viewModeDropdownFocusNode = FocusNode(debugLabel: 'rd-view-mode');
+  final FocusNode _viewModeDropdownFocusNode = FocusNode(
+    debugLabel: 'rd-view-mode',
+  );
   late final FocusNode _firstItemFocusNode;
-  final FocusNode _deleteButtonFocusNode = FocusNode(debugLabel: 'rd-delete-btn');
+  final FocusNode _deleteButtonFocusNode = FocusNode(
+    debugLabel: 'rd-delete-btn',
+  );
 
   // Flag to focus first item after data loads (set by TV content focus handler)
   bool _shouldFocusOnLoad = false;
 
   // Torrent list search state
   bool _isTorrentSearchActive = false;
-  final TextEditingController _torrentSearchController = TextEditingController();
+  final TextEditingController _torrentSearchController =
+      TextEditingController();
   List<RDTorrent> _allTorrentsForSearch = [];
   bool _isLoadingSearch = false;
   String _torrentSearchQuery = '';
@@ -151,8 +155,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   bool _isSearchActive = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'rd-search');
-  final FocusNode _searchButtonFocusNode = FocusNode(debugLabel: 'rd-search-button');
-  final FocusNode _searchClearFocusNode = FocusNode(debugLabel: 'rd-search-clear');
+  final FocusNode _searchButtonFocusNode = FocusNode(
+    debugLabel: 'rd-search-button',
+  );
+  final FocusNode _searchClearFocusNode = FocusNode(
+    debugLabel: 'rd-search-clear',
+  );
   List<_RDSearchResult> _searchResults = [];
 
   @override
@@ -222,7 +230,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       });
     } else {
       // Displayed in a tab
-      MainPageBridge.registerTabBackHandler('realdebrid', _handleBackNavigation);
+      MainPageBridge.registerTabBackHandler(
+        'realdebrid',
+        _handleBackNavigation,
+      );
       // Register TV sidebar focus handler (tab index 4 = Real Debrid)
       _tvContentFocusHandler = () {
         // Set flag to focus after data loads
@@ -263,13 +274,17 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (_currentViewNodes != null && _currentViewNodes!.isNotEmpty) {
         _shouldFocusOnLoad = false;
         _firstItemFocusNode.requestFocus();
-      } else if (_selectedView == _DebridDownloadsView.torrents && _torrents.isNotEmpty) {
+      } else if (_selectedView == _DebridDownloadsView.torrents &&
+          _torrents.isNotEmpty) {
         _shouldFocusOnLoad = false;
         _firstItemFocusNode.requestFocus();
-      } else if (_selectedView == _DebridDownloadsView.ddl && _downloads.isNotEmpty) {
+      } else if (_selectedView == _DebridDownloadsView.ddl &&
+          _downloads.isNotEmpty) {
         _shouldFocusOnLoad = false;
         _firstItemFocusNode.requestFocus();
-      } else if (!_isLoadingTorrents && !_isLoadingDownloads && !_isLoadingFolder) {
+      } else if (!_isLoadingTorrents &&
+          !_isLoadingDownloads &&
+          !_isLoadingFolder) {
         // No items and not loading - focus fallback
         _shouldFocusOnLoad = false;
         _searchButtonFocusNode.requestFocus();
@@ -277,7 +292,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // If still loading, keep the flag set - will be called again after load
     });
   }
-
 
   @override
   void dispose() {
@@ -287,7 +301,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     } else {
       MainPageBridge.unregisterTabBackHandler('realdebrid');
       if (_tvContentFocusHandler != null) {
-        MainPageBridge.unregisterTvContentFocusHandler(4, _tvContentFocusHandler!);
+        MainPageBridge.unregisterTvContentFocusHandler(
+          4,
+          _tvContentFocusHandler!,
+        );
       }
     }
 
@@ -353,7 +370,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // If came from torrent search flow, switch back to torrent search tab
       if (MainPageBridge.returnToTorrentSearchOnBack) {
         MainPageBridge.returnToTorrentSearchOnBack = false;
-        MainPageBridge.switchTab?.call(0);
+        MainPageBridge.switchTab?.call(MainTab.legacyTorrentSearch);
         return true;
       }
       // Normal case: go back to torrents list
@@ -405,7 +422,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       }
     }
 
-    if (widget.initialSearchQuery != null && widget.initialSearchQuery!.isNotEmpty) {
+    if (widget.initialSearchQuery != null &&
+        widget.initialSearchQuery!.isNotEmpty) {
       _submitTorrentSearch();
     }
   }
@@ -546,11 +564,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     if (widget.selectSourceMode &&
         _hiddenFromNav &&
         !_queryMatchesInitialTitle(query)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Search must include part of "${widget.initialSearchQuery}"'),
-        backgroundColor: const Color(0xFFF59E0B),
-        duration: const Duration(seconds: 3),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Search must include part of "${widget.initialSearchQuery}"',
+          ),
+          backgroundColor: const Color(0xFFF59E0B),
+          duration: const Duration(seconds: 3),
+        ),
+      );
       return;
     }
     setState(() => _torrentSearchQuery = query);
@@ -594,7 +616,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       if (mounted) {
         setState(() => _isLoadingSearch = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load torrents for search: ${e.toString()}')),
+          SnackBar(
+            content: Text(
+              'Failed to load torrents for search: ${e.toString()}',
+            ),
+          ),
         );
       }
     }
@@ -787,11 +813,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     try {
       final meta = jsonEncode({
         'restrictedLink': download.link,
-        'apiKey': _apiKey ?? '',
         'torrentHash': '',
         'fileIndex': '',
       });
       await DownloadService.instance.enqueueDownload(
+        credentialKey: 'real_debrid_api_key',
         url: download.link,
         fileName: download.filename,
         context: context,
@@ -853,9 +879,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               children: [
                 CircularProgressIndicator(),
                 SizedBox(width: 16),
-                Text(
-                  'Deleting torrent...',
-                ),
+                Text('Deleting torrent...'),
               ],
             ),
           ),
@@ -944,20 +968,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           setDialogState = dialogStateSetter;
           return AlertDialog(
             backgroundColor: app.cloud.dialogSurface,
-            shape: RoundedRectangleBorder(
-              borderRadius: app.shape.br(16),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: app.shape.br(16)),
             title: const Text(
               'Deleting All Torrents',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  total == 0 ? phase : 'Deleting torrents... ($completed/$total)',
+                  total == 0
+                      ? phase
+                      : 'Deleting torrents... ($completed/$total)',
                   style: const TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 16),
@@ -1000,7 +1022,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       bool hasMore = true;
 
       while (hasMore && !isCancelled) {
-        final result = await DebridService.getTorrents(_apiKey!, page: page, limit: 1000);
+        final result = await DebridService.getTorrents(
+          _apiKey!,
+          page: page,
+          limit: 1000,
+        );
         final torrents = result['torrents'] as List<RDTorrent>;
         allTorrents.addAll(torrents);
         hasMore = result['hasMore'] as bool;
@@ -1142,20 +1168,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           setDialogState = dialogStateSetter;
           return AlertDialog(
             backgroundColor: app.cloud.dialogSurface,
-            shape: RoundedRectangleBorder(
-              borderRadius: app.shape.br(16),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: app.shape.br(16)),
             title: const Text(
               'Deleting All Downloads',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  total == 0 ? phase : 'Deleting downloads... ($completed/$total)',
+                  total == 0
+                      ? phase
+                      : 'Deleting downloads... ($completed/$total)',
                   style: const TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 16),
@@ -1198,7 +1222,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       bool hasMore = true;
 
       while (hasMore && !isCancelled) {
-        final result = await DebridService.getDownloads(_apiKey!, page: page, limit: 1000);
+        final result = await DebridService.getDownloads(
+          _apiKey!,
+          page: page,
+          limit: 1000,
+        );
         final downloads = result['downloads'] as List<DebridDownload>;
         allDownloads.addAll(downloads);
         hasMore = result['hasMore'] as bool;
@@ -1329,9 +1357,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               children: [
                 CircularProgressIndicator(),
                 SizedBox(width: 16),
-                Text(
-                  'Deleting download...',
-                ),
+                Text('Deleting download...'),
               ],
             ),
           ),
@@ -1485,14 +1511,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           setDialogState = dialogStateSetter;
           return AlertDialog(
             backgroundColor: app.cloud.dialogSurface,
-            shape: RoundedRectangleBorder(
-              borderRadius: app.shape.br(16),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: app.shape.br(16)),
             title: Text(
               'Deleting ${isTorrents ? 'Torrents' : 'Downloads'}',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1579,7 +1601,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       });
 
       if (failedDeletes.isEmpty) {
-        _showSuccess('${deletedIds.length} ${isTorrents ? 'torrents' : 'downloads'} deleted successfully!');
+        _showSuccess(
+          '${deletedIds.length} ${isTorrents ? 'torrents' : 'downloads'} deleted successfully!',
+        );
       } else {
         _showError(
           'Deleted ${deletedIds.length}. ${failedDeletes.length} failed to delete.',
@@ -1788,8 +1812,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
     try {
       // Get torrent info to check for RAR archives
-      final torrentInfo = await DebridService.getTorrentInfo(_apiKey!, torrent.id);
-      final files = (torrentInfo['files'] as List<dynamic>?)?.map((f) => f as Map<String, dynamic>).toList() ?? [];
+      final torrentInfo = await DebridService.getTorrentInfo(
+        _apiKey!,
+        torrent.id,
+      );
+      final files =
+          (torrentInfo['files'] as List<dynamic>?)
+              ?.map((f) => f as Map<String, dynamic>)
+              .toList() ??
+          [];
       final links = (torrentInfo['links'] as List<dynamic>?) ?? [];
 
       // Check if this is a RAR archive
@@ -1807,7 +1838,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             context: context,
             builder: (ctx) => AlertDialog(
               backgroundColor: AppThemeScope.of(ctx).cloud.dialogSurface,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               title: Row(
                 children: [
                   Container(
@@ -1816,7 +1849,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                       color: const Color(0xFFF59E0B),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.archive, color: Colors.white, size: 20),
+                    child: const Icon(
+                      Icons.archive,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
@@ -1836,7 +1873,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
                 TextButton(
                   onPressed: () async {
@@ -1844,17 +1884,26 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                     // Download the single RAR file
                     if (links.isNotEmpty) {
                       try {
-                        final unrestrictResult = await DebridService.unrestrictLink(_apiKey!, links[0]);
-                        final downloadUrl = unrestrictResult['download'] as String?;
+                        final unrestrictResult =
+                            await DebridService.unrestrictLink(
+                              _apiKey!,
+                              links[0],
+                            );
+                        final downloadUrl =
+                            unrestrictResult['download'] as String?;
                         if (downloadUrl != null) {
                           _copyToClipboard(downloadUrl);
                         }
                       } catch (e) {
-                        _showError('Failed to get download link: ${e.toString()}');
+                        _showError(
+                          'Failed to get download link: ${e.toString()}',
+                        );
                       }
                     }
                   },
-                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF60A5FA)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF60A5FA),
+                  ),
                   child: const Text('Copy Download Link'),
                 ),
               ],
@@ -1979,16 +2028,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         // Find the folder node at the current path
         RDFileNode currentNode = _currentFolderTree!;
         for (final folderName in _folderPath) {
-          final childFolder = currentNode.children.cast<RDFileNode?>().firstWhere(
-            (node) => node?.name == folderName && node?.isFolder == true,
-            orElse: () => null,
-          );
+          final childFolder = currentNode.children
+              .cast<RDFileNode?>()
+              .firstWhere(
+                (node) => node?.name == folderName && node?.isFolder == true,
+                orElse: () => null,
+              );
           if (childFolder != null) {
             currentNode = childFolder;
           } else {
             // Folder not found - reset to root
             _folderPath.clear();
-            rawNodes = RDFolderTreeBuilder.getRootLevelNodes(_currentFolderTree!);
+            rawNodes = RDFolderTreeBuilder.getRootLevelNodes(
+              _currentFolderTree!,
+            );
             // Apply view mode and set state
             final mode = _getCurrentViewMode();
             List<RDFileNode> transformedNodes;
@@ -2181,8 +2234,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     final files = nodes.where((n) => !n.isFolder).toList();
 
     // Parse files for series info
-    final videoFiles = files.where((f) => FileUtils.isVideoFile(f.name)).toList();
-    final nonVideoFiles = files.where((f) => !FileUtils.isVideoFile(f.name)).toList();
+    final videoFiles = files
+        .where((f) => FileUtils.isVideoFile(f.name))
+        .toList();
+    final nonVideoFiles = files
+        .where((f) => !FileUtils.isVideoFile(f.name))
+        .toList();
 
     if (videoFiles.isEmpty) return nodes;
 
@@ -2283,7 +2340,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         // Not a series - show snackbar and fallback to sorted view
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('No series detected in this folder. Switching to Sort (A-Z) view.'),
+            content: const Text(
+              'No series detected in this folder. Switching to Sort (A-Z) view.',
+            ),
             duration: const Duration(seconds: 3),
             backgroundColor: AppThemeScope.of(context).cloud.dialogSurface,
             behavior: SnackBarBehavior.floating,
@@ -2380,8 +2439,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               // D-pad exits for Android TV (formerly a Focus/onKeyEvent wrapper)
               onUpArrow: () => _searchFocusNode.unfocus(),
               onDownArrow: () => _searchFocusNode.unfocus(),
-              onRightArrow:
-                  hasText ? () => _searchClearFocusNode.requestFocus() : null,
+              onRightArrow: hasText
+                  ? () => _searchClearFocusNode.requestFocus()
+                  : null,
               decoration: InputDecoration(
                 hintText: 'Search all files...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
@@ -2391,7 +2451,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                   borderRadius: app.shape.br(8),
                   borderSide: BorderSide.none,
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
               onChanged: _performSearch,
               onSubmitted: (_) => _searchFocusNode.unfocus(),
@@ -2464,7 +2527,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
   Widget _buildSearchResults() {
     if (_searchController.text.isEmpty) {
       return const Center(
-        child: Text('Type to search all files', style: TextStyle(color: Colors.grey)),
+        child: Text(
+          'Type to search all files',
+          style: TextStyle(color: Colors.grey),
+        ),
       );
     }
 
@@ -2509,7 +2575,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const Icon(Icons.play_circle_outline, color: Colors.blue, size: 32),
+                const Icon(
+                  Icons.play_circle_outline,
+                  color: Colors.blue,
+                  size: 32,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -2525,7 +2595,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                         const SizedBox(height: 4),
                         Text(
                           result.path,
-                          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -2533,7 +2606,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                       if (node.bytes != null)
                         Text(
                           Formatters.formatFileSize(node.bytes!),
-                          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                          ),
                         ),
                     ],
                   ),
@@ -2648,22 +2724,22 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               mode == _FolderViewMode.raw
                   ? Icons.view_list
                   : mode == _FolderViewMode.sortedAZ
-                      ? Icons.sort_by_alpha
-                      : Icons.video_library,
+                  ? Icons.sort_by_alpha
+                  : Icons.video_library,
               color: theme.colorScheme.primary,
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             filled: true,
-            fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            fillColor: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.3,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
           ),
           items: const [
-            DropdownMenuItem(
-              value: _FolderViewMode.raw,
-              child: Text('Raw'),
-            ),
+            DropdownMenuItem(value: _FolderViewMode.raw, child: Text('Raw')),
             DropdownMenuItem(
               value: _FolderViewMode.sortedAZ,
               child: Text('Sort (A-Z)'),
@@ -2725,7 +2801,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           Expanded(
             child: FocusTraversalGroup(
               policy: OrderedTraversalPolicy(),
-              child: _isSearchActive ? _buildSearchResults() : _buildFolderContentsView(),
+              child: _isSearchActive
+                  ? _buildSearchResults()
+                  : _buildFolderContentsView(),
             ),
           ),
         ],
@@ -2753,9 +2831,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       addRepaintBoundaries: true, // Optimize repainting
       itemBuilder: (context, index) {
         final node = _currentViewNodes![index];
-        return RepaintBoundary(
-          child: _buildNodeCard(node, index),
-        );
+        return RepaintBoundary(child: _buildNodeCard(node, index));
       },
     );
   }
@@ -2816,8 +2892,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       kind: isFolder
           ? CloudRowKind.folder
           : isVideo
-              ? CloudRowKind.video
-              : CloudRowKind.file,
+          ? CloudRowKind.video
+          : CloudRowKind.file,
       title: node.name,
       meta: isFolder
           ? '${RDFolderTreeBuilder.countFiles(node)} files · ${Formatters.formatFileSize(node.totalBytes)}'
@@ -2825,8 +2901,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       onTap: isFolder
           ? () => _navigateIntoFolder(node)
           : isVideo
-              ? () => _playFile(node)
-              : null,
+          ? () => _playFile(node)
+          : null,
       actions: actions,
       focusNode: index == 0 ? _firstItemFocusNode : null,
     );
@@ -2897,17 +2973,20 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             onPressed: count > 0 ? _handleDeleteSelected : null,
             icon: const Icon(Icons.delete_outline, size: 18),
             label: const Text('Delete'),
-            style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.error,
-              disabledBackgroundColor: theme.colorScheme.error.withValues(alpha: 0.3),
-            ).copyWith(
-              side: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.focused)) {
-                  return BorderSide(color: app.core.tx, width: 3);
-                }
-                return null;
-              }),
-            ),
+            style:
+                FilledButton.styleFrom(
+                  backgroundColor: theme.colorScheme.error,
+                  disabledBackgroundColor: theme.colorScheme.error.withValues(
+                    alpha: 0.3,
+                  ),
+                ).copyWith(
+                  side: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.focused)) {
+                      return BorderSide(color: app.core.tx, width: 3);
+                    }
+                    return null;
+                  }),
+                ),
           ),
         ],
       ),
@@ -2928,14 +3007,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       builder: (context, constraints) {
         final isCompact = constraints.maxWidth < 480;
         final double iconSize = isCompact ? 20 : 24;
-        final EdgeInsets iconPadding =
-            isCompact ? const EdgeInsets.all(6) : const EdgeInsets.all(8);
+        final EdgeInsets iconPadding = isCompact
+            ? const EdgeInsets.all(6)
+            : const EdgeInsets.all(8);
         final BoxConstraints iconConstraints = isCompact
             ? const BoxConstraints(minWidth: 36, minHeight: 36)
             : const BoxConstraints(minWidth: 44, minHeight: 44);
         return Container(
-          margin: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
-          padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
+          margin: EdgeInsets.symmetric(
+            horizontal: isCompact ? 8 : 16,
+            vertical: 8,
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: isCompact ? 8 : 16,
+            vertical: 8,
+          ),
           decoration: BoxDecoration(
             color: app.fade(app.core.tx, 0.05),
             borderRadius: app.shape.br(12),
@@ -2960,14 +3046,18 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
               ],
               const Spacer(),
               Tooltip(
-                message: _isTorrentSearchActive ? 'Close search' : 'Search torrents',
+                message: _isTorrentSearchActive
+                    ? 'Close search'
+                    : 'Search torrents',
                 child: IconButton(
                   onPressed: _toggleTorrentSearch,
                   iconSize: iconSize,
                   padding: iconPadding,
                   constraints: iconConstraints,
                   icon: Icon(
-                    _isTorrentSearchActive ? Icons.search_off_rounded : Icons.search_rounded,
+                    _isTorrentSearchActive
+                        ? Icons.search_off_rounded
+                        : Icons.search_rounded,
                   ),
                   color: _isTorrentSearchActive
                       ? theme.colorScheme.primary
@@ -3031,14 +3121,21 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       builder: (context, constraints) {
         final isCompact = constraints.maxWidth < 480;
         final double iconSize = isCompact ? 20 : 24;
-        final EdgeInsets iconPadding =
-            isCompact ? const EdgeInsets.all(6) : const EdgeInsets.all(8);
+        final EdgeInsets iconPadding = isCompact
+            ? const EdgeInsets.all(6)
+            : const EdgeInsets.all(8);
         final BoxConstraints iconConstraints = isCompact
             ? const BoxConstraints(minWidth: 36, minHeight: 36)
             : const BoxConstraints(minWidth: 44, minHeight: 44);
         return Container(
-          margin: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
-          padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 16, vertical: 8),
+          margin: EdgeInsets.symmetric(
+            horizontal: isCompact ? 8 : 16,
+            vertical: 8,
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: isCompact ? 8 : 16,
+            vertical: 8,
+          ),
           decoration: BoxDecoration(
             color: app.fade(app.core.tx, 0.05),
             borderRadius: app.shape.br(12),
@@ -3225,14 +3322,22 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         if (!widget.selectSourceMode) _buildViewSelectorBar(),
         if (_isTorrentSearchActive) _buildTorrentSearchBar(),
         if (_isSelectionMode) _buildSelectionBar(),
-        Expanded(child: _isLoadingFolder ? _buildFolderLoadingView() : _isTorrentSearchActive ? _buildTorrentSearchResults() : body),
+        Expanded(
+          child: _isLoadingFolder
+              ? _buildFolderLoadingView()
+              : _isTorrentSearchActive
+              ? _buildTorrentSearchResults()
+              : body,
+        ),
       ],
     );
   }
 
   // Focus nodes for torrent search DPAD navigation
   late final FocusNode _torrentSearchFocusNode;
-  final FocusNode _torrentSearchClearFocusNode = FocusNode(debugLabel: 'rd-torrent-search-clear');
+  final FocusNode _torrentSearchClearFocusNode = FocusNode(
+    debugLabel: 'rd-torrent-search-clear',
+  );
 
   Widget _buildTorrentSearchBar() {
     final app = AppThemeScope.of(context);
@@ -3243,34 +3348,41 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         children: [
           Expanded(
             child: TvTextField(
-                controller: _torrentSearchController,
-                focusNode: _torrentSearchFocusNode,
-                autofocus: true,
-                onSubmitted: (_) => _submitTorrentSearch(),
-                textInputAction: TextInputAction.search,
-                style: const TextStyle(fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Search your torrents...',
-                  hintStyle: TextStyle(color: app.fade(app.core.tx, 0.3)),
-                  prefixIcon: Icon(Icons.search_rounded, color: app.fade(app.core.tx, 0.4), size: 20),
-                  filled: true,
-                  fillColor: app.fade(app.core.tx, 0.06),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: app.shape.br(12),
-                    borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: app.shape.br(12),
-                    borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: app.shape.br(12),
-                    borderSide: BorderSide(color: app.cloud.accent),
-                  ),
+              controller: _torrentSearchController,
+              focusNode: _torrentSearchFocusNode,
+              autofocus: true,
+              onSubmitted: (_) => _submitTorrentSearch(),
+              textInputAction: TextInputAction.search,
+              style: const TextStyle(fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Search your torrents...',
+                hintStyle: TextStyle(color: app.fade(app.core.tx, 0.3)),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  color: app.fade(app.core.tx, 0.4),
+                  size: 20,
+                ),
+                filled: true,
+                fillColor: app.fade(app.core.tx, 0.06),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: app.shape.br(12),
+                  borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: app.shape.br(12),
+                  borderSide: BorderSide(color: app.fade(app.core.tx, 0.08)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: app.shape.br(12),
+                  borderSide: BorderSide(color: app.cloud.accent),
                 ),
               ),
             ),
+          ),
           if (hasText)
             Padding(
               padding: const EdgeInsets.only(left: 8),
@@ -3279,8 +3391,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
                 onKeyEvent: (node, event) {
                   if (event is! KeyDownEvent) return KeyEventResult.ignored;
                   final key = event.logicalKey;
-                  if (isActivateKey(key) ||
-                      key == LogicalKeyboardKey.space) {
+                  if (isActivateKey(key) || key == LogicalKeyboardKey.space) {
                     _torrentSearchController.clear();
                     setState(() => _torrentSearchQuery = '');
                     _torrentSearchFocusNode.requestFocus();
@@ -3327,7 +3438,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Loading all torrents...', style: TextStyle(color: Colors.grey)),
+            Text(
+              'Loading all torrents...',
+              style: TextStyle(color: Colors.grey),
+            ),
           ],
         ),
       );
@@ -3349,8 +3463,11 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off_rounded,
-                size: 48, color: app.fade(app.core.tx, 0.2)),
+            Icon(
+              Icons.search_off_rounded,
+              size: 48,
+              color: app.fade(app.core.tx, 0.2),
+            ),
             const SizedBox(height: 12),
             Text(
               'No results',
@@ -3497,8 +3614,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         '${Formatters.formatFileSize(torrent.bytes)} · ${torrent.links.length} ${torrent.links.length == 1 ? 'file' : 'files'} · ${_formatDate(torrent.added)}';
     final upNode = (index == 0)
         ? (_isSelectionMode
-            ? _deleteButtonFocusNode
-            : (_isTorrentSearchActive ? _torrentSearchFocusNode : null))
+              ? _deleteButtonFocusNode
+              : (_isTorrentSearchActive ? _torrentSearchFocusNode : null))
         : null;
 
     if (widget.selectSourceMode) {
@@ -3594,8 +3711,12 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       );
 
       // Get torrent info to access files and links
-      final torrentInfo = await DebridService.getTorrentInfo(_apiKey!, torrent.id);
-      final allFiles = (torrentInfo['files'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final torrentInfo = await DebridService.getTorrentInfo(
+        _apiKey!,
+        torrent.id,
+      );
+      final allFiles =
+          (torrentInfo['files'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       final links = (torrentInfo['links'] as List).cast<String>();
 
       // Filter to only selected files (files that were selected when adding to RD)
@@ -3617,10 +3738,10 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         final bytes = file['bytes'] as int? ?? 0;
 
         formattedFiles.add({
-          '_fullPath': path,  // Use path field for full path
+          '_fullPath': path, // Use path field for full path
           'name': path,
           'size': bytes.toString(),
-          '_linkIndex': i,  // Store the link index for later use
+          '_linkIndex': i, // Store the link index for later use
         });
       }
 
@@ -3704,9 +3825,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
     try {
       final result = await DebrifyTvChannelAddService.addTorrentsToChannel(
         context,
-        torrents: [
-          DebrifyTvChannelAddService.fromRealDebridTorrent(torrent),
-        ],
+        torrents: [DebrifyTvChannelAddService.fromRealDebridTorrent(torrent)],
         searchKeyword: _torrentSearchQuery,
       );
 
@@ -3720,7 +3839,6 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       _showError('Failed to add torrent to Debrify TV: $e');
     }
   }
-
 
   Widget _buildDownloadCard(DebridDownload download, int index) {
     final canStream = download.streamable == 1;
@@ -3792,9 +3910,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
             children: [
               CircularProgressIndicator(),
               SizedBox(width: 16),
-              Text(
-                'Preparing playlist…',
-              ),
+              Text('Preparing playlist…'),
             ],
           ),
         ),
@@ -4064,7 +4180,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           subtitle: '${entries.length} files',
           playlist: entries,
           startIndex: 0,
-          viewMode: isSeries ? PlaylistViewMode.series : PlaylistViewMode.sorted,
+          viewMode: isSeries
+              ? PlaylistViewMode.series
+              : PlaylistViewMode.sorted,
         ),
       );
     } catch (e) {
@@ -4602,9 +4720,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           children: [
             const CircularProgressIndicator(),
             const SizedBox(height: 16),
-            const Text(
-              'Processing link...',
-            ),
+            const Text('Processing link...'),
             const SizedBox(height: 8),
             Text(
               'This may take a few moments',
@@ -4788,6 +4904,7 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       if (downloadLink.isNotEmpty) {
         await DownloadService.instance.enqueueDownload(
+          credentialKey: 'real_debrid_api_key',
           url: downloadLink,
           // Use RD-provided filename if available to avoid mismatches
           fileName: (unrestrictResult['filename']?.toString() ?? fileName),
@@ -5761,7 +5878,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
   /// Play all videos in a folder with a playlist
   Future<void> _playFolder(RDFileNode folder) async {
-    if (_apiKey == null || _currentTorrentId == null || _currentTorrent == null) return;
+    if (_apiKey == null || _currentTorrentId == null || _currentTorrent == null)
+      return;
 
     try {
       // Show loading dialog
@@ -5837,7 +5955,8 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
 
       // Detect if it's a series collection
       final filenames = playlist.map((e) => e.title).toList();
-      final isSeries = playlist.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
+      final isSeries =
+          playlist.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
 
       // Launch video player with playlist
       await VideoPlayerLauncher.push(
@@ -5848,7 +5967,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           subtitle: '${videoFiles.length} videos',
           playlist: playlist,
           startIndex: 0,
-          viewMode: isSeries ? PlaylistViewMode.series : PlaylistViewMode.sorted,
+          viewMode: isSeries
+              ? PlaylistViewMode.series
+              : PlaylistViewMode.sorted,
         ),
       );
     } catch (e) {
@@ -5912,13 +6033,13 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
       // Pass metadata for lazy unrestriction
       final meta = jsonEncode({
         'restrictedLink': restrictedLink,
-        'apiKey': _apiKey,
         'torrentHash': _currentTorrent?.hash,
         'fileIndex': file.linkIndex,
       });
 
       // Pass restricted link as URL (download service will replace it)
       await DownloadService.instance.enqueueDownload(
+        credentialKey: 'real_debrid_api_key',
         url: restrictedLink,
         fileName: fileName,
         meta: meta,
@@ -6059,7 +6180,9 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
         try {
           // Extract link index and file name
           final linkIndex = fileData['_linkIndex'] as int;
-          final fileName = (fileData['_fullPath'] as String?) ?? (fileData['name'] as String? ?? 'download');
+          final fileName =
+              (fileData['_fullPath'] as String?) ??
+              (fileData['name'] as String? ?? 'download');
 
           // Validate linkIndex
           if (linkIndex >= links.length) {
@@ -6073,14 +6196,15 @@ class _DebridDownloadsScreenState extends State<DebridDownloadsScreen> {
           // Pass metadata for lazy unrestriction
           final meta = jsonEncode({
             'restrictedLink': restrictedLink,
-            'apiKey': _apiKey,
             'torrentHash': _currentTorrent?.hash,
             'fileIndex': linkIndex,
           });
 
           // Queue download instantly (download service will unrestrict when ready)
           await DownloadService.instance.enqueueDownload(
-            url: restrictedLink, // Pass restricted link (will be replaced by download service)
+            credentialKey: 'real_debrid_api_key',
+            url:
+                restrictedLink, // Pass restricted link (will be replaced by download service)
             fileName: fileName,
             meta: meta,
             torrentName: _currentTorrent?.filename ?? folderName,
@@ -6258,4 +6382,3 @@ class _RDSearchResult {
 
   const _RDSearchResult({required this.node, required this.path});
 }
-

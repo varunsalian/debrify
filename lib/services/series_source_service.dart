@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'profiles/profile_preferences.dart';
+
 /// Represents a bound torrent source for a series.
 /// When set, episode playback skips torrent search and uses this source directly.
 class SeriesSource {
@@ -46,8 +48,7 @@ class SeriesSource {
       !isLocal &&
       torrentHash.isEmpty &&
       debridTorrentId.trim().isNotEmpty &&
-      (cloudSourceKind == cloudKindFile ||
-          cloudSourceKind == cloudKindFolder);
+      (cloudSourceKind == cloudKindFile || cloudSourceKind == cloudKindFolder);
 
   /// Stable identity used for dedupe, reorder keys, and removal. Existing
   /// hash-backed bindings retain their exact behavior; only hashless cloud
@@ -108,7 +109,7 @@ class SeriesSourceService {
 
   /// Get all bound sources for a series, ordered by priority (first = highest).
   static Future<List<SeriesSource>> getSources(String imdbId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString('$_prefix$imdbId');
     if (raw == null) return [];
     try {
@@ -143,7 +144,7 @@ class SeriesSourceService {
   /// Hash-backed sources dedupe exactly as before. Provider-native cloud
   /// sources dedupe by provider + kind + stable provider id.
   static Future<void> addSource(String imdbId, SeriesSource source) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final sources = await getSources(imdbId);
     // Replace if the same stable binding already exists.
     final existingIdx = sources.indexWhere(
@@ -162,7 +163,7 @@ class SeriesSourceService {
     String imdbId,
     String torrentHash,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final sources = await getSources(imdbId);
     sources.removeWhere((s) => s.torrentHash == torrentHash);
     if (sources.isEmpty) {
@@ -177,7 +178,7 @@ class SeriesSourceService {
     String imdbId,
     SeriesSource source,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     final sources = await getSources(imdbId);
     sources.removeWhere((s) => s.bindingKey == source.bindingKey);
     if (sources.isEmpty) {
@@ -189,7 +190,7 @@ class SeriesSourceService {
 
   /// Remove all sources for a series.
   static Future<void> removeAllSources(String imdbId) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     await prefs.remove('$_prefix$imdbId');
   }
 
@@ -198,7 +199,7 @@ class SeriesSourceService {
     String imdbId,
     List<SeriesSource> sources,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ProfilePreferences.instance();
     if (sources.isEmpty) {
       await prefs.remove('$_prefix$imdbId');
     } else {

@@ -450,8 +450,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     // Multi-file: build a series-aware playlist, unlocking only the start file
     // up front. The rest carry their stable locked link and are unlocked on
     // demand by the player's lazy AllDebrid resolver.
-    final infos =
-        videos.map((v) => SeriesParser.parseFilename(v.fileName)).toList();
+    final infos = videos
+        .map((v) => SeriesParser.parseFilename(v.fileName))
+        .toList();
     final filenames = videos.map((v) => v.fileName).toList();
     final bool isSeries =
         videos.length > 1 && SeriesParser.isSeriesPlaylist(filenames);
@@ -464,14 +465,14 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         final ea = infos[a].episode ?? 0, eb = infos[b].episode ?? 0;
         if (ea != eb) return ea.compareTo(eb);
         return videos[a].fileName.toLowerCase().compareTo(
-              videos[b].fileName.toLowerCase(),
-            );
+          videos[b].fileName.toLowerCase(),
+        );
       });
     } else {
       order.sort(
         (a, b) => videos[a].fileName.toLowerCase().compareTo(
-              videos[b].fileName.toLowerCase(),
-            ),
+          videos[b].fileName.toLowerCase(),
+        ),
       );
     }
 
@@ -549,7 +550,8 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       final episode = info.episode;
       if (!info.isSeries || season == null || episode == null) continue;
       final betterSeason = bestSeason == null || season < bestSeason;
-      final betterEpisode = bestSeason != null &&
+      final betterEpisode =
+          bestSeason != null &&
           season == bestSeason &&
           (bestEpisode == null || episode < bestEpisode);
       if (betterSeason || betterEpisode) {
@@ -576,6 +578,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     }
     try {
       await DownloadService.instance.enqueueDownload(
+        credentialKey: 'alldebrid_api_key',
         url: url,
         fileName: file.fileName,
         context: mounted ? context : null,
@@ -649,6 +652,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       }
       try {
         await DownloadService.instance.enqueueDownload(
+          credentialKey: 'alldebrid_api_key',
           url: url,
           fileName: target.fileName,
           torrentName: magnetName,
@@ -774,6 +778,7 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     }
     try {
       await DownloadService.instance.enqueueDownload(
+        credentialKey: 'alldebrid_api_key',
         url: url,
         fileName: l.fileName,
         context: mounted ? context : null,
@@ -850,8 +855,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     );
     if (link == null || link.isEmpty) return;
     if (!link.startsWith('http://') && !link.startsWith('https://')) {
-      _snack('Enter a valid URL (must start with http:// or https://)',
-          isError: true);
+      _snack(
+        'Enter a valid URL (must start with http:// or https://)',
+        isError: true,
+      );
       return;
     }
     _showLoading('Adding…');
@@ -875,8 +882,12 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(title ??
-            (links.length == 1 ? 'Delete link?' : 'Delete ${links.length} links?')),
+        title: Text(
+          title ??
+              (links.length == 1
+                  ? 'Delete link?'
+                  : 'Delete ${links.length} links?'),
+        ),
         content: Text(
           links.length == 1
               ? 'Remove "${links.first.fileName}" from your AllDebrid saved links?'
@@ -914,8 +925,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         isError: false,
       );
     } else {
-      _snack('Failed to delete $fail link${fail == 1 ? '' : 's'}',
-          isError: true);
+      _snack(
+        'Failed to delete $fail link${fail == 1 ? '' : 's'}',
+        isError: true,
+      );
     }
   }
 
@@ -973,23 +986,29 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       });
     }
     if (!mounted) return;
-    _snack(added ? 'Added to playlist' : 'Already in playlist',
-        isError: !added);
+    _snack(
+      added ? 'Added to playlist' : 'Already in playlist',
+      isError: !added,
+    );
   }
 
   // ── Delete ─────────────────────────────────────────────────────────────
 
-  Future<void> _deleteMagnets(List<AllDebridMagnet> magnets,
-      {String? title}) async {
+  Future<void> _deleteMagnets(
+    List<AllDebridMagnet> magnets, {
+    String? title,
+  }) async {
     final apiKey = _apiKey;
     if (apiKey == null || apiKey.isEmpty || magnets.isEmpty) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(title ??
-            (magnets.length == 1
-                ? 'Delete magnet?'
-                : 'Delete ${magnets.length} magnets?')),
+        title: Text(
+          title ??
+              (magnets.length == 1
+                  ? 'Delete magnet?'
+                  : 'Delete ${magnets.length} magnets?'),
+        ),
         content: Text(
           magnets.length == 1
               ? 'Remove "${magnets.first.name}" from your AllDebrid account?'
@@ -1116,9 +1135,11 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     if (_searchQuery.trim().isEmpty) return _links;
     final q = _searchQuery.trim().toLowerCase();
     return _links
-        .where((l) =>
-            l.fileName.toLowerCase().contains(q) ||
-            l.host.toLowerCase().contains(q))
+        .where(
+          (l) =>
+              l.fileName.toLowerCase().contains(q) ||
+              l.host.toLowerCase().contains(q),
+        )
         .toList();
   }
 
@@ -1234,16 +1255,21 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       builder: (context, constraints) {
         final isCompact = constraints.maxWidth < 480;
         final double iconSize = isCompact ? 20 : 24;
-        final iconPadding =
-            isCompact ? const EdgeInsets.all(6) : const EdgeInsets.all(8);
+        final iconPadding = isCompact
+            ? const EdgeInsets.all(6)
+            : const EdgeInsets.all(8);
         final iconConstraints = isCompact
             ? const BoxConstraints(minWidth: 36, minHeight: 36)
             : const BoxConstraints(minWidth: 44, minHeight: 44);
         return Container(
           margin: EdgeInsets.symmetric(
-              horizontal: isCompact ? 8 : 16, vertical: 8),
+            horizontal: isCompact ? 8 : 16,
+            vertical: 8,
+          ),
           padding: EdgeInsets.symmetric(
-              horizontal: isCompact ? 8 : 16, vertical: 8),
+            horizontal: isCompact ? 8 : 16,
+            vertical: 8,
+          ),
           decoration: BoxDecoration(
             color: app.fade(app.core.tx, 0.05),
             borderRadius: app.shape.br(12),
@@ -1282,7 +1308,8 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                     padding: iconPadding,
                     constraints: iconConstraints,
                     icon: Icon(
-                        _selectionMode ? Icons.close : Icons.checklist_outlined),
+                      _selectionMode ? Icons.close : Icons.checklist_outlined,
+                    ),
                     color: _selectionMode
                         ? theme.colorScheme.error
                         : theme.colorScheme.onSurface,
@@ -1293,8 +1320,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 Tooltip(
                   message: isWeb ? 'Delete all links' : 'Delete all magnets',
                   child: IconButton(
-                    onPressed:
-                        isWeb ? _confirmDeleteAllLinks : _confirmDeleteAll,
+                    onPressed: isWeb
+                        ? _confirmDeleteAllLinks
+                        : _confirmDeleteAll,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
@@ -1313,9 +1341,11 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
-                    icon: Icon(_searchActive
-                        ? Icons.search_off_rounded
-                        : Icons.search_rounded),
+                    icon: Icon(
+                      _searchActive
+                          ? Icons.search_off_rounded
+                          : Icons.search_rounded,
+                    ),
                     color: _searchActive
                         ? theme.colorScheme.primary
                         : theme.colorScheme.onSurface,
@@ -1347,7 +1377,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                 Tooltip(
                   message: isWeb ? 'Add link' : 'Add magnet link',
                   child: IconButton(
-                    onPressed: isWeb ? _showAddLinkDialog : _showAddMagnetDialog,
+                    onPressed: isWeb
+                        ? _showAddLinkDialog
+                        : _showAddMagnetDialog,
                     iconSize: iconSize,
                     padding: iconPadding,
                     constraints: iconConstraints,
@@ -1423,7 +1455,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
       decoration: BoxDecoration(
         color: theme.colorScheme.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+        ),
       ),
       child: Row(
         children: [
@@ -1447,8 +1481,9 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
             label: const Text('Delete'),
             style: FilledButton.styleFrom(
               backgroundColor: theme.colorScheme.error,
-              disabledBackgroundColor:
-                  theme.colorScheme.error.withValues(alpha: 0.3),
+              disabledBackgroundColor: theme.colorScheme.error.withValues(
+                alpha: 0.3,
+              ),
             ),
           ),
         ],
@@ -1462,8 +1497,11 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
     return InputDecoration(
       hintText: hint,
       hintStyle: TextStyle(color: app.fade(app.core.tx, 0.3)),
-      prefixIcon: Icon(Icons.search_rounded,
-          color: app.fade(app.core.tx, 0.4), size: 20),
+      prefixIcon: Icon(
+        Icons.search_rounded,
+        color: app.fade(app.core.tx, 0.4),
+        size: 20,
+      ),
       filled: true,
       fillColor: app.fade(app.core.tx, 0.06),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1513,14 +1551,16 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                   _moveFocusTo(_toolbarSearchFocusNode, _searchFocusNode),
               onDownArrow: () =>
                   _moveFocusTo(_firstItemFocusNode, _searchFocusNode),
-              onRightArrow:
-                  hasText ? () => _searchClearFocusNode.requestFocus() : null,
+              onRightArrow: hasText
+                  ? () => _searchClearFocusNode.requestFocus()
+                  : null,
               onChanged: (v) => setState(() => _searchQuery = v),
               onSubmitted: (_) => _searchFocusNode.unfocus(),
               decoration: _searchDecoration(
-                  _selectedView == _AdView.webDownloads
-                      ? 'Search your links...'
-                      : 'Search your magnets...'),
+                _selectedView == _AdView.webDownloads
+                    ? 'Search your links...'
+                    : 'Search your magnets...',
+              ),
             ),
           ),
           if (hasText)
@@ -1560,9 +1600,11 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
                           setState(() => _searchQuery = '');
                           _searchFocusNode.requestFocus();
                         },
-                        icon: Icon(Icons.clear_rounded,
-                            color: app.fade(app.core.tx, 0.4),
-                            size: 18),
+                        icon: Icon(
+                          Icons.clear_rounded,
+                          color: app.fade(app.core.tx, 0.4),
+                          size: 18,
+                        ),
                       ),
                     );
                   },
@@ -1610,8 +1652,11 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.cloud_off,
-                  size: 48, color: app.fade(app.core.tx, 0x62 / 0xFF)),
+              Icon(
+                Icons.cloud_off,
+                size: 48,
+                color: app.fade(app.core.tx, 0x62 / 0xFF),
+              ),
               const SizedBox(height: 16),
               Text(_error!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -1673,8 +1718,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         badges: const [CloudRowBadge('Ready', CloudBadgeKind.ok)],
         onTap: () async {
           if (m.hash.trim().isEmpty) {
-            _snack('This AllDebrid magnet has no infohash to bind.',
-                isError: true);
+            _snack(
+              'This AllDebrid magnet has no infohash to bind.',
+              isError: true,
+            );
             return;
           }
           await widget.onSourceSelected?.call(
@@ -1738,8 +1785,10 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
         if (m.isError)
           const CloudRowBadge('Failed', CloudBadgeKind.error)
         else if (!m.isReady)
-          CloudRowBadge('Downloading ${m.progressPercent}%',
-              CloudBadgeKind.warn),
+          CloudRowBadge(
+            'Downloading ${m.progressPercent}%',
+            CloudBadgeKind.warn,
+          ),
       ],
       // Not-ready magnets keep a tap action too: _openMagnet explains why it
       // can't open ("still downloading" / "failed") — better than the menu
@@ -1765,13 +1814,15 @@ class _AllDebridFilesScreenState extends State<AllDebridFilesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.cloud_off,
-                  size: 48, color: app.fade(app.core.tx, 0x62 / 0xFF)),
+              Icon(
+                Icons.cloud_off,
+                size: 48,
+                color: app.fade(app.core.tx, 0x62 / 0xFF),
+              ),
               const SizedBox(height: 16),
               Text(_linksError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              ElevatedButton(
-                  onPressed: _loadLinks, child: const Text('Retry')),
+              ElevatedButton(onPressed: _loadLinks, child: const Text('Retry')),
             ],
           ),
         ),

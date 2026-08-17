@@ -394,7 +394,19 @@ class EpisodesPanelState extends State<EpisodesPanel> {
     // Overlay Simkl state — a third source, same merge rules as Trakt's
     // (watched wins outright, partials only raise). Skipped entirely when
     // Simkl isn't connected so disconnected users pay zero extra calls.
-    if (_isSimklAuthenticated) {
+    //
+    // Asked FRESH rather than read off [_isSimklAuthenticated]: that field is
+    // resolved concurrently from initState, and this loader used to win the
+    // race against it — silently skipping the Simkl overlay on first open.
+    // It only STARTED losing when the profiles/at-rest-encryption work turned
+    // the token read from one SharedPreferences hop into ProfilePreferences +
+    // SecretVault, which is exactly when "no ticks on a fresh install with
+    // only Simkl history" was reported (2026-08-16). Nothing re-runs this
+    // loader when the field flips later, so losing the race wasn't a delay —
+    // it was a miss. One storage read here keeps the no-API-when-disconnected
+    // intent without racing anybody; the field keeps gating the episode MENU
+    // rows, where by open-time it has long settled.
+    if (await _simklService.isAuthenticated()) {
       try {
         final watched = await _simklService.fetchWatchedShowEpisodes(imdbId);
         if (!mounted || generation != _episodeModeGeneration) return;
@@ -1905,37 +1917,43 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           ],
         ];
 
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(sheetCtx).size.height * 0.8,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'S${episode.season} · E${episode.number}  ${episode.title}',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w600,
+        // Opened by a HELD OK, and it autofocuses Play below — so it
+        // arrives under a key that is still repeating. Without this the
+        // next repeat activates Play and the sheet closes on the very
+        // press that opened it.
+        return TvHeldKeyGuard(
+          child: SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(sheetCtx).size.height * 0.8,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'S${episode.season} · E${episode.number}  ${episode.title}',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
-                Flexible(
-                  child: ListView(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.only(bottom: 8),
-                    children: tiles,
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.only(bottom: 8),
+                      children: tiles,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

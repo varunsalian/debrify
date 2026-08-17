@@ -90,6 +90,35 @@ void main() {
     text.dispose();
   });
 
+  testWidgets(
+    'terminal recovery can force the TV keyboard after probe failure',
+    (tester) async {
+      PlatformUtil.debugSetAndroidTvCached(false);
+      StorageService.tvKeyboardEnabledCached = false;
+      final text = TextEditingController();
+      final fieldKey = GlobalKey<TvTextFieldState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TvTextField(
+              key: fieldKey,
+              controller: text,
+              forceTvKeyboard: true,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byType(TvTextField));
+      await tester.pump();
+      expect(fieldKey.currentState!.debugHasKeyboardOverlay, isTrue);
+      expect(find.byType(TvKeyboardPanel), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      text.dispose();
+    },
+  );
+
   testWidgets('system IME and widget removal clear the slotted controller', (
     tester,
   ) async {

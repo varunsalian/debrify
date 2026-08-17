@@ -14,6 +14,7 @@ import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/wide_touch_scale.dart';
 import '../episodes_panel.dart';
+import '../tracker_brand_marks.dart';
 import 'detail_model.dart';
 
 /// Card metrics as FRACTIONS of the viewport.
@@ -498,13 +499,31 @@ class ShowcaseIdentity extends StatelessWidget {
       return n;
     }
 
-    if (m.onTrackers != null && actionNodes.isNotEmpty) {
-      actions.add(_Circle(node: next(), icon: Icons.add_rounded, onTap: m.onTrackers!));
-    }
-    if (m.onTrackersSecondary != null && i < actionNodes.length) {
+    if (m.onToggleMyWatchlist != null && actionNodes.isNotEmpty) {
       actions.add(_Circle(
         node: next(),
-        icon: Icons.bookmark_add_outlined,
+        icon: m.inMyWatchlist
+            ? Icons.bookmark_rounded
+            : Icons.bookmark_add_outlined,
+        onTap: m.onToggleMyWatchlist!,
+      ));
+    }
+    if (m.onTrackers != null && actionNodes.isNotEmpty) {
+      // The screen assigns Trakt to the primary slot when it is connected;
+      // otherwise this callback opens Simkl. Keep the mark coupled to that
+      // same rule instead of presenting an ambiguous generic `+`.
+      actions.add(_Circle.mark(
+        node: next(),
+        mark: m.hasTrakt ? const TraktMark() : const SimklMark(),
+        onTap: m.onTrackers!,
+      ));
+    }
+    if (m.onTrackersSecondary != null && i < actionNodes.length) {
+      // The secondary slot only exists when both are connected. Trakt owns
+      // the primary slot above, so this callback always opens Simkl.
+      actions.add(_Circle.mark(
+        node: next(),
+        mark: const SimklMark(),
         onTap: m.onTrackersSecondary!,
       ));
     }
@@ -791,7 +810,7 @@ class _Chip extends StatelessWidget {
 /// Trakt and Simkl are READOUT here, not buttons: filled when tracked, hollow
 /// when not, never focusable. Tracker state describes what a title is to you;
 /// it is not an errand you came to the page to run, and a row of verbs is the
-/// wrong place for it. The `+` button opens both.
+/// wrong place for it. The branded tracker buttons open their matching sheet.
 class _MetaLine extends StatelessWidget {
   final DetailModel model;
 
@@ -1059,10 +1078,21 @@ class _PrimaryState extends State<_Primary> {
 
 class _Circle extends StatefulWidget {
   final FocusNode node;
-  final IconData icon;
+  final IconData? icon;
+  final Widget? mark;
   final VoidCallback onTap;
 
-  const _Circle({required this.node, required this.icon, required this.onTap});
+  const _Circle({
+    required this.node,
+    required IconData this.icon,
+    required this.onTap,
+  }) : mark = null;
+
+  const _Circle.mark({
+    required this.node,
+    required Widget this.mark,
+    required this.onTap,
+  }) : icon = null;
 
   @override
   State<_Circle> createState() => _CircleState();
@@ -1096,11 +1126,12 @@ class _CircleState extends State<_Circle> {
                 color: _f ? _ink : _ink.withValues(alpha: 0.18),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                widget.icon,
-                size: compact ? 20 : 13 * m.k,
-                color: _f ? Colors.black : _ink,
-              ),
+              child: widget.mark ??
+                  Icon(
+                    widget.icon,
+                    size: compact ? 20 : 13 * m.k,
+                    color: _f ? Colors.black : _ink,
+                  ),
             );
           }),
         ),
@@ -1514,23 +1545,24 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
       focused: focused,
       shape: ParallaxShape.episodeStill,
       radius: BorderRadius.circular(12),
-      child: Container(
+      child: SizedBox(
         width: m.epCell,
         height: m.stillH + m.epPlate,
-        decoration: BoxDecoration(
-          // A step off the page, like every card slot — on the Spotlight
-          // palette this lands on the mock's #141416-on-black.
-          color: slot,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: m.epCell,
-              height: m.stillH,
-              child: Stack(
+            // No card fill: still + caption sit straight on the page, the
+            // wide/TV cell's anatomy (user call 2026-08-16 — the solid
+            // integrated card read as a foreign object on a board where
+            // every other surface is the page). The still carries its own
+            // full rounded clip now; under the old whole-card clip its
+            // bottom corners were squared off against the plate below.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: m.epCell,
+                height: m.stillH,
+                child: Stack(
                 fit: StackFit.expand,
                 children: [
                   if (url != null && url.isNotEmpty)
@@ -1571,11 +1603,24 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                       ),
                     ),
                 ],
+                ),
               ),
             ),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 9, 12, 8),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                // The wide/TV cell's answer to focus, echoed here for the
+                // scroll-settled card: the caption gains an ink plate while
+                // the still lifts. Padded identically in BOTH states so
+                // gaining the plate never shifts the text — only its ground
+                // appears (the wide cell's own rule).
+                decoration: BoxDecoration(
+                  color: focused ? _ink.withValues(alpha: 0.13) : null,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                // Near-flush with the still's edge — page text, not card
+                // text, now that the resting fill is gone.
+                padding: const EdgeInsets.fromLTRB(8, 9, 8, 6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1592,11 +1637,31 @@ class ShowcaseEpisodeCardCompact extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Expanded(
-                      child: Text(
-                        episode.overview ?? '',
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: _t(11.5, a: 0.55).copyWith(height: 1.4),
+                      // Whole lines only. maxLines guards the HORIZONTAL
+                      // overflow of the last permitted line — it does nothing
+                      // about the box being 2.6 line-heights tall, which
+                      // sliced the third line through its middle. Fit the
+                      // line count to the height that actually exists
+                      // (text-scale aware), and the last line ends in an
+                      // ellipsis instead of a crop.
+                      child: LayoutBuilder(
+                        builder: (context, c) {
+                          const fs = 11.5;
+                          final line =
+                              MediaQuery.textScalerOf(context).scale(fs) * 1.4;
+                          final lines =
+                              (c.maxHeight / line).floor().clamp(1, 3);
+                          return Align(
+                            alignment: Alignment.topLeft,
+                            child: Text(
+                              episode.overview ?? '',
+                              maxLines: lines,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  _t(fs, a: 0.55).copyWith(height: 1.4),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     Row(

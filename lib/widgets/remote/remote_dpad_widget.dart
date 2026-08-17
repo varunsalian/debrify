@@ -8,10 +8,7 @@ import '../../services/remote_control/remote_control_state.dart';
 class RemoteDpadWidget extends StatelessWidget {
   final double size;
 
-  const RemoteDpadWidget({
-    super.key,
-    this.size = 200,
-  });
+  const RemoteDpadWidget({super.key, this.size = 200});
 
   @override
   Widget build(BuildContext context) {
@@ -150,14 +147,8 @@ class _DpadButtonState extends State<_DpadButton> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: _isPressed
-                  ? [
-                      const Color(0xFF6366F1),
-                      const Color(0xFF8B5CF6),
-                    ]
-                  : [
-                      const Color(0xFF334155),
-                      const Color(0xFF1E293B),
-                    ],
+                  ? [const Color(0xFF6366F1), const Color(0xFF8B5CF6)]
+                  : [const Color(0xFF334155), const Color(0xFF1E293B)],
             ),
             border: Border.all(
               color: _isPressed
@@ -190,10 +181,7 @@ class _DpadCenterButton extends StatefulWidget {
   final double size;
   final VoidCallback onPressed;
 
-  const _DpadCenterButton({
-    required this.size,
-    required this.onPressed,
-  });
+  const _DpadCenterButton({required this.size, required this.onPressed});
 
   @override
   State<_DpadCenterButton> createState() => _DpadCenterButtonState();
@@ -226,21 +214,16 @@ class _DpadCenterButtonState extends State<_DpadCenterButton> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: _isPressed
-                  ? [
-                      const Color(0xFF10B981),
-                      const Color(0xFF059669),
-                    ]
-                  : [
-                      const Color(0xFF6366F1),
-                      const Color(0xFF8B5CF6),
-                    ],
+                  ? [const Color(0xFF10B981), const Color(0xFF059669)]
+                  : [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
             ),
             boxShadow: [
               BoxShadow(
-                color: (_isPressed
-                        ? const Color(0xFF10B981)
-                        : const Color(0xFF6366F1))
-                    .withValues(alpha: 0.4),
+                color:
+                    (_isPressed
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFF6366F1))
+                        .withValues(alpha: 0.4),
                 blurRadius: 16,
                 offset: const Offset(0, 4),
               ),

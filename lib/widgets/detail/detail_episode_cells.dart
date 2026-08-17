@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,13 +11,16 @@ import '../home/home_theme.dart';
 import 'detail_style.dart';
 import 'theme/detail_theme.dart';
 
-/// How a cell reaches the per-episode options menu.
+/// Whether RIGHT is an ADDITIONAL way into the per-episode options menu.
 ///
-/// `_CompactEpisodeRow` can bind RIGHT because it lives in a vertical,
-/// right-most pane. A horizontal rail or a grid needs RIGHT to advance, so
-/// those bind a **held OK** instead — which is a real key implementation, not
-/// `GestureDetector.onLongPress` (a held DPAD SELECT never becomes a pointer
-/// long-press).
+/// Holding OK always opens it — see `_DetailEpisodeInteractionState._hold`.
+/// This only says whether the cell can also spare RIGHT for it: a vertical
+/// pane that is already the right-most one can, while a horizontal rail or a
+/// grid needs RIGHT to advance the cursor.
+///
+/// Neither is `GestureDetector.onLongPress`, which is a POINTER gesture — a
+/// held DPAD centre arrives as key-down plus repeats and never becomes one, so
+/// the hold has to be recognised from the keys (`TvHoldOk`).
 enum DetailOptionsGesture { rightArrow, holdOk }
 
 /// Focus, activation and options handling shared by every episode cell.
@@ -66,6 +67,18 @@ class DetailEpisodeInteraction extends StatefulWidget {
 class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
   bool _focused = false;
 
+  /// Hold OK for the options menu, on EVERY cell.
+  ///
+  /// It used to be exclusive to [DetailOptionsGesture.holdOk] — the cells that
+  /// could spare RIGHT bound that instead and had no hold at all, so the same
+  /// card answered a held OK in one layout and ignored it in the next. The
+  /// gesture now decides only whether RIGHT is ALSO a way in; holding OK is
+  /// the one gesture that works everywhere.
+  late final TvHoldOk _hold = TvHoldOk(
+    onTap: () => widget.onPlay(),
+    onHold: () => widget.onOptions(),
+  );
+
   /// Pointer hover, feeding the SAME visual the DPAD cursor gets — the lift
   /// and the caption plate — so mousing across the rail reads like walking
   /// it with a remote. Purely visual: hover must not request focus (that
@@ -73,21 +86,11 @@ class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
   /// ensure-visible scroll, letting the mouse yank the rail around) and it
   /// is never reported upward.
   bool _hovered = false;
-  Timer? _holdTimer;
-  bool _holdFired = false;
-  bool _keyDownSeen = false;
 
   @override
   void dispose() {
-    _holdTimer?.cancel();
+    _hold.reset();
     super.dispose();
-  }
-
-  void _resetHold() {
-    _holdTimer?.cancel();
-    _holdTimer = null;
-    _holdFired = false;
-    _keyDownSeen = false;
   }
 
   @override
@@ -96,7 +99,7 @@ class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
       focusNode: widget.focusNode,
       onFocusChange: (f) {
         setState(() => _focused = f);
-        if (!f) _resetHold();
+        if (!f) _hold.reset();
         widget.onFocusChange?.call(f);
         if (f && widget.ensureVisible) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -127,45 +130,16 @@ class _DetailEpisodeInteractionState extends State<DetailEpisodeInteraction> {
         final k = event.logicalKey;
 
         // Activation — plain press plays, held press opens options.
-        if (isActivateOrSpaceKey(k)) {
-          if (widget.gesture == DetailOptionsGesture.holdOk) {
-            if (event is KeyDownEvent) {
-              _keyDownSeen = true;
-              _holdFired = false;
-              _holdTimer?.cancel();
-              _holdTimer = Timer(const Duration(milliseconds: 800), () {
-                _holdFired = true;
-                HapticFeedback.mediumImpact();
-                widget.onOptions();
-              });
-              return KeyEventResult.handled;
-            }
-            if (event is KeyUpEvent) {
-              _holdTimer?.cancel();
-              // A key-up with no matching key-down belongs to whatever had
-              // focus before — never treat it as a tap here.
-              if (!_keyDownSeen) return KeyEventResult.handled;
-              if (!_holdFired) widget.onPlay();
-              _resetHold();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          }
-          if (event is KeyDownEvent) {
-            widget.onPlay();
-            return KeyEventResult.handled;
-          }
-          return event is KeyUpEvent
-              ? KeyEventResult.handled
-              : KeyEventResult.ignored;
-        }
+        if (isActivateOrSpaceKey(k)) return _hold.handle(event);
 
         if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
           return KeyEventResult.ignored;
         }
         if (widget.gesture == DetailOptionsGesture.rightArrow &&
             k == LogicalKeyboardKey.arrowRight) {
-          widget.onOptions();
+          // Key-DOWN only. On a repeat this pushed another sheet for every
+          // auto-repeat tick of a held RIGHT, stacking them.
+          if (event is KeyDownEvent) widget.onOptions();
           return KeyEventResult.handled;
         }
         if (k == LogicalKeyboardKey.arrowLeft && widget.onLeftEdge != null) {

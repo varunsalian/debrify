@@ -50,6 +50,11 @@ class MainActivity : FlutterActivity() {
 	private val VOICE_CHANNEL = "debrify/tv_voice"
 	private val VOICE_EVENTS = "debrify/tv_voice_events"
 	private val PLAYER_DIAGNOSTICS_CHANNEL = "debrify/player_diagnostics"
+	// SecretVault key derivation. ANDROID_ID is per-device (scoped to our
+	// signing key + user since Android 8, stable across OTAs) — unlike the
+	// build/model fields device_info_plus exposes, which every unit of the
+	// same model shares and which therefore bind nothing.
+	private val DEVICE_ID_CHANNEL = "debrify/device"
 	private val recordAudioPermissionRequestCode = 7404
 	private var pendingVoicePermissionResult: MethodChannel.Result? = null
 	private var speechRecognizer: android.speech.SpeechRecognizer? = null
@@ -466,14 +471,20 @@ class MainActivity : FlutterActivity() {
      *  legacy grant is held). Scan-only files (tee recordings, entries the old
      *  TTL pruned) surface with metadata read off the file itself. Call from a
      *  worker thread — reconcile + scan are IO. */
-    private fun buildRecordingsLibrary(): List<Map<String, Any?>> {
+    private fun buildRecordingsLibrary(
+        ownerProfileId: String,
+        includeUnassigned: Boolean,
+        includeOtherOwners: Boolean,
+    ): List<Map<String, Any?>> {
         com.debrify.app.recording.RecordingTaskStore
             .reconcileDeadEntries(this, forceFileCheck = true)
         val entries = com.debrify.app.recording.RecordingTaskStore.all(this)
         val out = ArrayList<Map<String, Any?>>()
 
-        // Every uri any entry owns — including LIVE captures, whose growing
-        // file must not be double-listed by the scans below.
+        // Every uri any entry owns — including another profile's rows and LIVE
+        // captures, whose growing file must not be rediscovered as an
+        // "unassigned" scan result. Visibility is applied only when indexed
+        // rows are appended below; scan de-duplication must be device-global.
         val coveredIds = HashSet<Long>()
         val coveredPaths = HashSet<String>()
         for (entry in entries.values) {
@@ -488,6 +499,7 @@ class MainActivity : FlutterActivity() {
         }
 
         for ((taskId, entry) in entries) {
+            if (entry.ownerProfileId != ownerProfileId && !includeOtherOwners) continue
             if (entry.status != "done") continue
             val raw = entry.uri ?: continue
             // Duration = finish (the final store write, which normal engine
@@ -509,6 +521,8 @@ class MainActivity : FlutterActivity() {
                     "durationMs" to durationMs.takeIf {
                         it in 1_000L..(12L * 60 * 60 * 1000)
                     },
+                    "ownerProfileId" to entry.ownerProfileId,
+                    "ownershipState" to "assigned",
                     // Crash-finalized (the OS killed the capture; reconcile
                     // salvaged the partial) — the hub's battery-optimization
                     // nudge keys off this. The WHEN is updatedAt (finalize
@@ -521,7 +535,7 @@ class MainActivity : FlutterActivity() {
             )
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (includeUnassigned && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val projection = arrayOf(
                 android.provider.MediaStore.Downloads._ID,
                 android.provider.MediaStore.Downloads.DISPLAY_NAME,
@@ -567,12 +581,14 @@ class MainActivity : FlutterActivity() {
                                 // DATE_MODIFIED is in SECONDS.
                                 "recordedAtMs" to cursor.getLong(dateCol) * 1000L,
                                 "durationMs" to null,
+                                "ownerProfileId" to null,
+                                "ownershipState" to "unassigned",
                             ),
                         )
                     }
                 }
             }
-        } else if (
+        } else if (includeUnassigned &&
             com.debrify.app.recording.LiveRecordingService.legacyStorageGranted(this)
         ) {
             val dir = com.debrify.app.recording.LiveRecordingService.legacyRecordingsDir()
@@ -590,6 +606,8 @@ class MainActivity : FlutterActivity() {
                         "bytes" to file.length(),
                         "recordedAtMs" to file.lastModified(),
                         "durationMs" to null,
+                        "ownerProfileId" to null,
+                        "ownershipState" to "unassigned",
                     ),
                 )
             }
@@ -602,8 +620,11 @@ class MainActivity : FlutterActivity() {
      *  too: the transparency mode is fixed at activity creation, so flipping
      *  the toggle takes effect on the next app start. */
     private fun trailerUnderlayEnabled(): Boolean =
-        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-            .getBoolean("flutter.tv_trailer_underlay_enabled", true)
+        com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
+            this,
+            "tv_trailer_underlay_enabled",
+            true,
+        )
 
     /** Whether this device's GPU can AFFORD the underlay's permanently
      *  translucent Flutter surface. A translucent full-screen surface can never
@@ -663,8 +684,11 @@ class MainActivity : FlutterActivity() {
         // Dart writes this with SharedPreferences.setInt, which lands as a
         // Long. Any other type (or none) means "never set" → the default.
         val percent = try {
-            getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-                .getLong("flutter.tv_ui_scale_percent", DEFAULT_UI_SCALE_PERCENT)
+            com.debrify.app.profiles.ProfilePreferenceProjection.getLong(
+                this,
+                "tv_ui_scale_percent",
+                DEFAULT_UI_SCALE_PERCENT,
+            )
                 .toInt()
         } catch (e: Exception) {
             DEFAULT_UI_SCALE_PERCENT.toInt()
@@ -686,8 +710,11 @@ class MainActivity : FlutterActivity() {
         val auto = isTelevision() && !gpuCapable
         // Pref = future Settings escape hatch ("sharper picture vs faster
         // navigation"); absent → the automatic weak-GPU decision.
-        val enabled = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
-            .getBoolean("flutter.tv_low_res_render", auto)
+        val enabled = com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
+            this,
+            "tv_low_res_render",
+            auto,
+        )
         if (!enabled) return
         val dm = DisplayMetrics()
         @Suppress("DEPRECATION")
@@ -894,6 +921,14 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // A lock-on-resume profile must be protected BEFORE Flutter starts and
+        // before Android can take a task snapshot. Dart later clears the flag
+        // only after it has published an unlocked active profile.
+        if (com.debrify.app.profiles.ProfilePrivacyState
+                .shouldProtectWhenBackgrounded(this)
+        ) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        }
         // Decide the surface mode BEFORE super.onCreate builds the FlutterView
         // (which consults getTransparencyMode exactly once), and persist the
         // EFFECTIVE decision where Dart's launch snapshot reads it — both
@@ -993,6 +1028,14 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onPause() {
+        // Set this BEFORE super.onPause: the task/recents snapshot belongs to
+        // this transition, while Flutter's lock-on-resume callback happens far
+        // too late (after the app becomes active again).
+        if (com.debrify.app.profiles.ProfilePrivacyState
+                .shouldProtectWhenBackgrounded(this)
+        ) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        }
         super.onPause()
         if (ActivityTracker.currentActivity == this) {
             ActivityTracker.currentActivity = null
@@ -1137,8 +1180,109 @@ class MainActivity : FlutterActivity() {
         return android.app.RemoteAction(icon, title, title, pi)
     }
 
+    private fun activeMayManageProfiles(): Boolean {
+        val active = com.debrify.app.profiles.ProfilePreferenceProjection
+            .activeJobContext(this)
+        return com.debrify.app.profiles.ProfilePreferenceProjection
+            .authorizationValid(
+                this,
+                active.profileId,
+                active.authorizationRevision,
+                "manageProfiles",
+            )
+    }
+
+    private fun mayControlOwner(ownerProfileId: String): Boolean {
+        val active = com.debrify.app.profiles.ProfilePreferenceProjection
+            .activeJobContext(this)
+        return ownerProfileId == active.profileId || activeMayManageProfiles()
+    }
+
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
 		super.configureFlutterEngine(flutterEngine)
+		com.debrify.app.security.DeviceSecretCipherPlugin.register(flutterEngine)
+		MethodChannel(
+			flutterEngine.dartExecutor.binaryMessenger,
+			"com.debrify.app/profile_privacy",
+		).setMethodCallHandler { call, result ->
+			when (call.method) {
+				"setSensitive" -> {
+					val sensitive = call.argument<Boolean>("sensitive") == true
+					val protectOnBackground =
+						call.argument<Boolean>("protectOnBackground") == true
+					com.debrify.app.profiles.ProfilePrivacyState.update(
+						this,
+						sensitive,
+						protectOnBackground,
+					)
+					runOnUiThread {
+						if (sensitive) {
+							window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+						} else {
+							window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+						}
+					}
+					result.success(true)
+				}
+				"hasLegacyProfileAuthority" -> result.success(
+					com.debrify.app.download.DownloadTaskStore.hasStoredState(this) ||
+						com.debrify.app.recording.RecordingTaskStore.hasStoredState(this) ||
+						com.debrify.app.recording.RecordingScheduleStore.hasStoredState(this)
+				)
+				"migrateLegacyProfileAuthority" -> {
+					val profileId = call.argument<String>("profileId")
+					val revision = call.argument<Number>("authorizationRevision")?.toLong()
+					if (profileId.isNullOrBlank() || revision == null || revision < 1L) {
+						result.error("invalid_profile_authority", null, null)
+						return@setMethodCallHandler
+					}
+					try {
+						val migration = getSharedPreferences(
+							"debrify_profile_migration",
+							MODE_PRIVATE,
+						)
+						synchronized(com.debrify.app.profiles.NativeProfileMigrationGate.lock) {
+						if (!migration.getBoolean("legacy_authority_v1", false)) {
+							com.debrify.app.download.DownloadTaskStore.migrateLegacyAuthority(
+								this,
+								profileId,
+								revision,
+							)
+							com.debrify.app.recording.RecordingTaskStore.migrateLegacyAuthority(
+								this,
+								profileId,
+								revision,
+							)
+							com.debrify.app.recording.RecordingScheduleStore.migrateLegacyAuthority(
+								this,
+								profileId,
+								revision,
+							)
+							if (!migration.edit().putBoolean("legacy_authority_v1", true).commit()) {
+								throw IllegalStateException("Could not commit native migration marker")
+							}
+							com.debrify.app.recording.RecordingAlarmReceiver.registerAll(this)
+						}
+						}
+						result.success(true)
+					} catch (_: Exception) {
+						result.error("native_profile_migration_failed", null, null)
+					}
+				}
+				"clearLegacyProfileMigrationMarker" -> {
+					val cleared = getSharedPreferences(
+						"debrify_profile_migration",
+						MODE_PRIVATE,
+					).edit().clear().commit()
+					if (cleared) {
+						result.success(true)
+					} else {
+						result.error("native_profile_migration_reset_failed", null, null)
+					}
+				}
+				else -> result.notImplemented()
+			}
+		}
 		MethodChannel(
 			flutterEngine.dartExecutor.binaryMessenger,
 			PLAYER_DIAGNOSTICS_CHANNEL,
@@ -1157,6 +1301,18 @@ class MainActivity : FlutterActivity() {
 			}
 			android.util.Log.i("DEBRIFY_PLAYER_DECODER", message)
 			result.success(null)
+		}
+		MethodChannel(
+			flutterEngine.dartExecutor.binaryMessenger,
+			DEVICE_ID_CHANNEL,
+		).setMethodCallHandler { call, result ->
+			if (call.method == "id") {
+				result.success(
+					Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID),
+				)
+			} else {
+				result.notImplemented()
+			}
 		}
 		// Lets system audio-effect apps (Wavelet, OEM equalizers) attach to the
 		// phone player's audio session — see AudioEffectSession.
@@ -1190,12 +1346,29 @@ class MainActivity : FlutterActivity() {
 					val subDir = call.argument<String>("subDir") ?: "Debrify"
 					val mimeType = call.argument<String>("mimeType") ?: "application/octet-stream"
 					val markAsUpdate = call.argument<Boolean>("markAsUpdate") ?: false
+					val activeJob = com.debrify.app.profiles.ProfilePreferenceProjection
+						.activeJobContext(this)
+					val ownerProfileId = call.argument<String>("ownerProfileId")
+						?: activeJob.profileId
+					val profileAuthRevision = call.argument<Number>("profileAuthorizationRevision")
+						?.toLong() ?: activeJob.authorizationRevision
+					val connectionResourceId = call.argument<String>("connectionResourceId")
+					val resourceAuthRevision = call.argument<Number>("resourceAuthorizationRevision")
+						?.toLong()
 					val treeUri = call.argument<String>("treeUri")
 					@Suppress("UNCHECKED_CAST")
 					val headers = call.argument<HashMap<String, String>>("headers") ?: hashMapOf()
 
 					if (url.isNullOrEmpty()) {
 						result.error("bad_args", "url is required", null)
+						return@setMethodCallHandler
+					}
+					val requiredFeature = if (markAsUpdate) "appUpdates" else "downloads"
+					if (!com.debrify.app.profiles.ProfilePreferenceProjection.authorizationValid(
+							this, ownerProfileId, profileAuthRevision, requiredFeature,
+						)
+					) {
+						result.error("profile_not_authorized", "Profile authorization changed", null)
 						return@setMethodCallHandler
 					}
 
@@ -1214,6 +1387,14 @@ class MainActivity : FlutterActivity() {
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_RELATIVE_SUBDIR, subDir)
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_MIME_TYPE, mimeType)
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_HEADERS, headers)
+						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_OWNER_PROFILE_ID, ownerProfileId)
+						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_PROFILE_AUTH_REVISION, profileAuthRevision)
+						connectionResourceId?.let {
+							putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_CONNECTION_RESOURCE_ID, it)
+						}
+						resourceAuthRevision?.let {
+							putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_RESOURCE_AUTH_REVISION, it)
+						}
 						if (!treeUri.isNullOrEmpty()) {
 							putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TREE_URI, treeUri)
 						}
@@ -1319,6 +1500,14 @@ class MainActivity : FlutterActivity() {
 							?: com.debrify.app.recording.LiveRecordingService.MAX_DURATION_DEFAULT_MS
 						@Suppress("UNCHECKED_CAST")
 						val headers = call.argument<HashMap<String, String>>("headers") ?: hashMapOf()
+						val activeJob = com.debrify.app.profiles.ProfilePreferenceProjection
+							.activeJobContext(this)
+						val ownerProfileId = call.argument<String>("ownerProfileId") ?: activeJob.profileId
+						val profileAuthRevision = call.argument<Number>("profileAuthorizationRevision")
+							?.toLong() ?: activeJob.authorizationRevision
+						val connectionResourceId = call.argument<String>("connectionResourceId")
+						val resourceAuthRevision = call.argument<Number>("resourceAuthorizationRevision")
+							?.toLong()
 						if (url.isNullOrEmpty()) {
 							result.error("bad_args", "url is required", null)
 							return@setMethodCallHandler
@@ -1364,6 +1553,10 @@ class MainActivity : FlutterActivity() {
 							channelName = channelName,
 							headers = headers,
 							maxDurationMs = maxDurationMs,
+							ownerProfileId = ownerProfileId,
+							connectionResourceId = connectionResourceId,
+							profileAuthorizationRevision = profileAuthRevision,
+							resourceAuthorizationRevision = resourceAuthRevision,
 						)
 						try {
 							androidx.core.content.ContextCompat.startForegroundService(this, intent)
@@ -1382,6 +1575,12 @@ class MainActivity : FlutterActivity() {
 							result.error("bad_args", "taskId required", null)
 							return@setMethodCallHandler
 						}
+						val recordingOwner = com.debrify.app.recording.RecordingTaskStore
+							.get(this, taskId)?.ownerProfileId
+						if (recordingOwner != null && !mayControlOwner(recordingOwner)) {
+							result.error("profile_not_authorized", "Recording belongs to another profile", null)
+							return@setMethodCallHandler
+						}
 						val intent = Intent(this, com.debrify.app.recording.LiveRecordingService::class.java).apply {
 							action = com.debrify.app.recording.LiveRecordingService.ACTION_STOP
 							putExtra(com.debrify.app.recording.LiveRecordingService.EXTRA_TASK_ID, taskId)
@@ -1396,8 +1595,11 @@ class MainActivity : FlutterActivity() {
 						}
 					}
 					"stopAllLiveRecordings" -> {
+						val active = com.debrify.app.profiles.ProfilePreferenceProjection
+							.activeJobContext(this)
 						val intent = Intent(this, com.debrify.app.recording.LiveRecordingService::class.java).apply {
 							action = com.debrify.app.recording.LiveRecordingService.ACTION_STOP_ALL
+							putExtra(com.debrify.app.recording.LiveRecordingService.EXTRA_OWNER_PROFILE_ID, active.profileId)
 						}
 						try {
 							startService(intent)
@@ -1412,7 +1614,13 @@ class MainActivity : FlutterActivity() {
 						Thread {
 							val list = try {
 								com.debrify.app.recording.RecordingTaskStore.reconcileDeadEntries(this)
-								com.debrify.app.recording.RecordingTaskStore.all(this).values.map { e ->
+								val requestedOwner = call.argument<String>("ownerProfileId")
+							val aggregate = !com.debrify.app.profiles.ProfilePreferenceProjection
+								.isCommitted(this) ||
+								(call.argument<Boolean>("adminAggregate") == true && activeMayManageProfiles())
+								com.debrify.app.recording.RecordingTaskStore.all(this).values
+									.filter { aggregate || requestedOwner == null || it.ownerProfileId == requestedOwner }
+									.map { e ->
 									val live = com.debrify.app.recording.RecordingRegistry.live[e.taskId]
 									mapOf(
 										"taskId" to e.taskId,
@@ -1425,6 +1633,10 @@ class MainActivity : FlutterActivity() {
 										"uri" to e.uri,
 										"errorMessage" to e.errorMessage,
 										"updatedAt" to e.updatedAt,
+										"ownerProfileId" to e.ownerProfileId,
+										"connectionResourceId" to e.connectionResourceId,
+										"profileAuthorizationRevision" to e.profileAuthorizationRevision,
+										"resourceAuthorizationRevision" to e.resourceAuthorizationRevision,
 									)
 								}
 							} catch (e: Exception) {
@@ -1442,6 +1654,12 @@ class MainActivity : FlutterActivity() {
 							result.error("bad_args", "taskId required", null)
 							return@setMethodCallHandler
 						}
+						val recordingOwner = com.debrify.app.recording.RecordingTaskStore
+							.get(this, taskId)?.ownerProfileId
+						if (recordingOwner != null && !mayControlOwner(recordingOwner)) {
+							result.error("profile_not_authorized", "Recording belongs to another profile", null)
+							return@setMethodCallHandler
+						}
 						com.debrify.app.recording.RecordingTaskStore.remove(this, taskId)
 						result.success(true)
 					}
@@ -1452,8 +1670,28 @@ class MainActivity : FlutterActivity() {
 						// recordings path — the scan is what surfaces tee-recorded
 						// files and recordings whose entries the old 24h TTL
 						// already pruned. Worker thread: reconcile + scan are IO.
+						val active = com.debrify.app.profiles.ProfilePreferenceProjection
+							.activeJobContext(this)
+						val committed = com.debrify.app.profiles.ProfilePreferenceProjection
+							.isCommitted(this)
+						val mayManageProfiles = activeMayManageProfiles()
+						// Unassigned disk rows are a separate recovery surface from
+						// another profile's indexed rows. Conflating the two made the
+						// Admin library either hide legacy files or aggregate every
+						// owner's files. Native authority remains the final gate even
+						// when Dart requests recovery visibility.
+						val includeUnassigned = !committed ||
+							(call.argument<Boolean>("includeUnassigned") == true && mayManageProfiles)
+						val includeOtherOwners = !committed ||
+							(call.argument<Boolean>("adminAggregate") == true && mayManageProfiles)
 						Thread {
-							val list = try { buildRecordingsLibrary() } catch (e: Exception) { null }
+							val list = try {
+								buildRecordingsLibrary(
+									active.profileId,
+									includeUnassigned,
+									includeOtherOwners,
+								)
+							} catch (e: Exception) { null }
 							runOnUiThread {
 								if (list != null) result.success(list)
 								else result.error("query_failed", "library query failed", null)
@@ -1464,6 +1702,16 @@ class MainActivity : FlutterActivity() {
 						val uriString = call.argument<String>("uri")
 						if (uriString.isNullOrEmpty()) {
 							result.error("bad_args", "uri required", null)
+							return@setMethodCallHandler
+						}
+						val indexedEntry = com.debrify.app.recording.RecordingTaskStore
+							.all(this).values.firstOrNull { it.uri == uriString }
+						if (indexedEntry == null && !activeMayManageProfiles()) {
+							result.error("profile_not_authorized", "Unassigned files are Admin-only", null)
+							return@setMethodCallHandler
+						}
+						if (indexedEntry != null && !mayControlOwner(indexedEntry.ownerProfileId)) {
+							result.error("profile_not_authorized", "Recording belongs to another profile", null)
 							return@setMethodCallHandler
 						}
 						// A live capture's destination must be stopped, not
@@ -1482,8 +1730,9 @@ class MainActivity : FlutterActivity() {
 						Thread {
 							val ok = try {
 								val uri = android.net.Uri.parse(uriString)
-								com.debrify.app.recording.RecordingTaskStore
+								val deleted = com.debrify.app.recording.RecordingTaskStore
 									.deleteDestination(this, uri)
+								if (!deleted) throw IllegalStateException("file delete failed")
 								for ((taskId, entry) in
 									com.debrify.app.recording.RecordingTaskStore.all(this)
 								) {
@@ -1505,11 +1754,26 @@ class MainActivity : FlutterActivity() {
 						val programmeTitle = call.argument<String>("programmeTitle") ?: ""
 						val startMs = call.argument<Number>("startMs")?.toLong()
 						val endMs = call.argument<Number>("endMs")?.toLong()
-						val force = call.argument<Boolean>("force") ?: false
+					val force = call.argument<Boolean>("force") ?: false
+					val activeJob = com.debrify.app.profiles.ProfilePreferenceProjection
+						.activeJobContext(this)
+					val ownerProfileId = call.argument<String>("ownerProfileId") ?: activeJob.profileId
+					val profileAuthRevision = call.argument<Number>("profileAuthorizationRevision")
+						?.toLong() ?: activeJob.authorizationRevision
+					val connectionResourceId = call.argument<String>("connectionResourceId")
+					val resourceAuthRevision = call.argument<Number>("resourceAuthorizationRevision")
+						?.toLong()
 						@Suppress("UNCHECKED_CAST")
 						val headers = call.argument<HashMap<String, String>>("headers") ?: hashMapOf()
 						if (url.isNullOrEmpty() || startMs == null || endMs == null) {
 							result.error("bad_args", "url/startMs/endMs required", null)
+							return@setMethodCallHandler
+						}
+						if (!com.debrify.app.profiles.ProfilePreferenceProjection.authorizationValid(
+								this, ownerProfileId, profileAuthRevision, "recordings",
+							)
+						) {
+							result.error("profile_not_authorized", "Profile authorization changed", null)
 							return@setMethodCallHandler
 						}
 						if (!com.debrify.app.recording.LiveRecordingService.isSupported(this)) {
@@ -1545,7 +1809,7 @@ class MainActivity : FlutterActivity() {
 							return@setMethodCallHandler
 						}
 						val id = "sched-${System.currentTimeMillis()}"
-						com.debrify.app.recording.RecordingScheduleStore.put(
+							com.debrify.app.recording.RecordingScheduleStore.put(
 							this,
 							com.debrify.app.recording.RecordingSchedule(
 								id = id,
@@ -1556,6 +1820,11 @@ class MainActivity : FlutterActivity() {
 								endMs = endMs,
 								programmeTitle = programmeTitle,
 								createdAt = now,
+								ownerProfileId = ownerProfileId,
+								connectionResourceId = connectionResourceId,
+								profileAuthorizationRevision = profileAuthRevision,
+								resourceAuthorizationRevision = resourceAuthRevision,
+									sealedExecutionPayload = null,
 							),
 						)
 						com.debrify.app.recording.RecordingAlarmReceiver.registerAll(this)
@@ -1571,13 +1840,22 @@ class MainActivity : FlutterActivity() {
 							result.error("bad_args", "id required", null)
 							return@setMethodCallHandler
 						}
+						val scheduleOwner = com.debrify.app.recording.RecordingScheduleStore
+							.get(this, id)?.ownerProfileId
+						if (scheduleOwner != null && !mayControlOwner(scheduleOwner)) {
+							result.error("profile_not_authorized", "Schedule belongs to another profile", null)
+							return@setMethodCallHandler
+						}
 						com.debrify.app.recording.RecordingScheduleStore.remove(this, id)
 						com.debrify.app.recording.RecordingAlarmReceiver.cancelAlarm(this, id)
 						result.success(true)
 					}
 					"listScheduledRecordings" -> {
+						val requestedOwner = call.argument<String>("ownerProfileId")
+						val aggregate = call.argument<Boolean>("adminAggregate") == true && activeMayManageProfiles()
 						val list = com.debrify.app.recording.RecordingScheduleStore.all(this)
 							.values
+							.filter { aggregate || requestedOwner == null || it.ownerProfileId == requestedOwner }
 							.sortedBy { it.startMs }
 							.map { s ->
 								mapOf(
@@ -1587,6 +1865,10 @@ class MainActivity : FlutterActivity() {
 									"programmeTitle" to s.programmeTitle,
 									"startMs" to s.startMs,
 									"endMs" to s.endMs,
+									"ownerProfileId" to s.ownerProfileId,
+									"connectionResourceId" to s.connectionResourceId,
+									"profileAuthorizationRevision" to s.profileAuthorizationRevision,
+									"resourceAuthorizationRevision" to s.resourceAuthorizationRevision,
 								)
 							}
 						result.success(list)
@@ -1613,14 +1895,18 @@ class MainActivity : FlutterActivity() {
 							result.success(false)
 						}
 					}
-					"queryDownloadTasks" -> {
+				"queryDownloadTasks" -> {
 					// Native truth for Dart reconciliation: the persisted store
 					// merged with the live in-memory registry. A stored
 					// "running" with no live worker means the process died
 					// mid-download — report it as paused (bytes are on disk).
 					try {
 						val entries = com.debrify.app.download.DownloadTaskStore.all(this)
-						val list = entries.values.map { e ->
+						val requestedOwner = call.argument<String>("ownerProfileId")
+						val aggregate = call.argument<Boolean>("adminAggregate") == true && activeMayManageProfiles()
+						val list = entries.values
+							.filter { aggregate || requestedOwner == null || it.ownerProfileId == requestedOwner }
+							.map { e ->
 							val live = com.debrify.app.download.DownloadRegistry.live[e.taskId]
 							val bytes = live?.bytes ?: (e.uri?.let { u ->
 								try {
@@ -1640,9 +1926,13 @@ class MainActivity : FlutterActivity() {
 								"destType" to e.destType,
 								"fileName" to e.fileName,
 								"subDir" to e.subDir,
-								"url" to e.url,
+									"url" to e.url,
 								"errorMessage" to e.errorMessage,
 								"updatedAt" to e.updatedAt,
+								"ownerProfileId" to e.ownerProfileId,
+								"connectionResourceId" to e.connectionResourceId,
+								"profileAuthorizationRevision" to e.profileAuthorizationRevision,
+								"resourceAuthorizationRevision" to e.resourceAuthorizationRevision,
 							)
 						}
 						result.success(list)
@@ -1653,6 +1943,12 @@ class MainActivity : FlutterActivity() {
 				"forgetDownloadTask" -> {
 					val taskId = call.argument<String>("taskId")
 					if (taskId.isNullOrEmpty()) { result.error("bad_args", "taskId required", null); return@setMethodCallHandler }
+					val downloadOwner = com.debrify.app.download.DownloadTaskStore
+						.get(this, taskId)?.ownerProfileId
+					if (downloadOwner != null && !mayControlOwner(downloadOwner)) {
+						result.error("profile_not_authorized", "Download belongs to another profile", null)
+						return@setMethodCallHandler
+					}
 					try {
 						com.debrify.app.download.DownloadTaskStore.remove(this, taskId)
 						com.debrify.app.download.DownloadRegistry.live.remove(taskId)
@@ -1695,6 +1991,24 @@ class MainActivity : FlutterActivity() {
 						result.success(false)
 					}
 				}
+				"releaseAllDownloadDirectories" -> {
+					if (!activeMayManageProfiles()) {
+						result.error("profile_not_authorized", "Admin required", null)
+						return@setMethodCallHandler
+					}
+					var released = true
+					for (permission in contentResolver.persistedUriPermissions.toList()) {
+						try {
+							var flags = 0
+							if (permission.isReadPermission) flags = flags or Intent.FLAG_GRANT_READ_URI_PERMISSION
+							if (permission.isWritePermission) flags = flags or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+							if (flags != 0) contentResolver.releasePersistableUriPermission(permission.uri, flags)
+						} catch (_: Exception) {
+							released = false
+						}
+					}
+					result.success(released)
+				}
 				"validateDownloadDirectory" -> {
 					val treeUri = call.argument<String>("treeUri")
 					if (treeUri.isNullOrEmpty()) { result.error("bad_args", "treeUri required", null); return@setMethodCallHandler }
@@ -1712,6 +2026,8 @@ class MainActivity : FlutterActivity() {
 				"pause" -> {
 					val taskId = call.argument<String>("taskId")
 					if (taskId.isNullOrEmpty()) { result.error("bad_args", "taskId required", null); return@setMethodCallHandler }
+					val owner = com.debrify.app.download.DownloadTaskStore.get(this, taskId)?.ownerProfileId
+					if (owner != null && !mayControlOwner(owner)) { result.error("profile_not_authorized", "Download belongs to another profile", null); return@setMethodCallHandler }
 					val intent = Intent(this, com.debrify.app.download.MediaStoreDownloadService::class.java).apply {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_PAUSE
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)
@@ -1726,6 +2042,8 @@ class MainActivity : FlutterActivity() {
 				"resume" -> {
 					val taskId = call.argument<String>("taskId")
 					if (taskId.isNullOrEmpty()) { result.error("bad_args", "taskId required", null); return@setMethodCallHandler }
+					val owner = com.debrify.app.download.DownloadTaskStore.get(this, taskId)?.ownerProfileId
+					if (owner != null && !mayControlOwner(owner)) { result.error("profile_not_authorized", "Download belongs to another profile", null); return@setMethodCallHandler }
 					val intent = Intent(this, com.debrify.app.download.MediaStoreDownloadService::class.java).apply {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_RESUME
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)
@@ -1740,6 +2058,8 @@ class MainActivity : FlutterActivity() {
 				"cancel" -> {
 					val taskId = call.argument<String>("taskId")
 					if (taskId.isNullOrEmpty()) { result.error("bad_args", "taskId required", null); return@setMethodCallHandler }
+					val owner = com.debrify.app.download.DownloadTaskStore.get(this, taskId)?.ownerProfileId
+					if (owner != null && !mayControlOwner(owner)) { result.error("profile_not_authorized", "Download belongs to another profile", null); return@setMethodCallHandler }
 					val intent = Intent(this, com.debrify.app.download.MediaStoreDownloadService::class.java).apply {
 						action = com.debrify.app.download.MediaStoreDownloadService.ACTION_CANCEL
 						putExtra(com.debrify.app.download.MediaStoreDownloadService.EXTRA_TASK_ID, taskId)

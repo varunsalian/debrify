@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show File, Platform;
+import 'dart:io' show File, Platform, exit;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -11,13 +11,23 @@ import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../utils/app_version_info.dart';
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
-import '../utils/app_storage.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/webdav_item.dart';
+import '../models/profiles/profile_policy.dart';
+import '../models/profiles/user_profile.dart';
 import '../services/main_page_bridge.dart';
+import '../services/profiles/profile_runtime.dart';
+import '../services/profiles/connection_resource_service.dart';
+import '../services/profiles/portable_profile_package.dart';
+import '../services/profiles/profile_app_lifecycle_participant.dart';
+import '../services/profiles/profile_lifecycle.dart';
+import '../services/profiles/profile_lock_controller.dart';
+import '../services/profiles/profile_authorization.dart';
+import '../services/profiles/profile_bootstrap.dart';
+import '../services/profiles/profile_device_reset_service.dart';
+import '../services/profiles/profile_reset_service.dart';
 import '../utils/platform_util.dart';
 
 import '../services/analytics_service.dart';
@@ -40,11 +50,14 @@ import '../services/live_recording_service.dart';
 import '../services/desktop_schedule_service.dart';
 import '../services/update_service.dart';
 import '../widgets/support_donation_chooser_dialog.dart';
+import '../widgets/tv_text_field.dart';
 import 'settings/debrify_tv_settings_page.dart';
 import 'settings/settings_tv_layout.dart';
+import 'settings/settings_spotlight_shell.dart';
 import 'settings/settings_search.dart';
 import 'settings/discover_layout_page.dart';
 import 'settings/iptv_style_page.dart';
+import 'settings/debrify_tv_style_page.dart';
 import 'settings/text_brightness_page.dart';
 import 'settings/launch_animation_page.dart';
 import '../widgets/launch/launch_ident.dart';
@@ -66,6 +79,7 @@ import 'settings/tv_screen_size_page.dart';
 import 'settings/recordings_page.dart';
 import 'settings/desktop_sidebar_style_page.dart';
 import 'settings/tv_sidebar_style_page.dart';
+import 'settings/profile_backup_flows.dart';
 import 'settings/widgets/settings_widgets.dart';
 import 'settings/pikpak_settings_page.dart';
 import 'settings/real_debrid_settings_page.dart';
@@ -80,6 +94,8 @@ import 'settings/indexer_managers_settings_page.dart';
 import 'settings/provider_settings_page.dart';
 import 'settings/quick_play_settings_page.dart';
 import 'settings/external_player_settings_page.dart';
+import 'settings/profiles_settings_page.dart';
+import 'profiles/profile_setup_flow.dart';
 import 'settings/trakt_settings_page.dart';
 import 'settings/simkl_settings_page.dart';
 import 'settings/mdblist_settings_page.dart';
@@ -202,6 +218,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _discoverLayout = 'stage';
   String _tvSidebarStyle = 'ghost';
   String _iptvStyle = 'command';
+  String _debrifyTvStyle = 'grid';
   String _playerGuideStyle = 'classic';
   String _playerDockStyle = 'classic';
   String _playerDockPalette = 'ultraviolet';
@@ -214,7 +231,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _phoneNavStyle = 'classic';
   String _desktopSidebarStyle = 'rail';
   String _textBrightness = 'bright';
-  String _launchAnimation = 'horizon';
+  String _launchAnimation = 'collider';
   String _downloadLocationSubtitle = 'Downloads/Debrify (default)';
   SupportDonationConfig _supportDonation = SupportDonationConfig.empty;
   String _supportSettingsLabel = 'Support Debrify';
@@ -259,25 +276,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadSummaries() async {
+    final startingScope = ProfileRuntime.isProfileCommitted
+        ? ProfileRuntime.capture()
+        : null;
+    try {
+      await _loadSummariesForCurrentProfile();
+    } on ResourceAuthorizationException {
+      // ProfileGate replaces this subtree before switching authority. Reads
+      // revoked while this disposed settings page winds down are expected.
+      if (!mounted ||
+          ProfileLockController.instance.lockedProfileId.value != null ||
+          (startingScope != null &&
+              ProfileRuntime.scope.value != startingScope)) {
+        return;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _loadSummariesForCurrentProfile() async {
     // Phase 1: Load cached/local state instantly (no network)
     final results = await Future.wait([
-      StorageService.getApiKey(),
-      StorageService.getTorboxApiKey(),
+      StorageService.hasRealDebridCredential(),
+      StorageService.hasTorboxCredential(),
       PikPakApiService.instance.isAuthenticated(),
       StorageService.getWebDavEnabled(),
-      StorageService.getWebDavServers(),
-      StorageService.getTraktAccessToken(),
+      StorageService.getWebDavServers(forSettings: true),
+      StorageService.hasTraktCredential(),
       StorageService.getTraktTokenExpiry(),
       StorageService.getTraktUsername(),
       AppVersionInfo.get(),
       AndroidNativeDownloader.isTelevision(),
       StorageService.getUpdateAutoCheckEnabled(),
-      StorageService.getIndexerManagerConfigs(),
-      StorageService.getPremiumizeApiKey(),
-      StorageService.getAllDebridApiKey(),
-      StorageService.getSimklAccessToken(),
+      StorageService.getIndexerManagerConfigs(forSettings: true),
+      StorageService.hasPremiumizeCredential(),
+      StorageService.hasAllDebridCredential(),
+      StorageService.hasSimklCredential(),
       StorageService.getSimklUsername(),
-      StorageService.getMdblistApiKey(),
+      StorageService.hasMdblistCredential(),
       StorageService.getMdblistUsername(),
       StorageService.getTvKeyboardEnabled(),
       StorageService.getTvUiScalePercent(),
@@ -298,27 +334,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       StorageService.getPlayerDockPalette(),
       StorageService.getPlayerDockSize(),
       StorageService.getDesktopSidebarStyle(),
+      StorageService.getDebrifyTvStyle(),
     ]);
 
     if (!mounted) return;
 
-    final rdKey = results[0] as String?;
-    final torboxKey = results[1] as String?;
+    final rdConnected = results[0] as bool;
+    final torConnected = results[1] as bool;
     final pikpakAuth = results[2] as bool;
     final webDavEnabled = results[3] as bool;
     final webDavServers = results[4] as List<WebDavConfig>;
-    final traktToken = results[5] as String?;
+    final traktConnected = results[5] as bool;
     final traktExpiry = results[6] as int?;
     final traktUsername = results[7] as String?;
     final packageInfo = results[8] as PackageInfo;
     final isAndroidTv = results[9] as bool;
     final autoCheckEnabled = results[10] as bool;
     final indexerManagers = results[11] as List;
-    final premiumizeKey = results[12] as String?;
-    final allDebridKey = results[13] as String?;
-    final simklToken = results[14] as String?;
+    final premiumizeConnected = results[12] as bool;
+    final allDebridConnected = results[13] as bool;
+    final simklConnected = results[14] as bool;
     final simklUsername = results[15] as String?;
-    final mdblistKey = results[16] as String?;
+    final mdblistConnected = results[16] as bool;
     final mdblistUsername = results[17] as String?;
     final tvKeyboardEnabled = results[18] as bool;
     final tvUiScalePercent = results[19] as int;
@@ -341,14 +378,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final playerDockPalette = results[34] as String;
     final playerDockSize = results[35] as String;
     final desktopSidebarStyle = results[36] as String;
+    final debrifyTvStyle = results[37] as String;
 
     // Set initial state from cached data
-    final rdConnected = rdKey != null && rdKey.isNotEmpty;
-    final torConnected = torboxKey != null && torboxKey.isNotEmpty;
-    final premiumizeConnected =
-        premiumizeKey != null && premiumizeKey.isNotEmpty;
-    final allDebridConnected = allDebridKey != null && allDebridKey.isNotEmpty;
-
     // Use cached account info if available
     if (rdConnected) {
       final user = AccountService.currentUser;
@@ -415,7 +447,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _webDavCaption = 'Tap to connect';
     }
 
-    if (traktToken != null && traktToken.isNotEmpty) {
+    if (traktConnected) {
       final traktExpired =
           traktExpiry != null &&
           DateTime.now().millisecondsSinceEpoch >= traktExpiry;
@@ -433,7 +465,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // Simkl's PIN-issued tokens don't expire, so unlike Trakt there's no
     // "Expired" branch here — a stored token means connected.
-    if (simklToken != null && simklToken.isNotEmpty) {
+    if (simklConnected) {
       _simklConnected = true;
       _simklStatus = 'Active';
       _simklCaption = simklUsername != null
@@ -448,7 +480,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // MDBList uses a plain API key (no expiry) — a stored key means connected.
     // Reset on the empty branch (like WebDAV above) so the card clears after a
     // logout, since this method re-runs when returning from the settings page.
-    if (mdblistKey != null && mdblistKey.isNotEmpty) {
+    if (mdblistConnected) {
       _mdblistConnected = true;
       _mdblistStatus = 'Active';
       _mdblistCaption = mdblistUsername != null
@@ -479,6 +511,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _tvSidebarStyle = tvSidebarStyle;
     _discoverLayout = discoverLayout;
     _iptvStyle = iptvStyle;
+    _debrifyTvStyle = debrifyTvStyle;
     _playerGuideStyle = playerGuideStyle;
     _playerDockStyle = playerDockStyle;
     _playerDockPalette = playerDockPalette;
@@ -754,6 +787,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenHomePageSettings: _openHomePageSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
+      showSwitchProfile:
+          ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted,
+      onSwitchProfile: _switchProfile,
+      onAddProfile: _addProfile,
+      onEditProfile: _editActiveProfile,
       onOpenTorrentSettings: _openTorrentSettings,
       onOpenFilterSettings: _openFilterSettings,
       onOpenProviderSettings: _openProviderSettings,
@@ -796,6 +834,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenTvHomeStyle: _openTvHomeStyle,
       iptvStyleLabel: iptvStyleLabel(_iptvStyle),
       onOpenIptvStyle: _openIptvStylePage,
+      debrifyTvStyleLabel: debrifyTvStyleLabel(_debrifyTvStyle),
+      onOpenDebrifyTvStyle: _openDebrifyTvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
       onOpenPlayerGuideStyle: _openPlayerGuideStylePage,
       detailPageStyleLabel: detailPageStyleLabel(_detailPageStyle),
@@ -847,6 +887,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenHomePageSettings: _openHomePageSettings,
       onOpenExternalPlayerSettings: _openExternalPlayerSettings,
       onOpenRemoteControl: _openRemoteControl,
+      showSwitchProfile:
+          ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted,
+      onSwitchProfile: _switchProfile,
+      onAddProfile: _addProfile,
+      onEditProfile: _editActiveProfile,
       onOpenNavigationSettings: _openNavigationSettings,
       isAndroidTv: _isAndroidTv,
       onClearDownloads: _clearDownloadData,
@@ -879,6 +924,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onOpenLaunchAnimation: _openLaunchAnimationPage,
       iptvStyleLabel: iptvStyleLabel(_iptvStyle),
       onOpenIptvStyle: _openIptvStylePage,
+      debrifyTvStyleLabel: debrifyTvStyleLabel(_debrifyTvStyle),
+      onOpenDebrifyTvStyle: _openDebrifyTvStylePage,
       playerGuideStyleLabel: playerGuideStyleLabel(_playerGuideStyle),
       playerDockLabel: playerDockLabel(
         _playerDockStyle,
@@ -902,8 +949,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       phoneNavStyleLabel: _phoneNavStyle == 'floating'
           ? 'Floating button'
           : 'Classic bar',
-      desktopSidebarStyleLabel:
-          desktopSidebarStyleLabel(_desktopSidebarStyle),
+      desktopSidebarStyleLabel: desktopSidebarStyleLabel(_desktopSidebarStyle),
       onOpenDesktopSidebarStyle: _openDesktopSidebarStyle,
     );
   }
@@ -966,6 +1012,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     return [
+      if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) ...[
+        nav(
+          SettingsRows.switchProfile,
+          'Profiles',
+          _switchProfile,
+          keywords: const [
+            'profile',
+            'profiles',
+            'switch',
+            'who is watching',
+            'avatar',
+            'pin',
+            'kids',
+            'account',
+            'startup',
+            'always ask',
+            'household',
+            'backup',
+            'restore',
+            'send to tv',
+            'transfer',
+            'delete profile',
+            'disable profile',
+          ],
+        ),
+        nav(
+          SettingsRows.addProfile,
+          'Profiles',
+          _addProfile,
+          keywords: const [
+            'create profile',
+            'new profile',
+            'add user',
+            'kid',
+            'member',
+            'admin',
+          ],
+        ),
+        nav(
+          SettingsRows.editProfile,
+          'Profiles',
+          _editActiveProfile,
+          keywords: const [
+            'rename',
+            'avatar',
+            'pin',
+            'access',
+            'permissions',
+            'edit user',
+          ],
+        ),
+      ],
       // Connections
       conn(_rdInfo, const ['debrid', 'real-debrid', 'rd', 'premium']),
       conn(_torboxInfo, const ['debrid', 'premium']),
@@ -1332,6 +1430,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             'live tv & dvr',
           ],
         ),
+      // Ungated: the pref covers every device class — the Spotlight arm has
+      // a TV layout AND a phone layout. Lands on the picker.
+      nav(
+        SettingsRows.debrifyTvAppearance,
+        'Appearance',
+        _openDebrifyTvStylePage,
+        subtitle: debrifyTvStyleLabel(_debrifyTvStyle),
+        keywords: const [
+          'debrify tv',
+          'channels',
+          'channel grid',
+          'rail',
+          'stage',
+          'spotlight',
+          'style',
+          'layout',
+          'look',
+          'appearance',
+        ],
+      ),
       // Ungated: every platform has a player — phones use the Dart player,
       // Android TV the native one, and both read the pref. Lands on the
       // picker.
@@ -1601,9 +1719,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'yaml',
           'add engine',
         ],
-        onTap: () async => MainPageBridge.switchTab?.call(
-          7, // 7 = Addons (see main.dart _pages)
-        ),
+        onTap: () async => MainPageBridge.switchTab?.call(MainTab.addons),
       ),
 
       // TV Mode
@@ -2263,6 +2379,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       leaf(
         'Playback',
+        'Network & Buffering',
+        'Connection patience & stream buffer for slow sources',
+        const [
+          'network',
+          'buffer',
+          'buffering',
+          'cache',
+          'timeout',
+          'plex',
+          'slow',
+          'stall',
+          'patience',
+        ],
+      ),
+      leaf(
+        'Playback',
         'Allow system audio effects',
         'Let equalizer apps process audio (Android)',
         const ['audio effects', 'equalizer', 'wavelet', 'dolby'],
@@ -2673,16 +2805,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openTorrentSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.torrentSearch)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const TorrentSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openIndexerManagersSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.torrentSearch)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const IndexerManagersSettingsPage());
     if (!mounted) return;
 
-    final configs = await StorageService.getIndexerManagerConfigs();
+    final configs = await StorageService.getIndexerManagerConfigs(
+      forSettings: true,
+    );
     if (!mounted) return;
     setState(() {
       _indexerManagersConfigured = configs.isNotEmpty;
@@ -2709,6 +2847,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openPikPakSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     final loggedOut = await pushSettingsPage<bool>(
       context,
       const PikPakSettingsPage(),
@@ -2721,24 +2861,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openWebDavSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const WebDavSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
   }
 
   Future<void> _openTraktSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.trackersAndDiscovery)) {
+      return;
+    }
+    if (!mounted) return;
     await pushSettingsPage(context, const TraktSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
   }
 
   Future<void> _openSimklSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.trackersAndDiscovery)) {
+      return;
+    }
+    if (!mounted) return;
     await pushSettingsPage(context, const SimklSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
   }
 
   Future<void> _openMdblistSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.trackersAndDiscovery)) {
+      return;
+    }
+    if (!mounted) return;
     await pushSettingsPage(context, const MdblistSettingsPage());
     if (!mounted) return;
     await _loadSummaries();
@@ -2815,6 +2969,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openIptvSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.iptv)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const IptvSettingsPage());
     if (!mounted) return;
     // IPTV settings hosts its own Appearance/Player guide sections — keep
@@ -2826,6 +2982,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// playlist" is actually after. Without the flag the wide (TV/desktop)
   /// layout opens its source rail instead, and the form is another hop away.
   Future<void> _openIptvAddSource() async {
+    if (!await _ensureProfileFeature(ProfileFeature.iptv)) return;
+    if (!mounted) return;
     await pushSettingsPage(
       context,
       const IptvSettingsPage(openAddSource: true),
@@ -2839,6 +2997,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Live TV & DVR › Recordings — the same page IPTV settings and the
   /// recording dialogs open, promoted to a first-class settings row.
   Future<void> _openRecordings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.recordings)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const RecordingsPage());
   }
 
@@ -2851,15 +3011,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openExternalPlayerSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.externalPlayers)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const ExternalPlayerSettingsPage());
     if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _openRemoteControl() async {
+    if (!await _ensureProfileFeature(ProfileFeature.remoteControl)) return;
+    if (!mounted) return;
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const RemoteRolePickerScreen()));
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// Opens the Profiles hub (roster + switch + create). The bare
+  /// switch-picker call moved onto the hub itself.
+  Future<void> _switchProfile() async {
+    await pushSettingsPage(context, const ProfilesSettingsPage());
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// The admin check the hub applies before its Create/Manage rows — the
+  /// Profiles card's action rows share it, but answer with a spoken refusal
+  /// instead of hiding: a card whose rows come and go with who is signed in
+  /// reads as broken, not as policy.
+  Future<bool> _mayManageProfiles() async {
+    final registry = ProfileBootstrap.registry;
+    final authorization = await ProfileAuthorizationContext.capture(registry);
+    UserProfile? actor;
+    try {
+      actor = await authorization.validate(registry);
+    } catch (_) {
+      actor = null;
+    }
+    return actor != null &&
+        actor.role == UserProfileRole.admin &&
+        actor.allows(ProfileFeature.manageProfiles);
+  }
+
+  void _profilesDenied(String action) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Only an admin can $action profiles.')),
+    );
+  }
+
+  /// The Profiles card's "Add a profile" row — the hub's create flow without
+  /// the detour through the hub.
+  Future<void> _addProfile() async {
+    if (!await _mayManageProfiles()) {
+      _profilesDenied('add');
+      return;
+    }
+    if (!mounted) return;
+    await ProfileSetupFlow.show(context);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// The Profiles card's "Edit this profile" row — straight into the ACTIVE
+  /// profile's editor, matching the hub's active-card Edit button.
+  Future<void> _editActiveProfile() async {
+    final registry = ProfileBootstrap.registry;
+    if (!await _mayManageProfiles()) {
+      _profilesDenied('edit');
+      return;
+    }
+    final profiles = await registry.listProfiles();
+    final activeId = ProfileRuntime.capture().profileId;
+    UserProfile? active;
+    for (final profile in profiles) {
+      if (profile.id == activeId) {
+        active = profile;
+        break;
+      }
+    }
+    if (active == null) return;
+    if (!mounted) return;
+    await ProfileSetupFlow.show(context, profile: active);
     if (!mounted) return;
     setState(() {});
   }
@@ -2871,6 +3105,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openProviderSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     await pushSettingsPage(context, const ProviderSettingsPage());
     if (!mounted) return;
     setState(() {});
@@ -2883,6 +3119,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openRealDebridSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     final loggedOut = await pushSettingsPage<bool>(
       context,
       const RealDebridSettingsPage(),
@@ -2895,6 +3133,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openTorboxSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     final loggedOut = await pushSettingsPage<bool>(
       context,
       const TorboxSettingsPage(),
@@ -2907,6 +3147,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openPremiumizeSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     final loggedOut = await pushSettingsPage<bool>(
       context,
       const PremiumizeSettingsPage(),
@@ -2919,6 +3161,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openAllDebridSettings() async {
+    if (!await _ensureProfileFeature(ProfileFeature.cloud)) return;
+    if (!mounted) return;
     final loggedOut = await pushSettingsPage<bool>(
       context,
       const AllDebridSettingsPage(),
@@ -2938,17 +3182,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Route checks are defense in depth; services still validate their own
+  /// capabilities. Keeping this helper fail-closed also protects search/deep
+  /// links that call an opener while a policy edit is propagating.
+  Future<bool> _ensureProfileFeature(ProfileFeature feature) async {
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return true;
+    }
+    var allowed = false;
+    try {
+      final registry = ProfileBootstrap.registry;
+      final authorization = await ProfileAuthorizationContext.capture(registry);
+      final actor = await authorization.validate(registry);
+      allowed = actor.allows(feature);
+    } catch (_) {
+      allowed = false;
+    }
+    if (!allowed && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This feature is disabled for this profile.'),
+        ),
+      );
+    }
+    return allowed;
+  }
+
+  Future<void> _createProfileBackup() =>
+      ProfileBackupFlows(context).createProfileBackup();
+
+  Future<void> _restoreProfileBackup() => ProfileBackupFlows(
+    context,
+    onRestored: () async {
+      await _loadSummaries();
+      MainPageBridge.notifyIntegrationChanged();
+    },
+  ).restoreProfileBackup();
+
   Future<void> _createBackup() async {
+    if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) {
+      await _createProfileBackup();
+      return;
+    }
     final app = AppThemeScope.of(context);
     // Build the payload first so we can warn if it's empty.
     final Map<String, dynamic> payload;
     try {
       payload = await BackupRestoreService.buildBackup();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to build backup: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to build the backup')),
+      );
       return;
     }
 
@@ -2968,88 +3253,223 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final iptvProviders = await IptvTransferPayload.countPlaylists();
 
     if (!mounted) return;
+    var includeCredentials = true;
+    var usePassphrase = false;
+    final passphraseController = TextEditingController();
+    final confirmController = TextEditingController();
+    final passphraseFocus = FocusNode(debugLabel: 'backupPassphrase');
+    final confirmFocus = FocusNode(debugLabel: 'backupPassphraseConfirmation');
     final confirmed = await showSettingsDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create backup'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('The backup will include:'),
-            const SizedBox(height: 8),
-            ..._backupSummaryLines(summary).map((line) => Text('• $line')),
-            if (iptvProviders.fileImported > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  '${iptvProviders.fileImported} IPTV playlist'
-                  '${iptvProviders.fileImported == 1 ? '' : 's'} imported from '
-                  'a file won\'t be included — re-import the file on the other '
-                  'device. Starred channels from them still travel.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: app.fade(app.core.tx, 0x99 / 0xFF),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final passphraseOk =
+              !usePassphrase ||
+              (passphraseController.text.isNotEmpty &&
+                  passphraseController.text == confirmController.text);
+          return AlertDialog(
+            title: const Text('Create backup'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('The backup will include:'),
+                  const SizedBox(height: 8),
+                  ..._backupSummaryLines(
+                    summary,
+                  ).map((line) => Text('• $line')),
+                  if (iptvProviders.fileImported > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        '${iptvProviders.fileImported} IPTV playlist'
+                        '${iptvProviders.fileImported == 1 ? '' : 's'} imported from '
+                        'a file won\'t be included — re-import the file on the other '
+                        'device. Starred channels from them still travel.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: app.fade(app.core.tx, 0x99 / 0xFF),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Include credentials'),
+                    subtitle: const Text(
+                      'Off: share your setup without your accounts. Skips '
+                      'anything that embeds them: addons, Xtream providers, '
+                      'indexers, starred channels and lists. M3U URLs are '
+                      'kept — use a passphrase to protect those.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    value: includeCredentials,
+                    onChanged: (v) =>
+                        setDialogState(() => includeCredentials = v),
                   ),
-                ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Encrypt with a passphrase'),
+                    value: usePassphrase,
+                    onChanged: (v) => setDialogState(() => usePassphrase = v),
+                  ),
+                  if (usePassphrase) ...[
+                    TvTextField(
+                      controller: passphraseController,
+                      focusNode: passphraseFocus,
+                      obscureText: true,
+                      autofocus: true,
+                      textInputAction: TextInputAction.next,
+                      keyboardSubmitLabel: 'Next',
+                      decoration: const InputDecoration(
+                        labelText: 'Passphrase',
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                      onSubmitted: (_) => confirmFocus.requestFocus(),
+                    ),
+                    const SizedBox(height: 8),
+                    TvTextField(
+                      controller: confirmController,
+                      focusNode: confirmFocus,
+                      obscureText: true,
+                      textInputAction: TextInputAction.done,
+                      keyboardSubmitLabel: 'Save backup',
+                      decoration: const InputDecoration(
+                        labelText: 'Confirm passphrase',
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                      onSubmitted: (_) {
+                        if (passphraseOk) Navigator.of(context).pop(true);
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  if (usePassphrase)
+                    Text(
+                      'Encrypted with your passphrase — if you forget it, '
+                      'this backup cannot be opened.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: app.fade(app.core.tx, 0x99 / 0xFF),
+                      ),
+                    )
+                  else if (includeCredentials)
+                    const Text(
+                      'Credentials are stored in plain text. Keep this file '
+                      'private and treat it like a password.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
+                    ),
+                ],
               ),
-            const SizedBox(height: 12),
-            const Text(
-              'Credentials are stored in plain text. Keep this file private '
-              'and treat it like a password.',
-              style: TextStyle(fontSize: 12, color: Color(0xFFEF4444)),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Save backup'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: passphraseOk
+                    ? () => Navigator.of(context).pop(true)
+                    : null,
+                child: const Text('Save backup'),
+              ),
+            ],
+          );
+        },
       ),
     );
 
+    final passphrase = usePassphrase ? passphraseController.text : null;
+    passphraseController.dispose();
+    confirmController.dispose();
+    passphraseFocus.dispose();
+    confirmFocus.dispose();
     if (confirmed != true) return;
     if (!mounted) return;
 
-    final jsonContent = const JsonEncoder.withIndent('  ').convert(payload);
+    // The pre-dialog payload was only for the summary — rebuild honoring the
+    // include-credentials choice.
+    Map<String, dynamic> exportMap = includeCredentials
+        ? payload
+        : await BackupRestoreService.buildBackup(includeCredentials: false);
+
+    // The pre-dialog summary described the FULL payload — stripping
+    // credentials can leave nothing behind (a device configured with only
+    // accounts), and restore rejects an empty backup anyway.
+    if (!includeCredentials &&
+        BackupRestoreService.summarize(exportMap).isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Nothing left to back up without credentials — everything on '
+            'this device is account data.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (passphrase != null && passphrase.isNotEmpty) {
+      if (!mounted) return;
+      // Captured BEFORE the await: the modal lives on the root navigator and
+      // must be popped even if this screen unmounts while Argon2id runs —
+      // a mounted-check first would strand an undismissable dialog.
+      final rootNavigator = Navigator.of(context, rootNavigator: true);
+      // Argon2id takes seconds on TV hardware — show progress.
+      showSettingsDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 16),
+                Expanded(child: Text('Encrypting backup…')),
+              ],
+            ),
+          ),
+        ),
+      );
+      try {
+        exportMap = await BackupRestoreService.encryptBackup(
+          exportMap,
+          passphrase,
+        );
+      } catch (_) {
+        rootNavigator.pop();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to encrypt the backup')),
+        );
+        return;
+      }
+      rootNavigator.pop();
+      if (!mounted) return;
+    }
+
+    final jsonContent = const JsonEncoder.withIndent('  ').convert(exportMap);
     final bytes = Uint8List.fromList(utf8.encode(jsonContent));
     final ts = DateTime.now();
     final fileName =
         'debrify-backup-${ts.year.toString().padLeft(4, '0')}${ts.month.toString().padLeft(2, '0')}${ts.day.toString().padLeft(2, '0')}-${ts.hour.toString().padLeft(2, '0')}${ts.minute.toString().padLeft(2, '0')}.json';
 
     try {
-      final savedPath = await FilePicker.platform.saveFile(
+      final savedPath = await ProfileBackupFlows(context).saveBackupFile(
         dialogTitle: 'Save Debrify backup',
         fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: const ['json'],
         bytes: bytes,
       );
-
-      if (savedPath == null) {
-        // User cancelled.
-        return;
-      }
-
-      // On some platforms, saveFile returns the chosen path but does not
-      // write the bytes itself — write defensively if the file is missing
-      // or empty.
-      try {
-        final file = File(savedPath);
-        if (!await file.exists() || (await file.length()) == 0) {
-          await file.writeAsBytes(bytes, flush: true);
-        }
-      } catch (_) {
-        // saveFile already handled writing on this platform.
-      }
-
-      if (!mounted) return;
+      if (!mounted || savedPath == null) return;
       // On Android, savedPath may be a content:// URI from the Storage
       // Access Framework — show it raw so the user has at least a
       // breadcrumb of where the backup went.
@@ -3059,31 +3479,123 @@ class _SettingsScreenState extends State<SettingsScreen> {
           duration: const Duration(seconds: 5),
         ),
       );
-    } catch (e) {
-      // Fallback: write to the app's documents directory so the user is
-      // never left without a copy when saveFile is unavailable (some TV
-      // platforms lack a system save dialog).
-      try {
-        final dir = await AppStorage.documents();
-        final fallbackPath = '${dir.path}/$fileName';
-        await File(fallbackPath).writeAsBytes(bytes, flush: true);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Backup saved to $fallbackPath'),
-            duration: const Duration(seconds: 5),
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to save the backup')),
+      );
+    }
+  }
+
+  /// Passphrase prompt loop for an encrypted backup envelope. Returns the
+  /// decrypted inner payload, or null when the user cancels. A wrong
+  /// passphrase re-shows the prompt with an inline error instead of aborting.
+  Future<Map<String, dynamic>?> _promptAndDecryptBackup(
+    Map<String, dynamic> envelope,
+  ) async {
+    String? errorText;
+    while (true) {
+      if (!mounted) return null;
+      final controller = TextEditingController();
+      final entered = await showSettingsDialog<String>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Backup is encrypted'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (envelope['createdAt'] is String)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Created: ${envelope['createdAt']}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                TvTextField(
+                  controller: controller,
+                  obscureText: true,
+                  autofocus: true,
+                  textInputAction: TextInputAction.done,
+                  keyboardSubmitLabel: 'Unlock',
+                  decoration: InputDecoration(
+                    labelText: 'Passphrase',
+                    errorText: errorText,
+                  ),
+                  onSubmitted: (value) => Navigator.of(context).pop(value),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(null),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(controller.text),
+                child: const Text('Unlock'),
+              ),
+            ],
           ),
+        ),
+      );
+      controller.dispose();
+      if (entered == null || entered.isEmpty) return null;
+      if (!mounted) return null;
+
+      // Captured BEFORE the await so the modal is popped even if this screen
+      // unmounts while the KDF runs (see _createBackup's encrypt block).
+      final rootNavigator = Navigator.of(context, rootNavigator: true);
+      showSettingsDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 16),
+                Expanded(child: Text('Unlocking backup…')),
+              ],
+            ),
+          ),
+        ),
+      );
+      try {
+        final inner = await BackupRestoreService.decryptBackup(
+          envelope,
+          entered,
         );
-      } catch (e2) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to save backup: $e2')));
+        rootNavigator.pop();
+        if (!mounted) return null;
+        return inner;
+      } on BackupPassphraseException {
+        rootNavigator.pop();
+        if (!mounted) return null;
+        errorText = 'Wrong passphrase — try again';
+      } on FormatException {
+        rootNavigator.pop();
+        if (!mounted) return null;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('The backup format is invalid')),
+        );
+        return null;
       }
     }
   }
 
   Future<void> _restoreBackup() async {
+    if (ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted) {
+      await _restoreProfileBackup();
+      return;
+    }
     final app = AppThemeScope.of(context);
     final t = app.settings;
     final FilePickerResult? pick;
@@ -3095,22 +3607,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       pick = await FilePicker.platform.pickFiles(
         dialogTitle: 'Choose Debrify backup file',
         type: FileType.any,
-        withData: true,
+        withData: false,
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not open file picker: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the file picker')),
+      );
       return;
     }
 
     if (pick == null || pick.files.isEmpty) return;
     final file = pick.files.first;
 
-    // FileType.any lets the user pick anything and withData buffers it into RAM;
-    // reject an implausibly large pick before reading so a stray huge file can't OOM.
-    if (file.size > 20 * 1024 * 1024) {
+    // FileType.any lets the user pick anything. Reject an implausibly large
+    // file before opening it so a stray huge selection cannot be allocated.
+    // Sized so the app always accepts what its own export can produce: a
+    // passphrase-encrypted envelope base64-inflates the payload by ~4/3, so an
+    // IPTV-heavy ~20 MiB backup arrives here at ~27 MiB.
+    if (file.size > 40 * 1024 * 1024) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -3122,30 +3637,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final String content;
     try {
-      if (file.bytes != null) {
-        content = utf8.decode(file.bytes!);
-      } else if (file.path != null) {
-        content = await File(file.path!).readAsString();
-      } else {
+      if (file.path == null) {
         throw Exception('Could not read backup file contents');
       }
-    } catch (e) {
+      final selected = File(file.path!);
+      content = await PortableProfilePackage.readBoundedUtf8(
+        selected.openRead(),
+        maxBytes: 40 * 1024 * 1024,
+      );
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to read backup file: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to read the backup file')),
+      );
       return;
     }
 
-    final Map<String, dynamic> payload;
+    Map<String, dynamic> payload;
     try {
       payload = BackupRestoreService.parse(content);
-    } on FormatException catch (e) {
+    } on FormatException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Invalid backup: ${e.message}')));
+      final looksLikeProfilePackage =
+          content.contains('"format":"debrify-profile-package"') ||
+          content.contains('"format": "debrify-profile-package"');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            looksLikeProfilePackage
+                ? 'This is a profile backup. Enable profiles or update to a build that supports profile restore.'
+                : error.message,
+          ),
+        ),
+      );
       return;
+    }
+
+    if (BackupRestoreService.isEncrypted(payload)) {
+      final inner = await _promptAndDecryptBackup(payload);
+      if (inner == null) return; // Cancelled or unrecoverable.
+      payload = inner;
     }
 
     final summary = BackupRestoreService.summarize(payload);
@@ -3258,12 +3789,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     RestoreReport report;
     try {
       report = await BackupRestoreService.applyBackup(payload);
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Restore failed: $e')));
+      ).showSnackBar(const SnackBar(content: Text('Restore failed')));
       return;
     }
 
@@ -3706,27 +4237,132 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _resetAppData() async {
-    final confirmed = await showSettingsDialog<bool>(
+    final profileMode =
+        ProfileRuntime.mode == ProfileRuntimeMode.profileCommitted;
+    ProfileAuthorizationContext? authorization;
+    UserProfile? actor;
+    if (profileMode) {
+      authorization = await ProfileAuthorizationContext.capture(
+        ProfileBootstrap.registry,
+      );
+      actor = await authorization.validate(ProfileBootstrap.registry);
+    }
+    final mayResetDevice =
+        actor?.role == UserProfileRole.admin &&
+        actor!.allows(ProfileFeature.manageProfiles) &&
+        actor.allows(ProfileFeature.backupRestore);
+    final action = await showSettingsDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reset Debrify?'),
-        content: const Text(
-          'This removes saved connections, playback history, download queue, and onboarding completion. Files already saved to disk remain untouched.',
+        title: Text(profileMode ? 'Reset this profile?' : 'Reset Debrify?'),
+        content: Text(
+          profileMode
+              ? 'This clears this profile\'s settings, history, playlists, and private app data. The profile, PIN, shared connections, active jobs, downloads, and recordings remain untouched.'
+              : 'This removes saved connections, playback history, download queue, and onboarding completion. Files already saved to disk remain untouched.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
+          if (mayResetDevice)
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('device'),
+              child: const Text('Reset device…'),
+            ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Reset app'),
+            onPressed: () => Navigator.of(context).pop('profile'),
+            child: Text(profileMode ? 'Reset profile' : 'Reset app'),
           ),
         ],
       ),
     );
 
-    if (confirmed != true) return;
+    if (action == null) return;
+
+    if (profileMode && action == 'device') {
+      if (!await ProfileBackupFlows(
+        context,
+      ).reauthenticateSensitiveProfile(actor!)) {
+        return;
+      }
+      final typed = TextEditingController();
+      final confirmed = await showSettingsDialog<bool>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Reset this Debrify installation?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'All profiles, connections, jobs, schedules, private data, remote pairings, and device keys will be removed. Downloaded and recorded files remain on disk. The app will close and start fresh next launch.',
+                ),
+                const SizedBox(height: 16),
+                TvTextField(
+                  controller: typed,
+                  autofocus: true,
+                  textInputAction: TextInputAction.done,
+                  keyboardSubmitLabel: 'Reset device',
+                  decoration: const InputDecoration(
+                    labelText: 'Type RESET to continue',
+                  ),
+                  onChanged: (_) => setDialogState(() {}),
+                  onSubmitted: (_) {
+                    if (typed.text == 'RESET') {
+                      Navigator.of(dialogContext).pop(true);
+                    }
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: typed.text == 'RESET'
+                    ? () => Navigator.of(dialogContext).pop(true)
+                    : null,
+                child: const Text('Reset device'),
+              ),
+            ],
+          ),
+        ),
+      );
+      typed
+        ..clear()
+        ..dispose();
+      if (confirmed != true) return;
+      await ProfileDeviceResetService.reset(
+        registry: ProfileBootstrap.registry,
+        authorization: authorization!,
+      );
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+        exit(0);
+      }
+      await SystemNavigator.pop();
+      return;
+    }
+
+    if (profileMode && action == 'profile') {
+      await ProfileResetService(
+        registry: ProfileBootstrap.registry,
+        lifecycleParticipants: <ProfileLifecycleParticipant>[
+          ProfileAppLifecycleParticipant(),
+        ],
+      ).resetActiveProfile();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile data reset. Connections and files were kept.'),
+        ),
+      );
+      await _loadSummaries();
+      return;
+    }
 
     await StorageService.deleteApiKey();
     AccountService.clearUserInfo();
@@ -3747,6 +4383,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await StorageService.clearContinueWatching();
     await StorageService.clearPlaylist();
     await StorageService.clearAllPlaylistMetadata();
+    await StorageService.clearMyWatchlist();
     await StorageService.clearTorrentSearchHistory();
     await StorageService.clearAllStartupSettings();
     await StorageService.clearAllHomePageSettings();
@@ -4078,6 +4715,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<void> _openDebrifyTvStylePage() async {
+    await pushSettingsPage(context, const DebrifyTvStylePage());
+    if (!mounted) return;
+    final style = await StorageService.getDebrifyTvStyle();
+    if (!mounted) return;
+    setState(() {
+      _debrifyTvStyle = style;
+    });
+  }
+
   /// Same contract as [_openTvHomeStyle], for the in-player guide picker.
   Future<void> _openPlayerGuideStylePage() async {
     await pushSettingsPage(context, const PlayerGuideStylePage());
@@ -4212,11 +4859,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tvHomeStyle = await StorageService.getTvHomeStyle();
     final iptvStyle = await StorageService.getIptvStyle();
     final playerGuideStyle = await StorageService.getIptvPlayerGuideStyle();
+    final debrifyTvStyle = await StorageService.getDebrifyTvStyle();
     if (!mounted) return;
     setState(() {
       _tvHomeStyle = tvHomeStyle;
       _iptvStyle = iptvStyle;
       _playerGuideStyle = playerGuideStyle;
+      _debrifyTvStyle = debrifyTvStyle;
     });
   }
 
@@ -4373,6 +5022,129 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
+const List<SettingsCategoryDefinition> _kAdaptiveSettingsCategories = [
+  SettingsCategoryDefinition(
+    icon: Icons.link_rounded,
+    label: 'Connections',
+    subtitle: 'Debrid, cloud, IPTV & more',
+    eyebrow: 'Connections',
+    title: 'Services, all in one place.',
+    description:
+        'See what is ready, what needs attention, and where playback will go '
+        'before opening a provider.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.sync_rounded,
+    label: 'Trackers',
+    subtitle: 'Trakt & Simkl watch history',
+    eyebrow: 'Trackers',
+    title: 'Keep every watch in sync.',
+    description:
+        'Connect watch-history services and see their health without digging '
+        'through account screens.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.home_rounded,
+    label: 'Home & Display',
+    subtitle: 'Rows, artwork & navigation',
+    eyebrow: 'Home & Display',
+    title: 'Shape the room you come home to.',
+    description:
+        'Arrange the home screen and choose the navigation that fits this '
+        'device.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.auto_awesome_rounded,
+    label: 'Appearance',
+    subtitle: 'Look, text, motion & layouts',
+    eyebrow: 'Appearance',
+    title: 'Make the interface feel like yours.',
+    description:
+        'A Look sets the room. Individual controls below let you adjust only '
+        'what matters.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.play_circle_outline_rounded,
+    label: 'Playback',
+    subtitle: 'Player, subtitles & audio',
+    eyebrow: 'Playback',
+    title: 'Playback without surprises.',
+    description:
+        'Choose how videos start, what plays them, and the behavior shared by '
+        'movies and episodes.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.search_rounded,
+    label: 'Search',
+    subtitle: 'Engines, filters & providers',
+    eyebrow: 'Search',
+    title: 'Find the right source faster.',
+    description:
+        'Search engines, default filters, and provider routing form one clear '
+        'pipeline.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.live_tv_rounded,
+    label: 'Live TV & DVR',
+    subtitle: 'Channels, guide & recordings',
+    eyebrow: 'Live TV & DVR',
+    title: 'Live television, organized.',
+    description:
+        'Manage channel sources, recordings, and the guide from one focused '
+        'area.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.devices_rounded,
+    label: 'Devices',
+    subtitle: 'Remote & setup transfer',
+    eyebrow: 'Devices',
+    title: 'Let your devices work together.',
+    description:
+        'Control another screen or move this setup without re-entering every '
+        'service.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.switch_account_rounded,
+    label: 'Profiles',
+    subtitle: 'Who can use this device',
+    eyebrow: 'Profiles',
+    title: 'One device, many viewers.',
+    description:
+        'Switch between people, add someone new, and shape what each '
+        'profile can reach.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.storage_rounded,
+    label: 'Data & Backup',
+    subtitle: 'Downloads, backup & restore',
+    eyebrow: 'Data & Backup',
+    title: 'Your data, under your control.',
+    description:
+        'Downloads, playback state, and portable backups are separated into '
+        'clear actions.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.info_outline_rounded,
+    label: 'About',
+    subtitle: 'Updates, version & community',
+    eyebrow: 'About',
+    title: 'Debrify, up to date.',
+    description:
+        'Version, release checks, and the places where the community meets.',
+  ),
+  SettingsCategoryDefinition(
+    icon: Icons.warning_amber_rounded,
+    label: 'Danger Zone',
+    subtitle: 'Reset Debrify',
+    eyebrow: 'Danger Zone',
+    title: 'Start over, deliberately.',
+    description:
+        'Destructive actions stay isolated and explain exactly what they '
+        'remove.',
+    destructive: true,
+  ),
+];
+
 class _SettingsLayout extends StatelessWidget {
   final ConnectionsSummary connections;
   final VoidCallback onOpenSearch;
@@ -4385,6 +5157,10 @@ class _SettingsLayout extends StatelessWidget {
   final Future<void> Function() onOpenHomePageSettings;
   final Future<void> Function() onOpenExternalPlayerSettings;
   final VoidCallback onOpenRemoteControl;
+  final bool showSwitchProfile;
+  final Future<void> Function() onSwitchProfile;
+  final Future<void> Function() onAddProfile;
+  final Future<void> Function() onEditProfile;
   final Future<void> Function() onOpenNavigationSettings;
   final bool isAndroidTv;
   final Future<void> Function() onClearDownloads;
@@ -4414,6 +5190,8 @@ class _SettingsLayout extends StatelessWidget {
   // pickers (home style, discover, sidebar, screen size) live solely in
   // SettingsTvLayout's Appearance category.
   final bool showIptvAppearance;
+  final String debrifyTvStyleLabel;
+  final Future<void> Function() onOpenDebrifyTvStyle;
   final String textBrightnessLabel;
   final Future<void> Function() onOpenTextBrightness;
   final String launchAnimationLabel;
@@ -4464,6 +5242,10 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenHomePageSettings,
     required this.onOpenExternalPlayerSettings,
     required this.onOpenRemoteControl,
+    required this.showSwitchProfile,
+    required this.onSwitchProfile,
+    required this.onAddProfile,
+    required this.onEditProfile,
     required this.onOpenNavigationSettings,
     required this.isAndroidTv,
     required this.onClearDownloads,
@@ -4488,6 +5270,8 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenRecordings,
     required this.onOpenIptvSettings,
     required this.showIptvAppearance,
+    required this.debrifyTvStyleLabel,
+    required this.onOpenDebrifyTvStyle,
     required this.textBrightnessLabel,
     required this.onOpenTextBrightness,
     required this.launchAnimationLabel,
@@ -4515,9 +5299,410 @@ class _SettingsLayout extends StatelessWidget {
     required this.onOpenDesktopSidebarStyle,
   });
 
+  List<ConnectionInfo> get _providerConnections => [
+    connections.realDebrid,
+    connections.torbox,
+    connections.premiumize,
+    connections.allDebrid,
+    connections.pikpak,
+    connections.webDav,
+    connections.indexerManagers,
+    connections.iptv,
+  ];
+
+  List<ConnectionInfo> get _trackerConnections => [
+    connections.trakt,
+    connections.simkl,
+    if (connections.mdblist != null) connections.mdblist!,
+  ];
+
+  Widget _buildSpotlight(BuildContext context) {
+    final attention = _providerConnections.where(
+      settingsConnectionNeedsAttention,
+    );
+    final attentionCount = attention.length;
+    final readyCount = _providerConnections
+        .where(settingsConnectionIsReady)
+        .length;
+    final firstAttention = attention.isEmpty ? null : attention.first;
+    final summaryTone = attentionCount == 0
+        ? SettingsSummaryTone.good
+        : SettingsSummaryTone.attention;
+    final summaryTitle = attentionCount > 0
+        ? '$attentionCount connection${attentionCount == 1 ? '' : 's'} need attention.'
+        : readyCount > 0
+        ? 'Everything connected looks ready.'
+        : 'Connect a playback service.';
+    final summarySubtitle = attentionCount > 0
+        ? '${firstAttention!.title} reports ${firstAttention.status.toLowerCase()}. '
+              'Review it before your next playback.'
+        : readyCount > 0
+        ? '$readyCount services are configured on this device.'
+        : 'Add a debrid, cloud, or IPTV service to get started.';
+    final summaryTarget = firstAttention ?? _providerConnections.first;
+    return SettingsSpotlightShell(
+      categories: _kAdaptiveSettingsCategories,
+      onOpenSearch: onOpenSearch,
+      compactSummary: SettingsSpotlightSummaryCard(
+        eyebrow: attentionCount > 0 ? 'Connection check' : 'Service health',
+        title: summaryTitle,
+        subtitle: summarySubtitle,
+        actionLabel: attentionCount > 0
+            ? 'Review ${summaryTarget.title}'
+            : readyCount > 0
+            ? 'Manage connections'
+            : 'Connect a service',
+        tone: summaryTone,
+        onTap: () => unawaited(summaryTarget.onTap()),
+      ),
+      categoryBuilder: _buildSpotlightCategory,
+    );
+  }
+
+  Widget _buildConnectionGrid(
+    BuildContext context,
+    List<ConnectionInfo> items,
+  ) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoColumns = constraints.maxWidth >= 680;
+        final width = twoColumns
+            ? (constraints.maxWidth - 10) / 2
+            : constraints.maxWidth;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final info in items)
+              SizedBox(
+                width: width,
+                child: ConnectionCard(info: info, isLeftColumn: false),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSpotlightCategory(BuildContext context, int category) {
+    final t = AppThemeScope.of(context).settings;
+    switch (category) {
+      case 0:
+        return _buildConnectionGrid(context, _providerConnections);
+      case 1:
+        return _buildConnectionGrid(context, _trackerConnections);
+      case 2:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.homePage,
+              onTap: onOpenHomePageSettings,
+            ),
+            SettingsTile.spec(
+              SettingsRows.navigationStyle,
+              subtitle: phoneNavStyleLabel,
+              onTap: onOpenNavigationSettings,
+            ),
+            SettingsTile.spec(
+              SettingsRows.desktopSidebarStyle,
+              subtitle: desktopSidebarStyleLabel,
+              onTap: onOpenDesktopSidebarStyle,
+            ),
+          ],
+        );
+      case 3:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SettingsLookHero(
+              label: AppLooks.active()?.label ?? 'Custom',
+              subtitle: 'Full-bleed art, borderless focus, and ambient detail.',
+              onTap: onOpenLooks,
+            ),
+            const SizedBox(height: 18),
+            SettingsSection(
+              title: 'Presets',
+              blurb:
+                  'One pick sets the theme, layouts, and launch animation '
+                  'together.',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.themeTokens,
+                  subtitle: themeTokensLabel,
+                  onTap: onOpenThemeTokens,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            SettingsSection(
+              title: 'Theme',
+              blurb: 'Colour, focus, and motion. Applies everywhere.',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.textBrightness,
+                  subtitle: textBrightnessLabel,
+                  onTap: onOpenTextBrightness,
+                ),
+                SettingsTile.spec(
+                  SettingsRows.launchAnimation,
+                  subtitle: launchAnimationLabel,
+                  onTap: onOpenLaunchAnimation,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            SettingsSection(
+              title: 'Screen layouts',
+              blurb: 'Where things sit. Each screen is chosen separately.',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.detailPageStyle,
+                  subtitle: detailPageStyleLabel,
+                  onTap: onOpenDetailPageStyle,
+                ),
+                if (showIptvAppearance)
+                  SettingsTile.spec(
+                    SettingsRows.iptvAppearance,
+                    subtitle: iptvStyleLabel,
+                    onTap: onOpenIptvStyle,
+                  ),
+                SettingsTile.spec(
+                  SettingsRows.debrifyTvAppearance,
+                  subtitle: debrifyTvStyleLabel,
+                  onTap: onOpenDebrifyTvStyle,
+                ),
+                SettingsTile.spec(
+                  SettingsRows.playerGuideStyle,
+                  subtitle: playerGuideStyleLabel,
+                  onTap: onOpenPlayerGuideStyle,
+                ),
+                if (!PlatformUtil.isTelevision)
+                  SettingsTile.spec(
+                    SettingsRows.playerDock,
+                    subtitle: playerDockLabel,
+                    onTap: onOpenPlayerDock,
+                  ),
+                SettingsTile.spec(
+                  SettingsRows.parentsGuideStyle,
+                  subtitle: parentsGuideStyleLabel,
+                  onTap: onOpenParentsGuideStyle,
+                ),
+              ],
+            ),
+          ],
+        );
+      case 4:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.player,
+              onTap: onOpenExternalPlayerSettings,
+            ),
+          ],
+        );
+      case 5:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.searchSettings,
+              onTap: onOpenTorrentSettings,
+            ),
+            SettingsTile.spec(
+              SettingsRows.filterSettings,
+              onTap: onOpenFilterSettings,
+            ),
+            SettingsTile.spec(
+              SettingsRows.providerSettings,
+              onTap: onOpenProviderSettings,
+            ),
+            SettingsTile.spec(
+              SettingsRows.quickPlay,
+              onTap: onOpenQuickPlaySettings,
+            ),
+          ],
+        );
+      case 6:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.debrifyTv,
+              onTap: onOpenDebrifyTvSettings,
+            ),
+            SettingsTile.spec(SettingsRows.recordings, onTap: onOpenRecordings),
+            SettingsTile.spec(
+              SettingsRows.iptvPlaylists,
+              onTap: onOpenIptvSettings,
+            ),
+          ],
+        );
+      case 7:
+        return SettingsSection(
+          title: '',
+          children: [
+            SettingsTile.spec(
+              SettingsRows.remote,
+              onTap: () async => onOpenRemoteControl(),
+            ),
+          ],
+        );
+      case 8:
+        // Profiles' own card (it used to be a tenant row under Devices). A
+        // legacy-mode install keeps the card but says why it's empty rather
+        // than presenting actions that would fail.
+        return SettingsSection(
+          title: '',
+          children: [
+            if (showSwitchProfile) ...[
+              SettingsTile.spec(
+                SettingsRows.switchProfile,
+                onTap: onSwitchProfile,
+              ),
+              SettingsTile.spec(
+                SettingsRows.addProfile,
+                onTap: onAddProfile,
+              ),
+              SettingsTile.spec(
+                SettingsRows.editProfile,
+                onTap: onEditProfile,
+              ),
+            ] else
+              SettingsTile.spec(
+                const SettingsRowContent(
+                  icon: Icons.info_outline_rounded,
+                  title: 'Profiles unavailable',
+                  subtitle: 'This install is running in legacy mode',
+                ),
+                onTap: () async {},
+              ),
+          ],
+        );
+      case 9:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (onOpenDownloadLocation != null) ...[
+              SettingsSection(
+                title: 'Downloads',
+                children: [
+                  SettingsTile.spec(
+                    SettingsRows.downloadLocation,
+                    subtitle: downloadLocationSubtitle,
+                    onTap: onOpenDownloadLocation!,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+            ],
+            SettingsSection(
+              title: 'Maintenance',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.clearDownloads,
+                  onTap: onClearDownloads,
+                ),
+                SettingsTile.spec(
+                  SettingsRows.clearPlayback,
+                  onTap: onClearPlayback,
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            SettingsSection(
+              title: 'Backup & Restore',
+              children: [
+                SettingsTile.spec(
+                  SettingsRows.createBackup,
+                  onTap: onCreateBackup,
+                ),
+                SettingsTile.spec(
+                  SettingsRows.restoreBackup,
+                  onTap: onRestoreBackup,
+                ),
+              ],
+            ),
+          ],
+        );
+      case 10:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SettingsSection(
+              title: 'Updates',
+              children: [
+                SettingsToggleTile.spec(
+                  SettingsRows.autoUpdate,
+                  value: autoUpdateChecksEnabled,
+                  onChanged: onToggleAutoUpdateChecks,
+                ),
+                SettingsTile.spec(
+                  SettingsRows.checkUpdates,
+                  subtitle: updateSubtitle,
+                  onTap: onCheckForUpdates,
+                  tag: 'New',
+                  trailing: checkingUpdates
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        )
+                      : null,
+                ),
+                SettingsInfoTile.spec(SettingsRows.version, value: appVersion),
+              ],
+            ),
+            const SizedBox(height: 18),
+            SettingsSection(
+              title: 'Community & Support',
+              children: [
+                if (showSupportDonation)
+                  SettingsTile(
+                    icon: SettingsRows.supportDebrify.icon,
+                    title: supportDonationLabel,
+                    subtitle: supportDonationSubtitle,
+                    onTap: onOpenSupportDonation,
+                  ),
+                SettingsTile.spec(
+                  SettingsRows.reddit,
+                  onTap: () => launchSettingsUrl(SettingsRows.reddit.url!),
+                ),
+                SettingsTile.spec(
+                  SettingsRows.discord,
+                  onTap: () => launchSettingsUrl(SettingsRows.discord.url!),
+                ),
+                SettingsTile.spec(
+                  SettingsRows.github,
+                  onTap: () => launchSettingsUrl(SettingsRows.github.url!),
+                ),
+              ],
+            ),
+          ],
+        );
+      case 11:
+        return SettingsSection(
+          title: '',
+          accentColor: t.danger,
+          children: [
+            SettingsTile.spec(
+              SettingsRows.resetDebrify,
+              onTap: onDangerAction,
+              destructive: true,
+            ),
+          ],
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final t = AppThemeScope.of(context).settings;
+    final app = AppThemeScope.of(context);
+    if (app.id == 'spotlight') return _buildSpotlight(context);
+    final t = app.settings;
     return SettingsBackground(
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
@@ -4560,7 +5745,8 @@ class _SettingsLayout extends StatelessWidget {
                 // layout never renders on Android TV.
                 SettingsSection(
                   title: 'Presets',
-                  blurb: 'One pick that sets the theme, layouts and launch '
+                  blurb:
+                      'One pick that sets the theme, layouts and launch '
                       'animation together.',
                   children: [
                     SettingsTile.spec(
@@ -4578,7 +5764,8 @@ class _SettingsLayout extends StatelessWidget {
                 const SizedBox(height: 24),
                 SettingsSection(
                   title: 'Theme',
-                  blurb: 'Colour, focus and motion. Applies everywhere in the '
+                  blurb:
+                      'Colour, focus and motion. Applies everywhere in the '
                       'app.',
                   children: [
                     SettingsTile.spec(
@@ -4609,6 +5796,11 @@ class _SettingsLayout extends StatelessWidget {
                         subtitle: iptvStyleLabel,
                         onTap: onOpenIptvStyle,
                       ),
+                    SettingsTile.spec(
+                      SettingsRows.debrifyTvAppearance,
+                      subtitle: debrifyTvStyleLabel,
+                      onTap: onOpenDebrifyTvStyle,
+                    ),
                     SettingsTile.spec(
                       SettingsRows.playerGuideStyle,
                       subtitle: playerGuideStyleLabel,
@@ -4713,6 +5905,30 @@ class _SettingsLayout extends StatelessWidget {
                     ),
                   ],
                 ),
+                // Profiles' own card (it used to be a tenant row under
+                // Devices). The list layout simply hides it in legacy mode —
+                // no index coupling to preserve here, unlike the category
+                // switches.
+                if (showSwitchProfile) ...[
+                  const SizedBox(height: 24),
+                  SettingsSection(
+                    title: 'Profiles',
+                    children: [
+                      SettingsTile.spec(
+                        SettingsRows.switchProfile,
+                        onTap: onSwitchProfile,
+                      ),
+                      SettingsTile.spec(
+                        SettingsRows.addProfile,
+                        onTap: onAddProfile,
+                      ),
+                      SettingsTile.spec(
+                        SettingsRows.editProfile,
+                        onTap: onEditProfile,
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 24),
                 SettingsSection(
                   title: 'Data & Backup',
@@ -4826,8 +6042,18 @@ class _SettingsSearchBar extends StatefulWidget {
 }
 
 class _SettingsSearchBarState extends State<_SettingsSearchBar> {
-  bool _focused = false;
+  final FocusNode _node = FocusNode(debugLabel: 'settingsSearchBar');
   bool _hovered = false;
+
+  /// Live, never cached — see the note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _node.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4837,9 +6063,10 @@ class _SettingsSearchBarState extends State<_SettingsSearchBar> {
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
+        focusNode: _node,
         borderRadius: BorderRadius.circular(12),
         onTap: widget.onTap,
-        onFocusChange: (f) => setState(() => _focused = f),
+        onFocusChange: (_) => setState(() {}),
         onHover: (h) => setState(() => _hovered = h),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),

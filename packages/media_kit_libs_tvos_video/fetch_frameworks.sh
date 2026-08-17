@@ -14,8 +14,11 @@
 # fetch resumes where it stopped.
 set -euo pipefail
 
-REPO="karelrooted/libmpv"
-TAG="v0.0.1-beta"
+# Built by varunsalian/libmpv-tvos — see design/plans/TVOS_LIBMPV_UPGRADE_PLAN.md.
+# karelrooted/libmpv is abandoned (last push 2023-12-22) and its mpv predates
+# ao_avfoundation, which the Dolby Atmos fix needs.
+REPO="varunsalian/libmpv-tvos"
+TAG="v1.0.0-tvos"
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="$PKG_DIR/tvos/Frameworks"
 WORK="${TMPDIR:-/tmp}/libmpv-tvos-$TAG"
@@ -27,9 +30,8 @@ WORK="${TMPDIR:-/tmp}/libmpv-tvos-$TAG"
 # list and OTHER_LDFLAGS in sync.
 FRAMEWORKS=(
   Libass Libavcodec Libavdevice Libavfilter Libavformat Libavutil
-  Libbluray Libcrypto Libdav1d Libfreetype Libfribidi Libglslang
-  Libgmp Libgnutls Libharfbuzz Libhogweed Liblcms2 Libluajit-5.1
-  Libmpv Libnettle Libplacebo Libpng Libshaderc_combined Libssl
+  Libbluray Libcrypto Libdav1d Libfreetype Libfribidi Libharfbuzz
+  Liblcms2 Libluajit Libmpv Libplacebo Libpng Libshaderc Libssl
   Libswresample Libswscale Libuchardet MoltenVK
 )
 
@@ -76,29 +78,13 @@ fetch_one() {
     return 1
   fi
 
-  # CocoaPods derives a bare archive's link flag from LibraryPath by truncating
-  # at the first dot, so upstream's `libluajit-5.1.a` becomes `-lluajit-5` and
-  # the link dies with "library 'luajit-5' not found". Rename the archive and
-  # the plist that names it so the derived flag is `-lluajit51` — which is what
-  # the podspec's OTHER_LDFLAGS asks for.
-  #
-  # This used to be a by-hand fix applied to one machine's copy, which is
-  # exactly why the first CI run failed: a pristine download has never been
-  # patched. Do it here so a fresh clone and CI both get it.
-  if [[ "$name" == "Libluajit-5.1" ]]; then
-    for a in "$fw"/*/libluajit-5.1.a; do
-      [[ -f "$a" ]] && mv "$a" "${a%/*}/libluajit51.a"
-    done
-    sed -i '' 's|libluajit-5\.1\.a|libluajit51.a|g' "$fw/Info.plist"
-    # Fail loudly if upstream ever renames it — silently shipping the old name
-    # reproduces the exact link error this exists to prevent.
-    if grep -q 'libluajit-5\.1\.a' "$fw/Info.plist"; then
-      echo "error: $name — luajit rename did not take" >&2
-      return 1
-    fi
-  fi
+  # No luajit rename here any more. CocoaPods derives a bare archive's link
+  # flag from LibraryPath by truncating at the first dot, so `libluajit-5.1.a`
+  # became `-lluajit-5` and the link died. Our build now emits `libluajit.a`
+  # directly (xcframework.sh), so the derived flag is `-lluajit` and the
+  # podspec asks for exactly that. Fixing it at build time rather than
+  # post-download means a hand-copied framework cannot reintroduce it.
 
-  rm -rf "$DEST/$name.xcframework"
   mv "$fw" "$DEST/$name.xcframework"
   rm -rf "$stage" "$zip"
 }
