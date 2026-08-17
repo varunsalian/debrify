@@ -3,6 +3,7 @@ import '../../utils/tv_reveal.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/main_page_bridge.dart';
+import '../../services/profiles/profile_bootstrap.dart';
 import '../../theme/app_focus.dart';
 import '../../theme/widgets/parallax_focus.dart';
 import 'settings_spotlight_shell.dart';
@@ -1048,14 +1049,19 @@ class _SettingsTvLayoutState extends State<SettingsTvLayout> {
                 ),
               ] else
                 // Legacy-mode installs keep the card but say why it's empty
-                // rather than presenting actions that would fail.
+                // rather than presenting actions that would fail — and OK
+                // opens the full captured reason, because a photo of that
+                // dialog is the whole bug report a TV user can give.
                 SettingsTile.spec(
-                  const SettingsRowContent(
+                  SettingsRowContent(
                     icon: Icons.info_outline_rounded,
                     title: 'Profiles unavailable',
-                    subtitle: 'This install is running in legacy mode',
+                    // First line only: the reason's second line can be a
+                    // stack frame, and the row is one-line copy.
+                    subtitle:
+                        ProfileBootstrap.legacyReasonSummary.split('\n').first,
                   ),
-                  onTap: () async {},
+                  onTap: () => showLegacyModeInfoDialog(context),
                   focusNode: _paneNodes[0],
                 ),
             ],

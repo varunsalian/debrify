@@ -5571,12 +5571,15 @@ class _SettingsLayout extends StatelessWidget {
               ),
             ] else
               SettingsTile.spec(
-                const SettingsRowContent(
+                SettingsRowContent(
                   icon: Icons.info_outline_rounded,
                   title: 'Profiles unavailable',
-                  subtitle: 'This install is running in legacy mode',
+                  // First line only: the captured reason can carry a stack
+                  // frame on its second line, and the row is one-line copy.
+                  subtitle:
+                      ProfileBootstrap.legacyReasonSummary.split('\n').first,
                 ),
-                onTap: () async {},
+                onTap: () => showLegacyModeInfoDialog(context),
               ),
           ],
         );
