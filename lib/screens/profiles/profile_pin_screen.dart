@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../models/profiles/user_profile.dart';
 import '../../services/profiles/profile_pin_service.dart';
+import '../../utils/platform_util.dart';
 import '../../widgets/tv_text_field.dart';
 
 class ProfilePinScreen extends StatefulWidget {
@@ -31,6 +32,8 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
   final List<int> _digits = <int>[];
   bool _busy = false;
   String? _error;
+
+  bool get _tv => PlatformUtil.isTelevision;
 
   @override
   void dispose() {
@@ -187,6 +190,15 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.select ||
         key == LogicalKeyboardKey.numpadEnter) {
+      // This handler sits on an ANCESTOR Focus, so it sees keys bubbling up
+      // from whichever keypad button holds focus. Claiming select here is
+      // what broke TV entry: DPAD-center on a focused digit submitted an
+      // (empty) PIN instead of pressing the button. Only submit when focus
+      // rests on this wrapper itself (physical-keyboard flow); otherwise let
+      // the focused button activate.
+      if (FocusManager.instance.primaryFocus != node) {
+        return KeyEventResult.ignored;
+      }
       _submit();
       return KeyEventResult.handled;
     }
@@ -208,54 +220,65 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
         onKeyEvent: _handleHardwareKey,
         child: SafeArea(
           child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 380),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Enter PIN',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List<Widget>.generate(
-                        8,
-                        (index) => Container(
-                          width: 13,
-                          height: 13,
-                          margin: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: index < _digits.length
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.outlineVariant,
+            // TV logical height is ~540px at the default scale, where the
+            // phone's square keypad cells push the submit row off-screen and
+            // out of DPAD reach. Short wide cells + a scroll fallback keep
+            // every control visible and focusable on any display.
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: _tv ? 430 : 380),
+                child: Padding(
+                  padding: EdgeInsets.all(_tv ? 12 : 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Enter PIN',
+                        style: _tv
+                            ? Theme.of(context).textTheme.titleMedium
+                            : Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      SizedBox(height: _tv ? 10 : 18),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List<Widget>.generate(
+                          8,
+                          (index) => Container(
+                            width: _tv ? 10 : 13,
+                            height: _tv ? 10 : 13,
+                            margin: EdgeInsets.all(_tv ? 4 : 5),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: index < _digits.length
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.outlineVariant,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    SizedBox(
-                      height: 40,
-                      child: _error == null
-                          ? null
-                          : Center(
-                              child: Text(
-                                _error!,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.error,
+                      SizedBox(
+                        height: _tv ? 30 : 40,
+                        child: _error == null
+                            ? null
+                            : Center(
+                                child: Text(
+                                  _error!,
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
                                 ),
                               ),
-                            ),
-                    ),
-                    GridView.count(
-                      shrinkWrap: true,
-                      crossAxisCount: 3,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
-                      children: <Widget>[
+                      ),
+                      GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 3,
+                        childAspectRatio: _tv ? 2.4 : 1.0,
+                        mainAxisSpacing: _tv ? 8 : 10,
+                        crossAxisSpacing: _tv ? 8 : 10,
+                        children: <Widget>[
                         for (var digit = 1; digit <= 9; digit++)
                           FilledButton.tonal(
                             autofocus: digit == 1,
@@ -277,15 +300,16 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
                               : const Icon(Icons.check_rounded),
                         ),
                       ],
-                    ),
-                    if (widget.onRecovery != null) ...[
-                      const SizedBox(height: 14),
-                      TextButton(
-                        onPressed: _busy ? null : _forgotPin,
-                        child: const Text('Forgot PIN?'),
                       ),
+                      if (widget.onRecovery != null) ...[
+                        SizedBox(height: _tv ? 8 : 14),
+                        TextButton(
+                          onPressed: _busy ? null : _forgotPin,
+                          child: const Text('Forgot PIN?'),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
