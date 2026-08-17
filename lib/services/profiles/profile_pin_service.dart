@@ -16,6 +16,18 @@ enum ProfilePinResult {
   notConfigured,
 }
 
+/// Outcome of a recovery-code attempt.
+enum ProfileRecoveryResult {
+  /// Code matched: the PIN and the (one-shot) code are cleared; the profile
+  /// opens without a PIN until a new one is set.
+  cleared,
+  invalid,
+
+  /// The profile has no PIN, or its PIN predates recovery codes (set before
+  /// this feature; a code is minted on the next PIN change).
+  notConfigured,
+}
+
 class ProfilePinVerification {
   final ProfilePinResult result;
   final DateTime? lockedUntil;
@@ -56,7 +68,11 @@ class ProfilePinService {
   /// Assigns a replacement PIN only after revalidating the currently active
   /// managing Admin. The lower-level [setPin] is restricted by the registry to
   /// pre-commit bootstrap/migration; live installs must use this method.
-  Future<void> setPinAsAdmin({
+  ///
+  /// Returns the freshly minted recovery code — the ONLY time it exists in
+  /// the clear. The caller must show it to the user once; only its hash is
+  /// stored, and every PIN change rotates it.
+  Future<String> setPinAsAdmin({
     required ProfileAuthorizationContext actor,
     required String targetProfileId,
     required String pin,
@@ -64,6 +80,13 @@ class ProfilePinService {
     _validatePin(pin);
     final salt = _randomBytes(16);
     final hash = await _derive(pin, salt, params);
+    final recoveryCode = _generateRecoveryCode();
+    final recoverySalt = _randomBytes(16);
+    final recoveryHash = await _derive(
+      _normalizeRecoveryCode(recoveryCode),
+      recoverySalt,
+      params,
+    );
     // KDF work is intentionally complete before the final actor check. The
     // registry repeats this authority condition inside the write transaction.
     await _authorizeAdmin(actor, targetProfileId);
@@ -72,10 +95,66 @@ class ProfilePinService {
       hash: hash,
       salt: salt,
       paramsJson: jsonEncode(params.toJson()),
+      recoveryHash: recoveryHash,
+      recoverySalt: recoverySalt,
+      recoveryParamsJson: jsonEncode(params.toJson()),
       actingProfileId: actor.profileId,
       actingAuthorizationRevision: actor.authorizationRevision,
       actingSessionEpoch: actor.sessionEpoch,
     );
+    return recoveryCode;
+  }
+
+  /// Self-service escape hatch for a forgotten PIN: a matching recovery code
+  /// removes the PIN entirely (and spends the code), letting the user in to
+  /// set a fresh one. Deliberately NOT throttled by the PIN lock — the code
+  /// has ~50 bits of entropy, so online guessing is not a real threat, and
+  /// its whole purpose is working when the PIN path is exhausted.
+  Future<ProfileRecoveryResult> verifyRecoveryCode(
+    String profileId,
+    String code,
+  ) async {
+    final record = await registry.getPinRecord(profileId);
+    if (record == null) throw StateError('Profile does not exist');
+    // Admin-reset state is a deliberate lockdown (possibly a compromised
+    // PIN); the pre-reset recovery code must not quietly undo it.
+    if (record.resetRequired ||
+        !record.hasPin ||
+        !record.hasRecoveryCode) {
+      return ProfileRecoveryResult.notConfigured;
+    }
+    final normalized = _normalizeRecoveryCode(code);
+    if (normalized.length != _recoveryCodeLength ||
+        normalized.codeUnits.any(
+          (unit) => !_recoveryAlphabet.codeUnits.contains(unit),
+        )) {
+      return ProfileRecoveryResult.invalid;
+    }
+    final PinKdfParams storedParams;
+    try {
+      final decoded = jsonDecode(record.recoveryParamsJson!);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Invalid recovery parameter record');
+      }
+      storedParams = PinKdfParams.fromJson(decoded);
+    } catch (_) {
+      return ProfileRecoveryResult.invalid;
+    }
+    final List<int> candidate;
+    try {
+      candidate = await _derive(normalized, record.recoverySalt!, storedParams);
+    } catch (_) {
+      return ProfileRecoveryResult.invalid;
+    }
+    if (!_constantTimeEquals(candidate, record.recoveryHash!)) {
+      return ProfileRecoveryResult.invalid;
+    }
+    final cleared = await registry.clearPinViaRecoveryIfUnchanged(
+      profileId: profileId,
+      expected: record,
+    );
+    if (!cleared) throw StateError('PIN authorization changed');
+    return ProfileRecoveryResult.cleared;
   }
 
   /// Removes PIN protection without ever revealing or verifying the old PIN.
@@ -236,6 +315,24 @@ class ProfilePinService {
       throw ArgumentError.value(pin, 'pin', 'PIN must contain 4–8 digits');
     }
   }
+
+  /// No 0/O/1/I/L: every character survives handwriting on a sticky note.
+  static const String _recoveryAlphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  static const int _recoveryCodeLength = 10;
+
+  /// ~49.5 bits of entropy, shown grouped (XXXXX-XXXXX) for transcription.
+  static String _generateRecoveryCode() {
+    final random = Random.secure();
+    final code = List<String>.generate(
+      _recoveryCodeLength,
+      (_) => _recoveryAlphabet[random.nextInt(_recoveryAlphabet.length)],
+    ).join();
+    return '${code.substring(0, 5)}-${code.substring(5)}';
+  }
+
+  /// Entry is forgiving: case, spaces, and dashes never matter.
+  static String _normalizeRecoveryCode(String code) =>
+      code.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
 
   static List<int> _randomBytes(int length) {
     final random = Random.secure();

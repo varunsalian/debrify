@@ -361,6 +361,47 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return builder.takeBytes();
   }
 
+  /// Shown exactly once, right after a PIN is set: the code exists only in
+  /// this dialog — the app stores a hash. Every PIN change mints a new one.
+  Future<void> _showRecoveryCode(String profileName, String code) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Save this recovery code'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'If the PIN for $profileName is ever forgotten, this code '
+              'removes it from the profile screen. It is shown only this '
+              'once — write it down or save it in a password manager.',
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: SelectableText(
+                code,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 26,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('I saved it'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _save() async {
     if (_saving || _name.text.trim().isEmpty) return;
     if (_resources == null || _engines == null || _setupLoadError != null) {
@@ -397,6 +438,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
     setState(() => _saving = true);
     PreparedProfileAvatar? preparedAvatar;
+    String? mintedRecoveryCode;
     try {
       if (snapshot.pendingAvatarBytes != null) {
         preparedAvatar = await ProfileAvatarIngest.prepare(
@@ -438,7 +480,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               );
             }
             if (snapshot.pin.isNotEmpty) {
-              await widget.pins.setPinAsAdmin(
+              mintedRecoveryCode = await widget.pins.setPinAsAdmin(
                 actor: operationActor,
                 targetProfileId: staged.id,
                 pin: snapshot.pin,
@@ -539,7 +581,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           operationActor.profileId,
         );
         if (snapshot.pin.isNotEmpty) {
-          await widget.pins.setPinAsAdmin(
+          mintedRecoveryCode = await widget.pins.setPinAsAdmin(
             actor: operationActor,
             targetProfileId: existing.id,
             pin: snapshot.pin,
@@ -570,6 +612,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (ProfileRuntime.isProfileCommitted &&
           widget.profile?.id == ProfileRuntime.capture().profileId) {
         MainPageBridge.reloadProfilePolicy?.call();
+      }
+      final recoveryCode = mintedRecoveryCode;
+      if (recoveryCode != null) {
+        await _showRecoveryCode(snapshot.name, recoveryCode);
+        if (!mounted) return;
       }
       Navigator.of(context).pop(true);
     } on ProfileAvatarRejected catch (rejected) {

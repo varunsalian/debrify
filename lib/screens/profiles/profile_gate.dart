@@ -259,6 +259,50 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
     return verification;
   }
 
+  /// A verified recovery code has already stripped the profile's PIN, so it
+  /// proceeds exactly like a successful PIN entry — plus a nudge to set a
+  /// replacement.
+  Future<ProfileRecoveryResult> _recoverPin(String code) async {
+    final target = _pinTarget!;
+    final result = await _pins!.verifyRecoveryCode(target.id, code);
+    if (result == ProfileRecoveryResult.cleared && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'PIN removed. Set a new one (and a new recovery code) in '
+            'Manage Profiles.',
+          ),
+          duration: Duration(seconds: 6),
+        ),
+      );
+      if (_pinForManagement) {
+        setState(() {
+          _pinTarget = null;
+          _pinForManagement = false;
+        });
+        // Let the recovery dialog's pop land first — opening management from
+        // inside onRecovery would push its route on top of the still-open
+        // dialog, freezing it beneath the management session. A zero-delay
+        // timer runs after the pop's microtask.
+        unawaited(
+          Future<void>.delayed(
+            Duration.zero,
+            () => _openManagement(target, pinVerified: true),
+          ),
+        );
+      } else {
+        // The PIN is gone whatever happens next; if activation fails, the
+        // stale PIN screen would be a dead end, so fall back to the picker.
+        setState(() {
+          _pinTarget = null;
+          _pinForManagement = false;
+        });
+        await _activate(target);
+      }
+    }
+    return result;
+  }
+
   Future<void> _manage() async {
     final authorization = await ProfileAuthorizationContext.capture(
       ProfileBootstrap.registry,
@@ -337,6 +381,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
       return ProfilePinScreen(
         profile: target,
         onSubmit: _verifyPin,
+        onRecovery: _recoverPin,
         onCancel: () => setState(() {
           _pinTarget = null;
           _pinForManagement = false;

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -19,7 +20,7 @@ import 'tvos_profile_recovery_store.dart';
 class ProfileRegistry {
   ProfileRegistry._(this._db);
 
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
   final Database _db;
   Future<void> _recoveryCheckpoint = Future<void>.value();
   Future<void> Function()? authorityWillChangeCallback;
@@ -101,10 +102,23 @@ class ProfileRegistry {
       dbPath,
       version: schemaVersion,
       onConfigure: (database) => database.execute('PRAGMA foreign_keys = ON'),
-      onCreate: (database, _) async => _createSchema(database),
+      onCreate: (database, _) async {
+        await _createSchema(database);
+        // Not in _schemaStatements, so spell it out: fresh installs went
+        // WITHOUT these triggers from v2 until 2026-08 — only upgraded
+        // installs ran the < 2 branch below. IF NOT EXISTS makes this safe
+        // for both paths.
+        await _createPinIntegrityTriggers(database);
+      },
       onUpgrade: (database, oldVersion, newVersion) async {
         if (oldVersion < 2) await _createPinIntegrityTriggers(database);
         if (oldVersion < 3) await _createRestoreResourceTable(database);
+        if (oldVersion < 4) {
+          await _addPinRecoveryColumns(database);
+          // Databases CREATED at v2/v3 never got the pin triggers (onCreate
+          // omitted them until v4); repair that here.
+          await _createPinIntegrityTriggers(database);
+        }
       },
     );
     return ProfileRegistry._(db);
@@ -115,6 +129,25 @@ class ProfileRegistry {
       await db.execute(statement);
     }
   }
+
+  /// v4: PIN recovery-code columns. Plain ADD COLUMN (works back to the
+  /// SQLite 3.9 OS floor); the set-together invariant with the PIN trio is
+  /// enforced in [setPinRecord] rather than a table CHECK, which ALTER
+  /// cannot add.
+  static Future<void> _addPinRecoveryColumns(DatabaseExecutor db) async {
+    await db.execute('ALTER TABLE user_profiles ADD COLUMN recovery_hash BLOB');
+    await db.execute(
+      'ALTER TABLE user_profiles ADD COLUMN recovery_salt BLOB',
+    );
+    await db.execute(
+      'ALTER TABLE user_profiles ADD COLUMN recovery_params_json TEXT',
+    );
+  }
+
+  /// Test seam: lets the migration suite build an older-schema database (by
+  /// stripping later columns) and prove the onUpgrade path against it.
+  @visibleForTesting
+  static List<String> get debugSchemaStatements => _schemaStatements;
 
   static const List<String> _schemaStatements = <String>[
     '''CREATE TABLE user_profiles (
@@ -135,6 +168,9 @@ class ProfileRegistry {
       pin_params_json TEXT,
       failed_pin_attempts INTEGER NOT NULL DEFAULT 0,
       locked_until_ms INTEGER,
+      recovery_hash BLOB,
+      recovery_salt BLOB,
+      recovery_params_json TEXT,
       lock_on_resume INTEGER NOT NULL DEFAULT 0,
       inactivity_timeout_minutes INTEGER,
       created_at_ms INTEGER NOT NULL,
@@ -2712,6 +2748,9 @@ class ProfileRegistry {
         'failed_pin_attempts',
         'locked_until_ms',
         'pin_reset_required',
+        'recovery_hash',
+        'recovery_salt',
+        'recovery_params_json',
       ],
       where: 'id = ? AND disabled_at_ms IS NULL',
       whereArgs: <Object>[profileId],
@@ -2726,6 +2765,9 @@ class ProfileRegistry {
       failedAttempts: row['failed_pin_attempts']! as int,
       lockedUntilMs: row['locked_until_ms'] as int?,
       resetRequired: row['pin_reset_required'] == 1,
+      recoveryHash: row['recovery_hash'] as Uint8List?,
+      recoverySalt: row['recovery_salt'] as Uint8List?,
+      recoveryParamsJson: row['recovery_params_json'] as String?,
     );
   }
 
@@ -2734,6 +2776,9 @@ class ProfileRegistry {
     required List<int>? hash,
     required List<int>? salt,
     required String? paramsJson,
+    List<int>? recoveryHash,
+    List<int>? recoverySalt,
+    String? recoveryParamsJson,
     bool resetRequired = false,
     String? actingProfileId,
     int? actingAuthorizationRevision,
@@ -2744,6 +2789,13 @@ class ProfileRegistry {
         (hash == null) != (paramsJson == null)) {
       throw ArgumentError(
         'PIN hash, salt, and parameters must be set together',
+      );
+    }
+    if ((recoveryHash == null) != (recoverySalt == null) ||
+        (recoveryHash == null) != (recoveryParamsJson == null) ||
+        (recoveryHash != null && hash == null)) {
+      throw ArgumentError(
+        'A recovery code must be complete and accompany a PIN',
       );
     }
     var changed = 0;
@@ -2760,6 +2812,15 @@ class ProfileRegistry {
           'pin_hash': hash == null ? null : Uint8List.fromList(hash),
           'pin_salt': salt == null ? null : Uint8List.fromList(salt),
           'pin_params_json': paramsJson,
+          // The recovery code lives and dies with the PIN it can reset:
+          // setting a PIN without one, or clearing the PIN, clears it.
+          'recovery_hash': recoveryHash == null
+              ? null
+              : Uint8List.fromList(recoveryHash),
+          'recovery_salt': recoverySalt == null
+              ? null
+              : Uint8List.fromList(recoverySalt),
+          'recovery_params_json': recoveryParamsJson,
           'pin_reset_required': resetRequired ? 1 : 0,
           'failed_pin_attempts': 0,
           'locked_until_ms': null,
@@ -2798,8 +2859,11 @@ class ProfileRegistry {
       if (rows.isEmpty) throw StateError('Profile does not exist');
       if (!_pinRecordMatches(rows.single, expected)) return null;
       final attempts = (rows.single['failed_pin_attempts']! as int) + 1;
-      final exponent = (attempts - 5).clamp(0, 7);
-      final lockSeconds = attempts < 5 ? 0 : min(3600, 30 * (1 << exponent));
+      // Household-lenient throttle (2026-08 product call): a family fumbling
+      // a shared remote gets 100 free attempts; only after that does the
+      // 30s-doubling lock (capped 1h) engage to keep scripted guessing out.
+      final exponent = (attempts - 100).clamp(0, 7);
+      final lockSeconds = attempts < 100 ? 0 : min(3600, 30 * (1 << exponent));
       final lockedUntil = lockSeconds == 0 ? null : nowMs + lockSeconds * 1000;
       await txn.update(
         'user_profiles',
@@ -2818,6 +2882,56 @@ class ProfileRegistry {
     });
     if (record != null) await checkpointTvOsRecovery();
     return record;
+  }
+
+  /// One-shot self-service PIN removal proven by the recovery code. Clears
+  /// the PIN, the (now spent) recovery code, the throttle state, and any
+  /// pending reset flag in one conditional write — the caller has already
+  /// verified the code against exactly [expected], so a concurrent Admin
+  /// change makes this a no-op instead of erasing a newer credential.
+  Future<bool> clearPinViaRecoveryIfUnchanged({
+    required String profileId,
+    required ProfilePinRecord expected,
+  }) async {
+    await authorityWillChangeCallback?.call();
+    var changed = false;
+    await _db.transaction((txn) async {
+      final rows = await txn.query(
+        'user_profiles',
+        columns: const <String>[
+          'pin_hash',
+          'pin_salt',
+          'pin_params_json',
+          'pin_reset_required',
+        ],
+        where: 'id = ? AND disabled_at_ms IS NULL',
+        whereArgs: <Object>[profileId],
+        limit: 1,
+      );
+      if (rows.isEmpty) throw StateError('Profile does not exist');
+      if (!_pinRecordMatches(rows.single, expected)) return;
+      changed =
+          await txn.update(
+            'user_profiles',
+            <String, Object?>{
+              'pin_hash': null,
+              'pin_salt': null,
+              'pin_params_json': null,
+              'recovery_hash': null,
+              'recovery_salt': null,
+              'recovery_params_json': null,
+              'pin_reset_required': 0,
+              'failed_pin_attempts': 0,
+              'locked_until_ms': null,
+              'updated_at_ms': DateTime.now().millisecondsSinceEpoch,
+            },
+            where: 'id = ?',
+            whereArgs: <Object>[profileId],
+          ) ==
+          1;
+    });
+    if (changed) await checkpointTvOsRecovery();
+    return changed;
   }
 
   Future<bool> normalizePinLockIfUnchanged({
@@ -2934,6 +3048,11 @@ class ProfileRegistry {
               'pin_hash': null,
               'pin_salt': null,
               'pin_params_json': null,
+              // The recovery code dies with the PIN it could reset — an
+              // Admin-forced reset must not leave a code that could undo it.
+              'recovery_hash': null,
+              'recovery_salt': null,
+              'recovery_params_json': null,
               'pin_reset_required': 1,
               'failed_pin_attempts': 0,
               'locked_until_ms': null,
@@ -4185,6 +4304,9 @@ class ProfilePinRecord {
   final int failedAttempts;
   final int? lockedUntilMs;
   final bool resetRequired;
+  final Uint8List? recoveryHash;
+  final Uint8List? recoverySalt;
+  final String? recoveryParamsJson;
 
   const ProfilePinRecord({
     this.hash,
@@ -4193,11 +4315,16 @@ class ProfilePinRecord {
     this.failedAttempts = 0,
     this.lockedUntilMs,
     this.resetRequired = false,
+    this.recoveryHash,
+    this.recoverySalt,
+    this.recoveryParamsJson,
   });
 
   bool get hasPin => hash != null && salt != null && paramsJson != null;
   bool get isCorrupt =>
       (hash != null || salt != null || paramsJson != null) && !hasPin;
+  bool get hasRecoveryCode =>
+      recoveryHash != null && recoverySalt != null && recoveryParamsJson != null;
 }
 
 extension<T> on List<T> {

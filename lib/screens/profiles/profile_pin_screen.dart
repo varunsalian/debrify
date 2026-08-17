@@ -3,17 +3,24 @@ import 'package:flutter/services.dart';
 
 import '../../models/profiles/user_profile.dart';
 import '../../services/profiles/profile_pin_service.dart';
+import '../../widgets/tv_text_field.dart';
 
 class ProfilePinScreen extends StatefulWidget {
   final UserProfile profile;
   final Future<ProfilePinVerification> Function(String pin) onSubmit;
   final VoidCallback onCancel;
 
+  /// Recovery-code fallback for a forgotten PIN. When provided, the screen
+  /// shows a "Forgot PIN?" action; a verified code has already REMOVED the
+  /// profile's PIN by the time this returns [ProfileRecoveryResult.cleared].
+  final Future<ProfileRecoveryResult> Function(String code)? onRecovery;
+
   const ProfilePinScreen({
     super.key,
     required this.profile,
     required this.onSubmit,
     required this.onCancel,
+    this.onRecovery,
   });
 
   @override
@@ -74,6 +81,94 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
         _ => null,
       };
     });
+  }
+
+  Future<void> _forgotPin() async {
+    final onRecovery = widget.onRecovery;
+    if (onRecovery == null || _busy) return;
+    final controller = TextEditingController();
+    String? errorText;
+    var submitting = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          Future<void> submit() async {
+            if (submitting || controller.text.trim().isEmpty) return;
+            setDialogState(() => submitting = true);
+            ProfileRecoveryResult result;
+            try {
+              result = await onRecovery(controller.text);
+            } catch (_) {
+              result = ProfileRecoveryResult.invalid;
+            }
+            if (!dialogContext.mounted) return;
+            switch (result) {
+              case ProfileRecoveryResult.cleared:
+                Navigator.of(dialogContext).pop();
+              case ProfileRecoveryResult.invalid:
+                setDialogState(() {
+                  submitting = false;
+                  errorText = 'That code does not match';
+                });
+              case ProfileRecoveryResult.notConfigured:
+                setDialogState(() {
+                  submitting = false;
+                  errorText =
+                      'No recovery code exists for this profile — an Admin '
+                      'must reset the PIN';
+                });
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Recover profile'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Enter the recovery code shown when this PIN was set. '
+                  'It removes the PIN so you can set a new one.',
+                ),
+                const SizedBox(height: 12),
+                TvTextField(
+                  controller: controller,
+                  autofocus: true,
+                  textInputAction: TextInputAction.done,
+                  keyboardSubmitLabel: 'Recover',
+                  decoration: InputDecoration(
+                    labelText: 'Recovery code',
+                    hintText: 'XXXXX-XXXXX',
+                    errorText: errorText,
+                  ),
+                  onSubmitted: (_) => submit(),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: submitting ? null : submit,
+                child: submitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Recover'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    controller
+      ..clear()
+      ..dispose();
   }
 
   KeyEventResult _handleHardwareKey(FocusNode node, KeyEvent event) {
@@ -183,6 +278,13 @@ class _ProfilePinScreenState extends State<ProfilePinScreen> {
                         ),
                       ],
                     ),
+                    if (widget.onRecovery != null) ...[
+                      const SizedBox(height: 14),
+                      TextButton(
+                        onPressed: _busy ? null : _forgotPin,
+                        child: const Text('Forgot PIN?'),
+                      ),
+                    ],
                   ],
                 ),
               ),
