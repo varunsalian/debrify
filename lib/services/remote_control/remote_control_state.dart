@@ -919,6 +919,32 @@ class RemoteControlState extends ChangeNotifier {
     String? data,
     RemoteCommandContext context,
   ) {
+    // Chunk gap-repair requests arrive on the SENDER, whose normal command
+    // callbacks are wired only in receiver mode — routed through them, a
+    // phone that never visited the receiver role would drop every repair
+    // request and the fast chunk pacing would lose transfers it was designed
+    // to save. Handle the request here, where every inbound decrypted
+    // command passes regardless of role.
+    if (action == RemoteAction.config &&
+        command == ConfigCommand.debrifyChannelNeed) {
+      if (data != null &&
+          context.encrypted &&
+          context.authorized &&
+          context.sourceIp != null) {
+        final need = parseChunkNeedBody(data);
+        if (need != null) {
+          unawaited(
+            ChunkResendCache.resend(
+              this,
+              need.transferId,
+              need.missing,
+              requesterIp: context.sourceIp!,
+            ),
+          );
+        }
+      }
+      return;
+    }
     final contextual = onCommandReceivedWithContext;
     if (contextual != null) {
       contextual(action, command, data, context);

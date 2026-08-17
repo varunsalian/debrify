@@ -165,6 +165,12 @@ class ConfigCommand {
   // config command can travel this way.
   static const String debrifyChannelStart = 'debrify_channel_start';
   static const String debrifyChannelChunk = 'debrify_channel_chunk';
+  // Gap repair, receiver → sender: "these chunk indices never arrived,
+  // resend them." This is what lets the sender pace aggressively — a lost
+  // datagram costs one small repair round instead of the whole transfer.
+  // v2-only by construction: it rides the encrypted session, and v1 senders
+  // (which keep the old slow pace) never receive one.
+  static const String debrifyChannelNeed = 'debrify_channel_need';
   // A picked avatar image from the paired phone. NOT setup data: it applies
   // to the active profile immediately instead of joining the staged import.
   static const String profileAvatar = 'profile_avatar';
@@ -173,6 +179,33 @@ class ConfigCommand {
 }
 
 /// Chunked transfer constants
+///
+/// Pace and repair tuning. The old design paced 50ms/chunk with no recovery
+/// — ~18 KB/s, so a 1 MB channel took 75 seconds and ONE lost datagram lost
+/// the whole transfer anyway. The current design paces fast and repairs:
+/// the receiver watches for stalls, asks for exactly the missing indices
+/// over the encrypted session, and the sender replays them from a short-
+/// lived cache.
+const Duration kChunkPace = Duration(milliseconds: 4);
+
+/// Quiet time on the receiver before it asks for missing chunks. Long enough
+/// that in-flight datagrams land first; short enough that a repair round is
+/// cheap.
+const Duration kChunkRepairStall = Duration(milliseconds: 1200);
+
+/// Repair rounds before the receiver gives up. Bounds the worst case at
+/// roughly rounds × stall on a dead link.
+const int kChunkRepairMaxRounds = 8;
+
+/// Missing indices per need packet — the whole request must fit one SEALED
+/// datagram (ecmd envelope: ~880 payload bytes; five-digit indices cost 6
+/// each). The budget test pins this. A round that cannot name every gap
+/// catches the rest on the next round.
+const int kChunkNeedMaxIndices = 100;
+
+/// How long a sender keeps a finished transfer's chunks for repair.
+const Duration kChunkResendCacheTtl = Duration(seconds: 90);
+
 const int kChunkMaxBytes =
     1400; // Safe single-fragment UDP payload (MTU 1500 - IP/UDP headers)
 const int kChunkJsonOverhead = 120; // JSON envelope overhead per chunk packet

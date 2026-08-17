@@ -517,4 +517,44 @@ void encryptedBudgetTests() {
       expect(lo, lessThan(kChunkDataMaxBytes));
     });
   });
+
+  group('gap repair', () {
+    test('need body round-trips and caps the index list', () {
+      final parsed = parseChunkNeedBody(
+        chunkNeedBody(transferId: 't1', missing: [0, 7, 42]),
+      );
+      expect(parsed, isNotNull);
+      expect(parsed!.transferId, 't1');
+      expect(parsed.missing, [0, 7, 42]);
+
+      // Oversized request lists are truncated at build AND parse time, so
+      // neither end trusts the other about the cap.
+      final huge = List<int>.generate(kChunkNeedMaxIndices * 2, (i) => i);
+      final capped = parseChunkNeedBody(
+        chunkNeedBody(transferId: 't2', missing: huge),
+      );
+      expect(capped!.missing.length, kChunkNeedMaxIndices);
+    });
+
+    test('a full need packet still fits one datagram', () {
+      // Worst realistic case: the cap's worth of five-digit indices (a 16MB
+      // transfer tops out under 19k chunks).
+      final missing = List<int>.generate(
+        kChunkNeedMaxIndices,
+        (i) => 18000 - i,
+      );
+      final body = chunkNeedBody(transferId: 'x' * 40, missing: missing);
+      // The need rides an ecmd envelope, so budget like the encrypted path.
+      expect(fitsSinglePacketEncrypted(body), isTrue);
+    });
+
+    test('malformed need requests are rejected, never thrown', () {
+      expect(parseChunkNeedBody('not json'), isNull);
+      expect(parseChunkNeedBody('{"transferId":"t"}'), isNull);
+      expect(parseChunkNeedBody('{"transferId":"t","need":[]}'), isNull);
+      expect(parseChunkNeedBody('{"transferId":"t","need":[-1]}'), isNull);
+      expect(parseChunkNeedBody('{"transferId":"t","need":["a"]}'), isNull);
+      expect(parseChunkNeedBody('{"transferId":"","need":[1]}'), isNull);
+    });
+  });
 }

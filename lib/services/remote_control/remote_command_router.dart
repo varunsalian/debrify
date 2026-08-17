@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'remote_constants.dart';
 import 'remote_control_state.dart';
 import 'remote_pairing_store.dart';
+import 'remote_chunked_send.dart';
 import 'remote_session.dart';
 import 'udp_command_service.dart';
 import '../../widgets/remote/remote_pairing_dialog.dart';
@@ -700,6 +701,28 @@ class RemoteCommandRouter {
 
     if (data == null) {
       debugPrint('RemoteCommandRouter: Config command missing data');
+      return;
+    }
+
+    // Gap repair for an outbound chunk transfer. Defense-in-depth only:
+    // RemoteControlState._dispatch consumes every need before the role
+    // callbacks that feed this router, so in production this branch is
+    // unreachable — it exists so a future dispatch refactor cannot silently
+    // turn repair requests into staged-import categories below. Same guards
+    // as the live path: authorized encrypted session + requester binding.
+    if (command == ConfigCommand.debrifyChannelNeed) {
+      final requesterIp = context.sourceIp;
+      if (context.encrypted && context.authorized && requesterIp != null) {
+        final need = parseChunkNeedBody(data);
+        if (need != null) {
+          await ChunkResendCache.resend(
+            RemoteControlState(),
+            need.transferId,
+            need.missing,
+            requesterIp: requesterIp,
+          );
+        }
+      }
       return;
     }
 
@@ -2239,6 +2262,7 @@ class RemoteCommandRouter {
       // path forever. Nothing legitimate names one, so refuse outright.
       if (kind == ConfigCommand.debrifyChannelStart ||
           kind == ConfigCommand.debrifyChannelChunk ||
+          kind == ConfigCommand.debrifyChannelNeed ||
           kind == ConfigCommand.complete) {
         debugPrint('RemoteCommandRouter: refusing recursive chunk transfer');
         return;
@@ -2256,6 +2280,17 @@ class RemoteCommandRouter {
         throw const FormatException('Too many active transfers');
       }
       existing?.timeout?.cancel();
+      // The sender fires its start packet twice (a lost start is the one
+      // packet gap-repair cannot recover). A duplicate for a transfer that
+      // is already receiving must be a NO-OP — rebuilding the buffer would
+      // wipe every chunk that already landed.
+      if (existing != null &&
+          existing.totalChunks == totalChunks &&
+          existing.kind == kind &&
+          existing.receivedCount > 0) {
+        _armChunkTimeout(transferId, existing);
+        return;
+      }
 
       final buffer = _ChunkBuffer(
         label: label,
@@ -2281,14 +2316,68 @@ class RemoteCommandRouter {
   }
 
   /// (Re)start a transfer's stall deadline.
+  ///
+  /// v2 (sealed) transfers repair instead of dying: after a short stall the
+  /// receiver names the missing indices over the session and the sender
+  /// replays them — this is what makes the sender's aggressive pacing safe.
+  /// Plain v1 transfers have no session to carry that request, so they keep
+  /// the original single long deadline.
   void _armChunkTimeout(String transferId, _ChunkBuffer buffer) {
     buffer.timeout?.cancel();
-    buffer.timeout = Timer(kChunkTransferTimeout, () {
-      debugPrint('RemoteCommandRouter: chunk transfer stalled');
-      _chunkBuffers.remove(transferId);
-      // A silent drop reads as success from the sender's side, so the
-      // receiving end has to be the one that says the data never landed.
-      _showSnackBar('Transfer timed out: ${buffer.label}', isError: true);
+    if (!buffer.encrypted) {
+      buffer.timeout = Timer(kChunkTransferTimeout, () {
+        debugPrint('RemoteCommandRouter: chunk transfer stalled');
+        _chunkBuffers.remove(transferId);
+        // A silent drop reads as success from the sender's side, so the
+        // receiving end has to be the one that says the data never landed.
+        _showSnackBar('Transfer timed out: ${buffer.label}', isError: true);
+      });
+      return;
+    }
+    buffer.timeout = Timer(kChunkRepairStall, () {
+      final missing = <int>[];
+      for (
+        var i = 0;
+        i < buffer.totalChunks && missing.length < kChunkNeedMaxIndices;
+        i++
+      ) {
+        if (buffer.chunks[i] == null) missing.add(i);
+      }
+      if (missing.isEmpty) return; // completion raced the timer
+      final state = RemoteControlState();
+      final sid = buffer.sidB64;
+      final session = sid == null
+          ? null
+          : state.sessionManager?.sessionBySid(sid);
+      if (buffer.repairRounds >= kChunkRepairMaxRounds || session == null) {
+        debugPrint('RemoteCommandRouter: chunk transfer stalled beyond repair');
+        _chunkBuffers.remove(transferId);
+        _showSnackBar('Transfer timed out: ${buffer.label}', isError: true);
+        return;
+      }
+      buffer.repairRounds++;
+      debugPrint(
+        'RemoteCommandRouter: requesting ${missing.length} missing chunk(s), '
+        'repair round ${buffer.repairRounds}',
+      );
+      // Guarded: sendEncryptedCommand can THROW (profile scope changed
+      // mid-transfer), and an unawaited raw future would surface that as an
+      // uncaught zone error from a timer callback.
+      unawaited(() async {
+        try {
+          await state.sendEncryptedCommand(
+            session,
+            RemoteCommand(
+              action: RemoteAction.config,
+              command: ConfigCommand.debrifyChannelNeed,
+              data: chunkNeedBody(transferId: transferId, missing: missing),
+            ),
+          );
+        } catch (_) {
+          debugPrint('RemoteCommandRouter: repair request send failed');
+        }
+      }());
+      _armChunkTimeout(transferId, buffer);
     });
   }
 
@@ -2787,6 +2876,10 @@ class _ChunkBuffer {
   Timer? timeout;
 
   int receivedCount = 0;
+
+  /// Gap-repair rounds already spent (v2 transfers only) — bounds the worst
+  /// case on a dead link at roughly rounds × [kChunkRepairStall].
+  int repairRounds = 0;
 
   _ChunkBuffer({
     required this.label,
