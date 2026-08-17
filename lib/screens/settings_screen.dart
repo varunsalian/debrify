@@ -6042,8 +6042,18 @@ class _SettingsSearchBar extends StatefulWidget {
 }
 
 class _SettingsSearchBarState extends State<_SettingsSearchBar> {
-  bool _focused = false;
+  final FocusNode _node = FocusNode(debugLabel: 'settingsSearchBar');
   bool _hovered = false;
+
+  /// Live, never cached — see the note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _node.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -6053,9 +6063,10 @@ class _SettingsSearchBarState extends State<_SettingsSearchBar> {
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
+        focusNode: _node,
         borderRadius: BorderRadius.circular(12),
         onTap: widget.onTap,
-        onFocusChange: (f) => setState(() => _focused = f),
+        onFocusChange: (_) => setState(() {}),
         onHover: (h) => setState(() => _hovered = h),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),

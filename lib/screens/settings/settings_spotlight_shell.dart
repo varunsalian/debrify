@@ -442,8 +442,17 @@ class SettingsSpotlightSearchButton extends StatefulWidget {
 
 class _SettingsSpotlightSearchButtonState
     extends State<SettingsSpotlightSearchButton> {
-  bool _focused = false;
+  final FocusNode _node = FocusNode(debugLabel: 'settingsSearchButton');
   bool _hovered = false;
+
+  /// Live, never cached — see the note on `_SettingsTileState._focused`.
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _node.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -462,7 +471,8 @@ class _SettingsSpotlightSearchButtonState
         borderRadius: radius,
         child: InkWell(
           onTap: widget.onTap,
-          onFocusChange: (value) => setState(() => _focused = value),
+          focusNode: _node,
+          onFocusChange: (_) => setState(() {}),
           onHover: (value) => setState(() => _hovered = value),
           borderRadius: radius,
           child: Container(
@@ -527,8 +537,17 @@ class _SettingsRailItem extends StatefulWidget {
 }
 
 class _SettingsRailItemState extends State<_SettingsRailItem> {
-  bool _focused = false;
+  final FocusNode _node = FocusNode(debugLabel: 'settingsRailItem');
   bool _hovered = false;
+
+  /// Live, never cached — see the note on `_SettingsTileState._focused`.
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _node.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -551,7 +570,8 @@ class _SettingsRailItemState extends State<_SettingsRailItem> {
         borderRadius: radius,
         child: InkWell(
           onTap: widget.onTap,
-          onFocusChange: (value) => setState(() => _focused = value),
+          focusNode: _node,
+          onFocusChange: (_) => setState(() {}),
           onHover: (value) => setState(() => _hovered = value),
           borderRadius: radius,
           child: Container(
@@ -662,8 +682,17 @@ class _SettingsCategoryCard extends StatefulWidget {
 }
 
 class _SettingsCategoryCardState extends State<_SettingsCategoryCard> {
-  bool _focused = false;
+  final FocusNode _node = FocusNode(debugLabel: 'settingsCategoryCard');
   bool _hovered = false;
+
+  /// Live, never cached — see the note on `_SettingsTileState._focused`.
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _node.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -690,7 +719,8 @@ class _SettingsCategoryCardState extends State<_SettingsCategoryCard> {
         borderRadius: radius,
         child: InkWell(
           onTap: widget.onTap,
-          onFocusChange: (value) => setState(() => _focused = value),
+          focusNode: _node,
+          onFocusChange: (_) => setState(() {}),
           onHover: (value) => setState(() => _hovered = value),
           borderRadius: radius,
           child: Container(
@@ -839,8 +869,17 @@ class SettingsSpotlightSummaryCard extends StatefulWidget {
 
 class _SettingsSpotlightSummaryCardState
     extends State<SettingsSpotlightSummaryCard> {
-  bool _focused = false;
+  final FocusNode _node = FocusNode(debugLabel: 'settingsSummaryCard');
   bool _hovered = false;
+
+  /// Live, never cached — see the note on `_SettingsTileState._focused`.
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _node.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -862,7 +901,8 @@ class _SettingsSpotlightSummaryCardState
         borderRadius: radius,
         child: InkWell(
           onTap: widget.onTap,
-          onFocusChange: (value) => setState(() => _focused = value),
+          focusNode: _node,
+          onFocusChange: (_) => setState(() {}),
           onHover: (value) => setState(() => _hovered = value),
           borderRadius: radius,
           child: Container(

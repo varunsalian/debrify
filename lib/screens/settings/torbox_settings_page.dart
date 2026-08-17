@@ -856,7 +856,21 @@ class _FocusRing extends StatefulWidget {
 }
 
 class _FocusRingState extends State<_FocusRing> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -866,7 +880,8 @@ class _FocusRingState extends State<_FocusRing> {
     return Focus(
       skipTraversal: true,
       canRequestFocus: false,
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       child: Container(
         decoration: BoxDecoration(
           color: (_focused && widget.fill) ? t.panel2 : null,

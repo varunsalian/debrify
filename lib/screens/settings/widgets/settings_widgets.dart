@@ -1346,8 +1346,15 @@ class ConnectionCard extends StatefulWidget {
 }
 
 class _ConnectionCardState extends State<ConnectionCard> {
-  bool _focused = false;
+  /// The wrapper's own node, so focus can be read rather than remembered —
+  /// see the note on `_SettingsTileState._focused`.
+  final FocusNode _wrapNode = FocusNode(debugLabel: 'ConnectionCard');
+
   bool _hovered = false;
+
+  /// Live, never cached. `hasFocus` here is ancestor-inclusive, so it is true
+  /// while the card's own InkWell holds focus — which is the intent.
+  bool get _focused => _wrapNode.hasFocus;
 
   /// The theme's tempo, resolved in the one hook that may depend on inherited
   /// widgets and still re-runs when they change. The reveal below fires from a
@@ -1358,6 +1365,12 @@ class _ConnectionCardState extends State<ConnectionCard> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _motion = AppMotion.of(context);
+  }
+
+  @override
+  void dispose() {
+    _wrapNode.dispose();
+    super.dispose();
   }
 
   // Helper to focus and scroll into view
@@ -1430,10 +1443,11 @@ class _ConnectionCardState extends State<ConnectionCard> {
       shape: ParallaxShape.settingsRow,
       radius: radius,
       child: Focus(
+        focusNode: _wrapNode,
         onKeyEvent: _onKeyEvent,
         // hasFocus includes the InkWell child node, so this lights up when the
         // card's InkWell receives DPAD focus.
-        onFocusChange: (f) => setState(() => _focused = f),
+        onFocusChange: (_) => setState(() {}),
         child: MouseRegion(
           onEnter: (_) => setState(() => _hovered = true),
           onExit: (_) => setState(() => _hovered = false),
@@ -1694,8 +1708,19 @@ class SettingsLookHero extends StatefulWidget {
 }
 
 class _SettingsLookHeroState extends State<SettingsLookHero> {
-  bool _focused = false;
+  FocusNode? _ownNode;
+  FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
+
   bool _hovered = false;
+
+  /// Live, never cached — see the note on `_SettingsTileState._focused`.
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _ownNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1713,8 +1738,8 @@ class _SettingsLookHeroState extends State<SettingsLookHero> {
         color: Colors.transparent,
         borderRadius: radius,
         child: InkWell(
-          focusNode: widget.focusNode,
-          onFocusChange: (value) => setState(() => _focused = value),
+          focusNode: _node,
+          onFocusChange: (_) => setState(() {}),
           onHover: (value) => setState(() => _hovered = value),
           onTap: () async => await widget.onTap(),
           borderRadius: radius,
@@ -1912,8 +1937,33 @@ class SettingsTile extends StatefulWidget {
 }
 
 class _SettingsTileState extends State<SettingsTile> {
-  bool _focused = false;
+  /// Owned only when the caller did not supply one.
+  FocusNode? _ownNode;
+  FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
+
   bool _hovered = false;
+
+  /// Read LIVE from the node, never cached from `onFocusChange`.
+  ///
+  /// A cached bool is only as good as the callback that maintains it, and
+  /// Flutter does not guarantee the falling edge: pop a route that was opened
+  /// with OK and focus is restored to the MODAL SCOPE rather than to a row, so
+  /// the rows that were focus-walked on the way in are never told they lost
+  /// it. They keep their cached `true`, and under the Spotlight look that is
+  /// not a faint stale highlight — every one of them paints a solid white
+  /// plate, so the list comes back from a sub-page with two or three cursors
+  /// on it and no way to tell which row OK will open.
+  ///
+  /// Derived state cannot go stale: `onFocusChange` below only asks for a
+  /// rebuild, and the value is re-read here. Any later frame — and a route
+  /// transition brings plenty — corrects it.
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _ownNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1945,11 +1995,11 @@ class _SettingsTileState extends State<SettingsTile> {
           ),
         ),
         child: InkWell(
-          focusNode: widget.focusNode,
+          focusNode: _node,
           // Also drops the row out of DPAD traversal — an unfocusable node
           // never enters the traversal ring, so no remote step is eaten.
           canRequestFocus: widget.enabled,
-          onFocusChange: (f) => setState(() => _focused = f),
+          onFocusChange: (_) => setState(() {}),
           onHover: (h) => setState(() => _hovered = h),
           onTap: widget.enabled
               ? () async {
@@ -2112,8 +2162,19 @@ class SettingsToggleTile extends StatefulWidget {
 }
 
 class _SettingsToggleTileState extends State<SettingsToggleTile> {
-  bool _focused = false;
+  FocusNode? _ownNode;
+  FocusNode get _node => widget.focusNode ?? (_ownNode ??= FocusNode());
+
   bool _hovered = false;
+
+  /// Live, never cached — see the note on `_SettingsTileState._focused`.
+  bool get _focused => _node.hasFocus;
+
+  @override
+  void dispose() {
+    _ownNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2142,8 +2203,8 @@ class _SettingsToggleTileState extends State<SettingsToggleTile> {
           ),
         ),
         child: InkWell(
-          focusNode: widget.focusNode,
-          onFocusChange: (f) => setState(() => _focused = f),
+          focusNode: _node,
+          onFocusChange: (_) => setState(() {}),
           onHover: (h) => setState(() => _hovered = h),
           onTap: () => widget.onChanged(!widget.value),
           borderRadius: radius,

@@ -1455,7 +1455,10 @@ class _RailEntry extends StatefulWidget {
 }
 
 class _RailEntryState extends State<_RailEntry> {
-  bool _focused = false;
+  /// Live, never cached — a remembered flag survives the focus change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  bool get _focused => widget.focusNode.hasFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -1466,7 +1469,7 @@ class _RailEntryState extends State<_RailEntry> {
       focusNode: widget.focusNode,
       onFocusChange: (has) {
         if (!mounted) return;
-        setState(() => _focused = has);
+        setState(() {});
         if (has) {
           widget.onFocused();
           // Keep the entry on screen when DPAD walks past the fold.
@@ -1816,19 +1819,31 @@ class _PaneRow extends StatefulWidget {
 }
 
 class _PaneRowState extends State<_PaneRow> {
-  bool _focused = false;
+  /// Live, never cached — a remembered flag survives the focus change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode =>
+      widget.focusNode ?? (_ownFocusNode ??= FocusNode());
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = AppThemeScope.of(context).settings;
     final tint = widget.danger ? t.danger : t.accent2;
     return Focus(
-      focusNode: widget.focusNode,
+      focusNode: _focusNode,
       canRequestFocus: widget.onTap != null,
       descendantsAreFocusable: false,
       onFocusChange: (has) {
         if (!mounted) return;
-        setState(() => _focused = has);
+        setState(() {});
         if (has) {
           Scrollable.ensureVisible(
             context,
@@ -1946,7 +1961,10 @@ class _MethodCard extends StatefulWidget {
 }
 
 class _MethodCardState extends State<_MethodCard> {
-  bool _focused = false;
+  /// Live, never cached — a remembered flag survives the focus change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  bool get _focused => widget.focusNode.hasFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -1954,7 +1972,7 @@ class _MethodCardState extends State<_MethodCard> {
     return Focus(
       focusNode: widget.focusNode,
       onFocusChange: (has) {
-        if (mounted) setState(() => _focused = has);
+        if (mounted) setState(() {});
       },
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent) {

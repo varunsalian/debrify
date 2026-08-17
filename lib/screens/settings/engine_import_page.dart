@@ -1702,7 +1702,10 @@ class _EnginePillButton extends StatefulWidget {
 }
 
 class _EnginePillButtonState extends State<_EnginePillButton> {
-  bool _focused = false;
+  /// Live, never cached — a remembered flag survives the focus change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  bool get _focused => widget.focusNode.hasFocus;
 
   @override
   void initState() {
@@ -1716,7 +1719,7 @@ class _EnginePillButtonState extends State<_EnginePillButton> {
     super.dispose();
   }
 
-  void _onFocus() => setState(() => _focused = widget.focusNode.hasFocus);
+  void _onFocus() => setState(() {});
 
   @override
   Widget build(BuildContext context) {

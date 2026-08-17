@@ -2432,7 +2432,10 @@ class _GlowFocusButton extends StatefulWidget {
 }
 
 class _GlowFocusButtonState extends State<_GlowFocusButton> {
-  bool _focused = false;
+  /// Live, never cached — a remembered flag survives the focus change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  bool get _focused => widget.focusNode.hasFocus;
 
   @override
   void initState() {
@@ -2446,7 +2449,7 @@ class _GlowFocusButtonState extends State<_GlowFocusButton> {
     super.dispose();
   }
 
-  void _onFocus() => setState(() => _focused = widget.focusNode.hasFocus);
+  void _onFocus() => setState(() {});
 
   @override
   Widget build(BuildContext context) {

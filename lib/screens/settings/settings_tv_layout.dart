@@ -1263,7 +1263,10 @@ class _RailItem extends StatefulWidget {
 }
 
 class _RailItemState extends State<_RailItem> {
-  bool _focused = false;
+  /// Live, never cached — a remembered flag survives the focus change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  bool get _focused => widget.focusNode.hasFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -1293,7 +1296,7 @@ class _RailItemState extends State<_RailItem> {
               borderRadius: radius,
               onTap: widget.onActivate,
               onFocusChange: (f) {
-                setState(() => _focused = f);
+                setState(() {});
                 if (f) {
                   widget.onFocused(widget.index);
                   // Scroll the focused item into view — the rail scrolls now.
@@ -1405,7 +1408,10 @@ class _RailSearchItem extends StatefulWidget {
 }
 
 class _RailSearchItemState extends State<_RailSearchItem> {
-  bool _focused = false;
+  /// Live, never cached — a remembered flag survives the focus change it
+  /// missed. See the note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  bool get _focused => widget.focusNode.hasFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -1437,7 +1443,7 @@ class _RailSearchItemState extends State<_RailSearchItem> {
               borderRadius: radius,
               onTap: widget.onActivate,
               onFocusChange: (f) {
-                setState(() => _focused = f);
+                setState(() {});
                 if (f) {
                   // Reveal the top of the rail (search sits above category 0).
                   WidgetsBinding.instance.addPostFrameCallback((_) {

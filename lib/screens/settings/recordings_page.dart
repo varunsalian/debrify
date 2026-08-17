@@ -1276,7 +1276,21 @@ class _ScheduleRow extends StatefulWidget {
 }
 
 class _ScheduleRowState extends State<_ScheduleRow> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1284,7 +1298,8 @@ class _ScheduleRowState extends State<_ScheduleRow> {
     final title = s.programmeTitle.isEmpty ? s.channelName : s.programmeTitle;
     return Focus(
       autofocus: widget.autofocus,
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onCancel();
@@ -1429,7 +1444,22 @@ class _LibraryRow extends StatefulWidget {
 }
 
 class _LibraryRowState extends State<_LibraryRow> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode =>
+      widget.focusNode ?? (_ownFocusNode ??= FocusNode());
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1449,9 +1479,9 @@ class _LibraryRowState extends State<_LibraryRow> {
         children: [
           Expanded(
             child: Focus(
-              focusNode: widget.focusNode,
+              focusNode: _focusNode,
               autofocus: widget.autofocus,
-              onFocusChange: (f) => setState(() => _focused = f),
+              onFocusChange: (_) => setState(() {}),
               onKeyEvent: (node, event) {
                 if (event is KeyDownEvent &&
                     isActivateOrSpaceKey(event.logicalKey)) {
@@ -1733,12 +1763,27 @@ class _AlarmBanner extends StatefulWidget {
 }
 
 class _AlarmBannerState extends State<_AlarmBanner> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onTap();
@@ -1832,7 +1877,21 @@ class _HubButton extends StatefulWidget {
 }
 
 class _HubButtonState extends State<_HubButton> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1850,7 +1909,8 @@ class _HubButtonState extends State<_HubButton> {
     }
     return Focus(
       autofocus: widget.autofocus,
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onPressed();
@@ -1925,12 +1985,27 @@ class _HubIconButton extends StatefulWidget {
 }
 
 class _HubIconButtonState extends State<_HubIconButton> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onPressed();
@@ -1993,12 +2068,27 @@ class _RowIconButton extends StatefulWidget {
 }
 
 class _RowIconButtonState extends State<_RowIconButton> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Focus(
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent && isActivateOrSpaceKey(event.logicalKey)) {
           widget.onPressed();

@@ -1391,7 +1391,21 @@ class _FocusHighlight extends StatefulWidget {
 }
 
 class _FocusHighlightState extends State<_FocusHighlight> {
-  bool _focused = false;
+  /// Live, never cached: Flutter does not guarantee the falling edge of
+  /// `onFocusChange` — popping a route opened with OK restores focus to the
+  /// modal scope rather than to a row, so rows that were focus-walked on the
+  /// way in are never told they lost it and keep painting as focused. See the
+  /// note on `_SettingsTileState._focused` in
+  /// `settings/widgets/settings_widgets.dart`.
+  FocusNode? _ownFocusNode;
+  FocusNode get _focusNode => _ownFocusNode ??= FocusNode();
+  bool get _focused => _focusNode.hasFocus;
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1400,7 +1414,8 @@ class _FocusHighlightState extends State<_FocusHighlight> {
       skipTraversal: true,
       // hasFocus includes descendants, so this fires when the child's
       // Switch/dropdown receives DPAD focus.
-      onFocusChange: (f) => setState(() => _focused = f),
+      focusNode: _focusNode,
+      onFocusChange: (_) => setState(() {}),
       child: widget.builder(context, _focused),
     );
   }
