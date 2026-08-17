@@ -8,20 +8,26 @@ import '../../services/profiles/profile_bootstrap.dart';
 import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_runtime.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
+import '../../widgets/remote/remote_control_screen.dart';
 import '../profiles/edit_profile_screen.dart';
 import '../profiles/profile_wall_screen.dart';
 import '../profiles/manage_profiles_screen.dart';
+import '../profiles/profile_row_actions.dart';
 import '../profiles/profile_setup_flow.dart';
+import 'profile_backup_flows.dart';
 
-/// Settings → Profiles: the roster, and almost nothing else.
+/// Settings → Profiles: the household hub.
 ///
-/// Deliberately thin — everything about one person (avatar, PIN, role, access)
-/// lives in that person's profile via Edit, and destructive management
-/// (delete, Top Shelf, diagnostics) stays on [ManageProfilesScreen]. This page
-/// must not grow a row when a feature does.
+/// One level shows everything (the roster with role/PIN/disabled state and
+/// the household actions — create, send to TV, back up, restore); selecting
+/// a profile opens ONE action panel (edit, enable/disable, delete — the
+/// same flows [ManageProfilesScreen] runs, via [ProfileRowActions]).
+/// [ManageProfilesScreen] remains for the long-tail (Top Shelf,
+/// diagnostics). This page must not grow a row when a feature does —
+/// per-profile things belong in the action panel, not the hub.
 ///
-/// Only reachable in committed-profile mode: the row that opens it is gated on
-/// `ProfileRuntime.mode == profileCommitted`.
+/// Only reachable in committed-profile mode: the row that opens it is gated
+/// on `ProfileRuntime.mode == profileCommitted`.
 class ProfilesSettingsPage extends StatefulWidget {
   const ProfilesSettingsPage({super.key});
 
@@ -45,7 +51,6 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
     try {
       await ProfileGateAlwaysAsk.warm();
       final registry = ProfileBootstrap.registry;
-      final profiles = await registry.listProfiles();
       final activeId = ProfileRuntime.capture().profileId;
       final authorization = await ProfileAuthorizationContext.capture(registry);
       UserProfile? actor;
@@ -54,14 +59,20 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
       } catch (_) {
         actor = null;
       }
+      final mayManage =
+          actor != null &&
+          actor.role == UserProfileRole.admin &&
+          actor.allows(ProfileFeature.manageProfiles);
+      // Managers see the whole household, disabled profiles included —
+      // hiding them is how "why can't I delete it" support threads start.
+      final profiles = await registry.listProfiles(
+        includeDisabled: mayManage,
+      );
       if (!mounted) return;
       setState(() {
         _profiles = profiles;
         _active = profiles.where((p) => p.id == activeId).firstOrNull;
-        _mayManage =
-            actor != null &&
-            actor.role == UserProfileRole.admin &&
-            actor.allows(ProfileFeature.manageProfiles);
+        _mayManage = mayManage;
         _loading = false;
       });
     } catch (_) {
@@ -120,6 +131,91 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
     await _load();
   }
 
+  /// ONE panel per profile — the hub's whole point. DPAD-safe by
+  /// construction: plain focusable ListTiles in a dialog, first one
+  /// autofocused, nothing trailing inside a focused row's rect.
+  Future<void> _profileActions(UserProfile profile) async {
+    final isActive = profile.id == _active?.id;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text(profile.name),
+        children: [
+          ListTile(
+            autofocus: true,
+            leading: const Icon(Icons.edit_rounded),
+            title: const Text('Edit'),
+            subtitle: const Text('Name, avatar, PIN, access'),
+            onTap: () => Navigator.of(dialogContext).pop('edit'),
+          ),
+          if (isActive)
+            ListTile(
+              leading: const Icon(Icons.swap_horiz_rounded),
+              title: const Text('Switch profile'),
+              onTap: () => Navigator.of(dialogContext).pop('switch'),
+            ),
+          // The registry hard-blocks disabling or deleting the profile you
+          // are signed into — offering them here would only produce a
+          // generic failure snackbar. Switch away first; the actions appear
+          // on the row once it is no longer "you".
+          if (!isActive) ...[
+            ListTile(
+              leading: Icon(
+                profile.isEnabled
+                    ? Icons.pause_circle_outline_rounded
+                    : Icons.play_circle_outline_rounded,
+              ),
+              title: Text(profile.isEnabled ? 'Disable' : 'Enable'),
+              onTap: () => Navigator.of(dialogContext).pop('toggle'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline_rounded),
+              title: const Text('Delete'),
+              onTap: () => Navigator.of(dialogContext).pop('delete'),
+            ),
+          ],
+        ],
+      ),
+    );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case 'edit':
+        await _edit(profile);
+      case 'switch':
+        _switchProfile();
+      case 'toggle':
+      case 'delete':
+        final registry = ProfileBootstrap.registry;
+        final authorization = await ProfileAuthorizationContext.capture(
+          registry,
+        );
+        if (!mounted) return;
+        final actions = ProfileRowActions(
+          context: context,
+          registry: registry,
+          authorization: authorization,
+        );
+        final changed = action == 'toggle'
+            ? await actions.toggleEnabled(profile)
+            : await actions.delete(profile);
+        if (changed) await _load();
+    }
+  }
+
+  Future<void> _backUp() async {
+    await ProfileBackupFlows(context).createProfileBackup();
+  }
+
+  Future<void> _restore() async {
+    await ProfileBackupFlows(context, onRestored: _load).restoreProfileBackup();
+  }
+
+  Future<void> _sendToTv() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const RemoteControlScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final profiles = _profiles ?? const <UserProfile>[];
@@ -173,6 +269,15 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
                   },
                 ),
                 if (_mayManage) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'HOUSEHOLD',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      letterSpacing: 1.8,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   ListTile(
                     leading: const Icon(Icons.person_add_alt_rounded),
                     title: const Text('Create a profile'),
@@ -180,9 +285,29 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
                     onTap: _create,
                   ),
                   ListTile(
+                    leading: const Icon(Icons.cast_rounded),
+                    title: const Text('Send everything to TV'),
+                    subtitle: const Text(
+                      'All profiles, connections and PINs over Remote',
+                    ),
+                    onTap: _sendToTv,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.save_alt_rounded),
+                    title: const Text('Back up'),
+                    subtitle: const Text('Encrypted file — one or all profiles'),
+                    onTap: _backUp,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.settings_backup_restore_rounded),
+                    title: const Text('Restore'),
+                    subtitle: const Text('From a Debrify backup file'),
+                    onTap: _restore,
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.manage_accounts_rounded),
-                    title: const Text('Manage profiles'),
-                    subtitle: const Text('Delete, Top Shelf and diagnostics'),
+                    title: const Text('More management'),
+                    subtitle: const Text('Top Shelf and diagnostics'),
                     onTap: _manage,
                   ),
                 ],
@@ -253,27 +378,41 @@ class _ProfilesSettingsPageState extends State<ProfilesSettingsPage> {
     );
   }
 
-  Widget _rosterRow(UserProfile profile) => ListTile(
-    leading: ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
-        width: 40,
-        height: 40,
-        child: ProfileAvatarView(
-          profileId: profile.id,
-          avatarKey: profile.avatarKey,
-          role: profile.role,
-          name: profile.name,
+  Widget _rosterRow(UserProfile profile) {
+    final isActive = profile.id == _active?.id;
+    return ListTile(
+      // Not `enabled: _mayManage` — that would grey the whole roster for
+      // non-managers, who deserve a readable view-only list. A null onTap
+      // already makes rows inert (and unfocusable) for them.
+      leading: Opacity(
+        opacity: profile.isEnabled ? 1 : 0.45,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: ProfileAvatarView(
+              profileId: profile.id,
+              avatarKey: profile.avatarKey,
+              role: profile.role,
+              name: profile.name,
+            ),
+          ),
         ),
       ),
-    ),
-    title: Text(profile.name),
-    subtitle: Text(
-      '${_roleLabel(profile.role)}${profile.hasPin ? ' · PIN' : ''}',
-    ),
-    trailing: _mayManage ? const Icon(Icons.chevron_right_rounded) : null,
-    onTap: _mayManage ? () => _edit(profile) : null,
-  );
+      title: Text(profile.name),
+      subtitle: Text(
+        [
+          _roleLabel(profile.role),
+          if (isActive) 'you',
+          if (profile.hasPin) 'PIN',
+          if (!profile.isEnabled) 'disabled',
+        ].join(' · '),
+      ),
+      trailing: _mayManage ? const Icon(Icons.more_horiz_rounded) : null,
+      onTap: _mayManage ? () => _profileActions(profile) : null,
+    );
+  }
 
   static String _roleLabel(UserProfileRole role) => switch (role) {
     UserProfileRole.admin => 'Admin',

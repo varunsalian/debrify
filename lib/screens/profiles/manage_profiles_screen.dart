@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -7,14 +6,11 @@ import 'package:flutter/services.dart';
 import '../../models/profiles/profile_policy.dart';
 import '../../models/profiles/user_profile.dart';
 import '../../services/profiles/profile_authorization.dart';
-import '../../services/profiles/profile_data_generation.dart';
-import '../../services/profiles/profile_cleanup_ledger.dart';
 import '../../services/profiles/profile_diagnostics_service.dart';
 import '../../services/profiles/profile_pin_service.dart';
 import '../../services/profiles/profile_registry.dart';
 import '../../services/profiles/native_profile_projection.dart';
 import '../../services/profiles/profile_runtime.dart';
-import '../../services/live_recording_service.dart';
 import '../../services/tvos_top_shelf_service.dart';
 import '../../utils/platform_util.dart';
 import '../../widgets/profiles/profile_avatar_view.dart';
@@ -22,6 +18,7 @@ import '../../widgets/profiles/profile_avatar_view.dart';
 import '../../services/profiles/dev/profile_audit_flag.dart';
 import 'dev/profile_data_screen.dart';
 import 'edit_profile_screen.dart';
+import 'profile_row_actions.dart';
 
 class ManageProfilesScreen extends StatefulWidget {
   final ProfileRegistry registry;
@@ -152,213 +149,24 @@ class _ManageProfilesScreenState extends State<ManageProfilesScreen> {
   }
 
   Future<void> _delete(UserProfile profile) async {
-    late final ProfileDeletionDependencies dependencies;
-    late ProfileAuthorizationContext operationActor;
-    try {
-      operationActor = _authorization;
-      await _validateManagingAdmin(operationActor);
-      dependencies = await widget.registry.deletionDependencies(profile.id);
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile deletion is not authorized')),
-      );
-      return;
-    }
-    if (!mounted) return;
-    var deleteConnections = dependencies.ownedResources == 0;
-    var revokeShares = false;
-    var retainPublicFiles = true;
-    final confirmed = await showDialog<bool>(
+    final changed = await ProfileRowActions(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text('Delete ${profile.name}?'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Active jobs: ${dependencies.activeJobs}\n'
-                  'Owned connections: ${dependencies.ownedResources}'
-                  '${dependencies.sharedResources == 0 ? '' : ' (${dependencies.sharedResources} shared)'}\n'
-                  'Public media records: ${dependencies.publicArtifacts}',
-                ),
-                if (dependencies.activeJobs > 0)
-                  const Text('\nFinish or cancel active jobs before deletion.'),
-                if (dependencies.sharedResources > 0)
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: revokeShares,
-                    title: Text(
-                      'Revoke shared access '
-                      '(${dependencies.sharedResources} connection'
-                      '${dependencies.sharedResources == 1 ? '' : 's'})',
-                    ),
-                    subtitle: const Text(
-                      'Other profiles lose access to the connections this '
-                      'profile shares; connections they own themselves are '
-                      'untouched.',
-                    ),
-                    onChanged: (value) => setDialogState(() {
-                      revokeShares = value == true;
-                      // Revoked shares leave the resources unshared —
-                      // orphaning them isn't an option, so they go too.
-                      if (revokeShares) deleteConnections = true;
-                    }),
-                  ),
-                if (dependencies.ownedResources > 0)
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: deleteConnections,
-                    title: const Text('Delete unshared owned connections'),
-                    onChanged: dependencies.sharedResources > 0
-                        ? null
-                        : (value) => setDialogState(
-                            () => deleteConnections = value == true,
-                          ),
-                  ),
-                if (dependencies.publicArtifacts > 0)
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: retainPublicFiles,
-                    title: const Text('Keep downloaded and recorded files'),
-                    subtitle: Text(
-                      retainPublicFiles
-                          ? 'Ownership is detached; files stay on this device.'
-                          : 'Files are permanently deleted before the profile.',
-                    ),
-                    onChanged: (value) =>
-                        setDialogState(() => retainPublicFiles = value == true),
-                  ),
-                const Text(
-                  '\nPrivate settings, history, and databases are deleted.',
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed:
-                  dependencies.activeJobs == 0 &&
-                      (dependencies.sharedResources == 0 || revokeShares) &&
-                      deleteConnections
-                  ? () => Navigator.pop(context, true)
-                  : null,
-              child: const Text('Delete profile'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await _validateManagingAdmin(operationActor);
-      if (revokeShares) {
-        await widget.registry.revokeGrantsOnOwnedResources(
-          ownerProfileId: profile.id,
-          actingProfileId: operationActor.profileId,
-          actingAuthorizationRevision: operationActor.authorizationRevision,
-          actingSessionEpoch: operationActor.sessionEpoch,
-        );
-        // Revocation bumps every BORROWER's authorization revision — and
-        // under default-on sharing the acting admin is almost always one of
-        // them, so its captured context just went stale. Re-capture (same
-        // session, same profile) or every later authority check fails.
-        final refreshed = await ProfileAuthorizationContext.capture(
-          widget.registry,
-        );
-        if (refreshed.profileId != operationActor.profileId) {
-          throw StateError('Managing profile session changed');
-        }
-        operationActor = refreshed;
-        await _validateManagingAdmin(operationActor);
-        // The delete transaction re-verifies shared == 0, so a racing
-        // re-grant safely re-blocks rather than slipping through.
-      }
-      if (!retainPublicFiles) {
-        final artifacts = await widget.registry.listOwnedArtifacts(profile.id);
-        for (final artifact in artifacts) {
-          final path = artifact['canonical_path']! as String;
-          final deleted = Platform.isAndroid && path.contains('://')
-              ? await LiveRecordingService.deleteRecordingFile(path)
-              : await _deleteLocalArtifact(path);
-          if (!deleted) {
-            throw StateError('Could not delete a public media file');
-          }
-        }
-        await _validateManagingAdmin(operationActor);
-        await widget.registry.removeOwnedArtifactRecords(
-          ownerProfileId: profile.id,
-          actingProfileId: operationActor.profileId,
-          actingAuthorizationRevision: operationActor.authorizationRevision,
-          actingSessionEpoch: operationActor.sessionEpoch,
-        );
-      }
-      await _validateManagingAdmin(operationActor);
-      await ProfileCleanupLedger.scheduleProfile(profile.id);
-      await _validateManagingAdmin(operationActor);
-      await widget.registry.deleteProfileWithDisposition(
-        id: profile.id,
-        deleteOwnedResources: deleteConnections,
-        detachPublicArtifacts: retainPublicFiles,
-        actingProfileId: operationActor.profileId,
-        actingAuthorizationRevision: operationActor.authorizationRevision,
-        actingSessionEpoch: operationActor.sessionEpoch,
-      );
-      await ProfileDataGenerationManager.deleteAllProfileData(profile.id);
-      await ProfileCleanupLedger.completeProfile(profile.id);
-      await _load();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Profile deletion failed')));
-    }
-  }
-
-  Future<bool> _deleteLocalArtifact(String path) async {
-    try {
-      final file = File(path);
-      if (await file.exists()) await file.delete();
-      return true;
-    } catch (_) {
-      return false;
-    }
+      registry: widget.registry,
+      authorization: _authorization,
+    ).delete(profile);
+    if (changed) await _load();
   }
 
   Future<void> _toggleEnabled(UserProfile profile) async {
-    try {
-      final actor = _authorization;
-      await _validateManagingAdmin(actor);
-      if (profile.isEnabled) {
-        await widget.registry.disableProfile(
-          profile.id,
-          actingProfileId: actor.profileId,
-          actingAuthorizationRevision: actor.authorizationRevision,
-          actingSessionEpoch: actor.sessionEpoch,
-        );
-      } else {
-        await widget.registry.enableProfile(
-          profile.id,
-          actingProfileId: actor.profileId,
-          actingAuthorizationRevision: actor.authorizationRevision,
-          actingSessionEpoch: actor.sessionEpoch,
-        );
-      }
-      await _load();
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile status could not be changed')),
-      );
-    }
+    final changed = await ProfileRowActions(
+      context: context,
+      registry: widget.registry,
+      authorization: _authorization,
+    ).toggleEnabled(profile);
+    if (changed) await _load();
   }
+
+
 
   Future<UserProfile> _validateManagingAdmin(
     ProfileAuthorizationContext context,
