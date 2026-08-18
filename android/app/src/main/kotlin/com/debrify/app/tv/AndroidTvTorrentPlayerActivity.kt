@@ -3232,6 +3232,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val addon = StremioAddon(
             id = "injected",
             name = groupName,
+            manifestUrl = "",
             baseUrl = "",
             resources = listOf("subtitles"),
             types = emptyList(),
@@ -3261,7 +3262,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         //    when that addon is retried.
         val contentToken = addonSubtitleFetchToken
         val addons = stremioSubtitleService?.getSubtitleAddons() ?: emptyList()
-
         addonSubtitleResults.clear()
         addons.forEach { addonSubtitleResults.add(AddonSubtitleResult(it, AddonSubtitleStatus.LOADING)) }
         isLoadingStremioSubtitles = addons.isNotEmpty()

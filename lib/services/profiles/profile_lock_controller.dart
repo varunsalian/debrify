@@ -16,6 +16,7 @@ class ProfileLockController {
   );
 
   final ValueNotifier<String?> lockedProfileId = ValueNotifier<String?>(null);
+  final ValueNotifier<int> authorityRevision = ValueNotifier<int>(0);
   Timer? _timer;
   UserProfile? _profile;
   bool _playbackActive = false;
@@ -26,6 +27,7 @@ class ProfileLockController {
   void activate(UserProfile profile, {required bool unlocked}) {
     _profile = profile;
     lockedProfileId.value = unlocked ? null : profile.id;
+    authorityRevision.value++;
     _arm();
     _publishPrivacy();
   }
@@ -53,6 +55,7 @@ class ProfileLockController {
     if (profile == null) return;
     _timer?.cancel();
     lockedProfileId.value = profile.id;
+    authorityRevision.value++;
     _publishPrivacy();
   }
 
@@ -64,6 +67,7 @@ class ProfileLockController {
     _timer?.cancel();
     _profile = null;
     lockedProfileId.value = null;
+    authorityRevision.value++;
     _publishPrivacy();
   }
 

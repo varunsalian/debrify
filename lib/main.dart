@@ -40,6 +40,7 @@ import 'services/discover_prefs.dart';
 import 'services/iptv_catalog_db.dart';
 import 'services/profiles/profile_bootstrap.dart';
 import 'services/profiles/profile_migration_service.dart';
+import 'services/profiles/profile_native_lock_bridge.dart';
 import 'services/profiles/profile_registry.dart';
 import 'services/profiles/connection_resource_service.dart';
 import 'services/profiles/profile_device_reset_service.dart';
@@ -395,6 +396,10 @@ Future<void> _terminateAfterDeviceReset() async {
 }
 
 Future<void> _continueApplicationStartup() async {
+  // This common path is also entered after registry recovery and interactive
+  // Linux vault unlock; both must receive the same native lock authority as a
+  // normal bootstrap.
+  ProfileNativeLockBridge.initialize();
   // These initializers may touch profile-sensitive state and therefore start
   // only after the immutable runtime mode and active scope are installed.
   unawaited(AnalyticsService.init());
