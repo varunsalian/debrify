@@ -328,6 +328,30 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('portrait tablets keep the stage stacked and focus-safe', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        ProfileMarqueeGateScreen(
+          profiles: household,
+          onSelected: (_) {},
+          onManage: () {},
+        ),
+        // This is wide enough for the old width-only breakpoint, but it is
+        // still a portrait surface and needs the vertical composition.
+        size: const Size(744, 1024),
+      );
+
+      final scroller = tester.widget<SingleChildScrollView>(
+        find.byType(SingleChildScrollView),
+      );
+      expect(scroller.scrollDirection, Axis.vertical);
+      expect(scroller.clipBehavior, Clip.none);
+      expect(find.text('Continue as Meera'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('a TV-width rail scrolls a big household', (tester) async {
       final big = [
         for (var i = 0; i < 12; i++)
