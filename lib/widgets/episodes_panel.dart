@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +12,7 @@ import '../services/trakt/trakt_episode_model.dart';
 import '../services/trakt/trakt_service.dart';
 import '../services/tvmaze_service.dart';
 import '../services/storage_service.dart';
+import '../services/local_series_completion_service.dart';
 import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import '../screens/debrify_tv/widgets/tv_focus_scroll_wrapper.dart';
@@ -809,6 +812,17 @@ class EpisodesPanelState extends State<EpisodesPanel> {
           _episodesUnavailable = true;
         });
         return;
+      }
+
+      final imdbId = show.effectiveImdbId;
+      if (!_isDirectSource && imdbId != null && imdbId.isNotEmpty) {
+        unawaited(
+          LocalSeriesCompletionService.instance.recordEpisodeInventory(
+            imdbId: imdbId,
+            seriesTitle: show.name,
+            seasons: seasons,
+          ),
+        );
       }
 
       // Resolve where to land (season + episode to auto-switch and scroll to),

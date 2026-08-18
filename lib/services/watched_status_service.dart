@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'simkl/simkl_service.dart';
+import 'local_series_completion_service.dart';
 import 'storage_service.dart';
 import 'trakt/trakt_service.dart';
 
@@ -14,11 +15,13 @@ import 'trakt/trakt_service.dart';
 class WatchedStatusService extends ChangeNotifier {
   WatchedStatusService._() {
     StorageService.movieFinishedRevision.addListener(refresh);
+    StorageService.localCompletionRevision.addListener(_refreshLocal);
   }
 
   static final WatchedStatusService instance = WatchedStatusService._();
 
   Set<String> _localMovies = const {};
+  Set<String> _localSeries = const {};
   Set<String> _traktMovies = const {};
   Set<String> _traktSeries = const {};
   Set<String> _simklMovies = const {};
@@ -27,12 +30,15 @@ class WatchedStatusService extends ChangeNotifier {
   bool _started = false;
   bool _refreshing = false;
   bool _refreshPending = false;
+  int _localGeneration = 0;
 
   bool isWatched(String imdbId, String contentType) {
     final id = imdbId.trim().toLowerCase();
     if (id.isEmpty) return false;
     if (contentType.toLowerCase() == 'series') {
-      return _traktSeries.contains(id) || _simklSeries.contains(id);
+      return _localSeries.contains(id) ||
+          _traktSeries.contains(id) ||
+          _simklSeries.contains(id);
     }
     return _localMovies.contains(id) ||
         _traktMovies.contains(id) ||
@@ -57,6 +63,31 @@ class WatchedStatusService extends ChangeNotifier {
     _startRefresh();
   }
 
+  void _refreshLocal() {
+    final generation = ++_localGeneration;
+    unawaited(() async {
+      final results = await Future.wait([
+        StorageService.getFinishedMovieIds(),
+        LocalSeriesCompletionService.instance.caughtUpIds(),
+      ]);
+      if (generation != _localGeneration) return;
+      _localMovies = results[0];
+      _localSeries = results[1];
+      notifyListeners();
+
+      // Calendar reconciliation may involve network requests. Keep it behind
+      // the immediate local snapshot so card rendering never waits on Simkl.
+      final calendarSeries = await LocalSeriesCompletionService.instance
+          .refreshCalendarIfDue();
+      if (generation != _localGeneration ||
+          setEquals(_localSeries, calendarSeries)) {
+        return;
+      }
+      _localSeries = calendarSeries;
+      notifyListeners();
+    }());
+  }
+
   void _startRefresh() {
     _refreshing = true;
     final generation = _generation;
@@ -72,21 +103,32 @@ class WatchedStatusService extends ChangeNotifier {
   }
 
   Future<void> _refresh(int generation) async {
+    final localGeneration = ++_localGeneration;
     // Start network work immediately, but publish the cheap local snapshot as
     // soon as it resolves rather than waiting for either tracker.
     final traktFuture = _fetchTrakt();
     final simklFuture = SimklService.instance.fetchCompletedTitleIds();
+    final localSeriesFuture = LocalSeriesCompletionService.instance
+        .caughtUpIds();
+    final calendarFuture = LocalSeriesCompletionService.instance
+        .refreshCalendarIfDue();
 
     final localMovies = await StorageService.getFinishedMovieIds();
-    if (generation == _generation) {
+    final localSeries = await localSeriesFuture;
+    if (generation == _generation && localGeneration == _localGeneration) {
       _localMovies = localMovies;
+      _localSeries = localSeries;
       notifyListeners();
     }
 
     // Always join the requests this pass started, even if invalidated. That
     // keeps the coalescer honest: the follow-up cannot overlap abandoned page
     // loops from the superseded pass.
-    final results = await Future.wait<Object?>([traktFuture, simklFuture]);
+    final results = await Future.wait<Object?>([
+      traktFuture,
+      simklFuture,
+      calendarFuture,
+    ]);
     if (generation != _generation) return;
     final trakt =
         results[0] as ({Map<String, double>? movies, Set<String>? series});
@@ -100,6 +142,9 @@ class WatchedStatusService extends ChangeNotifier {
     if (simkl != null) {
       _simklMovies = simkl.movies;
       _simklSeries = simkl.series;
+    }
+    if (localGeneration == _localGeneration) {
+      _localSeries = results[2] as Set<String>;
     }
     notifyListeners();
   }

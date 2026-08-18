@@ -40,6 +40,7 @@ import '../services/series_source_service.dart';
 import '../services/stremio_iptv_service.dart';
 import '../services/stremio_service.dart';
 import '../services/next_episode_service.dart';
+import '../services/local_series_completion_service.dart';
 import '../services/storage_service.dart';
 import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/tvos_top_shelf_service.dart';
@@ -1305,6 +1306,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           : 'home',
     );
     MainPageBridge.registerTvContentFocusHandler(_tabIndex, _focusContent);
+    if (!widget.searchMode && !widget.discoverMode) {
+      StorageService.localCompletionRevision.addListener(
+        _onLocalCompletionChanged,
+      );
+    }
     if (widget.searchMode) {
       MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
     }
@@ -1787,6 +1793,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
     }
     MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
+    StorageService.localCompletionRevision.removeListener(
+      _onLocalCompletionChanged,
+    );
     if (!widget.searchMode && !widget.discoverMode) {
       MainPageBridge.unregisterCatalogDetailOpenHandler(
         _openPendingCatalogDetail,
@@ -2576,6 +2585,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ..addAll(addonIds);
     });
     _maybeAutoFocusBoard();
+  }
+
+  void _onLocalCompletionChanged() {
+    if (!mounted || widget.searchMode || widget.discoverMode) return;
+    unawaited(_loadContinueWatching());
   }
 
   /// Load the IPTV Continue Watching shelves (Xtream VOD movies + series) from
@@ -11881,6 +11895,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ? null
         : await _stremio.fetchSeriesMeta(metaAddon, contentId);
     if (!mounted) return;
+    if (videos != null) {
+      unawaited(
+        LocalSeriesCompletionService.instance.recordRawEpisodeInventory(
+          imdbId: imdb,
+          seriesTitle: item.name,
+          videos: videos,
+        ),
+      );
+    }
 
     final episodes = <({int season, int episode})>[];
     for (final v in videos ?? const <Map<String, dynamic>>[]) {
@@ -21810,6 +21833,13 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       if (metaAddon == null) return;
       final videos = await stremio.fetchSeriesMeta(metaAddon, _imdbId);
       if (videos == null || !mounted) return;
+      unawaited(
+        LocalSeriesCompletionService.instance.recordRawEpisodeInventory(
+          imdbId: _imdbId,
+          seriesTitle: widget.selection.title,
+          videos: videos,
+        ),
+      );
       final seasons = <int>{};
       for (final v in videos) {
         final s = (v['season'] as num?)?.toInt();

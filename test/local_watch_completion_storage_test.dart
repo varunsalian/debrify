@@ -84,6 +84,82 @@ void main() {
     expect(await StorageService.isMovieFinished('tt001'), isFalse);
   });
 
+  test('clearing playlist progress invalidates local completion', () async {
+    await StorageService.saveSeriesPlaybackState(
+      seriesTitle: 'Example Series',
+      season: 1,
+      episode: 1,
+      positionMs: 1000,
+      durationMs: 1000,
+      imdbId: 'tt-series',
+    );
+    await StorageService.markEpisodeAsFinished(
+      seriesTitle: 'Example Series',
+      season: 1,
+      episode: 1,
+      imdbId: 'tt-series',
+    );
+    final revisionBefore = StorageService.localCompletionRevision.value;
+
+    await StorageService.clearPlaylistProgress(title: 'Example Series');
+
+    expect(
+      await StorageService.isEpisodeFinished(
+        seriesTitle: 'Example Series',
+        season: 1,
+        episode: 1,
+      ),
+      isFalse,
+    );
+    expect(StorageService.localCompletionRevision.value, revisionBefore + 1);
+  });
+
+  test('clearing playback by IMDb invalidates local completion', () async {
+    await StorageService.markEpisodeAsFinished(
+      seriesTitle: 'IMDb Clear Show',
+      season: 1,
+      episode: 1,
+      imdbId: 'tt-imdb-clear',
+    );
+    final revisionBefore = StorageService.localCompletionRevision.value;
+
+    await StorageService.clearPlaybackStateByImdbId('TT-IMDB-CLEAR');
+
+    expect(
+      await StorageService.isEpisodeFinished(
+        seriesTitle: 'IMDb Clear Show',
+        season: 1,
+        episode: 1,
+      ),
+      isFalse,
+    );
+    expect(StorageService.localCompletionRevision.value, revisionBefore + 1);
+  });
+
+  test('finished episode index unions duplicate IMDb records', () async {
+    await StorageService.markEpisodeAsFinished(
+      seriesTitle: 'Original Title',
+      season: 1,
+      episode: 1,
+      imdbId: 'tt-duplicate',
+    );
+    await StorageService.markEpisodeAsFinished(
+      seriesTitle: 'Localized Title',
+      season: 1,
+      episode: 2,
+      imdbId: 'tt-duplicate',
+    );
+
+    final index = await StorageService.getFinishedSeriesEpisodeIndex();
+    expect(index['tt-duplicate']?['1'], {1, 2});
+    expect(
+      await StorageService.getFinishedEpisodesByImdbId(imdbId: 'tt-duplicate'),
+      {
+        '1': {1, 2},
+      },
+    );
+  });
+
   test(
     'existing playback is migrated once using separate thresholds',
     () async {

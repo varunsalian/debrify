@@ -48,10 +48,12 @@ enum TvRenderQuality {
 }
 
 class StorageService {
-  /// Changes whenever watched-title data should be refreshed. Local movie
-  /// completion and tracker/profile mutations all feed this one lightweight
-  /// signal; poster badges never block page rendering on the refresh itself.
+  /// Tracker/account watched-title invalidation. Kept separate from local
+  /// playback so finishing an episode never reloads entire remote histories.
   static final ValueNotifier<int> movieFinishedRevision = ValueNotifier(0);
+
+  /// Local movie, episode, and derived-series completion invalidation.
+  static final ValueNotifier<int> localCompletionRevision = ValueNotifier(0);
 
   static Future<bool> profileAllowsAdultContent() async {
     if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
@@ -214,6 +216,12 @@ class StorageService {
   static const String _videoResumeKey = 'video_resume_v1';
   static const String _playbackStateKey = 'playback_state_v1';
   static const String _continueWatchingKey = 'continue_watching_v1';
+  static const String localSeriesCompletionStateKey =
+      'local_series_completion_v1';
+  static const String localSeriesCalendarCheckedAtKey =
+      'local_series_completion_calendar_checked_at_v1';
+  static const String localSeriesCalendarAttemptedAtKey =
+      'local_series_completion_calendar_attempted_at_v1';
   static const String _finishedMoviesKey = 'finished_movies_v1';
   static const String _debrifyTvStartRandomKey = 'debrify_tv_start_random';
   static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
@@ -2270,7 +2278,7 @@ class StorageService {
     if (finished.add(normalized)) {
       final prefs = await ProfilePreferences.instance();
       await prefs.setStringList(_finishedMoviesKey, finished.toList()..sort());
-      movieFinishedRevision.value++;
+      localCompletionRevision.value++;
     }
     await Future.wait([
       removeContinueWatchingItem(normalized),
@@ -2294,7 +2302,7 @@ class StorageService {
     } else {
       await prefs.setStringList(_finishedMoviesKey, finished.toList()..sort());
     }
-    movieFinishedRevision.value++;
+    localCompletionRevision.value++;
     debugPrint('StorageService: unmarkMovieAsFinished imdbId="$normalized"');
   }
 
@@ -2330,6 +2338,9 @@ class StorageService {
       map.remove(key);
     }
     await _savePlaybackStateMap(map);
+    // Series finished-episode markers share this map, so clearing a Continue
+    // Watching item must also invalidate derived series completion.
+    localCompletionRevision.value++;
     debugPrint(
       'StorageService: Cleared ${keysToRemove.length} playback state entries for "$imdbId"',
     );
@@ -2461,6 +2472,7 @@ class StorageService {
     );
 
     await _savePlaybackStateMap(map);
+    localCompletionRevision.value++;
   }
 
   /// Unmark an episode as finished (mark as unwatched)
@@ -2522,6 +2534,7 @@ class StorageService {
     );
 
     await _savePlaybackStateMap(map);
+    localCompletionRevision.value++;
   }
 
   /// Check if an episode is marked as finished
@@ -2568,6 +2581,71 @@ class StorageService {
       result[season] = episodes.keys.map((e) => int.parse(e)).toSet();
     }
 
+    return result;
+  }
+
+  /// Resolve finished episodes by stable title identity, falling back to the
+  /// historical title-keyed record for installs created before IMDb IDs were
+  /// persisted with series playback.
+  static Future<Map<String, Set<int>>> getFinishedEpisodesByImdbId({
+    required String imdbId,
+    String? seriesTitle,
+  }) async {
+    final normalized = imdbId.trim().toLowerCase();
+    final map = await _getPlaybackStateMap();
+    final result = <String, Set<int>>{};
+    for (final raw in map.values) {
+      if (raw is! Map<String, dynamic> || raw['type'] != 'series') continue;
+      final storedId = raw['imdbId']?.toString().trim().toLowerCase();
+      if (storedId != normalized) continue;
+      final finished = raw['finishedEpisodes'];
+      if (finished is! Map) continue;
+      for (final entry in finished.entries) {
+        final episodes = entry.value;
+        if (episodes is! Map) continue;
+        result.putIfAbsent(entry.key.toString(), () => <int>{}).addAll({
+          for (final episode in episodes.keys)
+            if (int.tryParse(episode.toString()) case final value?) value,
+        });
+      }
+    }
+    if (result.isNotEmpty) return result;
+    if (seriesTitle != null && seriesTitle.isNotEmpty) {
+      return getFinishedEpisodes(seriesTitle: seriesTitle);
+    }
+    return {};
+  }
+
+  /// One-pass index for derived series completion. IMDb keys are preferred;
+  /// title keys preserve older playback records that predate stable IDs.
+  static Future<Map<String, Map<String, Set<int>>>>
+  getFinishedSeriesEpisodeIndex() async {
+    final map = await _getPlaybackStateMap();
+    final result = <String, Map<String, Set<int>>>{};
+    for (final raw in map.values) {
+      if (raw is! Map<String, dynamic> || raw['type'] != 'series') continue;
+      final finished = raw['finishedEpisodes'];
+      if (finished is! Map) continue;
+      final parsed = <String, Set<int>>{
+        for (final entry in finished.entries)
+          entry.key.toString(): {
+            if (entry.value is Map)
+              for (final episode in (entry.value as Map).keys)
+                if (int.tryParse(episode.toString()) case final value?) value,
+          },
+      };
+      void mergeInto(String key) {
+        final target = result.putIfAbsent(key, () => <String, Set<int>>{});
+        for (final season in parsed.entries) {
+          target.putIfAbsent(season.key, () => <int>{}).addAll(season.value);
+        }
+      }
+
+      final imdbId = raw['imdbId']?.toString().trim().toLowerCase();
+      if (imdbId != null && imdbId.isNotEmpty) mergeInto(imdbId);
+      final title = raw['title']?.toString().trim().toLowerCase();
+      if (title != null && title.isNotEmpty) mergeInto('title:$title');
+    }
     return result;
   }
 
@@ -3157,7 +3235,10 @@ class StorageService {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_playbackStateKey);
     await prefs.remove(_finishedMoviesKey);
-    movieFinishedRevision.value++;
+    await prefs.remove(localSeriesCompletionStateKey);
+    await prefs.remove(localSeriesCalendarCheckedAtKey);
+    await prefs.remove(localSeriesCalendarAttemptedAtKey);
+    localCompletionRevision.value++;
     // Resume lives in the DB now; the prefs key only still exists for users
     // who wipe before the one-time import has run.
     await prefs.remove(_videoResumeKey);
@@ -3273,6 +3354,9 @@ class StorageService {
     // Save the updated map if anything was removed
     if (keysToRemove.isNotEmpty) {
       await _savePlaybackStateMap(map);
+      // Finished episodes live in this same map. Re-derive local series
+      // completion so watched badges and Continue Watching update immediately.
+      localCompletionRevision.value++;
       debugPrint(
         'StorageService: clearPlaylistProgress completed - removed ${keysToRemove.length} entries for "$title"',
       );
@@ -5712,7 +5796,7 @@ class StorageService {
         _finishedMoviesKey,
         completedMovieIds.toList()..sort(),
       );
-      movieFinishedRevision.value++;
+      localCompletionRevision.value++;
 
       final rawContinueWatching = prefs.getString(_continueWatchingKey);
       if (rawContinueWatching != null && rawContinueWatching.isNotEmpty) {
