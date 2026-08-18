@@ -81,6 +81,7 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
   /// a neighbour of a built row, which the list's cache extent has built too.
   final Map<int, FocusNode> _rowNodes = {};
   final FocusNode _showAllNode = FocusNode(debugLabel: 'iptv-hidden-show-all');
+  final FocusNode _hideAllNode = FocusNode(debugLabel: 'iptv-hidden-hide-all');
   final List<FocusNode> _tabNodes = [];
 
   @override
@@ -102,6 +103,7 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
       node.dispose();
     }
     _showAllNode.dispose();
+    _hideAllNode.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -198,6 +200,8 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
   }
 
   int get _hiddenCount => _rows.where((r) => r.hidden).length;
+  bool get _canShowAll => _hiddenCount > 0;
+  bool get _canHideAll => _rows.any((r) => !r.hidden && !r.stale);
 
   void _toggle(_CategoryRow row) {
     final tab = _tabs[_selectedTab];
@@ -233,6 +237,39 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
     // Reload rather than flip every row in place: the stale entries drop out
     // entirely, and only a re-read knows which those were.
     await _load();
+    if (mounted && _tabs[_selectedTab].key == tab.key) {
+      _focusAfterRebuild(_hideAllNode);
+    }
+  }
+
+  void _hideAll() {
+    final tab = _tabs[_selectedTab];
+    final names = [
+      for (final row in _rows)
+        if (!row.hidden && !row.stale) row.name,
+    ];
+    if (names.isEmpty) return;
+    IptvCatalogDb.hideGroups(tab.key, names);
+    setState(() {
+      _rows = [
+        for (final row in _rows)
+          row.stale
+              ? row
+              : _CategoryRow(
+                  name: row.name,
+                  count: row.count,
+                  hidden: true,
+                  stale: false,
+                ),
+      ];
+    });
+    _focusAfterRebuild(_showAllNode);
+  }
+
+  void _focusAfterRebuild(FocusNode node) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && node.canRequestFocus) node.requestFocus();
+    });
   }
 
   void _selectTab(int index) {
@@ -330,12 +367,23 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
                   ),
                 ),
               ),
-              if (_hiddenCount > 0)
-                _FocusableTextButton(
-                  focusNode: _showAllNode,
-                  label: 'Show all',
-                  onTap: _showAll,
-                ),
+              _FocusableTextButton(
+                focusNode: _showAllNode,
+                label: 'Show all',
+                enabled: _canShowAll,
+                onTap: _showAll,
+                onNavigateRight: _canHideAll ? _hideAllNode.requestFocus : null,
+                onNavigateDown: _focusFirstRow,
+              ),
+              const SizedBox(width: 8),
+              _FocusableTextButton(
+                focusNode: _hideAllNode,
+                label: 'Hide all',
+                enabled: _canHideAll,
+                onTap: _hideAll,
+                onNavigateLeft: _canShowAll ? _showAllNode.requestFocus : null,
+                onNavigateDown: _focusFirstRow,
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -371,14 +419,20 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
     );
   }
 
-  /// UP off the first row: the Show-all action when it exists, otherwise the
+  /// UP off the first row reaches the useful bulk action first, then the
   /// catalog tabs — never nothing, which on a remote is a dead end.
   void _focusAbove() {
-    if (_hiddenCount > 0) {
+    if (_canHideAll) {
+      _hideAllNode.requestFocus();
+    } else if (_canShowAll) {
       _showAllNode.requestFocus();
     } else if (_tabNodes.length > 1) {
       _tabNodes[_selectedTab].requestFocus();
     }
+  }
+
+  void _focusFirstRow() {
+    if (_visibleRows.isNotEmpty) _rowNode(0).requestFocus();
   }
 
   Widget _buildTabs() {
@@ -593,17 +647,25 @@ class _CatalogTabChipState extends State<_CatalogTabChip> {
   }
 }
 
-/// Small focusable text action (the header's "Show all").
+/// Small focusable text action in the hidden-category header.
 class _FocusableTextButton extends StatefulWidget {
   const _FocusableTextButton({
     required this.focusNode,
     required this.label,
     required this.onTap,
+    this.enabled = true,
+    this.onNavigateLeft,
+    this.onNavigateRight,
+    this.onNavigateDown,
   });
 
   final FocusNode focusNode;
   final String label;
   final VoidCallback onTap;
+  final bool enabled;
+  final VoidCallback? onNavigateLeft;
+  final VoidCallback? onNavigateRight;
+  final VoidCallback? onNavigateDown;
 
   @override
   State<_FocusableTextButton> createState() => _FocusableTextButtonState();
@@ -623,28 +685,46 @@ class _FocusableTextButtonState extends State<_FocusableTextButton> {
     final t = AppThemeScope.of(context).settings;
     return Focus(
       focusNode: widget.focusNode,
+      canRequestFocus: widget.enabled,
+      skipTraversal: !widget.enabled,
       onFocusChange: (_) => setState(() {}),
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (!widget.enabled) return KeyEventResult.ignored;
+        final key = event.logicalKey;
         if (isActivateKey(event.logicalKey) ||
             event.logicalKey == LogicalKeyboardKey.space) {
           widget.onTap();
           return KeyEventResult.handled;
         }
+        final move = switch (key) {
+          LogicalKeyboardKey.arrowLeft => widget.onNavigateLeft,
+          LogicalKeyboardKey.arrowRight => widget.onNavigateRight,
+          LogicalKeyboardKey.arrowDown => widget.onNavigateDown,
+          _ => null,
+        };
+        if (move != null) {
+          move();
+          return KeyEventResult.handled;
+        }
         return KeyEventResult.ignored;
       },
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: widget.enabled ? widget.onTap : null,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: _focused
+            color: widget.enabled && _focused
                 ? t.accent.withValues(alpha: 0.24)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: _focused ? t.accent : t.accent2,
-              width: _focused ? 2 : 1,
+              color: !widget.enabled
+                  ? t.dim2
+                  : _focused
+                  ? t.accent
+                  : t.accent2,
+              width: widget.enabled && _focused ? 2 : 1,
             ),
           ),
           child: Text(
@@ -652,7 +732,7 @@ class _FocusableTextButtonState extends State<_FocusableTextButton> {
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w700,
-              color: t.accent2,
+              color: widget.enabled ? t.accent2 : t.dim2,
             ),
           ),
         ),

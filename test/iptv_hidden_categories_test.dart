@@ -158,6 +158,16 @@ void main() {
     expect(IptvCatalogDb.hiddenGroups(key), isEmpty);
   });
 
+  test('hide-all batches every named category into one durable update', () {
+    IptvCatalogDb.hideGroups(key, ['Sports', 'News', 'Adult', '']);
+
+    expect(IptvCatalogDb.hiddenGroups(key), {'Sports', 'News', 'Adult'});
+    expect(IptvCatalogDb.snapshot(key)!.count(), 0);
+
+    IptvCatalogDb.showAllGroups(key);
+    expect(IptvCatalogDb.snapshot(key)!.count(), 6);
+  });
+
   test('hidden sets are per catalog and countable in one query', () {
     const other = 'm3u|http://example/other.m3u';
     IptvCatalogDb.ingest(
@@ -264,6 +274,19 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
 
+    expect(find.text('Show all'), findsOneWidget);
+    expect(find.text('Hide all'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'iptv-hidden-hide-all',
+      reason: 'UP from the first row must reach Hide all on TV',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'iptv-hidden-row-0');
+
     final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
     final before = scrollable.position.pixels;
     for (var i = 0; i < 10; i++) {
@@ -280,6 +303,40 @@ void main() {
       scrollable.position.pixels,
       greaterThan(before),
       reason: 'moving focus below the fold must scroll the category list',
+    );
+
+    scrollable.position.jumpTo(0);
+    await tester.pump();
+    firstNode.requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+
+    expect(
+      IptvCatalogDb.hiddenGroups(key),
+      categories.toSet(),
+      reason: 'Hide all must apply every category, not just visible rows',
+    );
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'iptv-hidden-show-all',
+      reason:
+          'after hiding all, focus advances to the now-useful inverse action',
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    await tester.pump();
+
+    expect(IptvCatalogDb.hiddenGroups(key), isEmpty);
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'iptv-hidden-hide-all',
+      reason: 'Show all must restore the opposite action as the DPAD anchor',
     );
   });
 }
