@@ -2139,8 +2139,8 @@ class ProfileRegistry {
   /// Atomically replaces an owner's resources of [types]. This is used by
   /// legacy collection-shaped APIs (WebDAV, IPTV, addons, and indexers) so a
   /// crash can never expose a half-replaced list. Shared resources are never
-  /// silently rewritten or deleted; callers must use an explicit share-aware
-  /// management flow for those.
+  /// silently deleted; callers must use an explicit share-aware management
+  /// flow to remove those.
   Future<void> replaceOwnedResourceCollection({
     required String ownerProfileId,
     required Set<ConnectionResourceType> types,
@@ -2194,11 +2194,6 @@ class ProfileRegistry {
            GROUP BY r.id''',
         <Object>[ownerProfileId, ...typeNames],
       );
-      if (existing.any((row) => (row['borrower_count'] as int? ?? 0) > 0)) {
-        throw StateError(
-          'A shared connection must be changed in profile management',
-        );
-      }
       final existingById = <String, Map<String, Object?>>{
         for (final row in existing) row['id']! as String: row,
       };
@@ -2207,6 +2202,15 @@ class ProfileRegistry {
         if (!replacementIds.add(replacement.resource.id)) {
           throw StateError('Replacement collection contains duplicate IDs');
         }
+      }
+      if (existing.any(
+        (row) =>
+            (row['borrower_count'] as int? ?? 0) > 0 &&
+            !replacementIds.contains(row['id']),
+      )) {
+        throw StateError(
+          'A shared connection must be removed in profile management',
+        );
       }
       for (final row in existing) {
         if (replacementIds.contains(row['id'])) continue;

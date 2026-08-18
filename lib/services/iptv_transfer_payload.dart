@@ -61,7 +61,8 @@ abstract final class IptvTransferPayload {
     );
     return [
       for (final playlist in playlists)
-        if (!playlist.isVirtual && !playlist.isLocalFile) playlist.toJson(),
+        if (!playlist.isVirtual && !playlist.isLocalFile)
+          playlist.toTransferJson(),
     ];
   }
 
@@ -101,7 +102,7 @@ abstract final class IptvTransferPayload {
           continue;
         }
         try {
-          final playlist = IptvPlaylist.fromJson(
+          final playlist = IptvPlaylist.fromTransferJson(
             Map<String, dynamic>.from(raw),
           );
           // A url is what makes a non-Xtream provider fetchable, so an entry

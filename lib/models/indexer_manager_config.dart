@@ -144,6 +144,26 @@ class IndexerManagerConfig {
     };
   }
 
+  Map<String, dynamic> toTransferJson() => {
+    'id': id,
+    'name': name,
+    'type': type.value,
+    'base_url': baseUrl,
+    'api_key': apiKey,
+    'enabled': enabled,
+    'max_results': maxResults,
+    'timeout_seconds': timeoutSeconds,
+    'jackett_indexer_id': jackettIndexerId,
+    'categories': categories,
+  };
+
+  factory IndexerManagerConfig.fromTransferJson(Map<String, dynamic> json) =>
+      IndexerManagerConfig.fromJson(<String, dynamic>{
+        for (final entry in json.entries)
+          if (!entry.key.startsWith('_connectionResource'))
+            entry.key: entry.value,
+      });
+
   static String generateId() {
     return DateTime.now().millisecondsSinceEpoch.toString();
   }

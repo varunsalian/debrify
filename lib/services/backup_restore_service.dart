@@ -102,7 +102,7 @@ class BackupRestoreService {
     try {
       final servers = await StorageService.getWebDavServers();
       webDavServers = servers.map((s) {
-        final json = s.toJson();
+        final json = s.toTransferJson();
         if (!includeCredentials) json['password'] = '';
         return json;
       }).toList();
@@ -117,7 +117,7 @@ class BackupRestoreService {
       // just advertise a category that always fails to import.
       try {
         final configs = await StorageService.getIndexerManagerConfigs();
-        indexerManagers = configs.map((c) => c.toJson()).toList();
+        indexerManagers = configs.map((c) => c.toTransferJson()).toList();
       } catch (_) {
         throw StateError('Could not read indexer managers for backup');
       }
@@ -683,7 +683,9 @@ class BackupRestoreService {
           continue;
         }
         try {
-          final config = WebDavConfig.fromJson(Map<String, dynamic>.from(raw));
+          final config = WebDavConfig.fromTransferJson(
+            Map<String, dynamic>.from(raw),
+          );
           if (config.baseUrl.trim().isEmpty) {
             report.webDavServersFailed++;
             continue;
@@ -729,7 +731,7 @@ class BackupRestoreService {
           continue;
         }
         try {
-          final config = IndexerManagerConfig.fromJson(
+          final config = IndexerManagerConfig.fromTransferJson(
             Map<String, dynamic>.from(raw),
           );
           if (config.baseUrl.trim().isEmpty || config.apiKey.trim().isEmpty) {
