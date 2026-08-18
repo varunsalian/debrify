@@ -1,9 +1,15 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 
 import '../../models/stremio_addon.dart';
+import '../../services/debrify_image_cache.dart';
 import '../../services/imdb_enrichment_service.dart';
+import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/parallax_focus.dart';
+import '../../utils/artwork_url.dart';
+import '../../utils/platform_util.dart';
 import '../episodes_panel.dart';
 import '../section_reveal.dart';
 import 'detail_episode_cells.dart';
@@ -58,6 +64,116 @@ class DetailShowcase extends StatefulWidget {
   State<DetailShowcase> createState() => _DetailShowcaseState();
 }
 
+/// One deliberately static, theme-coloured placeholder plane.
+///
+/// This does not use [ThemedSkeleton]: the legacy profile intentionally keeps
+/// its animated shimmer on TV, while this surface exists specifically to give
+/// a weak GPU a quiet frame in which to decode and compose the real page.
+class _ShowcaseTvSkeletonPlane extends StatelessWidget {
+  final double? width;
+  final double height;
+  final BorderRadius borderRadius;
+
+  const _ShowcaseTvSkeletonPlane({
+    this.width,
+    required this.height,
+    required this.borderRadius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    return SizedBox(
+      width: width,
+      height: height,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: app.core.tx.withValues(alpha: .09),
+          borderRadius: borderRadius,
+          border: Border.all(color: app.core.tx.withValues(alpha: .035)),
+        ),
+      ),
+    );
+  }
+}
+
+/// The TV opening state is a small number of static, themed planes. The real
+/// page remains mounted beneath it, so its image providers and lazy bands can
+/// settle without exposing their incremental arrival.
+class _ShowcaseTvOpeningSkeleton extends StatelessWidget {
+  const _ShowcaseTvOpeningSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppThemeScope.of(context);
+    return ExcludeFocus(
+      child: IgnorePointer(
+        child: ColoredBox(
+          key: const ValueKey('showcase-tv-opening-skeleton'),
+          color: app.home.bg,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final gutter = (constraints.maxWidth * .044).clamp(30.0, 52.0);
+              return Padding(
+                padding: EdgeInsets.fromLTRB(gutter, 0, gutter, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    _ShowcaseTvSkeletonPlane(
+                      width: 52,
+                      height: 17,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(height: 12),
+                    _ShowcaseTvSkeletonPlane(
+                      width: (constraints.maxWidth * .29).clamp(220.0, 350.0),
+                      height: 40,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    const SizedBox(height: 12),
+                    _ShowcaseTvSkeletonPlane(
+                      width: 180,
+                      height: 13,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(height: 9),
+                    _ShowcaseTvSkeletonPlane(
+                      width: (constraints.maxWidth * .42).clamp(280.0, 460.0),
+                      height: 13,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(height: 18),
+                    _ShowcaseTvSkeletonPlane(
+                      width: 122,
+                      height: 34,
+                      borderRadius: BorderRadius.circular(17),
+                    ),
+                    const SizedBox(height: 28),
+                    Row(
+                      children: [
+                        for (var i = 0; i < 4; i++) ...[
+                          if (i > 0) const SizedBox(width: 12),
+                          Expanded(
+                            child: _ShowcaseTvSkeletonPlane(
+                              height: 62,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// One horizontal band: its focus nodes, and where it rests when selected.
 class _Band {
   final String key;
@@ -75,6 +191,20 @@ class _Band {
 class _DetailShowcaseState extends State<DetailShowcase> {
   final ScrollController _scroll = ScrollController();
   final DetailCellNodes _cells = DetailCellNodes('showcase');
+
+  /// A TV opens on one composed frame, instead of asking the GPU to reveal a
+  /// backdrop, wordmark and several off-screen rails independently. The shell
+  /// starts its backdrop decode before this body builds; this gate warms the
+  /// matching image-cache keys, then lets the page crossfade in once the first
+  /// useful frame is ready. It is deliberately TV-only — touch keeps its
+  /// existing immediate, scroll-led presentation.
+  bool _openingReady = false;
+  bool _openingWarmupScheduled = false;
+  EpisodesPanelView? _openingView;
+  bool _openingUserNavigated = false;
+  bool _openingKeyHandlerAttached = false;
+  static const _openingMinimum = Duration(milliseconds: 180);
+  static const _openingTimeout = Duration(milliseconds: 1200);
 
   final List<FocusNode> _actionNodes = [];
   final List<FocusNode> _seasonNodes = [];
@@ -109,6 +239,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     final clamped = settled < 0 ? 0 : settled;
     if (clamped != _epSettled) setState(() => _epSettled = clamped);
   }
+
   final GlobalKey _castKey = GlobalKey();
   final GlobalKey _guideKey = GlobalKey();
   final GlobalKey _sourcesKey = GlobalKey();
@@ -152,7 +283,9 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     if (widget.dpad || _viewportH <= 0 || !_scroll.hasClients) return;
     final off = _scroll.offset;
     final next = _scrollDeep
-        ? off > _viewportH * 0.30 // stays deep until it drops below 30%
+        ? off >
+              _viewportH *
+                  0.30 // stays deep until it drops below 30%
         : off > _viewportH * 0.40; // becomes deep past 40%
     if (next == _scrollDeep) return;
     setState(() => _scrollDeep = next);
@@ -198,7 +331,140 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_usesTvOpeningGate && !_openingWarmupScheduled) {
+      _openingWarmupScheduled = true;
+      HardwareKeyboard.instance.addHandler(_onOpeningHardwareKey);
+      _openingKeyHandlerAttached = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _warmTvOpening());
+    }
+  }
+
+  bool get _usesTvOpeningGate => widget.dpad && PlatformUtil.isTelevision;
+
+  Future<void> _warmTvOpening() async {
+    if (!mounted || !_usesTvOpeningGate) return;
+    final watch = Stopwatch()..start();
+    // Let the hidden page finish its first layout before taking the provider
+    // snapshot. The hosted episode view is supplied during that build.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    // IMDb enrichment, recommendations and the hosted episode loader can add
+    // whole bands after the first frame. Keep taking the cheap static frames
+    // until those producers finish, then snapshot the final opening artwork.
+    // The hard deadline prevents a slow metadata service from holding the UI.
+    while (mounted &&
+        watch.elapsed < _openingTimeout &&
+        (!widget.model.openingDataReady || (_openingView?.loading ?? false))) {
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (!mounted) return;
+    final providers = _openingImageProviders();
+    try {
+      final remaining = _openingTimeout - watch.elapsed;
+      if (remaining > Duration.zero) {
+        await Future.wait<void>([
+          for (final provider in providers) _precacheQuietly(provider),
+        ]).timeout(remaining);
+      }
+    } catch (_) {
+      // The skeleton has a bounded life even if an artwork host is slow or
+      // unavailable. The normal image widgets keep their own placeholders and
+      // retry/cache policy after the page arrives.
+    }
+    final remaining = _openingMinimum - watch.elapsed;
+    if (remaining > Duration.zero) await Future<void>.delayed(remaining);
+    // Give the raster thread one more presentation boundary after the decoded
+    // images enter the cache. Without this, an already-completed precache can
+    // still reveal on the same frame that uploads the texture on weak TV GPUs.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    _detachOpeningKeyHandler();
+    setState(() => _openingReady = true);
+    // The page was deliberately focus-excluded while hidden. Autofocus is only
+    // considered when the primary action first mounts, so explicitly restore
+    // the normal TV entry point once the gate opens.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final focused = FocusManager.instance.primaryFocus;
+      if (!_openingUserNavigated ||
+          focused == null ||
+          focused == FocusManager.instance.rootScope ||
+          focused == widget.model.focus.primaryEntry) {
+        widget.model.focus.focusEntry();
+      }
+    });
+  }
+
+  bool _onOpeningHardwareKey(KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown ||
+        key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.tab) {
+      _openingUserNavigated = true;
+    }
+    return false;
+  }
+
+  void _detachOpeningKeyHandler() {
+    if (!_openingKeyHandlerAttached) return;
+    HardwareKeyboard.instance.removeHandler(_onOpeningHardwareKey);
+    _openingKeyHandlerAttached = false;
+  }
+
+  List<ImageProvider> _openingImageProviders() {
+    final providers = <ImageProvider>[];
+    final seen = <String>{};
+    void add(String? url, int width) {
+      if (url == null || url.isEmpty || !seen.add('$width:$url')) return;
+      providers.add(
+        CachedNetworkImageProvider(
+          url,
+          cacheManager: DebrifyImageCache.manager,
+          maxWidth: width,
+        ),
+      );
+    }
+
+    // Match each consumer's decode width. Each rail is capped at its first TV
+    // screenful; warming cards that cannot yet be painted would recreate the
+    // GPU spike behind the cover instead of smoothing it.
+    add(highQualityArtworkUrl(widget.model.backdrop), 1400);
+    add(widget.model.logo, 520);
+    final view = _openingView;
+    if (view != null) {
+      for (final episode in view.episodes.take(6)) {
+        add(episode.thumbnailUrl ?? view.showImageUrl, 500);
+      }
+    }
+    for (final member in widget.model.cast.take(7)) {
+      add(member.imageUrl, 260);
+    }
+    for (final item in widget.model.recommendations.take(6)) {
+      add(item.poster, 300);
+    }
+    for (final item in _universe.take(6)) {
+      add(item.posterUrl, 300);
+    }
+    return providers;
+  }
+
+  Future<void> _precacheQuietly(ImageProvider provider) async {
+    try {
+      await precacheImage(provider, context);
+    } catch (_) {
+      // See _warmTvOpening: this is presentation preparation, never a reason
+      // to block a usable detail page.
+    }
+  }
+
+  @override
   void dispose() {
+    _detachOpeningKeyHandler();
     _scroll.dispose();
     _epScroll.dispose();
     for (final n in [
@@ -367,13 +633,13 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     final hasSeasons = view != null && view.seasons.length > 1;
     return hasSeasons
         ? episodePeek +
-            // Only the ROW k-scales — ShowcaseSeasons renders
-            // `SizedBox(height: 34 * k)` while the air around it stays fixed.
-            // Scaling the whole 50 over-reserved by 16·(k−1) on wide touch,
-            // showing a sliver more episode row than the 0.18 peek pins.
-            (m.compact
-                ? _seasonPillBandHeight
-                : _seasonsRowHeight * m.k + _seasonsBandAir)
+              // Only the ROW k-scales — ShowcaseSeasons renders
+              // `SizedBox(height: 34 * k)` while the air around it stays fixed.
+              // Scaling the whole 50 over-reserved by 16·(k−1) on wide touch,
+              // showing a sliver more episode row than the 0.18 peek pins.
+              (m.compact
+                  ? _seasonPillBandHeight
+                  : _seasonsRowHeight * m.k + _seasonsBandAir)
         : episodePeek;
   }
 
@@ -574,24 +840,31 @@ class _DetailShowcaseState extends State<DetailShowcase> {
   void _openUniverse(UniverseTitle u) {
     final open = widget.model.onRecommendationTap;
     if (open == null) return;
-    open(StremioMeta(
-      id: u.imdbId,
-      imdbId: u.imdbId,
-      type: u.isSeries ? 'series' : 'movie',
-      name: u.name,
-      poster: u.posterUrl,
-      year: u.year?.toString(),
-    ));
+    open(
+      StremioMeta(
+        id: u.imdbId,
+        imdbId: u.imdbId,
+        type: u.isSeries ? 'series' : 'movie',
+        name: u.name,
+        poster: u.posterUrl,
+        year: u.year?.toString(),
+      ),
+    );
   }
 
   /// The bands as they exist for THIS build. Order here is the DPAD order.
   List<_Band> _bands(EpisodesPanelView? view) {
     final m = widget.model;
     final bands = <_Band>[
-      _Band('identity', [
-        if (m.showPrimary) m.focus.primaryEntry,
-        ..._grow(_actionNodes, _actionCount(m), 'showcase-act'),
-      ], _identityKey, 0),
+      _Band(
+        'identity',
+        [
+          if (m.showPrimary) m.focus.primaryEntry,
+          ..._grow(_actionNodes, _actionCount(m), 'showcase-act'),
+        ],
+        _identityKey,
+        0,
+      ),
     ];
     if (view != null && view.seasons.length > 1) {
       // Compact renders ONE control — the season pill — so its band carries
@@ -600,95 +873,113 @@ class _DetailShowcaseState extends State<DetailShowcase> {
       // node (dpad:false still receives arrow keys from real keyboards) and
       // strand the cursor. Topology always matches rendering.
       final compact = (_m?.compact ?? false);
-      bands.add(_Band(
-        'seasons',
-        _grow(
-          _seasonNodes,
-          compact ? 1 : view.seasons.length,
-          'showcase-season',
+      bands.add(
+        _Band(
+          'seasons',
+          _grow(
+            _seasonNodes,
+            compact ? 1 : view.seasons.length,
+            'showcase-season',
+          ),
+          _seasonsKey,
+          110,
         ),
-        _seasonsKey,
-        110,
-      ));
+      );
     }
     if (view != null && view.episodes.isEmpty && view.unavailable) {
       // A band with one control in it. Without this entry the Retry chip is
       // rendered, focusable, and unreachable — the parent's key handler only
       // ever walks the bands in this list.
-      bands.add(_Band(
-        'retry',
-        _grow(_retryNodes, 1, 'showcase-retry'),
-        _episodesKey,
-        125,
-      ));
+      bands.add(
+        _Band(
+          'retry',
+          _grow(_retryNodes, 1, 'showcase-retry'),
+          _episodesKey,
+          125,
+        ),
+      );
     }
     if (view != null && view.episodes.isNotEmpty) {
-      bands.add(_Band(
-        'episodes',
-        [
-          for (final ep in view.episodes)
-            _cells.of(view.generation, ep.season, ep.number),
-        ],
-        _episodesKey,
-        125,
-      ));
+      bands.add(
+        _Band(
+          'episodes',
+          [
+            for (final ep in view.episodes)
+              _cells.of(view.generation, ep.season, ep.number),
+          ],
+          _episodesKey,
+          125,
+        ),
+      );
     }
     if (m.cast.isNotEmpty) {
-      bands.add(_Band(
-        'cast',
-        _grow(_castNodes, m.cast.length, 'showcase-cast'),
-        _castKey,
-        150,
-      ));
+      bands.add(
+        _Band(
+          'cast',
+          _grow(_castNodes, m.cast.length, 'showcase-cast'),
+          _castKey,
+          150,
+        ),
+      );
     }
     if (_hasGuide) {
-      bands.add(_Band(
-        'guide',
-        _grow(
-          _guideNodes,
-          m.parentsGuide!.categories.length,
-          'showcase-guide',
+      bands.add(
+        _Band(
+          'guide',
+          _grow(
+            _guideNodes,
+            m.parentsGuide!.categories.length,
+            'showcase-guide',
+          ),
+          _guideKey,
+          130,
         ),
-        _guideKey,
-        130,
-      ));
+      );
     }
-    bands.add(_Band(
-      'sources',
-      _grow(
-        _sourceNodes,
-        // Bound cards + "Find sources" + (movies) "Browse all". The count
-        // mirrors ShowcaseSources' itemCount exactly — a node the rendering
-        // doesn't mount is a place arrow keys can strand focus.
-        m.boundSources.length + 1 + (m.isMovie && m.onBrowse != null ? 1 : 0),
-        'showcase-source',
+    bands.add(
+      _Band(
+        'sources',
+        _grow(
+          _sourceNodes,
+          // Bound cards + "Find sources" + (movies) "Browse all". The count
+          // mirrors ShowcaseSources' itemCount exactly — a node the rendering
+          // doesn't mount is a place arrow keys can strand focus.
+          m.boundSources.length + 1 + (m.isMovie && m.onBrowse != null ? 1 : 0),
+          'showcase-source',
+        ),
+        _sourcesKey,
+        165,
       ),
-      _sourcesKey,
-      165,
-    ));
+    );
     if (m.recommendations.isNotEmpty) {
-      bands.add(_Band(
-        'recs',
-        _grow(_recNodes, m.recommendations.length, 'showcase-rec'),
-        _recsKey,
-        150,
-      ));
+      bands.add(
+        _Band(
+          'recs',
+          _grow(_recNodes, m.recommendations.length, 'showcase-rec'),
+          _recsKey,
+          150,
+        ),
+      );
     }
     if (_universe.isNotEmpty) {
-      bands.add(_Band(
-        'universe',
-        _grow(_uniNodes, _universe.length, 'showcase-uni'),
-        _uniKey,
-        150,
-      ));
+      bands.add(
+        _Band(
+          'universe',
+          _grow(_uniNodes, _universe.length, 'showcase-uni'),
+          _uniKey,
+          150,
+        ),
+      );
     }
     if (_dyk.isNotEmpty) {
-      bands.add(_Band(
-        'dyk',
-        _grow(_dykNodes, _dykNodeCount, 'showcase-dyk'),
-        _dykKey,
-        150,
-      ));
+      bands.add(
+        _Band(
+          'dyk',
+          _grow(_dykNodes, _dykNodeCount, 'showcase-dyk'),
+          _dykKey,
+          150,
+        ),
+      );
     }
     return bands;
   }
@@ -713,10 +1004,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     );
   }
 
-  Widget _page(
-    BuildContext context,
-    EpisodesPanelView? view,
-  ) {
+  Widget _page(BuildContext context, EpisodesPanelView? view) {
     final m = widget.model;
 
     if (view != null && view.generation != _handledGeneration) {
@@ -780,6 +1068,8 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     double viewport,
   ) {
     _viewportH = viewport;
+    final opening = _usesTvOpeningGate && !_openingReady;
+    if (opening) _openingView = view;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -796,141 +1086,171 @@ class _DetailShowcaseState extends State<DetailShowcase> {
           thinned: !widget.dpad && m.trailerPlaying,
         ),
         ShowcaseStickyLogo(url: m.logo, name: m.name, visible: _effectiveDeep),
-        ListView(
-          controller: _scroll,
-          padding: EdgeInsets.zero,
-          // Build well past the fold.
-          //
-          // The identity is a full screenful now, so everything below it starts
-          // off-screen — and an unbuilt band has no anchor context, which is
-          // what `_reveal` needs to park it and what focus needs to land on.
-          // The peek guarantees the NEXT band is mounted; this widens the
-          // window so the one after it is ready before the cursor arrives,
-          // rather than being built during the glide.
-          cacheExtent: 1200,
-          children: [
-            ShowcaseIdentity(
-              key: _identityKey,
-              model: m,
-              primaryNode: m.focus.primaryEntry,
-              actionNodes: _grow(_actionNodes, _actionCount(m), 'showcase-act'),
-              onFocused: () => _setBand('identity'),
-              height: _heroHeight(view, viewport),
-            ),
-            if (view != null && view.seasons.length > 1)
-              _band(
-                'seasons',
-                ShowcaseSeasons(
-                  key: _seasonsKey,
-                  view: view,
-                  nodes: _grow(
-                    _seasonNodes,
-                    view.seasons.length,
-                    'showcase-season',
+        ExcludeFocus(
+          excluding: opening,
+          child: IgnorePointer(
+            ignoring: opening,
+            child: AnimatedOpacity(
+              opacity: opening ? 0 : 1,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              child: ListView(
+                controller: _scroll,
+                padding: EdgeInsets.zero,
+                // DPAD moves focus before it scrolls. Keep the original broad
+                // mount window so the next target has a live node and anchor;
+                // the opaque opening plane hides these bands while they warm.
+                scrollCacheExtent: const ScrollCacheExtent.pixels(1200),
+                children: [
+                  ShowcaseIdentity(
+                    key: _identityKey,
+                    model: m,
+                    primaryNode: m.focus.primaryEntry,
+                    actionNodes: _grow(
+                      _actionNodes,
+                      _actionCount(m),
+                      'showcase-act',
+                    ),
+                    onFocused: () => _setBand('identity'),
+                    height: _heroHeight(view, viewport),
                   ),
-                ),
-              ),
-            if (view != null && view.episodes.isNotEmpty)
-              _band('episodes', _episodes(view))
-            else if (view != null && view.loading)
-              // The same slot as the rail it stands in for, so the swap from
-              // note to episodes is not a second arrival.
-              _band('episodes', const ShowcaseBandNote(text: 'Loading episodes…'))
-            else if (view != null && view.unavailable)
-              // 'retry' matches this note's key in `_bands` — the ladder
-              // treats it as a band of its own, so the reveal must too, or
-              // the one band the user is staring at is the one that pops in
-              // while its neighbours fade.
-              _band(
-                'retry',
-                ShowcaseBandNote(
-                  text: 'Episodes unavailable',
-                  actionLabel: 'Retry',
-                  onAction: view.onRetry,
-                  actionNode: _grow(_retryNodes, 1, 'showcase-retry').first,
-                ),
-              ),
-            if (m.cast.isNotEmpty)
-              _band(
-                'cast',
-                ShowcaseCast(
-                  key: _castKey,
-                  cast: m.cast,
-                  nodes: _grow(_castNodes, m.cast.length, 'showcase-cast'),
-                ),
-              ),
-            if (_hasGuide)
-              _band(
-                'guide',
-                ShowcaseGuide(
-                  key: _guideKey,
-                  guide: m.parentsGuide!,
-                  nodes: _grow(
-                    _guideNodes,
-                    m.parentsGuide!.categories.length,
-                    'showcase-guide',
+                  if (view != null && view.seasons.length > 1)
+                    _band(
+                      'seasons',
+                      ShowcaseSeasons(
+                        key: _seasonsKey,
+                        view: view,
+                        nodes: _grow(
+                          _seasonNodes,
+                          view.seasons.length,
+                          'showcase-season',
+                        ),
+                      ),
+                    ),
+                  if (view != null && view.episodes.isNotEmpty)
+                    _band('episodes', _episodes(view))
+                  else if (view != null && view.loading)
+                    // The same slot as the rail it stands in for, so the swap from
+                    // note to episodes is not a second arrival.
+                    _band(
+                      'episodes',
+                      const ShowcaseBandNote(text: 'Loading episodes…'),
+                    )
+                  else if (view != null && view.unavailable)
+                    // 'retry' matches this note's key in `_bands` — the ladder
+                    // treats it as a band of its own, so the reveal must too, or
+                    // the one band the user is staring at is the one that pops in
+                    // while its neighbours fade.
+                    _band(
+                      'retry',
+                      ShowcaseBandNote(
+                        text: 'Episodes unavailable',
+                        actionLabel: 'Retry',
+                        onAction: view.onRetry,
+                        actionNode: _grow(
+                          _retryNodes,
+                          1,
+                          'showcase-retry',
+                        ).first,
+                      ),
+                    ),
+                  if (m.cast.isNotEmpty)
+                    _band(
+                      'cast',
+                      ShowcaseCast(
+                        key: _castKey,
+                        cast: m.cast,
+                        nodes: _grow(
+                          _castNodes,
+                          m.cast.length,
+                          'showcase-cast',
+                        ),
+                      ),
+                    ),
+                  if (_hasGuide)
+                    _band(
+                      'guide',
+                      ShowcaseGuide(
+                        key: _guideKey,
+                        guide: m.parentsGuide!,
+                        nodes: _grow(
+                          _guideNodes,
+                          m.parentsGuide!.categories.length,
+                          'showcase-guide',
+                        ),
+                        accent: m.accent,
+                      ),
+                    ),
+                  _band(
+                    'sources',
+                    ShowcaseSources(
+                      key: _sourcesKey,
+                      sources: m.boundSources,
+                      nodes: _grow(
+                        _sourceNodes,
+                        m.boundSources.length +
+                            1 +
+                            (m.isMovie && m.onBrowse != null ? 1 : 0),
+                        'showcase-source',
+                      ),
+                      onOpen: m.onManageSources ?? m.onSelectSource,
+                      onBrowseAll: m.isMovie ? m.onBrowse : null,
+                    ),
                   ),
-                  accent: m.accent,
-                ),
-              ),
-            _band(
-              'sources',
-              ShowcaseSources(
-                key: _sourcesKey,
-                sources: m.boundSources,
-                nodes: _grow(
-                  _sourceNodes,
-                  m.boundSources.length +
-                      1 +
-                      (m.isMovie && m.onBrowse != null ? 1 : 0),
-                  'showcase-source',
-                ),
-                onOpen: m.onManageSources ?? m.onSelectSource,
-                onBrowseAll: m.isMovie ? m.onBrowse : null,
+                  if (m.recommendations.isNotEmpty)
+                    _band(
+                      'recs',
+                      ShowcaseRecs(
+                        key: _recsKey,
+                        items: m.recommendations,
+                        nodes: _grow(
+                          _recNodes,
+                          m.recommendations.length,
+                          'showcase-rec',
+                        ),
+                        onTap: m.onRecommendationTap,
+                      ),
+                    ),
+                  if (_universe.isNotEmpty)
+                    _band(
+                      'universe',
+                      ShowcaseUniverse(
+                        key: _uniKey,
+                        items: _universe,
+                        nodes: _grow(
+                          _uniNodes,
+                          _universe.length,
+                          'showcase-uni',
+                        ),
+                        onOpen: m.onRecommendationTap != null
+                            ? _openUniverse
+                            : null,
+                      ),
+                    ),
+                  if (_dyk.isNotEmpty)
+                    _band(
+                      'dyk',
+                      ShowcaseDidYouKnow(
+                        key: _dykKey,
+                        entries: _dyk,
+                        total: _x?.didYouKnowTotal ?? _dyk.length,
+                        countLine: _dykCountLine,
+                        nodes: _grow(_dykNodes, _dykNodeCount, 'showcase-dyk'),
+                      ),
+                    ),
+                  // Reference material, last and unfocusable — it is not a band in
+                  // the DPAD ladder, it is the page's footer.
+                  _band(
+                    'details',
+                    ShowcaseDetails(rows: m.detailRows, awards: m.awards),
+                  ),
+                  const SizedBox(height: 40),
+                ],
               ),
             ),
-            if (m.recommendations.isNotEmpty)
-              _band(
-                'recs',
-                ShowcaseRecs(
-                  key: _recsKey,
-                  items: m.recommendations,
-                  nodes:
-                      _grow(_recNodes, m.recommendations.length, 'showcase-rec'),
-                  onTap: m.onRecommendationTap,
-                ),
-              ),
-            if (_universe.isNotEmpty)
-              _band(
-                'universe',
-                ShowcaseUniverse(
-                  key: _uniKey,
-                  items: _universe,
-                  nodes: _grow(_uniNodes, _universe.length, 'showcase-uni'),
-                  onOpen:
-                      m.onRecommendationTap != null ? _openUniverse : null,
-                ),
-              ),
-            if (_dyk.isNotEmpty)
-              _band(
-                'dyk',
-                ShowcaseDidYouKnow(
-                  key: _dykKey,
-                  entries: _dyk,
-                  total: _x?.didYouKnowTotal ?? _dyk.length,
-                  countLine: _dykCountLine,
-                  nodes: _grow(_dykNodes, _dykNodeCount, 'showcase-dyk'),
-                ),
-              ),
-            // Reference material, last and unfocusable — it is not a band in
-            // the DPAD ladder, it is the page's footer.
-            _band(
-              'details',
-              ShowcaseDetails(rows: m.detailRows, awards: m.awards),
-            ),
-            const SizedBox(height: 40),
-          ],
+          ),
         ),
+        if (opening) const _ShowcaseTvOpeningSkeleton(),
       ],
     );
   }
@@ -1009,8 +1329,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                       // Touch/pointer without the compact card still needs a
                       // visible way into the options that hold-OK provides on
                       // TV — the kebab. TV passes null and renders untouched.
-                      onOptions:
-                          widget.dpad ? null : () => view.options(ep),
+                      onOptions: widget.dpad ? null : () => view.options(ep),
                     ),
             );
           },

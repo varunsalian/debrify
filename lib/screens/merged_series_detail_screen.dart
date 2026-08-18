@@ -401,6 +401,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// [simklStatusLoader] resolves — mirrors [_traktStatus] one-for-one.
   SimklTitleStatus? _simklStatus;
   bool _localMovieFinished = false;
+  bool _showcaseOpeningDataReady = false;
 
   /// Debrify's local watchlist is independent of tracker connectivity.
   bool _inMyWatchlist = false;
@@ -423,11 +424,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _loadBoundSources();
-      _loadEnrichedMeta();
-      _loadImdbEnrichment();
-      _loadParentsGuide();
-      _loadRecommendations();
+      _loadShowcaseOpeningData();
       _loadTrailer();
       _loadAccent();
       _loadResumeInfo();
@@ -436,6 +433,23 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       _loadLocalMovieFinished();
       _loadMyWatchlistState();
     });
+  }
+
+  Future<void> _loadShowcaseOpeningData() async {
+    try {
+      await Future.wait<void>([
+        _loadBoundSources(),
+        _loadEnrichedMeta(),
+        _loadImdbEnrichment(),
+        _loadParentsGuide(),
+        _loadRecommendations(),
+      ]);
+    } catch (_) {
+      // Each loader is best effort. One failed service must not hold the
+      // composed Showcase opening behind its readiness signal.
+    } finally {
+      if (mounted) setState(() => _showcaseOpeningDataReady = true);
+    }
   }
 
   @override
@@ -1197,6 +1211,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       imdbExtra: _imdbExtra,
       parentsGuide: _parentsGuide,
       recommendations: _recommendations ?? const [],
+      openingDataReady: _showcaseOpeningDataReady,
       primaryLabel: _primaryLabel,
       sourceCount: widget.boundSourceCount?.call(_item) ?? 0,
       boundSources: _boundSources,
