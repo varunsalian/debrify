@@ -209,6 +209,7 @@ class StorageService {
   static const String _videoResumeKey = 'video_resume_v1';
   static const String _playbackStateKey = 'playback_state_v1';
   static const String _continueWatchingKey = 'continue_watching_v1';
+  static const String _finishedMoviesKey = 'finished_movies_v1';
   static const String _debrifyTvStartRandomKey = 'debrify_tv_start_random';
   static const String _debrifyTvHideSeekbarKey = 'debrify_tv_hide_seekbar';
   static const String _debrifyTvShowChannelNameKey =
@@ -331,6 +332,10 @@ class StorageService {
   static const String _playerSystemAudioEffectsKey =
       'player_system_audio_effects';
   static const String _playerStartPortraitKey = 'player_start_portrait';
+  static const String _movieCompletionThresholdKey =
+      'movie_completion_threshold';
+  static const String _episodeCompletionThresholdKey =
+      'episode_completion_threshold';
   static const String _androidVideoRendererModeKey =
       'android_video_renderer_mode';
   static const String _tvosForceSoftwareDecodeKey =
@@ -338,10 +343,8 @@ class StorageService {
   static const String _audioPassthroughKey = 'player_audio_passthrough';
   static const String _appleMultichannelAudioKey =
       'player_apple_multichannel_audio';
-  static const String _tvosForceStereoAudioKey =
-      'tvos_force_stereo_audio_v1';
-  static const String _tvosLegacyAudioOutputKey =
-      'tvos_legacy_audio_output_v1';
+  static const String _tvosForceStereoAudioKey = 'tvos_force_stereo_audio_v1';
+  static const String _tvosLegacyAudioOutputKey = 'tvos_legacy_audio_output_v1';
   static const String _uiSoundsKey = 'ui_sounds';
   static const String _uiHapticsKey = 'ui_haptics';
   static const String _subtitleAutoSyncKey = 'subtitle_auto_sync_enabled';
@@ -351,6 +354,21 @@ class StorageService {
       'player_default_audio_language';
   static const String _skipSegmentsEnabledKey = 'skip_segments_enabled';
   static const String _skipSegmentProviderKey = 'skip_segment_provider';
+
+  /// Completion thresholds selectable in Settings → Playback. A lower bound
+  /// avoids treating a brief accidental play as watched; 95% still lets users
+  /// finish a title without waiting through every trailing credit frame.
+  static const List<int> localCompletionThresholdOptions = <int>[
+    50,
+    60,
+    70,
+    75,
+    80,
+    85,
+    90,
+    95,
+  ];
+  static const int defaultLocalCompletionThreshold = 80;
 
   /// Stable provider identifier persisted by the Playback settings page.
   /// Kept here rather than using a display label so future provider names can
@@ -2187,6 +2205,8 @@ class StorageService {
 
   /// Remove a continue watching entry by IMDB ID.
   static Future<void> removeContinueWatchingItem(String imdbId) async {
+    final normalized = imdbId.trim().toLowerCase();
+    if (normalized.isEmpty) return;
     final prefs = await ProfilePreferences.instance();
     final raw = prefs.getString(_continueWatchingKey);
     if (raw == null || raw.isEmpty) return;
@@ -2196,7 +2216,9 @@ class StorageService {
           .whereType<Map<String, dynamic>>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
-      items.removeWhere((e) => e['imdbId'] == imdbId);
+      items.removeWhere(
+        (e) => (e['imdbId'] as String?)?.trim().toLowerCase() == normalized,
+      );
       await prefs.setString(_continueWatchingKey, jsonEncode(items));
     } catch (_) {}
   }
@@ -2205,6 +2227,62 @@ class StorageService {
   static Future<void> clearContinueWatching() async {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_continueWatchingKey);
+  }
+
+  /// Movies finished locally by the Debrify player. This intentionally stays
+  /// separate from Trakt and Simkl: tracker-backed sessions use the tracker as
+  /// their source of truth, while offline/local sessions still need a durable
+  /// completed state for the detail screen.
+  static Future<Set<String>> _getFinishedMovieIds() async {
+    final prefs = await ProfilePreferences.instance();
+    final stored = prefs.getStringList(_finishedMoviesKey) ?? const <String>[];
+    return {
+      for (final raw in stored)
+        if (raw.trim().isNotEmpty) raw.trim().toLowerCase(),
+    };
+  }
+
+  static Future<bool> isMovieFinished(String imdbId) async {
+    final normalized = imdbId.trim().toLowerCase();
+    if (normalized.isEmpty) return false;
+    return (await _getFinishedMovieIds()).contains(normalized);
+  }
+
+  /// Mark a locally tracked movie finished, remove it from Continue Watching,
+  /// and clear its resumable state. The finished record itself remains so the
+  /// detail action can accurately read "Rewatch".
+  static Future<void> markMovieAsFinished(String imdbId) async {
+    final normalized = imdbId.trim().toLowerCase();
+    if (normalized.isEmpty) return;
+
+    final finished = await _getFinishedMovieIds();
+    if (finished.add(normalized)) {
+      final prefs = await ProfilePreferences.instance();
+      await prefs.setStringList(_finishedMoviesKey, finished.toList()..sort());
+    }
+    await Future.wait([
+      removeContinueWatchingItem(normalized),
+      clearPlaybackStateByImdbId(normalized),
+    ]);
+    debugPrint('StorageService: markMovieAsFinished imdbId="$normalized"');
+  }
+
+  /// Start a local rewatch. The caller saves a fresh resume point afterwards,
+  /// so only the completed marker is removed here.
+  static Future<void> unmarkMovieAsFinished(String imdbId) async {
+    final normalized = imdbId.trim().toLowerCase();
+    if (normalized.isEmpty) return;
+
+    final finished = await _getFinishedMovieIds();
+    if (!finished.remove(normalized)) return;
+
+    final prefs = await ProfilePreferences.instance();
+    if (finished.isEmpty) {
+      await prefs.remove(_finishedMoviesKey);
+    } else {
+      await prefs.setStringList(_finishedMoviesKey, finished.toList()..sort());
+    }
+    debugPrint('StorageService: unmarkMovieAsFinished imdbId="$normalized"');
   }
 
   // Enhanced Playback State methods
@@ -2223,11 +2301,14 @@ class StorageService {
 
   /// Remove all playback state entries (series progress, video progress) for an IMDB ID.
   static Future<void> clearPlaybackStateByImdbId(String imdbId) async {
+    final normalized = imdbId.trim().toLowerCase();
+    if (normalized.isEmpty) return;
     final map = await _getPlaybackStateMap();
     final keysToRemove = <String>[];
     for (final entry in map.entries) {
       if (entry.value is Map<String, dynamic> &&
-          entry.value['imdbId'] == imdbId) {
+          (entry.value['imdbId'] as String?)?.trim().toLowerCase() ==
+              normalized) {
         keysToRemove.add(entry.key);
       }
     }
@@ -2755,6 +2836,13 @@ class StorageService {
     final videoData = map[key];
     if (videoData == null || videoData['type'] != 'video') return null;
 
+    final imdbId = (videoData['imdbId'] as String?)?.trim();
+    // A finished movie can have a stale source-specific state from a final
+    // autosave tick. Its local completion record wins over that stale resume.
+    if (imdbId != null && imdbId.isNotEmpty && await isMovieFinished(imdbId)) {
+      return null;
+    }
+
     return videoData as Map<String, dynamic>;
   }
 
@@ -2762,6 +2850,10 @@ class StorageService {
   static Future<Map<String, dynamic>?> getVideoPlaybackStateByImdbId(
     String imdbId,
   ) async {
+    // A completion write and the periodic player autosave can overlap by one
+    // tick. The finished marker is authoritative for movies, so never expose
+    // a stale resume record that slipped back in during that tiny window.
+    if (await isMovieFinished(imdbId)) return null;
     final map = await _getPlaybackStateMap();
     Map<String, dynamic>? best;
     int bestUpdatedAt = -1;
@@ -3051,11 +3143,14 @@ class StorageService {
   static Future<void> clearAllPlaybackData() async {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_playbackStateKey);
+    await prefs.remove(_finishedMoviesKey);
     // Resume lives in the DB now; the prefs key only still exists for users
     // who wipe before the one-time import has run.
     await prefs.remove(_videoResumeKey);
     await IptvMediaStore.clearVideoResume();
-    debugPrint('StorageService: cleared playback state and video resume data');
+    debugPrint(
+      'StorageService: cleared playback state, completed movies, and video resume data',
+    );
   }
 
   /// Clear all progress data for a specific playlist/series
@@ -3182,6 +3277,10 @@ class StorageService {
     Map<String, dynamic> entry,
   ) {
     return IptvMediaStore.upsertVideoResume(key, entry);
+  }
+
+  static Future<void> removeVideoResume(String key) {
+    return IptvMediaStore.removeVideoResume(key);
   }
 
   /// Save audio and subtitle preferences for series content
@@ -5439,6 +5538,49 @@ class StorageService {
   static Future<void> setNetworkBufferSize(String value) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setString(_networkBufferSizeKey, value);
+  }
+
+  static int _normalizeLocalCompletionThreshold(int value) {
+    return localCompletionThresholdOptions.contains(value)
+        ? value
+        : defaultLocalCompletionThreshold;
+  }
+
+  /// Percentage of a movie that must be watched before the local player marks
+  /// it complete. Tracker-backed sessions retain Trakt/Simkl's own semantics.
+  static Future<int> getMovieCompletionThreshold() async {
+    final prefs = await ProfilePreferences.instance();
+    return _normalizeLocalCompletionThreshold(
+      prefs.getInt(_movieCompletionThresholdKey) ??
+          defaultLocalCompletionThreshold,
+    );
+  }
+
+  static Future<void> setMovieCompletionThreshold(int value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setInt(
+      _movieCompletionThresholdKey,
+      _normalizeLocalCompletionThreshold(value),
+    );
+  }
+
+  /// Percentage of an episode that must be watched before the local player
+  /// marks it complete. Kept separate from movies because users commonly want
+  /// a different rule for episode credits.
+  static Future<int> getEpisodeCompletionThreshold() async {
+    final prefs = await ProfilePreferences.instance();
+    return _normalizeLocalCompletionThreshold(
+      prefs.getInt(_episodeCompletionThresholdKey) ??
+          defaultLocalCompletionThreshold,
+    );
+  }
+
+  static Future<void> setEpisodeCompletionThreshold(int value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setInt(
+      _episodeCompletionThresholdKey,
+      _normalizeLocalCompletionThreshold(value),
+    );
   }
 
   // PikPak API Settings

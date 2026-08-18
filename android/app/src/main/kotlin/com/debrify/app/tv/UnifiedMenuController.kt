@@ -116,6 +116,11 @@ class UnifiedMenuController(
     interface Callbacks {
         /** Build the full menu model for the current (section, sub-control) selection. */
         fun buildModel(sectionIndex: Int, col2Index: Int): Model
+        /**
+         * Gives an owner a chance to replace a top-level section with its own
+         * full-screen surface. Return true when the section was handled.
+         */
+        fun onSectionActivated(sectionIndex: Int): Boolean = false
         /** Run the subtitle movie/show search for [query]; results arrive async and
          *  the Activity calls [render] when ready. */
         fun onSearchSubmit(query: String)
@@ -304,7 +309,10 @@ class UnifiedMenuController(
 
     private fun activate() {
         when (activeCol) {
-            0 -> { activeCol = 1; sel[1] = 0; sel[2] = 0; rebuildModel(); render() }
+            0 -> {
+                if (callbacks.onSectionActivated(sel[0])) return
+                activeCol = 1; sel[1] = 0; sel[2] = 0; rebuildModel(); render()
+            }
             1 -> { activeCol = 2; landOnCol3(); rebuildModel(); render(); maybeEnterSearchField() }
             else -> {
                 if (model.col3Mode == Col3Mode.SEARCH && sel[2] == 0) { enterEditMode(); render(); return }

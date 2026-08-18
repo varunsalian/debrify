@@ -1125,6 +1125,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   /// twice, ejecting the user off the host screen instead of playing the next.
   bool _seriesNextDispatched = false;
   bool _currentEpisodeMarkedAsFinished = false;
+  bool _currentMovieMarkedAsFinished = false;
+  bool _currentMovieRewatchStarted = false;
+  int _movieCompletionThreshold =
+      StorageService.defaultLocalCompletionThreshold;
+  int _episodeCompletionThreshold =
+      StorageService.defaultLocalCompletionThreshold;
   // We render using a large logical surface; fit is controlled by BoxFit
   StreamSubscription? _posSub;
   StreamSubscription? _durSub;
@@ -1384,6 +1390,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     SubtitleSettingsService.instance.resetSyncOffset();
     _loadSubtitleSettings();
     unawaited(_loadSkipSegmentSettings());
+    unawaited(_loadLocalCompletionThresholds());
     MediaKitInit.ensureInitialized();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // The player opens landscape — a video wants the long edge — unless the
@@ -1452,6 +1459,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _skipSegmentProviderId = providerId;
     _skipSegmentSettingsLoaded = true;
     _syncSkipSegmentsForCurrentContent();
+  }
+
+  Future<void> _loadLocalCompletionThresholds() async {
+    final values = await Future.wait<int>([
+      StorageService.getMovieCompletionThreshold(),
+      StorageService.getEpisodeCompletionThreshold(),
+    ]);
+    if (!mounted) return;
+    _movieCompletionThreshold = values[0];
+    _episodeCompletionThreshold = values[1];
+    // A seek can cross the default threshold before the preference read
+    // finishes. Re-evaluate against the configured value once it arrives.
+    _checkAndApplyLocalCompletion();
+  }
+
+  bool get _usesLocalCompletionTracking =>
+      !widget.traktScrobble &&
+      !widget.simklScrobble &&
+      widget.stremioTvChannels == null &&
+      _effectiveIptvChannels == null;
+
+  String? get _currentLocalMovieImdbId {
+    if (_effectiveContentType != 'movie') return null;
+    final imdbId = _effectiveContentImdbId?.trim();
+    return imdbId == null || imdbId.isEmpty ? null : imdbId;
+  }
+
+  void _resetLocalCompletionState() {
+    _currentEpisodeMarkedAsFinished = false;
+    _currentMovieMarkedAsFinished = false;
+    _currentMovieRewatchStarted = false;
   }
 
   ({String imdbId, int season, int episode, Duration duration, String key})?
@@ -2549,7 +2587,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final recordingsAllowed = ProfilePolicyGuard.allowsSync(
       ProfileFeature.recordings,
     );
-    _recordingSupported = recordingsAllowed && nativeBackend && !Platform.isAndroid;
+    _recordingSupported =
+        recordingsAllowed && nativeBackend && !Platform.isAndroid;
     if (recordingsAllowed && nativeBackend && Platform.isAndroid) {
       unawaited(
         AndroidNativeDownloader.canPublishRecordings().then((canPublish) {
@@ -2737,7 +2776,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _playbackUiClock.updatePosition(d);
       _syncSkipSegmentsForCurrentContent();
       _syncActiveSkipSegmentUi();
-      _checkAndMarkEpisodeAsFinished();
+      _checkAndApplyLocalCompletion();
     });
     _durSub = player.stream.duration.listen((d) {
       if (!isCurrent()) return;
@@ -3653,6 +3692,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
     // Mark the current episode as finished if it's a series
     await _markCurrentEpisodeAsFinished();
+    // A locally tracked movie may finish before the next periodic position
+    // save; make EOF a completion too (tracker sessions keep their existing
+    // scrobble-only path above).
+    await _markCurrentMovieAsFinished();
 
     // "Stop at the end of this episode": suppress every advance below and let
     // the screen sleep. Playback has already finished, so there is nothing
@@ -4272,11 +4315,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             'Player: MagicTV next success. Opening new URL (provider: $provider, pikpakFileId: $pikpakFileId).',
           );
 
-          // Clear subtitle, IMDB, and episode-finished state when switching content
+          // Clear subtitle, IMDB, and local completion state when switching content
           _resetSubtitleState();
           _singleFileImdbId = null;
           _singleFileImdbFetched = false;
-          _currentEpisodeMarkedAsFinished = false;
+          _resetLocalCompletionState();
 
           // Update TV static overlay to show signal acquired
           if (title.isNotEmpty && mounted) {
@@ -4557,7 +4600,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       // those to stereo. 0 means "unknown" and leaves mpv's default alone.
       try {
         _tvosRouteOutputChannels =
-            await _tvReleaseLogChannel.invokeMethod<int>('outputChannelCount') ??
+            await _tvReleaseLogChannel.invokeMethod<int>(
+              'outputChannelCount',
+            ) ??
             0;
       } catch (_) {
         _tvosRouteOutputChannels = 0;
@@ -6969,7 +7014,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _resetSubtitleState();
     _singleFileImdbId = null;
     _singleFileImdbFetched = false;
-    _currentEpisodeMarkedAsFinished = false;
+    _resetLocalCompletionState();
 
     try {
       _pikPakRetryId++;
@@ -7416,22 +7461,61 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (e) {}
   }
 
-  /// Check if current episode should be marked as finished (for manual seeking)
-  ///
-  /// Sync on purpose: this runs on EVERY position event — dozens of times a
-  /// second for the whole session — and as an async function each of those
-  /// calls allocated a Future and a microtask just to hit the first early
-  /// return. The actual marking stays async and is fired unawaited, exactly
-  /// as the position listener already treated it.
-  void _checkAndMarkEpisodeAsFinished() {
-    if (_currentEpisodeMarkedAsFinished) return;
-    // Only check if we're near the end of the video (within last 30 seconds)
-    if (_duration > Duration.zero && _position > Duration.zero) {
-      final timeRemaining = _duration - _position;
-      if (timeRemaining <= VideoPlayerTimingConstants.endingThreshold) {
-        unawaited(_markCurrentEpisodeAsFinished());
-      }
+  Future<void> _markCurrentMovieAsFinished() async {
+    final imdbId = _currentLocalMovieImdbId;
+    if (!_usesLocalCompletionTracking ||
+        _currentMovieMarkedAsFinished ||
+        imdbId == null) {
+      return;
     }
+    // Set this before the await: position events are frequent and completion
+    // must perform one cleanup/write, not queue one per frame.
+    _currentMovieMarkedAsFinished = true;
+    try {
+      await Future.wait([
+        StorageService.markMovieAsFinished(imdbId),
+        StorageService.removeVideoResume(_resumeKey),
+      ]);
+    } catch (_) {
+      // Playback remains usable if local storage is temporarily unavailable.
+    }
+  }
+
+  /// Apply the local, user-configured completion rule. This is synchronous on
+  /// purpose because it runs for every position update; actual writes stay
+  /// unawaited and are guarded one-shot above/in [_markCurrentEpisodeAsFinished].
+  void _checkAndApplyLocalCompletion() {
+    if (!_usesLocalCompletionTracking ||
+        _duration <= Duration.zero ||
+        _position <= Duration.zero) {
+      return;
+    }
+
+    final percent = _position.inMicroseconds * 100 / _duration.inMicroseconds;
+    final movieImdbId = _currentLocalMovieImdbId;
+    if (movieImdbId != null) {
+      if (!_currentMovieRewatchStarted && percent < _movieCompletionThreshold) {
+        // The title was finished during an earlier session. A real new play
+        // below its threshold is a rewatch, so restore it to normal local
+        // Continue Watching behavior before the next resume save.
+        _currentMovieRewatchStarted = true;
+        unawaited(StorageService.unmarkMovieAsFinished(movieImdbId));
+      }
+      if (!_currentMovieMarkedAsFinished &&
+          percent >= _movieCompletionThreshold) {
+        unawaited(_markCurrentMovieAsFinished());
+      }
+      return;
+    }
+
+    final isSeries =
+        _effectiveContentType == 'series' || _seriesPlaylist?.isSeries == true;
+    if (!isSeries) return;
+    if (_currentEpisodeMarkedAsFinished ||
+        percent < _episodeCompletionThreshold) {
+      return;
+    }
+    unawaited(_markCurrentEpisodeAsFinished());
   }
 
   /// Tear down the black transition overlay when a load fails partway (bad
@@ -7511,7 +7595,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
     final entry = _activePlaylist![index];
     _currentIndex = index;
-    _currentEpisodeMarkedAsFinished = false;
+    _resetLocalCompletionState();
 
     // Clear subtitle cache and selection when changing content
     _resetSubtitleState();
@@ -8934,9 +9018,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Local candidate + speed/aspect restore (enhanced state preferred, else the
     // legacy resume store). Speed/aspect are restored regardless of the seek.
     int localMs = 0;
-    final state =
-        await _getEnhancedPlaybackState() ??
-        await StorageService.getVideoResume(_resumeKey);
+    final localMovieImdbId = _currentLocalMovieImdbId;
+    final locallyFinishedMovie =
+        !preferLocalResume &&
+        localMovieImdbId != null &&
+        await StorageService.isMovieFinished(localMovieImdbId);
+    final state = locallyFinishedMovie
+        ? null
+        : await _getEnhancedPlaybackState() ??
+              await StorageService.getVideoResume(_resumeKey);
     if (state != null) {
       localMs = (state['positionMs'] ?? 0) as int;
       final speed = (state['speed'] ?? 1.0) as double;
@@ -9107,6 +9197,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final pos = _position;
     final dur = _duration;
     if (dur <= Duration.zero) {
+      return;
+    }
+
+    // Completion clears local movie resume/CW state. Do not let the autosave
+    // tick immediately recreate that state while end credits keep playing.
+    if (_currentMovieMarkedAsFinished && _currentLocalMovieImdbId != null) {
       return;
     }
 

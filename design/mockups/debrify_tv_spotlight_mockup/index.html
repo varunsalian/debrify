@@ -1,0 +1,1276 @@
+<!doctype html>
+<html lang="en" data-view="wide" data-art="off">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Debrify TV — Spotlight mockup</title>
+<style>
+@font-face{font-family:SpaceGrotesk;src:url('../../../assets/fonts/SpaceGrotesk-Medium.ttf') format('truetype');font-weight:500}
+@font-face{font-family:SpaceGrotesk;src:url('../../../assets/fonts/SpaceGrotesk-Bold.ttf') format('truetype');font-weight:700}
+@font-face{font-family:JetBrainsMono;src:url('../../../assets/fonts/JetBrainsMono-Regular.ttf') format('truetype');font-weight:400}
+@font-face{font-family:JetBrainsMono;src:url('../../../assets/fonts/JetBrainsMono-Bold.ttf') format('truetype');font-weight:700}
+
+:root{
+  --ground:#0D1420; --sunken:#080D16; --raised:#151D2A;
+  --ink:#FFFFFF; --accent:#E23D4C; --accent-lit:#FF7A86;
+  --ok:#39D98A; --warn:#F4B860; --bad:#FF6673;
+  --dim:rgba(255,255,255,.58); --dimmer:rgba(255,255,255,.36);
+  --hair:rgba(255,255,255,.075);
+  --sans:SpaceGrotesk,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:JetBrainsMono,"SFMono-Regular",Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{background:#070B12;color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+body{margin:0;min-width:340px;background:radial-gradient(circle at 84% -18%,rgba(226,61,76,.11),transparent 32rem),#070B12}
+button,input{font:inherit}button{color:inherit;cursor:pointer}
+
+/* ══════════════ doc chrome ══════════════ */
+.docbar{position:sticky;top:0;z-index:90;display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:13px 24px;
+  background:rgba(7,11,18,.87);border-bottom:1px solid var(--hair);backdrop-filter:blur(18px)}
+.docbrand{font:700 11px/1 var(--mono);letter-spacing:.19em;text-transform:uppercase;color:var(--accent-lit)}
+.docnote{font-size:12px;color:var(--dimmer)}
+.pillrow{display:flex;gap:6px;margin-left:auto;padding:4px;border-radius:999px;background:rgba(255,255,255,.05)}
+.pillrow button{border:0;background:transparent;padding:8px 13px;border-radius:999px;
+  font:700 10px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--dimmer)}
+.pillrow button.on{background:#fff;color:#0B1019}
+
+main{width:min(1240px,calc(100% - 44px));margin:0 auto;padding:44px 0 120px}
+.intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,400px);gap:44px;align-items:end;margin-bottom:30px}
+.eyebrow{font:700 10px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--accent-lit);margin-bottom:13px}
+h1{font-size:35px;line-height:1.03;letter-spacing:-1.1px;margin:0 0 12px}
+.lede{max-width:730px;font-size:14px;line-height:1.68;color:var(--dim);margin:0}
+.lede b{color:#fff;font-weight:700}
+.principles{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+.principles span{padding:8px 11px;border-radius:999px;background:rgba(255,255,255,.055);border:1px solid var(--hair);
+  font:700 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dimmer)}
+
+.framebar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:0 0 11px}
+.framebar .label{font:700 10px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer);margin-right:4px}
+.screenbtn{border:1px solid var(--hair);background:rgba(255,255,255,.04);border-radius:8px;padding:8px 11px;
+  font:700 9.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dimmer)}
+.screenbtn.on{background:#fff;border-color:#fff;color:#0B1019}
+.framebar .hint{margin-left:auto;font:400 10px/1 var(--mono);color:rgba(255,255,255,.26)}
+
+.stage-shell{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:var(--sunken);
+  border:1px solid rgba(255,255,255,.10);box-shadow:0 34px 100px rgba(0,0,0,.5);outline:none}
+.stage-shell:focus{border-color:rgba(226,61,76,.6)}
+.scaler{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0}
+.stagenote{font:400 11px/1.7 var(--mono);color:var(--dimmer);margin:11px 0 0;letter-spacing:.02em}
+.stagenote b{color:var(--dim)}
+
+/* ══════════════ THE TV PAGE — drawn at 1920×1080, logical = ÷2 ══════════════ */
+.tv{position:absolute;inset:0;overflow:hidden;color:#fff;
+  background:linear-gradient(178deg,#0D1420 0%,#101722 58%,#0C121D 100%)}
+.tv::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at 96% -14%,rgba(226,61,76,.14),transparent 46%)}
+.tv::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.16;
+  background:linear-gradient(115deg,transparent 0 44%,rgba(255,255,255,.02) 50%,transparent 58%)}
+
+/* collapsed app sidebar — context only, 64 logical = 128 here */
+.shellrail{position:absolute;left:0;top:0;bottom:0;width:128px;z-index:5;
+  background:linear-gradient(90deg,rgba(0,0,0,.4),rgba(0,0,0,0));display:flex;flex-direction:column;align-items:center;padding-top:44px;gap:34px}
+.shellrail .mark{width:56px;height:56px;border-radius:16px;background:var(--accent);display:grid;place-items:center;
+  box-shadow:0 0 40px rgba(226,61,76,.3)}
+.shellrail .mark svg{width:30px;height:30px;stroke:#fff;fill:none;stroke-width:2.4}
+.shellrail i{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.05);display:grid;place-items:center}
+.shellrail i svg{width:24px;height:24px;stroke:rgba(255,255,255,.3);fill:none;stroke-width:2}
+.shellrail i.here{background:rgba(255,255,255,.14)}
+.shellrail i.here svg{stroke:#fff}
+
+.screen{position:absolute;inset:0;display:none}
+.screen.on{display:block}
+
+/* ── the standing rail ────────────────────────────────────────── */
+.rail{position:absolute;left:176px;top:60px;bottom:44px;width:572px;display:flex;flex-direction:column;
+  border-right:1px solid var(--hair);padding-right:44px}
+.rail .kick{font:700 21px/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--accent-lit);margin-bottom:16px}
+.rail h2{font-size:62px;line-height:.98;letter-spacing:-2px;margin:0 0 12px}
+.rail .sub{font:400 23px/1.45 var(--sans);color:rgba(255,255,255,.46);margin:0 0 30px}
+.rail .sub b{color:rgba(255,255,255,.8);font-weight:700}
+.grouplabel{font:700 18px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.3);
+  margin:22px 4px 12px;display:flex;align-items:center}
+.grouplabel span{margin-left:auto;letter-spacing:.06em;color:rgba(255,255,255,.2)}
+.raillist{min-height:0;overflow:hidden;display:flex;flex-direction:column;padding:2px 4px 0;margin-right:-4px}
+
+/* ── focusables: text rows invert, art cards lift ─────────────── */
+.f{position:relative;overflow:hidden;border:1px solid transparent;background:transparent;text-align:left;
+  transition:transform .18s cubic-bezier(.2,.9,.25,1.06),background .15s,box-shadow .18s,border-color .15s}
+.f::after{content:"";position:absolute;inset:-60%;pointer-events:none;opacity:0;border-radius:inherit;
+  background:radial-gradient(circle at 50% 46%,rgba(255,255,255,.3),rgba(255,255,255,.07) 26%,transparent 58%);transition:opacity .18s}
+.f.on::after{opacity:1}
+
+.chrow{display:grid;grid-template-columns:76px minmax(0,1fr) 18px;align-items:center;gap:18px;
+  height:92px;padding:0 16px;border-radius:16px;flex:0 0 auto;margin-bottom:6px;color:rgba(255,255,255,.5)}
+.chrow .num{width:72px;height:60px;border-radius:12px;background:rgba(255,255,255,.06);display:grid;place-items:center;
+  font:700 30px/1 var(--mono);letter-spacing:-.02em;color:rgba(255,255,255,.72)}
+.chrow b{display:block;font-size:30px;font-weight:700;line-height:1.1;color:rgba(255,255,255,.9);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chrow small{display:block;font:400 20px/1.2 var(--sans);margin-top:5px;color:rgba(255,255,255,.34);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chrow .pip{width:12px;height:12px;border-radius:50%;background:var(--ok);box-shadow:0 0 16px rgba(57,217,138,.5)}
+.chrow .pip.warn{background:var(--warn);box-shadow:0 0 16px rgba(244,184,96,.5)}
+.chrow .pip.bad{background:var(--bad);box-shadow:0 0 16px rgba(255,102,115,.5)}
+.chrow.sel{background:rgba(255,255,255,.085)}
+.chrow.sel .num{background:rgba(226,61,76,.2);color:var(--accent-lit)}
+.chrow.on{background:#fff;color:var(--sunken);transform:scale(1.022);z-index:6;box-shadow:0 20px 44px rgba(0,0,0,.5)}
+.chrow.on .num{background:rgba(13,20,32,.09);color:var(--sunken)}
+.chrow.on b{color:var(--sunken)}
+.chrow.on small{color:rgba(8,13,22,.5)}
+.chrow .star{position:absolute;left:64px;top:14px;width:18px;height:18px}
+.chrow .star svg{width:18px;height:18px;fill:var(--warn);stroke:none}
+.chrow.on .star svg{fill:#B07A16}
+
+.btn{height:84px;border-radius:42px;display:flex;align-items:center;gap:16px;padding:0 26px;
+  font-size:27px;font-weight:700;border:1px solid var(--hair);background:rgba(255,255,255,.07);color:rgba(255,255,255,.78)}
+.btn svg{width:30px;height:30px;stroke:currentColor;fill:none;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
+.btn.primary{background:#fff;color:#0B1019;border-color:#fff}
+.btn.on{background:#fff;color:#0B1019;border-color:#fff;transform:translateY(-5px) scale(1.02);box-shadow:0 22px 46px rgba(0,0,0,.5)}
+.btn .kb{margin-left:auto;font:700 17px/1 var(--mono);letter-spacing:.1em;color:rgba(255,255,255,.26)}
+.btn.on .kb{color:rgba(11,16,25,.4)}
+.btn.primary .kb{color:rgba(11,16,25,.4)}
+
+/* ── the acting stage ─────────────────────────────────────────── */
+.stagepane{position:absolute;left:812px;right:64px;top:60px;bottom:70px;display:flex;flex-direction:column}
+.stagehead{display:flex;align-items:flex-start;gap:30px}
+.stagehead .idbox{min-width:0;flex:1}
+.stagehead .kick{font:700 21px/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--accent-lit);margin-bottom:14px}
+.stagehead h3{font-size:74px;line-height:.96;letter-spacing:-2.4px;margin:0}
+.statuschip{flex:0 0 auto;height:52px;border-radius:26px;padding:0 20px;display:flex;align-items:center;gap:11px;
+  background:rgba(255,255,255,.06);border:1px solid var(--hair);font-size:20px;color:rgba(255,255,255,.55)}
+.statuschip .d{width:11px;height:11px;border-radius:50%;background:var(--ok)}
+.statuschip.warn .d{background:var(--warn)}.statuschip.bad .d{background:var(--bad)}
+.statuschip b{color:#fff;font-size:21px}
+
+.kwrow{display:flex;gap:11px;flex-wrap:wrap;margin-top:26px}
+.kw{height:50px;border-radius:25px;padding:0 19px;display:flex;align-items:center;gap:10px;
+  background:rgba(255,255,255,.055);border:1px solid var(--hair);font-size:21px;color:rgba(255,255,255,.66)}
+.kw em{font-style:normal;font:700 17px/1 var(--mono);color:rgba(255,255,255,.3)}
+.kw.more{background:transparent;color:rgba(255,255,255,.34)}
+.kw.dead{border-color:rgba(244,184,96,.3);background:rgba(244,184,96,.08);color:var(--warn)}
+.kw.dead em{color:rgba(244,184,96,.62)}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:34px}
+.stat{border:1px solid var(--hair);border-radius:18px;background:rgba(255,255,255,.04);padding:20px 22px}
+.stat .l{font:700 17px/17px var(--mono);letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.32);
+  height:34px;margin-bottom:9px;display:flex;align-items:flex-start}
+.stat .v{font-size:40px;font-weight:700;line-height:1;letter-spacing:-1px}
+.stat .v small{font-size:23px;color:rgba(255,255,255,.4);font-weight:500;margin-left:6px;letter-spacing:0}
+.stat .c{font-size:19px;color:rgba(255,255,255,.36);margin-top:9px}
+.stat.hot{background:linear-gradient(120deg,rgba(226,61,76,.16),rgba(255,255,255,.04) 62%);border-color:rgba(226,61,76,.24)}
+.stat.hot .l{color:var(--accent-lit)}
+.stat.cold{border-color:rgba(244,184,96,.26)}
+.stat.cold .l,.stat.cold .c{color:var(--warn)}
+.bars{display:flex;gap:4px;height:10px;margin-top:14px;border-radius:5px;overflow:hidden}
+.bars i{display:block;height:100%;border-radius:2px}
+
+.sectlabel{font:700 18px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.32);
+  margin:36px 2px 16px;display:flex;align-items:center}
+.sectlabel span{margin-left:auto;letter-spacing:.05em;text-transform:none;color:rgba(255,255,255,.24);font-weight:400}
+
+.strip{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}
+.plate{display:block;border-radius:16px;overflow:hidden;background:var(--raised);border:1px solid var(--hair);text-align:left;padding:0}
+.plate .bed{display:block;position:relative;height:143px;overflow:hidden;
+  background:linear-gradient(140deg,rgba(255,255,255,.075),rgba(255,255,255,.02) 60%,rgba(0,0,0,.18))}
+.plate .bed img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
+html[data-art="on"] .plate .bed img{display:block}
+html[data-art="on"] .plate .raw{display:none}
+.plate .bed::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,13,22,.05),rgba(8,13,22,.72))}
+.plate .qual{position:absolute;z-index:2;top:12px;left:13px;border-radius:7px;padding:6px 9px;background:rgba(8,13,22,.6);
+  font:700 16px/1 var(--mono);letter-spacing:.09em;color:#fff;backdrop-filter:blur(6px)}
+.plate .match{position:absolute;z-index:2;top:12px;right:13px;max-width:118px;font:700 15px/1 var(--mono);letter-spacing:.11em;
+  text-transform:uppercase;color:rgba(255,255,255,.6);background:rgba(8,13,22,.5);padding:6px 9px;border-radius:7px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plate .raw{position:absolute;z-index:2;left:13px;right:13px;bottom:11px;font:400 15px/1.35 var(--mono);
+  color:rgba(255,255,255,.42);max-height:42px;overflow:hidden;word-break:break-all}
+.plate .meta{display:block;padding:15px 16px 17px}
+.plate .meta b{display:block;font-size:26px;font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plate .meta small{display:block;font:400 19px/1 var(--sans);color:rgba(255,255,255,.38);margin-top:8px}
+.plate.on{transform:translateY(-10px) scale(1.045);z-index:6;border-color:#fff;box-shadow:0 30px 56px rgba(0,0,0,.55)}
+
+.actions{display:flex;gap:14px;margin-top:auto;padding-top:34px}
+.act{height:88px;border-radius:44px;display:flex;align-items:center;gap:14px;padding:0 30px;
+  font-size:27px;font-weight:700;border:1px solid var(--hair);background:rgba(255,255,255,.06);color:rgba(255,255,255,.76)}
+.act svg{width:30px;height:30px;stroke:currentColor;fill:none;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
+.act.play{background:#fff;color:#0B1019;border-color:#fff;padding:0 42px}
+.act.icon{padding:0;width:88px;justify-content:center}
+.act.on{background:#fff;color:#0B1019;border-color:#fff;transform:translateY(-6px) scale(1.03);box-shadow:0 24px 48px rgba(0,0,0,.5)}
+.act.danger.on{background:#FFE3E5;color:#8A1420}
+
+.legend{position:absolute;left:812px;right:64px;bottom:16px;height:44px;display:flex;align-items:center;gap:26px;
+  font:400 17px/1 var(--mono);color:rgba(255,255,255,.24)}
+.legend kbd{border:1px solid rgba(255,255,255,.11);border-radius:6px;padding:5px 8px;color:rgba(255,255,255,.4);margin-right:7px}
+.legend span{display:flex;align-items:center}
+
+/* ── two-band screens (editor / quick play) ──────────────────── */
+.backrail{position:absolute;left:176px;top:60px;bottom:44px;width:430px;border-right:1px solid var(--hair);padding-right:40px}
+.backrail .kick{font:700 21px/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--accent-lit);margin:30px 0 16px}
+.backrail h2{font-size:54px;line-height:1;letter-spacing:-1.6px;margin:0 0 16px}
+.backrail p{font-size:22px;line-height:1.5;color:rgba(255,255,255,.44);margin:0}
+.backbtn{height:76px;width:76px;border-radius:38px;background:rgba(255,255,255,.07);border:1px solid var(--hair);
+  display:grid;place-items:center}
+.backbtn svg{width:32px;height:32px;stroke:rgba(255,255,255,.7);fill:none;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round}
+.backbtn.on{background:#fff}.backbtn.on svg{stroke:#0B1019}
+.summary{position:absolute;left:0;right:40px;bottom:0;border-top:1px solid var(--hair);padding-top:24px}
+.summary div{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;font-size:21px;color:rgba(255,255,255,.4)}
+.summary div b{font-size:23px;color:#fff}
+
+.band{position:absolute;left:660px;right:64px}
+.fieldband{top:60px;height:504px;display:flex;flex-direction:column}
+.kbband{top:596px;bottom:44px}
+.bandnote{font:700 17px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.28);margin-bottom:16px}
+.field{height:104px;border-radius:20px;background:rgba(255,255,255,.07);border:1px solid var(--hair);
+  display:flex;align-items:center;gap:18px;padding:0 26px;font-size:30px;color:rgba(255,255,255,.9)}
+.field.on{background:#fff;color:#0B1019;border-color:#fff;transform:scale(1.008);box-shadow:0 20px 44px rgba(0,0,0,.45)}
+.field .ph{color:rgba(255,255,255,.28)}.field.on .ph{color:rgba(11,16,25,.35)}
+.field .caret{width:3px;height:40px;background:var(--accent);animation:blink 1.05s steps(1) infinite}
+.field.on .caret{background:#0B1019}
+@keyframes blink{50%{opacity:0}}
+.chipwall{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px;align-content:flex-start;overflow:hidden}
+.chip{height:58px;border-radius:29px;padding:0 12px 0 20px;display:flex;align-items:center;gap:13px;font-size:22px;
+  background:rgba(255,255,255,.06);border:1px solid var(--hair);color:rgba(255,255,255,.78)}
+.chip x{width:34px;height:34px;border-radius:17px;background:rgba(255,255,255,.1);display:grid;place-items:center;
+  font:400 22px/1 var(--sans);color:rgba(255,255,255,.5)}
+.chip.on{background:#fff;color:#0B1019;border-color:#fff;transform:scale(1.03)}
+.chip.on x{background:rgba(11,16,25,.1);color:rgba(11,16,25,.6)}
+.chip.sel{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip.sel.on{background:#fff;color:#8A1420;border-color:#fff}
+
+.kbd{height:100%;border-radius:24px;background:rgba(255,255,255,.035);border:1px solid var(--hair);padding:24px}
+.kbdgrid{display:grid;grid-template-columns:repeat(10,1fr);gap:11px}
+.key{height:74px;border-radius:14px;background:rgba(255,255,255,.06);display:grid;place-items:center;
+  font-size:28px;font-weight:700;color:rgba(255,255,255,.8);border:1px solid transparent}
+.key.on{background:#fff;color:#0B1019;transform:scale(1.06);box-shadow:0 14px 30px rgba(0,0,0,.45)}
+.key.wide{grid-column:span 2}
+.key.wide,.key.mono{font-size:21px;letter-spacing:.06em;text-transform:uppercase;font-family:var(--mono)}
+.key.acc{background:rgba(226,61,76,.2);color:var(--accent-lit)}
+
+/* ── cards grid (import / settings) ──────────────────────────── */
+.pane{position:absolute;left:660px;right:64px;top:60px;bottom:44px;display:flex;flex-direction:column}
+.pane .kick{font:700 21px/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--accent-lit);margin-bottom:14px}
+.pane h3{font-size:58px;line-height:1;letter-spacing:-1.8px;margin:0 0 12px}
+.pane .sub{font-size:23px;line-height:1.5;color:rgba(255,255,255,.45);margin:0 0 34px;max-width:900px}
+.bigcards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.bigcard{border:1px solid var(--hair);border-radius:22px;background:rgba(255,255,255,.045);padding:30px;text-align:left;min-height:280px;
+  display:flex;flex-direction:column}
+.bigcard .ic{width:76px;height:76px;border-radius:22px;background:rgba(255,255,255,.07);display:grid;place-items:center;margin-bottom:26px}
+.bigcard .ic svg{width:36px;height:36px;stroke:var(--accent-lit);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.bigcard b{font-size:30px;font-weight:700;display:block;margin-bottom:12px}
+.bigcard p{font-size:21px;line-height:1.45;color:rgba(255,255,255,.42);margin:0}
+.bigcard .tag{margin-top:auto;font:700 16px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.28)}
+.bigcard.on{background:#fff;border-color:#fff;color:var(--sunken);transform:translateY(-8px) scale(1.02);
+  box-shadow:0 30px 56px rgba(0,0,0,.5);z-index:6}
+.bigcard.on .ic{background:rgba(13,20,32,.08)}.bigcard.on .ic svg{stroke:#B51F2D}
+.bigcard.on p{color:rgba(8,13,22,.5)}.bigcard.on .tag{color:rgba(8,13,22,.42)}
+.bigcard p code{font:400 18px/1 var(--mono);background:rgba(255,255,255,.09);padding:4px 7px;border-radius:6px;color:#FFB3BA}
+.bigcard.on p code{background:rgba(13,20,32,.08);color:#B51F2D}
+
+.setgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.setcard{border:1px solid var(--hair);border-radius:18px;background:rgba(255,255,255,.045);
+  display:grid;grid-template-columns:70px minmax(0,1fr) auto;align-items:center;gap:20px;padding:22px 26px;text-align:left;min-height:120px}
+.setcard .si{width:66px;height:66px;border-radius:20px;background:rgba(255,255,255,.07);display:grid;place-items:center;color:rgba(255,255,255,.62)}
+.setcard svg{width:30px;height:30px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.setcard b{display:block;font-size:26px;font-weight:700;margin-bottom:8px}
+.setcard small{display:block;font-size:19px;line-height:1.3;color:rgba(255,255,255,.36)}
+.setcard .val{font:700 18px/1 var(--mono);color:#FF828D;background:rgba(226,61,76,.14);padding:11px 14px;border-radius:999px;white-space:nowrap}
+.setcard .tg{width:66px;height:38px;padding:4px;border-radius:999px;background:rgba(255,255,255,.16);display:flex;justify-content:flex-start}
+.setcard .tg i{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.55)}
+.setcard .tg.tgon{background:var(--accent);justify-content:flex-end}.setcard .tg.tgon i{background:#fff}
+.setcard.on{background:#fff;border-color:#fff;color:var(--sunken);transform:translateY(-5px) scale(1.014);
+  box-shadow:0 24px 46px rgba(0,0,0,.46);z-index:6}
+.setcard.on .si{background:rgba(13,20,32,.08);color:var(--sunken)}
+.setcard.on small{color:rgba(8,13,22,.5)}
+.setcard.on .val{background:rgba(226,61,76,.13);color:#B51F2D}
+.setcard.on .tg:not(.tgon){background:rgba(13,20,32,.16)}
+
+/* ── tuning ──────────────────────────────────────────────────── */
+.tune{position:absolute;inset:0;display:grid;place-items:center;background:rgba(8,13,22,.55)}
+.tunecard{width:1180px;border-radius:32px;background:linear-gradient(160deg,#182130,#0F1723);
+  border:1px solid rgba(255,255,255,.09);box-shadow:0 60px 140px rgba(0,0,0,.6);padding:56px 60px;position:relative;overflow:hidden}
+.tunecard::before{content:"";position:absolute;width:520px;height:520px;right:-190px;top:-260px;border-radius:50%;
+  background:rgba(226,61,76,.16);filter:blur(80px)}
+.tunecard .kick{font:700 21px/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--accent-lit);margin-bottom:20px}
+.tunecard h3{font-size:66px;line-height:1;letter-spacing:-2px;margin:0 0 14px}
+.tunecard .who{font-size:25px;color:rgba(255,255,255,.45);margin:0 0 38px}
+.track{height:10px;border-radius:5px;background:rgba(255,255,255,.1);overflow:hidden;margin-bottom:32px}
+.track i{display:block;height:100%;width:62%;border-radius:5px;background:linear-gradient(90deg,var(--accent),#FF8A94)}
+.log{font:400 21px/2 var(--mono);color:rgba(255,255,255,.34);margin-bottom:38px}
+.log div:last-child{color:#fff}
+.log em{font-style:normal;color:var(--ok)}
+
+/* ── overlay (share) ─────────────────────────────────────────── */
+.overlay{position:absolute;inset:0;z-index:20;display:grid;place-items:center;background:rgba(8,13,22,.72);backdrop-filter:blur(16px)}
+.sharecard{width:1120px;border-radius:30px;background:#141C29;border:1px solid rgba(255,255,255,.1);padding:52px 56px;
+  box-shadow:0 60px 140px rgba(0,0,0,.6)}
+.sharecard .kick{font:700 21px/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--accent-lit);margin-bottom:18px}
+.sharecard h3{font-size:54px;line-height:1;letter-spacing:-1.6px;margin:0 0 14px}
+.sharecard p{font-size:23px;line-height:1.5;color:rgba(255,255,255,.45);margin:0 0 30px}
+.linkbox{border-radius:18px;background:rgba(0,0,0,.34);border:1px solid var(--hair);padding:24px 26px;
+  font:400 20px/1.6 var(--mono);color:rgba(255,255,255,.6);word-break:break-all;max-height:150px;overflow:hidden;margin-bottom:22px}
+.sharemeta{display:flex;gap:14px;margin-bottom:34px}
+.sharemeta div{border:1px solid var(--hair);border-radius:14px;background:rgba(255,255,255,.04);padding:16px 22px}
+.sharemeta .l{font:700 15px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:10px}
+.sharemeta .v{font-size:26px;font-weight:700}
+
+/* ── empty ───────────────────────────────────────────────────── */
+.empty{position:absolute;left:176px;right:64px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;max-width:1400px}
+.empty .kick{font:700 21px/1 var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--accent-lit);margin-bottom:22px}
+.empty h2{font-size:88px;line-height:.98;letter-spacing:-3px;margin:0 0 22px;max-width:1100px}
+.empty p{font-size:27px;line-height:1.5;color:rgba(255,255,255,.45);margin:0 0 48px;max-width:820px}
+
+.toast{position:absolute;z-index:40;right:64px;bottom:56px;min-width:340px;max-width:640px;padding:24px 28px;border-radius:20px;
+  background:#fff;color:#0B1019;box-shadow:0 30px 70px rgba(0,0,0,.5);font-size:25px;font-weight:700;
+  opacity:0;transform:translateY(14px);pointer-events:none;transition:opacity .18s,transform .22s cubic-bezier(.2,.9,.25,1.06)}
+.toast.show{opacity:1;transform:none}
+.toast small{display:block;margin-top:8px;font-size:20px;font-weight:500;color:rgba(11,16,25,.5)}
+
+/* ══════════════ phone ══════════════ */
+.phone-area{display:none;gap:34px;justify-content:center;flex-wrap:wrap;padding:8px 0 4px}
+.phone{position:relative;width:390px;height:844px;border-radius:40px;overflow:hidden;
+  background:linear-gradient(180deg,#0D1420,#101722 70%,#0C121D);border:1px solid rgba(255,255,255,.11);
+  box-shadow:0 34px 90px rgba(0,0,0,.55)}
+.phone::before{content:"";position:absolute;width:360px;height:290px;right:-180px;top:-140px;border-radius:50%;
+  background:rgba(226,61,76,.13);filter:blur(56px)}
+.pstat{height:46px;padding:16px 24px 0;display:flex;justify-content:space-between;font:700 12px/1 var(--sans);color:rgba(255,255,255,.8)}
+.pscroll{position:absolute;inset:46px 0 0;overflow:auto;scrollbar-width:none;padding:16px 18px 40px}
+.pscroll::-webkit-scrollbar{display:none}
+.pkick{font:700 9px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--accent-lit);margin-bottom:9px}
+.phone h2{font-size:32px;line-height:1;letter-spacing:-.9px;margin:0 0 7px}
+.phone .psub{font-size:12px;line-height:1.45;color:rgba(255,255,255,.45);margin:0 0 18px}
+.pbtn{height:50px;width:100%;border-radius:25px;background:#fff;color:#0B1019;display:flex;align-items:center;justify-content:center;gap:9px;
+  font-size:14px;font-weight:700;border:0;margin-bottom:10px}
+.pbtn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.psearch{height:46px;width:100%;border-radius:23px;background:rgba(255,255,255,.07);border:0;display:flex;align-items:center;gap:10px;
+  padding:0 16px;color:rgba(255,255,255,.5);font-size:13px;margin-bottom:18px}
+.psearch svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2}
+.plabel{font:700 9px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.3);margin:0 2px 10px;display:flex}
+.plabel span{margin-left:auto;color:rgba(255,255,255,.2);letter-spacing:.05em}
+.prow{display:grid;grid-template-columns:44px minmax(0,1fr) 10px;align-items:center;gap:12px;height:62px;
+  border-radius:14px;background:rgba(255,255,255,.045);border:1px solid var(--hair);padding:0 12px;margin-bottom:8px;position:relative}
+.prow .num{width:42px;height:36px;border-radius:9px;background:rgba(255,255,255,.07);display:grid;place-items:center;
+  font:700 15px/1 var(--mono);color:rgba(255,255,255,.72)}
+.prow b{display:block;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow small{display:block;font-size:10.5px;color:rgba(255,255,255,.35);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .pip{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.prow .pip.warn{background:var(--warn)}.prow .pip.bad{background:var(--bad)}
+.prow .star{position:absolute;left:38px;top:8px;width:11px;height:11px;fill:var(--warn)}
+.psheet{position:absolute;inset:46px 0 0;background:linear-gradient(180deg,#111926,#0C121D);padding:16px 18px 40px;overflow:auto;
+  border-radius:22px 22px 0 0;border-top:1px solid rgba(255,255,255,.1)}
+.psheet .grab{width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.2);margin:0 auto 18px}
+.pstat4{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:16px 0 18px}
+.pstat4>div{border:1px solid var(--hair);border-radius:12px;background:rgba(255,255,255,.04);padding:11px 13px}
+.pstat4 .l{font:700 8px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:8px}
+.pstat4 .v{font-size:19px;font-weight:700}
+.pstat4 .c{font-size:9.5px;color:rgba(255,255,255,.33);margin-top:4px}
+.pnext{display:flex;gap:9px;overflow:hidden;margin-bottom:18px}
+.pnext div{flex:0 0 128px}
+.pnext .bed{height:74px;border-radius:10px;background:linear-gradient(140deg,rgba(255,255,255,.08),rgba(255,255,255,.02));
+  border:1px solid var(--hair);position:relative;overflow:hidden}
+.pnext .bed img{width:100%;height:100%;object-fit:cover;display:none}
+html[data-art="on"] .pnext .bed img{display:block}
+.pnext .bed em{position:absolute;left:8px;right:8px;bottom:7px;font:400 8.5px/1.3 var(--mono);font-style:normal;
+  color:rgba(255,255,255,.4);max-height:22px;overflow:hidden;word-break:break-all}
+.pnext .bed i{position:absolute;top:7px;left:8px;font:700 8.5px/1 var(--mono);letter-spacing:.08em;
+  color:#fff;background:rgba(8,13,22,.6);padding:4px 6px;border-radius:5px;font-style:normal}
+html[data-art="on"] .pnext .bed em{display:none}
+.pnext b{display:block;font-size:11.5px;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pnext small{display:block;font-size:9.5px;color:rgba(255,255,255,.34);margin-top:2px}
+.pacts{display:flex;gap:8px}
+.pacts button{flex:1;height:44px;border-radius:22px;background:rgba(255,255,255,.07);border:1px solid var(--hair);
+  color:rgba(255,255,255,.75);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px}
+.pacts button svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2.1}
+.phonecap{text-align:center;font:700 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer);margin-top:14px}
+
+html[data-view="phone"] .stage-shell,html[data-view="phone"] .framebar .screenbtn,html[data-view="phone"] .stagenote{display:none}
+html[data-view="phone"] .phone-area{display:flex}
+
+/* ══════════════ doc body ══════════════ */
+h2.sec{font-size:24px;letter-spacing:-.6px;margin:64px 0 8px}
+h2.sec .n{display:block;font:700 10px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--accent-lit);margin-bottom:12px}
+.secsub{font-size:14px;line-height:1.65;color:var(--dim);margin:0 0 22px;max-width:78ch}
+table{width:100%;border-collapse:collapse;margin:0 0 8px;font-size:13px}
+th{text-align:left;font:700 9.5px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer);
+  padding:0 14px 12px;border-bottom:1px solid var(--hair)}
+td{padding:14px;border-bottom:1px solid var(--hair);color:var(--dim);line-height:1.55;vertical-align:top}
+td:first-child{color:#fff;font-weight:700;width:22%}
+td code,p code,li code{font:400 11.5px/1 var(--mono);background:rgba(255,255,255,.07);padding:3px 6px;border-radius:5px;color:#FFB3BA}
+.pill-ok{display:inline-block;font:700 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;
+  background:rgba(57,217,138,.14);color:#6FE3AC;padding:5px 8px;border-radius:999px}
+.pill-new{background:rgba(226,61,76,.16);color:#FF8A94}
+.pill-cut{background:rgba(255,255,255,.07);color:var(--dimmer)}
+.cards3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}
+.cards3 article{border:1px solid var(--hair);border-radius:14px;padding:20px;background:rgba(255,255,255,.025)}
+.cards3 .num{font:700 9px/1 var(--mono);letter-spacing:.15em;color:var(--accent-lit);margin-bottom:12px}
+.cards3 h3{font-size:15px;margin:0 0 8px}
+.cards3 p{font-size:12.5px;line-height:1.6;color:var(--dimmer);margin:0}
+ul.tight{font-size:13.5px;line-height:1.75;color:var(--dim);padding-left:20px;max-width:82ch}
+ul.tight b{color:#fff}
+@media(max-width:900px){.intro{grid-template-columns:1fr}.principles{justify-content:flex-start}.cards3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="docbar">
+  <span class="docbrand">Debrify · design</span>
+  <span class="docnote">Debrify TV in the Spotlight idiom — click the frame, then arrows / Enter / Backspace</span>
+  <div class="pillrow">
+    <button data-art-btn="off" class="on">Art off</button>
+    <button data-art-btn="on">Art on</button>
+  </div>
+  <div class="pillrow">
+    <button data-view-btn="wide" class="on">TV</button>
+    <button data-view-btn="phone">Phone</button>
+  </div>
+</div>
+
+<main>
+  <section class="intro">
+    <div>
+      <div class="eyebrow">Surface redesign · magic_tv_screen.dart</div>
+      <h1>Debrify TV, in the Spotlight idiom</h1>
+      <p class="lede">Debrify TV is the app's best idea and its oldest-looking screen: a wall of identical red
+      <code>CH n</code> tiles that tells you nothing about a channel until you press it and find out whether it plays.
+      This redraws it in the same language as the new onboarding and settings — <b>navy ground, mono eyebrows,
+      borderless lift focus</b> — and turns the channel list into a <b>rail and a stage</b>, where the stage answers the
+      one question the grid never could: <b>what is actually on this channel right now.</b></p>
+    </div>
+    <div class="principles">
+      <span>Rail + stage</span><span>Lift, never ring</span><span>One press still plays</span>
+      <span>Zero new network</span><span>Phone gets a phone</span>
+    </div>
+  </section>
+
+  <div class="framebar">
+    <span class="label">Screen</span>
+    <button class="screenbtn on" data-screen="channels">Channels</button>
+    <button class="screenbtn" data-screen="editor">Editor</button>
+    <button class="screenbtn" data-screen="quickplay">Quick&nbsp;Play</button>
+    <button class="screenbtn" data-screen="settings">Settings</button>
+    <button class="screenbtn" data-screen="import">Import</button>
+    <button class="screenbtn" data-screen="tuning">Tuning</button>
+    <button class="screenbtn" data-screen="empty">Empty</button>
+    <span class="hint">1920×1080 · logical = ÷2</span>
+  </div>
+
+  <div class="stage-shell" id="shell" tabindex="0">
+    <div class="scaler" id="scaler">
+      <div class="tv" id="tv">
+
+        <div class="shellrail">
+          <div class="mark"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="14" rx="2.5"/><path d="M8 21h8"/></svg></div>
+          <i><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V21H3z"/></svg></i>
+          <i><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg></i>
+          <i class="here"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="14" rx="2.5"/><path d="M8 21h8"/></svg></i>
+          <i><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg></i>
+          <i><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 15H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9 3V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1"/></svg></i>
+        </div>
+
+        <!-- ══════════ CHANNELS ══════════ -->
+        <div class="screen on" data-screen="channels">
+          <div class="rail">
+            <div class="kick">Debrify TV</div>
+            <h2>Channels</h2>
+            <p class="sub" id="railsub"><b>12 channels</b> · 9,340 titles cached</p>
+            <button class="f btn primary" data-nav data-id="qp" data-down="search" data-right="play" data-act="quickplay">
+              <svg viewBox="0 0 24 24"><path d="m6 4 14 8-14 8z" fill="currentColor" stroke="none"/></svg>
+              Quick Play <span class="kb">Any keyword</span>
+            </button>
+            <div style="height:12px"></div>
+            <button class="f btn" data-nav data-id="search" data-up="qp" data-down="ch0" data-right="play" data-act="toast:Search opens the TV keyboard inline|Filters the rail as you type — no separate results page">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+              Search channels
+            </button>
+            <div class="raillist" id="raillist"></div>
+          </div>
+
+          <div class="stagepane" id="stagepane"></div>
+          <div class="legend">
+            <span><kbd>OK</kbd>Tune this channel</span>
+            <span><kbd>→</kbd>Channel actions</span>
+            <span><kbd>←</kbd>App sidebar</span>
+            <span><kbd>Back</kbd>Leave</span>
+          </div>
+        </div>
+
+        <!-- ══════════ EDITOR ══════════ -->
+        <div class="screen" data-screen="editor">
+          <div class="backrail">
+            <button class="f backbtn" data-nav data-id="eback" data-down="ename" data-right="ename" data-act="screen:channels">
+              <svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>
+            </button>
+            <div class="kick">Channel 03</div>
+            <h2>Edit channel</h2>
+            <p>Keywords are search terms. Every one you add is queried across the enabled engines and its results are
+            pooled into this channel.</p>
+            <div class="summary">
+              <div>Keywords <b>6</b></div>
+              <div>Titles pooled <b>1,204</b></div>
+              <div>Playable after filters <b>318</b></div>
+              <div>Last built <b>2 days ago</b></div>
+            </div>
+          </div>
+
+          <div class="band fieldband">
+            <div class="bandnote">Field band · never covered</div>
+            <div class="f field" data-nav data-id="ename" data-left="eback" data-down="ekw" data-act="none">
+              Tonight<span class="caret"></span>
+            </div>
+            <div style="height:20px"></div>
+            <div class="bandnote">Keywords · 6 of 1000</div>
+            <div class="f field" data-nav data-id="ekw" data-up="ename" data-left="eback" data-down="k1" data-act="none">
+              <span class="ph">Add a keyword — Enter to commit, comma for several</span>
+            </div>
+            <div class="chipwall">
+              <span class="f chip" data-nav data-id="k1" data-up="ekw" data-right="k2" data-left="eback" data-down="key1" data-act="toast:Remove “Silo”|OK on a chip deletes it — no tiny × target to hit with a D-pad">Silo <x>×</x></span>
+              <span class="f chip" data-nav data-id="k2" data-up="ekw" data-left="k1" data-right="k3" data-down="key1" data-act="none">Spider-Man <x>×</x></span>
+              <span class="f chip" data-nav data-id="k3" data-up="ekw" data-left="k2" data-right="k4" data-down="key1" data-act="none">House of the Dragon <x>×</x></span>
+              <span class="f chip" data-nav data-id="k4" data-up="ekw" data-left="k3" data-right="k5" data-down="key1" data-act="none">Furious <x>×</x></span>
+              <span class="f chip" data-nav data-id="k5" data-up="ekw" data-left="k4" data-right="k6" data-down="key1" data-act="none">Obsession <x>×</x></span>
+              <span class="f chip" data-nav data-id="k6" data-up="ekw" data-left="k5" data-down="key1" data-act="none">Disclosure Day <x>×</x></span>
+            </div>
+          </div>
+
+          <div class="band kbband">
+            <div class="kbd">
+              <div class="kbdgrid" id="ekbd"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════ QUICK PLAY ══════════ -->
+        <div class="screen" data-screen="quickplay">
+          <div class="backrail">
+            <button class="f backbtn" data-nav data-id="qback" data-down="qfield" data-right="qfield" data-act="screen:channels">
+              <svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>
+            </button>
+            <div class="kick">No channel needed</div>
+            <h2>Quick Play</h2>
+            <p>Type anything. Debrify searches, picks what survives your filters, and starts playing — nothing is
+            saved unless you ask for it.</p>
+            <div class="summary">
+              <div>Provider <b>Real-Debrid</b></div>
+              <div>Quality filter <b>1080p · 4K</b></div>
+              <div>Size filter <b>2.5–4 GB</b></div>
+              <div>Avoid NSFW <b>On</b></div>
+            </div>
+          </div>
+          <div class="band fieldband">
+            <div class="bandnote">Keywords · comma separated</div>
+            <div class="f field" data-nav data-id="qfield" data-left="qback" data-down="qsave" data-act="none">
+              nolan, interstellar<span class="caret"></span>
+            </div>
+            <div style="height:26px"></div>
+            <div class="setgrid">
+              <button class="f setcard" data-nav data-id="qsave" data-up="qfield" data-right="qgo" data-left="qback" data-down="qkey1" data-act="toast:Saved as a channel|The one thing today's Quick Play can't do — it throws the search away every time">
+                <span class="si"><svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7"/></svg></span>
+                <span><b>Keep as a channel</b><small>Turn this search into channel 13</small></span>
+                <span class="tg"><i></i></span>
+              </button>
+              <button class="f setcard" data-nav data-id="qgo" data-up="qfield" data-left="qsave" data-down="qkey1" data-act="screen:tuning">
+                <span class="si"><svg viewBox="0 0 24 24"><path d="m6 4 14 8-14 8z"/></svg></span>
+                <span><b>Play now</b><small>Search, filter, tune — about 20 seconds</small></span>
+                <span class="val">OK</span>
+              </button>
+            </div>
+          </div>
+          <div class="band kbband">
+            <div class="kbd"><div class="kbdgrid" id="qkbd"></div></div>
+          </div>
+        </div>
+
+        <!-- ══════════ SETTINGS ══════════ -->
+        <div class="screen" data-screen="settings">
+          <div class="backrail">
+            <button class="f backbtn" data-nav data-id="sback" data-down="s1" data-right="s1" data-act="screen:channels">
+              <svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>
+            </button>
+            <div class="kick">Applies to every channel</div>
+            <h2>Playback</h2>
+            <p>These rules decide what a channel is allowed to play. The stage on the channel screen shows their
+            effect before you press Play.</p>
+            <div class="summary">
+              <div>Pooled across channels <b>9,340</b></div>
+              <div>Playable after filters <b>2,611</b></div>
+              <div>Engines enabled <b>6 of 8</b></div>
+            </div>
+          </div>
+          <div class="pane" style="left:660px">
+            <div class="kick">Debrify TV</div>
+            <h3>Channel settings</h3>
+            <p class="sub">One page, in reading order — provider first, then how a title is chosen, then how it starts.</p>
+            <div class="setgrid">
+              <button class="f setcard" data-nav data-id="s1" data-right="s2" data-down="s3" data-left="sback" data-act="toast:Provider · Real-Debrid|Torbox, PikPak, Premiumize and AllDebrid are listed with why each is unavailable">
+                <span class="si"><svg viewBox="0 0 24 24"><path d="M18 10a5 5 0 0 0-9.6-1.9A4 4 0 1 0 7 18h10.5a3.5 3.5 0 0 0 .5-7z"/></svg></span>
+                <span><b>Provider</b><small>Which debrid service streams the pick</small></span>
+                <span class="val">Real-Debrid</span>
+              </button>
+              <button class="f setcard" data-nav data-id="s2" data-left="s1" data-down="s4" data-act="toast:Quality · 1080p, 4K|Matched on the release name — the same classifier the search badges use">
+                <span class="si"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M7 9v6M12 9v6M17 9v6"/></svg></span>
+                <span><b>Quality</b><small>4K · 1080p · 720p · SD</small></span>
+                <span class="val">1080p · 4K</span>
+              </button>
+              <button class="f setcard" data-nav data-id="s3" data-up="s1" data-right="s4" data-down="s5" data-left="sback" data-act="toast:File size · 2.5–4 GB|Judged per file, so a season pack is measured per episode">
+                <span class="si"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span>
+                <span><b>File size</b><small>Per episode or movie, not per torrent</small></span>
+                <span class="val">2.5–4 GB</span>
+              </button>
+              <button class="f setcard" data-nav data-id="s4" data-up="s2" data-left="s3" data-down="s6" data-act="toast:Start at a random point|20% in by default — the setting that makes it feel like broadcast">
+                <span class="si"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+                <span><b>Start position</b><small>Random point, 20% in</small></span>
+                <span class="tg tgon"><i></i></span>
+              </button>
+              <button class="f setcard" data-nav data-id="s5" data-up="s3" data-right="s6" data-down="s7" data-left="sback" data-act="toast:Channel banner on tune|The lower-third that names the channel when it starts">
+                <span class="si"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="14" rx="2.5"/><path d="M8 21h8"/></svg></span>
+                <span><b>On-screen identity</b><small>Channel name and title when tuning</small></span>
+                <span class="tg tgon"><i></i></span>
+              </button>
+              <button class="f setcard" data-nav data-id="s6" data-up="s4" data-left="s5" data-down="s7" data-act="toast:Avoid NSFW · on|Best effort, per channel as well as globally">
+                <span class="si"><svg viewBox="0 0 24 24"><path d="M12 3 4 6.5V12c0 5 3.4 8.4 8 9 4.6-.6 8-4 8-9V6.5z"/></svg></span>
+                <span><b>Avoid NSFW</b><small>Best-effort filter while searching</small></span>
+                <span class="tg tgon"><i></i></span>
+              </button>
+              <button class="f setcard" data-nav data-id="s7" data-up="s5" data-left="sback" data-act="toast:Search engines · 6 of 8|Per-engine caps still live in Settings → Debrify TV">
+                <span class="si"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg></span>
+                <span><b>Search engines</b><small>Which trackers build the pool</small></span>
+                <span class="val">6 of 8</span>
+              </button>
+              <button class="f setcard" data-nav data-id="s8" data-up="s6" data-left="s7" data-act="toast:Reset to defaults|Restores every value on this page">
+                <span class="si"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></span>
+                <span><b>Reset to defaults</b><small>This page only — channels are untouched</small></span>
+                <span class="val">Reset</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════ IMPORT ══════════ -->
+        <div class="screen" data-screen="import">
+          <div class="backrail">
+            <button class="f backbtn" data-nav data-id="iback" data-down="i1" data-right="i1" data-act="screen:channels">
+              <svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg>
+            </button>
+            <div class="kick">Three ways in</div>
+            <h2>Add channels</h2>
+            <p>A Debrify channel is a small file: a name, its keywords and the pool it has already built. It travels
+            as a file, a link or a community entry.</p>
+            <div class="summary">
+              <div>Community channels <b>36</b></div>
+              <div>Categories <b>9</b></div>
+            </div>
+          </div>
+          <div class="pane" style="left:660px">
+            <div class="kick">Import</div>
+            <h3>Where is it coming from?</h3>
+            <p class="sub">Same three sources the app already supports — drawn as destinations rather than a list of radio buttons.</p>
+            <div class="bigcards">
+              <button class="f bigcard" data-nav data-id="i1" data-right="i2" data-down="i4" data-left="iback" data-act="toast:Storage picker|Any .debrify, .yaml or .zip the app can read">
+                <span class="ic"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg></span>
+                <b>From storage</b><p>A <code>.debrify</code> or <code>.yaml</code> file already on this device or a USB stick.</p>
+                <span class="tag">File picker</span>
+              </button>
+              <button class="f bigcard" data-nav data-id="i2" data-left="i1" data-right="i3" data-down="i4" data-act="toast:Paste a link|debrify:// links carry the whole channel, compressed">
+                <span class="ic"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7L12.5 19.5"/></svg></span>
+                <b>From a link</b><p>A <code>debrify://</code> share link or any http(s) URL to a channel file.</p>
+                <span class="tag">Paste or type</span>
+              </button>
+              <button class="f bigcard" data-nav data-id="i3" data-left="i2" data-down="i4" data-act="toast:Community channels|36 curated channels, multi-select, categorised">
+                <span class="ic"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.6"/><path d="M3 19c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 14c2.8.3 5 1.9 5 5"/></svg></span>
+                <b>From the community</b><p>36 ready-made channels, grouped by category. Pick as many as you like.</p>
+                <span class="tag">Browse · 36</span>
+              </button>
+            </div>
+            <div style="margin-top:auto"></div>
+            <div class="sectlabel">Also here <span>moved out of the ⋮ menu</span></div>
+            <div class="setgrid">
+              <button class="f setcard" data-nav data-id="i4" data-up="i1" data-right="i5" data-left="iback" data-act="screen:editor">
+                <span class="si"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+                <span><b>Create a channel</b><small>Name it, add keywords, build the pool</small></span>
+                <span class="val">New</span>
+              </button>
+              <button class="f setcard" data-nav data-id="i5" data-up="i2" data-left="i4" data-act="toast:Delete all channels|Confirms first, and says exactly how many pools it will discard">
+                <span class="si"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></span>
+                <span><b>Delete every channel</b><small>12 channels · 9,340 pooled titles</small></span>
+                <span class="val">Careful</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════ TUNING ══════════ -->
+        <div class="screen" data-screen="tuning">
+          <div class="rail" style="opacity:.35;pointer-events:none">
+            <div class="kick">Debrify TV</div><h2>Channels</h2>
+            <p class="sub"><b>12 channels</b> · 9,340 titles cached</p>
+          </div>
+          <div class="tune">
+            <div class="tunecard">
+              <div class="kick">Tuning · Channel 03</div>
+              <h3>Tonight</h3>
+              <p class="who">Silo · S02E04 — 2160p ATVP WEB-DL</p>
+              <div class="track"><i></i></div>
+              <div class="log">
+                <div><em>✓</em> 1,204 pooled · 318 match 1080p · 4K</div>
+                <div><em>✓</em> Shuffled — picked one at random</div>
+                <div><em>✓</em> Real-Debrid has this one cached</div>
+                <div>Checking the file size…</div>
+              </div>
+              <div style="display:flex;gap:14px">
+                <button class="f act" data-nav data-id="tcancel" data-right="tskip" data-act="screen:channels">
+                  <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg> Cancel
+                </button>
+                <button class="f act" data-nav data-id="tskip" data-left="tcancel" data-act="toast:Skipped to the next title|The pick is random, so skipping is free — no queue position to lose">
+                  <svg viewBox="0 0 24 24"><path d="m5 5 9 7-9 7z"/><path d="M18 5v14"/></svg> Play something else
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════ EMPTY ══════════ -->
+        <div class="screen" data-screen="empty">
+          <div class="empty">
+            <div class="kick">Debrify TV</div>
+            <h2>Make a channel out of anything you can name.</h2>
+            <p>A channel is a handful of keywords. Debrify searches them, keeps what your filters allow, and plays the
+            result back-to-back — no queue to manage, no list to maintain.</p>
+            <div style="display:flex;gap:16px">
+              <button class="f act play" data-nav data-id="e1" data-right="e2" data-act="screen:editor">
+                <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> Create a channel
+              </button>
+              <button class="f act" data-nav data-id="e2" data-left="e1" data-right="e3" data-act="screen:import">
+                <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9.5" r="2.6"/><path d="M3 19c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M16 14c2.8.3 5 1.9 5 5"/></svg> Browse 36 community channels
+              </button>
+              <button class="f act" data-nav data-id="e3" data-left="e2" data-act="screen:quickplay">
+                <svg viewBox="0 0 24 24"><path d="m6 4 14 8-14 8z"/></svg> Just play something
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="toast" id="toast"></div>
+      </div>
+    </div>
+  </div>
+  <p class="stagenote"><b>Stage:</b> arrows move, <b>Enter</b> activates, <b>Backspace</b> goes back. Moving in the rail
+  re-draws the stage for that channel — every number on it comes from that channel's own cache, with no network call.
+  The strip is a <b>sample of the pool, not a running order</b> — §3 has the four reasons nothing here may promise what
+  plays. Flip <b>Art on</b> to see the optional poster layer described in §5.</p>
+
+  <div class="phone-area">
+    <div>
+      <div class="phone">
+        <div class="pstat"><span>9:41</span><span>Debrify</span></div>
+        <div class="pscroll">
+          <div class="pkick">Debrify TV</div>
+          <h2>Channels</h2>
+          <p class="psub">12 channels · 9,340 titles cached</p>
+          <button class="pbtn"><svg viewBox="0 0 24 24"><path d="m6 4 14 8-14 8z" fill="currentColor" stroke="none"/></svg> Quick Play</button>
+          <button class="psearch"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg> Search channels</button>
+          <div class="plabel">Pinned <span>2</span></div>
+          <div id="pphone1"></div>
+          <div class="plabel" style="margin-top:18px">Everything else <span>10</span></div>
+          <div id="pphone2"></div>
+        </div>
+      </div>
+      <div class="phonecap">Phone — a list, not a TV grid</div>
+    </div>
+    <div>
+      <div class="phone">
+        <div class="pstat"><span>9:41</span><span>Debrify</span></div>
+        <div class="pscroll" style="filter:brightness(.5)">
+          <div class="pkick">Debrify TV</div><h2>Channels</h2>
+          <p class="psub">12 channels · 9,340 titles cached</p>
+        </div>
+        <div class="psheet">
+          <div class="grab"></div>
+          <div class="pkick">Channel 03</div>
+          <h2>Tonight</h2>
+          <p class="psub">Silo · Spider-Man · House of the Dragon · +3</p>
+          <div class="pstat4">
+            <div><div class="l">In the pool</div><div class="v">1,204</div><div class="c">across 6 keywords</div></div>
+            <div><div class="l">Match quality</div><div class="v">318</div><div class="c">1080p · 4K by name</div></div>
+            <div><div class="l">Keywords</div><div class="v">6 of 6</div><div class="c">all returned results</div></div>
+            <div><div class="l">Freshness</div><div class="v">2d</div><div class="c">since last build</div></div>
+          </div>
+          <div class="plabel">What's in it <span>sample</span></div>
+          <div class="pnext" id="pnext"></div>
+          <button class="pbtn"><svg viewBox="0 0 24 24"><path d="m6 4 14 8-14 8z" fill="currentColor" stroke="none"/></svg> Tune in</button>
+          <div class="pacts">
+            <button><svg viewBox="0 0 24 24"><path d="m12 4 2.4 5 5.6.8-4 3.9 1 5.5-5-2.6-5 2.6 1-5.5-4-3.9 5.6-.8z"/></svg> Pin</button>
+            <button><svg viewBox="0 0 24 24"><path d="M4 20h4l10-10-4-4L4 16z"/></svg> Edit</button>
+            <button><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.4 10.8 7.2-4.2M8.4 13.2l7.2 4.2"/></svg> Share</button>
+          </div>
+          <div class="plabel" style="margin:26px 0 10px">Pool</div>
+          <div class="prow" style="height:56px">
+            <span class="num" style="background:transparent"><svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:rgba(255,255,255,.5);fill:none;stroke-width:2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></span>
+            <span><b>Rebuild now</b><small>Last built 2 days ago · background prefetch is on</small></span>
+            <span style="color:rgba(255,255,255,.3);font-size:16px">›</span>
+          </div>
+          <button style="width:100%;height:44px;margin-top:14px;border-radius:22px;background:transparent;border:1px solid rgba(255,102,115,.28);color:#FF8A94;font-size:12px;font-weight:700">Delete channel</button>
+          <div style="font-size:10px;color:rgba(255,255,255,.28);text-align:center;margin-top:10px">Discards 1,204 pooled titles</div>
+        </div>
+      </div>
+      <div class="phonecap">Channel sheet — the stage, folded</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ DOC ═══════════════ -->
+
+  <h2 class="sec"><span class="n">01</span>What Debrify TV actually is, feature by feature</h2>
+  <p class="secsub">Everything the shipped screen does today, and where it lands in this redesign. Nothing in the
+  inventory is dropped; four things move and three things become visible for the first time.</p>
+  <table>
+    <thead><tr><th>Feature today</th><th>How it works</th><th>Here</th></tr></thead>
+    <tbody>
+      <tr><td>Channel grid</td><td>2/3/4-column grid of <code>CH n</code> + uppercase name. Same layout on phone, tablet and TV.</td><td><span class="pill-ok pill-new">Moved</span> One rail, one column, with a health pip and a live stage beside it.</td></tr>
+      <tr><td>Favourites row</td><td>A second, smaller card size in a horizontal strip above the grid — the same channels, drawn twice.</td><td><span class="pill-ok pill-new">Merged</span> A <em>Pinned</em> group at the top of the same rail. One card size, no duplication.</td></tr>
+      <tr><td>Tap a channel</td><td>Plays immediately.</td><td><span class="pill-ok">Kept</span> OK on a rail row still plays immediately. This is the fast path and it does not move.</td></tr>
+      <tr><td>Long-press a channel</td><td>Favourite / Edit / Share / Delete — discoverable only via a hint that appears after focus.</td><td><span class="pill-ok pill-new">Surfaced</span> The same four are buttons on the stage, one RIGHT away. Long-press keeps working.</td></tr>
+      <tr><td>⋮ options menu</td><td>Import · Add Channel · Delete All · Settings, behind a 40px glyph.</td><td><span class="pill-ok pill-new">Split</span> Add and Import become the Import screen; Settings becomes a page; Delete All lives with Import, where its blast radius is stated.</td></tr>
+      <tr><td>Quick Play</td><td>Dialog with a keyword field and an NSFW switch. Discards the search afterwards.</td><td><span class="pill-ok">Kept</span> Own screen, two fixed bands, plus <em>Keep as a channel</em>.</td></tr>
+      <tr><td>Channel editor</td><td>520px dialog: name, keyword chips, add-field, NSFW switch. TV keyboard opens over it.</td><td><span class="pill-ok pill-new">Rebuilt</span> Two fixed bands — the keyboard cannot cover the field. Same fix as onboarding.</td></tr>
+      <tr><td>Global settings</td><td>Dialog containing provider chips, random-start + slider, two identity switches, ~14 filter chips, Reset.</td><td><span class="pill-ok pill-new">Rebuilt</span> A page of setting cards in reading order; the chip wall stays but behind its own card.</td></tr>
+      <tr><td>Playback filters</td><td>Quality tiers and ten size buckets. Applied silently; you learn they were too tight from a fallback snackbar.</td><td><span class="pill-ok pill-new">Made visible</span> <em>At your quality</em> is a first-class number. Size stays uncounted — §3 says why.</td></tr>
+      <tr><td>Random pick</td><td><code>list.shuffle(Random())</code>. Nothing records what played, and there is no queue to inspect.</td><td><span class="pill-ok">Kept, and stated</span> The strip is a sample of the pool, never a running order.</td></tr>
+      <tr><td>Import</td><td>Device file · <code>debrify://</code> link or URL · community browser, chosen in a dialog.</td><td><span class="pill-ok">Kept</span> Three destination cards on one screen.</td></tr>
+      <tr><td>Share a channel</td><td>Generates a compressed <code>debrify://</code> link, shows size and compression ratio, copies.</td><td><span class="pill-ok">Kept</span> Overlay in the new grammar; the numbers stay.</td></tr>
+      <tr><td>Progress dialogs</td><td>Two of them — channel creation (per-keyword log, countdown) and cached loading (cancellable).</td><td><span class="pill-ok pill-new">Unified</span> One <em>Tuning</em> surface for both, with the same log.</td></tr>
+      <tr><td>Background prefetch</td><td>Warms the next items while you watch. No UI at all.</td><td><span class="pill-ok">Kept</span> Surfaces only as freshness on the stage.</td></tr>
+      <tr><td>Provider choice</td><td>Real-Debrid · Torbox · PikPak · Premiumize · AllDebrid, greyed with a tooltip when unconfigured.</td><td><span class="pill-ok">Kept</span> A setting card; unavailable providers say why on their own row.</td></tr>
+      <tr><td>Deep link / auto-play</td><td>Home tiles and the remote can tune a channel by id.</td><td><span class="pill-ok">Kept</span> Lands on the stage for that channel, already tuning.</td></tr>
+      <tr><td>Settings → Debrify TV</td><td>Per-engine enable and result caps, keyword threshold, batch size, min torrents per keyword.</td><td><span class="pill-ok">Kept</span> Stays where it is; the new Settings page links to it as <em>Search engines</em>.</td></tr>
+      <tr><td>Empty state</td><td>A grey TV glyph, "No channels yet", one button.</td><td><span class="pill-ok pill-new">Rewritten</span> A statement and the three real ways in.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="sec"><span class="n">02</span>The one thing the grid could never tell you</h2>
+  <p class="secsub">Today a channel that plays nothing looks exactly like a channel with 1,200 titles in it — same red
+  badge, same white name. Four numbers already sit in <code>debrify_tv.db</code> and have never been drawn.</p>
+  <table>
+    <thead><tr><th>On the stage</th><th>Comes from</th><th>Cost</th></tr></thead>
+    <tbody>
+      <tr><td>In the pool</td><td><code>tv_cached_torrents</code>, count by <code>channel_id</code></td><td>One indexed count</td></tr>
+      <tr><td>At your quality</td><td><code>_applyQualityFilterToCached</code> — literally the call playback makes at <code>magic_tv_screen.dart:1522</code>, before anything is shuffled</td><td>String classify per row — the same call the search badges make</td></tr>
+      <tr><td>Keywords working</td><td><code>tv_keyword_stats.total_fetched</code> — a keyword at zero is why a channel is thin</td><td>Already stored, never read</td></tr>
+      <tr><td>Freshness</td><td><code>tv_channel_cache_state.fetched_at</code></td><td>Already loaded</td></tr>
+      <tr><td>Quality mix bar</td><td><code>qualityTierForName</code> over the pool, bucketed</td><td>Shares the pass above</td></tr>
+      <tr><td>Health pip</td><td>green = pool has depth · amber = thin at your quality, or a dead keyword · red = nothing pooled</td><td>Derived from the counts</td></tr>
+      <tr><td>The sample strip</td><td>Rows of the pool, names cleaned by <code>FileUtils.cleanPlaylistTitle</code></td><td>Zero network</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="sec"><span class="n">03</span>What nothing on this page may promise</h2>
+  <p class="secsub">An earlier draft of this mock called the strip <em>“Up next on this channel”</em>. That was a lie, and
+  the code says so in four places. Debrify TV does not have a running order, and three of the rules that decide what
+  actually plays cannot be evaluated until the provider has been asked.</p>
+  <table>
+    <thead><tr><th>Claim</th><th>Why it can't be made</th></tr></thead>
+    <tbody>
+      <tr><td>“This plays next”</td><td><code>_selectTorrentsForPlayback</code> ends in <code>list.shuffle(Random())</code> (<code>:1525</code>). The order is redrawn on every tune. There is no next.</td></tr>
+      <tr><td>“This will play at all”</td><td>Whether the provider has a given infohash cached is only known when it answers. An uncached pick is skipped and the queue moves on.</td></tr>
+      <tr><td>“This is in your size range”</td><td>Size is a <b>per-file</b> rule, and Real-Debrid “hands back a flat list of links with no per-file metadata, so a file's size is only knowable AFTER unrestricting it” (<code>_rdLinkPassesSizeRules</code>). The pool row's size is the whole torrent.</td></tr>
+      <tr><td>“Your filters will be respected”</td><td>Both degrade on purpose. A quality filter matching zero <b>returns the unfiltered pool</b> (<code>:1428</code>); after <code>_rdSizeRejectionLimit</code> consecutive rejections the size filter is <b>relaxed for the rest of the session</b> (<code>:1505</code>). Both are correct behaviour — an unplayable channel is worse — but neither can be promised in advance.</td></tr>
+    </tbody>
+  </table>
+  <p class="secsub" style="margin-top:18px">So the strip is <b>inventory, not schedule</b>: “What's in this channel”,
+  captioned <em>a sample of the pool · nothing here is a running order</em>. It answers the question you actually have
+  when twelve channels are named things you half-remember — <b>what kind of stuff is in this one</b> — and it answers it
+  with real rows from real cache.</p>
+  <p class="secsub"><b>And where a promise can't be made, offer a choice instead.</b> OK on a plate plays
+  <em>that</em> title. It is the one behaviour on this page that is not already implemented, and it is cheap:
+  <code>_watchWithCachedTorrents</code> already takes a list, so a single-element list is the whole change. That turns
+  the strip from a claim about the future into a control over it.</p>
+  <p class="secsub"><b>What survives the correction.</b> <em>At your quality</em> stays a first-class number, because
+  that one filter genuinely is applied to the cache before the shuffle — it is the same function call, on the same rows.
+  The relax-fallback snackbar is currently the only way to learn your filter emptied a channel, and it fires <em>after</em>
+  you pressed Play and waited. That discovery still moves to before the press. Size simply isn't part of the claim.</p>
+
+  <h2 class="sec"><span class="n">04</span>The focus rule</h2>
+  <p class="secsub">Two behaviours, chosen by what the thing is — never mixed, and never a coloured ring.</p>
+  <div class="cards3">
+    <article><div class="num">TEXT ROWS</div><h3>Invert and lift</h3>
+      <p>Rail rows, setting cards, buttons and chips flood white, take dark ink, rise ~5px and scale ~1.02, with a
+      soft specular sweep across the fill. This is the settings and onboarding mechanic, unchanged.</p></article>
+    <article><div class="num">ART PLATES</div><h3>Lift only</h3>
+      <p>Sample plates never invert — inverting a card whose subject is an image destroys the image. They scale
+      1.045, rise 10px, take a white hairline and a large soft shadow. Straight from <code>APPLE_LOOK_PLAN.md</code> §2.1.</p></article>
+    <article><div class="num">NOWHERE</div><h3>No accent ring</h3>
+      <p>The crimson stays on badges, pips, the tuning bar and the value pills. It is never the cursor. The shipped
+      card draws a 3px accent border today; it goes.</p></article>
+  </div>
+
+  <h2 class="sec"><span class="n">05</span>Artwork is a layer, and it is optional</h2>
+  <p class="secsub">Flip <b>Art on</b> above. The plates keep their geometry and swap their beds for stills. Everything
+  else on the page is identical, because artwork is the only part of this design that costs anything to add.</p>
+  <ul class="tight">
+    <li><b>Art off is the shippable state.</b> Every number and every title on the stage comes out of SQLite. No
+    request leaves the device, so it works offline, on a cold boot, and on a TV box with no headroom.</li>
+    <li><b>Art on needs a cache, not a lookup.</b> <code>MovieMetadataService.lookupFromFilename()</code> already
+    turns a release name into Cinemeta metadata — but calling it on focus change would hit the network on every
+    D-pad press. It needs a persistent <code>infohash → {poster, backdrop, title, year, runtime}</code> table,
+    filled by the same background prefetch that already warms the pool.</li>
+    <li><b>Some titles will never resolve.</b> Debrify channels are keyword channels; plenty of pool entries are
+    scene names a metadata service has never seen. The typographic bed is not a placeholder for missing art — it is
+    the design for a plate that has none, which is why it carries the raw release name and the matched keyword.</li>
+    <li><b>Do not put art in the rail.</b> A channel is six keywords, not one title; a mosaic of three posters says
+    less than the numbers do and costs three lookups per row.</li>
+  </ul>
+
+  <h2 class="sec"><span class="n">06</span>D-pad map</h2>
+  <p class="secsub">Explicit node targeting throughout — no geometric traversal, per the house rule.</p>
+  <table>
+    <thead><tr><th>From</th><th>←</th><th>→</th><th>↑ / ↓</th><th>OK</th></tr></thead>
+    <tbody>
+      <tr><td>Quick Play</td><td>App sidebar</td><td>Stage · Play</td><td>↓ Search</td><td>Quick Play screen</td></tr>
+      <tr><td>Search</td><td>App sidebar</td><td>Stage · Play</td><td>↑ Quick Play · ↓ first channel</td><td>Inline TV keyboard, filters the rail</td></tr>
+      <tr><td>Channel row</td><td>App sidebar</td><td>Stage · Play</td><td>Previous / next channel</td><td><b>Tunes immediately</b></td></tr>
+      <tr><td>Stage · Play</td><td>Back to the same rail row</td><td>Pin</td><td>↑ Up-next strip</td><td>Tunes</td></tr>
+      <tr><td>Stage · actions</td><td>Previous action, then the rail</td><td>Next action</td><td>↑ Up-next strip</td><td>That action</td></tr>
+      <tr><td>Sample plate</td><td>Previous plate, then the rail</td><td>Next plate</td><td>↓ Tune in</td><td>Plays <em>that</em> title (§3)</td></tr>
+      <tr><td>Editor keyword chip</td><td>Previous chip, then Back</td><td>Next chip</td><td>↑ add-field · ↓ keyboard</td><td>Removes the keyword</td></tr>
+      <tr><td>Keyboard</td><td colspan="3">Arrows stay inside the keyboard; <b>Back</b> is the only way out, then LEFT reaches the rail — as shipped.</td><td>Types</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="sec"><span class="n">07</span>What this costs to build</h2>
+  <table>
+    <thead><tr><th>Piece</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Dead code first</td><td><code>_buildChannelsTab</code>, <code>_buildChannelCard</code>, <code>_buildKeywordChip</code>, <code>_buildOptionChip</code>, <code>_buildEmptyChannelsState</code> and <code>_buildNoChannelResultsState</code> (≈ lines 8924–9560) are unreachable — <code>build()</code> calls <code>_buildTvGridLayout</code> on every device. Delete before redrawing, or the file grows a third layout.</td></tr>
+      <tr><td>Stage data</td><td>One new repository method returning <code>{pooled, qualityMatched, mix, deadKeywords, fresh, sample[]}</code> per channel. Read it on focus change, debounced, and memoise per channel id — the pool does not change while you are looking at it.</td></tr>
+      <tr><td>Play one title</td><td>The only new behaviour (§3). <code>_watchWithCachedTorrents</code> already takes a list; pass a single-element one. Everything else on the stage is a read.</td></tr>
+      <tr><td>Rail + stage</td><td>Reuses the two-pane D-pad grammar already built for the TV filter manager. Rail rows are the settings mock's <code>rail-item</code> at TV scale.</td></tr>
+      <tr><td>Editor / Quick Play</td><td><code>TvKeyboardSlot</code> from the onboarding plan — move where the panel draws, keep the real <code>TextField</code> underneath so hardware keyboards still type.</td></tr>
+      <tr><td>Phone</td><td>The first genuine phone layout for this screen. <code>build()</code> must branch, and television has to be checked before any width breakpoint — 1920×1080 is 960×540 logical and would otherwise be sent to the tablet arm.</td></tr>
+      <tr><td>Flag</td><td>Additive behind a style value, like every other layout in this app, so the shipped grid stays reachable.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="sec"><span class="n">08</span>Deliberately not drawn</h2>
+  <ul class="tight">
+    <li><b>A programme guide.</b> Debrify TV picks at random from a pool; there is no schedule to show and inventing
+    one would be a lie the player immediately contradicts.</li>
+    <li><b>Poster mosaics on channel rows.</b> §5.</li>
+    <li><b>Per-channel provider or filter overrides.</b> The data model has no column for either, and adding one is a
+    feature decision rather than a layout one.</li>
+    <li><b>A "recently played" row.</b> Nothing records what a channel has already played — the pick is random and
+    stateless by design.</li>
+    <li><b>Channel reordering.</b> <code>channel_number</code> is a <code>UNIQUE</code> column assigned at insert; making it
+    draggable means renumbering inside a transaction, which is real work and not part of a repaint.</li>
+  </ul>
+
+  <p class="secsub" style="margin-top:44px;color:var(--dimmer)">Design artifact only — no Flutter code is changed by
+  this file. Palette, type and focus mechanic are the shipped Spotlight look
+  (<code>PremiumLooks.spotlight</code>): ground <code>#0D1420</code>, raised <code>#151D2A</code>, accent
+  <code>#E23D4C</code>, white primary buttons, parallax focus.</p>
+</main>
+
+<script>
+/* ═════════════ data ═════════════ */
+const ART = '../apple_look_mockup/art/';
+const T = (clean,sub,raw,q,size,kw,art)=>({clean,sub,raw,q,size,kw,art});
+
+const TONIGHT = [
+  T('Silo','2025 · S02E04','Silo.S02E04.2160p.ATVP.WEB-DL.DDP5.1.Atmos.H.265-FLUX','4K','3.4 GB','silo','bg_tt14688458.jpg'),
+  T('Spider-Man: No Way Home','2021 · 2h 28m','Spider-Man.No.Way.Home.2021.1080p.BluRay.x264-VETERAN','1080p','3.1 GB','spider-man','bg_tt10872600.jpg'),
+  T('House of the Dragon','2024 · S02E07','House.of.the.Dragon.S02E07.1080p.WEB-DL.DD5.1.H.264-NTb','1080p','2.8 GB','house of the dragon','bg_tt11198330.jpg'),
+  T('Furious','2025 · 1h 54m','Furious.2025.1080p.WEB-DL.DDP5.1.H.264-FLUX','1080p','3.6 GB','furious','bg_tt36303968.jpg')
+];
+const GEN = (names,arts)=>names.map((n,i)=>T(n[0],n[1],n[2],n[3],n[4],n[5],arts[i%arts.length]));
+const ARTS = ['bg_tt37287335.jpg','bg_tt15047880.jpg','bg_tt13592494.jpg','bg_tt0427340.jpg'];
+
+const CH = [
+  {n:1,name:'Marvel Marathon',pin:1,kw:[['Avengers',412],['Iron Man',288],['Thor',201],['Loki',166],['Guardians of the Galaxy',149]],pool:1612,play:503,fresh:'6 hours ago',mix:[18,58,24],health:'ok',
+   next:GEN([['Thor: Ragnarok','2017 · 2h 10m','Thor.Ragnarok.2017.1080p.BluRay.x264-SPARKS','1080p','3.2 GB','thor'],
+             ['Loki','2021 · S01E04','Loki.S01E04.1080p.DSNP.WEB-DL.DDP5.1-TOMMY','1080p','2.6 GB','loki'],
+             ['Iron Man 3','2013 · 2h 10m','Iron.Man.3.2013.2160p.UHD.BluRay.x265-TERMiNAL','4K','3.9 GB','iron man'],
+             ['The Avengers','2012 · 2h 23m','The.Avengers.2012.1080p.BluRay.x264-AMIABLE','1080p','3.4 GB','avengers']],ARTS)},
+  {n:2,name:'90s Action',pin:1,kw:[['Die Hard',204],['Speed',97],['Point Break',88],['The Rock',142],['Face/Off',76],['Con Air',81]],pool:988,play:264,fresh:'yesterday',mix:[4,49,47],health:'ok',
+   next:GEN([['Die Hard: With a Vengeance','1995 · 2h 8m','Die.Hard.With.A.Vengeance.1995.1080p.BluRay.x264-CiNEFiLE','1080p','3.0 GB','die hard'],
+             ['The Rock','1996 · 2h 16m','The.Rock.1996.1080p.BluRay.DTS.x264-HDMaNiAcS','1080p','3.7 GB','the rock'],
+             ['Speed','1994 · 1h 56m','Speed.1994.1080p.BluRay.x264-CULTHD','1080p','2.7 GB','speed'],
+             ['Face/Off','1997 · 2h 18m','Face.Off.1997.1080p.BluRay.x264-SiNNERS','1080p','3.3 GB','face/off']],ARTS)},
+  {n:3,name:'Tonight',pin:0,kw:[['Silo',214],['Spider-Man',332],['House of the Dragon',188],['Furious',96],['Obsession',71],['Disclosure Day',43]],pool:1204,play:318,fresh:'2 days ago',mix:[12,61,27],health:'ok',next:TONIGHT},
+  {n:4,name:'Studio Ghibli',pin:0,kw:[['Spirited Away',118],['Totoro',94],['Princess Mononoke',103],['Howl',87]],pool:612,play:189,fresh:'4 days ago',mix:[9,66,25],health:'ok',
+   next:GEN([['Spirited Away','2001 · 2h 5m','Spirited.Away.2001.1080p.BluRay.x264-CtrlHD','1080p','3.5 GB','spirited away'],
+             ['My Neighbor Totoro','1988 · 1h 26m','My.Neighbor.Totoro.1988.1080p.BluRay.x264-PHOBOS','1080p','2.6 GB','totoro'],
+             ['Princess Mononoke','1997 · 2h 14m','Princess.Mononoke.1997.1080p.BluRay.x264-DEPTH','1080p','3.8 GB','princess mononoke'],
+             ['Howl’s Moving Castle','2004 · 1h 59m','Howls.Moving.Castle.2004.1080p.BluRay.x264-DON','1080p','3.4 GB','howl']],ARTS)},
+  {n:5,name:'Kannada Cinema',pin:0,kw:[['Kantara',77],['KGF',214],['Sapta Sagaradaache',31],['Ulidavaru Kandanthe',22]],pool:388,play:96,fresh:'3 days ago',mix:[6,54,40],health:'ok',
+   next:GEN([['Kantara','2022 · 2h 30m','Kantara.2022.1080p.AMZN.WEB-DL.DDP5.1.H.264-Telly','1080p','3.6 GB','kantara'],
+             ['K.G.F: Chapter 2','2022 · 2h 48m','KGF.Chapter.2.2022.1080p.WEB-DL.AAC.x264-Dus','1080p','3.9 GB','kgf'],
+             ['Ulidavaru Kandanthe','2014 · 2h 32m','Ulidavaru.Kandanthe.2014.1080p.WEB-DL.x264','1080p','2.9 GB','ulidavaru kandanthe'],
+             ['Sapta Sagaradaache Ello','2023 · 2h 24m','Sapta.Sagaradaache.Ello.2023.1080p.WEB-DL.x264','1080p','3.1 GB','sapta sagaradaache']],ARTS)},
+  {n:6,name:'Cosmic Horror',pin:0,kw:[['Annihilation',64],['Event Horizon',52],['The Thing',119],['Color Out of Space',28]],pool:441,play:127,fresh:'5 days ago',mix:[11,58,31],health:'ok',
+   next:GEN([['Annihilation','2018 · 1h 55m','Annihilation.2018.2160p.WEB-DL.DDP5.1.HDR.H.265-NTG','4K','3.8 GB','annihilation'],
+             ['The Thing','1982 · 1h 49m','The.Thing.1982.1080p.BluRay.x264-CtrlHD','1080p','3.2 GB','the thing'],
+             ['Event Horizon','1997 · 1h 36m','Event.Horizon.1997.1080p.BluRay.x264-AMIABLE','1080p','2.6 GB','event horizon'],
+             ['Color Out of Space','2019 · 1h 51m','Color.Out.of.Space.2019.1080p.BluRay.x264-YOL0W','1080p','3.0 GB','color out of space']],ARTS)},
+  {n:7,name:'Bond, Every One',pin:0,kw:[['James Bond',402],['007',377],['Skyfall',91],['Casino Royale',108]],pool:1330,play:402,fresh:'yesterday',mix:[14,63,23],health:'ok',
+   next:GEN([['Skyfall','2012 · 2h 23m','Skyfall.2012.2160p.UHD.BluRay.x265-TERMiNAL','4K','3.9 GB','skyfall'],
+             ['Casino Royale','2006 · 2h 24m','Casino.Royale.2006.1080p.BluRay.x264-CtrlHD','1080p','3.5 GB','casino royale'],
+             ['GoldenEye','1995 · 2h 10m','GoldenEye.1995.1080p.BluRay.x264-SECTOR7','1080p','3.1 GB','007'],
+             ['Licence to Kill','1989 · 2h 13m','Licence.To.Kill.1989.1080p.BluRay.x264-AMIABLE','1080p','3.3 GB','james bond']],ARTS)},
+  {n:8,name:'Late Night Anime',pin:0,kw:[['Cowboy Bebop',88],['Evangelion',131],['Trigun',44],['Serial Experiments Lain',19]],pool:704,play:211,fresh:'2 days ago',mix:[3,44,53],health:'ok',
+   next:GEN([['Cowboy Bebop','1998 · S01E12','Cowboy.Bebop.S01E12.1080p.BluRay.x265-RARBG','1080p','2.7 GB','cowboy bebop'],
+             ['Neon Genesis Evangelion','1995 · S01E16','Neon.Genesis.Evangelion.S01E16.1080p.NF.WEB-DL-VARYG','1080p','2.9 GB','evangelion'],
+             ['Trigun','1998 · S01E08','Trigun.S01E08.1080p.BluRay.x264-HAiKU','1080p','2.6 GB','trigun'],
+             ['Serial Experiments Lain','1998 · S01E03','Serial.Experiments.Lain.S01E03.1080p.BluRay.x264','1080p','2.5 GB','serial experiments lain']],ARTS)},
+  {n:9,name:'A24',pin:0,kw:[['Hereditary',72],['Everything Everywhere',96],['The Lighthouse',48],['Midsommar',66]],pool:520,play:158,fresh:'6 days ago',mix:[10,60,30],health:'ok',
+   next:GEN([['Everything Everywhere All at Once','2022 · 2h 19m','Everything.Everywhere.All.At.Once.2022.1080p.BluRay.x264-PiGNUS','1080p','3.7 GB','everything everywhere'],
+             ['Hereditary','2018 · 2h 7m','Hereditary.2018.1080p.BluRay.x264-DRONES','1080p','3.4 GB','hereditary'],
+             ['The Lighthouse','2019 · 1h 49m','The.Lighthouse.2019.1080p.BluRay.x264-YOL0W','1080p','3.0 GB','the lighthouse'],
+             ['Midsommar','2019 · 2h 28m','Midsommar.2019.1080p.BluRay.x264-AAA','1080p','3.9 GB','midsommar']],ARTS)},
+  {n:10,name:'Kurosawa',pin:0,kw:[['Seven Samurai',41],['Rashomon',29],['Yojimbo',26],['Ran',34]],pool:212,play:73,fresh:'a week ago',mix:[2,38,60],health:'ok',
+   next:GEN([['Seven Samurai','1954 · 3h 27m','Seven.Samurai.1954.1080p.BluRay.x264-CiNEFiLE','1080p','3.9 GB','seven samurai'],
+             ['Rashomon','1950 · 1h 28m','Rashomon.1950.1080p.BluRay.x264-DEPTH','1080p','2.6 GB','rashomon'],
+             ['Yojimbo','1961 · 1h 50m','Yojimbo.1961.1080p.BluRay.x264-USURY','1080p','2.9 GB','yojimbo'],
+             ['Ran','1985 · 2h 42m','Ran.1985.1080p.BluRay.x264-DEPTH','1080p','3.8 GB','ran']],ARTS)},
+  {n:11,name:'Nature Docs',pin:0,kw:[['Planet Earth',58],['Blue Planet',36],['Our Planet',22],['Wild Isles',0]],pool:190,play:11,fresh:'2 weeks ago',mix:[3,3,94],health:'warn',
+   next:GEN([['Planet Earth II','2016 · S01E03','Planet.Earth.II.S01E03.720p.HDTV.x264-FTP','720p','1.1 GB','planet earth'],
+             ['Blue Planet II','2017 · S01E01','Blue.Planet.II.S01E01.720p.HDTV.x264-DEADPOOL','720p','1.3 GB','blue planet'],
+             ['Our Planet','2019 · S01E05','Our.Planet.S01E05.720p.NF.WEBRip.x264-STRiFE','720p','1.0 GB','our planet'],
+             ['Planet Earth','2006 · S01E09','Planet.Earth.S01E09.2160p.UHD.BluRay.x265-TERMiNAL','4K','3.9 GB','planet earth']],ARTS)},
+  {n:12,name:'Formula 1',pin:0,kw:[['Formula 1',0],['Grand Prix',0],['F1 Highlights',0]],pool:0,play:0,fresh:'failed',mix:[0,0,0],health:'bad',next:[]}
+];
+
+CH.forEach(c=>{ c.dead = c.kw.filter(k=>!k[1]).length; });
+
+/* ═════════════ stage rendering ═════════════ */
+const ico = {
+  play:'<path d="m6 4 14 8-14 8z" fill="currentColor" stroke="none"/>',
+  star:'<path d="m12 4 2.4 5 5.6.8-4 3.9 1 5.5-5-2.6-5 2.6 1-5.5-4-3.9 5.6-.8z"/>',
+  edit:'<path d="M4 20h4l10-10-4-4L4 16z"/>',
+  share:'<circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.4 10.8 7.2-4.2M8.4 13.2l7.2 4.2"/>',
+  trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'
+};
+const svg = p=>`<svg viewBox="0 0 24 24">${p}</svg>`;
+let sel = 2;
+
+function stageHTML(c){
+  const st = c.health==='bad' ? ['bad','Cache failed','nothing to play'] :
+             c.health==='warn'? ['warn','Thin pool', 'only '+c.play+' at your quality'] :
+                                ['','Ready', c.pool.toLocaleString()+' in the pool'];
+  const kws = c.kw.slice(0,5).map(k=>k[1]
+      ? `<span class="kw">${k[0]} <em>${k[1]}</em></span>`
+      : `<span class="kw dead">${k[0]} <em>nothing found</em></span>`).join('')
+            + (c.kw.length>5?`<span class="kw more">+${c.kw.length-5} more</span>`:'');
+  const plates = c.next.length ? c.next.map((t,i)=>`
+    <button class="f plate" data-nav data-id="up${i}" ${i?`data-left="up${i-1}"`:'data-left="RAIL"'} ${i<c.next.length-1?`data-right="up${i+1}"`:''} data-down="play" data-act="toast:Play “${t.clean}”|Pick one deliberately instead of letting the shuffle decide — the one new behaviour this strip needs">
+      <span class="bed">
+        <img src="${ART}${t.art}" alt="">
+        <span class="qual">${t.q}</span><span class="match">${t.kw}</span>
+        <span class="raw">${t.raw}</span>
+      </span>
+      <span class="meta"><b>${t.clean}</b><small>${t.sub} · ${t.size}</small></span>
+    </button>`).join('')
+
+    : `<div style="grid-column:1/-1;border:1px dashed rgba(255,255,255,.12);border-radius:16px;padding:44px;text-align:center">
+         <div style="font-size:28px;font-weight:700;margin-bottom:12px">Nothing was pooled for this channel</div>
+         <div style="font-size:22px;color:rgba(255,255,255,.4)">None of its keywords returned results. Edit them and save to build the pool again.</div>
+       </div>`;
+  const mixTotal = c.mix[0]+c.mix[1]+c.mix[2] || 1;
+  return `
+    <div class="stagehead">
+      <div class="idbox">
+        <div class="kick">Channel ${String(c.n).padStart(2,'0')}${c.pin?' · Pinned':''}</div>
+        <h3>${c.name}</h3>
+      </div>
+      <div class="statuschip ${st[0]}"><span class="d"></span><b>${st[1]}</b> ${st[2]}</div>
+    </div>
+    <div class="kwrow">${kws}</div>
+    <div class="stats">
+      <div class="stat"><div class="l">In the pool</div><div class="v">${c.pool.toLocaleString()}</div>
+        <div class="c">titles cached for this channel</div></div>
+      <div class="stat hot"><div class="l">At your quality</div><div class="v">${c.play.toLocaleString()}</div>
+        <div class="c">1080p · 4K, by release name</div>
+        <div class="bars">
+          <i style="flex:${c.mix[0]/mixTotal};background:#FF7A86"></i>
+          <i style="flex:${c.mix[1]/mixTotal};background:rgba(255,255,255,.6)"></i>
+          <i style="flex:${c.mix[2]/mixTotal};background:rgba(255,255,255,.22)"></i>
+        </div></div>
+      <div class="stat ${c.dead?'cold':''}"><div class="l">Keywords</div>
+        <div class="v">${c.kw.length-c.dead}<small>of ${c.kw.length}</small></div>
+        <div class="c">${c.dead?`“${c.kw.filter(k=>!k[1])[0][0]}” found nothing`:'every keyword returned results'}</div></div>
+      <div class="stat"><div class="l">Freshness</div><div class="v" style="font-size:31px">${c.fresh}</div>
+        <div class="c">${c.health==='bad'?'no pool was written':'background prefetch keeps it warm'}</div></div>
+    </div>
+    <div class="sectlabel">What's in this channel <span>a sample of the pool · nothing here is a running order</span></div>
+    <div class="strip">${plates}</div>
+    <div class="actions">
+      <button class="f act play" data-nav data-id="play" data-left="RAIL" data-right="pin" ${c.next.length?'data-up="up0"':''} data-act="screen:tuning">${svg(ico.play)} Tune in</button>
+      <button class="f act icon" data-nav data-id="pin" data-left="play" data-right="edit" ${c.next.length?'data-up="up1"':''} data-act="toast:${c.pin?'Unpinned':'Pinned to the top of the rail'}|Pinned channels keep the same row shape — no second card size">${svg(ico.star)}</button>
+      <button class="f act icon" data-nav data-id="edit" data-left="pin" data-right="share" ${c.next.length?'data-up="up2"':''} data-act="screen:editor">${svg(ico.edit)}</button>
+      <button class="f act icon" data-nav data-id="share" data-left="edit" data-right="del" ${c.next.length?'data-up="up3"':''} data-act="share">${svg(ico.share)}</button>
+      <button class="f act icon danger" data-nav data-id="del" data-left="share" ${c.next.length?'data-up="up3"':''} data-act="toast:Delete “${c.name}”|Asks first, and says it will discard ${c.pool.toLocaleString()} pooled titles">${svg(ico.trash)}</button>
+    </div>`;
+}
+
+function railHTML(){
+  const rows = (c,i)=>`
+    <button class="f chrow ${i===sel?'sel':''}" data-nav data-id="ch${i}"
+      ${i?`data-up="ch${i-1}"`:'data-up="search"'} ${i<CH.length-1?`data-down="ch${i+1}"`:''}
+      data-right="play" data-act="screen:tuning" data-ch="${i}">
+      <span class="num">${String(c.n).padStart(2,'0')}</span>
+      ${c.pin?`<span class="star"><svg viewBox="0 0 24 24">${ico.star.replace(/stroke/g,'')}</svg></span>`:''}
+      <span><b>${c.name}</b><small>${c.health==='bad'?'Cache failed — rebuild':c.pool.toLocaleString()+' pooled · '+c.kw.length+' keywords'}</small></span>
+      <span class="pip ${c.health==='warn'?'warn':c.health==='bad'?'bad':''}"></span>
+    </button>`;
+  const pin = CH.map((c,i)=>[c,i]).filter(x=>x[0].pin);
+  const rest = CH.map((c,i)=>[c,i]).filter(x=>!x[0].pin);
+  return `<div class="grouplabel">Pinned <span>${pin.length}</span></div>`
+       + pin.map(x=>rows(x[0],x[1])).join('')
+       + `<div class="grouplabel">Everything else <span>${rest.length}</span></div>`
+       + rest.map(x=>rows(x[0],x[1])).join('');
+}
+
+function drawStage(){
+  document.getElementById('stagepane').innerHTML = stageHTML(CH[sel]);
+  document.querySelectorAll('#raillist .chrow').forEach(el=>
+    el.classList.toggle('sel', +el.dataset.ch===sel));
+}
+
+/* keyboards */
+const ROWS=['QWERTYUIOP','ASDFGHJKL','ZXCVBNM'];
+function kbd(host,prefix){
+  let h='',n=0;
+  ROWS.forEach((r,ri)=>{
+    if(ri===1) h+='<div></div>';
+    [...r].forEach(ch=>{ n++; h+=`<div class="f key" data-nav data-id="${prefix}${n}" data-act="none">${ch}</div>`; });
+    if(ri===2){ h+=`<div class="f key mono acc" data-nav data-id="${prefix}del" data-act="none">Del</div>`;
+                h+=`<div class="f key wide" data-nav data-id="${prefix}sp" data-act="none">Space</div>`; }
+  });
+  document.getElementById(host).innerHTML=h;
+  // wire a simple grid
+  const keys=[...document.querySelectorAll('#'+host+' [data-nav]')];
+  keys.forEach((k,i)=>{
+    if(i>0) k.dataset.left=keys[i-1].dataset.id;
+    if(i<keys.length-1) k.dataset.right=keys[i+1].dataset.id;
+    if(i>=10) k.dataset.up=keys[i-10].dataset.id;
+    if(i+10<keys.length) k.dataset.down=keys[i+10].dataset.id;
+  });
+  keys.slice(0,10).forEach(k=>k.dataset.up=prefix==='key'?'k1':'qsave');
+}
+
+/* phone */
+function phone(){
+  const row=c=>`<div class="prow"><span class="num">${String(c.n).padStart(2,'0')}</span>
+    ${c.pin?`<svg class="star" viewBox="0 0 24 24">${ico.star.replace(/stroke/g,'')}</svg>`:''}
+    <span><b>${c.name}</b><small>${c.health==='bad'?'Cache failed — rebuild':c.pool.toLocaleString()+' pooled · '+c.kw.length+' keywords'}</small></span>
+    <span class="pip ${c.health==='warn'?'warn':c.health==='bad'?'bad':''}"></span></div>`;
+  document.getElementById('pphone1').innerHTML=CH.filter(c=>c.pin).map(row).join('');
+  document.getElementById('pphone2').innerHTML=CH.filter(c=>!c.pin).map(row).join('');
+  document.getElementById('pnext').innerHTML=TONIGHT.map(t=>
+    `<div><div class="bed"><img src="${ART}${t.art}" alt=""><i>${t.q}</i><em>${t.raw}</em></div>
+     <b>${t.clean}</b><small>${t.q} · ${t.size}</small></div>`).join('');
+}
+
+/* ═════════════ focus engine ═════════════ */
+let cur='channels', fid='ch2';
+function items(){ return [...document.querySelectorAll('.screen.on [data-nav]')]; }
+function byId(id){ return document.querySelector(`.screen.on [data-id="${CSS.escape(id)}"]`); }
+function paint(){
+  items().forEach(el=>el.classList.toggle('on', el.dataset.id===fid));
+  const el=byId(fid);
+  if(el && el.dataset.ch!==undefined && +el.dataset.ch!==sel){ sel=+el.dataset.ch; drawStage(); paint(); }
+}
+function move(dir){
+  const el=byId(fid); if(!el) return;
+  let t=el.dataset[dir];
+  if(t==='RAIL'){ toast('Back to the channel rail','LEFT from the stage always returns to the row you came from'); fid='ch'+sel; paint(); return; }
+  if(!t){
+    if(dir==='left'){ toast('The app sidebar opens','LEFT at column 0 — the house rule, unchanged'); }
+    return;
+  }
+  if(byId(t)){ fid=t; paint(); scrollRail(); }
+}
+function scrollRail(){
+  const el=byId(fid); const list=document.getElementById('raillist');
+  if(!el||!list||!list.contains(el)) return;
+  const er=el.getBoundingClientRect(), lr=list.getBoundingClientRect();
+  if(er.bottom>lr.bottom) list.scrollTop += er.bottom-lr.bottom+12;
+  if(er.top<lr.top) list.scrollTop -= lr.top-er.top+12;
+}
+let tt;
+function toast(a,b){
+  const el=document.getElementById('toast');
+  el.innerHTML=a+(b?`<small>${b}</small>`:'');
+  el.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('show'),2600);
+}
+function go(s){
+  cur=s;
+  document.querySelectorAll('.screen').forEach(el=>el.classList.toggle('on', el.dataset.screen===s));
+  document.querySelectorAll('.screenbtn').forEach(b=>b.classList.toggle('on', b.dataset.screen===s));
+  const first={channels:'ch'+sel,editor:'ename',quickplay:'qfield',settings:'s1',import:'i1',tuning:'tcancel',empty:'e1'};
+  fid=first[s]||items()[0]?.dataset.id; paint();
+  history.replaceState(null,'','#s='+s);
+}
+function showShare(){
+  const ov=document.createElement('div'); ov.className='overlay'; ov.id='shareov';
+  ov.innerHTML=`<div class="sharecard">
+    <div class="kick">Share channel 03</div><h3>Tonight</h3>
+    <p>Anyone on Debrify can paste this link to get the channel and everything it has already pooled.</p>
+    <div class="linkbox">debrify://eJyNVE1v2zAM/SuCdmqBOHYSJ02BHYYNAwYM2GHYYYcdBFmiHSGypEly0m7Yfx/lJE3aFdgu
+      NsX3+PhIyj+ppTLQKtBrsCvQK7ArsCuwK7ArsCuwK7ArsCuwK7AraJdgV2BXYFdgV2BXYFdgV2BXYFdgV9AuwK7ArsCuwK7ArqBdgV2B</div>
+    <div class="sharemeta">
+      <div><div class="l">Link size</div><div class="v">41.2 KB</div></div>
+      <div><div class="l">Compression</div><div class="v">6.4×</div></div>
+      <div><div class="l">Carries</div><div class="v">1,204 titles</div></div>
+    </div>
+    <div style="display:flex;gap:14px">
+      <button class="f act play" data-nav data-id="scopy" data-right="sclose" data-act="toast:Copied|The link goes to the clipboard — paste it anywhere">Copy link</button>
+      <button class="f act" data-nav data-id="sclose" data-left="scopy" data-act="closeshare">Close</button>
+    </div></div>`;
+  document.getElementById('tv').appendChild(ov);
+  fid='scopy'; paint();
+}
+
+/* ═════════════ wiring ═════════════ */
+function fitStage(){
+  const shell=document.getElementById('shell'); if(!shell) return;
+  document.getElementById('scaler').style.transform='scale('+(shell.clientWidth/1920)+')';
+}
+document.getElementById('raillist').innerHTML=railHTML();
+drawStage(); kbd('ekbd','key'); kbd('qkbd','qkey'); phone();
+new ResizeObserver(fitStage).observe(document.getElementById('shell'));
+fitStage(); paint();
+
+document.getElementById('shell').addEventListener('keydown',e=>{
+  const K={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'}[e.key];
+  if(K){ e.preventDefault(); move(K); return; }
+  if(e.key==='Enter'){ e.preventDefault(); doAct(); }
+  if(e.key==='Backspace'){ e.preventDefault(); back(); }
+});
+document.getElementById('shell').addEventListener('click',e=>{
+  const el=e.target.closest('[data-nav]');
+  document.getElementById('shell').focus();
+  if(el){ fid=el.dataset.id; paint(); doAct(); }
+});
+function doAct(){
+  const el=byId(fid); if(!el) return;
+  const a=el.dataset.act||'none';
+  if(a.startsWith('screen:')) return go(a.slice(7));
+  if(a==='quickplay') return go('quickplay');
+  if(a==='share') return showShare();
+  if(a==='closeshare'){ document.getElementById('shareov')?.remove(); fid='share'; return paint(); }
+  if(a.startsWith('toast:')){ const p=a.slice(6).split('|'); return toast(p[0],p[1]||''); }
+}
+function back(){
+  if(document.getElementById('shareov')){ document.getElementById('shareov').remove(); fid='share'; return paint(); }
+  if(cur!=='channels') return go('channels');
+  toast('Back leaves Debrify TV','Nothing on this screen traps you');
+}
+document.querySelectorAll('.screenbtn').forEach(b=>b.onclick=()=>{ go(b.dataset.screen); document.getElementById('shell').focus(); });
+document.querySelectorAll('[data-view-btn]').forEach(b=>b.onclick=()=>{
+  document.documentElement.dataset.view=b.dataset.viewBtn;
+  document.querySelectorAll('[data-view-btn]').forEach(x=>x.classList.toggle('on',x===b));
+  fitStage();
+});
+document.querySelectorAll('[data-art-btn]').forEach(b=>b.onclick=()=>{
+  document.documentElement.dataset.art=b.dataset.artBtn;
+  document.querySelectorAll('[data-art-btn]').forEach(x=>x.classList.toggle('on',x===b));
+});
+const h=(location.hash.match(/s=([a-z]+)/)||[])[1];
+if(h) go(h);
+</script>
+</body>
+</html>

@@ -277,6 +277,7 @@ class VideoPlayerLaunchArgs {
   // Simkl scrobble/progress — fully parallel to the Trakt pair above.
   final bool simklScrobble;
   final double? simklProgressPercent;
+
   // Continue watching metadata (for home screen section)
   final String? contentTitle; // Clean display name (IMDB title)
   final String? posterUrl;
@@ -2770,12 +2771,44 @@ class VideoPlayerLauncher {
       final speed = (progress['speed'] ?? 1.0) as double;
       final aspect = (progress['aspect'] ?? 'contain') as String;
       final completed = progress['completed'] == true;
+      final localCompleted = progress['localCompleted'] == true;
       final resumeId = progress['resumeId'] as String?;
       final itemIndex = progress['itemIndex'] as int? ?? 0;
       final progressUrl = progress['url'] as String?;
 
       if (resumeId != null && progressUrl != null && progressUrl.isNotEmpty) {
         _cacheResolvedStream(resumeId, progressUrl);
+      }
+
+      // Native TV uses this one-shot signal for locally tracked catalog
+      // movies. Complete before the generic resume writer runs, otherwise the
+      // next native ping would immediately recreate Continue Watching after we
+      // intentionally clear it.
+      final locallyTrackedMovie =
+          payload.localCompletionTracking &&
+          payload.contentType == _PlaybackContentType.single &&
+          payload.imdbId != null &&
+          payload.imdbId!.isNotEmpty;
+      if (locallyTrackedMovie) {
+        if (payload.localMovieCompletionRecorded) return;
+        final movieProgress = durationMs > 0
+            ? positionMs * 100 / durationMs
+            : 0.0;
+        if (!payload.localMovieRewatchStarted &&
+            positionMs > 0 &&
+            movieProgress < payload.movieCompletionThreshold) {
+          payload.localMovieRewatchStarted = true;
+          await StorageService.unmarkMovieAsFinished(payload.imdbId!);
+        }
+        if (localCompleted || completed) {
+          payload.localMovieCompletionRecorded = true;
+          await Future.wait([
+            StorageService.markMovieAsFinished(payload.imdbId!),
+            if (resumeId != null && resumeId.isNotEmpty)
+              StorageService.removeVideoResume(resumeId),
+          ]);
+          return;
+        }
       }
 
       // Trakt scrobble for Android TV player (movies and series)
@@ -3077,7 +3110,8 @@ class VideoPlayerLauncher {
             imdbId: payload.imdbId,
           );
 
-          if (completed) {
+          if (completed ||
+              (payload.localCompletionTracking && localCompleted)) {
             await StorageService.markEpisodeAsFinished(
               seriesTitle: seriesTitle,
               season: season,
@@ -3424,11 +3458,22 @@ class _AndroidTvPlaybackPayload {
   // progress percent folds into the native resume seed via toMap below).
   final bool simklScrobble;
   final double? simklProgressPercent;
+
+  /// Local-only completion settings. Tracker sessions deliberately omit this
+  /// path and continue to use the trackers' own completion rules.
+  final bool localCompletionTracking;
+  final int movieCompletionThreshold;
+  final int episodeCompletionThreshold;
+  // Session-only guards; the native activity emits local threshold crossing
+  // once per item, while these prevent later progress pings from rebuilding a
+  // completed movie's local resume state.
+  bool localMovieCompletionRecorded = false;
+  bool localMovieRewatchStarted = false;
   // Subtitle tracks known at launch (e.g. YouTube captions), surfaced natively
   // as a pre-loaded provider group without an addon fetch.
   final List<StremioSubtitle>? initialSubtitles;
 
-  const _AndroidTvPlaybackPayload({
+  _AndroidTvPlaybackPayload({
     required this.contentType,
     required this.title,
     required this.subtitle,
@@ -3449,6 +3494,11 @@ class _AndroidTvPlaybackPayload {
     this.traktProgressPercent,
     this.simklScrobble = false,
     this.simklProgressPercent,
+    this.localCompletionTracking = false,
+    this.movieCompletionThreshold =
+        StorageService.defaultLocalCompletionThreshold,
+    this.episodeCompletionThreshold =
+        StorageService.defaultLocalCompletionThreshold,
     this.initialSubtitles,
   });
 
@@ -3493,6 +3543,11 @@ class _AndroidTvPlaybackPayload {
       // input, but carries the furthest of the Trakt/Simkl launch percents.
       if (_effectiveLaunchPercent != null)
         'traktProgressPercent': _effectiveLaunchPercent,
+      if (localCompletionTracking) ...{
+        'localCompletionTracking': true,
+        'movieCompletionThreshold': movieCompletionThreshold,
+        'episodeCompletionThreshold': episodeCompletionThreshold,
+      },
       if (initialSubtitles != null && initialSubtitles!.isNotEmpty)
         'initialSubtitles': [
           for (final s in initialSubtitles!)
@@ -3782,6 +3837,20 @@ class _AndroidTvPlaybackPayloadBuilder {
     final playlistEntries = _normalizePlaylist();
     final seriesPlaylist = await _buildSeriesPlaylist(playlistEntries);
     final contentType = _determineContentType(seriesPlaylist, playlistEntries);
+    final localCompletionTracking =
+        !args.traktScrobble &&
+        !args.simklScrobble &&
+        args.stremioTvChannels == null &&
+        args.iptvChannels == null;
+    final completionThresholds = localCompletionTracking
+        ? await Future.wait<int>([
+            StorageService.getMovieCompletionThreshold(),
+            StorageService.getEpisodeCompletionThreshold(),
+          ])
+        : const <int>[
+            StorageService.defaultLocalCompletionThreshold,
+            StorageService.defaultLocalCompletionThreshold,
+          ];
     final perItemStates = await _fetchPerItemPlaybackState(playlistEntries);
     // Cross-device per-episode progress ("season_episode" → 0-100) for playlist
     // bars and in-session episode resume. The native payload retains its legacy
@@ -3984,6 +4053,9 @@ class _AndroidTvPlaybackPayloadBuilder {
       traktProgressPercent: args.traktProgressPercent,
       simklScrobble: args.simklScrobble,
       simklProgressPercent: args.simklProgressPercent,
+      localCompletionTracking: localCompletionTracking,
+      movieCompletionThreshold: completionThresholds[0],
+      episodeCompletionThreshold: completionThresholds[1],
       initialSubtitles: args.initialSubtitles,
     );
 

@@ -1,43 +1,28 @@
 import 'dart:ui';
-import 'package:flutter/material.dart';
 
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../utils/platform_util.dart';
-import '../../../utils/tv_keys.dart';
+
 import '../../../models/torrent.dart';
 import '../../../services/series_source_fetcher.dart';
-import '../../../widgets/tv_text_field.dart';
+import '../../../utils/platform_util.dart';
+import '../../../utils/tv_keys.dart';
 
-/// In-player source switcher panel (right-sliding, Netflix-dark).
-///
-/// Flat plays show Direct/Torrent tabs. Series plays that carry a
-/// [SeriesSourceFetcher] split torrents into Packs/Episodes/Direct (same
-/// coverage_type classification as the Android TV player), and tabs whose
-/// dedicated search never ran offer a "Load more sources" action that runs
-/// the missing search and appends the results (append-only merge).
+/// Full-screen source browser.  It deliberately keeps the source list in its
+/// supplied order: grouping is only a view over the list, never a re-rank.
 class SourceSheet extends StatefulWidget {
   final List<Torrent> sources;
   final int currentSourceIndex;
   final Future<String?> Function(Torrent) resolveSource;
   final void Function(int index, String resolvedUrl) onSourceSelected;
   final VoidCallback onClose;
-
-  /// Load-more backend. Null for plays without one (IPTV, YouTube, manual
-  /// picks…) — the sheet then behaves like the classic flat picker.
   final SeriesSourceFetcher? seriesFetcher;
-
-  /// Currently playing position, so "Load more → Episodes" targets the
-  /// episode on screen (pack playlists auto-advance without relaunching).
   final int? currentSeason;
   final int? currentEpisode;
-
-  /// Fired with the full merged list after a successful load-more. The owner
-  /// must adopt it as the new effective sources (append-only: existing
-  /// entries keep their positions).
   final void Function(List<Torrent> merged)? onSourcesMerged;
 
   const SourceSheet({
-    Key? key,
+    super.key,
     required this.sources,
     required this.currentSourceIndex,
     required this.resolveSource,
@@ -47,343 +32,280 @@ class SourceSheet extends StatefulWidget {
     this.currentSeason,
     this.currentEpisode,
     this.onSourcesMerged,
-  }) : super(key: key);
+  });
 
   @override
   State<SourceSheet> createState() => _SourceSheetState();
 }
 
-enum _FocusZone { tabs, search, sources }
+enum _FocusZone { addons, sources }
 
-class _TabDef {
-  final String id;
-  final String label;
-  final List<Torrent> sources;
-  final bool hasCurrent;
-  const _TabDef(this.id, this.label, this.sources, this.hasCurrent);
+class _SourceEntry {
+  final int originalIndex;
+  final Torrent torrent;
+  const _SourceEntry(this.originalIndex, this.torrent);
 }
 
-class _SourceSheetState extends State<SourceSheet>
-    with TickerProviderStateMixin {
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
-  final FocusNode _keyboardFocusNode = FocusNode();
-  final ScrollController _scrollController = ScrollController();
-  late AnimationController _animController;
-  late Animation<Offset> _slideAnim;
-  late Animation<double> _fadeAnim;
+class _AddonGroup {
+  final String id;
+  final String label;
+  final List<_SourceEntry> entries;
+  const _AddonGroup(this.id, this.label, this.entries);
+}
 
-  // Pulsing glow for playing badge on source tiles
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnim;
+class _SourceSheetState extends State<SourceSheet> {
+  static const _glass = Color(0xFF101012);
 
-  List<_TabDef> _tabs = [];
-  int _activeTab = 0;
-  List<Torrent> _filteredSources = [];
-  int _focusedIndex = 0;
+  final FocusNode _keyboardFocusNode = FocusNode(debugLabel: 'source-browser');
+  final ScrollController _addonScrollController = ScrollController();
+  final ScrollController _sourceScrollController = ScrollController();
+  final Map<int, GlobalKey> _sourceKeys = <int, GlobalKey>{};
+  final GlobalKey _loadMoreKey = GlobalKey();
+
+  List<_AddonGroup> _groups = const [];
+  int _selectedGroup = 0;
+  int _focusedSource = 0;
   _FocusZone _focusZone = _FocusZone.sources;
-
-  // Resolution state
-  int? _resolvingIndex; // Original index in widget.sources being resolved
-  String? _errorMessage; // Brief error message shown at bottom
-
-  // Load-more state: the mode currently in flight, or null.
+  int? _resolvingIndex;
+  String? _errorMessage;
   String? _loadingMode;
-
-  // Design tokens (Netflix-dark, matching the TV unified menu)
-  static const _accent = Color(0xFFFFFFFF);
-  static const _accentSoft = Color(0xFFE9E9EE);
-  static const _surfaceDark = Color(0xFF101012);
-
-  bool get _seriesTabs =>
-      widget.seriesFetcher != null && !widget.seriesFetcher!.isMovie;
 
   @override
   void initState() {
     super.initState();
-
-    // A television opens this over the player, whose root Focus already holds
-    // focus in this scope — so `autofocus: true` on the KeyboardListener never
-    // wins and the sheet renders its virtual focus while receiving no keys at
-    // all (the DPAD appears dead). Claim focus explicitly once mounted.
+    _rebuildGroups(landOnCurrent: true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _keyboardFocusNode.requestFocus();
-    });
-
-    _rebuildTabs();
-    _autoSelectTab();
-    _recomputeFilters();
-
-    // Slide + fade in
-    _animController = AnimationController(
-      duration: const Duration(milliseconds: 350),
-      vsync: this,
-    );
-    _slideAnim = Tween<Offset>(
-      begin: const Offset(1.0, 0.0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-        parent: _animController, curve: Curves.easeOutCubic));
-    _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.easeOut),
-    );
-
-    // Pulsing glow for playing badge
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat(reverse: true);
-    _pulseAnim = Tween<double>(begin: 0.3, end: 0.7).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-
-    _animController.forward();
-
-    _searchFocusNode.addListener(() {
-      if (_searchFocusNode.hasFocus && _focusZone != _FocusZone.search) {
-        setState(() => _focusZone = _FocusZone.search);
+      if (mounted) {
+        _keyboardFocusNode.requestFocus();
+        _ensureFocusedVisible();
       }
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToCurrentSource();
     });
   }
 
   @override
   void didUpdateWidget(SourceSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Load-more merged in a new sources list (owner adopted it): re-bucket.
-    // Append-only merge keeps tab identity stable, so the active tab stays.
     if (!identical(oldWidget.sources, widget.sources) ||
         oldWidget.currentSourceIndex != widget.currentSourceIndex) {
-      _rebuildTabs();
-      if (_activeTab >= _tabs.length) _activeTab = 0;
-      // Keep the user's focus where it was (append-only merges preserve
-      // indices) instead of letting the recompute snap it back to the
-      // PLAYING row above the freshly appended results.
-      final keepFocus = _focusedIndex;
-      _recomputeFilters();
-      _focusedIndex = keepFocus.clamp(0, _maxFocusIndex);
+      final focusedOriginal = _focusedEntry?.originalIndex;
+      final selectedId = _groups.isEmpty ? 'all' : _groups[_selectedGroup].id;
+      _rebuildGroups(selectedId: selectedId, focusedOriginal: focusedOriginal);
     }
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
-    _searchFocusNode.dispose();
     _keyboardFocusNode.dispose();
-    _scrollController.dispose();
-    _animController.dispose();
-    _pulseController.dispose();
+    _addonScrollController.dispose();
+    _sourceScrollController.dispose();
     super.dispose();
   }
 
-  // ─── Categorization ────────────────────────────────────────────────
-
-  static bool _isPack(Torrent t) =>
-      t.coverageType == 'seasonPack' ||
-      t.coverageType == 'multiSeasonPack' ||
-      t.coverageType == 'completeSeries';
-
-  void _rebuildTabs() {
-    final direct =
-        widget.sources.where((t) => t.isDirectStream).toList();
-    final torrents = widget.sources
-        .where((t) => t.streamType == StreamType.torrent)
-        .toList();
-
-    final cur = (widget.currentSourceIndex >= 0 &&
-            widget.currentSourceIndex < widget.sources.length)
-        ? widget.sources[widget.currentSourceIndex]
-        : null;
-    bool hasCur(List<Torrent> list) =>
-        cur != null && list.any((t) => _isSameTorrent(t, cur));
-
-    if (_seriesTabs) {
-      final packs = torrents.where(_isPack).toList();
-      final episodes = torrents.where((t) => !_isPack(t)).toList();
-      _tabs = [
-        _TabDef('packs', 'Packs', packs, hasCur(packs)),
-        _TabDef('episodes', 'Episodes', episodes, hasCur(episodes)),
-        _TabDef('direct', 'Direct', direct, hasCur(direct)),
-      ];
-    } else {
-      _tabs = [
-        _TabDef('direct', 'Direct', direct, hasCur(direct)),
-        _TabDef('torrent', 'Torrent', torrents, hasCur(torrents)),
-      ];
-    }
+  String _groupId(Torrent torrent) {
+    final source = torrent.source.trim();
+    return source.isEmpty ? '_other' : source.toLowerCase();
   }
 
-  void _autoSelectTab() {
-    // Land on the tab holding the currently playing source; otherwise the
-    // first tab that has anything to show (or offers load-more).
-    final curIdx = _tabs.indexWhere((t) => t.hasCurrent);
-    if (curIdx >= 0) {
-      _activeTab = curIdx;
-      return;
+  String _groupLabel(Torrent torrent) {
+    var source = torrent.source.trim();
+    if (source.isEmpty) return 'Other sources';
+    if (source.toLowerCase().startsWith('stremio:')) {
+      source = source.substring('stremio:'.length);
     }
-    final nonEmpty = _tabs.indexWhere((t) => t.sources.isNotEmpty);
-    if (nonEmpty >= 0) _activeTab = nonEmpty;
+    return source
+        .split(RegExp(r'[_-]'))
+        .map((word) {
+          if (word.isEmpty) return word;
+          return '${word[0].toUpperCase()}${word.substring(1)}';
+        })
+        .join(' ');
   }
 
-  List<Torrent> get _currentTabSources =>
-      _tabs.isEmpty ? const [] : _tabs[_activeTab].sources;
+  void _rebuildGroups({
+    bool landOnCurrent = false,
+    String? selectedId,
+    int? focusedOriginal,
+  }) {
+    final all = <_SourceEntry>[];
+    final buckets = <String, List<_SourceEntry>>{};
+    final labels = <String, String>{};
+    for (var index = 0; index < widget.sources.length; index++) {
+      final entry = _SourceEntry(index, widget.sources[index]);
+      all.add(entry);
+      final id = _groupId(entry.torrent);
+      (buckets[id] ??= <_SourceEntry>[]).add(entry);
+      labels.putIfAbsent(id, () => _groupLabel(entry.torrent));
+    }
+    _groups = <_AddonGroup>[
+      _AddonGroup('all', 'All add-ons', all),
+      for (final bucket in buckets.entries)
+        _AddonGroup(bucket.key, labels[bucket.key]!, bucket.value),
+    ];
+    final nextGroup = _groups.indexWhere((g) => g.id == selectedId);
+    _selectedGroup = nextGroup < 0 ? 0 : nextGroup;
+    final target =
+        focusedOriginal ?? (landOnCurrent ? widget.currentSourceIndex : null);
+    final idx = target == null
+        ? -1
+        : _visibleEntries.indexWhere((entry) => entry.originalIndex == target);
+    _focusedSource = idx < 0 ? 0 : idx;
+  }
 
-  /// Fetch mode offered on the active tab, or null when that tab's search
-  /// already ran (or there is no fetcher).
-  String? get _activeLoadMoreMode {
-    final f = widget.seriesFetcher;
-    if (f == null || _tabs.isEmpty) return null;
-    final id = _tabs[_activeTab].id;
-    if (f.isMovie) {
-      return (id == 'torrent' && !f.movieFetched)
-          ? SeriesSourceFetcher.modeMovie
-          : null;
+  List<_SourceEntry> get _visibleEntries => _groups.isEmpty
+      ? const <_SourceEntry>[]
+      : _groups[_selectedGroup].entries;
+
+  _SourceEntry? get _focusedEntry =>
+      _focusedSource >= 0 && _focusedSource < _visibleEntries.length
+      ? _visibleEntries[_focusedSource]
+      : null;
+
+  String? get _loadMoreMode {
+    final fetcher = widget.seriesFetcher;
+    if (fetcher == null) return null;
+    if (fetcher.isMovie) {
+      return fetcher.movieFetched ? null : SeriesSourceFetcher.modeMovie;
     }
-    if (id == 'packs' && !f.packsFetched) return SeriesSourceFetcher.modePacks;
-    if (id == 'episodes' && !f.episodesFetched) {
-      return SeriesSourceFetcher.modeEpisodes;
-    }
+    if (!fetcher.packsFetched) return SeriesSourceFetcher.modePacks;
+    if (!fetcher.episodesFetched) return SeriesSourceFetcher.modeEpisodes;
     return null;
   }
 
-  // ─── Filtering ─────────────────────────────────────────────────────
-
-  /// Recompute filtered sources and focused index. Mutates state directly
-  /// without calling setState — safe to call from inside a setState block.
-  void _recomputeFilters() {
-    final query = _searchController.text.toLowerCase();
-    final tabSources = _currentTabSources;
-    _filteredSources = tabSources.where((t) {
-      if (query.isEmpty) return true;
-      return t.displayTitle.toLowerCase().contains(query) ||
-          t.source.toLowerCase().contains(query);
-    }).toList();
-
-    final currentOrigIdx = widget.currentSourceIndex;
-    if (currentOrigIdx >= 0 && currentOrigIdx < widget.sources.length) {
-      final current = widget.sources[currentOrigIdx];
-      final idx = _filteredSources.indexWhere((t) => _isSameTorrent(t, current));
-      if (idx >= 0) {
-        _focusedIndex = idx;
-        return;
-      }
+  String get _seriesStateLabel {
+    final fetcher = widget.seriesFetcher;
+    if (fetcher == null || fetcher.isMovie) {
+      return 'Sources returned for this title.';
     }
-    _focusedIndex = _focusedIndex.clamp(0, _maxFocusIndex);
+    final hasPacks = _visibleEntries.any((e) => _isPack(e.torrent));
+    final hasEpisodes = _visibleEntries.any(
+      (e) => e.torrent.streamType == StreamType.torrent && !_isPack(e.torrent),
+    );
+    if (hasPacks && hasEpisodes) {
+      return 'Season packs and episode results loaded.';
+    }
+    if (hasPacks) {
+      return 'Season packs loaded. Episode results are fetched separately.';
+    }
+    if (hasEpisodes) {
+      return 'Episode results loaded. Season packs are fetched separately.';
+    }
+    return 'Sources returned for this series.';
   }
 
-  /// Whether the load-more row/CTA is actually on screen: a search query
-  /// that empties the tab shows the plain "no matches" state instead.
-  bool get _loadMoreVisible =>
-      _activeLoadMoreMode != null &&
-      (_filteredSources.isNotEmpty || _searchController.text.isEmpty);
+  String get _loadMoreLabel => switch (_loadMoreMode) {
+    SeriesSourceFetcher.modeEpisodes => 'Load episode sources',
+    SeriesSourceFetcher.modePacks => 'Load season-pack sources',
+    _ => 'Load more sources',
+  };
 
-  /// Highest focusable index in the list zone: sources, plus the trailing
-  /// load-more row when visible (also focusable at 0 on an empty tab).
-  int get _maxFocusIndex {
-    final count = _filteredSources.length + (_loadMoreVisible ? 1 : 0);
-    return count > 0 ? count - 1 : 0;
-  }
+  static bool _isPack(Torrent torrent) =>
+      torrent.coverageType == 'seasonPack' ||
+      torrent.coverageType == 'multiSeasonPack' ||
+      torrent.coverageType == 'completeSeries';
 
-  /// Recompute filters and trigger a rebuild.
-  void _applyFilters() {
+  void _selectGroup(int index) {
     setState(() {
-      _recomputeFilters();
+      _selectedGroup = index;
+      final current = _visibleEntries.indexWhere(
+        (entry) => entry.originalIndex == widget.currentSourceIndex,
+      );
+      _focusedSource = current < 0 ? 0 : current;
+    });
+    _ensureAddonVisible();
+    _ensureFocusedVisible();
+  }
+
+  void _ensureFocusedVisible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final GlobalKey? key = _focusedSource < 0
+          ? _loadMoreKey
+          : _sourceKeys[_focusedEntry?.originalIndex];
+      final context = key?.currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          alignment: 0.45,
+        );
+      } else if (_sourceScrollController.hasClients && _focusedSource >= 0) {
+        final target = (_focusedSource * 63.0).clamp(
+          0.0,
+          _sourceScrollController.position.maxScrollExtent,
+        );
+        _sourceScrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+        );
+      }
     });
   }
 
-  bool _isSameTorrent(Torrent a, Torrent b) {
-    if (a.infohash.isNotEmpty && b.infohash.isNotEmpty) {
-      return a.infohash == b.infohash;
-    }
-    return a.directUrl == b.directUrl && a.name == b.name;
-  }
-
-  int _getOriginalIndex(Torrent torrent) {
-    return widget.sources.indexWhere((t) => _isSameTorrent(t, torrent));
-  }
-
-  // ─── Scrolling ─────────────────────────────────────────────────────
-
-  void _scrollToFocused() {
-    if (!_scrollController.hasClients) return;
-    const h = 72.0;
-    final target = _focusedIndex * h;
-    final vp = _scrollController.position.viewportDimension;
-    final cur = _scrollController.offset;
-    if (target < cur || target > cur + vp - h) {
-      _scrollController.animateTo(
-        (target - vp / 2 + h / 2)
-            .clamp(0.0, _scrollController.position.maxScrollExtent),
-        duration: const Duration(milliseconds: 150),
+  void _ensureAddonVisible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_addonScrollController.hasClients) return;
+      final horizontal =
+          _addonScrollController.position.axisDirection ==
+              AxisDirection.right ||
+          _addonScrollController.position.axisDirection == AxisDirection.left;
+      final extent = horizontal ? 150.0 : 47.0;
+      _addonScrollController.animateTo(
+        (_selectedGroup * extent).clamp(
+          0.0,
+          _addonScrollController.position.maxScrollExtent,
+        ),
+        duration: const Duration(milliseconds: 160),
         curve: Curves.easeOutCubic,
       );
-    }
+    });
   }
 
-  void _scrollToCurrentSource() {
-    if (_filteredSources.isEmpty || !_scrollController.hasClients) return;
-    final currentOrigIdx = widget.currentSourceIndex;
-    if (currentOrigIdx >= 0 && currentOrigIdx < widget.sources.length) {
-      final current = widget.sources[currentOrigIdx];
-      final idx = _filteredSources.indexWhere((t) => _isSameTorrent(t, current));
-      if (idx >= 0) {
-        _focusedIndex = idx;
-        _scrollToFocused();
-      }
+  Future<void> _selectSource(_SourceEntry entry) async {
+    if (entry.originalIndex == widget.currentSourceIndex ||
+        _resolvingIndex != null) {
+      return;
     }
-  }
-
-  // ─── Source Selection ──────────────────────────────────────────────
-
-  Future<void> _selectSource(Torrent torrent) async {
-    final origIdx = _getOriginalIndex(torrent);
-    if (origIdx < 0) return;
-    if (origIdx == widget.currentSourceIndex) return; // Already playing
-
-    setState(() => _resolvingIndex = origIdx);
-
+    setState(() {
+      _resolvingIndex = entry.originalIndex;
+      _errorMessage = null;
+    });
     try {
-      final url = await widget.resolveSource(torrent);
+      final url = await widget.resolveSource(entry.torrent);
       if (!mounted) return;
-
       if (url != null && url.isNotEmpty) {
-        widget.onSourceSelected(origIdx, url);
+        widget.onSourceSelected(entry.originalIndex, url);
       } else {
-        // Resolution failed — flash red on tile + show error message
-        setState(() {
-          _resolvingIndex = -1;
-          _errorMessage = 'Source unavailable — not cached or not a video';
-        });
-        await Future.delayed(const Duration(seconds: 3));
-        if (mounted) setState(() { _resolvingIndex = null; _errorMessage = null; });
+        await _showResolutionError(
+          'Source unavailable — not cached or not a video',
+        );
       }
-    } catch (e) {
-      if (!mounted) return;
-      debugPrint('SourceSheet: Resolution error: $e');
-      setState(() {
-        _resolvingIndex = -1;
-        _errorMessage = 'Failed to resolve source';
-      });
-      await Future.delayed(const Duration(seconds: 3));
-      if (mounted) setState(() { _resolvingIndex = null; _errorMessage = null; });
+    } catch (_) {
+      if (mounted) await _showResolutionError('Failed to resolve source');
     }
   }
 
-  // ─── Load more ─────────────────────────────────────────────────────
+  Future<void> _showResolutionError(String message) async {
+    if (!mounted) return;
+    setState(() {
+      _resolvingIndex = null;
+      _errorMessage = message;
+    });
+    await Future<void>.delayed(const Duration(seconds: 3));
+    if (mounted && _resolvingIndex == null) {
+      setState(() => _errorMessage = null);
+    }
+  }
 
   Future<void> _loadMore() async {
-    final mode = _activeLoadMoreMode;
+    final mode = _loadMoreMode;
     final fetcher = widget.seriesFetcher;
     if (mode == null || fetcher == null || _loadingMode != null) return;
-
     setState(() {
       _loadingMode = mode;
       _errorMessage = null;
     });
-
     List<Torrent>? fetched;
     try {
       fetched = await fetcher.fetch(
@@ -391,1057 +313,562 @@ class _SourceSheetState extends State<SourceSheet>
         season: widget.currentSeason,
         episode: widget.currentEpisode,
       );
-    } catch (e) {
-      debugPrint('SourceSheet: Load more failed: $e');
-      fetched = null;
-    }
-
+    } catch (_) {}
     if (fetched != null) {
-      // Deliver the merge even if the sheet was closed mid-fetch: the
-      // fetcher's flag has already flipped, so dropping the results here
-      // would lose them with no way to re-run the search.
-      final merged = SeriesSourceFetcher.mergeSources(widget.sources, fetched);
-      widget.onSourcesMerged?.call(merged);
-      if (mounted) {
-        setState(() => _loadingMode = null);
-      }
+      widget.onSourcesMerged?.call(
+        SeriesSourceFetcher.mergeSources(widget.sources, fetched),
+      );
+      if (mounted) setState(() => _loadingMode = null);
       return;
     }
-
     if (!mounted) return;
-
-    // Failure: the fetcher keeps the flag down, so the row survives for a
-    // retry — mirror the resolution-error banner pattern.
     setState(() {
       _loadingMode = null;
       _errorMessage = "Couldn't fetch more sources — try again";
     });
-    await Future.delayed(const Duration(seconds: 3));
-    if (mounted && _loadingMode == null) {
-      setState(() => _errorMessage = null);
-    }
   }
 
-  // ─── Keyboard / DPAD ──────────────────────────────────────────────
-
-  void _handleKeyEvent(KeyEvent event) {
+  void _handleKey(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return;
-
     if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.goBack) {
       TvOverlayBack.mark();
       widget.onClose();
       return;
     }
-
-    switch (_focusZone) {
-      case _FocusZone.tabs:
-        _handleTabKeys(event);
-        break;
-      case _FocusZone.search:
-        _handleSearchKeys(event);
-        break;
-      case _FocusZone.sources:
-        _handleSourceKeys(event);
-        break;
+    if (_focusZone == _FocusZone.addons) {
+      final compact = MediaQuery.sizeOf(context).width < 700;
+      final previousKey = compact
+          ? LogicalKeyboardKey.arrowLeft
+          : LogicalKeyboardKey.arrowUp;
+      final nextKey = compact
+          ? LogicalKeyboardKey.arrowRight
+          : LogicalKeyboardKey.arrowDown;
+      final exitKey = compact
+          ? LogicalKeyboardKey.arrowDown
+          : LogicalKeyboardKey.arrowRight;
+      if (event.logicalKey == previousKey && _selectedGroup > 0) {
+        _selectGroup(_selectedGroup - 1);
+      } else if (event.logicalKey == nextKey &&
+          _selectedGroup < _groups.length - 1) {
+        _selectGroup(_selectedGroup + 1);
+      } else if (event.logicalKey == exitKey ||
+          isActivateKey(event.logicalKey)) {
+        setState(() => _focusZone = _FocusZone.sources);
+        _ensureFocusedVisible();
+      }
+      return;
     }
-  }
-
-  void _handleTabKeys(KeyEvent event) {
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      if (_activeTab > 0) {
-        setState(() {
-          _activeTab--;
-          _focusedIndex = 0;
-          _recomputeFilters();
-        });
-      }
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      if (_activeTab < _tabs.length - 1) {
-        setState(() {
-          _activeTab++;
-          _focusedIndex = 0;
-          _recomputeFilters();
-        });
+      setState(() => _focusZone = _FocusZone.addons);
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      final minimum = _loadMoreMode == null ? 0 : -1;
+      if (_focusedSource > minimum) {
+        setState(() => _focusedSource--);
+        _ensureFocusedVisible();
       }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      setState(() => _focusZone = _FocusZone.search);
-      _searchFocusNode.requestFocus();
-    }
-  }
-
-  void _handleSearchKeys(KeyEvent event) {
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _searchFocusNode.unfocus();
-      // Reclaim the sheet's key listener: unfocusing clears the scope's
-      // focused child, and without this the list paints a focused row but
-      // stops receiving DPAD keys entirely.
-      _keyboardFocusNode.requestFocus();
-      setState(() => _focusZone = _FocusZone.tabs);
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      _searchFocusNode.unfocus();
-      // Reclaim the sheet's key listener: unfocusing clears the scope's
-      // focused child, and without this the list paints a focused row but
-      // stops receiving DPAD keys entirely.
-      _keyboardFocusNode.requestFocus();
-      setState(() => _focusZone = _FocusZone.sources);
-    }
-  }
-
-  void _handleSourceKeys(KeyEvent event) {
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      if (_focusedIndex > 0) {
-        setState(() => _focusedIndex--);
-        _scrollToFocused();
-      } else {
-        _searchFocusNode.requestFocus();
-        setState(() => _focusZone = _FocusZone.search);
-      }
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      if (_focusedIndex < _maxFocusIndex) {
-        setState(() => _focusedIndex++);
-        _scrollToFocused();
+      if (_focusedSource < _visibleEntries.length - 1) {
+        setState(() => _focusedSource++);
+        _ensureFocusedVisible();
       }
     } else if (isActivateKey(event.logicalKey)) {
-      if (_focusedIndex >= _filteredSources.length) {
-        // Trailing load-more row (or the empty-tab CTA at index 0).
-        if (_loadMoreVisible) _loadMore();
-      } else if (_filteredSources.isNotEmpty && _resolvingIndex == null) {
-        _selectSource(_filteredSources[_focusedIndex]);
+      if (_focusedSource < 0) {
+        _loadMore();
+      } else {
+        final entry = _focusedEntry;
+        if (entry != null) _selectSource(entry);
       }
     }
-  }
-
-  // ─── Build ─────────────────────────────────────────────────────────
-
-  /// TV: skip the frosted-glass BackdropFilter. The panel fill is 97% opaque,
-  /// so the blur is barely visible — but its saveLayer re-blurs the live video
-  /// underneath on every frame, which weak TV GPUs can't afford.
-  Widget _frost(Widget child) {
-    if (PlatformUtil.isAndroidTvCached) return child;
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
-      child: child,
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context);
-    final isLandscape = mq.orientation == Orientation.landscape;
-    final panelWidth =
-        isLandscape ? mq.size.width * 0.42 : mq.size.width * 0.92;
-
+    final useBlur = !PlatformUtil.isAndroidTvCached;
+    final shell = LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 700;
+        return Container(
+          color: useBlur
+              ? _glass.withValues(alpha: .88)
+              : const Color(0xF5101012),
+          child: SafeArea(
+            child: compact
+                ? Column(
+                    children: [
+                      SizedBox(
+                        height: 104,
+                        child: _buildAddonRail(compact: true),
+                      ),
+                      Container(
+                        height: .75,
+                        color: Colors.white.withValues(alpha: .12),
+                      ),
+                      Expanded(child: _buildResults(compact: true)),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      SizedBox(width: 300, child: _buildAddonRail()),
+                      Container(
+                        width: .75,
+                        color: Colors.white.withValues(alpha: .12),
+                      ),
+                      Expanded(child: _buildResults()),
+                    ],
+                  ),
+          ),
+        );
+      },
+    );
     return KeyboardListener(
       focusNode: _keyboardFocusNode,
       autofocus: true,
-      onKeyEvent: _handleKeyEvent,
+      onKeyEvent: _handleKey,
       child: Stack(
+        fit: StackFit.expand,
         children: [
-          // Scrim
           GestureDetector(
             onTap: widget.onClose,
-            child: FadeTransition(
-              opacity: _fadeAnim,
-              child: Container(color: Colors.black54),
-            ),
+            child: const ColoredBox(color: Color(0xA6000000)),
           ),
-          // Panel
-          Positioned(
-            top: 0,
-            bottom: 0,
-            right: 0,
-            width: panelWidth,
-            child: SlideTransition(
-              position: _slideAnim,
-              child: ClipRRect(
-                borderRadius: BorderRadius.zero,
-                child: _frost(
-                  Container(
-                    decoration: BoxDecoration(
-                      color: _surfaceDark.withOpacity(
-                          PlatformUtil.isAndroidTvCached ? 0.96 : 0.80),
-                      border: Border(
-                        left: BorderSide(
-                            color: Colors.white.withOpacity(0.14),
-                            width: 0.75),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        _buildHeader(),
-                        _buildTabBar(),
-                        _buildSearchBar(),
-                        Expanded(child: _buildSourceList()),
-                        if (_errorMessage != null)
-                          _buildErrorBanner(),
-                        const SizedBox(height: 8),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+          Positioned.fill(
+            child: useBlur
+                ? BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+                    child: shell,
+                  )
+                : shell,
           ),
         ],
       ),
     );
   }
 
-  // ─── Error Banner ──────────────────────────────────────────────────
-
-  Widget _buildErrorBanner() {
-    return AnimatedOpacity(
-      opacity: _errorMessage != null ? 1.0 : 0.0,
-      duration: const Duration(milliseconds: 200),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.red.withOpacity(0.25)),
+  Widget _buildAddonRail({bool compact = false}) => Padding(
+    padding: compact
+        ? const EdgeInsets.fromLTRB(18, 14, 18, 10)
+        : const EdgeInsets.fromLTRB(30, 46, 30, 24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('Sources'),
+        SizedBox(height: compact ? 8 : 18),
+        Expanded(
+          child: ListView.builder(
+            controller: _addonScrollController,
+            scrollDirection: compact ? Axis.horizontal : Axis.vertical,
+            itemCount: _groups.length,
+            itemBuilder: (context, index) {
+              final group = _groups[index];
+              final selected = index == _selectedGroup;
+              final focused = selected && _focusZone == _FocusZone.addons;
+              return SizedBox(
+                width: compact ? 146 : null,
+                child: _AddonRailRow(
+                  label: group.label,
+                  count: group.entries.length,
+                  selected: selected,
+                  focused: focused,
+                  onTap: () {
+                    _selectGroup(index);
+                    setState(() => _focusZone = _FocusZone.addons);
+                  },
+                ),
+              );
+            },
+          ),
         ),
-        child: Row(
+      ],
+    ),
+  );
+
+  Widget _buildResults({bool compact = false}) => Padding(
+    padding: compact
+        ? const EdgeInsets.fromLTRB(18, 18, 18, 18)
+        : const EdgeInsets.fromLTRB(56, 46, 56, 34),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Icon(Icons.error_outline_rounded,
-                color: Colors.red.withOpacity(0.8), size: 16),
-            const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                _errorMessage ?? '',
-                style: TextStyle(
-                  color: Colors.red.withOpacity(0.9),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
+              child: _sectionLabel(
+                _groups.isEmpty ? 'All add-ons' : _groups[_selectedGroup].label,
               ),
             ),
+            Text('${_visibleEntries.length} sources', style: _mutedStyle),
           ],
         ),
-      ),
-    );
-  }
-
-  // ─── Header ────────────────────────────────────────────────────────
-
-  Widget _buildHeader() {
-    final totalCount = widget.sources.length;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 18, 16, 14),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [_accent, _accentSoft],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
-                    blurRadius: 16,
-                    spreadRadius: 2),
-              ],
-            ),
-            child: const Icon(Icons.swap_horiz_rounded,
-                color: Colors.black, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Sources',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '$totalCount sources available',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.35),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: widget.onClose,
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.06),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withOpacity(0.06)),
-                ),
-                child: Icon(Icons.close_rounded,
-                    color: Colors.white.withOpacity(0.5), size: 18),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─── Tab Bar ───────────────────────────────────────────────────────
-
-  Widget _buildTabBar() {
-    final inTabZone = _focusZone == _FocusZone.tabs;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-      child: Container(
-        height: 38,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.04),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            for (var i = 0; i < _tabs.length; i++)
-              _buildTab(
-                tab: _tabs[i],
-                index: i,
-                isFocused: inTabZone && _activeTab == i,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTab({
-    required _TabDef tab,
-    required int index,
-    required bool isFocused,
-  }) {
-    final isActive = _activeTab == index;
-    final count = tab.sources.length;
-    final isEmpty = count == 0;
-    // An empty tab stays tappable when it can load more sources.
-    final canLoadMore = widget.seriesFetcher != null &&
-        (widget.seriesFetcher!.isMovie
-            ? (tab.id == 'torrent' && !widget.seriesFetcher!.movieFetched)
-            : (tab.id == 'packs' && !widget.seriesFetcher!.packsFetched) ||
-                (tab.id == 'episodes' &&
-                    !widget.seriesFetcher!.episodesFetched));
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: (isEmpty && !canLoadMore)
-            ? null
-            : () {
-                setState(() {
-                  _activeTab = index;
-                  _focusedIndex = 0;
-                  _recomputeFilters();
-                });
-              },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          margin: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            gradient: isActive
-                ? const LinearGradient(
-                    colors: [_accent, _accentSoft],
-                  )
-                : null,
-            borderRadius: BorderRadius.circular(10),
-            border: isFocused && !isActive
-                ? Border.all(color: _accentSoft.withOpacity(0.6), width: 1.5)
-                : null,
-          ),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (tab.hasCurrent && !isActive) ...[
-                Container(
-                  width: 5,
-                  height: 5,
-                  decoration: const BoxDecoration(
-                    color: _accentSoft,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 5),
-              ],
-              Flexible(
-                child: Text(
-                  tab.label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: isActive
-                        ? ((isEmpty && !canLoadMore)
-                            ? Colors.black.withOpacity(0.45)
-                            : Colors.black)
-                        : (isEmpty && !canLoadMore)
-                            ? Colors.white.withOpacity(0.2)
-                            : Colors.white.withOpacity(0.5),
-                    fontSize: 12,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? Colors.black.withOpacity(0.12)
-                      : isEmpty
-                          ? Colors.white.withOpacity(0.04)
-                          : Colors.white.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$count',
-                  style: TextStyle(
-                    color: isActive
-                        ? (isEmpty
-                            ? Colors.black.withOpacity(0.4)
-                            : Colors.black)
-                        : isEmpty
-                            ? Colors.white.withOpacity(0.15)
-                            : Colors.white.withOpacity(0.4),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ─── Search ────────────────────────────────────────────────────────
-
-  Widget _buildSearchBar() {
-    final hasFocus = _focusZone == _FocusZone.search;
-    final hasQuery = _searchController.text.isNotEmpty;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          color: hasFocus
-              ? Colors.white.withOpacity(0.08)
-              : Colors.white.withOpacity(0.04),
-          border: Border.all(
-            color: hasFocus ? _accentSoft.withOpacity(0.4) : Colors.transparent,
-            width: 1.5,
-          ),
-          boxShadow: hasFocus
-              ? [BoxShadow(color: _accent.withOpacity(0.08), blurRadius: 16)]
-              : [],
-        ),
-        child: TvTextField(
-          controller: _searchController,
-          focusNode: _searchFocusNode,
-          style: const TextStyle(
-              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w400),
-          decoration: InputDecoration(
-            hintText: 'Search sources...',
-            hintStyle: TextStyle(
-                color: Colors.white.withOpacity(0.25),
-                fontSize: 13,
-                fontWeight: FontWeight.w400),
-            prefixIcon: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: Icon(
-                hasQuery ? Icons.filter_list_rounded : Icons.search_rounded,
-                key: ValueKey(hasQuery),
-                color: hasFocus
-                    ? _accentSoft.withOpacity(0.7)
-                    : Colors.white.withOpacity(0.3),
-                size: 20,
-              ),
-            ),
-            suffixIcon: hasQuery
-                ? IconButton(
-                    icon: Icon(Icons.clear_rounded,
-                        color: Colors.white.withOpacity(0.4), size: 18),
-                    onPressed: () {
-                      _searchController.clear();
-                      _applyFilters();
-                    },
-                  )
-                : null,
-            filled: false,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide.none,
-            ),
-          ),
-          onChanged: (_) {
-            _applyFilters();
-          },
-          textInputAction: TextInputAction.search,
-        ),
-      ),
-    );
-  }
-
-  // ─── Source List ───────────────────────────────────────────────────
-
-  Widget _buildSourceList() {
-    final loadMoreMode = _activeLoadMoreMode;
-    final inSourceZone = _focusZone == _FocusZone.sources;
-
-    if (_filteredSources.isEmpty) {
-      if (loadMoreMode != null && _searchController.text.isEmpty) {
-        return _buildEmptyLoadMoreState(
-            focused: inSourceZone && _focusedIndex == 0);
-      }
-      return _buildEmptyState();
-    }
-
-    final extraRow = _loadMoreVisible ? 1 : 0;
-
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      itemCount: _filteredSources.length + extraRow,
-      itemBuilder: (context, index) {
-        if (index >= _filteredSources.length) {
-          return _LoadMoreRow(
-            isLoading: _loadingMode != null,
-            isFocused: inSourceZone && _focusedIndex == index,
-            onTap: _loadMore,
-          );
-        }
-        final source = _filteredSources[index];
-        final origIdx = _getOriginalIndex(source);
-        final isCurrent = origIdx == widget.currentSourceIndex;
-        final isFocused = inSourceZone && index == _focusedIndex;
-        final isResolving = _resolvingIndex == origIdx;
-        final isError = _resolvingIndex == -1 && index == _focusedIndex;
-
-        return _SourceTile(
-          source: source,
-          isFocused: isFocused,
-          isCurrent: isCurrent,
-          isResolving: isResolving,
-          isError: isError,
-          showSeeders: source.streamType == StreamType.torrent,
-          pulseAnim: _pulseAnim,
-          onTap: () {
-            if (_resolvingIndex == null) {
-              _selectSource(source);
-            }
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildEmptyState() {
-    final tabName =
-        _tabs.isEmpty ? 'matching' : _tabs[_activeTab].label.toLowerCase();
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.cloud_off_rounded,
-              color: Colors.white.withOpacity(0.1),
-              size: 32,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No $tabName sources available',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.4),
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            _searchController.text.isNotEmpty
-                ? 'Try a different search term'
-                : 'This content has no $tabName streams',
-            style: TextStyle(
-                color: Colors.white.withOpacity(0.2), fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyLoadMoreState({required bool focused}) {
-    final tab = _tabs[_activeTab];
-    final isLoading = _loadingMode != null;
-    final String subtitle;
-    if (tab.id == 'packs') {
-      subtitle = "A dedicated season-pack search hasn't run for this play.";
-    } else if (tab.id == 'episodes') {
-      subtitle = "Individual episodes weren't searched for this play.";
-    } else {
-      subtitle = "A full source search hasn't run for this play.";
-    }
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.04),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.travel_explore_rounded,
-              color: Colors.white.withOpacity(0.25),
-              size: 26,
-            ),
-          ),
+        const SizedBox(height: 20),
+        Text(_seriesStateLabel, style: _noteStyle),
+        if (_loadMoreMode != null) ...[
           const SizedBox(height: 12),
-          Text(
-            'No ${tab.label.toLowerCase()} sources yet',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.6),
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30),
-            child: Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.3),
-                  fontSize: 11.5,
-                  height: 1.4),
-            ),
-          ),
-          const SizedBox(height: 16),
-          GestureDetector(
-            onTap: isLoading ? null : _loadMore,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
-              decoration: BoxDecoration(
-                gradient: isLoading
-                    ? null
-                    : const LinearGradient(colors: [_accent, _accentSoft]),
-                color: isLoading ? Colors.white.withOpacity(0.06) : null,
-                borderRadius: BorderRadius.circular(10),
-                border: focused
-                    ? Border.all(color: Colors.white, width: 1.5)
-                    : null,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isLoading)
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: _accentSoft,
-                      ),
-                    )
-                  else
-                    const Icon(Icons.add_rounded,
-                        color: Colors.black, size: 17),
-                  const SizedBox(width: 8),
-                  Text(
-                    isLoading ? 'Searching for sources…' : 'Load more sources',
-                    style: TextStyle(
-                      color:
-                          isLoading ? Colors.white.withOpacity(0.6) : Colors.black,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          _LoadMoreRow(
+            key: _loadMoreKey,
+            label: _loadingMode == null ? _loadMoreLabel : 'Loading sources…',
+            focused: _focusZone == _FocusZone.sources && _focusedSource < 0,
+            enabled: _loadingMode == null,
+            onTap: _loadMore,
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Load-more Row
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _LoadMoreRow extends StatelessWidget {
-  final bool isLoading;
-  final bool isFocused;
-  final VoidCallback onTap;
-
-  static const _accentSoft = Color(0xFFE9E9EE);
-
-  const _LoadMoreRow({
-    required this.isLoading,
-    required this.isFocused,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: isLoading ? null : onTap,
-      child: Container(
-        height: 48,
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: isFocused
-              ? _accentSoft.withOpacity(0.08)
-              : Colors.transparent,
-          border: Border.all(
-            color: isFocused
-                ? _accentSoft.withOpacity(0.8)
-                : _accentSoft.withOpacity(isLoading ? 0.2 : 0.45),
-            width: 1.5,
-            style: BorderStyle.solid,
-          ),
-        ),
-        child: Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isLoading)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: _accentSoft,
+        const SizedBox(height: 14),
+        if (_errorMessage != null) _ErrorBanner(message: _errorMessage!),
+        Expanded(
+          child: _visibleEntries.isEmpty
+              ? Center(
+                  child: Text(
+                    'No sources from this add-on',
+                    style: _mutedStyle,
                   ),
                 )
-              else
-                const Icon(Icons.add_rounded, color: _accentSoft, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                isLoading ? 'Searching for sources…' : 'Load more sources',
-                style: TextStyle(
-                  color: isLoading
-                      ? Colors.white.withOpacity(0.5)
-                      : _accentSoft,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
+              : ListView.builder(
+                  controller: _sourceScrollController,
+                  itemCount: _visibleEntries.length,
+                  itemBuilder: (context, index) {
+                    final entry = _visibleEntries[index];
+                    return KeyedSubtree(
+                      key: _sourceKeys.putIfAbsent(
+                        entry.originalIndex,
+                        GlobalKey.new,
+                      ),
+                      child: _SourceRow(
+                        entry: entry,
+                        current:
+                            entry.originalIndex == widget.currentSourceIndex,
+                        focused:
+                            _focusZone == _FocusZone.sources &&
+                            _focusedSource == index,
+                        resolving: _resolvingIndex == entry.originalIndex,
+                        onTap: () {
+                          setState(() {
+                            _focusZone = _FocusZone.sources;
+                            _focusedSource = index;
+                          });
+                          _selectSource(entry);
+                        },
+                      ),
+                    );
+                  },
                 ),
-              ),
-            ],
-          ),
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  );
+
+  Widget _sectionLabel(String label) => Text(
+    label.toUpperCase(),
+    style: const TextStyle(
+      color: Color(0x70FFFFFF),
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 2,
+    ),
+  );
+
+  static final _mutedStyle = TextStyle(
+    color: Colors.white.withValues(alpha: .42),
+    fontSize: 12,
+  );
+  static final _noteStyle = TextStyle(
+    color: Colors.white.withValues(alpha: .55),
+    fontSize: 13,
+    height: 1.35,
+  );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Source Tile
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _SourceTile extends StatelessWidget {
-  final Torrent source;
-  final bool isFocused;
-  final bool isCurrent;
-  final bool isResolving;
-  final bool isError;
-  final bool showSeeders;
-  final Animation<double> pulseAnim;
+class _AddonRailRow extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool selected;
+  final bool focused;
   final VoidCallback onTap;
-
-  static const _accent = Color(0xFFFFFFFF);
-  static const _accentSoft = Color(0xFFE9E9EE);
-
-  const _SourceTile({
-    required this.source,
-    required this.isFocused,
-    required this.isCurrent,
-    required this.isResolving,
-    required this.isError,
-    required this.showSeeders,
-    required this.pulseAnim,
+  const _AddonRailRow({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.focused,
     required this.onTap,
   });
-
-  static String _detectQuality(String name) {
-    final lower = name.toLowerCase();
-    if (lower.contains('2160p') || lower.contains('4k') || lower.contains('uhd')) return '4K';
-    if (lower.contains('1080p') || lower.contains('1080i')) return '1080p';
-    if (lower.contains('720p')) return '720p';
-    if (lower.contains('480p') || lower.contains('sd')) return '480p';
-    return '?';
-  }
-
-  static Color _qualityColor(String quality) {
-    switch (quality) {
-      case '4K':
-        return Colors.white;
-      case '1080p':
-        return Colors.white.withOpacity(0.85);
-      case '720p':
-        return Colors.white.withOpacity(0.65);
-      default:
-        return Colors.white.withOpacity(0.4);
-    }
-  }
-
-  static String _formatSize(int bytes) {
-    if (bytes <= 0) return '';
-    const gb = 1024 * 1024 * 1024;
-    const mb = 1024 * 1024;
-    if (bytes >= gb) {
-      return '${(bytes / gb).toStringAsFixed(1)} GB';
-    }
-    if (bytes >= mb) {
-      return '${(bytes / mb).toStringAsFixed(0)} MB';
-    }
-    return '${(bytes / 1024).toStringAsFixed(0)} KB';
-  }
-
   @override
   Widget build(BuildContext context) {
-    final quality = _detectQuality(source.name);
-    final qColor = _qualityColor(quality);
-    final size = _formatSize(source.sizeBytes);
-
+    final inverse = focused;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOutCubic,
-        height: 64,
-        margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        duration: const Duration(milliseconds: 140),
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
         decoration: BoxDecoration(
-          gradient: isFocused
-              ? LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Colors.white.withOpacity(0.12),
-                    Colors.white.withOpacity(0.06),
-                  ],
-                )
-              : isCurrent
-                  ? LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        _accent.withOpacity(0.10),
-                        _accent.withOpacity(0.02),
-                      ],
-                    )
-                  : isError
-                      ? LinearGradient(
-                          colors: [
-                            Colors.red.withOpacity(0.15),
-                            Colors.red.withOpacity(0.05),
-                          ],
-                        )
-                      : null,
-          color: (!isFocused && !isCurrent && !isError)
-              ? Colors.transparent
-              : null,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: isError
-                ? Colors.red.withOpacity(0.5)
-                : isFocused
-                    ? _accentSoft.withOpacity(0.6)
-                    : isCurrent
-                        ? _accent.withOpacity(0.25)
-                        : Colors.transparent,
-            width: isFocused ? 1.5 : 1,
-          ),
-          boxShadow: isFocused
-              ? [
-                  BoxShadow(
-                      color: _accent.withOpacity(0.1),
-                      blurRadius: 16,
-                      spreadRadius: 2),
-                ]
-              : [],
+          color: inverse
+              ? Colors.white
+              : selected
+              ? Colors.white.withValues(alpha: .10)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
           children: [
-            // Quality badge
             Container(
-              width: 48,
-              height: 32,
+              width: 20,
+              height: 20,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: qColor.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: qColor.withOpacity(0.2)),
+                color: inverse
+                    ? Colors.black.withValues(alpha: .10)
+                    : Colors.white.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                quality,
+                label == 'All add-ons'
+                    ? '✦'
+                    : label.characters.first.toUpperCase(),
                 style: TextStyle(
-                  color: qColor,
-                  fontSize: 11,
+                  color: inverse
+                      ? Colors.black
+                      : Colors.white.withValues(alpha: .76),
+                  fontSize: 9,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3,
                 ),
               ),
             ),
-            const SizedBox(width: 12),
-            // Info
+            const SizedBox(width: 9),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    source.displayTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isCurrent || isFocused
-                          ? Colors.white
-                          : Colors.white.withOpacity(0.85),
-                      fontSize: 13,
-                      fontWeight:
-                          isFocused || isCurrent ? FontWeight.w600 : FontWeight.w400,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      if (size.isNotEmpty)
-                        _buildChip(size, const Color(0xFF42A5F5)),
-                      if (showSeeders && source.seeders > 0) ...[
-                        if (size.isNotEmpty) const SizedBox(width: 6),
-                        _buildChip('${source.seeders} S', const Color(0xFF66BB6A)),
-                      ],
-                      if (source.source.isNotEmpty) ...[
-                        if (size.isNotEmpty || (showSeeders && source.seeders > 0))
-                          const SizedBox(width: 6),
-                        _buildChip(source.source, const Color(0xFFAB47BC)),
-                      ],
-                    ],
-                  ),
-                ],
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: inverse
+                      ? Colors.black
+                      : Colors.white.withValues(alpha: .82),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-            // Status badge
-            if (isResolving)
+            Text(
+              '$count',
+              style: TextStyle(
+                color: inverse
+                    ? Colors.black.withValues(alpha: .55)
+                    : Colors.white.withValues(alpha: .42),
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadMoreRow extends StatelessWidget {
+  final String label;
+  final bool focused;
+  final bool enabled;
+  final VoidCallback onTap;
+  const _LoadMoreRow({
+    super.key,
+    required this.label,
+    required this.focused,
+    required this.enabled,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: enabled ? onTap : null,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: focused ? Colors.white : Colors.transparent,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: focused
+                    ? Colors.black
+                    : Colors.white.withValues(alpha: enabled ? .82 : .42),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 18,
+            color: focused ? Colors.black : Colors.white.withValues(alpha: .60),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _SourceRow extends StatelessWidget {
+  final _SourceEntry entry;
+  final bool current;
+  final bool focused;
+  final bool resolving;
+  final VoidCallback onTap;
+  const _SourceRow({
+    required this.entry,
+    required this.current,
+    required this.focused,
+    required this.resolving,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final torrent = entry.torrent;
+    final inverse = focused;
+    final tags = <String>[
+      if (torrent.streamType == StreamType.directUrl) 'DIRECT',
+      if (torrent.sizeBytes > 0) _formatSize(torrent.sizeBytes),
+      if (!torrent.isDirectStream && torrent.seeders > 0)
+        '${torrent.seeders} seeders',
+    ];
+    final quality = _quality(torrent.displayTitle);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+        decoration: BoxDecoration(
+          color: inverse ? Colors.white : Colors.white.withValues(alpha: .025),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: inverse
+              ? [
+                  const BoxShadow(
+                    color: Color(0x73000000),
+                    blurRadius: 20,
+                    offset: Offset(0, 6),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                torrent.displayTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: inverse
+                      ? Colors.black
+                      : Colors.white.withValues(alpha: .86),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            if (quality != null)
+              _Pill(label: quality, inverse: inverse, emphasis: true),
+            for (final tag in tags) ...[
+              const SizedBox(width: 6),
+              _Pill(label: tag, inverse: inverse),
+            ],
+            const SizedBox(width: 14),
+            if (resolving)
               SizedBox(
-                width: 20,
-                height: 20,
+                width: 14,
+                height: 14,
                 child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation(_accentSoft.withOpacity(0.8)),
+                  strokeWidth: 1.8,
+                  color: inverse ? Colors.black : Colors.white70,
                 ),
               )
-            else if (isCurrent)
-              _buildPlayingBadge()
-            else if (isError)
-              Icon(Icons.error_outline_rounded,
-                  color: Colors.red.withOpacity(0.7), size: 20),
+            else if (current)
+              Text(
+                '▮▮▮',
+                semanticsLabel: 'Playing',
+                style: TextStyle(
+                  color: inverse
+                      ? const Color(0xFFAB2733)
+                      : const Color(0xFFE23D4C),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1,
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
-  // Spotlight chips: hairline-outlined monochrome; the color parameter is
-  // kept for call-site stability but no longer paints (one accent max).
-  Widget _buildChip(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.white.withOpacity(0.30), width: 0.75),
-        borderRadius: BorderRadius.circular(3.5),
-      ),
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.70),
-          fontSize: 9,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.4,
-        ),
-      ),
-    );
+  static String? _quality(String value) {
+    final lower = value.toLowerCase();
+    if (lower.contains('2160') ||
+        lower.contains('4k') ||
+        lower.contains('uhd')) {
+      return '4K';
+    }
+    if (lower.contains('1080')) return '1080P';
+    if (lower.contains('720')) return '720P';
+    return null;
   }
 
-  Widget _buildPlayingBadge() {
-    return AnimatedBuilder(
-      animation: pulseAnim,
-      builder: (context, child) {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                _accent.withOpacity(0.8 + pulseAnim.value * 0.2),
-                _accentSoft.withOpacity(0.6 + pulseAnim.value * 0.2),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(6),
-            boxShadow: [
-              BoxShadow(
-                  color: _accent.withOpacity(0.2 + pulseAnim.value * 0.1),
-                  blurRadius: 10),
-            ],
-          ),
-          child: const Text(
-            'PLAYING',
-            style: TextStyle(
-              color: Colors.black,
-              fontSize: 8,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1,
-            ),
-          ),
-        );
-      },
-    );
+  static String _formatSize(int bytes) {
+    final gb = bytes / (1024 * 1024 * 1024);
+    return gb >= 1
+        ? '${gb.toStringAsFixed(1)} GB'
+        : '${(bytes / (1024 * 1024)).round()} MB';
   }
+}
+
+class _Pill extends StatelessWidget {
+  final String label;
+  final bool inverse;
+  final bool emphasis;
+  const _Pill({
+    required this.label,
+    required this.inverse,
+    this.emphasis = false,
+  });
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+    decoration: BoxDecoration(
+      color: inverse
+          ? Colors.black.withValues(alpha: emphasis ? .12 : .07)
+          : Colors.white.withValues(alpha: emphasis ? .12 : .07),
+      borderRadius: BorderRadius.circular(5),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: inverse
+            ? Colors.black.withValues(alpha: emphasis ? .80 : .58)
+            : Colors.white.withValues(alpha: emphasis ? .82 : .58),
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+}
+
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  const _ErrorBanner({required this.message});
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: Colors.red.withValues(alpha: .12),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Text(
+      message,
+      style: TextStyle(color: Colors.red.withValues(alpha: .9), fontSize: 12),
+    ),
+  );
 }

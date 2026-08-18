@@ -3730,6 +3730,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             }
 
             @Override
+            public boolean onSectionActivated(int sectionIndex) {
+                return false;
+            }
+
+            @Override
             public void onSearchSubmit(@NonNull String query) {
                 // Torbox subtitle search uses its own dialog (opened from the
                 // Subtitles → Search row), so the inline search field is unused.
