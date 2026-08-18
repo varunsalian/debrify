@@ -112,7 +112,14 @@ object ProfilePreferenceProjection {
         return if (values != null && values.has(logicalKey)) {
             values.optBoolean(logicalKey, fallback)
         } else if (!committed(context)) {
-            flutterPrefs(context).getBoolean("flutter.$logicalKey", fallback)
+            try {
+                flutterPrefs(context).getBoolean("flutter.$logicalKey", fallback)
+            } catch (_: ClassCastException) {
+                // A writer stored a different type under this key (the getLong
+                // guard below exists for the same reason). A wrong type has no
+                // boolean reading — fall back rather than crash the caller.
+                fallback
+            }
         } else fallback
     }
 
@@ -139,7 +146,13 @@ object ProfilePreferenceProjection {
         return if (values != null && values.has(logicalKey) && !values.isNull(logicalKey)) {
             values.opt(logicalKey) as? String ?: fallback
         } else if (!committed(context)) {
-            flutterPrefs(context).getString("flutter.$logicalKey", fallback)
+            try {
+                flutterPrefs(context).getString("flutter.$logicalKey", fallback)
+            } catch (_: ClassCastException) {
+                // Same as getBoolean/getLong: a mistyped value must degrade to
+                // the fallback, not crash whichever native reader asked.
+                fallback
+            }
         } else fallback
     }
 

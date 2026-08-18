@@ -1890,27 +1890,42 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // stops at whichever target hits first, exactly like stock.
             val hugeBuffer = networkBuffer == "huge"
             // Unlike mpv's native-memory demuxer cache, this target is JAVA
-            // heap (DefaultAllocator's byte[] segments) — an uncapped 512 MiB
-            // sails past the heap ceiling of most TV boxes and OOMs
-            // mid-playback on exactly the hardware this preset serves. Clamp
-            // to half the large-heap class so the buffer can never own more
-            // than half the heap; the preset then degrades gracefully on
-            // small boxes instead of crashing them.
+            // heap (DefaultAllocator's byte[] segments) shared with the
+            // Flutter engine, image caches, and every profile/guide
+            // structure in this process. The original clamp — HALF the
+            // large-heap class — was a ceiling, not headroom: on a 256
+            // MiB-class TV box a high-bitrate stream drove the allocator to
+            // 128 MiB of live byte[] and the loader thread died with
+            // OutOfMemoryError, an Error no player plumbing catches →
+            // process death straight to the launcher, on exactly the
+            // hardware this preset serves (Mecool KM2+ field report,
+            // 2026-08-18: one high-bitrate episode "crashes the app", every
+            // source). Budget a QUARTER of the heap instead, cap the
+            // requests well below the old 256/512 MiB, and when even the
+            // quarter is too small to be worth overriding, keep stock —
+            // stock's own byte targets are what the device already
+            // survives. Long math throughout: largeMemoryClass is an Int MB
+            // count, and `mb / 2 * 1024 * 1024` overflows Int from a 4
+            // GiB heap class up.
             val activityManager =
                 getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
-            val heapCapBytes = activityManager.largeMemoryClass / 2 * 1024 * 1024
-            val requestedBytes = (if (hugeBuffer) 512 else 256) * 1024 * 1024
-            playerBuilder.setLoadControl(
-                DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(
-                        if (hugeBuffer) 300_000 else 120_000, // minBufferMs
-                        if (hugeBuffer) 300_000 else 120_000, // maxBufferMs
-                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
-                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
-                    )
-                    .setTargetBufferBytes(minOf(requestedBytes, heapCapBytes))
-                    .build()
-            )
+            val heapBudgetBytes =
+                activityManager.largeMemoryClass.toLong() * 1024L * 1024L / 4L
+            val requestedBytes = (if (hugeBuffer) 192L else 96L) * 1024L * 1024L
+            val targetBytes = minOf(requestedBytes, heapBudgetBytes)
+            if (targetBytes >= 48L * 1024L * 1024L) {
+                playerBuilder.setLoadControl(
+                    DefaultLoadControl.Builder()
+                        .setBufferDurationsMs(
+                            if (hugeBuffer) 300_000 else 120_000, // minBufferMs
+                            if (hugeBuffer) 300_000 else 120_000, // maxBufferMs
+                            DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                            DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+                        )
+                        .setTargetBufferBytes(targetBytes.toInt())
+                        .build()
+                )
+            }
         }
 
         player = playerBuilder.build()

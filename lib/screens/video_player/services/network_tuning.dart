@@ -44,10 +44,14 @@ class NetworkTuning {
     'patient': 'Patient (3min, auto-retry)',
   };
 
+  // Labeled by read-ahead TIME, not bytes: both players share the 120s/300s
+  // targets, but the byte ceiling differs by player (mpv's demuxer cache is
+  // native memory; the TV player's is Java heap and clamps much lower), so a
+  // byte figure here would overpromise on one of them.
   static const Map<String, String> bufferOptions = {
     'standard': 'Standard',
-    'large': 'Large (up to 256 MB)',
-    'huge': 'Huge (up to 512 MB)',
+    'large': 'Large (~2 min read-ahead)',
+    'huge': 'Huge (~5 min read-ahead)',
   };
 
   bool get isStandard => patience == standard && buffer == standard;
