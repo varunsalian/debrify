@@ -1016,22 +1016,21 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         if (!mounted) return;
         final landing = view.landing;
         if (landing == null) return;
-        final node = _cells.lookup(
-          view.generation,
-          landing.season,
-          landing.number,
+        final index = view.episodes.indexWhere(
+          (episode) =>
+              episode.season == landing.season &&
+              episode.number == landing.number,
         );
-        final ctx = node?.context;
-        if (ctx == null) return;
-        // The RAIL only. This used to be a global `Scrollable.ensureVisible`,
-        // which walks every ancestor scrollable — so opening a series with a
-        // resume point scrolled the page's vertical list too, and with a
-        // full-height hero that means the page opens already scrolled past its
-        // own key art, while `_bandKey` still says `identity`.
-        final rail = Scrollable.maybeOf(ctx);
-        final box = ctx.findRenderObject();
-        if (rail == null || box is! RenderBox || !box.attached) return;
-        rail.position.ensureVisible(box, alignment: 0.5);
+        revealDetailLanding(
+          controller: _epScroll,
+          index: index,
+          itemCount: view.episodes.length,
+          contextOf: () => _cells
+              .lookup(view.generation, landing.season, landing.number)
+              ?.context,
+          alignment: 0.5,
+          onlyController: true,
+        );
       });
     }
 
