@@ -48,6 +48,11 @@ enum TvRenderQuality {
 }
 
 class StorageService {
+  /// Changes whenever watched-title data should be refreshed. Local movie
+  /// completion and tracker/profile mutations all feed this one lightweight
+  /// signal; poster badges never block page rendering on the refresh itself.
+  static final ValueNotifier<int> movieFinishedRevision = ValueNotifier(0);
+
   static Future<bool> profileAllowsAdultContent() async {
     if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
       return true;
@@ -2245,6 +2250,9 @@ class StorageService {
     };
   }
 
+  /// Snapshot used by poster badges. Returned IDs are normalized lowercase.
+  static Future<Set<String>> getFinishedMovieIds() => _getFinishedMovieIds();
+
   static Future<bool> isMovieFinished(String imdbId) async {
     final normalized = imdbId.trim().toLowerCase();
     if (normalized.isEmpty) return false;
@@ -2262,6 +2270,7 @@ class StorageService {
     if (finished.add(normalized)) {
       final prefs = await ProfilePreferences.instance();
       await prefs.setStringList(_finishedMoviesKey, finished.toList()..sort());
+      movieFinishedRevision.value++;
     }
     await Future.wait([
       removeContinueWatchingItem(normalized),
@@ -2285,6 +2294,7 @@ class StorageService {
     } else {
       await prefs.setStringList(_finishedMoviesKey, finished.toList()..sort());
     }
+    movieFinishedRevision.value++;
     debugPrint('StorageService: unmarkMovieAsFinished imdbId="$normalized"');
   }
 
@@ -3147,6 +3157,7 @@ class StorageService {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_playbackStateKey);
     await prefs.remove(_finishedMoviesKey);
+    movieFinishedRevision.value++;
     // Resume lives in the DB now; the prefs key only still exists for users
     // who wipe before the one-time import has run.
     await prefs.remove(_videoResumeKey);
@@ -5701,6 +5712,7 @@ class StorageService {
         _finishedMoviesKey,
         completedMovieIds.toList()..sort(),
       );
+      movieFinishedRevision.value++;
 
       final rawContinueWatching = prefs.getString(_continueWatchingKey);
       if (rawContinueWatching != null && rawContinueWatching.isNotEmpty) {

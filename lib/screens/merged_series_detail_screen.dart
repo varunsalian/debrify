@@ -36,6 +36,7 @@ import '../widgets/episodes_panel.dart';
 import '../widgets/horizontal_mouse_wheel.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
+import '../widgets/movie_watched_badge.dart';
 import '../services/trakt/trakt_episode_model.dart';
 import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
@@ -2964,8 +2965,11 @@ class _RecCardState extends State<_RecCard> {
             onFocusChange: (f) => setState(() => _focused = f),
             child: AspectRatio(
               aspectRatio: 2 / 3,
-              child: (rec.poster != null && rec.poster!.isNotEmpty)
-                  ? CachedNetworkImage(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (rec.poster != null && rec.poster!.isNotEmpty)
+                    CachedNetworkImage(
                       imageUrl: rec.poster!,
                       fit: BoxFit.cover,
                       cacheManager: DebrifyImageCache.manager,
@@ -2976,7 +2980,20 @@ class _RecCardState extends State<_RecCard> {
                       errorWidget: (_, __, ___) =>
                           Container(color: widget.fallback),
                     )
-                  : Container(color: widget.fallback),
+                  else
+                    Container(color: widget.fallback),
+                  if (rec.type == 'movie' || rec.type == 'series')
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: MovieWatchedBadge(
+                        imdbId: rec.effectiveImdbId ?? rec.id,
+                        contentType: rec.type,
+                        compact: true,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

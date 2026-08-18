@@ -14,6 +14,7 @@ import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/parents_guide_section.dart';
+import '../widgets/movie_watched_badge.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
@@ -2058,14 +2059,32 @@ class _RecCardState extends State<_RecCard> {
                           width: _active ? 2 : 0.5,
                         ),
                       ),
-                      child: (poster != null && poster.isNotEmpty)
-                          ? CachedNetworkImage(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (poster != null && poster.isNotEmpty)
+                            CachedNetworkImage(
                               imageUrl: poster,
                               fit: BoxFit.cover,
                               placeholder: (_, __) => _posterFallback(),
                               errorWidget: (_, __, ___) => _posterFallback(),
                             )
-                          : _posterFallback(),
+                          else
+                            _posterFallback(),
+                          if (widget.item.type == 'movie' ||
+                              widget.item.type == 'series')
+                            Positioned(
+                              top: 7,
+                              right: 7,
+                              child: MovieWatchedBadge(
+                                imdbId: widget.item.effectiveImdbId ??
+                                    widget.item.id,
+                                contentType: widget.item.type,
+                                compact: true,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),

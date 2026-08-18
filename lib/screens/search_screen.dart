@@ -68,6 +68,7 @@ import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/home/row_tag_pill.dart';
 import '../widgets/home/spotlight_board.dart';
+import '../widgets/movie_watched_badge.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
 import '../widgets/source_row.dart';
@@ -5836,6 +5837,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             SpotlightCard(
               image: m.poster,
               title: m.name,
+              watchedImdbId: m.type == 'movie' || m.type == 'series'
+                  ? (m.effectiveImdbId ?? m.id)
+                  : null,
+              watchedContentType: m.type,
               // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
               progress: (row.progressOf(m) ?? 0) * 100,
               onOpen: () => row.onOpen(m),
@@ -5864,6 +5869,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           SpotlightCard(
             image: m.poster,
             title: m.name,
+            watchedImdbId: m.type == 'movie' || m.type == 'series'
+                ? (m.effectiveImdbId ?? m.id)
+                : null,
+            watchedContentType: m.type,
             onOpen: () => _openItem(m, _sections[i].addon),
           ),
       ],
@@ -5921,6 +5930,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 image: item.poster,
                 title: item.name,
                 subtitle: isMovies ? 'MOVIE' : 'SERIES',
+                watchedImdbId: item.effectiveImdbId ?? item.id,
+                watchedContentType: item.type,
                 onOpen: () => _openMyWatchlistItem(item),
               ),
           ],
@@ -20708,6 +20719,9 @@ class _StremioCardState extends State<_StremioCard>
     final item = widget.item;
     final wide = widget.aspectRatio > 1;
     final poster = widget.artUrl ?? item.poster;
+    final isMovie = item.type.toLowerCase() == 'movie';
+    final supportsWatched = isMovie || item.type.toLowerCase() == 'series';
+    final movieId = item.effectiveImdbId ?? item.id;
     // Focus visuals (scale + shadow + ring on one curve) live in the shared
     // [CardFocusRise] so tuning lands once for every board card.
     final List<Widget> layers = [
@@ -20732,10 +20746,21 @@ class _StremioCardState extends State<_StremioCard>
         )
       else
         _placeholder(item.name),
+      if (supportsWatched)
+        Positioned(
+          top: 7,
+          right: 7,
+          child: MovieWatchedBadge(
+            imdbId: movieId,
+            contentType: item.type,
+            compact: true,
+          ),
+        ),
       if (widget.hasBoundSource)
         Positioned(
           top: 8,
-          right: 8,
+          left: supportsWatched ? 8 : null,
+          right: supportsWatched ? null : 8,
           child: Icon(
             Icons.bookmark_rounded,
             size: 18,

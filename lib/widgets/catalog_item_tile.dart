@@ -11,6 +11,7 @@ import '../utils/platform_util.dart';
 import '../utils/tv_keys.dart';
 import 'home/card_focus_rise.dart';
 import 'home/home_theme.dart';
+import 'movie_watched_badge.dart';
 
 /// Poster-first grid tile for catalog and search results.
 ///
@@ -104,6 +105,9 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
     final poster = item.poster;
     final rating = item.imdbRating;
     final typeLabel = item.type == 'series' ? 'SERIES' : 'MOVIE';
+    final isMovie = item.type.toLowerCase() == 'movie';
+    final supportsWatched = isMovie || item.type.toLowerCase() == 'series';
+    final movieId = item.effectiveImdbId ?? item.id;
     final board = widget.boardChrome;
     // TVs are low-powered: keep the focus highlight but make it instant
     // (no per-frame tweening of large posters/shadows). Board chrome animates
@@ -186,6 +190,16 @@ class _CatalogItemTileState extends State<CatalogItemTile> {
 
       if (widget.showTypeBadge)
         Positioned(top: 10, left: 10, child: _GlassChip(label: typeLabel)),
+
+      if (supportsWatched)
+        Positioned(
+          top: 9,
+          left: widget.showTypeBadge ? 68 : 9,
+          child: MovieWatchedBadge(
+            imdbId: movieId,
+            contentType: item.type,
+          ),
+        ),
 
       if (rating != null && widget.showRatingBadge)
         Positioned(top: 10, right: 10, child: _RatingChip(value: rating)),

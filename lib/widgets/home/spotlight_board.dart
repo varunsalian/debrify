@@ -14,6 +14,7 @@ import '../../theme/widgets/parallax_focus.dart';
 import '../../utils/artwork_url.dart';
 import '../../utils/dominant_color.dart';
 import 'row_tag_pill.dart';
+import '../movie_watched_badge.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/wide_touch_scale.dart';
 
@@ -41,6 +42,11 @@ class SpotlightCard {
   final VoidCallback? onOptions;
   final SpotlightCardShape shape;
 
+  /// Title identity for the effective watched marker. Null for channels,
+  /// playlists, and other non-title cards.
+  final String? watchedImdbId;
+  final String? watchedContentType;
+
   /// A lightweight, in-card preview for the one card the user is actively
   /// inspecting. It is built only while the card is hovered on pointer
   /// surfaces, or holds DPAD focus on television; resting cards never mount a
@@ -56,6 +62,8 @@ class SpotlightCard {
     this.onOptions,
     this.shape = SpotlightCardShape.poster,
     this.previewBuilder,
+    this.watchedImdbId,
+    this.watchedContentType,
   });
 }
 
@@ -2342,6 +2350,16 @@ class _CardState extends State<_Card> {
                     minHeight: 2,
                     backgroundColor: Colors.black.withValues(alpha: 0.45),
                     valueColor: const AlwaysStoppedAnimation(Colors.white),
+                  ),
+                ),
+              if (c.watchedImdbId != null && c.watchedImdbId!.isNotEmpty)
+                Positioned(
+                  top: 7,
+                  right: 7,
+                  child: MovieWatchedBadge(
+                    imdbId: c.watchedImdbId!,
+                    contentType: c.watchedContentType ?? 'movie',
+                    compact: true,
                   ),
                 ),
             ],
