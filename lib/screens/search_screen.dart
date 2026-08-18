@@ -13448,8 +13448,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                         },
                         child: ListView.builder(
                           controller: _kwScroll,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 8,
+                          // A focused SourceRow can scale and rise in
+                          // Spotlight. The first item starts at scroll offset
+                          // zero, so it needs real viewport clearance rather
+                          // than relying on ensureVisible to make room.
+                          padding: EdgeInsets.symmetric(
+                            vertical: widget.isTelevision ? 24 : 8,
                             horizontal: 10,
                           ),
                           cacheExtent: 1200,
@@ -22521,7 +22525,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                                       },
                                       child: ListView.builder(
                                         padding: EdgeInsets.symmetric(
-                                          vertical: 8,
+                                          // Spotlight expands the focused
+                                          // SourceRow beyond its layout box.
+                                          // At the top of the list there is no
+                                          // negative scroll extent to reveal
+                                          // it, so reserve TV focus room here.
+                                          vertical: widget.isTelevision
+                                              ? 24
+                                              : 8,
                                           horizontal: _redesign ? 10 : 0,
                                         ),
                                         cacheExtent: 1200,
