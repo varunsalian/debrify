@@ -414,6 +414,10 @@ Future<void> _continueApplicationStartup() async {
   // MUST precede the brightness/theme warms below — they read migrated keys
   // for the very first frame.
   await StorageService.migrateDefaultsGeneration();
+  // Adopt the configurable local watched thresholds for playback recorded by
+  // older builds. The generation marker is profile-scoped, so every profile
+  // migrates once when it next becomes active.
+  await StorageService.migrateExistingPlaybackCompletionThresholds();
   // Warm the layout prefs the shell reads through field initializers —
   // without this the first frame paints canvas/ghost/rail and then snaps
   // to the stored (possibly just-migrated) look.
