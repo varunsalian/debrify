@@ -65,6 +65,16 @@
 
 Debrify is a **media manager** that lets you browse, stream, and download content from your debrid accounts and WebDAV servers—all from one app. It comes with a **built-in video player** optimized for movies and TV shows, a **download manager** with queue support, an **optional plugin system** for torrent search engines, **Jackett/Prowlarr indexer support**, **Trakt integration** for sync and discovery, **Stremio Addons support** for discovering content, and a **cinematic UI** inspired by premium streaming services.
 
+## Before You Read the Code
+
+A warning: this is not a clean codebase.
+
+Debrify grew rapidly around features rather than a planned architecture. It contains enormous files, god classes, static state, duplicated provider logic, tightly coupled UI and business logic, inconsistent abstractions, legacy implementations, and more special cases than anyone should be proud of.
+
+Some newer subsystems are better structured and heavily tested, but the repository as a whole does not represent Flutter best practices. It represents a product that kept growing while architectural cleanup repeatedly lost to the next feature or platform problem.
+
+The application works and solves difficult problems, but maintaining it can be painful. Refactoring, simplification, and removal of legacy code are welcome.
+
 ## Responsible Use
 
 Debrify does not host, sell, provide, or bundle media content. Search engines, Stremio addons, Jackett/Prowlarr servers, WebDAV servers, IPTV playlists, and debrid accounts are user-configured integrations. Only use Debrify with content, services, and sources that you own, created, licensed, or are otherwise authorized to access.
