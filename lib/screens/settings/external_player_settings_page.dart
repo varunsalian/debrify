@@ -93,6 +93,10 @@ class _ExternalPlayerSettingsPageState
       AndroidVideoRendererMode.automatic;
   bool _startPortrait = false; // Phone only, opt-in
   bool _subtitleAutoSync = true; // Android TV only, ON by default (opt-out)
+  int _movieCompletionThreshold =
+      StorageService.defaultLocalCompletionThreshold;
+  int _episodeCompletionThreshold =
+      StorageService.defaultLocalCompletionThreshold;
   bool _skipSegmentsEnabled = true;
   String _skipSegmentProvider = SkipSegmentProviders.auto;
   String _netPatience = NetworkTuning.standard;
@@ -127,6 +131,8 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _androidVideoRendererFocusNode = FocusNode();
   final FocusNode _startPortraitFocusNode = FocusNode();
   final FocusNode _subtitleAutoSyncFocusNode = FocusNode();
+  final FocusNode _movieCompletionThresholdFocusNode = FocusNode();
+  final FocusNode _episodeCompletionThresholdFocusNode = FocusNode();
   final FocusNode _skipSegmentsEnabledFocusNode = FocusNode();
   final FocusNode _skipSegmentProviderFocusNode = FocusNode();
   final FocusNode _subtitleSizeFocusNode = FocusNode();
@@ -149,6 +155,8 @@ class _ExternalPlayerSettingsPageState
   bool _androidVideoRendererFocused = false;
   bool _startPortraitFocused = false;
   bool _subtitleAutoSyncFocused = false;
+  bool _movieCompletionThresholdFocused = false;
+  bool _episodeCompletionThresholdFocused = false;
   bool _skipSegmentsEnabledFocused = false;
   bool _skipSegmentProviderFocused = false;
   bool _subtitleSizeFocused = false;
@@ -296,6 +304,20 @@ class _ExternalPlayerSettingsPageState
         _subtitleAutoSyncFocused = _subtitleAutoSyncFocusNode.hasFocus;
       });
     });
+    _movieCompletionThresholdFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _movieCompletionThresholdFocused =
+            _movieCompletionThresholdFocusNode.hasFocus;
+      });
+    });
+    _episodeCompletionThresholdFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _episodeCompletionThresholdFocused =
+            _episodeCompletionThresholdFocusNode.hasFocus;
+      });
+    });
     _skipSegmentsEnabledFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -386,6 +408,8 @@ class _ExternalPlayerSettingsPageState
     _androidVideoRendererFocusNode.dispose();
     _startPortraitFocusNode.dispose();
     _subtitleAutoSyncFocusNode.dispose();
+    _movieCompletionThresholdFocusNode.dispose();
+    _episodeCompletionThresholdFocusNode.dispose();
     _skipSegmentsEnabledFocusNode.dispose();
     _skipSegmentProviderFocusNode.dispose();
     _subtitleSizeFocusNode.dispose();
@@ -515,6 +539,10 @@ class _ExternalPlayerSettingsPageState
       final startPortrait = await StorageService.getPlayerStartPortrait();
       final subtitleAutoSync =
           await StorageService.getSubtitleAutoSyncEnabled();
+      final movieCompletionThreshold =
+          await StorageService.getMovieCompletionThreshold();
+      final episodeCompletionThreshold =
+          await StorageService.getEpisodeCompletionThreshold();
       final skipSegmentsEnabled = await StorageService.getSkipSegmentsEnabled();
       final storedSkipSegmentProvider =
           await StorageService.getSkipSegmentProvider();
@@ -574,6 +602,8 @@ class _ExternalPlayerSettingsPageState
         _androidVideoRendererMode = androidVideoRendererMode;
         _startPortrait = startPortrait;
         _subtitleAutoSync = subtitleAutoSync;
+        _movieCompletionThreshold = movieCompletionThreshold;
+        _episodeCompletionThreshold = episodeCompletionThreshold;
         _skipSegmentsEnabled = skipSegmentsEnabled;
         _skipSegmentProvider = skipSegmentProvider;
         // Unknown stored value (a downgrade across versions) falls back to
@@ -1078,6 +1108,30 @@ class _ExternalPlayerSettingsPageState
   Future<void> _setSubtitleAutoSync(bool enabled) async {
     setState(() => _subtitleAutoSync = enabled);
     await StorageService.setSubtitleAutoSyncEnabled(enabled);
+  }
+
+  List<int> get _completionThresholdOptions =>
+      StorageService.localCompletionThresholdOptions;
+
+  int _completionThresholdIndex(int value) {
+    final index = _completionThresholdOptions.indexOf(value);
+    return index < 0
+        ? _completionThresholdOptions.indexOf(
+            StorageService.defaultLocalCompletionThreshold,
+          )
+        : index;
+  }
+
+  Future<void> _setMovieCompletionThresholdIndex(int index) async {
+    final value = _completionThresholdOptions[index];
+    setState(() => _movieCompletionThreshold = value);
+    await StorageService.setMovieCompletionThreshold(value);
+  }
+
+  Future<void> _setEpisodeCompletionThresholdIndex(int index) async {
+    final value = _completionThresholdOptions[index];
+    setState(() => _episodeCompletionThreshold = value);
+    await StorageService.setEpisodeCompletionThreshold(value);
   }
 
   Future<void> _setSkipSegmentsEnabled(bool enabled) async {
@@ -2333,7 +2387,8 @@ class _ExternalPlayerSettingsPageState
                             const SizedBox(height: 4),
                             _buildCheckboxTile(
                               context,
-                              title: 'Audio passthrough (AC3 · EAC3 · DTS core)',
+                              title:
+                                  'Audio passthrough (AC3 · EAC3 · DTS core)',
                               subtitle:
                                   'Send the original bitstream to your receiver '
                                   'instead of decoding. Requires an HDMI chain '
@@ -2400,6 +2455,62 @@ class _ExternalPlayerSettingsPageState
                               isFocused: _tvosLegacyAudioFocused,
                             ),
                           ],
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Local completion is deliberately independent from tracker
+                  // scrobbling: Trakt and Simkl keep their own watched rules.
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Watch History',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Mark locally tracked videos watched after this much playback. Trakt and Simkl keep their own rules.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: t.dim,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildSettingDropdown(
+                            context,
+                            label: 'Mark movies watched at',
+                            value: _completionThresholdIndex(
+                              _movieCompletionThreshold,
+                            ),
+                            items: _completionThresholdOptions
+                                .map((value) => '$value%')
+                                .toList(),
+                            onChanged: _setMovieCompletionThresholdIndex,
+                            focusNode: _movieCompletionThresholdFocusNode,
+                            isFocused: _movieCompletionThresholdFocused,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildSettingDropdown(
+                            context,
+                            label: 'Mark episodes watched at',
+                            value: _completionThresholdIndex(
+                              _episodeCompletionThreshold,
+                            ),
+                            items: _completionThresholdOptions
+                                .map((value) => '$value%')
+                                .toList(),
+                            onChanged: _setEpisodeCompletionThresholdIndex,
+                            focusNode: _episodeCompletionThresholdFocusNode,
+                            isFocused: _episodeCompletionThresholdFocused,
+                          ),
                         ],
                       ),
                     ),
@@ -3021,12 +3132,14 @@ class _ExternalPlayerSettingsPageState
                         // tvOS lists only players with a real Apple TV app —
                         // a row that can never launch is worse than no row.
                         ...[
-                          for (final (i, player) in iOSExternalPlayer.values
-                              .where(
-                                (p) =>
-                                    !PlatformUtil.isTvOS || p.availableOnTvos,
-                              )
-                              .indexed) ...[
+                          for (final (i, player)
+                              in iOSExternalPlayer.values
+                                  .where(
+                                    (p) =>
+                                        !PlatformUtil.isTvOS ||
+                                        p.availableOnTvos,
+                                  )
+                                  .indexed) ...[
                             if (i > 0) const Divider(height: 1),
                             _buildIOSPlayerTile(player),
                           ],

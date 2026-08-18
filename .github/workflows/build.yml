@@ -454,12 +454,10 @@ jobs:
 
   linux:
     if: github.event_name == 'release' || github.event.inputs.job == 'all' || github.event.inputs.job == 'linux'
-    # Pinned, not ubuntu-latest: the bundled libmpv drags in the base image's
-    # glibc floor (24.04 => 2.38), so the minimum host glibc our AppImage runs
-    # on is now a property of this line. Let it float and a runner image bump
-    # silently drops older distros. Moving it DOWN is not a one-word change —
-    # 22.04 ships libmpv.so.1 rather than .so.2.
-    runs-on: ubuntu-24.04
+    # Pinned: both the Flutter runner and private libmpv inherit this image's
+    # glibc floor. Ubuntu 22.04 (glibc 2.35) covers Mint 21+, Mint 22 and current
+    # SteamOS without importing either distro's multimedia stack.
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -467,7 +465,30 @@ jobs:
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libmpv-dev
+        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libpulse-dev libva-dev libvdpau-dev libxpresent-dev patchelf
+
+    - name: Build private libmpv
+      run: |
+        mkdir -p build
+        docker run --rm \
+          -v "$PWD:/src" \
+          -w /src \
+          ubuntu:22.04 \
+          bash -euxo pipefail -c '
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y \
+              build-essential git pkg-config ninja-build python3-pip nasm yasm \
+              autoconf automake libtool-bin libssl-dev zlib1g-dev \
+              libasound2-dev libpulse-dev libva-dev libvdpau-dev \
+              libgl-dev libegl-dev libx11-dev libxext-dev libxrandr-dev \
+              libxss-dev libxpresent-dev libdrm-dev libgbm-dev \
+              libwayland-dev wayland-protocols libxkbcommon-dev \
+              libfontconfig1-dev libfreetype6-dev libharfbuzz-dev \
+              libfribidi-dev python3-jinja2 python3-docutils
+            python3 -m pip install --no-cache-dir meson==1.7.0
+            scripts/build_linux_libmpv.sh build/private-libmpv
+          '
 
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
@@ -482,13 +503,15 @@ jobs:
       run: flutter pub get
 
     - name: Build Linux app
-      run: flutter build linux --release
+      # media_kit_video uses pkg-config at CMake time. Point it at the same
+      # private mpv SDK that will be installed into the AppImage so the plugin
+      # records DT_NEEDED=libmpv.so.2 instead of Ubuntu 22.04's libmpv.so.1.
+      run: PKG_CONFIG_PATH="$PWD/build/private-libmpv/pkgconfig" flutter build linux --release
 
-    # media_kit ships no libmpv on Linux — see the header of the script. Without
-    # this the AppImage only runs where the host happens to have libmpv.so.2,
-    # which rules out immutable distros like SteamOS.
-    - name: Bundle libmpv into the app bundle
-      run: scripts/bundle_linux_mpv.sh build/linux/x64/release/bundle
+    # media_kit ships no Linux libmpv. Install our statically consolidated mpv
+    # in a plugin-private directory; never expose it through LD_LIBRARY_PATH.
+    - name: Install private libmpv into the app bundle
+      run: scripts/bundle_linux_mpv.sh build/linux/x64/release/bundle build/private-libmpv
 
     - name: Create AppImage
       run: |
@@ -556,7 +579,33 @@ jobs:
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libmpv-dev
+        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libpulse-dev libva-dev libvdpau-dev libxpresent-dev patchelf
+
+    # Build inside Ubuntu 22.04 even though GitHub currently only offers the
+    # native public ARM runner on 24.04. This keeps both AppImage architectures
+    # at the same glibc 2.35 compatibility floor.
+    - name: Build private libmpv
+      run: |
+        mkdir -p build
+        docker run --rm \
+          -v "$PWD:/src" \
+          -w /src \
+          ubuntu:22.04 \
+          bash -euxo pipefail -c '
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y \
+              build-essential git pkg-config ninja-build python3-pip nasm yasm \
+              autoconf automake libtool-bin libssl-dev zlib1g-dev \
+              libasound2-dev libpulse-dev libva-dev libvdpau-dev \
+              libgl-dev libegl-dev libx11-dev libxext-dev libxrandr-dev \
+              libxss-dev libxpresent-dev libdrm-dev libgbm-dev \
+              libwayland-dev wayland-protocols libxkbcommon-dev \
+              libfontconfig1-dev libfreetype6-dev libharfbuzz-dev \
+              libfribidi-dev python3-jinja2 python3-docutils
+            python3 -m pip install --no-cache-dir meson==1.7.0
+            scripts/build_linux_libmpv.sh build/private-libmpv
+          '
 
     - name: Setup Flutter (manual for arm64)
       run: |
@@ -577,11 +626,11 @@ jobs:
       run: flutter pub get
 
     - name: Build Linux app
-      run: flutter build linux --release
+      run: PKG_CONFIG_PATH="$PWD/build/private-libmpv/pkgconfig" flutter build linux --release
 
     # See the x64 job — same reason, same script, arm64 bundle path.
-    - name: Bundle libmpv into the app bundle
-      run: scripts/bundle_linux_mpv.sh build/linux/arm64/release/bundle
+    - name: Install private libmpv into the app bundle
+      run: scripts/bundle_linux_mpv.sh build/linux/arm64/release/bundle build/private-libmpv
 
     - name: Create AppImage
       run: |

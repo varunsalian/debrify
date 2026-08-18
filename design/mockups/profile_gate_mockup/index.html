@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Debrify — Profile Gate Concepts</title>
+<style>
+  /* Deliberately single-theme: these are TV mocks and the TV is dark.     */
+  /* Tokens follow the shipped Spotlight look.                              */
+  :root {
+    --ground: #0D1420;
+    --panel: #151D2A;
+    --accent: #E23D4C;
+    --ink: #FFFFFF;
+    --dim: rgba(255,255,255,.55);
+    --faint: rgba(255,255,255,.32);
+    --hairline: rgba(255,255,255,.09);
+    --admin: #5B8CFF;
+    --member: #3D8B8B;
+    --child: #E2864A;
+    --neutral: #31435F;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #080D16;
+    color: var(--ink);
+    font-family: -apple-system, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    padding: 28px 0 80px;
+  }
+  .page { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .kick {
+    color: var(--accent); font-size: 12px; font-weight: 700;
+    letter-spacing: 3px; text-transform: uppercase;
+  }
+  h1 { font-size: 34px; letter-spacing: -1px; margin: 8px 0 6px; }
+  .sub { color: var(--dim); font-size: 14px; max-width: 640px; line-height: 1.5; }
+  .tabs { display: flex; gap: 8px; margin: 26px 0 14px; flex-wrap: wrap; }
+  .tab {
+    border: 1px solid var(--hairline); background: var(--panel);
+    color: var(--dim); border-radius: 999px; padding: 9px 16px;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .tab.on { background: var(--ink); color: #0B0F17; border-color: var(--ink); }
+  .hint { color: var(--faint); font-size: 12px; margin-bottom: 18px; }
+  kbd {
+    border: 1px solid var(--faint); border-radius: 4px; padding: 1px 6px;
+    font-size: 11px; font-family: ui-monospace, monospace;
+  }
+
+  .concept { display: none; }
+  .concept.on { display: block; }
+  .note {
+    background: var(--panel); border: 1px solid var(--hairline);
+    border-radius: 12px; padding: 14px 18px; margin-top: 14px;
+    color: var(--dim); font-size: 13.5px; line-height: 1.55;
+  }
+  .note b { color: var(--ink); }
+  .note .tag { color: var(--accent); font-weight: 700; }
+
+  /* ── TV frame: 1920×1080, scaled to fit ───────────────────────────── */
+  .stagewrap { width: 100%; aspect-ratio: 16 / 9; position: relative; }
+  .frame {
+    width: 1920px; height: 1080px; position: absolute; top: 0; left: 0;
+    transform-origin: top left; background: var(--ground);
+    border-radius: 18px; overflow: hidden; outline: 1px solid var(--hairline);
+  }
+
+  .brand {
+    position: absolute; top: 64px; left: 0; right: 0; text-align: center;
+    font-size: 22px; font-weight: 800; letter-spacing: 10px; color: var(--faint);
+  }
+  .ask {
+    position: absolute; top: 108px; left: 0; right: 0; text-align: center;
+    font-size: 64px; font-weight: 800; letter-spacing: -1.5px;
+  }
+
+  /* Avatar art (pure CSS: gradient art + initial) */
+  .art { width: 100%; height: 100%; display: grid; place-items: center; position: relative; }
+  .art .init { font-weight: 800; color: rgba(255,255,255,.92); }
+  .art.varun  { background: radial-gradient(120% 120% at 20% 15%, #8FB2FF 0%, #5B8CFF 38%, #1E3A8A 100%); }
+  .art.priya  { background: radial-gradient(120% 120% at 75% 20%, #7FD1CB 0%, #3D8B8B 45%, #14403D 100%); }
+  .art.kids   { background: radial-gradient(120% 120% at 30% 80%, #FFC98A 0%, #E2864A 45%, #7A3C14 100%); }
+  .art.manage { background: linear-gradient(150deg, #3A4F6E 0%, #22314A 100%); }
+  /* Only the focused tile's art may animate — the app's contract. */
+  .focus .art.varun { animation: drift 7s ease-in-out infinite alternate; background-size: 160% 160%; }
+  @keyframes drift { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
+
+  .lock {
+    position: absolute; top: 14px; right: 14px;
+    background: rgba(0,0,0,.55); border-radius: 10px; padding: 8px 9px;
+    font-size: 16px; line-height: 1;
+  }
+
+  /* ── Concept 1 · Netflix Row ──────────────────────────────────────── */
+  .c1 .row {
+    position: absolute; top: 0; bottom: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 56px;
+  }
+  .c1 .tile { width: 260px; text-align: center; transition: transform .22s ease, opacity .22s ease; opacity: .55; }
+  .c1 .tile .plate {
+    width: 260px; height: 260px; border-radius: 20px; overflow: hidden;
+    border: 4px solid transparent; position: relative; transition: border-color .22s ease, box-shadow .22s ease;
+  }
+  .c1 .tile .init { font-size: 120px; }
+  .c1 .tile .name { margin-top: 22px; font-size: 30px; font-weight: 600; color: var(--dim); }
+  .c1 .tile.focus { transform: scale(1.12); opacity: 1; }
+  .c1 .tile.focus .plate { border-color: var(--ink); box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+  .c1 .tile.focus .name { color: var(--ink); }
+  .c1 .tile.man .plate { display: grid; place-items: center; border-style: dashed; border-color: var(--faint); }
+  .c1 .tile.man.focus .plate { border-color: var(--ink); border-style: solid; }
+  .c1 .tile.man .glyph { font-size: 84px; color: var(--dim); }
+
+  /* ── Concept 2 · Portrait Wall (in the app today) ─────────────────── */
+  .c2 .room { position: absolute; inset: 0; transition: background 450ms ease; }
+  .c2 .row {
+    position: absolute; top: 160px; bottom: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 44px;
+  }
+  .c2 .tile { width: 300px; text-align: center; transition: transform .22s ease, opacity .22s ease; opacity: .62; }
+  .c2 .plate {
+    width: 300px; height: 400px; border-radius: 26px; overflow: hidden; position: relative;
+    border: 5px solid transparent; transition: border-color .22s, box-shadow .22s;
+    filter: saturate(.35);
+  }
+  .c2 .init { font-size: 150px; }
+  .c2 .tile.focus { transform: scale(1.08); opacity: 1; }
+  .c2 .tile.focus .plate { border-color: var(--ink); filter: none; }
+  .c2 .name { margin-top: 20px; font-size: 30px; font-weight: 600; }
+  .c2 .role { margin-top: 6px; font-size: 15px; letter-spacing: 3.5px; color: var(--faint); }
+  .c2 .managechip {
+    position: absolute; bottom: 54px; left: 0; right: 0; margin: 0 auto; width: fit-content;
+    border: 2px solid var(--faint); color: var(--dim); border-radius: 999px;
+    padding: 14px 30px; font-size: 22px; font-weight: 600;
+  }
+
+  /* ── Concept 3 · Marquee (rail + stage) ───────────────────────────── */
+  .c3 .wash { position: absolute; inset: 0; transition: background 450ms ease; }
+  .c3 .stagehalf {
+    position: absolute; left: 120px; top: 0; bottom: 0; width: 760px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .c3 .eyebrow { font-size: 20px; font-weight: 700; letter-spacing: 5px; color: var(--accent); }
+  .c3 .bigname { font-size: 110px; font-weight: 800; letter-spacing: -3px; line-height: 1; margin: 18px 0 20px; }
+  .c3 .meta { font-size: 24px; color: var(--dim); display: flex; gap: 14px; align-items: center; }
+  .c3 .chip {
+    border: 1.5px solid var(--faint); border-radius: 999px; padding: 5px 16px;
+    font-size: 17px; letter-spacing: 2px; color: var(--dim);
+  }
+  .c3 .enter {
+    margin-top: 56px; width: fit-content; background: var(--ink); color: #0B0F17;
+    border-radius: 999px; padding: 22px 44px; font-size: 28px; font-weight: 800;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55);
+  }
+  .c3 .bigart {
+    position: absolute; right: -140px; top: 50%; transform: translateY(-50%);
+    width: 820px; height: 820px; border-radius: 50%; overflow: hidden;
+    box-shadow: 0 40px 140px rgba(0,0,0,.65); opacity: .9;
+  }
+  .c3 .bigart .init { font-size: 360px; }
+  .c3 .rail {
+    position: absolute; left: 120px; bottom: 70px; display: flex; gap: 26px; align-items: center;
+  }
+  .c3 .dot {
+    width: 128px; height: 128px; border-radius: 50%; overflow: hidden;
+    border: 4px solid transparent; opacity: .55; transition: all .2s ease; position: relative;
+  }
+  .c3 .dot .init { font-size: 52px; }
+  .c3 .dot.focus { border-color: var(--ink); opacity: 1; transform: scale(1.12); }
+  .c3 .dot.man { display: grid; place-items: center; border: 3px dashed var(--faint); }
+  .c3 .dot.man .glyph { font-size: 44px; color: var(--dim); }
+  .c3 .dot .lock { top: auto; bottom: 2px; right: 2px; padding: 5px 6px; font-size: 12px; }
+
+  /* ── Concept 4 · Theater ──────────────────────────────────────────── */
+  .c4 .backdrop { position: absolute; inset: 0; transition: background 500ms ease; }
+  .c4 .ghost {
+    position: absolute; top: 40%; left: 0; right: 0; transform: translateY(-58%);
+    text-align: center; font-size: 620px; font-weight: 800;
+    color: rgba(255,255,255,.05); letter-spacing: -20px; user-select: none;
+    transition: color .4s ease;
+  }
+  .c4 .name {
+    position: absolute; top: 190px; left: 0; right: 0; text-align: center;
+    font-size: 96px; font-weight: 800; letter-spacing: -2px;
+  }
+  .c4 .role {
+    position: absolute; top: 320px; left: 0; right: 0; text-align: center;
+    font-size: 20px; letter-spacing: 6px; color: var(--dim);
+  }
+  .c4 .shelf {
+    position: absolute; bottom: 150px; left: 0; right: 0;
+    display: flex; justify-content: center; gap: 64px; align-items: flex-end;
+  }
+  .c4 .orb { text-align: center; transition: transform .25s ease, opacity .25s; opacity: .5; }
+  .c4 .ball {
+    width: 210px; height: 210px; border-radius: 50%; overflow: hidden; position: relative;
+    border: 5px solid transparent; transition: all .25s ease;
+  }
+  .c4 .ball .init { font-size: 92px; }
+  .c4 .orb.focus { transform: translateY(-26px) scale(1.14); opacity: 1; }
+  .c4 .orb.focus .ball { border-color: var(--ink); box-shadow: 0 34px 90px rgba(0,0,0,.6); }
+  .c4 .cap { margin-top: 18px; font-size: 24px; font-weight: 600; color: var(--dim); }
+  .c4 .orb.focus .cap { color: var(--ink); }
+  .c4 .orb.man .ball { display: grid; place-items: center; border: 3px dashed var(--faint); }
+  .c4 .orb.man .glyph { font-size: 64px; color: var(--dim); }
+
+  .footerbar {
+    position: absolute; bottom: 34px; left: 0; right: 0; display: flex;
+    justify-content: center; gap: 34px; color: var(--faint); font-size: 19px;
+  }
+  .footerbar b {
+    border: 1.5px solid var(--faint); border-radius: 6px; padding: 2px 10px;
+    font-weight: 700; font-size: 16px; margin-right: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="kick">Debrify · Profile gate</div>
+  <h1>“Who’s watching?” — four takes</h1>
+  <p class="sub">Same household, same contract (pick a profile / manage), four rooms.
+    <kbd>←</kbd> <kbd>→</kbd> move focus inside the frame · <kbd>1</kbd>–<kbd>4</kbd> or the pills switch concepts.</p>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="hint" id="conceptTitle"></div>
+
+  <div id="concepts"></div>
+</div>
+
+<script>
+const HOUSEHOLD = [
+  { key:'varun', name:'Varun', role:'ADMIN',  wash:'#5B8CFF', locked:true  },
+  { key:'priya', name:'Priya', role:'MEMBER', wash:'#3D8B8B', locked:false },
+  { key:'kids',  name:'Kids',  role:'KID',    wash:'#E2864A', locked:false },
+];
+const MANAGE = { key:'manage', name:'Manage', role:'', wash:'#31435F' };
+
+const CONCEPTS = [
+  {
+    id:'c1', title:'1 · Netflix Row',
+    note:`<b>The straight Netflix treatment.</b> One centred row of big square plates,
+      focused plate scales with a white ring, everything else dims. Manage is the dashed
+      tile at the end — no chrome anywhere else. <span class="tag">Cheapest build</span>:
+      it is the shipped classic grid re-drawn (same avatars, same two callbacks), maybe a day.`,
+  },
+  {
+    id:'c2', title:'2 · Portrait Wall',
+    note:`<b>Already in the app.</b> Settings → Profiles → the gate-style toggle flips this on
+      today: tall movie-poster plates, the focused one saturates and repaints the whole room
+      in its avatar’s colour, idle plates desaturate. Shown here so you can judge it against
+      the new concepts — <span class="tag">zero build</span> if it wins, and any polish
+      (bigger plates, poster-style name overlay) is small.`,
+  },
+  {
+    id:'c3', title:'3 · Marquee',
+    note:`<b>The Spotlight grammar applied to the gate</b> — the same standing-rail/acting-stage
+      shape as Debrify TV and Settings. The focused person IS the screen: giant name in display
+      type, role + PIN chips, a white “Continue” pill; the household is a quiet rail of circles
+      below. Most “premium TV” of the four and the best home for per-profile touches later
+      (last-watched line, resume hint). <span class="tag">~2–3 days</span>.`,
+  },
+  {
+    id:'c4', title:'4 · Theater',
+    note:`<b>The focused profile floods the room.</b> Their wash colour and a huge ghost
+      monogram become the backdrop, name in marquee type up top, and the household sits as
+      globes on a shelf — the focused one rises. Feels like a cinema lobby; calm, very little
+      UI. <span class="tag">~1–2 days</span>; the backdrop is the same wash the wall already
+      computes.`,
+  },
+];
+
+let concept = 0, focusIdx = 0;
+
+function initial(p){ return p.name[0]; }
+
+function tiles(cls, plate, focus) {
+  const all = [...HOUSEHOLD, MANAGE];
+  return all.map((p,i)=>{
+    const f = i===focus ? ' focus':'';
+    const man = p===MANAGE;
+    return plate(p, f, man, i);
+  }).join('');
+}
+
+function frame(id, inner) {
+  return `<div class="stagewrap"><div class="frame ${id}" id="frame-${id}">${inner}</div></div>`;
+}
+
+function footer(extra){
+  return `<div class="footerbar"><span><b>OK</b>Open profile</span>
+    <span><b>←→</b>Choose</span>${extra??''}</div>`;
+}
+
+function renderC1(focus){
+  const t = (p,f,man)=> man
+    ? `<div class="tile man${f}"><div class="plate"><div class="glyph">⚙</div></div>
+       <div class="name">Manage</div></div>`
+    : `<div class="tile${f}"><div class="plate"><div class="art ${p.key}">
+       <span class="init">${initial(p)}</span>${p.locked?'<span class="lock">🔒</span>':''}
+       </div></div><div class="name">${p.name}</div></div>`;
+  return `<div class="brand">D E B R I F Y</div><div class="ask">Who’s watching?</div>
+    <div class="row">${tiles('c1',t,focus)}</div>${footer()}`;
+}
+
+function renderC2(focus){
+  const all=[...HOUSEHOLD,MANAGE];
+  const wash=(all[focus]??MANAGE).wash;
+  const t=(p,f,man)=> man
+    ? `<div class="tile man${f}"><div class="plate" style="display:grid;place-items:center;filter:none;border-style:dashed;border-color:var(--faint)">
+       <div style="font-size:96px;color:var(--dim)">⚙</div></div>
+       <div class="name">Manage</div><div class="role">HOUSEHOLD</div></div>`
+    : `<div class="tile${f}"><div class="plate"><div class="art ${p.key}">
+       <span class="init">${initial(p)}</span>${p.locked?'<span class="lock">🔒</span>':''}
+       </div></div><div class="name">${p.name}</div><div class="role">${p.role}</div></div>`;
+  return `<div class="room" style="background:radial-gradient(120% 90% at 50% 20%, ${wash}52 0%, var(--ground) 62%)"></div>
+    <div class="brand">D E B R I F Y</div><div class="ask">Who’s watching?</div>
+    <div class="row">${tiles('c2',t,focus)}</div>${footer()}`;
+}
+
+function renderC3(focus){
+  const all=[...HOUSEHOLD,MANAGE];
+  const p=all[focus]??MANAGE; const man=p===MANAGE;
+  const dots=all.map((q,i)=>{
+    const f=i===focus?' focus':'';
+    return q===MANAGE
+      ? `<div class="dot man${f}"><div class="glyph">⚙</div></div>`
+      : `<div class="dot${f}"><div class="art ${q.key}"><span class="init">${initial(q)}</span></div>
+         ${q.locked?'<span class="lock">🔒</span>':''}</div>`;
+  }).join('');
+  const stage = man
+    ? `<div class="eyebrow">HOUSEHOLD</div><div class="bigname">Manage<br>profiles</div>
+       <div class="meta">Create, edit, back up, send to TV</div><div class="enter">Open</div>`
+    : `<div class="eyebrow">PROFILE</div><div class="bigname">${p.name}</div>
+       <div class="meta"><span class="chip">${p.role}</span>${p.locked?'<span class="chip">PIN</span>':''}</div>
+       <div class="enter">Continue as ${p.name}</div>`;
+  return `<div class="wash" style="background:
+      radial-gradient(90% 120% at 85% 50%, ${p.wash}5e 0%, var(--ground) 60%)"></div>
+    ${man?'':`<div class="bigart"><div class="art ${p.key}"><span class="init">${initial(p)}</span></div></div>`}
+    <div class="stagehalf">${stage}</div>
+    <div class="rail">${dots}</div>${footer()}`;
+}
+
+function renderC4(focus){
+  const all=[...HOUSEHOLD,MANAGE];
+  const p=all[focus]??MANAGE; const man=p===MANAGE;
+  const orbs=all.map((q,i)=>{
+    const f=i===focus?' focus':'';
+    return q===MANAGE
+      ? `<div class="orb man${f}"><div class="ball"><div class="glyph">⚙</div></div><div class="cap">Manage</div></div>`
+      : `<div class="orb${f}"><div class="ball"><div class="art ${q.key}"><span class="init">${initial(q)}</span>
+         ${q.locked?'<span class="lock">🔒</span>':''}</div></div><div class="cap">${q.name}</div></div>`;
+  }).join('');
+  return `<div class="backdrop" style="background:
+      radial-gradient(100% 100% at 50% 105%, ${p.wash}66 0%, var(--ground) 68%)"></div>
+    <div class="ghost">${man?'⚙':initial(p)}</div>
+    <div class="name">${man?'Manage profiles':p.name}</div>
+    <div class="role">${man?'HOUSEHOLD':p.role + (p.locked?' · PIN':'')}</div>
+    <div class="shelf">${orbs}</div>${footer()}`;
+}
+
+const RENDER=[renderC1,renderC2,renderC3,renderC4];
+
+function draw(){
+  const host=document.getElementById('concepts');
+  host.innerHTML=CONCEPTS.map((c,i)=>`
+    <div class="concept${i===concept?' on':''}">
+      ${frame(c.id, RENDER[i](focusIdx))}
+      <div class="note">${c.note}</div>
+    </div>`).join('');
+  document.getElementById('tabs').innerHTML=CONCEPTS.map((c,i)=>
+    `<button class="tab${i===concept?' on':''}" onclick="setConcept(${i})">${c.title}</button>`).join('');
+  document.getElementById('conceptTitle').textContent=
+    'Focused: ' + ([...HOUSEHOLD,MANAGE][focusIdx].name);
+  scaleFrames();
+}
+
+function setConcept(i){ concept=i; draw(); }
+
+function scaleFrames(){
+  document.querySelectorAll('.stagewrap').forEach(w=>{
+    const f=w.querySelector('.frame');
+    f.style.transform=`scale(${w.clientWidth/1920})`;
+  });
+}
+
+addEventListener('resize', scaleFrames);
+addEventListener('keydown', e=>{
+  const n=HOUSEHOLD.length+1;
+  if(e.key==='ArrowRight'){ focusIdx=(focusIdx+1)%n; draw(); }
+  if(e.key==='ArrowLeft'){ focusIdx=(focusIdx+n-1)%n; draw(); }
+  if(['1','2','3','4'].includes(e.key)){ setConcept(+e.key-1); }
+});
+draw();
+</script>
+</body>
+</html>

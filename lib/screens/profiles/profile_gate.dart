@@ -19,6 +19,7 @@ import '../../services/profiles/profile_runtime.dart';
 import '../../services/profiles/profile_remote_lease.dart';
 import '../../services/remote_control/remote_command_router.dart';
 import '../../services/tvos_top_shelf_service.dart';
+import '../../services/watched_status_service.dart';
 import 'manage_profiles_screen.dart';
 import 'profile_gate_looks.dart';
 import 'profile_picker_screen.dart';
@@ -155,6 +156,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
         );
         TvosTopShelfService.instance.onProfileUnlocked();
         DeepLinkService().onProfileUnlocked();
+        WatchedStatusService.instance.refresh();
       } else {
         ProfileRemoteLease.instance.revoke();
         RemoteCommandRouter().clearProfileSessionState();
@@ -241,6 +243,7 @@ class _ProfileGateState extends State<ProfileGate> with WidgetsBindingObserver {
     ProfileRemoteLease.instance.authorize(profile, ProfileRuntime.capture());
     TvosTopShelfService.instance.onProfileUnlocked();
     DeepLinkService().onProfileUnlocked();
+    WatchedStatusService.instance.refresh();
   }
 
   Future<ProfilePinVerification> _verifyPin(String pin) async {

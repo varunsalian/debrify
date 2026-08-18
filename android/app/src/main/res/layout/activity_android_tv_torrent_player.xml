@@ -457,6 +457,9 @@
     <!-- Unified Player Menu (Miller columns) -->
     <include layout="@layout/view_unified_menu" />
 
+    <!-- Full-screen source browser (separate from the audio/subtitle menu) -->
+    <include layout="@layout/view_tv_source_browser" />
+
     <!-- PikPak Reactivation Indicator (non-blocking, bottom-center pill) -->
     <LinearLayout
         android:id="@+id/android_tv_pikpak_reactivation_indicator"

@@ -39,6 +39,37 @@ class ProfileBootstrap {
   static const String freshAdminId = 'profile-initial-admin-v1';
   static const String recoveryAdminId = 'profile-recovery-admin-v1';
 
+  /// Why THIS launch is running in legacy mode, or null while committed.
+  ///
+  /// The bootstrap has always known exactly why it backed off — and then threw
+  /// that knowledge away into debugPrint, which is unreachable on a user's
+  /// television. The first legacy-mode report arrived as a Discord photo of
+  /// the settings row, with nothing on the row to photograph but the words
+  /// "legacy mode". This field is what makes that photo diagnostic: the
+  /// Profiles row surfaces it, and a dialog shows it in full.
+  ///
+  /// In-memory only, set fresh by every [initialize] run: migration retries
+  /// on each launch, so a stored copy of last week's reason would only ever
+  /// be stale or redundant.
+  static String? legacyReason;
+
+  /// The settings row's subtitle: the captured reason, or the generic line
+  /// for the paths that predate the capture (and for tests that enter legacy
+  /// mode directly through [ProfileRuntime]).
+  static String get legacyReasonSummary =>
+      legacyReason ?? 'This install is running in legacy mode';
+
+  /// One line, bounded, for [legacyReason] — a dialog gets photographed, not
+  /// scrolled, so a 2KB toString would bury the part that identifies the
+  /// failure.
+  static String _describeError(Object error) {
+    final line = error.toString().replaceAll('\n', ' ');
+    final typed = line.startsWith('${error.runtimeType}')
+        ? line
+        : '${error.runtimeType}: $line';
+    return typed.length <= 300 ? typed : '${typed.substring(0, 297)}…';
+  }
+
   static ProfileRegistry? _registry;
   static _LinuxPendingBootstrap? _linuxPending;
   static ProfileRegistry get registry =>
@@ -64,6 +95,8 @@ class ProfileBootstrap {
 
   static Future<void> initialize({bool? enabled}) async {
     if (ProfileRuntime.isInitialized) return;
+    // Every run re-decides; a reason may only describe THIS launch.
+    legacyReason = null;
     final legacyPreferences = await SharedPreferences.getInstance();
     // CFPreferences aborts the entire tvOS process when UserDefaults grows too
     // large. Discard only rebuildable TVMaze responses before any bootstrap
@@ -85,6 +118,9 @@ class ProfileBootstrap {
       );
     }
     if ((!requested || !migrationRolloutReady) && !hasAuthority) {
+      legacyReason = !requested
+          ? 'Profiles are switched off in this build.'
+          : 'Profile migration is paused in this build.';
       ProfileRuntime.initializeLegacy();
       return;
     }
@@ -168,6 +204,9 @@ class ProfileBootstrap {
     // A rollout flag can pause an incomplete candidate, but it must never
     // return an already-committed install to stale legacy data.
     if (!requested || !migrationRolloutReady) {
+      legacyReason = !requested
+          ? 'Profiles are switched off in this build.'
+          : 'Profile migration is paused in this build.';
       await opened.close();
       _registry = null;
       TvOsProfileRecoveryStore.checkpointCallback = null;
@@ -235,11 +274,16 @@ class ProfileBootstrap {
         existingInstall: isExistingInstall,
         hasWrappedKey: await DeviceKeyProvider.linuxHasWrappedKey(),
       );
+      legacyReason =
+          'The encryption vault is locked — unlock it to start migration.';
       await _stayOnLegacy(registry);
       return;
     }
     if (isExistingInstall) {
       if (!DeviceKeyProvider.isUnlocked) {
+        legacyReason =
+            'The device key store is locked or unavailable; migration will '
+            'retry on the next launch.';
         await _stayOnLegacy(registry);
         return;
       }
@@ -260,6 +304,9 @@ class ProfileBootstrap {
         // first entry: without this the device silently never gains profiles,
         // with nothing in the journal or a bug report to explain why.
         debugPrint('Profile migration deferred: $error');
+        legacyReason =
+            'Migration deferred — copying settings would exceed the tvOS '
+            'preference budget. ${_describeError(error)}';
         await _stayOnLegacy(registry);
         return;
       } on ProfileBootstrapRecoveryRequired {
@@ -290,6 +337,16 @@ class ProfileBootstrap {
         // the nine it was.
         debugPrint('Profile migration failed, staying on legacy: $error');
         debugPrint('$stackTrace');
+        // The first stack frame usually names the failing subsystem, and a
+        // photographed dialog is the only log channel most reporters have.
+        final frame = stackTrace
+            .toString()
+            .split('\n')
+            .firstWhere((l) => l.trim().isNotEmpty, orElse: () => '')
+            .trim();
+        legacyReason =
+            'Migration failed — ${_describeError(error)}'
+            '${frame.isEmpty ? '' : '\nat $frame'}';
         await _stayOnLegacy(registry);
         return;
       }

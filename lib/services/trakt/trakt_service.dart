@@ -347,6 +347,7 @@ class TraktService {
     // Drop cached library state so a later sign-in (possibly a different
     // account) never reads the previous user's watchlist/collection/ratings.
     _invalidateLibraryCache();
+    StorageService.movieFinishedRevision.value++;
   }
 
   /// Get the stored username.
@@ -371,6 +372,7 @@ class TraktService {
           .millisecondsSinceEpoch;
       await StorageService.setTraktTokenExpiry(expiryMs);
     }
+    StorageService.movieFinishedRevision.value++;
   }
 
   // ============================================================================
@@ -661,6 +663,9 @@ class TraktService {
       // A watchlist/collection/history/ratings change makes the cached lists
       // stale — drop them so the next title-status lookup reflects it.
       _invalidateLibraryCache();
+      if (path == '/sync/history' || path == '/sync/history/remove') {
+        StorageService.movieFinishedRevision.value++;
+      }
     }
     return ok;
   }
@@ -1359,32 +1364,114 @@ class TraktService {
 
   /// Fetch all watched movies.
   /// Returns a map of IMDB ID → 100.0 (fully watched).
-  Future<Map<String, double>> fetchWatchedMovies() async {
-    final response = await _authenticatedGet('/sync/watched/movies');
-    if (response == null || response.statusCode != 200) {
-      debugPrint('Trakt: fetchWatchedMovies failed (${response?.statusCode})');
-      return {};
-    }
+  Future<Map<String, double>> fetchWatchedMovies() async =>
+      await fetchWatchedMoviesOrNull() ?? {};
 
+  /// Failure-aware watched movie bulk read for background badge refreshes.
+  Future<Map<String, double>?> fetchWatchedMoviesOrNull() async {
+    final list = await _fetchAllWatchedPages(
+      'movies',
+      limit: 250,
+    );
+    if (list == null) return null;
     try {
-      final list = jsonDecode(response.body) as List<dynamic>;
-      final result = <String, double>{};
-      for (final item in list) {
-        if (item is! Map<String, dynamic>) continue;
-        final movie = item['movie'] as Map<String, dynamic>?;
-        final ids = movie?['ids'] as Map<String, dynamic>?;
-        final imdbId = ids?['imdb'] as String?;
-        if (imdbId != null) {
-          result[imdbId] = 100.0;
-        }
-      }
-      return result;
+      return debugParseWatchedMovies(list);
     } catch (error) {
       debugPrint(
         'Trakt: fetchWatchedMovies parse error (${error.runtimeType})',
       );
-      return {};
+      return null;
     }
+  }
+
+  /// Kept visible for a response-shape regression test. The normal watched
+  /// response contains the IMDb mapping; `extended=min` deliberately does not.
+  @visibleForTesting
+  static Map<String, double> debugParseWatchedMovies(List<dynamic> list) {
+    final result = <String, double>{};
+    for (final item in list) {
+      if (item is! Map<String, dynamic>) continue;
+      final movie = item['movie'] as Map<String, dynamic>?;
+      final ids = movie?['ids'] as Map<String, dynamic>?;
+      final imdbId = (ids?['imdb'] as String?)?.trim().toLowerCase();
+      if (imdbId != null && imdbId.isNotEmpty) result[imdbId] = 100.0;
+    }
+    return result;
+  }
+
+  /// Fully watched series, calculated in bulk from Trakt's paged progress
+  /// response. A show with only some watched episodes is deliberately absent.
+  Future<Set<String>> fetchFullyWatchedShows() async {
+    return await fetchFullyWatchedShowsOrNull() ?? {};
+  }
+
+  /// Failure-aware fully-watched series bulk read.
+  Future<Set<String>?> fetchFullyWatchedShowsOrNull() async {
+    final list = await _fetchAllWatchedPages(
+      'shows',
+      extended: 'progress',
+      limit: 100,
+    );
+    if (list == null) return null;
+    final result = <String>{};
+    for (final item in list) {
+      if (item is! Map<String, dynamic>) continue;
+      final show = item['show'] as Map<String, dynamic>?;
+      final ids = show?['ids'] as Map<String, dynamic>?;
+      final imdbId = ids?['imdb'] as String?;
+      final aired = (show?['aired_episodes'] as num?)?.toInt() ?? 0;
+      if (imdbId == null || imdbId.isEmpty || aired <= 0) continue;
+      final watched = <String>{};
+      final seasons = item['seasons'] as List<dynamic>? ?? const [];
+      for (final rawSeason in seasons) {
+        if (rawSeason is! Map<String, dynamic>) continue;
+        final season = (rawSeason['number'] as num?)?.toInt();
+        if (season == null || season <= 0) continue;
+        final episodes = rawSeason['episodes'] as List<dynamic>? ?? const [];
+        for (final rawEpisode in episodes) {
+          if (rawEpisode is! Map<String, dynamic>) continue;
+          final episode = (rawEpisode['number'] as num?)?.toInt();
+          if (episode != null && episode > 0) watched.add('$season-$episode');
+        }
+      }
+      if (watched.length >= aired) result.add(imdbId.toLowerCase());
+    }
+    return result;
+  }
+
+  Future<List<dynamic>?> _fetchAllWatchedPages(
+    String type, {
+    String? extended,
+    required int limit,
+  }) async {
+    final all = <dynamic>[];
+    for (var page = 1; ; page++) {
+      final response = await _authenticatedGet(
+        '/sync/watched/$type?page=$page&limit=$limit'
+        '${extended == null ? '' : '&extended=$extended'}',
+      );
+      if (response == null || response.statusCode != 200) {
+        debugPrint(
+          'Trakt: fetch watched $type failed (${response?.statusCode})',
+        );
+        return null;
+      }
+      try {
+        final items = jsonDecode(response.body) as List<dynamic>;
+        all.addAll(items);
+        final pageCount = int.tryParse(
+          response.headers['x-pagination-page-count'] ?? '',
+        );
+        if (items.isEmpty || (pageCount != null && page >= pageCount)) break;
+        if (pageCount == null && items.length < limit) break;
+      } catch (error) {
+        debugPrint(
+          'Trakt: fetch watched $type parse error (${error.runtimeType})',
+        );
+        return null;
+      }
+    }
+    return all;
   }
 
   /// Fetch watched episode keys for a specific show.

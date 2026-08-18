@@ -711,6 +711,7 @@ class _LogoOrTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = ShowcaseMetrics.of(context);
+    final alignment = centered ? Alignment.bottomCenter : Alignment.bottomLeft;
     // Metahub ships some logos as BLACK wordmarks, invisible on ink — roughly
     // one title in four. The text fallback is not a degraded path, it is the
     // other half of the design.
@@ -727,16 +728,36 @@ class _LogoOrTitle extends StatelessWidget {
         color: _ink,
       ),
     );
-    if (url == null || url!.isEmpty) return text;
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: 235 * m.k, maxHeight: 60 * m.k),
-      child: CachedNetworkImage(
-        imageUrl: url!,
-        fit: BoxFit.contain,
-        alignment: centered ? Alignment.bottomCenter : Alignment.bottomLeft,
-        cacheManager: DebrifyImageCache.manager,
-        memCacheWidth: 520,
-        errorWidget: (_, __, ___) => text,
+    // Keep one stable title-art viewport from the first frame. A loose
+    // ConstrainedBox let CachedNetworkImage adopt its placeholder's intrinsic
+    // width and then relayout around the decoded logo, which made the wordmark
+    // visibly slide into place on slower TVs.
+    return SizedBox(
+      width: 235 * m.k,
+      height: 60 * m.k,
+      child: Align(
+        alignment: alignment,
+        child: (url == null || url!.isEmpty)
+            ? FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: alignment,
+                child: text,
+              )
+            : CachedNetworkImage(
+                imageUrl: url!,
+                width: 235 * m.k,
+                height: 60 * m.k,
+                fit: BoxFit.contain,
+                alignment: alignment,
+                cacheManager: DebrifyImageCache.manager,
+                memCacheWidth: 520,
+                placeholder: (_, __) => const SizedBox.expand(),
+                errorWidget: (_, __, ___) => FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: alignment,
+                  child: text,
+                ),
+              ),
       ),
     );
   }

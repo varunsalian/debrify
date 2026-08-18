@@ -957,6 +957,21 @@ class IptvMediaStore {
     });
   }
 
+  /// Removes the resume entry for one media item without touching the rest of
+  /// the user's IPTV/on-demand playback history.
+  static Future<void> removeVideoResume(String key) {
+    if (key.isEmpty) return Future<void>.value();
+    return _runScoped((_) async {
+      await DebrifyTvDatabase.instance.runTxn((txn) async {
+        await txn.delete(
+          'video_resume',
+          where: 'resume_key = ?',
+          whereArgs: [key],
+        );
+      });
+    });
+  }
+
   /// Stored resume entries for whichever of [keys] exist. Batched `IN`
   /// lookups — callers pass up to thousands of playlist URLs.
   static Future<Map<String, Map<String, dynamic>>> resumeEntries(

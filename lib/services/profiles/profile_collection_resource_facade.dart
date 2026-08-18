@@ -47,16 +47,13 @@ class ProfileCollectionResourceFacade {
           !readOnly && grant.allows(ResourcePermission.revealSecret);
       Map<String, dynamic> secret;
       if (forRemoteTransfer) {
-        try {
-          secret = await service.resolveSecretForUse(
-            context: context,
-            resourceId: resource.id,
-            feature: ProfileFeature.remoteTransfer,
-            permission: ResourcePermission.writeRemote,
-          );
-        } on ResourceAuthorizationException {
-          continue;
-        }
+        if (!grant.allows(ResourcePermission.writeRemote)) continue;
+        secret = await service.resolveSecretForUse(
+          context: context,
+          resourceId: resource.id,
+          feature: ProfileFeature.remoteTransfer,
+          permission: ResourcePermission.writeRemote,
+        );
       } else if (forSettings && !canReveal) {
         secret = _redactedSettingsRecord(resource);
       } else if (forSettings) {
@@ -66,6 +63,11 @@ class ProfileCollectionResourceFacade {
           feature: ProfileFeature.manageConnections,
         );
       } else {
+        // An independently restricted grant is not an error for the rest of
+        // the collection. Preflight that stable property before decryption;
+        // authorization exceptions from resolve must still propagate because
+        // they can mean the profile/session changed during this read.
+        if (!grant.allows(ResourcePermission.use)) continue;
         secret = await service.resolveSecretForUse(
           context: context,
           resourceId: resource.id,
@@ -83,6 +85,10 @@ class ProfileCollectionResourceFacade {
         '_connectionResourceCredentialsRedacted': forSettings && !canReveal,
       });
     }
+    // Close the collection-level race after the final item. Callers that do
+    // not install their own async authorization barrier must never receive a
+    // partial collection decrypted under a session that has since ended.
+    await context.validate(registry);
     return result;
   }
 

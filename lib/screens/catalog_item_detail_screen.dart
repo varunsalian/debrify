@@ -14,10 +14,12 @@ import '../services/series_source_service.dart';
 import '../services/storage_service.dart';
 import '../widgets/detail/theme/detail_theme.dart';
 import '../widgets/parents_guide_section.dart';
+import '../widgets/movie_watched_badge.dart';
 import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import '../services/simkl/simkl_service.dart';
+import '../utils/artwork_url.dart';
 import '../utils/tv_keys.dart';
 
 /// Cinematic detail screen for a catalog item.
@@ -159,13 +161,15 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// Live Simkl status (drives the "Rewatch" relabel). Null until
   /// [simklStatusLoader] resolves — the button keeps "Play" until then.
   SimklTitleStatus? _simklStatus;
+  bool _localMovieFinished = false;
   bool _inMyWatchlist = false;
 
   /// A movie the user has already finished on Simkl (status `completed`). Its
   /// Play button reads "Rewatch" and the play path un-marks it watched so the
   /// rewatch re-enters Continue Watching.
   bool get _isCompletedMovie =>
-      _item.type != 'series' && _simklStatus?.currentStatus == 'completed';
+      _item.type != 'series' &&
+      (_localMovieFinished || _simklStatus?.currentStatus == 'completed');
 
   @override
   void initState() {
@@ -195,6 +199,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
       _loadImdbEnrichment();
       _loadResumeInfo();
       _loadSimklStatus();
+      _loadLocalMovieFinished();
       _loadMyWatchlistState();
     });
   }
@@ -248,6 +253,17 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     }
   }
 
+  Future<void> _loadLocalMovieFinished() async {
+    if (_item.type == 'series') return;
+    final imdbId =
+        _item.effectiveImdbId ?? (_item.id.startsWith('tt') ? _item.id : null);
+    if (imdbId == null || imdbId.isEmpty) return;
+    final finished = await StorageService.isMovieFinished(imdbId);
+    if (mounted && finished != _localMovieFinished) {
+      setState(() => _localMovieFinished = finished);
+    }
+  }
+
   Future<void> _loadResumeInfo() async {
     final loader = widget.resumeInfoLoader;
     if (loader == null) return;
@@ -270,7 +286,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   /// static "Play" until the resume state resolves.
   String get _primaryLabel {
     final isMovie = _item.type != 'series';
-    if (!_resumeLoaded) return 'Play';
+    // Some entry points (for example the catalog browser) intentionally omit
+    // a resume loader. Local/Simkl completion is still enough to distinguish
+    // a new play from a rewatch, so do not hide that state behind the optional
+    // resume lookup.
+    if (!_resumeLoaded) return _isCompletedMovie ? 'Rewatch' : 'Play';
     if (!_resumeStarted) {
       if (_isCompletedMovie) return 'Rewatch';
       return isMovie ? 'Play' : 'Start Watching';
@@ -295,6 +315,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   void didPopNext() {
     _refreshBoundState();
     _loadResumeInfo();
+    _loadLocalMovieFinished();
   }
 
   /// Native-TV / DeoVR / external playback runs in its own ACTIVITY and pushes
@@ -307,6 +328,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
     if (!(ModalRoute.of(context)?.isCurrent ?? false)) return;
     _refreshBoundState();
     _loadResumeInfo();
+    _loadLocalMovieFinished();
   }
 
   /// Re-read this title's bound-source count and flip the Play accent to match.
@@ -487,7 +509,10 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isWide = _wide;
-    final backdropUrl = _item.background ?? _item.poster;
+    // The detail backdrop is a display-sized hero, not a shelf card. Upgrade
+    // MetaHub's catalog-sized art here without changing the item's shared
+    // poster URL (recommendation shelves continue to use their medium source).
+    final backdropUrl = highQualityArtworkUrl(_item.background ?? _item.poster);
 
     return ArtworkAccentScope(
       accent: _artworkAccent,
@@ -891,11 +916,7 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.star_rounded,
-                    size: 16,
-                    color: Color(0xFFFACC15),
-                  ),
+                  Icon(Icons.star_rounded, size: 16, color: Color(0xFFFACC15)),
                   const SizedBox(width: 4),
                   Text(rating.toStringAsFixed(1)),
                   if (hasVotes) ...[
@@ -2038,14 +2059,32 @@ class _RecCardState extends State<_RecCard> {
                           width: _active ? 2 : 0.5,
                         ),
                       ),
-                      child: (poster != null && poster.isNotEmpty)
-                          ? CachedNetworkImage(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (poster != null && poster.isNotEmpty)
+                            CachedNetworkImage(
                               imageUrl: poster,
                               fit: BoxFit.cover,
                               placeholder: (_, __) => _posterFallback(),
                               errorWidget: (_, __, ___) => _posterFallback(),
                             )
-                          : _posterFallback(),
+                          else
+                            _posterFallback(),
+                          if (widget.item.type == 'movie' ||
+                              widget.item.type == 'series')
+                            Positioned(
+                              top: 7,
+                              right: 7,
+                              child: MovieWatchedBadge(
+                                imdbId: widget.item.effectiveImdbId ??
+                                    widget.item.id,
+                                contentType: widget.item.type,
+                                compact: true,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -2200,9 +2239,7 @@ class _ReadMoreToggleState extends State<_ReadMoreToggle> {
             child: Text(
               widget.label,
               style: TextStyle(
-                color: _active
-                    ? t.focus
-                    : Colors.white.withValues(alpha: 0.95),
+                color: _active ? t.focus : Colors.white.withValues(alpha: 0.95),
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.3,

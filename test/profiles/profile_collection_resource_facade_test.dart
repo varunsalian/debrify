@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:debrify/models/indexer_manager_config.dart';
@@ -391,6 +392,107 @@ void main() {
     expect(ownerView.single['enabled'], isTrue);
   });
 
+  test('an unusable grant does not hide usable collection resources', () async {
+    final service = ConnectionResourceService(
+      registry: registry,
+      cipher: cipher,
+    );
+    final first = await service.create(
+      context: await ProfileAuthorizationContext.capture(registry),
+      type: ConnectionResourceType.stremioAddon,
+      label: 'Usable subtitles',
+      publicConfig: const <String, dynamic>{
+        'addonName': 'Usable subtitles',
+        'contentKinds': <String>['movie'],
+      },
+      secretConfig: const <String, dynamic>{
+        'id': 'usable-subtitles',
+        'name': 'Usable subtitles',
+        'manifest_url': 'https://usable.invalid/manifest.json',
+        'base_url': 'https://usable.invalid',
+        'resources': <String>['subtitles'],
+      },
+    );
+    final denied = await service.create(
+      context: await ProfileAuthorizationContext.capture(registry),
+      type: ConnectionResourceType.stremioAddon,
+      label: 'Denied subtitles',
+      publicConfig: const <String, dynamic>{
+        'addonName': 'Denied subtitles',
+        'contentKinds': <String>['movie'],
+      },
+      secretConfig: const <String, dynamic>{
+        'id': 'denied-subtitles',
+        'name': 'Denied subtitles',
+        'manifest_url': 'https://denied.invalid/manifest.json',
+        'base_url': 'https://denied.invalid',
+        'resources': <String>['subtitles'],
+      },
+    );
+    await registry.upsertGrant(
+      profileId: memberId,
+      resourceId: denied.id,
+      permissions: ResourcePermission.download.bit,
+      grantedByProfileId: adminId,
+      origin: const <String, dynamic>{'origin': 'testRestrictedGrant'},
+    );
+    await registry.setActiveProfile(memberId);
+    ProfileRuntime.publish(
+      ProfileScope(profileId: memberId, dataGeneration: 1, sessionEpoch: 2),
+    );
+
+    final rows = await ProfileCollectionResourceFacade.read(
+      types: const <ConnectionResourceType>{
+        ConnectionResourceType.stremioAddon,
+      },
+      feature: ProfileFeature.addonUse,
+    );
+
+    expect(rows, hasLength(1));
+    expect(rows.single['_connectionResourceId'], first.id);
+  });
+
+  test(
+    'a profile switch cannot return a partially decrypted collection',
+    () async {
+      final service = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      for (final name in <String>['A subtitles', 'Z subtitles']) {
+        await service.create(
+          context: await ProfileAuthorizationContext.capture(registry),
+          type: ConnectionResourceType.stremioAddon,
+          label: name,
+          publicConfig: <String, dynamic>{'addonName': name},
+          secretConfig: <String, dynamic>{
+            'id': name,
+            'name': name,
+            'base_url': 'https://${name.codeUnitAt(0)}.invalid',
+            'resources': <String>['subtitles'],
+          },
+        );
+      }
+      final blocking = _NthOpenBlockingCipher(cipher, blockAt: 2);
+      DeviceKeyProvider.debugInstallCipher(blocking);
+
+      final read = ProfileCollectionResourceFacade.read(
+        types: const <ConnectionResourceType>{
+          ConnectionResourceType.stremioAddon,
+        },
+        feature: ProfileFeature.addonUse,
+      );
+      await blocking.operationStarted.future;
+      await registry.setActiveProfile(memberId);
+      ProfileRuntime.publish(
+        ProfileScope(profileId: memberId, dataGeneration: 1, sessionEpoch: 2),
+      );
+      blocking.release();
+
+      await expectLater(read, throwsA(isA<ResourceAuthorizationException>()));
+    },
+  );
+
   test('IPTV mutation readback returns current execution authority', () async {
     final existing = IptvPlaylist(
       id: 'legacy-provider-id',
@@ -598,4 +700,38 @@ void main() {
       throwsA(isA<TypeError>()),
     );
   });
+}
+
+class _NthOpenBlockingCipher implements DeviceSecretCipher {
+  final DeviceSecretCipher delegate;
+  final int blockAt;
+  final Completer<void> operationStarted = Completer<void>();
+  final Completer<void> _release = Completer<void>();
+  int _opens = 0;
+
+  _NthOpenBlockingCipher(this.delegate, {required this.blockAt});
+
+  @override
+  Future<void> initialize() => delegate.initialize();
+
+  @override
+  Future<List<int>> open(
+    String envelope, {
+    required List<int> associatedData,
+  }) async {
+    _opens++;
+    if (_opens == blockAt) {
+      operationStarted.complete();
+      await _release.future;
+    }
+    return delegate.open(envelope, associatedData: associatedData);
+  }
+
+  @override
+  Future<String> seal(
+    List<int> plaintext, {
+    required List<int> associatedData,
+  }) => delegate.seal(plaintext, associatedData: associatedData);
+
+  void release() => _release.complete();
 }

@@ -20,7 +20,7 @@ import 'tvos_profile_recovery_store.dart';
 class ProfileRegistry {
   ProfileRegistry._(this._db);
 
-  static const int schemaVersion = 4;
+  static const int schemaVersion = 5;
   final Database _db;
   Future<void> _recoveryCheckpoint = Future<void>.value();
   Future<void> Function()? authorityWillChangeCallback;
@@ -37,6 +37,10 @@ class ProfileRegistry {
     'profile_data_generations',
     'profile_restore_journal',
     'profile_restore_resources',
+    // After their parents: the snapshot import replays inserts in list order
+    // with foreign keys on.
+    'resource_secret_chunks',
+    'restore_secret_chunks',
   ];
 
   static Future<String> defaultPath() async =>
@@ -118,6 +122,14 @@ class ProfileRegistry {
           // Databases CREATED at v2/v3 never got the pin triggers (onCreate
           // omitted them until v4); repair that here.
           await _createPinIntegrityTriggers(database);
+        }
+        if (oldVersion < 5) {
+          await _createSecretChunkTables(database);
+          // Rows this size were written by v4 (writes never cross a
+          // CursorWindow) and have been unreadable whole ever since. substr()
+          // is the one door left: the window holds the RESULT row, not the
+          // source, so the repair reads them out in slices.
+          await _repairOversizedInlineEnvelopes(database);
         }
       },
     );
@@ -320,7 +332,153 @@ class ProfileRegistry {
         (ownership_state != 'assigned' AND owner_profile_id IS NULL)),
       FOREIGN KEY(owner_profile_id) REFERENCES user_profiles(id) ON DELETE RESTRICT
     )''',
+    ..._secretChunkStatements,
   ];
+
+  /// v5: sealed-payload overflow chunks.
+  ///
+  /// Android's OS SQLite delivers query results through a CursorWindow with a
+  /// hard ~2MB per-ROW ceiling, and a file-imported IPTV playlist seals its
+  /// whole M3U body — routinely tens of MB — into `sealed_secret_payload`.
+  /// The write succeeds (writes don't cross a CursorWindow) and then EVERY
+  /// read of the row throws, which took down not just that resource but any
+  /// listing that materializes the column — one oversized playlist made every
+  /// resource of the profile unreadable, and made migration fail its own
+  /// read-back and strand the install in legacy mode (caught live via a
+  /// photographed legacy-mode dialog).
+  ///
+  /// Envelopes above [_envelopeInlineMaxChars] are therefore split into
+  /// chunk rows here, each far below the window, and the payload column holds
+  /// a small `@chunks:v1:<n>` marker instead. Chunks rather than sidecar
+  /// files on purpose: they ride inside the same transaction as their row,
+  /// ON DELETE CASCADE cleans them wherever rows are deleted today, and a
+  /// file-level copy of the database keeps them.
+  ///
+  /// tvOS is the one platform chunking does NOT rescue: its entire recovery
+  /// snapshot must fit a bounded Keychain item, so an envelope this size can
+  /// never be recoverable there no matter how it is stored — chunked rows
+  /// inflate the snapshot exactly as inline ones did. tvOS therefore refuses
+  /// oversized envelopes at the write APIs ([_guardTvOsEnvelopeBound]) instead
+  /// of accepting one and poisoning every subsequent checkpoint.
+  static const List<String> _secretChunkStatements = <String>[
+    '''CREATE TABLE IF NOT EXISTS resource_secret_chunks (
+      resource_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      chunk TEXT NOT NULL,
+      PRIMARY KEY(resource_id, seq),
+      FOREIGN KEY(resource_id) REFERENCES connection_resources(id) ON DELETE CASCADE
+    )''',
+    '''CREATE TABLE IF NOT EXISTS restore_secret_chunks (
+      restore_id TEXT NOT NULL,
+      backup_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      chunk TEXT NOT NULL,
+      PRIMARY KEY(restore_id, backup_id, seq),
+      FOREIGN KEY(restore_id, backup_id)
+        REFERENCES profile_restore_resources(restore_id, backup_id)
+        ON DELETE CASCADE
+    )''',
+  ];
+
+  static Future<void> _createSecretChunkTables(DatabaseExecutor db) async {
+    for (final statement in _secretChunkStatements) {
+      await db.execute(statement);
+    }
+  }
+
+  /// v5 repair: move every already-committed oversized INLINE envelope into
+  /// its chunk table.
+  ///
+  /// These rows exist wherever a v4 install file-imported a large playlist:
+  /// the INSERT succeeded and every whole-row read has thrown since. They
+  /// cannot be read back normally even here — that read is the very crash —
+  /// so each is pulled out through `substr()` slices, which fit the window
+  /// because only the RESULT reaches it.
+  static Future<void> _repairOversizedInlineEnvelopes(
+    DatabaseExecutor db,
+  ) async {
+    Future<void> repair({
+      required String sourceTable,
+      required String chunkTable,
+      required List<String> keyColumns,
+      required Map<String, String> chunkKeyBySource,
+    }) async {
+      final keySelect = keyColumns.join(', ');
+      final oversized = await db.rawQuery(
+        '''SELECT $keySelect, length(sealed_secret_payload) AS payload_length
+           FROM $sourceTable
+           WHERE sealed_secret_payload IS NOT NULL
+             AND length(sealed_secret_payload) > $_envelopeInlineMaxChars''',
+      );
+      for (final row in oversized) {
+        final length = row['payload_length']! as int;
+        final chunkCount =
+            (length + _envelopeChunkChars - 1) ~/ _envelopeChunkChars;
+        final where = keyColumns.map((c) => '$c = ?').join(' AND ');
+        final whereArgs = [for (final c in keyColumns) row[c]!];
+        final chunkKey = <String, Object?>{
+          for (final entry in chunkKeyBySource.entries)
+            entry.value: row[entry.key]!,
+        };
+        final chunkWhere = chunkKey.keys.map((c) => '$c = ?').join(' AND ');
+        await db.delete(
+          chunkTable,
+          where: chunkWhere,
+          whereArgs: chunkKey.values.toList(growable: false),
+        );
+        // ONE INSERT..SELECT per row, sliced by a recursive counter
+        // (SQLite ≥ 3.8.3; the OS floor is 3.9). The slices are produced and
+        // consumed natively — nothing here returns result rows, so nothing
+        // crosses a CursorWindow OR the platform channel. Pulling the value
+        // out slice-by-slice through rawQuery did the same repair with a
+        // full re-materialization of the cell per round trip, which for the
+        // motivating 50MB playlist was gigabytes of churn inside the
+        // exclusive upgrade transaction — a first-boot hang for exactly the
+        // stranded install this repair exists to rescue. substr() is
+        // 1-based.
+        final chunkColumns = [
+          ...chunkKey.keys,
+          'seq',
+          'chunk',
+        ].join(', ');
+        final keyPlaceholders = chunkKey.keys.map((_) => '?').join(', ');
+        await db.execute(
+          '''WITH RECURSIVE seq(i) AS (
+               SELECT 0
+               UNION ALL
+               SELECT i + 1 FROM seq WHERE i + 1 < $chunkCount
+             )
+             INSERT INTO $chunkTable ($chunkColumns)
+             SELECT $keyPlaceholders, i,
+                    substr((SELECT sealed_secret_payload FROM $sourceTable
+                            WHERE $where),
+                           i * $_envelopeChunkChars + 1, $_envelopeChunkChars)
+             FROM seq''',
+          <Object?>[...chunkKey.values, ...whereArgs],
+        );
+        await db.rawUpdate(
+          'UPDATE $sourceTable SET sealed_secret_payload = ? WHERE $where',
+          <Object>['$_envelopeChunkMarkerPrefix$chunkCount', ...whereArgs],
+        );
+      }
+    }
+
+    await repair(
+      sourceTable: 'connection_resources',
+      chunkTable: 'resource_secret_chunks',
+      keyColumns: const <String>['id'],
+      chunkKeyBySource: const <String, String>{'id': 'resource_id'},
+    );
+    await repair(
+      sourceTable: 'profile_restore_resources',
+      chunkTable: 'restore_secret_chunks',
+      keyColumns: const <String>['restore_id', 'backup_id'],
+      chunkKeyBySource: const <String, String>{
+        'restore_id': 'restore_id',
+        'backup_id': 'backup_id',
+      },
+    );
+  }
 
   static Future<void> _createPinIntegrityTriggers(DatabaseExecutor db) async {
     for (final operation in const <String>['INSERT', 'UPDATE']) {
@@ -351,21 +509,27 @@ class ProfileRegistry {
 
   Future<String> exportRecoverySnapshot() async {
     final tables = <String, Object?>{};
-    for (final table in _recoveryTables) {
-      final rows = await _db.query(table);
-      tables[table] = rows
-          .map(
-            (row) => row.map(
-              (key, value) => MapEntry<String, Object?>(
-                key,
-                value is Uint8List
-                    ? <String, Object?>{'blob': base64Encode(value)}
-                    : value,
+    // One transaction across every table: a secret's marker row and its
+    // chunk rows live in different tables now, and a rotation committing
+    // between two bare reads would snapshot one secret's marker with
+    // another's body — a pairing the count check cannot always catch.
+    await _db.transaction((txn) async {
+      for (final table in _recoveryTables) {
+        final rows = await txn.query(table);
+        tables[table] = rows
+            .map(
+              (row) => row.map(
+                (key, value) => MapEntry<String, Object?>(
+                  key,
+                  value is Uint8List
+                      ? <String, Object?>{'blob': base64Encode(value)}
+                      : value,
+                ),
               ),
-            ),
-          )
-          .toList(growable: false);
-    }
+            )
+            .toList(growable: false);
+      }
+    });
     return jsonEncode(<String, Object?>{
       'version': 1,
       'schemaVersion': schemaVersion,
@@ -374,26 +538,48 @@ class ProfileRegistry {
     });
   }
 
+  /// Snapshot schema versions this build can ingest. The FLOOR matters as
+  /// much as the ceiling: the Keychain snapshot on a device was written by
+  /// whatever build ran last, and bootstrap imports it unconditionally on
+  /// every launch — an exact-match check here turned every schema bump into
+  /// a tvOS boot loop, because the first post-update launch met the previous
+  /// build's snapshot, threw out of main(), and died before any checkpoint
+  /// could republish a current one. Newer-than-us stays fatal: rows from a
+  /// future schema may not fit these tables.
+  static const int _minSupportedSnapshotSchema = 3;
+
   Future<void> importRecoverySnapshot(String source) async {
     final decoded = jsonDecode(source);
+    final snapshotSchema = decoded is Map ? decoded['schemaVersion'] : null;
     if (decoded is! Map ||
         decoded['version'] != 1 ||
-        decoded['schemaVersion'] != schemaVersion ||
+        snapshotSchema is! int ||
+        snapshotSchema < _minSupportedSnapshotSchema ||
+        snapshotSchema > schemaVersion ||
         decoded['tables'] is! Map) {
       throw const FormatException('Unsupported profile recovery snapshot');
     }
     final tables = decoded['tables']! as Map;
     for (final table in _recoveryTables) {
-      if (tables[table] is! List) {
-        throw FormatException('Recovery snapshot is missing $table');
+      if (tables[table] is List) continue;
+      // A table this snapshot's schema had not grown yet is EMPTY, not
+      // missing — the v4 snapshot on an updated device predates the chunk
+      // tables and must still boot.
+      if (snapshotSchema < 5 &&
+          const <String>{
+            'resource_secret_chunks',
+            'restore_secret_chunks',
+          }.contains(table)) {
+        continue;
       }
+      throw FormatException('Recovery snapshot is missing $table');
     }
     await _db.transaction((txn) async {
       for (final table in _recoveryTables.reversed) {
         await txn.delete(table);
       }
       for (final table in _recoveryTables) {
-        for (final raw in tables[table]! as List) {
+        for (final raw in (tables[table] as List? ?? const <Object?>[])) {
           if (raw is! Map) throw const FormatException('Invalid recovery row');
           final row = <String, Object?>{};
           for (final entry in raw.entries) {
@@ -407,6 +593,12 @@ class ProfileRegistry {
         }
       }
       await _assertAdminInvariant(txn);
+      // An older snapshot can carry envelopes as oversized INLINE columns
+      // (that is exactly what v4 stored). Chunk them on the way in, so the
+      // imported registry obeys the same invariant as a native v5 one.
+      if (snapshotSchema < 5) {
+        await _repairOversizedInlineEnvelopes(txn);
+      }
     });
     await _importTvOsRecoverablePreferences(
       decoded['preferences'],
@@ -1441,6 +1633,7 @@ class ProfileRegistry {
     int? actingAuthorizationRevision,
     int? actingSessionEpoch,
   }) async {
+    _guardTvOsEnvelopeBound(sealedSecretPayload);
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db.transaction((txn) async {
@@ -1464,13 +1657,19 @@ class ProfileRegistry {
         'label': resource.label,
         'owner_profile_id': resource.ownerProfileId,
         'public_config_json': jsonEncode(resource.publicConfig),
-        'sealed_secret_payload': sealedSecretPayload,
+        'sealed_secret_payload': _encodeEnvelopeColumn(sealedSecretPayload),
         'secret_payload_version': secretPayloadVersion,
         'authorization_revision': resource.authorizationRevision,
         'created_at_ms': now,
         'updated_at_ms': now,
         'disabled_at_ms': resource.enabled ? null : now,
       });
+      await _writeEnvelopeChunks(
+        txn,
+        'resource_secret_chunks',
+        <String, Object?>{'resource_id': resource.id},
+        sealedSecretPayload,
+      );
       await txn.insert('profile_resource_grants', <String, Object?>{
         'profile_id': resource.ownerProfileId,
         'resource_id': resource.id,
@@ -1513,9 +1712,27 @@ class ProfileRegistry {
     await checkpointTvOsRecovery();
   }
 
+  /// Columns [_decodeResource] needs — everything EXCEPT the sealed payload.
+  ///
+  /// Deliberate, not an optimization: `SELECT *` materializes the payload
+  /// column into Android's CursorWindow even when the caller never reads it,
+  /// and one legacy oversized inline envelope (pre-chunking rows) is enough
+  /// to abort every such query. Reads that want the envelope go through
+  /// [getSealedResourceSecret], which is chunk-aware.
+  static const List<String> _resourceRowColumns = <String>[
+    'id',
+    'type',
+    'label',
+    'owner_profile_id',
+    'public_config_json',
+    'authorization_revision',
+    'disabled_at_ms',
+  ];
+
   Future<ConnectionResource?> getResource(String id) async {
     final rows = await _db.query(
       'connection_resources',
+      columns: _resourceRowColumns,
       where: 'id = ?',
       whereArgs: <Object>[id],
       limit: 1,
@@ -1524,35 +1741,47 @@ class ProfileRegistry {
   }
 
   Future<SealedResourceSecretRecord?> getSealedResourceSecret(String id) async {
-    final rows = await _db.query(
-      'connection_resources',
-      columns: const <String>[
-        'id',
-        'type',
-        'owner_profile_id',
-        'public_config_json',
-        'sealed_secret_payload',
-        'secret_payload_version',
-      ],
-      where: 'id = ? AND disabled_at_ms IS NULL',
-      whereArgs: <Object>[id],
-      limit: 1,
-    );
-    if (rows.isEmpty || rows.single['sealed_secret_payload'] == null) {
-      return null;
-    }
-    final row = rows.single;
-    final publicConfig = Map<String, dynamic>.from(
-      jsonDecode(row['public_config_json']! as String) as Map,
-    );
-    return SealedResourceSecretRecord(
-      resourceId: row['id']! as String,
-      type: ConnectionResourceType.values.byName(row['type']! as String),
-      ownerProfileId: row['owner_profile_id']! as String,
-      publicSchemaVersion: publicConfig['schemaVersion']! as int,
-      payloadVersion: row['secret_payload_version']! as int,
-      envelope: row['sealed_secret_payload']! as String,
-    );
+    // One transaction for the marker and its chunks: a rotation landing
+    // between two bare reads could pair one secret's marker with another's
+    // body. The count check in [_loadEnvelope] catches most torn pairs, but
+    // a same-size rotation would pass it — atomicity, not detection, is the
+    // guarantee a SECRET read needs.
+    return _db.transaction((txn) async {
+      final rows = await txn.query(
+        'connection_resources',
+        columns: const <String>[
+          'id',
+          'type',
+          'owner_profile_id',
+          'public_config_json',
+          'sealed_secret_payload',
+          'secret_payload_version',
+        ],
+        where: 'id = ? AND disabled_at_ms IS NULL',
+        whereArgs: <Object>[id],
+        limit: 1,
+      );
+      if (rows.isEmpty || rows.single['sealed_secret_payload'] == null) {
+        return null;
+      }
+      final row = rows.single;
+      final publicConfig = Map<String, dynamic>.from(
+        jsonDecode(row['public_config_json']! as String) as Map,
+      );
+      return SealedResourceSecretRecord(
+        resourceId: row['id']! as String,
+        type: ConnectionResourceType.values.byName(row['type']! as String),
+        ownerProfileId: row['owner_profile_id']! as String,
+        publicSchemaVersion: publicConfig['schemaVersion']! as int,
+        payloadVersion: row['secret_payload_version']! as int,
+        envelope: await _loadEnvelope(
+          txn,
+          'resource_secret_chunks',
+          <String, Object?>{'resource_id': id},
+          row['sealed_secret_payload']! as String,
+        ),
+      );
+    });
   }
 
   Future<void> updateResourceSecret({
@@ -1563,6 +1792,7 @@ class ProfileRegistry {
     int? actingAuthorizationRevision,
     int? expectedResourceAuthorizationRevision,
   }) async {
+    _guardTvOsEnvelopeBound(sealedSecretPayload);
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
     await _db.transaction((txn) async {
@@ -1592,7 +1822,7 @@ class ProfileRegistry {
            WHERE id = ? AND disabled_at_ms IS NULL
              ${expectedResourceAuthorizationRevision == null ? '' : 'AND authorization_revision = ?'}''',
         <Object>[
-          sealedSecretPayload,
+          _encodeEnvelopeColumn(sealedSecretPayload),
           secretPayloadVersion,
           now,
           resourceId,
@@ -1601,6 +1831,13 @@ class ProfileRegistry {
         ],
       );
       if (changed != 1) throw StateError('Resource is unavailable');
+      // After the guard: a refused rotation must not touch the old chunks.
+      await _writeEnvelopeChunks(
+        txn,
+        'resource_secret_chunks',
+        <String, Object?>{'resource_id': resourceId},
+        sealedSecretPayload,
+      );
       final profiles = await txn.query(
         'profile_resource_grants',
         columns: const <String>['profile_id'],
@@ -1740,6 +1977,7 @@ class ProfileRegistry {
     int? expectedTargetAuthorizationRevision,
   }) async {
     if (currentOwnerProfileId == newOwnerProfileId) return;
+    _guardTvOsEnvelopeBound(resealedSecretPayload);
     await authorityWillChangeCallback?.call();
     await _db.transaction((txn) async {
       if (actingProfileId != null ||
@@ -1826,7 +2064,7 @@ class ProfileRegistry {
            WHERE id = ? AND owner_profile_id = ? AND disabled_at_ms IS NULL''',
         <Object>[
           newOwnerProfileId,
-          resealedSecretPayload,
+          _encodeEnvelopeColumn(resealedSecretPayload),
           secretPayloadVersion,
           now,
           resourceId,
@@ -1834,6 +2072,12 @@ class ProfileRegistry {
         ],
       );
       if (changed != 1) throw StateError('Connection ownership changed');
+      await _writeEnvelopeChunks(
+        txn,
+        'resource_secret_chunks',
+        <String, Object?>{'resource_id': resourceId},
+        resealedSecretPayload,
+      );
       final grantedRows = await txn.query(
         'profile_resource_grants',
         columns: const <String>['profile_id'],
@@ -1865,8 +2109,9 @@ class ProfileRegistry {
   Future<List<ConnectionResource>> listGrantedResources(
     String profileId,
   ) async {
+    final columns = _resourceRowColumns.map((c) => 'r.$c').join(', ');
     final rows = await _db.rawQuery(
-      '''SELECT r.* FROM connection_resources r
+      '''SELECT $columns FROM connection_resources r
          INNER JOIN profile_resource_grants g ON g.resource_id = r.id
          WHERE g.profile_id = ? AND r.disabled_at_ms IS NULL
          ORDER BY lower(r.label), r.id''',
@@ -1878,6 +2123,7 @@ class ProfileRegistry {
   Future<List<ConnectionResource>> listAllResources() async {
     final rows = await _db.query(
       'connection_resources',
+      columns: _resourceRowColumns,
       where: 'disabled_at_ms IS NULL',
       orderBy: 'created_at_ms, id',
     );
@@ -1905,6 +2151,9 @@ class ProfileRegistry {
     ProfileFeature? actingFeature,
   }) async {
     if (types.isEmpty) throw ArgumentError.value(types, 'types');
+    for (final replacement in replacements) {
+      _guardTvOsEnvelopeBound(replacement.sealedSecretPayload);
+    }
     await authorityWillChangeCallback?.call();
     final typeNames = types.map((type) => type.name).toList(growable: false);
     if (replacements.any(
@@ -1980,12 +2229,20 @@ class ProfileRegistry {
             'label': resource.label,
             'owner_profile_id': ownerProfileId,
             'public_config_json': jsonEncode(resource.publicConfig),
-            'sealed_secret_payload': replacement.sealedSecretPayload,
+            'sealed_secret_payload': _encodeEnvelopeColumn(
+              replacement.sealedSecretPayload,
+            ),
             'secret_payload_version': replacement.secretPayloadVersion,
             'authorization_revision': resource.authorizationRevision,
             'created_at_ms': now,
             'updated_at_ms': now,
           });
+          await _writeEnvelopeChunks(
+            txn,
+            'resource_secret_chunks',
+            <String, Object?>{'resource_id': resource.id},
+            replacement.sealedSecretPayload,
+          );
         } else {
           final priorRevision = prior['authorization_revision']! as int;
           if (resource.authorizationRevision != priorRevision + 1) {
@@ -1997,7 +2254,9 @@ class ProfileRegistry {
               'type': resource.type.name,
               'label': resource.label,
               'public_config_json': jsonEncode(resource.publicConfig),
-              'sealed_secret_payload': replacement.sealedSecretPayload,
+              'sealed_secret_payload': _encodeEnvelopeColumn(
+                replacement.sealedSecretPayload,
+              ),
               'secret_payload_version': replacement.secretPayloadVersion,
               'authorization_revision': resource.authorizationRevision,
               'updated_at_ms': now,
@@ -2010,6 +2269,12 @@ class ProfileRegistry {
           if (changed != 1) {
             throw StateError('Replacement source authority changed');
           }
+          await _writeEnvelopeChunks(
+            txn,
+            'resource_secret_chunks',
+            <String, Object?>{'resource_id': resource.id},
+            replacement.sealedSecretPayload,
+          );
         }
         await _compatUpsert(
           txn,
@@ -3304,6 +3569,9 @@ class ProfileRegistry {
     required List<String> stagedProfileIds,
     required List<StagedGraphResource> resources,
   }) async {
+    for (final item in resources) {
+      _guardTvOsEnvelopeBound(item.sealedSecretPayload);
+    }
     await authorityWillChangeCallback?.call();
     final now = DateTime.now().millisecondsSinceEpoch;
     final profileIds = stagedProfileIds.toSet();
@@ -3354,12 +3622,20 @@ class ProfileRegistry {
           'label': item.label,
           'owner_profile_id': item.ownerProfileId,
           'public_config_json': jsonEncode(item.publicConfig),
-          'sealed_secret_payload': item.sealedSecretPayload,
+          'sealed_secret_payload': _encodeEnvelopeColumn(
+            item.sealedSecretPayload,
+          ),
           'secret_payload_version': item.secretPayloadVersion,
           'authorization_revision': 1,
           'created_at_ms': now,
           'updated_at_ms': now,
         });
+        await _writeEnvelopeChunks(
+          txn,
+          'resource_secret_chunks',
+          <String, Object?>{'resource_id': item.id},
+          item.sealedSecretPayload,
+        );
         for (final grant in item.grants) {
           if (!profileIds.contains(grant.profileId)) {
             throw StateError('Imported grant target is not staged');
@@ -3525,18 +3801,29 @@ class ProfileRegistry {
     if (!ProfileScope.isValidProfileId(resourceId)) {
       throw ArgumentError.value(resourceId, 'resourceId');
     }
-    await _db.insert('profile_restore_resources', <String, Object?>{
-      'restore_id': operationId,
-      'resource_id': resourceId,
-      'backup_id': backupId,
-      'type': type.name,
-      'label': label.trim(),
-      'owner_profile_id': ownerProfileId,
-      'public_config_json': jsonEncode(publicConfig),
-      'sealed_secret_payload': sealedSecretPayload,
-      'secret_payload_version': secretPayloadVersion,
-      'permissions': permissions,
-      'binding_slot': bindingSlot,
+    _guardTvOsEnvelopeBound(sealedSecretPayload);
+    // One transaction: the chunk rows and the marker that promises them must
+    // land together, and this method previously wrote outside any txn.
+    await _db.transaction((txn) async {
+      await txn.insert('profile_restore_resources', <String, Object?>{
+        'restore_id': operationId,
+        'resource_id': resourceId,
+        'backup_id': backupId,
+        'type': type.name,
+        'label': label.trim(),
+        'owner_profile_id': ownerProfileId,
+        'public_config_json': jsonEncode(publicConfig),
+        'sealed_secret_payload': _encodeEnvelopeColumn(sealedSecretPayload),
+        'secret_payload_version': secretPayloadVersion,
+        'permissions': permissions,
+        'binding_slot': bindingSlot,
+      });
+      await _writeEnvelopeChunks(
+        txn,
+        'restore_secret_chunks',
+        <String, Object?>{'restore_id': operationId, 'backup_id': backupId},
+        sealedSecretPayload,
+      );
     });
     await checkpointTvOsRecovery();
   }
@@ -3578,18 +3865,36 @@ class ProfileRegistry {
         whereArgs: <Object>[operationId],
       );
       for (final row in stagedResources) {
+        // Marker-aware on BOTH sides: the staged row may hold a marker whose
+        // body lives in restore_secret_chunks, and the live copy re-chunks it
+        // under the resource's own key.
+        final envelope = await _loadEnvelope(
+          txn,
+          'restore_secret_chunks',
+          <String, Object?>{
+            'restore_id': operationId,
+            'backup_id': row['backup_id'],
+          },
+          row['sealed_secret_payload']! as String,
+        );
         await txn.insert('connection_resources', <String, Object?>{
           'id': row['resource_id'],
           'type': row['type'],
           'label': row['label'],
           'owner_profile_id': row['owner_profile_id'],
           'public_config_json': row['public_config_json'],
-          'sealed_secret_payload': row['sealed_secret_payload'],
+          'sealed_secret_payload': _encodeEnvelopeColumn(envelope),
           'secret_payload_version': row['secret_payload_version'],
           'authorization_revision': 1,
           'created_at_ms': now,
           'updated_at_ms': now,
         });
+        await _writeEnvelopeChunks(
+          txn,
+          'resource_secret_chunks',
+          <String, Object?>{'resource_id': row['resource_id']},
+          envelope,
+        );
         await txn.insert('profile_resource_grants', <String, Object?>{
           'profile_id': row['owner_profile_id'],
           'resource_id': row['resource_id'],
@@ -3925,6 +4230,131 @@ class ProfileRegistry {
           ? null
           : DateTime.fromMillisecondsSinceEpoch(row['disabled_at_ms']! as int),
     );
+  }
+
+  /// tvOS ceiling for ONE envelope, enforced BEFORE anything commits.
+  ///
+  /// The whole registry snapshot must fit the recovery store's 768KB
+  /// Keychain bound. An envelope past this cannot be made recoverable by any
+  /// storage scheme — and if one were allowed to commit, the write would
+  /// succeed, the post-commit checkpoint would throw, and EVERY subsequent
+  /// checkpoint from every mutation would keep throwing while the Keychain
+  /// snapshot went stale — which the next boot would then restore, silently
+  /// rolling the registry back. Refusing the one oversized item up front is
+  /// the honest failure. Android/desktop have no such bound and take the
+  /// chunked path instead.
+  static const int _tvOsEnvelopeBoundChars = 256 * 1024;
+
+  static void _guardTvOsEnvelopeBound(String envelope) {
+    if (!TvOsProfileRecoveryStore.supported) return;
+    if (envelope.length <= _tvOsEnvelopeBoundChars) return;
+    throw StateError(
+      'This connection is too large for Apple TV recovery storage '
+      '(${envelope.length} chars; limit $_tvOsEnvelopeBoundChars)',
+    );
+  }
+
+  /// Envelopes longer than this leave the row for a chunk table. Half the
+  /// 2MB CursorWindow ceiling, so the row keeps generous headroom for its
+  /// other columns and the chunk rows themselves never approach the limit.
+  static const int _envelopeInlineMaxChars = 512 * 1024;
+  static const int _envelopeChunkChars = 512 * 1024;
+  static const String _envelopeChunkMarkerPrefix = '@chunks:v1:';
+
+  /// Whether [envelope] must live in a chunk table.
+  ///
+  /// Size is the normal reason. The marker-prefix clause is defensive: real
+  /// envelopes are `native1:`-prefixed ciphertext and can never start with
+  /// the marker, but a crafted backup or remote payload could — stored
+  /// inline, it would be MISPARSED as a marker at read. Spilling it makes
+  /// the column a genuine marker whose chunks hold the impostor as data.
+  static bool _envelopeMustSpill(String envelope) =>
+      envelope.length > _envelopeInlineMaxChars ||
+      envelope.startsWith(_envelopeChunkMarkerPrefix);
+
+  /// The column value for [envelope]: itself when small, a marker when its
+  /// body belongs in a chunk table. Callers that get a marker back MUST also
+  /// call [_writeEnvelopeChunks] inside the same transaction — the marker
+  /// carries the chunk count so a torn pair is detectable at read.
+  static String _encodeEnvelopeColumn(String envelope) {
+    if (!_envelopeMustSpill(envelope)) return envelope;
+    final chunks =
+        (envelope.length + _envelopeChunkChars - 1) ~/ _envelopeChunkChars;
+    return '$_envelopeChunkMarkerPrefix${chunks < 1 ? 1 : chunks}';
+  }
+
+  static bool _isEnvelopeChunkMarker(String? value) =>
+      value != null && value.startsWith(_envelopeChunkMarkerPrefix);
+
+  /// Replaces [key]'s chunk rows with [envelope]'s body when it spills, and
+  /// just clears them when it fits inline. Always run AFTER the parent row
+  /// write (the chunk tables' foreign keys point at it) and inside its
+  /// transaction.
+  static Future<void> _writeEnvelopeChunks(
+    DatabaseExecutor db,
+    String table,
+    Map<String, Object?> key,
+    String envelope,
+  ) async {
+    final where = key.keys.map((k) => '$k = ?').join(' AND ');
+    final args = key.values.toList(growable: false);
+    await db.delete(table, where: where, whereArgs: args);
+    if (!_envelopeMustSpill(envelope)) return;
+    var seq = 0;
+    // A spilled marker-lookalike can be shorter than one chunk; the loop
+    // below still writes its single chunk because the empty envelope is
+    // unreachable (sealing always produces ciphertext).
+    for (var i = 0; i < envelope.length; i += _envelopeChunkChars) {
+      final end = i + _envelopeChunkChars < envelope.length
+          ? i + _envelopeChunkChars
+          : envelope.length;
+      await db.insert(table, <String, Object?>{
+        ...key,
+        'seq': seq++,
+        'chunk': envelope.substring(i, end),
+      });
+    }
+  }
+
+  /// The full envelope behind a stored column value — the value itself for
+  /// inline rows, reassembled chunks for markers.
+  static Future<String> _loadEnvelope(
+    DatabaseExecutor db,
+    String table,
+    Map<String, Object?> key,
+    String stored,
+  ) async {
+    if (!_isEnvelopeChunkMarker(stored)) return stored;
+    final expected = int.tryParse(
+      stored.substring(_envelopeChunkMarkerPrefix.length),
+    );
+    if (expected != null && expected < 1) {
+      // '@chunks:v1:0' would otherwise "round-trip" as an EMPTY envelope —
+      // zero rows equals zero expected — and an absent credential is the one
+      // corruption worse than a loud one.
+      throw StateError('Sealed payload marker is invalid ($stored) for $key');
+    }
+    final where = key.keys.map((k) => '$k = ?').join(' AND ');
+    final rows = await db.query(
+      table,
+      columns: const <String>['chunk'],
+      where: where,
+      whereArgs: key.values.toList(growable: false),
+      orderBy: 'seq',
+    );
+    if (expected == null || rows.length != expected) {
+      // Transactions make a torn pair unreachable; if one appears anyway,
+      // serving a truncated secret would decrypt to garbage or worse.
+      throw StateError(
+        'Sealed payload chunks are incomplete '
+        '(${rows.length}/${expected ?? '?'}) for $key',
+      );
+    }
+    final buffer = StringBuffer();
+    for (final row in rows) {
+      buffer.write(row['chunk'] as String);
+    }
+    return buffer.toString();
   }
 
   static ConnectionResource _decodeResource(Map<String, Object?> row) {

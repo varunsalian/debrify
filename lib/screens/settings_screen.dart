@@ -1641,6 +1641,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'skipdb',
           'introdb',
           'theintrodb',
+          'watch history',
+          'watched',
+          'completion',
+          'threshold',
+          'movie',
+          'episode',
         ],
       ),
       nav(
@@ -2349,6 +2355,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'Default Aspect Ratio',
         'Default video aspect / zoom',
         const ['aspect', 'ratio', 'zoom', 'fit', 'fill'],
+      ),
+      leaf(
+        'Playback',
+        'Watch completion thresholds',
+        'Choose when locally tracked movies and episodes are marked watched',
+        const [
+          'watch history',
+          'watched',
+          'completion',
+          'threshold',
+          'movie',
+          'episode',
+          'series',
+          'percentage',
+          'percent',
+          'rewatch',
+        ],
       ),
       leaf(
         'Playback',
@@ -5561,22 +5584,20 @@ class _SettingsLayout extends StatelessWidget {
                 SettingsRows.switchProfile,
                 onTap: onSwitchProfile,
               ),
-              SettingsTile.spec(
-                SettingsRows.addProfile,
-                onTap: onAddProfile,
-              ),
-              SettingsTile.spec(
-                SettingsRows.editProfile,
-                onTap: onEditProfile,
-              ),
+              SettingsTile.spec(SettingsRows.addProfile, onTap: onAddProfile),
+              SettingsTile.spec(SettingsRows.editProfile, onTap: onEditProfile),
             ] else
               SettingsTile.spec(
-                const SettingsRowContent(
+                SettingsRowContent(
                   icon: Icons.info_outline_rounded,
                   title: 'Profiles unavailable',
-                  subtitle: 'This install is running in legacy mode',
+                  // First line only: the captured reason can carry a stack
+                  // frame on its second line, and the row is one-line copy.
+                  subtitle: ProfileBootstrap.legacyReasonSummary
+                      .split('\n')
+                      .first,
                 ),
-                onTap: () async {},
+                onTap: () => showLegacyModeInfoDialog(context),
               ),
           ],
         );

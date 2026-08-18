@@ -1,15 +1,20 @@
 import 'dart:async';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:debrify/models/iptv_playlist.dart';
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/screens/search_screen.dart'
+    show SpotlightIptvCardPreview;
 import 'package:debrify/theme/app_theme.dart';
 import 'package:debrify/theme/app_theme_scope.dart';
 import 'package:debrify/theme/widgets/focus_expression.dart';
 import 'package:debrify/theme/widgets/parallax_focus.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
+import 'package:debrify/widgets/hero_trailer_backdrop.dart';
 import 'package:debrify/widgets/home/spotlight_board.dart';
 
 /// Spotlight's hero, which is the piece that changes Home's focus topology
@@ -74,7 +79,13 @@ void main() {
     }
   });
 
-  Widget host(List<StremioMeta> heroItems, List<SpotlightShelf> sections) =>
+  Widget host(
+    List<StremioMeta> heroItems,
+    List<SpotlightShelf> sections, {
+    bool dpad = true,
+    void Function(StremioMeta item)? onDwell,
+    VoidCallback? onTrailerStop,
+  }) =>
       MaterialApp(
         home: AppThemeScope(
           theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
@@ -85,6 +96,9 @@ void main() {
               heroNode: hero,
               heroAddon: _addon,
               onHeroOpen: (_, __) {},
+              onDwell: onDwell,
+              onTrailerStop: onTrailerStop,
+              dpad: dpad,
             ),
           ),
         ),
@@ -557,6 +571,163 @@ void main() {
     expect(SpotlightCardShape.poster.fit, BoxFit.cover);
     // Square, so the mark is not cropped to a portrait slot.
     expect(SpotlightCardShape.channel.aspect, 1);
+  });
+
+  testWidgets('an IPTV card preview uses the configured Home audio volume', (
+    tester,
+  ) async {
+    const volume = 62.0;
+    final channel = IptvChannel(
+      name: 'A Channel',
+      url: 'https://example.invalid/live.m3u8',
+      contentType: 'live',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SpotlightIptvCardPreview(
+          channel: channel,
+          ambientVolume: volume,
+        ),
+      ),
+    );
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is HeroTrailerBackdrop && widget.ambientVolume == volume,
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('an IPTV preview mounts only while its TV card has DPAD focus', (
+    tester,
+  ) async {
+    final a = _meta('tt1', 'Alpha');
+    const preview = ValueKey('iptv-card-preview');
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          SpotlightShelf(
+            title: 'IPTV Favourites',
+            nodes: rows[0],
+            items: [
+              SpotlightCard(
+                title: 'A Channel',
+                shape: SpotlightCardShape.channel,
+                onOpen: _noop,
+                previewBuilder: (_) => const SizedBox.expand(key: preview),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(preview), findsNothing);
+    rows[0][0].requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.byKey(preview), findsOneWidget);
+
+    hero.requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.byKey(preview), findsNothing);
+  });
+
+  testWidgets('an IPTV preview follows desktop hover, not keyboard focus', (
+    tester,
+  ) async {
+    final a = _meta('tt1', 'Alpha');
+    const preview = ValueKey('iptv-card-preview');
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          SpotlightShelf(
+            title: 'IPTV Favourites',
+            nodes: rows[0],
+            items: [
+              SpotlightCard(
+                title: 'A Channel',
+                shape: SpotlightCardShape.channel,
+                onOpen: _noop,
+                previewBuilder: (_) => const SizedBox.expand(key: preview),
+              ),
+            ],
+          ),
+        ],
+        dpad: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Desktop focus can remain on a card while the pointer goes elsewhere;
+    // it must not keep a second card decoder alive.
+    rows[0][0].requestFocus();
+    await tester.pumpAndSettle();
+    expect(find.byKey(preview), findsNothing);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.byType(ParallaxFocus).first));
+    await tester.pumpAndSettle();
+    expect(find.byKey(preview), findsOneWidget);
+
+    await mouse.moveTo(Offset.zero);
+    await tester.pumpAndSettle();
+    expect(find.byKey(preview), findsNothing);
+  });
+
+  testWidgets('a desktop IPTV preview preempts the rolling hero trailer', (
+    tester,
+  ) async {
+    final a = _meta('tt1', 'Alpha');
+    const preview = ValueKey('desktop-preempt-preview');
+    final dwelled = <String>[];
+    var trailerStops = 0;
+    await tester.pumpWidget(
+      host(
+        [a],
+        [
+          SpotlightShelf(
+            title: 'IPTV Favourites',
+            nodes: rows[0],
+            items: [
+              SpotlightCard(
+                title: 'A Channel',
+                shape: SpotlightCardShape.channel,
+                onOpen: _noop,
+                previewBuilder: (_) => const SizedBox.expand(key: preview),
+              ),
+            ],
+          ),
+        ],
+        dpad: false,
+        onDwell: (item) => dwelled.add(item.id),
+        onTrailerStop: () => trailerStops++,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+    expect(dwelled, ['tt1']);
+
+    final cardMouseRegion = tester.widget<MouseRegion>(
+      find.byType(MouseRegion).last,
+    );
+    cardMouseRegion.onEnter!(const PointerEnterEvent());
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(preview), findsOneWidget);
+    expect(trailerStops, 1);
+
+    cardMouseRegion.onExit!(const PointerExitEvent());
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+    expect(dwelled, ['tt1', 'tt1']);
   });
 
   testWidgets('a single-item reel shows no dots', (tester) async {

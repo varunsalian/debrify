@@ -14,6 +14,8 @@ import 'movie_metadata_service.dart';
 import 'stremio_iptv_service.dart';
 import 'stremio_service.dart';
 import 'subtitle_font_service.dart';
+import 'profiles/profile_preferences.dart';
+import 'profiles/profile_runtime.dart';
 
 typedef StreamNextProvider = Future<Map<String, String>?> Function();
 typedef TorboxNextProvider = StreamNextProvider; // Backward compatibility
@@ -98,6 +100,59 @@ class AndroidTvPlayerBridge {
   // heartbeat per [AnalyticsService.heartbeatInterval] so the analytics session
   // stays alive without flooding events.
   static DateTime? _lastPlaybackHeartbeat;
+  static Future<void> _subtitleAppearanceSaveQueue = Future<void>.value();
+
+  static Future<void> _saveSubtitleAppearance(
+    Map<String, dynamic> values,
+  ) async {
+    final operation = _subtitleAppearanceSaveQueue.then((_) async {
+      final expectedProfileId = values['profileId'];
+      final expectedGeneration = values['dataGeneration'];
+      final expectedSessionEpoch = values['sessionEpoch'];
+      final current = ProfileRuntime.capture();
+      if (expectedProfileId != current.profileId ||
+          expectedGeneration != current.dataGeneration ||
+          expectedSessionEpoch != current.sessionEpoch) {
+        throw StateError('Stale native subtitle appearance authority');
+      }
+      final size = values['subtitle_size_index'];
+      final style = values['subtitle_style_index'];
+      final color = values['subtitle_color_index'];
+      final background = values['subtitle_bg_index'];
+      final outline = values['subtitle_outline_color_index'];
+      final elevation = values['subtitle_elevation_index'];
+      final bold = values['subtitle_bold'];
+      final fontId = values['subtitle_selected_font_id'];
+      final update = <String, Object>{};
+      if (size is int) update['subtitle_size_index'] = size.clamp(0, 6);
+      if (style is int) update['subtitle_style_index'] = style.clamp(0, 4);
+      if (color is int) update['subtitle_color_index'] = color.clamp(0, 7);
+      if (background is int) {
+        update['subtitle_bg_index'] = background.clamp(0, 4);
+      }
+      if (outline is int) {
+        update['subtitle_outline_color_index'] = outline.clamp(0, 9);
+      }
+      if (elevation is int) {
+        update['subtitle_elevation_index'] = elevation.clamp(0, 4);
+      }
+      if (bold is bool) update['subtitle_bold'] = bold;
+      if (fontId is String && fontId.isNotEmpty) {
+        final fonts = await SubtitleFontService.instance.getAllFonts();
+        if (fonts.any((font) => font.id == fontId)) {
+          update['subtitle_selected_font_id'] = fontId;
+        }
+      }
+      if (update.isNotEmpty) {
+        final prefs = await ProfilePreferences.instance();
+        if (!await prefs.setNativeProjectionBatch(update)) {
+          throw StateError('Could not save native subtitle appearance');
+        }
+      }
+    });
+    _subtitleAppearanceSaveQueue = operation.catchError((_) {});
+    await operation;
+  }
 
   static void _maybeSendPlaybackHeartbeat(String player) {
     final now = DateTime.now();
@@ -214,6 +269,17 @@ class AndroidTvPlayerBridge {
             }
           }
           return null;
+        case 'saveSubtitleAppearance':
+          final raw = call.arguments;
+          if (raw is! Map) {
+            throw PlatformException(
+              code: 'invalid_subtitle_appearance',
+              message: 'Expected a subtitle appearance map',
+            );
+          }
+          final values = Map<String, dynamic>.from(raw);
+          await _saveSubtitleAppearance(values);
+          return true;
         case 'torboxPlaybackFinished':
         case 'realDebridPlaybackFinished':
         case 'streamPlaybackFinished':

@@ -178,6 +178,38 @@ void main() {
     );
 
     test(
+      'skips query-authenticated base and manifest URL duplicates',
+      () async {
+        Map<String, dynamic> descriptor(String transportUrl) => {
+          'manifest': {
+            'id': 'org.example.private',
+            'name': 'Private addon',
+            'resources': ['subtitles'],
+            'types': ['movie'],
+          },
+          'transportUrl': transportUrl,
+        };
+
+        await StremioService.instance.importAddonsFromJson(
+          jsonEncode({
+            'addons': [
+              descriptor('https://example.com/addon/manifest.json?token=a%2Fb'),
+            ],
+          }),
+        );
+        final result = await StremioService.instance.importAddonsFromJson(
+          jsonEncode({
+            'addons': [descriptor('https://example.com/addon?token=a%2Fb')],
+          }),
+        );
+
+        expect(result.imported, 0);
+        expect(result.skippedDuplicates, 1);
+        expect(await StremioService.instance.getAddons(), hasLength(1));
+      },
+    );
+
+    test(
       'preserves imported transport URLs that are not manifest URLs',
       () async {
         final payload = jsonEncode({

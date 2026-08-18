@@ -14,6 +14,7 @@ import 'package:debrify/widgets/detail/showcase_parts.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 import 'package:debrify/widgets/episodes_panel.dart';
 import 'package:debrify/widgets/tracker_brand_marks.dart';
+import 'package:debrify/utils/platform_util.dart';
 
 /// Showcase's band model and DPAD map.
 ///
@@ -25,19 +26,20 @@ import 'package:debrify/widgets/tracker_brand_marks.dart';
 const _tv = Size(960, 540);
 
 TraktEpisode _ep(int n) => TraktEpisode(
-      season: 5,
-      number: n,
-      title: 'Episode $n',
-      overview: 'Synopsis $n.',
-      firstAired: '2012-07-0$n',
-      runtime: 47,
-    );
+  season: 5,
+  number: n,
+  title: 'Episode $n',
+  overview: 'Synopsis $n.',
+  firstAired: '2012-07-0$n',
+  runtime: 47,
+);
 
 EpisodesPanelView _view({required bool manySeasons, int count = 5}) {
   final eps = [for (var i = 1; i <= count; i++) _ep(i)];
   return EpisodesPanelView(
     seasons: [
-      if (manySeasons) const TraktSeason(number: 4, episodeCount: 5, episodes: []),
+      if (manySeasons)
+        const TraktSeason(number: 4, episodeCount: 5, episodes: []),
       TraktSeason(number: 5, episodeCount: count, episodes: eps),
     ],
     selectedSeasonNumber: 5,
@@ -71,6 +73,7 @@ DetailModel _model({
   List<SeriesSource> sources = const [],
   List<StremioMeta> recs = const [],
   void Function(bool)? onDepth,
+  bool openingDataReady = true,
 }) {
   final item = StremioMeta(
     id: 'tt0903747',
@@ -96,6 +99,7 @@ DetailModel _model({
         : null,
     parentsGuide: null,
     recommendations: recs,
+    openingDataReady: openingDataReady,
     primaryLabel: 'Resume',
     sourceCount: sources.length,
     boundSources: sources,
@@ -142,28 +146,40 @@ Widget _host(
   bool manySeasons = true,
   int count = 5,
   bool tall = false,
-}) =>
-    MediaQuery(
-      data: MediaQueryData(size: tall ? const Size(960, 2000) : _tv),
-      child: MaterialApp(
-        home: AppThemeScope(
-          theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
-          child: Scaffold(
-            body: DetailShowcase(
+}) => MediaQuery(
+  data: MediaQueryData(size: tall ? const Size(960, 2000) : _tv),
+  child: MaterialApp(
+    home: AppThemeScope(
+      theme: AppTheme.fromDetail(DetailThemes.byId('signal')),
+      child: Scaffold(
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned(
+              top: 0,
+              left: 0,
+              child: Focus(
+                focusNode: m.focus.backNode,
+                child: const SizedBox.square(dimension: 1),
+              ),
+            ),
+            DetailShowcase(
               model: m,
               episodesHost: m.isMovie
                   ? null
                   : (builder) => Builder(
-                        builder: (context) => builder(
-                          context,
-                          _view(manySeasons: manySeasons, count: count),
-                        ),
+                      builder: (context) => builder(
+                        context,
+                        _view(manySeasons: manySeasons, count: count),
                       ),
+                    ),
             ),
-          ),
+          ],
         ),
       ),
-    );
+    ),
+  ),
+);
 
 /// Resizes the actual render surface. A `MediaQuery` wrapper does not — the
 /// view stays 800×600 and the lazy band list never builds what is below it,
@@ -180,8 +196,82 @@ Future<void> _press(WidgetTester t, LogicalKeyboardKey k) async {
 }
 
 void main() {
-  testWidgets('a series walks identity → seasons → episodes → cast → sources',
-      (tester) async {
+  testWidgets(
+    'TV holds a composed opening skeleton before revealing Showcase',
+    (tester) async {
+      PlatformUtil.debugSetAndroidTvCached(true);
+      addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+      _surface(tester, _tv);
+      final model = _model();
+
+      await tester.pumpWidget(_host(model));
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('showcase-tv-opening-skeleton')),
+        findsOneWidget,
+      );
+      // The real page is already mounted under the opaque gate so its lazy
+      // image widgets can resolve, but it must not take remote input yet.
+      expect(find.byType(ShowcaseIdentity), findsOneWidget);
+      expect(model.focus.primaryEntry.hasFocus, isFalse);
+
+      await tester.pump(const Duration(milliseconds: 220));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('showcase-tv-opening-skeleton')),
+        findsNothing,
+      );
+      expect(find.byType(ShowcaseIdentity), findsOneWidget);
+      expect(model.focus.primaryEntry.hasFocus, isTrue);
+    },
+  );
+
+  testWidgets('TV reveal preserves focus deliberately moved to shell chrome', (
+    tester,
+  ) async {
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    _surface(tester, _tv);
+    final model = _model();
+
+    await tester.pumpWidget(_host(model));
+    await tester.pump();
+    model.focus.backNode.requestFocus();
+    await tester.pump();
+    expect(model.focus.backNode.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('showcase-tv-opening-skeleton')),
+      findsNothing,
+    );
+    expect(model.focus.backNode.hasFocus, isTrue);
+    expect(model.focus.primaryEntry.hasFocus, isFalse);
+  });
+
+  testWidgets('TV gate stays composed while opening metadata is pending', (
+    tester,
+  ) async {
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    _surface(tester, _tv);
+    final loading = _model(openingDataReady: false);
+
+    await tester.pumpWidget(_host(loading));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.byKey(const ValueKey('showcase-tv-opening-skeleton')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a series walks identity → seasons → episodes → cast → sources', (
+    tester,
+  ) async {
     _surface(tester, const Size(960, 2000));
     await tester.pumpWidget(_host(_model(), tall: true));
     await tester.pumpAndSettle();
@@ -203,8 +293,9 @@ void main() {
     expect(find.byType(DetailShowcase), findsOneWidget);
   });
 
-  testWidgets('a single-season show has no Seasons band and no hole',
-      (tester) async {
+  testWidgets('a single-season show has no Seasons band and no hole', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(_model(), manySeasons: false));
     await tester.pumpAndSettle();
     expect(find.byType(ShowcaseSeasons, skipOffstage: false), findsNothing);
@@ -213,8 +304,9 @@ void main() {
     expect(find.byType(DetailShowcase), findsOneWidget);
   });
 
-  testWidgets('a movie has neither Seasons nor Episodes; Sources moves up',
-      (tester) async {
+  testWidgets('a movie has neither Seasons nor Episodes; Sources moves up', (
+    tester,
+  ) async {
     _surface(tester, const Size(960, 2000));
     await tester.pumpWidget(_host(_model(isMovie: true), tall: true));
     await tester.pumpAndSettle();
@@ -225,8 +317,9 @@ void main() {
     expect(find.byType(DetailShowcase), findsOneWidget);
   });
 
-  testWidgets('no cast means no Cast band — an empty row is not a band',
-      (tester) async {
+  testWidgets('no cast means no Cast band — an empty row is not a band', (
+    tester,
+  ) async {
     _surface(tester, const Size(960, 2000));
     await tester.pumpWidget(_host(_model(withCast: false), tall: true));
     await tester.pumpAndSettle();
@@ -252,8 +345,9 @@ void main() {
     expect(find.text('＋  Find sources', skipOffstage: false), findsOneWidget);
   });
 
-  testWidgets('trackers are READOUT in the meta line, never focusable',
-      (tester) async {
+  testWidgets('trackers are READOUT in the meta line, never focusable', (
+    tester,
+  ) async {
     await tester.pumpWidget(_host(_model()));
     await tester.pumpAndSettle();
     // The branded pills are gone from the action row entirely.
@@ -264,37 +358,31 @@ void main() {
     expect(find.text('S'), findsOneWidget);
   });
 
-  testWidgets('tracker action uses the connected service brand',
-      (tester) async {
-    await tester.pumpWidget(
-      _host(_model(hasTrakt: true, hasSimkl: false)),
-    );
+  testWidgets('tracker action uses the connected service brand', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_model(hasTrakt: true, hasSimkl: false)));
     await tester.pumpAndSettle();
     expect(find.byType(TraktMark), findsOneWidget);
     expect(find.byType(SimklMark), findsNothing);
 
-    await tester.pumpWidget(
-      _host(_model(hasTrakt: false, hasSimkl: true)),
-    );
+    await tester.pumpWidget(_host(_model(hasTrakt: false, hasSimkl: true)));
     await tester.pumpAndSettle();
     expect(find.byType(TraktMark), findsNothing);
     expect(find.byType(SimklMark), findsOneWidget);
   });
 
-  testWidgets('both connected trackers get their own branded action',
-      (tester) async {
-    await tester.pumpWidget(
-      _host(_model(withSecondaryTracker: true)),
-    );
+  testWidgets('both connected trackers get their own branded action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_model(withSecondaryTracker: true)));
     await tester.pumpAndSettle();
     expect(find.byType(TraktMark), findsOneWidget);
     expect(find.byType(SimklMark), findsOneWidget);
   });
 
   testWidgets('My Watchlist action reflects saved state', (tester) async {
-    await tester.pumpWidget(
-      _host(_model(withMyWatchlist: true)),
-    );
+    await tester.pumpWidget(_host(_model(withMyWatchlist: true)));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.bookmark_add_outlined), findsOneWidget);
 
@@ -305,8 +393,9 @@ void main() {
     expect(find.byIcon(Icons.bookmark_rounded), findsOneWidget);
   });
 
-  testWidgets('the title falls back to text when there is no logo art',
-      (tester) async {
+  testWidgets('the title falls back to text when there is no logo art', (
+    tester,
+  ) async {
     // ~1 metahub logo in 4 is a black wordmark, invisible on ink. The text
     // path is the other half of the design, not a degraded one.
     await tester.pumpWidget(_host(_model()));
@@ -327,14 +416,21 @@ void main() {
     final identity = tester.getSize(find.byType(ShowcaseIdentity)).height;
     final viewport = tester.getSize(find.byType(DetailShowcase)).height;
     final peek = viewport - identity;
-    expect(peek, greaterThan(50),
-        reason: 'nothing peeking reads as a dead end');
-    expect(peek, lessThan(viewport * 0.45),
-        reason: 'a whole band showing is the old layout, not a peek');
+    expect(
+      peek,
+      greaterThan(50),
+      reason: 'nothing peeking reads as a dead end',
+    );
+    expect(
+      peek,
+      lessThan(viewport * 0.45),
+      reason: 'a whole band showing is the old layout, not a peek',
+    );
   });
 
-  testWidgets('depth is announced to the shell, once per transition',
-      (tester) async {
+  testWidgets('depth is announced to the shell, once per transition', (
+    tester,
+  ) async {
     final depths = <bool>[];
     await tester.pumpWidget(_host(_model(onDepth: depths.add)));
     await tester.pumpAndSettle();

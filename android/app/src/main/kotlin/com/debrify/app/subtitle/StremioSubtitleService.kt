@@ -1,6 +1,7 @@
 package com.debrify.app.subtitle
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -126,6 +127,7 @@ data class AddonSubtitleResult(
 data class StremioAddon(
     val id: String,
     val name: String,
+    val manifestUrl: String = "",
     val baseUrl: String,
     val resources: List<String>,
     val types: List<String>,
@@ -133,6 +135,9 @@ data class StremioAddon(
 ) {
     val supportsSubtitles: Boolean
         get() = resources.contains("subtitles")
+
+    val needsManifestHydration: Boolean
+        get() = !supportsSubtitles && manifestUrl.isNotBlank()
 
     val supportsMovies: Boolean
         get() = types.contains("movie")
@@ -159,6 +164,7 @@ data class StremioAddon(
             return StremioAddon(
                 id = json.optString("id", "unknown"),
                 name = json.optString("name", "Unknown Addon"),
+                manifestUrl = json.optString("manifest_url", json.optString("manifestUrl", "")),
                 baseUrl = json.optString("base_url", ""),
                 resources = resources,
                 types = types,
@@ -211,7 +217,14 @@ class StremioSubtitleService(private val context: Context) {
                 allAddons.add(StremioAddon.fromJson(addonJson))
             }
 
-            allAddons.filter { it.enabled && it.supportsSubtitles }
+            // URL-only backup/remote-transfer records have not persisted their
+            // manifest fields yet. Keep them as candidates; the suspend fetch
+            // path hydrates the manifest before deciding whether this addon
+            // actually supports subtitles.
+            val selected = allAddons.filter {
+                it.enabled && (it.supportsSubtitles || it.needsManifestHydration)
+            }
+            selected
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse addons", e)
             emptyList()
@@ -335,14 +348,21 @@ class StremioSubtitleService(private val context: Context) {
         type: String,
         subtitleId: String
     ): List<StremioSubtitle> {
-        val url = "${addon.baseUrl}/subtitles/$type/$subtitleId.json"
-
         var lastError: Exception? = null
         var backoffMs = INITIAL_BACKOFF_MS
 
         for (attempt in 1..MAX_ATTEMPTS) {
             try {
-                return attemptFetch(addon, url)
+                // URL-only restore records need a manifest request before their
+                // subtitle endpoint is known. Keep that request inside the same
+                // retry ladder as the subtitle request so a transient manifest
+                // failure does not make the addon fail immediately.
+                val effectiveAddon = hydrateAddonForSubtitles(addon) ?: return emptyList()
+                val url = buildResourceUrl(
+                    effectiveAddon.baseUrl,
+                    "subtitles/$type/$subtitleId.json",
+                )
+                return attemptFetch(effectiveAddon, url)
             } catch (e: Exception) {
                 lastError = e
                 Log.w(TAG, "${addon.name} attempt $attempt/$MAX_ATTEMPTS failed: ${e.message}")
@@ -355,6 +375,74 @@ class StremioSubtitleService(private val context: Context) {
 
         Log.e(TAG, "${addon.name} exhausted $MAX_ATTEMPTS attempts, giving up")
         throw lastError ?: Exception("All retry attempts failed")
+    }
+
+    /** Hydrates URL-only restore records without mutating profile authority. */
+    private fun hydrateAddonForSubtitles(addon: StremioAddon): StremioAddon? {
+        if (addon.supportsSubtitles && addon.baseUrl.isNotBlank()) return addon
+        if (addon.manifestUrl.isBlank()) return null
+
+        val manifestUrl = normalizeManifestUrl(addon.manifestUrl)
+        val connection = URL(manifestUrl).openConnection() as HttpURLConnection
+        connection.connectTimeout = REQUEST_TIMEOUT_MS
+        connection.readTimeout = REQUEST_TIMEOUT_MS
+        connection.requestMethod = "GET"
+        connection.setRequestProperty("User-Agent", "Debrify/1.0")
+        try {
+            val responseCode = connection.responseCode
+            if (responseCode != 200) throw Exception("Manifest HTTP $responseCode")
+            val manifest = JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+            val resources = mutableListOf<String>()
+            manifest.optJSONArray("resources")?.let { array ->
+                for (index in 0 until array.length()) {
+                    when (val value = array.opt(index)) {
+                        is String -> resources.add(value)
+                        is JSONObject -> value.optString("name").takeIf { it.isNotBlank() }?.let(resources::add)
+                    }
+                }
+            }
+            if (!resources.contains("subtitles")) return null
+            val baseUrl = removeManifestPath(manifestUrl)
+            return addon.copy(
+                name = manifest.optString("name", addon.name),
+                manifestUrl = manifestUrl,
+                baseUrl = baseUrl,
+                resources = resources,
+            )
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun normalizeManifestUrl(raw: String): String {
+        var url = raw.trim()
+        if (url.startsWith("stremio://")) {
+            url = "https://${url.removePrefix("stremio://")}"
+        }
+        val uri = Uri.parse(url)
+        val path = uri.encodedPath.orEmpty().trimEnd('/')
+        if (path.endsWith("/manifest.json")) return uri.toString()
+        return uri.buildUpon()
+            .encodedPath("$path/manifest.json")
+            .build()
+            .toString()
+    }
+
+    /** Removes only the manifest path component, preserving auth query values. */
+    private fun removeManifestPath(manifestUrl: String): String {
+        val uri = Uri.parse(manifestUrl)
+        val path = uri.encodedPath.orEmpty().removeSuffix("/manifest.json").trimEnd('/')
+        return uri.buildUpon().encodedPath(path).build().toString()
+    }
+
+    /** Appends an addon resource path before any query string or fragment. */
+    private fun buildResourceUrl(baseUrl: String, resourcePath: String): String {
+        val uri = Uri.parse(baseUrl)
+        val basePath = uri.encodedPath.orEmpty().trimEnd('/')
+        return uri.buildUpon()
+            .encodedPath("$basePath/${Uri.encode(resourcePath, "/:")}")
+            .build()
+            .toString()
     }
 
     /**

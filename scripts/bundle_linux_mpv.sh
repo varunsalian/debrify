@@ -1,186 +1,95 @@
 #!/usr/bin/env bash
 #
-# Copy libmpv and its transitive dependencies into a built Flutter Linux
-# bundle, so the AppImage runs on hosts that have no libmpv installed.
+# Install Debrify's reproducible libmpv build into a Flutter Linux bundle.
 #
-# Why this exists: on Linux, package:media_kit bundles NOTHING. Both
-# media_kit_libs_linux and media_kit_video set their *_bundled_libraries
-# CMake variable to "", and media_kit_video links libmpv at build time via
-# pkg-config while media_kit ALSO dlopen()s it at runtime (see
-# packages/media_kit_patched/.../native_library.dart). So a stock
-# `flutter build linux` produces a bundle that silently depends on the host
-# having libmpv. Immutable distros (SteamOS on the Steam Deck) can't install
-# it, which is what sent our first Deck user to distrobox.
+# libmedia_kit_video_plugin.so has a hard DT_NEEDED edge to libmpv, while
+# package:media_kit also dlopen()s the same library from Dart.  Keep that
+# private dependency in bundle/lib/mpv and give only the plugin a RUNPATH to
+# it.  In particular, do NOT put bundle/lib/mpv on LD_LIBRARY_PATH: doing so
+# makes Ubuntu's multimedia, graphics and support libraries override the host
+# GTK/Mesa stack for the entire Flutter process.
 #
-# The bundle already has the plumbing to find libraries here: the runner's
-# rpath is $ORIGIN/lib (linux/CMakeLists.txt) and linux/AppRun exports
-# LD_LIBRARY_PATH pointing at the same directory. We only ever needed to put
-# the file there.
-#
-# Usage: scripts/bundle_linux_mpv.sh <path-to-bundle>
-#   e.g. scripts/bundle_linux_mpv.sh build/linux/x64/release/bundle
-#
-# Arch-agnostic — pkg-config resolves libmpv for whatever we're building.
+# Usage:
+#   scripts/bundle_linux_mpv.sh <flutter-bundle> <private-libmpv-directory>
 
 set -euo pipefail
 
-BUNDLE="${1:?usage: $0 <path-to-flutter-linux-bundle>}"
+BUNDLE="${1:?usage: $0 <flutter-bundle> <private-libmpv-directory>}"
+SOURCE="${2:?usage: $0 <flutter-bundle> <private-libmpv-directory>}"
 LIB="$BUNDLE/lib"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-EXCLUDELIST="$REPO_ROOT/linux/appimage-excludelist"
-
-[ -d "$LIB" ] || { echo "error: $LIB does not exist — build the app first" >&2; exit 1; }
-[ -f "$EXCLUDELIST" ] || { echo "error: missing $EXCLUDELIST" >&2; exit 1; }
-
-EXCLUDED="$(mktemp)"
-trap 'rm -f "$EXCLUDED"' EXIT
-
-# Strip comments and blank lines; the file format is one soname per line.
-# Note the upstream file deliberately comments OUT some entries (libglib,
-# libgtk, ...) to mean "do bundle these" — stripping from # to end of line
-# drops those, which is the intended reading.
-sed -e 's/#.*//' -e 's/[[:space:]]*$//' "$EXCLUDELIST" | grep -v '^[[:space:]]*$' > "$EXCLUDED"
-
-# Libraries that must come from the HOST, on top of the upstream excludelist.
-#
-# The glib family is ours to add because upstream's list can't know our
-# situation: it comments these out (i.e. "bundle them") for the general case,
-# but a Flutter app hard-links GTK3 from the host, so the host's glib is
-# already loaded in this process. Bundling a second copy and putting it first
-# on LD_LIBRARY_PATH means host GTK3 gets our glib — fine when ours is newer,
-# a missing-symbol crash when the host's GTK is newer than our glib. There can
-# only be one glib in the process and it has to be the host's.
-#
-# Deliberately NOT excluded here: libva*, libvdpau and libvulkan. They are hard
-# DT_NEEDED dependencies of Ubuntu's libmpv (verified against the libmpv2
-# package metadata), so omitting them means libmpv fails to load outright on
-# any host missing one. They are bundled and then redirected at the host's
-# drivers by linux/AppRun — see the long comment there.
-#
-# The second group is glib's own support stack. Excluding glib but bundling
-# the libraries that exist only to serve it just moves the skew one level
-# down — the host's glib would end up using our pcre2. Anything that can run
-# a GTK3 app necessarily has all of these, so leave the whole subtree host-
-# side. Entries that never appear in libmpv's closure are harmless no-ops.
-cat >> "$EXCLUDED" <<'EOF'
-libglib-2.0.so.0
-libgobject-2.0.so.0
-libgio-2.0.so.0
-libgmodule-2.0.so.0
-libgthread-2.0.so.0
-libpcre2-8.so.0
-libselinux.so.1
-libmount.so.1
-libblkid.so.1
-libffi.so.8
-libffi.so.7
-EOF
-
-# The third group is the rest of the GTK3 stack, and it is here for the same
-# reason as glib. We deliberately don't bundle GTK itself, so the host's
-# libgtk-3 is what loads — but LD_LIBRARY_PATH puts our lib/ first, so a
-# bundled pango or cairo is what host GTK would pick up. That pairs Ubuntu's
-# pango with the host's harfbuzz (excluded upstream), which is an undefined
-# symbol away from failing at startup. libgdk_pixbuf is worse: it loads image
-# modules from a compile-time path via a loaders.cache we don't ship, so it
-# only works host-side. Anything that can run this app has GTK3 and therefore
-# has all of these.
-cat >> "$EXCLUDED" <<'EOF'
-libcairo.so.2
-libcairo-gobject.so.2
-libpango-1.0.so.0
-libpangocairo-1.0.so.0
-libpangoft2-1.0.so.0
-libgdk_pixbuf-2.0.so.0
-libpixman-1.so.0
-libthai.so.0
-libdatrie.so.1
-libgraphite2.so.3
-libxkbcommon.so.0
-libwayland-cursor.so.0
-libwayland-egl.so.1
-libepoxy.so.0
-libatk-1.0.so.0
-libatk-bridge-2.0.so.0
-EOF
-
-MPV_LIBDIR="$(pkg-config --variable=libdir mpv)"
-
-# Don't hardcode the soname: Ubuntu 24.04 ships libmpv.so.2 (mpv 0.37+) but
-# older bases ship libmpv.so.1, and media_kit accepts either.
-MPV_SO=""
-for _soname in libmpv.so.2 libmpv.so.1; do
-  if [ -f "$MPV_LIBDIR/$_soname" ]; then
-    MPV_SO="$MPV_LIBDIR/$_soname"
-    MPV_SONAME="$_soname"
-    break
-  fi
-done
-[ -n "$MPV_SO" ] || { echo "error: no libmpv.so.{2,1} in $MPV_LIBDIR (is libmpv-dev installed?)" >&2; exit 1; }
-
-echo "==> Bundling $MPV_SONAME from $MPV_SO into $LIB"
-
-# ldd's output is already the full transitive closure, so one pass is enough.
-# Copy each dependency under its SONAME (field 1), not the basename of the
-# resolved path — those can differ (libfoo.so.1 -> libfoo.so.1.2.3) and the
-# loader only ever searches for the soname.
-copied=0
-skipped=0
-while read -r soname path; do
-  if grep -qxF -- "$soname" "$EXCLUDED"; then
-    echo "    skip (host)  $soname"
-    skipped=$((skipped + 1))
-    continue
-  fi
-  cp -L "$path" "$LIB/$soname"
-  echo "    bundle       $soname"
-  copied=$((copied + 1))
-done < <(ldd "$MPV_SO" | awk '/=> \//{print $1, $3}' | sort -u)
-
-cp -L "$MPV_SO" "$LIB/$MPV_SONAME"
-copied=$((copied + 1))
-
-echo "==> Bundled $copied libraries, left $skipped to the host"
-
-# Guard: prove every dependency we claimed to bundle actually resolves from
-# INSIDE the bundle. Checking only for ldd's "not found" would be close to
-# vacuous — on a fully provisioned CI runner anything we forgot still resolves
-# happily from /usr, and the check would pass on a bundle that dies on a user's
-# machine. So assert the resolved path, not merely that one exists.
-#
-# This is still not proof the AppImage runs on SteamOS: excluded libraries are
-# host-provided by design and unverifiable here, and nothing dlopen()ed at
-# runtime (VA/VDPAU/Vulkan drivers, ALSA and PipeWire plugins) appears in ldd
-# output at all. Only a Deck can answer that.
-echo "==> Verifying the bundled closure resolves from inside the bundle"
-LEAKS="$(mktemp)"
-trap 'rm -f "$EXCLUDED" "$LEAKS"' EXIT
-
-LD_LIBRARY_PATH="$LIB" ldd "$LIB/$MPV_SONAME" | awk '/=> \//{print $1, $3}' \
-  | while read -r soname path; do
-      grep -qxF -- "$soname" "$EXCLUDED" && continue
-      case "$path" in
-        "$LIB"/*) ;;
-        *) echo "  $soname resolved to $path" >> "$LEAKS" ;;
-      esac
-    done
-
-if [ -s "$LEAKS" ]; then
-  echo "error: these libmpv dependencies came from the host instead of the bundle:" >&2
-  cat "$LEAKS" >&2
-  echo "       either bundle them or add them to the exclusion set with a reason." >&2
-  exit 1
-fi
-
-# The media_kit plugin is checked only for hard failures: its own GTK linkage
-# is host-provided by Flutter's design, so "resolved outside the bundle" is
-# the expected state there, not an error.
+PRIVATE="$LIB/mpv"
 PLUGIN="$LIB/libmedia_kit_video_plugin.so"
-if [ -f "$PLUGIN" ] && LD_LIBRARY_PATH="$LIB" ldd "$PLUGIN" | grep -q 'not found'; then
-  echo "error: unresolved dependencies in libmedia_kit_video_plugin.so:" >&2
-  LD_LIBRARY_PATH="$LIB" ldd "$PLUGIN" | grep 'not found' >&2
+
+command -v patchelf >/dev/null || {
+  echo "error: patchelf is required" >&2
+  exit 1
+}
+command -v readelf >/dev/null || {
+  echo "error: readelf is required" >&2
+  exit 1
+}
+
+[ -d "$LIB" ] || { echo "error: Flutter bundle library directory not found: $LIB" >&2; exit 1; }
+[ -f "$PLUGIN" ] || { echo "error: media_kit video plugin not found: $PLUGIN" >&2; exit 1; }
+
+MPV_SOURCE="$SOURCE/libmpv.so.2"
+[ -f "$MPV_SOURCE" ] || {
+  echo "error: no libmpv.so.2 in $SOURCE" >&2
+  exit 1
+}
+
+# Refuse the old accidental distro closure.  The private build intentionally
+# contains libmpv (with FFmpeg/libass/libplacebo linked into it), not a copy of
+# every library installed on the CI runner.
+mapfile -t payload < <(find "$SOURCE" -maxdepth 1 -type f -name '*.so*' -printf '%f\n' | sort)
+if [ "${#payload[@]}" -ne 1 ]; then
+  printf 'error: private mpv payload must contain exactly one shared library; found:\n' >&2
+  printf '  %s\n' "${payload[@]}" >&2
   exit 1
 fi
 
-du -sh "$LIB" | awk '{print "==> bundle/lib is now " $1}'
-echo "==> OK"
+rm -rf "$PRIVATE"
+mkdir -p "$PRIVATE"
+cp -L "$MPV_SOURCE" "$PRIVATE/libmpv.so.2"
+chmod 0755 "$PRIVATE/libmpv.so.2"
+
+# The plugin's direct dependency is resolved privately. libmpv itself uses
+# host-facing graphics/audio ABI libraries and therefore needs no private
+# search path of its own.
+patchelf --set-rpath '$ORIGIN/mpv' "$PLUGIN"
+
+# Dart receives the absolute AppImage-relative path from AppRun. Keep the
+# canonical SONAME expected by media_kit and by the plugin.
+if [ "$(patchelf --print-soname "$PRIVATE/libmpv.so.2")" != "libmpv.so.2" ]; then
+  patchelf --set-soname libmpv.so.2 "$PRIVATE/libmpv.so.2"
+fi
+
+plugin_rpath="$(patchelf --print-rpath "$PLUGIN")"
+[ "$plugin_rpath" = '$ORIGIN/mpv' ] || {
+  echo "error: unexpected media_kit plugin RUNPATH: $plugin_rpath" >&2
+  exit 1
+}
+
+readelf -d "$PLUGIN" | grep -q 'Shared library: \[libmpv.so.2\]' || {
+  echo "error: media_kit video plugin does not require libmpv.so.2" >&2
+  exit 1
+}
+
+# ldd inspects the plugin in isolation, so it does not inherit the executable's
+# $ORIGIN/lib RUNPATH that normally resolves libflutter_linux_gtk.so. Expose
+# only the existing Flutter bundle directory for this verification; libmpv is
+# deliberately absent there and must still resolve through the plugin RUNPATH.
+loader_report="$(LD_LIBRARY_PATH="$LIB" ldd "$PLUGIN")"
+if grep -q 'not found' <<<"$loader_report"; then
+  echo "error: unresolved native dependency after private mpv installation:" >&2
+  grep 'not found' <<<"$loader_report" >&2
+  exit 1
+fi
+resolved_mpv="$(awk '/libmpv\.so\.2 =>/{print $3; exit}' <<<"$loader_report")"
+[ "$(readlink -f "$resolved_mpv")" = "$(readlink -f "$PRIVATE/libmpv.so.2")" ] || {
+  echo "error: plugin resolved libmpv outside its private directory: $resolved_mpv" >&2
+  exit 1
+}
+
+echo "==> Installed private libmpv at $PRIVATE/libmpv.so.2"
+echo "==> media_kit plugin RUNPATH: $plugin_rpath"

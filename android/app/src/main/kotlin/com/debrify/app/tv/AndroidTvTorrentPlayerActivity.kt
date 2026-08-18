@@ -728,6 +728,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var syncOverlay: SubtitleSyncOverlayController? = null
     private var linePickerOverlay: SubtitleLinePickerController? = null
     private var unifiedMenu: UnifiedMenuController? = null
+    private var sourceBrowser: TvSourceBrowserController? = null
     private val subtitleSeekHandler = Handler(Looper.getMainLooper())
     private val subtitleSeekRunnable = Runnable {
         player?.let { p ->
@@ -897,6 +898,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // ~100% and scrobble the item as fully watched. Both reset per item.
     private var maxStableDurationMs: Long = 0L
     private var lastRealPositionMs: Long = 0L
+    // One local-threshold report per playlist item. Flutter owns the durable
+    // completed state; this only prevents sending a write-trigger on every
+    // five-second progress pulse after the threshold has been crossed.
+    private val locallyCompletedItemIndices = mutableSetOf<Int>()
     private val bufferingHandler = Handler(Looper.getMainLooper())
     private var bufferingDebounceRunnable: Runnable? = null
 
@@ -1595,11 +1600,70 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             )
         }
 
+        findViewById<View?>(R.id.tv_source_browser_root)?.let { root ->
+            sourceBrowser = TvSourceBrowserController(
+                activity = this,
+                root = root,
+                rail = findViewById(R.id.tv_source_browser_rail),
+                railScroll = findViewById(R.id.tv_source_browser_rail_scroll),
+                header = findViewById(R.id.tv_source_browser_header),
+                count = findViewById(R.id.tv_source_browser_count),
+                context = findViewById(R.id.tv_source_browser_context),
+                loadMore = findViewById(R.id.tv_source_browser_load_more),
+                results = findViewById(R.id.tv_source_browser_results),
+                resultsScroll = findViewById(R.id.tv_source_browser_scroll),
+                callbacks = object : TvSourceBrowserController.Callbacks {
+                    override fun entries(): List<TvSourceBrowserEntry> = stremioSources.map { source ->
+                        TvSourceBrowserEntry(
+                            index = source.index,
+                            title = source.displayTitle,
+                            source = source.source,
+                            quality = source.quality,
+                            size = source.formattedSize,
+                            seeders = source.seeders,
+                            direct = source.isDirectStream,
+                            seasonPack = source.isSeasonPack,
+                        )
+                    }
+
+                    override fun currentIndex(): Int = currentStremioSourceIndex
+
+                    override fun isSeries(): Boolean =
+                        payload?.contentType?.lowercase(java.util.Locale.US) == "series"
+
+                    override fun loadMoreMode(): String? = when {
+                        seriesSourceTabs && !seriesPacksFetched -> "packs"
+                        seriesSourceTabs && !seriesEpisodesFetched -> "episodes"
+                        !seriesSourceTabs && movieMoreSources && !movieSourcesFetched -> "movie"
+                        else -> null
+                    }
+
+                    override fun isLoading(mode: String): Boolean =
+                        moreSourcesLoadingMode == mode
+
+                    override fun requestLoadMore(mode: String) {
+                        requestMoreTorrentSources(mode)
+                    }
+
+                    override fun onSourceSelected(index: Int) {
+                        if (index == currentStremioSourceIndex) return
+                        val source = stremioSources.firstOrNull { it.index == index } ?: return
+                        sourceBrowser?.hide()
+                        onStremioSourceSelected(source)
+                    }
+
+                    override fun onHidden() {
+                        findViewById<View>(R.id.android_tv_player_view)?.requestFocus()
+                    }
+                },
+            )
+        }
+
         bufferingIndicator = findViewById(R.id.android_tv_buffering_indicator)
         pikPakReactivationIndicator = findViewById(R.id.android_tv_pikpak_reactivation_indicator)
         pikPakReactivationText = findViewById(R.id.android_tv_pikpak_reactivation_text)
 
-        // Stremio sources badge (the picker itself lives in the unified menu)
+        // Stremio sources badge (opens the dedicated full-screen browser).
         stremioSourceBadge = findViewById(R.id.stremio_source_badge)
         stremioSourceBadgeText = findViewById(R.id.stremio_source_badge_text)
     }
@@ -1890,27 +1954,42 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // stops at whichever target hits first, exactly like stock.
             val hugeBuffer = networkBuffer == "huge"
             // Unlike mpv's native-memory demuxer cache, this target is JAVA
-            // heap (DefaultAllocator's byte[] segments) — an uncapped 512 MiB
-            // sails past the heap ceiling of most TV boxes and OOMs
-            // mid-playback on exactly the hardware this preset serves. Clamp
-            // to half the large-heap class so the buffer can never own more
-            // than half the heap; the preset then degrades gracefully on
-            // small boxes instead of crashing them.
+            // heap (DefaultAllocator's byte[] segments) shared with the
+            // Flutter engine, image caches, and every profile/guide
+            // structure in this process. The original clamp — HALF the
+            // large-heap class — was a ceiling, not headroom: on a 256
+            // MiB-class TV box a high-bitrate stream drove the allocator to
+            // 128 MiB of live byte[] and the loader thread died with
+            // OutOfMemoryError, an Error no player plumbing catches →
+            // process death straight to the launcher, on exactly the
+            // hardware this preset serves (Mecool KM2+ field report,
+            // 2026-08-18: one high-bitrate episode "crashes the app", every
+            // source). Budget a QUARTER of the heap instead, cap the
+            // requests well below the old 256/512 MiB, and when even the
+            // quarter is too small to be worth overriding, keep stock —
+            // stock's own byte targets are what the device already
+            // survives. Long math throughout: largeMemoryClass is an Int MB
+            // count, and `mb / 2 * 1024 * 1024` overflows Int from a 4
+            // GiB heap class up.
             val activityManager =
                 getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
-            val heapCapBytes = activityManager.largeMemoryClass / 2 * 1024 * 1024
-            val requestedBytes = (if (hugeBuffer) 512 else 256) * 1024 * 1024
-            playerBuilder.setLoadControl(
-                DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(
-                        if (hugeBuffer) 300_000 else 120_000, // minBufferMs
-                        if (hugeBuffer) 300_000 else 120_000, // maxBufferMs
-                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
-                        DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
-                    )
-                    .setTargetBufferBytes(minOf(requestedBytes, heapCapBytes))
-                    .build()
-            )
+            val heapBudgetBytes =
+                activityManager.largeMemoryClass.toLong() * 1024L * 1024L / 4L
+            val requestedBytes = (if (hugeBuffer) 192L else 96L) * 1024L * 1024L
+            val targetBytes = minOf(requestedBytes, heapBudgetBytes)
+            if (targetBytes >= 48L * 1024L * 1024L) {
+                playerBuilder.setLoadControl(
+                    DefaultLoadControl.Builder()
+                        .setBufferDurationsMs(
+                            if (hugeBuffer) 300_000 else 120_000, // minBufferMs
+                            if (hugeBuffer) 300_000 else 120_000, // maxBufferMs
+                            DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                            DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
+                        )
+                        .setTargetBufferBytes(targetBytes.toInt())
+                        .build()
+                )
+            }
         }
 
         player = playerBuilder.build()
@@ -1937,6 +2016,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Setup subtitle styling from saved preferences
         subtitleOverlay.setApplyEmbeddedStyles(false)
         subtitleOverlay.setApplyEmbeddedFontSizes(false)
+        SubtitleSettings.synchronizeProjectedAppearance(this)
+        SubtitleFontManager.synchronizeProjectedFont(this)
         // The sync offset is per-subtitle and in-memory: start this session at 0
         // and let SubtitleSettings scope it to whatever subtitle is on screen.
         SubtitleSettings.resetSyncOffset()
@@ -3153,6 +3234,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val addon = StremioAddon(
             id = "injected",
             name = groupName,
+            manifestUrl = "",
             baseUrl = "",
             resources = listOf("subtitles"),
             types = emptyList(),
@@ -3182,7 +3264,6 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         //    when that addon is retried.
         val contentToken = addonSubtitleFetchToken
         val addons = stremioSubtitleService?.getSubtitleAddons() ?: emptyList()
-
         addonSubtitleResults.clear()
         addons.forEach { addonSubtitleResults.add(AddonSubtitleResult(it, AddonSubtitleStatus.LOADING)) }
         isLoadingStremioSubtitles = addons.isNotEmpty()
@@ -4601,6 +4682,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             return subtitlePanel?.dispatchKey(event) ?: super.dispatchKeyEvent(event)
         }
 
+        if (sourceBrowser?.isVisible == true) {
+            return sourceBrowser?.dispatchKey(event) ?: super.dispatchKeyEvent(event)
+        }
+
         // Handle unified player menu (Miller columns). Only navigation keys are
         // consumed; volume/media keys fall through to the system. In edit mode
         // (search field focused) all keys fall through so typing + IME work,
@@ -5757,6 +5842,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             !upNextVisible &&
             subtitlePanel?.isVisible != true &&
             unifiedMenu?.isVisible != true &&
+            sourceBrowser?.isVisible != true &&
             syncOverlay?.isVisible != true &&
             linePickerOverlay?.isVisible != true
         if (canOfferFocus && skipFocusOfferedKey != focusKey) {
@@ -6136,6 +6222,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         if (subtitlePanel?.isVisible == true) return false
         if (linePickerOverlay?.isVisible == true || syncOverlay?.isVisible == true) return false
         if (unifiedMenu?.isVisible == true) return false
+        if (sourceBrowser?.isVisible == true) return false
         if (nextOverlay.visibility == View.VISIBLE) return false
         if (pikPakReactivationIndicator.visibility == View.VISIBLE) return false
         return true
@@ -6677,12 +6764,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * defaults loaded in onCreate).
      */
     private val recordingEngineEnabled: Boolean by lazy {
-        com.debrify.app.profiles.ProfilePreferenceProjection.isCommitted(this) ||
-            com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
-                this,
-                "recording_engine_enabled",
-                true,
-            )
+        com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
+            this,
+            "recording_engine_enabled",
+            true,
+        )
     }
 
     /** Repaints the Record button whenever an engine capture starts or ends —
@@ -11660,6 +11746,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         iptvStremioWinnerReported = false
         currentStremioSourceIndex = sourceIndex
         updateStremioQualityBadge()
+        sourceBrowser?.render()
         val entry = iptvChannels.getOrNull(currentIptvIndex)
         if (entry != null) {
             setIptvMediaItem(entry, url)
@@ -11716,6 +11803,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Keep the sources menu's active row in step with the auto-advance.
         if (stremioSources.isNotEmpty()) {
             currentStremioSourceIndex = next
+            sourceBrowser?.render()
         }
         setIptvMediaItem(entry, candidates[next].url)
         armIptvStremioStallWatchdog()
@@ -11886,7 +11974,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return listOf(
             mrow("Audio"),
             mrow("Subtitles", value = subBadge),
-            mrow("Sources", value = if (stremioSources.isNotEmpty()) "${stremioSources.size}" else null),
+            mrow(
+                "Sources",
+                value = if (stremioSources.isNotEmpty()) "${stremioSources.size}" else null,
+                enabled = stremioSources.isNotEmpty(),
+            ),
             mrow("Display"),
             mrow("Playback")
         )
@@ -11903,6 +11995,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 "playback" -> umPlaybackModel(col1, col2Index)
                 else -> UnifiedMenuController.Model(col1, "", emptyList(), "", emptyList())
             }
+        }
+
+        override fun onSectionActivated(sectionIndex: Int): Boolean {
+            if (unifiedSectionIds.getOrNull(sectionIndex) != "sources") return false
+            if (stremioSources.isEmpty()) return true
+            unifiedMenu?.hide()
+            sourceBrowser?.show()
+            return true
         }
 
         override fun onSearchSubmit(query: String) {
@@ -12078,7 +12178,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun umAppearanceRows(): List<UnifiedMenuController.Row> =
         // Shared with the Torbox player so the subtitle-appearance controls
         // can't drift between the two (see UnifiedMenuSections).
-        UnifiedMenuSections.appearanceRows(this) { applySubtitleSettings() }
+        UnifiedMenuSections.appearanceRows(this) { applyAndPersistSubtitleSettings() }
 
     private fun umTimingRows(): List<UnifiedMenuController.Row> {
         val ctx = this
@@ -12846,7 +12946,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         override fun onSearchSubtitle() { showSearchSubtitleDialog() }
         override fun getIdentityLabel(): String = currentSubtitleIdentityLabel()
-        override fun onSettingsChanged() { applySubtitleSettings() }
+        override fun onSettingsChanged() { applyAndPersistSubtitleSettings() }
         override fun onSyncOverlayRequested() { showSyncOverlay() }
         override fun onHidden() {
             subtitleSettingsVisible = false
@@ -13395,6 +13495,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun applyAndPersistSubtitleSettings() {
+        applySubtitleSettings()
+        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+            "saveSubtitleAppearance",
+            SubtitleSettings.profileAppearanceSnapshot(this),
+        )
+    }
+
     // Aspect ratio
     private fun cycleAspectRatio() {
         resizeModeIndex = (resizeModeIndex + 1) % resizeModes.size
@@ -13550,6 +13658,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // inflate progress% and scrobble a false watch on Trakt.
         val duration = maxOf(player?.duration ?: 0L, maxStableDurationMs)
         val position = if (completed) duration else player?.currentPosition ?: 0
+        val completionThreshold = if (model.contentType == "series") {
+            model.episodeCompletionThreshold
+        } else {
+            model.movieCompletionThreshold
+        }
+        val localCompleted =
+            model.localCompletionTracking &&
+            duration > 0L &&
+            position > 0L &&
+            position.toDouble() * 100.0 / duration.toDouble() >= completionThreshold &&
+            locallyCompletedItemIndices.add(currentIndex)
 
         // Update the item's progress in the payload for live UI updates
         val updatedItem = item.copy(
@@ -13574,6 +13693,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             "speed" to playbackSpeeds[playbackSpeedIndex].toDouble(),
             "aspect" to resizeModeLabels[resizeModeIndex].lowercase(),
             "completed" to completed,
+            "localCompleted" to localCompleted,
             "url" to item.url,
             "isPlaying" to (player?.isPlaying ?: false),
             "isBuffering" to (player?.playbackState == Player.STATE_BUFFERING)
@@ -13657,23 +13777,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
         // Setup quality badge
         updateStremioQualityBadge()
+        sourceBrowser?.render()
 
-        // Badge opens the unified menu's Sources section — the single picker,
-        // landing on the tab that holds the currently playing source.
+        // Sources use their own full-screen browser; the unified menu remains
+        // the home for player settings such as audio and subtitles.
         stremioSourceBadge?.setOnClickListener {
             hideControlsMenu()
-            unifiedMenu?.show("sources", currentSourcesTab())
-        }
-    }
-
-    /** col2 tag of the tab containing the current source (null → default). */
-    private fun currentSourcesTab(): String? {
-        val current = stremioSources.getOrNull(currentStremioSourceIndex) ?: return null
-        if (!seriesSourceTabs) return if (current.isDirectStream) "direct" else "torrent"
-        return when {
-            current.isDirectStream -> "direct"
-            current.isSeasonPack -> "packs"
-            else -> "episodes"
+            unifiedMenu?.hide()
+            sourceBrowser?.show()
         }
     }
 
@@ -13934,6 +14045,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         moreSourcesLoadingMode = mode
         unifiedMenu?.render()
+        sourceBrowser?.render()
         // Current playlist position: a season-pack playlist auto-advances
         // episodes without relaunching, so the fetch must target what's
         // playing NOW, not the launch episode.
@@ -13995,12 +14107,18 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         (map["movieFetched"] as? Boolean)?.let { movieSourcesFetched = it }
         updateStremioQualityBadge()
         unifiedMenu?.render()
+        sourceBrowser?.render()
     }
 
     private fun failMoreTorrentSources(alreadyCleared: Boolean = false) {
         if (!alreadyCleared) moreSourcesLoadingMode = null
-        showStatusPillTransient("Couldn't load more sources")
+        if (sourceBrowser?.isVisible == true) {
+            sourceBrowser?.showError("Couldn't load more sources — try again")
+        } else {
+            showStatusPillTransient("Couldn't load more sources")
+        }
         unifiedMenu?.render()
+        sourceBrowser?.render()
     }
 
     private fun switchToSourcePlaylist(sourceIndex: Int, rawItems: List<*>) {
@@ -14115,6 +14233,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Update source state
         currentStremioSourceIndex = sourceIndex
         updateStremioQualityBadge()
+        sourceBrowser?.render()
 
         // Cancel any ongoing PikPak retry
         cancelPikPakRetry()
@@ -14217,6 +14336,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Update state
         currentStremioSourceIndex = sourceIndex
         updateStremioQualityBadge()
+        sourceBrowser?.render()
 
         // Cancel any ongoing PikPak retry before switching
         cancelPikPakRetry()
@@ -14372,6 +14492,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val traktProgressPercent = obj.optDouble("traktProgressPercent", 0.0).let {
                 if (it.isNaN() || it.isInfinite()) 0.0 else it
             }
+            val localCompletionTracking = obj.optBoolean("localCompletionTracking", false)
+            val movieCompletionThreshold =
+                obj.optInt("movieCompletionThreshold", 80).coerceIn(50, 95)
+            val episodeCompletionThreshold =
+                obj.optInt("episodeCompletionThreshold", 80).coerceIn(50, 95)
 
             // Parse Stremio sources for source switching
             val stremioSourcesJson = obj.optJSONArray("stremioSources")
@@ -14403,6 +14528,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             movieMoreSources = obj.optBoolean("movieMoreSources", false)
             movieSourcesFetched = obj.optBoolean("movieSourcesFetched", true)
             moreSourcesLoadingMode = null
+            locallyCompletedItemIndices.clear()
 
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
 
@@ -14420,6 +14546,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 httpHeaders = httpHeaders,
                 startAtPercent = startAtPercent,
                 traktProgressPercent = traktProgressPercent,
+                localCompletionTracking = localCompletionTracking,
+                movieCompletionThreshold = movieCompletionThreshold,
+                episodeCompletionThreshold = episodeCompletionThreshold,
             )
         } catch (e: Exception) {
             android.util.Log.e("AndroidTvPlayer", "parsePayload failed", e)
@@ -15541,6 +15670,9 @@ private data class PlaybackPayload(
     val perItemImdbIds: MutableMap<Int, String?> = mutableMapOf(), // Per-item IMDB IDs for movie collections (caches Cinemeta lookups)
     var startAtPercent: Double = 0.0, // Start video at this fraction (0.0 to 1.0) of duration — var so Stremio TV channel switches can update it
     val traktProgressPercent: Double = 0.0, // Trakt watch progress (0-100) for resume — takes priority over local resume
+    val localCompletionTracking: Boolean = false,
+    val movieCompletionThreshold: Int = 80,
+    val episodeCompletionThreshold: Int = 80,
 )
 
 private data class PlaybackItem(

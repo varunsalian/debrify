@@ -6,6 +6,7 @@ import '../models/stremio_addon.dart';
 import '../models/torrent.dart';
 import '../utils/concurrency.dart';
 import '../utils/json_isolate.dart';
+import '../utils/stremio_url.dart';
 import 'profiles/profile_preferences.dart';
 import 'profiles/profile_collection_resource_facade.dart';
 import 'profiles/connection_resource_service.dart';
@@ -629,38 +630,53 @@ class StremioService {
     final authorization = await ProfileAsyncAuthorization.capture(
       ProfileFeature.addonsAndEngines,
     );
-    final addons = await getAddons();
+    // forSettings, because the plain read HIDES disabled addons — the facade
+    // drops any row whose local settings say enabled == false. Reading that
+    // list here meant a disabled addon was not in it, so the toggle that would
+    // turn it back ON could never find it: disable worked once and enable
+    // never did.
+    final addons = await getAddons(forSettings: true);
     final index = addons.indexWhere((a) => a.storageKey == addonKey);
-    if (index >= 0) {
-      final addon = addons[index];
-      if (ProfileCollectionResourceFacade.active) {
-        final resourceId = addon.connectionResourceId;
-        final resourceRevision = addon.connectionResourceRevision;
-        if (resourceId == null || resourceRevision == null) {
-          throw const ResourceAuthorizationException(
-            'Addon connection authority is missing',
-          );
-        }
-        await ProfileCollectionResourceFacade.setLocalEnabled(
-          resourceId: resourceId,
-          resourceRevision: resourceRevision,
-          feature: ProfileFeature.addonsAndEngines,
-          enabled: enabled,
-        );
-        if (authorization != null && !authorization.isCurrentlyActive) {
-          throw StateError('Profile session changed before addon publication');
-        }
-        _addonsCache = null;
-        _recommendationsCache.clear();
-        _metaDetailsCache.clear();
-        _nonRecommendationAddonIds.clear();
-        _catalogCache.clear();
-        _notifyAddonsChanged();
-        return;
-      }
-      addons[index] = addon.copyWith(enabled: enabled);
-      await _saveAddons(addons, initiatingAuthorization: authorization);
+    if (index < 0) {
+      // Returning quietly here is how a caller passing the wrong key — a
+      // manifest URL, which IS the storage key until profiles turn addons
+      // into connection resources — became an invisible dead toggle rather
+      // than a crash. Say so; the key that missed is the whole diagnosis.
+      throw ArgumentError.value(
+        addonKey,
+        'addonKey',
+        'No addon with this storage key (expected storageKey, which is the '
+            'connection resource id under profiles — not the manifest URL)',
+      );
     }
+    final addon = addons[index];
+    if (ProfileCollectionResourceFacade.active) {
+      final resourceId = addon.connectionResourceId;
+      final resourceRevision = addon.connectionResourceRevision;
+      if (resourceId == null || resourceRevision == null) {
+        throw const ResourceAuthorizationException(
+          'Addon connection authority is missing',
+        );
+      }
+      await ProfileCollectionResourceFacade.setLocalEnabled(
+        resourceId: resourceId,
+        resourceRevision: resourceRevision,
+        feature: ProfileFeature.addonsAndEngines,
+        enabled: enabled,
+      );
+      if (authorization != null && !authorization.isCurrentlyActive) {
+        throw StateError('Profile session changed before addon publication');
+      }
+      _addonsCache = null;
+      _recommendationsCache.clear();
+      _metaDetailsCache.clear();
+      _nonRecommendationAddonIds.clear();
+      _catalogCache.clear();
+      _notifyAddonsChanged();
+      return;
+    }
+    addons[index] = addon.copyWith(enabled: enabled);
+    await _saveAddons(addons, initiatingAuthorization: authorization);
   }
 
   /// Refresh an addon's manifest
@@ -1284,7 +1300,11 @@ class StremioService {
     // This handles IDs like "vavoo_SKY%20ATLANTIC|group:it" that are partially encoded
     final decodedId = Uri.decodeComponent(streamId);
     final encodedStreamId = Uri.encodeComponent(decodedId);
-    final url = '${addon.baseUrl}/stream/$type/$encodedStreamId.json';
+    final url = buildStremioResourceUri(addon.baseUrl, <String>[
+      'stream',
+      type,
+      '$encodedStreamId.json',
+    ]).toString();
 
     try {
       final uri = Uri.parse(url);
@@ -1471,8 +1491,11 @@ class StremioService {
       // up enrichment. mapWithConcurrency preserves order, so results stay in
       // addon priority.
       final results = await mapWithConcurrency(candidates, (addon) async {
-        final url =
-            '${addon.baseUrl}/meta/$type/${Uri.encodeComponent(imdbId)}.json';
+        final url = buildStremioResourceUri(addon.baseUrl, <String>[
+          'meta',
+          type,
+          '${Uri.encodeComponent(imdbId)}.json',
+        ]).toString();
         final client = http.Client();
         try {
           final request = http.Request('GET', Uri.parse(url));
@@ -1796,8 +1819,6 @@ class StremioService {
     // Build catalog URL: {baseUrl}/catalog/{type}/{catalogId}.json
     // With extra parameters: {baseUrl}/catalog/{type}/{catalogId}/genre=Action.json
     // Multiple extras are joined with &: /genre=Action&skip=20.json
-    String url = '${addon.baseUrl}/catalog/${catalog.type}/${catalog.id}';
-
     // Build extra parameters
     final List<String> extraParts = [];
     if (genre != null && genre.isNotEmpty) {
@@ -1812,10 +1833,15 @@ class StremioService {
       }
     }
 
-    if (extraParts.isNotEmpty) {
-      url += '/${extraParts.join("&")}';
-    }
-    url += '.json';
+    final endpoint = extraParts.isEmpty
+        ? '${Uri.encodeComponent(catalog.id)}.json'
+        : Uri.encodeComponent(catalog.id);
+    final url = buildStremioResourceUri(addon.baseUrl, <String>[
+      'catalog',
+      catalog.type,
+      endpoint,
+      if (extraParts.isNotEmpty) '${extraParts.join("&")}.json',
+    ]).toString();
 
     final cached = forceRefresh ? null : _catalogCache[url];
     if (cached != null &&
@@ -1920,8 +1946,11 @@ class StremioService {
       return cached.videos;
     }
 
-    final url =
-        '${addon.baseUrl}/meta/series/${Uri.encodeComponent(contentId)}.json';
+    final url = buildStremioResourceUri(addon.baseUrl, <String>[
+      'meta',
+      'series',
+      '${Uri.encodeComponent(contentId)}.json',
+    ]).toString();
     debugPrint('StremioService: Fetching metadata');
 
     try {
@@ -2283,8 +2312,12 @@ class StremioService {
       extraParts.add('genre=${Uri.encodeComponent(genre)}');
     }
     if (skip > 0) extraParts.add('skip=$skip');
-    final url =
-        '${addon.baseUrl}/catalog/${catalog.type}/${catalog.id}/${extraParts.join("&")}.json';
+    final url = buildStremioResourceUri(addon.baseUrl, <String>[
+      'catalog',
+      catalog.type,
+      Uri.encodeComponent(catalog.id),
+      '${extraParts.join("&")}.json',
+    ]).toString();
 
     debugPrint(
       'StremioService: Searching catalog ${addon.name}/${catalog.name}',
@@ -2359,21 +2392,7 @@ class StremioService {
   // ============================================================
 
   String _normalizeManifestUrl(String manifestUrl) {
-    manifestUrl = manifestUrl.trim();
-
-    if (manifestUrl.startsWith('stremio://')) {
-      manifestUrl = 'https://${manifestUrl.substring('stremio://'.length)}';
-    }
-
-    if (!manifestUrl.endsWith('/manifest.json')) {
-      if (manifestUrl.endsWith('/')) {
-        manifestUrl = '${manifestUrl}manifest.json';
-      } else {
-        manifestUrl = '$manifestUrl/manifest.json';
-      }
-    }
-
-    return manifestUrl;
+    return normalizeStremioManifestUri(manifestUrl).toString();
   }
 
   String _normalizeImportedTransportUrl(String transportUrl) {
@@ -2410,27 +2429,23 @@ class StremioService {
     final trimmed = url.trim();
     if (trimmed.isEmpty) return const {};
 
-    final variants = <String>{trimmed};
-    const manifestSuffix = '/manifest.json';
-
-    if (trimmed.endsWith(manifestSuffix)) {
-      final base = trimmed.substring(0, trimmed.length - manifestSuffix.length);
-      if (base.isNotEmpty) {
-        variants.add(base);
-        variants.add('$base/');
-      }
-    } else {
-      final base = trimmed.endsWith('/')
-          ? trimmed.substring(0, trimmed.length - 1)
-          : trimmed;
-      if (base.isNotEmpty) {
-        variants.add(base);
-        variants.add('$base/');
-        variants.add('$base$manifestSuffix');
-      }
+    try {
+      final manifest = normalizeStremioManifestUri(trimmed);
+      final base = stremioBaseUriFromManifest(manifest.toString());
+      final baseWithSlash = base.replace(
+        path: base.path.endsWith('/') ? base.path : '${base.path}/',
+      );
+      return <String>{
+        trimmed,
+        manifest.toString(),
+        base.toString(),
+        baseWithSlash.toString(),
+      };
+    } on FormatException {
+      // Preserve the previous best-effort behavior for malformed imported
+      // values; validation will report the useful error later.
+      return <String>{trimmed};
     }
-
-    return variants;
   }
 
   List<dynamic> _extractAddonDescriptors(dynamic decoded) {

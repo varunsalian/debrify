@@ -1,0 +1,220 @@
+import 'package:debrify/models/torrent.dart';
+import 'package:debrify/screens/video_player/widgets/source_sheet.dart';
+import 'package:debrify/services/series_source_fetcher.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+Torrent _source({
+  required String name,
+  required String source,
+  StreamType type = StreamType.torrent,
+}) => Torrent(
+  rowid: 0,
+  infohash: 'a' * 40,
+  name: name,
+  sizeBytes: 2 * 1024 * 1024 * 1024,
+  createdUnix: 0,
+  seeders: 12,
+  leechers: 0,
+  completed: 0,
+  scrapedDate: 0,
+  source: source,
+  streamType: type,
+  directUrl: type == StreamType.directUrl
+      ? 'https://example.test/stream'
+      : null,
+);
+
+void main() {
+  testWidgets('groups by add-on while retaining original selection indexes', (
+    tester,
+  ) async {
+    int? selectedIndex;
+    final sources = [
+      _source(name: 'Current 2160p WEB-DL', source: 'stremio:torrentio'),
+      _source(name: 'Comet result 1080p', source: 'stremio:comet'),
+      _source(
+        name: 'Direct result',
+        source: 'stremio:torrentio',
+        type: StreamType.directUrl,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SourceSheet(
+            sources: sources,
+            currentSourceIndex: 0,
+            resolveSource: (_) async => 'https://example.test/resolved',
+            onSourceSelected: (index, _) => selectedIndex = index,
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('All add-ons'), findsOneWidget);
+    expect(find.text('Torrentio'), findsOneWidget);
+    expect(find.text('Comet'), findsOneWidget);
+    expect(find.text('DIRECT'), findsOneWidget);
+
+    await tester.tap(find.text('Torrentio'));
+    await tester.pump();
+    await tester.tap(find.text('Direct result'));
+    await tester.pump();
+
+    expect(selectedIndex, 2);
+  });
+
+  testWidgets('uses a compact source browser without overflowing in portrait', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SourceSheet(
+          sources: [
+            _source(
+              name:
+                  'A deliberately long complete-series source title 2160p WEB-DL',
+              source: 'stremio:torrentio',
+            ),
+            _source(name: 'Another source 1080p', source: 'stremio:comet'),
+          ],
+          currentSourceIndex: 0,
+          resolveSource: (_) async => 'https://example.test/resolved',
+          onSourceSelected: (_, _) {},
+          onClose: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('All add-ons'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('does not move above the first source without load more', (
+    tester,
+  ) async {
+    int? selectedIndex;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SourceSheet(
+          sources: [
+            _source(name: 'Current', source: 'stremio:torrentio'),
+            _source(name: 'Second', source: 'stremio:comet'),
+          ],
+          currentSourceIndex: 0,
+          resolveSource: (_) async => 'https://example.test/resolved',
+          onSourceSelected: (index, _) => selectedIndex = index,
+          onClose: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(selectedIndex, 1);
+  });
+
+  testWidgets('activates load more from the row above the first source', (
+    tester,
+  ) async {
+    var searches = 0;
+    final fetcher = SeriesSourceFetcher(
+      season: 1,
+      episode: 1,
+      searchPacks: (_, _) async {
+        searches++;
+        return <Torrent>[];
+      },
+      searchEpisodes: (_, _) async => <Torrent>[],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SourceSheet(
+          sources: [_source(name: 'Current', source: 'stremio:torrentio')],
+          currentSourceIndex: 0,
+          resolveSource: (_) async => 'https://example.test/resolved',
+          onSourceSelected: (_, _) {},
+          onClose: () {},
+          seriesFetcher: fetcher,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(searches, 1);
+  });
+
+  testWidgets('closes from the visible DPAD close control', (tester) async {
+    var closed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SourceSheet(
+          sources: [_source(name: 'Current', source: 'stremio:torrentio')],
+          currentSourceIndex: 0,
+          resolveSource: (_) async => 'https://example.test/resolved',
+          onSourceSelected: (_, _) {},
+          onClose: () => closed = true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('source-sheet-close')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(closed, isTrue);
+  });
+
+  testWidgets('uses horizontal DPAD navigation for compact add-ons', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    int? selectedIndex;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SourceSheet(
+          sources: [
+            _source(name: 'Torrentio result', source: 'stremio:torrentio'),
+            _source(name: 'Current Comet result', source: 'stremio:comet'),
+          ],
+          currentSourceIndex: 1,
+          resolveSource: (_) async => 'https://example.test/resolved',
+          onSourceSelected: (index, _) => selectedIndex = index,
+          onClose: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(selectedIndex, 0);
+  });
+}

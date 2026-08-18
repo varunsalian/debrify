@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/stremio_addon.dart';
 import '../models/stremio_subtitle.dart';
+import '../utils/stremio_url.dart';
 import 'stremio_service.dart';
 
 /// Service for fetching subtitles from Stremio addons.
@@ -30,12 +31,20 @@ class StremioSubtitleService {
   /// Get addons that support subtitles
   Future<List<StremioAddon>> getSubtitleAddons() async {
     final addons = await _stremioService.getEnabledAddons();
-    debugPrint('StremioSubtitleService: Total enabled addons: ${addons.length}');
+    debugPrint(
+      'StremioSubtitleService: Total enabled addons: ${addons.length}',
+    );
     for (final addon in addons) {
-      debugPrint('StremioSubtitleService: Addon "${addon.name}" resources: ${addon.resources}');
+      debugPrint(
+        'StremioSubtitleService: Addon "${addon.name}" resources: ${addon.resources}',
+      );
     }
-    final subtitleAddons = addons.where((a) => a.resources.contains('subtitles')).toList();
-    debugPrint('StremioSubtitleService: Subtitle addons: ${subtitleAddons.map((a) => a.name).toList()}');
+    final subtitleAddons = addons
+        .where((a) => a.resources.contains('subtitles'))
+        .toList();
+    debugPrint(
+      'StremioSubtitleService: Subtitle addons: ${subtitleAddons.map((a) => a.name).toList()}',
+    );
     return subtitleAddons;
   }
 
@@ -66,7 +75,8 @@ class StremioSubtitleService {
     final subtitleId = _buildSubtitleId(imdbId, season, episode);
 
     debugPrint(
-        'StremioSubtitleService: Fetching subtitles for $type/$subtitleId from ${addons.length} addons');
+      'StremioSubtitleService: Fetching subtitles for $type/$subtitleId from ${addons.length} addons',
+    );
 
     // Fetch from every subtitle addon in parallel. We intentionally don't
     // filter by the addon's declared `types` — that field describes an
@@ -79,8 +89,7 @@ class StremioSubtitleService {
     for (final addon in addons) {
       futures.add(
         _fetchSubtitlesFromAddon(addon, type, subtitleId).catchError((error) {
-          debugPrint(
-              'StremioSubtitleService: ${addon.name} error: $error');
+          debugPrint('StremioSubtitleService: ${addon.name} error: $error');
           failedAddons.add(addon.name);
           return <StremioSubtitle>[];
         }),
@@ -107,7 +116,8 @@ class StremioSubtitleService {
     allSubtitles.sort((a, b) => a.displayName.compareTo(b.displayName));
 
     debugPrint(
-        'StremioSubtitleService: Found ${allSubtitles.length} unique subtitles');
+      'StremioSubtitleService: Found ${allSubtitles.length} unique subtitles',
+    );
 
     return StremioSubtitleResult(
       subtitles: allSubtitles,
@@ -147,8 +157,11 @@ class StremioSubtitleService {
         () async {
           AddonSubtitleSlot updated;
           try {
-            final subs =
-                await _fetchSubtitlesFromAddon(addons[i], type, subtitleId);
+            final subs = await _fetchSubtitlesFromAddon(
+              addons[i],
+              type,
+              subtitleId,
+            );
             updated = slots[i].copyWith(
               status: AddonSubtitleStatus.ok,
               subtitles: subs,
@@ -231,7 +244,11 @@ class StremioSubtitleService {
     String type,
     String subtitleId,
   ) async {
-    final url = '${addon.baseUrl}/subtitles/$type/$subtitleId.json';
+    final url = buildStremioResourceUri(addon.baseUrl, <String>[
+      'subtitles',
+      type,
+      '$subtitleId.json',
+    ]).toString();
     debugPrint('StremioSubtitleService: Fetching from ${addon.name}: $url');
 
     Object? lastError;
@@ -243,7 +260,8 @@ class StremioSubtitleService {
       } catch (e) {
         lastError = e;
         debugPrint(
-            'StremioSubtitleService: ${addon.name} attempt $attempt/$_maxAttempts failed: $e');
+          'StremioSubtitleService: ${addon.name} attempt $attempt/$_maxAttempts failed: $e',
+        );
         if (attempt < _maxAttempts) {
           await Future.delayed(backoff);
           backoff *= _backoffMultiplier;
@@ -252,7 +270,8 @@ class StremioSubtitleService {
     }
 
     debugPrint(
-        'StremioSubtitleService: ${addon.name} exhausted $_maxAttempts attempts, giving up');
+      'StremioSubtitleService: ${addon.name} exhausted $_maxAttempts attempts, giving up',
+    );
     throw lastError ?? Exception('All retry attempts failed');
   }
 
@@ -265,7 +284,9 @@ class StremioSubtitleService {
   ) async {
     final uri = Uri.parse(url);
     final response = await http.get(uri).timeout(_requestTimeout);
-    debugPrint('StremioSubtitleService: ${addon.name} response: ${response.statusCode}');
+    debugPrint(
+      'StremioSubtitleService: ${addon.name} response: ${response.statusCode}',
+    );
 
     if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode}');
@@ -280,15 +301,16 @@ class StremioSubtitleService {
     }
 
     final subtitles = subtitlesRaw
-        .map((s) => StremioSubtitle.fromJson(
-              s as Map<String, dynamic>,
-              addon.name,
-            ))
+        .map(
+          (s) =>
+              StremioSubtitle.fromJson(s as Map<String, dynamic>, addon.name),
+        )
         .where((s) => s.url.isNotEmpty)
         .toList();
 
     debugPrint(
-        'StremioSubtitleService: ${addon.name} returned ${subtitles.length} subtitles');
+      'StremioSubtitleService: ${addon.name} returned ${subtitles.length} subtitles',
+    );
     return subtitles;
   }
 

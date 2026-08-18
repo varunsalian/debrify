@@ -97,6 +97,11 @@ class DetailModel {
   final ParentsGuideResult? parentsGuide;
   final List<StremioMeta> recommendations;
 
+  /// Whether the screen-level metadata that can add or reshape Showcase bands
+  /// has finished its opening pass. Other layouts ignore this; `true` by
+  /// default keeps independently constructed models immediately usable.
+  final bool openingDataReady;
+
   /// Primary button caption — "Resume · S5E9", "Start Watching", "Rewatch", …
   final String primaryLabel;
 
@@ -186,6 +191,7 @@ class DetailModel {
     required this.imdbExtra,
     required this.parentsGuide,
     required this.recommendations,
+    this.openingDataReady = true,
     required this.primaryLabel,
     required this.sourceCount,
     this.boundSources = const [],

@@ -36,6 +36,7 @@ import '../widgets/episodes_panel.dart';
 import '../widgets/horizontal_mouse_wheel.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/parents_guide_section.dart';
+import '../widgets/movie_watched_badge.dart';
 import '../services/trakt/trakt_episode_model.dart';
 import '../services/trakt/trakt_service.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
@@ -48,6 +49,7 @@ import '../theme/app_theme_controller.dart';
 import '../theme/theme_core_resolver.dart';
 import '../theme/theme_overrides.dart';
 import '../theme/shipped_themes.dart' show effectiveDetailTheme;
+import '../utils/artwork_url.dart';
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
 /// episode drill-down fused into one Stremio-styled screen. Reached only from
@@ -399,15 +401,17 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// The user's live Simkl relationship to this title. Null until
   /// [simklStatusLoader] resolves — mirrors [_traktStatus] one-for-one.
   SimklTitleStatus? _simklStatus;
+  bool _localMovieFinished = false;
+  bool _showcaseOpeningDataReady = false;
 
   /// Debrify's local watchlist is independent of tracker connectivity.
   bool _inMyWatchlist = false;
   bool get _supportsMyWatchlist =>
       StorageService.supportsMyWatchlistItem(_item);
   StremioMeta get _myWatchlistItem => StorageService.withMyWatchlistSource(
-        _item,
-        widget.item.sourceAddon ?? widget.addon,
-      );
+    _item,
+    widget.item.sourceAddon ?? widget.addon,
+  );
 
   /// The Simkl quick-actions strip to render: rebuilt against [_simklStatus]
   /// when a builder was supplied, else the static list passed in.
@@ -421,18 +425,32 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     MainPageBridge.addPlaybackReturnListener(_onPlaybackReturned);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _loadBoundSources();
-      _loadEnrichedMeta();
-      _loadImdbEnrichment();
-      _loadParentsGuide();
-      _loadRecommendations();
+      _loadShowcaseOpeningData();
       _loadTrailer();
       _loadAccent();
       _loadResumeInfo();
       _loadTraktStatus();
       _loadSimklStatus();
+      _loadLocalMovieFinished();
       _loadMyWatchlistState();
     });
+  }
+
+  Future<void> _loadShowcaseOpeningData() async {
+    try {
+      await Future.wait<void>([
+        _loadBoundSources(),
+        _loadEnrichedMeta(),
+        _loadImdbEnrichment(),
+        _loadParentsGuide(),
+        _loadRecommendations(),
+      ]);
+    } catch (_) {
+      // Each loader is best effort. One failed service must not hold the
+      // composed Showcase opening behind its readiness signal.
+    } finally {
+      if (mounted) setState(() => _showcaseOpeningDataReady = true);
+    }
   }
 
   @override
@@ -468,6 +486,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // away — re-read the Trakt status too.
     _loadTraktStatus();
     _loadSimklStatus();
+    _loadLocalMovieFinished();
     _loadMyWatchlistState();
     // And the episode list's ticks/progress: episode quick-play now plays on
     // top of this screen (like Resume), so the list is still alive when the
@@ -550,6 +569,17 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     }
   }
 
+  Future<void> _loadLocalMovieFinished() async {
+    if (!_isMovie) return;
+    final imdbId =
+        _item.effectiveImdbId ?? (_item.id.startsWith('tt') ? _item.id : null);
+    if (imdbId == null || imdbId.isEmpty) return;
+    final finished = await StorageService.isMovieFinished(imdbId);
+    if (mounted && finished != _localMovieFinished) {
+      setState(() => _localMovieFinished = finished);
+    }
+  }
+
   Future<void> _loadResumeInfo() async {
     final loader = widget.resumeInfoLoader;
     if (loader == null) return;
@@ -571,12 +601,21 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   /// "Resume" with an OTT-style "· S3E4" tag for series. Falls back to the
   /// static Play/Resume label until the resume state resolves.
   String get _primaryLabel {
-    if (!_resumeLoaded) return _isMovie ? 'Play' : 'Resume';
+    // Completion is available independently of the optional resume loader.
+    // Keep the rewatch affordance visible for movie routes that omit one.
+    if (!_resumeLoaded) {
+      if (_isMovie &&
+          (_localMovieFinished || _simklStatus?.currentStatus == 'completed')) {
+        return 'Rewatch';
+      }
+      return _isMovie ? 'Play' : 'Resume';
+    }
     if (!_resumeStarted) {
       // A movie already finished on Simkl (status `completed`) has no resume
       // session; its Play un-marks it watched so the rewatch re-enters
       // Continue Watching — surface that intent as "Rewatch".
-      if (_isMovie && _simklStatus?.currentStatus == 'completed') {
+      if (_isMovie &&
+          (_localMovieFinished || _simklStatus?.currentStatus == 'completed')) {
         return 'Rewatch';
       }
       return _isMovie ? 'Play' : 'Start Watching';
@@ -905,7 +944,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // which is a plain field read and notifies nobody — without this line the
     // page you edited from would be the last one to change.
     AppThemeScope.of(context);
-    final backdropUrl = _item.background ?? _item.poster;
+    // The backdrop is the one display-sized detail hero. Keep the model's
+    // catalog URL intact for rails, but ask MetaHub for the large source here.
+    final backdropUrl = highQualityArtworkUrl(_item.background ?? _item.poster);
     return PopScope(
       // While the trailer is fullscreen, Back closes it instead of leaving the
       // page — the same player stays alive and settles back into the backdrop.
@@ -942,8 +983,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                 // the key-art frame — and blurring it is why it read as dim
                 // mush next to the Apple app. Sharp for Showcase everywhere;
                 // the other layouts keep their ambient blur.
-                videoBlurSigma:
-                    widget.isTelevision || _style == 'showcase' ? 0 : 8,
+                videoBlurSigma: widget.isTelevision || _style == 'showcase'
+                    ? 0
+                    : 8,
                 // Dropped the moment the body walks past its hero: the
                 // reference's trailer belongs to the key-art frame, and playing
                 // one under a blurred field is a decoder held for nothing. It
@@ -1057,31 +1099,33 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                         // A radial gradient fill is a single cheap paint — no
                         // blur, no layer — so it's safe on the weak TV GPU.
                         if (_bodySpec.shellTint && !_trailerClearView)
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: TweenAnimationBuilder<Color?>(
-                              duration: const Duration(milliseconds: 500),
-                              tween: ColorTween(
-                                end: _accent.withValues(
-                                  alpha: _themedBody ? _theme.washOpacity : 0.16,
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: TweenAnimationBuilder<Color?>(
+                                duration: const Duration(milliseconds: 500),
+                                tween: ColorTween(
+                                  end: _accent.withValues(
+                                    alpha: _themedBody
+                                        ? _theme.washOpacity
+                                        : 0.16,
+                                  ),
                                 ),
-                              ),
-                              builder: (_, color, __) => DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: RadialGradient(
-                                    center: const Alignment(-0.7, -0.85),
-                                    radius: 1.5,
-                                    colors: [
-                                      color ?? Colors.transparent,
-                                      Colors.transparent,
-                                    ],
-                                    stops: const [0.0, 0.7],
+                                builder: (_, color, __) => DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: RadialGradient(
+                                      center: const Alignment(-0.7, -0.85),
+                                      radius: 1.5,
+                                      colors: [
+                                        color ?? Colors.transparent,
+                                        Colors.transparent,
+                                      ],
+                                      stops: const [0.0, 0.7],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
                         SafeArea(child: _buildBody(backdropUrl)),
                         // Back button.
                         Positioned(
@@ -1121,9 +1165,9 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
                   child: Padding(
                     padding: EdgeInsets.all(widget.isTelevision ? 20 : 12),
                     child: _TrailerPlayingChip(
-                onTap: _playTrailer,
-                theme: _themedBody ? _theme : null,
-              ),
+                      onTap: _playTrailer,
+                      theme: _themedBody ? _theme : null,
+                    ),
                   ),
                 ),
               ),
@@ -1168,6 +1212,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       imdbExtra: _imdbExtra,
       parentsGuide: _parentsGuide,
       recommendations: _recommendations ?? const [],
+      openingDataReady: _showcaseOpeningDataReady,
       primaryLabel: _primaryLabel,
       sourceCount: widget.boundSourceCount?.call(_item) ?? 0,
       boundSources: _boundSources,
@@ -1218,15 +1263,16 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       // With both connected this opens Trakt's sheet and Simkl stays reachable
       // from the More button beside it; there is no combined sheet to open,
       // and `_showAppActionsMenu` is the APP-action list, not a chooser.
-      onTrackers: (_traktOnlyMenuOptions.isNotEmpty &&
-              widget.onTraktAction != null)
+      onTrackers:
+          (_traktOnlyMenuOptions.isNotEmpty && widget.onTraktAction != null)
           ? _showQuickActionsMenu
           : (_menuOptionsSimkl.isNotEmpty && widget.onSimklAction != null
-              ? _showSimklQuickActionsMenu
-              : null),
+                ? _showSimklQuickActionsMenu
+                : null),
       // Only when Trakt already took the first slot; otherwise Simkl IS the
       // first slot above and this would mount the same sheet twice.
-      onTrackersSecondary: (_traktOnlyMenuOptions.isNotEmpty &&
+      onTrackersSecondary:
+          (_traktOnlyMenuOptions.isNotEmpty &&
               widget.onTraktAction != null &&
               _menuOptionsSimkl.isNotEmpty &&
               widget.onSimklAction != null)
@@ -1267,7 +1313,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   DetailBodySpec get _bodySpec => switch (_style) {
     // Marquee and Stage are showcase layouts — the artwork is the point, and
     // each already paints the gradient its own identity block sits on.
-    'marquee' || 'stage' || 'vista' || 'halo' => const DetailBodySpec(ownScrim: true),
+    'marquee' ||
+    'stage' ||
+    'vista' ||
+    'halo' => const DetailBodySpec(ownScrim: true),
     // Showcase paints a SPECIFIC angled scrim (100° from the left) and its own
     // ambient field. `ownScrim` alone only swaps the shell's diagonal for a
     // lighter one; compounded with Showcase's own gradient neither reaches the
@@ -1282,7 +1331,8 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
   bool get _themedBody => _style != 'classic';
 
   /// The ground the shell paints when the body asks for a flat one.
-  Color get _groundColor => _themedBody ? _theme.ground : const Color(0xFF0A0A0C);
+  Color get _groundColor =>
+      _themedBody ? _theme.ground : const Color(0xFF0A0A0C);
 
   /// The one thing that switches on the chosen layout. Everything around it —
   /// PopScope, the trailer backdrop and its promote/dismiss, the tint, the back
@@ -1397,7 +1447,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     }
     if (_wide) return _buildTwoPane(backdropUrl);
     return Column(
-      children: [_buildHero(), Expanded(child: _buildStackedBody())],
+      children: [
+        _buildHero(),
+        Expanded(child: _buildStackedBody()),
+      ],
     );
   }
 
@@ -1776,10 +1829,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           ),
           child: Text(
             cert,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
           ),
         ),
       );
@@ -1791,10 +1841,7 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
           children: [
             Text(
               rating.toStringAsFixed(1),
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
             ),
             const SizedBox(width: 6),
             Container(
@@ -2859,10 +2906,7 @@ class _CastTileState extends State<_CastTile> {
                         )
                       : Container(
                           color: widget.fallback,
-                          child: Icon(
-                            Icons.person,
-                            color: Colors.white38,
-                          ),
+                          child: Icon(Icons.person, color: Colors.white38),
                         ),
                 ),
               ),
@@ -2921,8 +2965,11 @@ class _RecCardState extends State<_RecCard> {
             onFocusChange: (f) => setState(() => _focused = f),
             child: AspectRatio(
               aspectRatio: 2 / 3,
-              child: (rec.poster != null && rec.poster!.isNotEmpty)
-                  ? CachedNetworkImage(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (rec.poster != null && rec.poster!.isNotEmpty)
+                    CachedNetworkImage(
                       imageUrl: rec.poster!,
                       fit: BoxFit.cover,
                       cacheManager: DebrifyImageCache.manager,
@@ -2933,7 +2980,20 @@ class _RecCardState extends State<_RecCard> {
                       errorWidget: (_, __, ___) =>
                           Container(color: widget.fallback),
                     )
-                  : Container(color: widget.fallback),
+                  else
+                    Container(color: widget.fallback),
+                  if (rec.type == 'movie' || rec.type == 'series')
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: MovieWatchedBadge(
+                        imdbId: rec.effectiveImdbId ?? rec.id,
+                        contentType: rec.type,
+                        compact: true,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -3057,7 +3117,8 @@ class _TrailerPlayingChip extends StatelessWidget {
     final t = theme;
     final radius = t?.brBtn ?? BorderRadius.circular(999);
     return Material(
-      color: t?.ground.withValues(alpha: 0.6) ??
+      color:
+          t?.ground.withValues(alpha: 0.6) ??
           Colors.black.withValues(alpha: 0.42),
       borderRadius: radius,
       child: InkWell(

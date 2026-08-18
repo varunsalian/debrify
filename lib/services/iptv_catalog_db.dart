@@ -1881,6 +1881,37 @@ class IptvCatalogDb {
     }
   }
 
+  /// Hide several categories in one transaction. The settings page exposes
+  /// this as "Hide all"; a provider can have hundreds of categories, so
+  /// issuing one durable write per row would visibly stall a TV box.
+  static void hideGroups(String catalogKey, Iterable<String> groups) {
+    if (!isOpen) return;
+    final names = {
+      for (final group in groups)
+        if (group.isNotEmpty) group,
+    };
+    if (names.isEmpty) return;
+
+    final db = _requireDb();
+    final insert = db.prepare(
+      'INSERT OR REPLACE INTO hidden_groups (catalog_key, grp, hidden_at) '
+      'VALUES (?, ?, ?)',
+    );
+    try {
+      db.execute('BEGIN');
+      final hiddenAt = DateTime.now().millisecondsSinceEpoch;
+      for (final group in names) {
+        insert.execute([catalogKey, group, hiddenAt]);
+      }
+      db.execute('COMMIT');
+    } catch (_) {
+      _rollbackQuietly(db);
+      rethrow;
+    } finally {
+      insert.dispose();
+    }
+  }
+
   /// Reveal every hidden category in [catalogKey].
   static void showAllGroups(String catalogKey) {
     if (!isOpen) return;

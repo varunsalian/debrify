@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Debrify · Sources by add-on</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --ink: #f7f7fb;
+        --muted: #9a9aa9;
+        --faint: #666674;
+        --line: rgba(255, 255, 255, 0.09);
+        --panel: rgba(16, 16, 18, .72);
+        --accent: #ed4d5b;
+        --accent-soft: rgba(237, 77, 91, 0.14);
+        --good: #65d49c;
+        --warning: #e5bc68;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        overflow: hidden;
+        background: #08090d;
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .stage {
+        min-height: 100vh;
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 14% 22%, rgba(196, 77, 67, .58), transparent 26%),
+          radial-gradient(circle at 72% 84%, rgba(28, 76, 94, .46), transparent 32%),
+          linear-gradient(110deg, #171016 0%, #26181c 36%, #0b1118 100%);
+      }
+
+      .stage::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        opacity: .65;
+        background:
+          linear-gradient(90deg, rgba(0, 0, 0, .44), transparent 48%),
+          repeating-linear-gradient(0deg, rgba(255, 255, 255, .018) 0 1px, transparent 1px 5px);
+      }
+
+      .show-meta {
+        position: absolute;
+        left: clamp(28px, 6vw, 104px);
+        bottom: clamp(34px, 7vh, 78px);
+        max-width: 490px;
+        text-shadow: 0 4px 28px #000;
+      }
+
+      .eyebrow, .section-label {
+        margin: 0;
+        color: #d7d7e0;
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+      }
+
+      .show-meta h1 {
+        margin: 9px 0 10px;
+        font-size: clamp(36px, 4.1vw, 64px);
+        letter-spacing: -.055em;
+        line-height: .98;
+      }
+
+      .show-meta p {
+        margin: 0;
+        color: #d8d8df;
+        font-size: 15px;
+      }
+
+      .scrim {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, rgba(0, 0, 0, .20), rgba(0, 0, 0, .55));
+      }
+
+      .sheet {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr);
+        background: rgba(16, 16, 18, .88);
+        backdrop-filter: blur(26px);
+      }
+
+      .playing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 4px var(--accent-soft);
+      }
+
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .sheet-body {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr);
+      }
+
+      .addons {
+        min-height: 0;
+        padding: 46px 30px 24px;
+        overflow: auto;
+        border-right: 1px solid var(--line);
+      }
+
+      .addons .section-label { padding: 0 14px 18px; color: rgba(255, 255, 255, .42); }
+
+      .addon {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 20px 1fr auto;
+        align-items: center;
+        gap: 8px;
+        margin: 1.5px 0;
+        padding: 10px 13px;
+        color: rgba(255, 255, 255, .80);
+        text-align: left;
+        background: transparent;
+        border: 0;
+        border-radius: 10px;
+      }
+
+      .addon:hover {
+        color: var(--ink);
+        background: rgba(255, 255, 255, .07);
+      }
+
+      .addon.selected {
+        color: var(--ink);
+        background: rgba(255, 255, 255, .10);
+      }
+
+      .addon-mark {
+        width: 20px;
+        height: 20px;
+        display: grid;
+        place-items: center;
+        color: rgba(255, 255, 255, .76);
+        background: rgba(255, 255, 255, .07);
+        border-radius: 6px;
+        font-size: 9px;
+        font-weight: 750;
+      }
+
+      .addon.selected .addon-mark { color: #fff; background: rgba(255, 255, 255, .14); }
+
+      .addon-name { font-size: 13.5px; font-weight: 600; }
+      .addon-count { color: rgba(255, 255, 255, .42); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+      .results {
+        min-width: 0;
+        min-height: 0;
+        padding: 46px clamp(34px, 5vw, 96px) 40px;
+        overflow: auto;
+      }
+
+      .results-header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin: 0 16px 16px;
+      }
+      .results-header h3 { margin: 0; color: rgba(255, 255, 255, .42); font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; }
+      .results-header span { color: rgba(255, 255, 255, .42); font-size: 11px; }
+
+      .source-context {
+        display: flex;
+        align-items: center;
+        margin: 0 16px 12px;
+        padding: 4px 0 8px;
+        color: rgba(255, 255, 255, .45);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .source-context b { color: var(--ink); }
+      .load-more {
+        width: calc(100% - 32px);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 0 16px 10px;
+        padding: 10px 15px;
+        color: rgba(255, 255, 255, .85);
+        text-align: left;
+        background: transparent;
+        border: 0;
+        border-radius: 9px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .load-more:hover { background: rgba(255, 255, 255, .07); }
+      .load-more span { color: rgba(255, 255, 255, .65); font-size: 19px; line-height: .5; }
+
+      .current-note {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 16px 10px;
+        padding: 4px 0 6px;
+        color: rgba(255, 255, 255, .45);
+        font-size: 12px;
+      }
+      .current-note b { color: rgba(255, 255, 255, .85); }
+
+      .source-list {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 5px;
+      }
+      .source {
+        width: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 14px;
+        min-height: 58px;
+        padding: 11px 18px;
+        color: rgba(255, 255, 255, .85);
+        text-align: left;
+        background: rgba(255, 255, 255, .025);
+        border: 0;
+        border-radius: 10px;
+        transition: background .14s ease, transform .16s ease;
+      }
+
+      .source:hover { background: rgba(255, 255, 255, .07); }
+      .source.current {
+        color: #000;
+        background: #fff;
+        box-shadow: 0 7px 22px rgba(0, 0, 0, .45);
+        transform: scale(1.005);
+      }
+      .source-copy { min-width: 0; display: contents; }
+      .source-title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .source-tags {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 6px;
+        align-items: center;
+        margin: 0;
+      }
+      .tag {
+        padding: 3px 6px;
+        color: rgba(255, 255, 255, .58);
+        background: rgba(255, 255, 255, .07);
+        border-radius: 5px;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1;
+      }
+      .tag.quality {
+        color: rgba(255, 255, 255, .82);
+        background: rgba(255, 255, 255, .12);
+        letter-spacing: .02em;
+      }
+      .source.current .tag { color: rgba(0, 0, 0, .58); background: rgba(0, 0, 0, .07); }
+      .source.current .tag.quality { color: rgba(0, 0, 0, .80); background: rgba(0, 0, 0, .11); }
+      .chips { display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: 6px; }
+      .chip {
+        padding: 2px 6px;
+        color: rgba(255, 255, 255, .70);
+        border: .75px solid rgba(255, 255, 255, .34);
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 740;
+        letter-spacing: .035em;
+        text-transform: uppercase;
+      }
+      .chip.direct { color: rgba(255, 255, 255, .75); }
+      .playing-glyph {
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 1px;
+        line-height: 1;
+      }
+      .source.current .playing-glyph { color: #ab2733; }
+
+      .empty {
+        display: grid;
+        min-height: 250px;
+        place-items: center;
+        color: var(--muted);
+        text-align: center;
+      }
+      .empty strong { display: block; margin-bottom: 6px; color: var(--ink); font-size: 15px; }
+
+      @media (max-width: 700px) {
+        body { overflow: auto; }
+        .stage { min-height: 100svh; }
+        .sheet { position: relative; width: 100%; min-height: 100svh; }
+        .sheet-body { grid-template-columns: 152px minmax(0, 1fr); }
+        .addons { padding: 20px 8px; }
+        .addons .section-label { padding: 0 8px 10px; font-size: 9px; }
+        .addon { grid-template-columns: 26px 1fr; padding: 10px 8px; }
+        .addon-count { display: none; }
+        .addon-name { overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+        .results { padding: 22px 12px; }
+        .source { grid-template-columns: 1fr; gap: 10px; }
+        .source-list { grid-template-columns: 1fr; }
+        .chips { justify-content: flex-start; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <section class="show-meta" aria-label="Playing media">
+        <p class="eyebrow">Now playing · S01 E04</p>
+        <h1>The Last Signal</h1>
+        <p>42:18 remaining</p>
+      </section>
+      <div class="scrim"></div>
+
+      <section class="sheet" aria-label="Sources">
+        <div class="sheet-body">
+          <aside class="addons" aria-label="Add-ons">
+            <p class="section-label">Sources</p>
+            <button class="addon selected" data-addon="all">
+              <span class="addon-mark all">✦</span><span class="addon-name">All add-ons</span><span class="addon-count">7</span>
+            </button>
+            <button class="addon" data-addon="torrentio">
+              <span class="addon-mark torrentio">T</span><span class="addon-name">Torrentio</span><span class="addon-count">3</span>
+            </button>
+            <button class="addon" data-addon="comet">
+              <span class="addon-mark comet">C</span><span class="addon-name">Comet</span><span class="addon-count">2</span>
+            </button>
+            <button class="addon" data-addon="mediafusion">
+              <span class="addon-mark fusion">M</span><span class="addon-name">MediaFusion</span><span class="addon-count">1</span>
+            </button>
+            <button class="addon" data-addon="knightcrawler">
+              <span class="addon-mark knight">K</span><span class="addon-name">KnightCrawler</span><span class="addon-count">1</span>
+            </button>
+          </aside>
+
+          <section class="results" aria-live="polite">
+            <div class="results-header">
+              <h3 id="results-title">All add-ons</h3>
+              <span id="results-count">7 sources</span>
+            </div>
+            <div class="source-context"><span><b>Season packs loaded.</b> Episode results are fetched separately; direct links stay with their add-on.</span></div>
+            <button class="load-more">Load episode sources <span>›</span></button>
+            <div class="current-note"><span class="playing-dot"></span><span><b>Playing now</b> · browse without switching</span></div>
+            <div class="source-list" id="source-list"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      // This is the initial, pack-first series result set. Episode results are
+      // requested separately by the existing "load more" path, not returned alongside it.
+      const sources = [
+        { addon: 'torrentio', title: 'The Last Signal · Complete Series · 2160p WEB-DL', quality: '4K HDR', size: '38.2 GB', seeds: '93 seeders', current: true },
+        { addon: 'torrentio', title: 'The Last Signal · Season 1 · 1080p WEB-DL', quality: '1080P', size: '18.6 GB', seeds: '184 seeders' },
+        { addon: 'torrentio', title: 'The Last Signal · Season 1 · Adaptive HLS', quality: 'Auto', size: 'Direct', seeds: 'Instant', direct: true },
+        { addon: 'comet', title: 'The Last Signal · Season 1 · 2160p WEB', quality: '4K HDR', size: '31.4 GB', seeds: '71 seeders' },
+        { addon: 'comet', title: 'The Last Signal · Complete Series · 1080p WEB', quality: '1080P', size: '23.1 GB', seeds: '327 seeders' },
+        { addon: 'mediafusion', title: 'The Last Signal · S01 · 1080p BluRay REMUX', quality: '1080P', size: '22.4 GB', seeds: '42 seeders' },
+        { addon: 'knightcrawler', title: 'The Last Signal · Complete Series · 720p WEBRip', quality: '720P', size: '11.7 GB', seeds: '18 seeders' }
+      ];
+
+      const labels = {
+        all: 'All add-ons', torrentio: 'Torrentio', comet: 'Comet', mediafusion: 'MediaFusion', knightcrawler: 'KnightCrawler'
+      };
+      let activeAddon = 'all';
+
+      const list = document.querySelector('#source-list');
+      const title = document.querySelector('#results-title');
+      const count = document.querySelector('#results-count');
+
+      function render() {
+        const visible = sources.filter((source) => activeAddon === 'all' || source.addon === activeAddon);
+        title.textContent = labels[activeAddon];
+        count.textContent = `${visible.length} ${visible.length === 1 ? 'source' : 'sources'}`;
+        list.innerHTML = visible.length ? visible.map((source) => `
+          <button class="source${source.current ? ' current' : ''}">
+            <span class="source-copy">
+              <span class="source-title">${source.title}</span>
+              <span class="source-tags"><span class="tag quality">${source.quality}</span><span class="tag">${source.size}</span><span class="tag">${source.seeds}</span></span>
+            </span>
+            <span class="chips">
+              ${source.current ? '<span class="playing-glyph" aria-label="Playing">▮▮▮</span>' : ''}
+              ${source.direct ? '<span class="chip direct">Direct</span>' : ''}
+            </span>
+          </button>
+        `).join('') : '<div class="empty"><div><strong>No sources from this add-on</strong>Choose another add-on.</div></div>';
+      }
+
+      document.querySelectorAll('.addon').forEach((button) => button.addEventListener('click', () => {
+        activeAddon = button.dataset.addon;
+        document.querySelectorAll('.addon').forEach((item) => item.classList.toggle('selected', item === button));
+        render();
+      }));
+      render();
+    </script>
+  </body>
+</html>

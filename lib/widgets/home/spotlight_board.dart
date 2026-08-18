@@ -11,8 +11,10 @@ import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/focus_expression.dart';
 import '../../theme/widgets/parallax_focus.dart';
+import '../../utils/artwork_url.dart';
 import '../../utils/dominant_color.dart';
 import 'row_tag_pill.dart';
+import '../movie_watched_badge.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/wide_touch_scale.dart';
 
@@ -40,6 +42,17 @@ class SpotlightCard {
   final VoidCallback? onOptions;
   final SpotlightCardShape shape;
 
+  /// Title identity for the effective watched marker. Null for channels,
+  /// playlists, and other non-title cards.
+  final String? watchedImdbId;
+  final String? watchedContentType;
+
+  /// A lightweight, in-card preview for the one card the user is actively
+  /// inspecting. It is built only while the card is hovered on pointer
+  /// surfaces, or holds DPAD focus on television; resting cards never mount a
+  /// player/decoder.
+  final WidgetBuilder? previewBuilder;
+
   const SpotlightCard({
     required this.title,
     required this.onOpen,
@@ -48,6 +61,9 @@ class SpotlightCard {
     this.progress,
     this.onOptions,
     this.shape = SpotlightCardShape.poster,
+    this.previewBuilder,
+    this.watchedImdbId,
+    this.watchedContentType,
   });
 }
 
@@ -492,12 +508,45 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// engine stayed mounted.
   bool _rolling = false;
 
+  /// Desktop previews and the hero share the process-wide video-output lease.
+  /// Keep a small owner set rather than a bool: when the pointer moves from
+  /// one live card to another, MouseRegion enter/exit ordering must never
+  /// briefly restart the hero between the two previews.
+  final Set<Object> _desktopPreviewOwners = <Object>{};
+
   /// One funnel for leaving the rolling state, so no exit path can forget to
   /// tell the host to tear the video down.
   void _stopRolling() {
     if (!_rolling) return;
     if (mounted) setState(() => _rolling = false);
     widget.onTrailerStop?.call();
+  }
+
+  /// A desktop IPTV card is about to mount its own video decoder. The hero
+  /// must yield its output lease before that mount; otherwise MediaKit queues
+  /// the card behind an ambient trailer that loops indefinitely. Re-arm the
+  /// hero only when the pointer has left every live card.
+  void _onDesktopPreviewActivityChanged(Object owner, bool active) {
+    if (widget.dpad) return;
+    final hadPreview = _desktopPreviewOwners.isNotEmpty;
+    if (active) {
+      _desktopPreviewOwners.add(owner);
+    } else {
+      _desktopPreviewOwners.remove(owner);
+    }
+    final hasPreview = _desktopPreviewOwners.isNotEmpty;
+    if (hadPreview == hasPreview) return;
+
+    if (hasPreview) {
+      _cadence?.cancel();
+      _cadence = null;
+      if (_rolling && mounted) setState(() => _rolling = false);
+      // Also cancels a hero resolve that has not reached its first frame yet.
+      widget.onTrailerStop?.call();
+      return;
+    }
+
+    _restartCadence();
   }
 
   void _restartCadence() {
@@ -508,6 +557,10 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     _cadence = null;
     _rolling = false;
     if (!mounted) return;
+    // The active card owns the one available decoder. A rebuild caused by
+    // loading more shelves or resolving hero art must not re-arm the hero
+    // underneath it.
+    if (_desktopPreviewOwners.isNotEmpty) return;
     // The cadence's only job is the trailer dwell now — with no trailer to
     // arm there is nothing to time. The reel itself moves only on input.
     if (!widget.trailersEnabled || widget.onDwell == null) return;
@@ -569,21 +622,25 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // Never an advance — see the cadence comment.
   }
 
-  /// Best full-bleed art for [item]: its own backdrop, else a metahub 16:9
+  /// Best full-bleed art for [item]: its own backdrop, else a MetaHub 16:9
   /// still derived from its IMDb id — the same synchronous trick the other
   /// stage layouts use, because catalog and Continue Watching items carry a
   /// poster but rarely a backdrop — and the poster only as a last resort.
-  /// The poster fallback is what blurry heroes are made of (~350px of 2:3
-  /// art cover-cropped over a full screen), so it is LAST, not second.
+  ///
+  /// This is intentionally the *large* MetaHub path. It feeds the single
+  /// full-screen hero only; shelf cards keep their medium artwork and small
+  /// decode budgets. The poster fallback is what blurry heroes are made of
+  /// (~350px of 2:3 art cover-cropped over a full screen), so it is LAST, not
+  /// second.
   static String? _heroArt(StremioMeta item) {
     final b = item.background;
-    if (b != null && b.isNotEmpty) return b;
+    if (b != null && b.isNotEmpty) return highQualityArtworkUrl(b);
     final tt = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
     if (tt != null) {
-      return 'https://images.metahub.space/background/medium/$tt/img';
+      return 'https://images.metahub.space/background/large/$tt/img';
     }
     final p = item.poster;
-    return (p != null && p.isNotEmpty) ? p : null;
+    return (p != null && p.isNotEmpty) ? highQualityArtworkUrl(p) : null;
   }
 
   int get _heroIndex {
@@ -1196,6 +1253,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final url = _heroArt(item);
+    final posterUrl = highQualityArtworkUrl(item.poster);
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
     final rolling = _rolling;
@@ -1234,11 +1292,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
               // Same guess-404 fallback as the wide backdrop: derived
               // metahub art can miss, and the poster beats a blank hero.
               errorWidget: (_, __, ___) =>
-                  (item.poster != null &&
-                          item.poster!.isNotEmpty &&
-                          item.poster != url)
+                  (posterUrl != null &&
+                          posterUrl.isNotEmpty &&
+                          posterUrl != url)
                       ? CachedNetworkImage(
-                          imageUrl: item.poster!,
+                          imageUrl: posterUrl,
                           fit: BoxFit.cover,
                           cacheManager: DebrifyImageCache.manager,
                           memCacheWidth: 900,
@@ -1377,6 +1435,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final url = _heroArt(item);
+    final posterUrl = highQualityArtworkUrl(item.poster);
     final flip = _flip;
     // Both scrims below were tuned against a STILL, where they only have to
     // keep white text off busy artwork. Left at that strength over a moving
@@ -1426,11 +1485,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             // for that title), fall back to the poster rather than a flat
             // ground: a soft hero beats a blank one.
             errorWidget: (_, __, ___) =>
-                (item.poster != null &&
-                        item.poster!.isNotEmpty &&
-                        item.poster != url)
+                (posterUrl != null &&
+                        posterUrl.isNotEmpty &&
+                        posterUrl != url)
                     ? CachedNetworkImage(
-                        imageUrl: item.poster!,
+                        imageUrl: posterUrl,
                         fit: BoxFit.cover,
                         cacheManager: DebrifyImageCache.manager,
                         memCacheWidth: 1400,
@@ -1818,6 +1877,9 @@ class SpotlightBoardState extends State<SpotlightBoard> {
                 captionBlock: captions ? m.captionBlock : 0,
                 showCaption: captions,
                 hoverable: !widget.dpad,
+                dpad: widget.dpad,
+                onDesktopPreviewActivityChanged:
+                    _onDesktopPreviewActivityChanged,
               ),
             ),
           ),
@@ -2046,6 +2108,17 @@ class _Card extends StatefulWidget {
   /// exactly one at HEAD.
   final bool hoverable;
 
+  /// Selects the input that owns an optional card preview: hover on a pointer
+  /// board, focus on a DPAD board. This deliberately does not use `_f || _h`:
+  /// a desktop card that retains keyboard focus while the pointer rests on a
+  /// different card must not leave a second live stream decoding offscreen.
+  final bool dpad;
+
+  /// Announces a pointer-owned live preview before it mounts, so the board
+  /// can release the hero trailer's single video-output lease first.
+  final void Function(Object owner, bool active)?
+      onDesktopPreviewActivityChanged;
+
   const _Card({
     required this.card,
     required this.node,
@@ -2056,6 +2129,8 @@ class _Card extends StatefulWidget {
     this.captionBlock = 0,
     this.showCaption = true,
     this.hoverable = false,
+    this.dpad = true,
+    this.onDesktopPreviewActivityChanged,
   });
 
   @override
@@ -2070,6 +2145,46 @@ class _CardState extends State<_Card> {
   /// visual that a keyboard put there.
   bool _h = false;
 
+  final Object _previewOwner = Object();
+  bool _previewActivityReported = false;
+
+  void _setHover(bool hovered) {
+    if (_h == hovered) return;
+    setState(() => _h = hovered);
+    _reportDesktopPreviewActivity(hovered);
+  }
+
+  void _reportDesktopPreviewActivity(bool active) {
+    final report = active &&
+        !widget.dpad &&
+        widget.card.previewBuilder != null;
+    if (_previewActivityReported == report) return;
+    _previewActivityReported = report;
+    widget.onDesktopPreviewActivityChanged?.call(_previewOwner, report);
+  }
+
+  @override
+  void didUpdateWidget(_Card oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final shouldReport =
+        _h && !widget.dpad && widget.card.previewBuilder != null;
+    if (_previewActivityReported && !shouldReport) {
+      _previewActivityReported = false;
+      oldWidget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
+    } else if (!_previewActivityReported && shouldReport) {
+      _previewActivityReported = true;
+      widget.onDesktopPreviewActivityChanged?.call(_previewOwner, true);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_previewActivityReported) {
+      widget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
@@ -2078,6 +2193,12 @@ class _CardState extends State<_Card> {
     final url = c.image;
     final contained = c.shape.fit == BoxFit.contain;
     final hasSubtitle = (c.subtitle ?? '').isNotEmpty;
+    final preview = c.previewBuilder;
+    // Exactly one card owns the decoder: desktop follows the pointer, TV
+    // follows the remote cursor. The preview is unmounted immediately when it
+    // stops being active, which tears its player down instead of leaving a
+    // decoder alive for every card crossed while browsing.
+    final previewActive = widget.dpad ? _f : _h;
 
     // The gradient remains part of the artwork so it covers and clips to the
     // whole poster as that poster grows. Only the glyph layer is counter-
@@ -2194,6 +2315,11 @@ class _CardState extends State<_Card> {
                     errorWidget: (_, __, ___) => const SizedBox.shrink(),
                   ),
                 ),
+              if (preview != null && previewActive)
+                // The art stays underneath until the first live frame lands,
+                // so a channel card never flashes to an empty/black plate
+                // while a stream resolves or buffers.
+                IgnorePointer(child: preview(context)),
               // Keep the gradient with the art: it must still grow to the
               // poster's full width and remain inside its rounded clip. The
               // text itself is the fixed-scale foreground above. No caption,
@@ -2224,6 +2350,16 @@ class _CardState extends State<_Card> {
                     minHeight: 2,
                     backgroundColor: Colors.black.withValues(alpha: 0.45),
                     valueColor: const AlwaysStoppedAnimation(Colors.white),
+                  ),
+                ),
+              if (c.watchedImdbId != null && c.watchedImdbId!.isNotEmpty)
+                Positioned(
+                  top: 7,
+                  right: 7,
+                  child: MovieWatchedBadge(
+                    imdbId: c.watchedImdbId!,
+                    contentType: c.watchedContentType ?? 'movie',
+                    compact: true,
                   ),
                 ),
             ],
@@ -2289,8 +2425,8 @@ class _CardState extends State<_Card> {
     );
     final interactive = widget.hoverable
         ? MouseRegion(
-            onEnter: (_) => setState(() => _h = true),
-            onExit: (_) => setState(() => _h = false),
+            onEnter: (_) => _setHover(true),
+            onExit: (_) => _setHover(false),
             child: tappable,
           )
         : tappable;

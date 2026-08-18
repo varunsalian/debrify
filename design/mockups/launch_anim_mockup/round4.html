@@ -1,0 +1,637 @@
+<!-- Debrify launch-ident pitch reel, ROUND 4 — five new directions.
+     Same law as rounds 2 & 3: an ident owns its TYPE + MATERIAL + LIGHT,
+     not just an intro. None of these reuse a lockup already shipped in R2
+     (Drop, Marquee, Prism, Horizon, Neon, Chrome, Monogram) or R3 (Aperture,
+     Blueprint, Ripple, Ember, Swiss, Origami, Anamorphic, Constellation,
+     Silk, Rack Focus).
+     New materials this round: CORONA rim-light, HOLO-FOIL diffraction,
+     DUST-MOTES in a beam, INTERFERENCE fringes, VOLUMETRIC GOD-RAYS.
+     All still land on a STATIC final frame (the hold-for-home contract),
+     and every noise term is progress-derived so the frame is motionless. -->
+<title>Debrify — Launch Idents · Round 4</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --ink:#05060D; --stage:#020617; --panel:#0C1120;
+    --line:rgba(233,237,255,.08); --text:#E9EDFF; --dim:#8B93B8;
+    --accent:#7B5CFF; --accent2:#818CF8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{color-scheme:dark}
+  body{background:var(--ink);color:var(--text);
+    font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 72px}
+  header{display:flex;align-items:baseline;gap:14px;margin-bottom:6px;flex-wrap:wrap}
+  header h1{font-size:22px;font-weight:800;letter-spacing:-.02em}
+  header .mono{margin-left:auto}
+  .mono{font:600 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  .sub{color:var(--dim);max-width:72ch;margin-bottom:22px}
+  .sub b{color:var(--text);font-weight:600}
+
+  .stage-shell{position:relative;border-radius:14px;padding:10px;
+    background:linear-gradient(180deg,#10162B,#080B18);
+    border:1px solid var(--line);
+    box-shadow:0 30px 80px -30px rgba(93,76,255,.28)}
+  .stage-shell canvas{display:block;width:100%;aspect-ratio:16/9;
+    border-radius:8px;background:var(--stage);cursor:pointer}
+  .stage-bar{display:flex;align-items:center;gap:14px;padding:12px 6px 2px;flex-wrap:wrap}
+  .stage-bar .name{font-weight:800;font-size:16px;letter-spacing:-.01em}
+  .stage-bar .type{color:var(--dim);font-size:12.5px}
+  .stage-bar .hint{margin-left:auto}
+  .tier{font:700 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;
+    text-transform:uppercase;padding:5px 9px;border-radius:999px;
+    border:1px solid var(--line);color:var(--dim)}
+  .tier.pick{color:#fff;border:none;background:linear-gradient(90deg,#4F74FF,#8A5CFF)}
+
+  .rail{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}
+  @media (max-width:760px){.rail{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:480px){.rail{grid-template-columns:1fr}}
+  .card{text-align:left;border-radius:12px;background:var(--panel);
+    border:1px solid var(--line);padding:0;overflow:hidden;cursor:pointer;
+    color:inherit;font:inherit;transition:border-color .15s,transform .15s}
+  .card:hover{transform:translateY(-2px)}
+  .card:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+  .card[aria-pressed="true"]{border-color:var(--accent)}
+  .card canvas{display:block;width:100%;aspect-ratio:16/9;background:var(--stage)}
+  .card .meta{padding:11px 13px 13px;border-top:1px solid var(--line)}
+  .card .row{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+  .card .row .name{font-weight:700;font-size:14px}
+  .card p{color:var(--dim);font-size:12.5px;line-height:1.5}
+  .card .spec{margin-top:7px;font:500 10.5px/1.5 ui-monospace,Menlo,monospace;
+    color:#6E7699;letter-spacing:.02em}
+  .card .spec b{color:var(--accent2);font-weight:700}
+  footer{margin-top:26px;color:#6E7699;font-size:12.5px;max-width:84ch;line-height:1.6}
+  footer b{color:var(--dim)}
+  @media (prefers-reduced-motion: reduce){.card:hover{transform:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Debrify · Launch Idents</h1>
+    <span class="mono">round 4 — five new materials</span>
+  </header>
+  <p class="sub">Rounds 2 & 3 already own aurora glass, gilded serif,
+  black-hole starlight, neon, chrome, hairline restraint, lens iris,
+  construction linework, water, iron, paper, anamorphic streak, star chart,
+  satin and bokeh. This round opens five <b>unclaimed materials</b> — a
+  corona of rim light, hologram diffraction, dust condensing into type,
+  interference fringes, and cathedral god-rays. Each still lands on a
+  <b>static final frame</b>.</p>
+
+  <div class="stage-shell">
+    <canvas id="stage" aria-label="Ident stage — click to replay"></canvas>
+    <div class="stage-bar">
+      <span class="name" id="stageName"></span>
+      <span class="tier" id="stageTier"></span>
+      <span class="type" id="stageType"></span>
+      <span class="hint mono" id="stageHint">click to replay</span>
+    </div>
+  </div>
+
+  <div class="rail" id="rail"></div>
+
+  <footer>
+    <b>Feasibility.</b> Everything here is 2-D vector paint — gradients,
+    clips, and at most one bounded mask layer (Hologram and Moiré reuse the
+    offscreen + source-atop/source-in trick Prism already ships in Flutter).
+    No shaders required on TV, no assets to decode before first frame.
+    Halo's corona is a stroke-with-glow plus inner fill (no mask); Cathedral
+    is six static rotated gradient wedges (8 draws); Motes is ~140 dots
+    (halve to ~70 on TV, drawn batched) with all motion progress-derived so
+    the settled frame is motionless. Glows use the two-stroke idiom already
+    shipped. The ~300 ms native window before Flutter's first frame stays a
+    static colour for all five.
+  </footer>
+</div>
+
+<script>
+'use strict';
+const WORD='DEBRIFY';
+const REDUCED=matchMedia('(prefers-reduced-motion: reduce)').matches || location.hash==='#still';
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const lerp=(a,b,t)=>a+(b-a)*t;
+const outBack=(t,s=1.7)=>1+(s+1)*Math.pow(t-1,3)+s*Math.pow(t-1,2);
+const outCubic=t=>1-Math.pow(1-t,3);
+const inCubic=t=>t*t*t;
+const ioSine=t=>-(Math.cos(Math.PI*t)-1)/2;
+const fract=x=>x-Math.floor(x);
+const n1=x=>fract(Math.sin(x*127.1)*43758.5453);   /* deterministic noise */
+
+/* rounded play triangle centred at origin, inscribed in ±s/2 */
+function playPath(ctx,s){
+  const pts=[[-.30*s,-.40*s],[-.30*s,.40*s],[.43*s,0]],r=.14*s;
+  ctx.beginPath();
+  for(let i=0;i<3;i++){
+    const a=pts[i],b=pts[(i+1)%3],c=pts[(i+2)%3];
+    const v1=[a[0]-b[0],a[1]-b[1]],v2=[c[0]-b[0],c[1]-b[1]];
+    const l1=Math.hypot(...v1)||1,l2=Math.hypot(...v2)||1;
+    const t1=[b[0]+v1[0]*r/l1,b[1]+v1[1]*r/l1],t2=[b[0]+v2[0]*r/l2,b[1]+v2[1]*r/l2];
+    if(i===0)ctx.moveTo(t1[0],t1[1]);else ctx.lineTo(t1[0],t1[1]);
+    ctx.quadraticCurveTo(b[0],b[1],t2[0],t2[1]);
+  }
+  ctx.closePath();
+}
+
+/* ── word machinery ── */
+const meas=document.createElement('canvas').getContext('2d');
+function wordLayout(font,size,tracking,scaleX=1){
+  meas.font=font(size);
+  const widths=WORD.split('').map(ch=>meas.measureText(ch).width*scaleX);
+  const total=widths.reduce((a,b)=>a+b,0)+tracking*(WORD.length-1);
+  return {font,size,tracking,scaleX,widths,total};
+}
+function fitWord(font,size,trackF,scaleX,maxW){
+  let W=wordLayout(font,size,size*trackF,scaleX);
+  if(W.total>maxW){const s=maxW/W.total;W=wordLayout(font,size*s,size*s*trackF,scaleX)}
+  return W;
+}
+function letterX(W,i,startX){let x=startX;for(let k=0;k<i;k++)x+=W.widths[k]+W.tracking;return x}
+function drawLetter(ctx,W,i,x,y,o={}){
+  const {alpha=1,dx=0,dy=0,scale=1,fill='#E9EDFF',stroke=0,strokeColor='#fff',
+         blur=0,blurColor}=o;
+  if(alpha<=0)return;
+  ctx.save();ctx.globalAlpha=alpha;
+  ctx.font=W.font(W.size);ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  ctx.translate(x+W.widths[i]/2+dx,y+dy);ctx.scale(W.scaleX*scale,scale);
+  if(blur){ctx.shadowColor=blurColor||fill||strokeColor;ctx.shadowBlur=blur}
+  if(fill){ctx.fillStyle=fill;ctx.fillText(WORD[i],0,0)}
+  if(stroke){ctx.strokeStyle=strokeColor;ctx.lineWidth=stroke/scale;ctx.strokeText(WORD[i],0,0)}
+  ctx.restore();
+}
+function off(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;return c}
+
+/* ═════════════════════════ IDENTS ═════════════════════════ */
+const IDENTS=[
+
+/* ── 1 · HALO — the mark as a corona of rim light ─────────────────────── */
+{
+  id:'halo',name:'Halo',pick:true,dur:2400,accent:'#D9C7FF',
+  type:'Thin tracked caps · pure rim light, silhouette corona',
+  blurb:'A cold core blooms, a hairline ring draws itself closed, and the mark arrives as a dark silhouette ringed by its own corona of rim light — the letters beneath wear the same edge as they condense in.',
+  spec:'Material: <b>corona</b> — stroke-with-glow + inner fill, no mask · cheapest wow.',
+  init(w,h){
+    const font=s=>`300 ${s}px -apple-system,"Helvetica Neue",system-ui,sans-serif`;
+    const W=fitWord(font,h*.075,.30,1,w*.56);
+    return {W,g:h*.15,cx:w/2,markY:h*.38,baseY:h*.60,startX:w/2-W.total/2};
+  },
+  draw(ctx,w,h,t,st){
+    ctx.fillStyle='#05050B';ctx.fillRect(0,0,w,h);
+    const {cx,markY,g}=st;
+    const vig=ctx.createRadialGradient(cx,markY,0,cx,markY,h*.75);
+    vig.addColorStop(0,'rgba(30,34,70,.35)');vig.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=vig;ctx.fillRect(0,0,w,h);
+
+    /* core bloom */
+    const b=clamp(t/.30,0,1);
+    if(b>0){
+      const cg=ctx.createRadialGradient(cx,markY,0,cx,markY,g*2.2);
+      cg.addColorStop(0,`rgba(217,199,255,${.55*b})`);cg.addColorStop(1,'rgba(129,140,248,0)');
+      ctx.fillStyle=cg;ctx.fillRect(0,0,w,h);
+    }
+    /* hairline ring draws closed */
+    const ring=ioSine(clamp(t/.40,0,1));
+    if(ring>0){
+      ctx.strokeStyle='rgba(217,199,255,.55)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(cx,markY,g*1.32,-Math.PI/2,-Math.PI/2+ring*Math.PI*2);ctx.stroke();
+    }
+    /* the corona mark: bright rim stroke, dark interior fill */
+    const p=clamp((t-.34)/.26,0,1);
+    if(p>0){
+      const e=outBack(p);
+      ctx.save();ctx.translate(cx,markY);ctx.scale(e,e);
+      /* halo — thick gradient stroke with soft glow */
+      const rim=ctx.createLinearGradient(-g,0,g,0);
+      rim.addColorStop(0,'#CFE0FF');rim.addColorStop(.5,'#9FB0FF');rim.addColorStop(1,'#D9C7FF');
+      ctx.save();
+      ctx.shadowColor='rgba(207,224,255,.9)';ctx.shadowBlur=g*.35*p;
+      ctx.strokeStyle=rim;ctx.lineWidth=g*.30;ctx.lineJoin='round';
+      playPath(ctx,g*.82);ctx.stroke();ctx.restore();
+      /* crisp edge — thinner bright stroke just inside the halo */
+      ctx.strokeStyle='rgba(235,241,255,.95)';ctx.lineWidth=1.6;
+      playPath(ctx,g*.82);ctx.stroke();
+      /* dark silhouette core leaves the rim */
+      playPath(ctx,g*.60);ctx.fillStyle='#05050B';ctx.fill();
+      ctx.restore();
+    }
+    /* the name — hairline rim letters condense beneath */
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-(.62+i*.05))/.3,0,1);if(lt<=0)continue;
+      const e=outCubic(lt);
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:e*.9,dy:(1-e)*st.W.size*.18,stroke:1.4,strokeColor:'#CFE0FF'});
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:e*.18,fill:'#E9EDFF',blur:8,blurColor:'#9FB0FF'});
+    }
+  }
+},
+
+/* ── 2 · HOLOGRAM — diffraction rainbow + scanline shimmer ────────────── */
+{
+  id:'holo',name:'Hologram',dur:2300,accent:'#B8C8FF',
+  type:'Clean caps · holo-foil diffraction rainbow + scanline',
+  blurb:'The lockup renders as diffraction rainbow foil with a faint interference grid behind, a single scanline shimmers down through the letters, and a chromatic fringe pulls itself back into register.',
+  spec:'Material: <b>holo-foil</b> — rainbow gradient + scanline, one offscreen mask (Prism idiom).',
+  init(w,h){
+    const font=s=>`800 ${s}px system-ui,-apple-system,"Segoe UI",sans-serif`;
+    const W=fitWord(font,h*.17,.06,1,w*.72);
+    return {W,g:h*.13,cx:w/2,markY:h*.34,baseY:h*.56,startX:w/2-W.total/2,o:off(w,h)};
+  },
+  draw(ctx,w,h,t,st){
+    ctx.fillStyle='#03040C';ctx.fillRect(0,0,w,h);
+    /* faint interference grid behind (static backdrop) */
+    ctx.strokeStyle='rgba(140,150,255,.045)';ctx.lineWidth=1;
+    for(let i=0;i<14;i++){
+      const y=i*h/14;
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+    }
+    const holo=(c,y0,y1)=>{const g=c.createLinearGradient(0,y0,0,y1);
+      g.addColorStop(0,'#7B5CFF');g.addColorStop(.35,'#5EE1FF');
+      g.addColorStop(.55,'#B7F0C0');g.addColorStop(.75,'#F3C97A');
+      g.addColorStop(1,'#FF7AB0');return g};
+
+    /* word rendered to an offscreen so scanline + fringe can clip to glyphs */
+    const o=st.o;if(o.width!==w||o.height!==h){o.width=w;o.height=h}
+    const oc=o.getContext('2d');oc.clearRect(0,0,w,h);
+    const fillG=holo(oc,st.baseY-st.W.size*.9,st.baseY+st.W.size*.1);
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-(.16+i*.04))/.34,0,1);if(lt<=0)continue;
+      const e=outCubic(lt);
+      drawLetter(oc,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:e,dy:(1-e)*st.W.size*.16,fill:fillG});
+    }
+    /* scanline shimmer — one bright band sweeps down, clipped to the foil */
+    const sp=clamp((t-.5)/.34,0,1);
+    if(sp>0&&sp<1){
+      oc.save();oc.globalCompositeOperation='source-atop';
+      const y=lerp(st.baseY-st.W.size*.9,st.baseY+st.W.size*1.1,ioSine(sp));
+      const sg=oc.createLinearGradient(0,y-40,0,y+40);
+      sg.addColorStop(0,'rgba(255,255,255,0)');
+      sg.addColorStop(.5,'rgba(255,255,255,.85)');
+      sg.addColorStop(1,'rgba(255,255,255,0)');
+      oc.fillStyle=sg;oc.fillRect(0,y-40,w,80);
+      oc.restore();
+    }
+    ctx.drawImage(o,0,0);
+
+    /* chromatic fringe pulls into register — ghost copies before the main word */
+    const fr=clamp((t-.34)/.4,0,1);
+    if(fr>0&&fr<1){
+      ctx.save();ctx.globalAlpha=(1-fr)*.35;
+      ctx.translate(3,0);
+      for(let i=0;i<WORD.length;i++)
+        drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,{fill:'#5EE1FF'});
+      ctx.restore();
+      ctx.save();ctx.globalAlpha=(1-fr)*.35;
+      ctx.translate(-3,0);
+      for(let i=0;i<WORD.length;i++)
+        drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,{fill:'#FF7AB0'});
+      ctx.restore();
+    }
+
+    /* the mark, same holo foil */
+    const mk=outCubic(clamp((t-.4)/.24,0,1));
+    if(mk>0){
+      ctx.save();ctx.globalAlpha=mk;ctx.translate(st.cx,st.markY);
+      ctx.shadowColor='rgba(181,192,255,.5)';ctx.shadowBlur=st.g*.14;
+      const gr=ctx.createLinearGradient(-st.g/2,0,st.g/2,0);
+      gr.addColorStop(0,'#7B5CFF');gr.addColorStop(.5,'#B7F0C0');gr.addColorStop(1,'#FF7AB0');
+      playPath(ctx,st.g);ctx.fillStyle=gr;ctx.fill();
+      ctx.shadowBlur=0;playPath(ctx,st.g*.5);
+      ctx.fillStyle='rgba(240,245,255,.25)';ctx.fill();
+      ctx.restore();
+    }
+  }
+},
+
+/* ── 3 · MOTES — the word condenses from dust in a beam of light ──────── */
+{
+  id:'motes',name:'Motes',pick:true,dur:3000,accent:'#A7D8FF',
+  type:'Medium caps · dust-motes condensing inside a volumetric beam',
+  blurb:'A shaft of light, and inside it motes of dust drift and swirl. The motes begin to pin themselves into the letters — the name assembles itself point by point, solidifying as it forms, leaving a faint trail of light.',
+  spec:'Material: <b>dust</b> — ~140 dots (70 TV, batched); pinning motes + solidify, all progress-derived.',
+  init(w,h){
+    const font=s=>`600 ${s}px system-ui,-apple-system,"Helvetica Neue",sans-serif`;
+    const W=fitWord(font,h*.16,.09,1,w*.62);
+    const N=140, AMB=46;
+    const motes=[];
+    /* pinning motes — assigned round-robin to letters */
+    const nP=N-AMB;
+    for(let j=0;j<nP;j++){
+      const L=j%WORD.length;
+      motes.push({pin:true,L,p:0,d:Math.random(),sx:Math.random()-.5,sy:Math.random()});
+    }
+    for(let j=0;j<AMB;j++)
+      motes.push({pin:false,L:-1,p:0,d:Math.random(),sx:Math.random()-.5,sy:Math.random()});
+    const beamW=w*.5, cx=w/2;
+    return {W,g:h*.15,cx,markY:h*.34,baseY:h*.60,startX:w/2-W.total/2,
+      beamW,beamTop:h*.18,beamBot:h*.95,motes,counts:Array(WORD.length).fill(0),
+      sums:Array(WORD.length).fill(0)};
+  },
+  draw(ctx,w,h,t,st){
+    ctx.fillStyle='#03040A';ctx.fillRect(0,0,w,h);
+    const {cx,markY,g,beamW,beamTop,beamBot}=st;
+
+    /* volumetric beam — soft elongated cone, fades as the word forms */
+    const beamA=clamp(.55*(1-clamp((t-.55)/.35,0,1))+.25,0,.55);
+    if(beamA>0){
+      const cg=ctx.createRadialGradient(cx,beamTop+ (beamBot-beamTop)*.55,0,
+                                        cx,beamTop+(beamBot-beamTop)*.55,beamW*1.1);
+      cg.addColorStop(0,`rgba(167,216,255,${beamA})`);cg.addColorStop(1,'rgba(167,216,255,0)');
+      ctx.fillStyle=cg;
+      ctx.save();ctx.translate(cx,0);ctx.scale(1,.8);ctx.translate(-cx,0);
+      ctx.fillRect(0,0,w,h);
+      ctx.restore();
+    }
+
+    /* per-letter pin progress (sums/counts) */
+    const counts=st.counts,sums=st.sums;
+    counts.fill(0);sums.fill(0);
+    for(const m of st.motes) if(m.pin){counts[m.L]++;sums[m.L]+=m.p}
+    const frac=i=>counts[i]?sums[i]/counts[i]:0;
+
+    /* motes */
+    for(const m of st.motes){
+      if(m.pin){
+        /* target point within the letter glyph box */
+        const i=m.L, wi=st.W.widths[i];
+        const tx=letterX(st.W,i,st.startX)+wi/2+(m.sx*.8-.4)*wi;
+        const ty=st.baseY+(m.sy-.5)*st.W.size*.42;
+        /* start point inside the beam */
+        const sx=cx+(m.sx-.5)*beamW, sy=beamTop+(m.sy*0.9+.1)*(beamBot-beamTop);
+        const p=clamp((t-(.42+i*.05+m.d*.10))/.30,0,1);
+        m.p=p;
+        const e=outCubic(p);
+        const x=lerp(sx,tx,e), y=lerp(sy,ty,e);
+        const a=clamp(p*1.5,0,1);
+        ctx.save();
+        ctx.fillStyle=`rgba(190,224,255,${a})`;
+        ctx.shadowColor='rgba(167,216,255,.9)';ctx.shadowBlur=a*6;
+        ctx.beginPath();ctx.arc(x,y,1.6+a*1.1,0,7);ctx.fill();
+        ctx.restore();
+      }else{
+        /* ambient drift — eased to a stop so the settled frame is still */
+        const stop=outCubic(clamp(t/.9,0,1));
+        const baseY=st.baseY;
+        const x=cx+(m.sx-.5)*beamW+Math.sin(m.d*31+t*1.2)*w*.025*(1-stop);
+        const y=beamBot-(t*(beamBot-beamTop)*.28+ m.sy*(beamBot-beamTop))*(1-stop)+beamTop;
+        const a=clamp(.6+.4*Math.sin(m.d*17+t*1.8),0,1)*.55;
+        ctx.fillStyle=`rgba(190,224,255,${a*(1-stop*.5)})`;
+        ctx.beginPath();ctx.arc(x,y,1.2,0,7);ctx.fill();
+      }
+    }
+
+    /* letters solidify behind the pinned motes */
+    for(let i=0;i<WORD.length;i++){
+      const f=frac(i);
+      const la=clamp((f-.72)/.28,0,1);
+      if(la>0)
+        drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+          {alpha:la*.55,fill:'#D6E8FF',blur:10,blurColor:'#7FB2FF'});
+    }
+
+    /* the mark — condenses from a soft glow into a solid point */
+    const mp=clamp((t-.55)/.22,0,1);
+    if(mp>0){
+      ctx.save();ctx.translate(cx,markY);
+      ctx.shadowColor='rgba(167,216,255,.9)';ctx.shadowBlur=g*.2*mp;
+      const gr=ctx.createLinearGradient(-g/2,0,g/2,0);
+      gr.addColorStop(0,'#9FC8FF');gr.addColorStop(1,'#B8D8FF');
+      playPath(ctx,g);ctx.fillStyle=gr;ctx.fill();
+      ctx.shadowBlur=0;playPath(ctx,g*.5);
+      ctx.fillStyle='rgba(240,245,255,.35)';ctx.fill();
+      ctx.restore();
+    }
+  }
+},
+
+/* ── 4 · MOIRÉ — interference fringes, oil-slick on type ──────────────── */
+{
+  id:'moire',name:'Moiré',dur:2600,accent:'#7FE8D2',
+  type:'Geometric caps · interference fringes, oil-slick iridescence',
+  blurb:'Two fields of concentric rings cross the letters and their interference draws out oil-slick fringes — thin bands of violet and teal that sweep and settle. The mark forms where the two systems converge.',
+  spec:'Material: <b>interference</b> — two radial fields composited lighter, one bounded mask (Prism idiom).',
+  init(w,h){
+    const font=s=>`700 ${s}px system-ui,-apple-system,"Segoe UI",sans-serif`;
+    const W=fitWord(font,h*.15,.07,1,w*.66);
+    return {W,g:h*.12,cx:w/2,markY:h*.34,baseY:h*.56,startX:w/2-W.total/2,
+      a:off(w,h),m:off(w,h)};
+  },
+  draw(ctx,w,h,t,st){
+    ctx.fillStyle='#04070C';ctx.fillRect(0,0,w,h);
+    /* faint ambient rings (static backdrop) */
+    const ac=ctx.createRadialGradient(st.cx,st.baseY,0,st.cx,st.baseY,h*.9);
+    ac.addColorStop(0,'rgba(127,232,210,.05)');ac.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=ac;ctx.fillRect(0,0,w,h);
+
+    const settle=outCubic(clamp(t/.8,0,1));
+    const c1x=st.cx-40+Math.sin(t*.6)*28*(1-settle);
+    const c1y=st.baseY-30+Math.cos(t*.5)*20*(1-settle);
+    const c2x=st.cx+40-Math.sin(t*.45)*28*(1-settle);
+    const c2y=st.baseY+30-Math.cos(t*.6)*20*(1-settle);
+
+    /* fringe field — two radial systems composited lighter */
+    const a=st.a;if(a.width!==w){a.width=w;a.height=h}
+    const ac2=a.getContext('2d');ac2.clearRect(0,0,w,h);
+    let g1=ac2.createRadialGradient(c1x,c1y,0,c1x,c1y,w*.7);
+    g1.addColorStop(0,'rgba(123,92,255,.9)');g1.addColorStop(.25,'rgba(127,232,210,.55)');
+    g1.addColorStop(.5,'rgba(123,92,255,.35)');g1.addColorStop(.75,'rgba(127,232,210,.25)');
+    g1.addColorStop(1,'rgba(0,0,0,0)');
+    ac2.fillStyle=g1;ac2.fillRect(0,0,w,h);
+    let g2=ac2.createRadialGradient(c2x,c2y,0,c2x,c2y,w*.7);
+    g2.addColorStop(0,'rgba(255,122,176,.9)');g2.addColorStop(.25,'rgba(94,225,255,.55)');
+    g2.addColorStop(.5,'rgba(255,122,176,.35)');g2.addColorStop(.75,'rgba(94,225,255,.25)');
+    g2.addColorStop(1,'rgba(0,0,0,0)');
+    ac2.globalCompositeOperation='lighter';
+    ac2.fillStyle=g2;ac2.fillRect(0,0,w,h);
+    ac2.globalCompositeOperation='source-over';
+
+    /* letters = fringes clipped to type */
+    const m=st.m;if(m.width!==w){m.width=w;m.height=h}
+    const mc=m.getContext('2d');mc.clearRect(0,0,w,h);
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-(.18+i*.04))/.34,0,1);if(lt<=0)continue;
+      const e=outCubic(lt);
+      drawLetter(mc,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:e,dy:(1-e)*st.W.size*.14,fill:'#fff'});
+    }
+    mc.globalCompositeOperation='source-in';mc.drawImage(a,0,0);
+    mc.globalCompositeOperation='source-over';
+    ctx.drawImage(m,0,0);
+    /* glass keyline on each letter */
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-(.18+i*.04))/.34,0,1);if(lt<=0)continue;
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:.25*outCubic(lt),fill:null,stroke:1,strokeColor:'#CFF3E8'});
+    }
+
+    /* highlight sheen sweeps the word once */
+    const sp=clamp((t-.52)/.3,0,1);
+    if(sp>0&&sp<1){
+      ctx.save();ctx.globalCompositeOperation='source-atop';
+      const x=lerp(st.startX-120,st.startX+st.W.total+120,ioSine(sp));
+      const sg=ctx.createLinearGradient(x-70,0,x+70,0);
+      sg.addColorStop(0,'rgba(255,255,255,0)');
+      sg.addColorStop(.5,'rgba(255,255,255,.6)');
+      sg.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=sg;ctx.fillRect(x-70,0,140,h);
+      ctx.restore();
+    }
+
+    /* the mark, in the same fringe material */
+    const mk=outCubic(clamp((t-.4)/.22,0,1));
+    if(mk>0){
+      ctx.save();ctx.globalAlpha=mk;ctx.translate(st.cx,st.markY);
+      const gr=ctx.createLinearGradient(-st.g/2,0,st.g/2,0);
+      gr.addColorStop(0,'#7B5CFF');gr.addColorStop(.5,'#7FE8D2');gr.addColorStop(1,'#5EE1FF');
+      playPath(ctx,st.g);ctx.fillStyle=gr;ctx.fill();
+      playPath(ctx,st.g*.5);ctx.fillStyle='rgba(240,248,255,.22)';ctx.fill();
+      ctx.restore();
+    }
+  }
+},
+
+/* ── 5 · CATHEDRAL — the mark rises through volumetric god-rays ───────── */
+{
+  id:'cathedral',name:'Cathedral',dur:2600,accent:'#CFE0FF',
+  type:'Strong caps · volumetric light shafts, mark rising',
+  blurb:'A dark vault crossed by tilted shafts of light. The mark rises from below through the beams, its edges catching the light as it climbs, and the name rises behind it into the glow.',
+  spec:'Material: <b>god-rays</b> — six static rotated gradient wedges (8 draws), no mask.',
+  init(w,h){
+    const font=s=>`900 ${s}px system-ui,-apple-system,"Segoe UI",sans-serif`;
+    const W=fitWord(font,h*.19,.04,1,w*.66);
+    const shafts=[];
+    for(let i=0;i<6;i++)shafts.push({ang:(i-2.5)*.10, x:w*.5+(i-2.5)*w*.16, s:i});
+    return {W,g:h*.14,cx:w/2,markY:h*.40,startY:h*.78,baseY:h*.64,startX:w/2-W.total/2,shafts};
+  },
+  draw(ctx,w,h,t,st){
+    ctx.fillStyle='#04040A';ctx.fillRect(0,0,w,h);
+    const topV=ctx.createLinearGradient(0,0,0,h);
+    topV.addColorStop(0,'rgba(40,46,90,.30)');topV.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=topV;ctx.fillRect(0,0,w,h);
+
+    /* god-rays — tilted wedges drifting, eased to rest */
+    const settle=outCubic(clamp(t/.85,0,1));
+    for(const s of st.shafts){
+      const x=s.x+Math.sin(t*0.9+s.s*2.4)*w*.018*(1-settle);
+      const alpha=.28+Math.sin(s.s*5.1)*.05;
+      const wd=w*.13;
+      ctx.save();
+      ctx.translate(x,0);ctx.rotate(s.ang);ctx.translate(-x,0);
+      const g=ctx.createLinearGradient(x-wd/2,0,x+wd/2,0);
+      g.addColorStop(0,'rgba(207,224,255,0)');
+      g.addColorStop(.5,`rgba(207,224,255,${alpha})`);
+      g.addColorStop(1,'rgba(207,224,255,0)');
+      ctx.fillStyle=g;
+      ctx.fillRect(x-wd/2,-h*.1,wd,h*1.2);
+      ctx.restore();
+    }
+
+    /* the mark rises through the beams */
+    const p=clamp(t/.5,0,1);
+    const e=outBack(p);
+    const y=lerp(st.startY,st.markY,e);
+    const sc=lerp(.62,1,e);
+    ctx.save();ctx.translate(st.cx,y);ctx.scale(sc,sc);
+    const riseGlow=clamp((t-.18)/.5,0,1);
+    if(riseGlow>0){
+      ctx.save();
+      ctx.shadowColor='rgba(207,224,255,.9)';ctx.shadowBlur=st.g*.30*riseGlow;
+      const gr=ctx.createLinearGradient(-st.g/2,0,st.g/2,0);
+      gr.addColorStop(0,'#CFE0FF');gr.addColorStop(.5,'#A9BDFF');gr.addColorStop(1,'#8FA8FF');
+      playPath(ctx,st.g);ctx.fillStyle=gr;ctx.fill();
+      ctx.restore();
+    }else{
+      const gr=ctx.createLinearGradient(-st.g/2,0,st.g/2,0);
+      gr.addColorStop(0,'#CFE0FF');gr.addColorStop(.5,'#A9BDFF');gr.addColorStop(1,'#8FA8FF');
+      playPath(ctx,st.g);ctx.fillStyle=gr;ctx.fill();
+    }
+    /* rim catch on the mark's edges */
+    ctx.strokeStyle='rgba(245,249,255,.9)';ctx.lineWidth=1.4;
+    playPath(ctx,st.g);ctx.stroke();
+    ctx.restore();
+
+    /* the name rises behind */
+    for(let i=0;i<WORD.length;i++){
+      const lt=clamp((t-(.44+i*.05))/.3,0,1);if(lt<=0)continue;
+      const e2=outCubic(lt);
+      drawLetter(ctx,st.W,i,letterX(st.W,i,st.startX),st.baseY,
+        {alpha:e2*.92,dy:(1-e2)*st.W.size*.3,fill:'#E9EDFF',blur:(1-e2)*8,blurColor:'#9FB0FF'});
+    }
+  }
+},
+];
+
+/* ═════════════════════════ runner ═════════════════════════ */
+const TIER_LABEL={pick:'Pick',premium:'Premium'};
+const stage=document.getElementById('stage');
+const sctx=stage.getContext('2d');
+const wantId=location.hash.match(/id=([a-z]+)/);
+let active=IDENTS.find(i=>i.id===(wantId?wantId[1]:'halo'));
+let runStart=0, runState=null, raf=0;
+
+function fit(canvas){
+  const dpr=Math.min(devicePixelRatio||1,2);
+  const r=canvas.getBoundingClientRect();
+  if(!r.width)return null;
+  const W=Math.round(r.width*dpr),H=Math.round(r.width*9/16*dpr);
+  if(canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H}
+  return {w:W,h:H};
+}
+function play(ident){
+  active=ident;
+  document.getElementById('stageName').textContent=ident.name;
+  document.getElementById('stageType').textContent=ident.type;
+  const tierEl=document.getElementById('stageTier');
+  tierEl.textContent=TIER_LABEL[ident.tier];
+  tierEl.className='tier '+(ident.tier==='pick'?'pick':'premium');
+  for(const b of document.querySelectorAll('.card'))
+    b.setAttribute('aria-pressed',b.dataset.id===ident.id?'true':'false');
+  restart();
+}
+function restart(){
+  cancelAnimationFrame(raf);
+  const size=fit(stage);if(!size)return;
+  runState=active.init(size.w,size.h);
+  runStart=performance.now();
+  if(REDUCED){
+    active.draw(sctx,size.w,size.h,1,runState);
+    document.getElementById('stageHint').textContent='reduced motion — end state';
+    return;
+  }
+  const HOLD=1400;
+  const tick=now=>{
+    const el=now-runStart;
+    const t=clamp(el/active.dur,0,1);
+    sctx.clearRect(0,0,size.w,size.h);
+    active.draw(sctx,size.w,size.h,t,runState);
+    if(el>=active.dur+HOLD){runStart=performance.now();runState=active.init(size.w,size.h)}
+    raf=requestAnimationFrame(tick);
+  };
+  raf=requestAnimationFrame(tick);
+}
+stage.addEventListener('click',restart);
+addEventListener('resize',()=>restart());
+
+const rail=document.getElementById('rail');
+for(const c of IDENTS){
+  const btn=document.createElement('button');
+  btn.className='card';btn.dataset.id=c.id;
+  btn.setAttribute('aria-pressed',c===active?'true':'false');
+  btn.innerHTML=`<canvas></canvas><div class="meta">
+    <div class="row"><span class="name">${c.name}</span>
+    <span class="tier ${c.tier==='pick'?'pick':'premium'}">${TIER_LABEL[c.tier]}</span></div>
+    <p>${c.blurb}</p><div class="spec">${c.spec}</div></div>`;
+  btn.addEventListener('click',()=>play(c));
+  rail.appendChild(btn);
+  requestAnimationFrame(()=>{
+    const cv=btn.querySelector('canvas');
+    const size=fit(cv);if(!size)return;
+    const ctx=cv.getContext('2d');
+    const st=c.init(size.w,size.h);
+    const sig={halo:.72,holo:.6,motes:.8,moire:.72,cathedral:.62}[c.id];
+    c.draw(ctx,size.w,size.h,sig,st);
+  });
+}
+play(active);
+</script>

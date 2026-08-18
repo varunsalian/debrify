@@ -145,6 +145,38 @@ class SimklService {
   Future<Map<String, dynamic>?> fetchLibrarySnapshotOrNull() =>
       _cachedLibAllAll();
 
+  /// Completed movies and series in one minimal bulk response. This omits
+  /// `extended=full`: poster badges need only IDs and title status.
+  Future<({Set<String> movies, Set<String> series})?>
+  fetchCompletedTitleIds() async {
+    final token = await StorageService.getSimklAccessToken();
+    // Disconnected is a successful empty snapshot, not a transient failure.
+    // This lets consumers clear badges belonging to the previous account while
+    // still preserving their last snapshot when an authenticated request fails.
+    if (token == null || token.isEmpty) {
+      return (movies: <String>{}, series: <String>{});
+    }
+    final data = await _getOrNull(
+      _apiUri('/sync/all-items/all/completed'),
+      headers: _apiHeaders(accessToken: token),
+      label: 'fetchCompletedTitleIds',
+    );
+    if (data is! Map<String, dynamic>) return null;
+    Set<String> idsFor(String bucket) {
+      final result = <String>{};
+      for (final raw in data[bucket] as List<dynamic>? ?? const []) {
+        if (raw is! Map<String, dynamic>) continue;
+        final content = (raw['movie'] ?? raw['show']) as Map<String, dynamic>?;
+        final ids = content?['ids'] as Map<String, dynamic>?;
+        final imdb = (ids?['imdb'] as String?)?.trim().toLowerCase();
+        if (imdb != null && imdb.isNotEmpty) result.add(imdb);
+      }
+      return result;
+    }
+
+    return (movies: idsFor('movies'), series: idsFor('shows'));
+  }
+
   /// The user's relationship to a single title: which watchlist status (if
   /// any) it's in, and their rating. Backed by one cached `all/all` library
   /// fetch, scanned across all three content-type buckets (an anime title
@@ -236,6 +268,7 @@ class SimklService {
     // the derived calendar (mirrors TraktService clearing TraktCalendarService).
     _invalidateLibraryCache();
     SimklCalendarService.instance.invalidate();
+    StorageService.movieFinishedRevision.value++;
   }
 
   /// Get the stored username, if known.
@@ -310,6 +343,7 @@ class SimklService {
           Future<void> commit() async {
             await StorageService.setSimklAccessToken(accessToken);
             await _fetchAndStoreUsername(accessToken);
+            StorageService.movieFinishedRevision.value++;
           }
 
           try {
@@ -547,6 +581,10 @@ class SimklService {
     );
     if (!_wasMatched(result, typeKey)) return false;
     _invalidateLibraryCache();
+    // Moving to or away from Completed changes the effective watched set.
+    // We do not know the previous status here, so every successful move must
+    // invalidate; unlike ratings, any list move can remove an existing tick.
+    StorageService.movieFinishedRevision.value++;
     return true;
   }
 
@@ -615,6 +653,7 @@ class SimklService {
     );
     if (!_wasMatched(result, typeKey)) return false;
     _invalidateLibraryCache();
+    StorageService.movieFinishedRevision.value++;
     return true;
   }
 
@@ -637,6 +676,7 @@ class SimklService {
     );
     if (!_wasMatched(result, typeKey)) return false;
     _invalidateLibraryCache();
+    StorageService.movieFinishedRevision.value++;
     return true;
   }
 

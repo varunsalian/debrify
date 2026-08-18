@@ -721,6 +721,12 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
         // Initialize Stremio subtitle service
         stremioSubtitleService = new StremioSubtitleService(this);
 
+        // Start every native session from the active Flutter profile. The
+        // native panel remains immediately editable, and changes are bridged
+        // back to that same profile below.
+        SubtitleSettings.synchronizeProjectedAppearance(this);
+        SubtitleFontManager.synchronizeProjectedFont(this);
+
         // Apply custom font from Flutter settings if provided
         String customFontPath = intent.getStringExtra("customFontPath");
         String customFontName = intent.getStringExtra("customFontName");
@@ -3683,7 +3689,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
 
             @Override
             public void onSettingsChanged() {
-                applySubtitleSettings();
+                applyAndPersistSubtitleSettings();
             }
 
             @Override
@@ -3727,6 +3733,11 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
                     case 0:
                     default: return umAudioModel(col1, col2Index);
                 }
+            }
+
+            @Override
+            public boolean onSectionActivated(int sectionIndex) {
+                return false;
             }
 
             @Override
@@ -3895,7 +3906,7 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
     private List<UnifiedMenuController.Row> umAppearanceRows() {
         // Shared with the torrent player so the subtitle-appearance controls
         // can't drift between the two (see UnifiedMenuSections).
-        return UnifiedMenuSections.appearanceRows(this, this::applySubtitleSettings);
+        return UnifiedMenuSections.appearanceRows(this, this::applyAndPersistSubtitleSettings);
     }
 
     private List<UnifiedMenuController.Row> umTimingRows() {
@@ -4729,6 +4740,16 @@ public class TorboxTvPlayerActivity extends AppCompatActivity {
             // renderer.
             subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable);
             subtitleSeekHandler.postDelayed(subtitleSeekRunnable, 150);
+        }
+    }
+
+    private void applyAndPersistSubtitleSettings() {
+        applySubtitleSettings();
+        MethodChannel channel = MainActivity.getAndroidTvPlayerChannel();
+        if (channel != null) {
+            channel.invokeMethod(
+                    "saveSubtitleAppearance",
+                    SubtitleSettings.profileAppearanceSnapshot(this));
         }
     }
 

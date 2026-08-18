@@ -511,18 +511,28 @@ void revealDetailLanding({
   required BuildContext? Function() contextOf,
   double alignment = 0.3,
   int retries = 8,
+  bool onlyController = false,
 }) {
   if (index < 0 || itemCount <= 0) return;
   void attempt(int left) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = contextOf();
       if (ctx != null && ctx.mounted) {
-        Scrollable.ensureVisible(
-          ctx,
-          alignment: alignment,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-          duration: Duration.zero,
-        );
+        final box = ctx.findRenderObject();
+        if (onlyController && box is RenderObject && box.attached) {
+          controller.position.ensureVisible(
+            box,
+            alignment: alignment,
+            duration: Duration.zero,
+          );
+        } else {
+          Scrollable.ensureVisible(
+            ctx,
+            alignment: alignment,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+            duration: Duration.zero,
+          );
+        }
         return;
       }
       // hasClients goes false once the layout is disposed — this is also what
@@ -695,4 +705,3 @@ class DetailAtmosphere extends StatelessWidget {
     );
   }
 }
-

@@ -40,6 +40,7 @@ import '../services/series_source_service.dart';
 import '../services/stremio_iptv_service.dart';
 import '../services/stremio_service.dart';
 import '../services/next_episode_service.dart';
+import '../services/local_series_completion_service.dart';
 import '../services/storage_service.dart';
 import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/tvos_top_shelf_service.dart';
@@ -68,6 +69,7 @@ import '../widgets/home/card_focus_rise.dart';
 import '../widgets/home/home_theme.dart';
 import '../widgets/home/row_tag_pill.dart';
 import '../widgets/home/spotlight_board.dart';
+import '../widgets/movie_watched_badge.dart';
 import '../widgets/search_loading_animation.dart';
 import '../widgets/skeleton_poster.dart';
 import '../widgets/source_row.dart';
@@ -1304,6 +1306,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           : 'home',
     );
     MainPageBridge.registerTvContentFocusHandler(_tabIndex, _focusContent);
+    if (!widget.searchMode && !widget.discoverMode) {
+      StorageService.localCompletionRevision.addListener(
+        _onLocalCompletionChanged,
+      );
+    }
     if (widget.searchMode) {
       MainPageBridge.registerTabBackHandler('search', _handleSearchBack);
     }
@@ -1374,13 +1381,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         StorageService.getAmbientTrailerAudioEnabled(
           AmbientTrailerSurface.homeHero,
         ),
-        StorageService.getAmbientTrailerVolume(AmbientTrailerSurface.homeHero),
+      StorageService.getAmbientTrailerVolume(AmbientTrailerSurface.homeHero),
       ]).then((values) {
-        if (!mounted || !(values[0] as bool)) return;
-        _heroTrailerEnabled = true;
-        _heroTrailerVolume = (values[1] as bool)
-            ? (values[2] as int).toDouble()
-            : 0;
+        if (!mounted) return;
+        final enabled = values[0] as bool;
+        setState(() {
+          _heroTrailerEnabled = enabled;
+          _heroTrailerVolume = (values[1] as bool)
+              ? (values[2] as int).toDouble()
+              : 0;
+        });
+        if (!enabled) return;
         // The board usually seeds the hero before this read lands — kick the
         // current spotlight so the billboard still starts on cold open.
         final current = _heroItem.value;
@@ -1782,6 +1793,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
     }
     MainPageBridge.unregisterTvContentFocusHandler(_tabIndex, _focusContent);
+    StorageService.localCompletionRevision.removeListener(
+      _onLocalCompletionChanged,
+    );
     if (!widget.searchMode && !widget.discoverMode) {
       MainPageBridge.unregisterCatalogDetailOpenHandler(
         _openPendingCatalogDetail,
@@ -2571,6 +2585,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ..addAll(addonIds);
     });
     _maybeAutoFocusBoard();
+  }
+
+  void _onLocalCompletionChanged() {
+    if (!mounted || widget.searchMode || widget.discoverMode) return;
+    unawaited(_loadContinueWatching());
   }
 
   /// Load the IPTV Continue Watching shelves (Xtream VOD movies + series) from
@@ -5832,6 +5851,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
             SpotlightCard(
               image: m.poster,
               title: m.name,
+              watchedImdbId: m.type == 'movie' || m.type == 'series'
+                  ? (m.effectiveImdbId ?? m.id)
+                  : null,
+              watchedContentType: m.type,
               // `_CwRow` publishes a 0..1 fraction; the card draws 0..100.
               progress: (row.progressOf(m) ?? 0) * 100,
               onOpen: () => row.onOpen(m),
@@ -5860,6 +5883,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           SpotlightCard(
             image: m.poster,
             title: m.name,
+            watchedImdbId: m.type == 'movie' || m.type == 'series'
+                ? (m.effectiveImdbId ?? m.id)
+                : null,
+            watchedContentType: m.type,
             onOpen: () => _openItem(m, _sections[i].addon),
           ),
       ],
@@ -5888,6 +5915,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               subtitle: 'LIVE',
               shape: SpotlightCardShape.channel,
               onOpen: () => _playIptvListChannel(ch),
+              previewBuilder: ch.isLive
+                  ? (_) => SpotlightIptvCardPreview(
+                      channel: ch,
+                      ambientVolume: _heroTrailerVolume,
+                    )
+                  : null,
             ),
         ],
       );
@@ -5911,6 +5944,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 image: item.poster,
                 title: item.name,
                 subtitle: isMovies ? 'MOVIE' : 'SERIES',
+                watchedImdbId: item.effectiveImdbId ?? item.id,
+                watchedContentType: item.type,
                 onOpen: () => _openMyWatchlistItem(item),
               ),
           ],
@@ -5941,6 +5976,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 subtitle: 'LIVE',
                 shape: SpotlightCardShape.channel,
                 onOpen: () => _playIptvChannel(ch),
+                previewBuilder: ch.isLive
+                    ? (_) => SpotlightIptvCardPreview(
+                        channel: ch,
+                        ambientVolume: _heroTrailerVolume,
+                      )
+                    : null,
               ),
           ],
         );
@@ -11854,6 +11895,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         ? null
         : await _stremio.fetchSeriesMeta(metaAddon, contentId);
     if (!mounted) return;
+    if (videos != null) {
+      unawaited(
+        LocalSeriesCompletionService.instance.recordRawEpisodeInventory(
+          imdbId: imdb,
+          seriesTitle: item.name,
+          videos: videos,
+        ),
+      );
+    }
 
     final episodes = <({int season, int episode})>[];
     for (final v in videos ?? const <Map<String, dynamic>>[]) {
@@ -13432,8 +13482,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                         },
                         child: ListView.builder(
                           controller: _kwScroll,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 8,
+                          // A focused SourceRow can scale and rise in
+                          // Spotlight. The first item starts at scroll offset
+                          // zero, so it needs real viewport clearance rather
+                          // than relying on ensureVisible to make room.
+                          padding: EdgeInsets.symmetric(
+                            vertical: widget.isTelevision ? 24 : 8,
                             horizontal: 10,
                           ),
                           cacheExtent: 1200,
@@ -17956,6 +18010,129 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
             12;
 }
 
+/// Live IPTV preview drawn directly inside the active Spotlight card.
+///
+/// [SpotlightBoard] mounts this only for the pointer-hovered card on desktop
+/// or the DPAD-focused card on TV, so a shelf never opens more than one stream
+/// while the user browses. Stremio-backed channels retain the same candidate
+/// ladder as the full IPTV preview stage; plain M3U/Xtream channels open their
+/// declared URL directly. Its audio follows the user's Home ambient-audio
+/// setting, so the channel is audible without overriding an intentional mute.
+class SpotlightIptvCardPreview extends StatefulWidget {
+  final IptvChannel channel;
+  final double ambientVolume;
+
+  const SpotlightIptvCardPreview({
+    super.key,
+    required this.channel,
+    required this.ambientVolume,
+  });
+
+  @override
+  State<SpotlightIptvCardPreview> createState() =>
+      _SpotlightIptvCardPreviewState();
+}
+
+class _SpotlightIptvCardPreviewState extends State<SpotlightIptvCardPreview> {
+  String? _streamUrl;
+  List<String>? _candidates;
+  int _resolveTicket = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve(notify: false);
+  }
+
+  @override
+  void didUpdateWidget(SpotlightIptvCardPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A shelf can reorder/reload while its active card's State is retained.
+    // Never carry the previous channel's stream (or a late candidate resolve)
+    // into the card that inherited that State slot.
+    if (!identical(oldWidget.channel, widget.channel)) _resolve();
+  }
+
+  @override
+  void dispose() {
+    _resolveTicket++;
+    super.dispose();
+  }
+
+  void _resolve({bool notify = true}) {
+    final channel = widget.channel;
+    final ticket = ++_resolveTicket;
+    _candidates = null;
+    if (channel.contentType == 'series') {
+      _setStreamUrl(null, notify: notify);
+      return;
+    }
+    if (!StremioIptvService.isStremioChannelUrl(channel.url)) {
+      _setStreamUrl(channel.url, notify: notify);
+      return;
+    }
+
+    _setStreamUrl(null, notify: notify);
+    StremioIptvService.instance.resolveCandidates(channel.url).then((found) {
+      if (!mounted || ticket != _resolveTicket || found.isEmpty) return;
+      _candidates = [for (final candidate in found) candidate.url];
+      _setStreamUrl(_candidates!.first);
+    });
+  }
+
+  void _setStreamUrl(String? value, {bool notify = true}) {
+    if (_streamUrl == value) return;
+    if (!notify) {
+      _streamUrl = value;
+      return;
+    }
+    setState(() => _streamUrl = value);
+  }
+
+  void _onPlaybackFailed() {
+    final candidates = _candidates;
+    final current = _streamUrl;
+    if (candidates == null || current == null) return;
+    final next = candidates.indexOf(current) + 1;
+    if (next <= 0 || next >= candidates.length) {
+      StremioIptvService.instance.invalidate(widget.channel.url);
+      _setStreamUrl(null);
+      return;
+    }
+    _setStreamUrl(candidates[next]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = _streamUrl;
+    if (url == null) return const SizedBox.expand();
+    final channel = widget.channel;
+    return RepaintBoundary(
+      child: HeroTrailerBackdrop(
+        // A candidate-ladder step needs a fresh player; retaining a dead
+        // engine would leave the logo visible forever after its replacement
+        // URL was selected.
+        key: ValueKey('spotlight-iptv-card-${channel.url}-$url'),
+        imageUrl: null,
+        videoUrl: url,
+        enabled: true,
+        live: true,
+        httpHeaders: channel.playbackHeaders,
+        imageBlurSigma: 0,
+        videoBlurSigma: 0,
+        // The short dwell filters a pointer sweep / held DPAD move without
+        // making a deliberate card preview feel late.
+        startDelay: const Duration(milliseconds: 300),
+        ambientVolume: widget.ambientVolume,
+        onPlaybackFailed: _onPlaybackFailed,
+        firstFrameTimeout: StremioIptvService.isStremioChannelUrl(channel.url)
+            ? const Duration(seconds: 12)
+            : null,
+      ),
+    );
+  }
+}
+
 /// The boxed hero video region's IPTV-favourite variant: plays a focused
 /// favourite channel's live stream in the SAME right-anchored region
 /// [_HeroTrailerLayer] uses for catalog trailers, via
@@ -20565,6 +20742,9 @@ class _StremioCardState extends State<_StremioCard>
     final item = widget.item;
     final wide = widget.aspectRatio > 1;
     final poster = widget.artUrl ?? item.poster;
+    final isMovie = item.type.toLowerCase() == 'movie';
+    final supportsWatched = isMovie || item.type.toLowerCase() == 'series';
+    final movieId = item.effectiveImdbId ?? item.id;
     // Focus visuals (scale + shadow + ring on one curve) live in the shared
     // [CardFocusRise] so tuning lands once for every board card.
     final List<Widget> layers = [
@@ -20589,10 +20769,21 @@ class _StremioCardState extends State<_StremioCard>
         )
       else
         _placeholder(item.name),
+      if (supportsWatched)
+        Positioned(
+          top: 7,
+          right: 7,
+          child: MovieWatchedBadge(
+            imdbId: movieId,
+            contentType: item.type,
+            compact: true,
+          ),
+        ),
       if (widget.hasBoundSource)
         Positioned(
           top: 8,
-          right: 8,
+          left: supportsWatched ? 8 : null,
+          right: supportsWatched ? null : 8,
           child: Icon(
             Icons.bookmark_rounded,
             size: 18,
@@ -21642,6 +21833,13 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       if (metaAddon == null) return;
       final videos = await stremio.fetchSeriesMeta(metaAddon, _imdbId);
       if (videos == null || !mounted) return;
+      unawaited(
+        LocalSeriesCompletionService.instance.recordRawEpisodeInventory(
+          imdbId: _imdbId,
+          seriesTitle: widget.selection.title,
+          videos: videos,
+        ),
+      );
       final seasons = <int>{};
       for (final v in videos) {
         final s = (v['season'] as num?)?.toInt();
@@ -22382,7 +22580,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                                       },
                                       child: ListView.builder(
                                         padding: EdgeInsets.symmetric(
-                                          vertical: 8,
+                                          // Spotlight expands the focused
+                                          // SourceRow beyond its layout box.
+                                          // At the top of the list there is no
+                                          // negative scroll extent to reveal
+                                          // it, so reserve TV focus room here.
+                                          vertical: widget.isTelevision
+                                              ? 24
+                                              : 8,
                                           horizontal: _redesign ? 10 : 0,
                                         ),
                                         cacheExtent: 1200,

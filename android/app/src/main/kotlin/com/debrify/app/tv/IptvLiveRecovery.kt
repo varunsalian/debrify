@@ -116,6 +116,34 @@ class IptvLiveRecovery(
          *  stall/tune watchdogs' business, not the video detector's. Just
          *  over one 5s progress tick. */
         private const val POSITION_FRESH_MS = 6_000L
+
+        /** Circuit breaker for the intermittent-wedge loop. The per-episode
+         *  [VIDEO_STALL_MAX_ATTEMPTS] ladder only catches a video that STAYS
+         *  frozen: any rendered frame resets the attempt climb, so a decoder
+         *  that plays a few seconds, wedges, gets re-tuned, plays the re-tune's
+         *  replayed buffer, then wedges AGAIN restarts at attempt 1 every
+         *  cycle — plain re-tunes forever, each rewinding ~15s, and the
+         *  strict-demux remedy at attempt 2 never gets its turn (the Google TV
+         *  Streamer whose freeze strict-TS reduced from permanent to periodic,
+         *  2026-08-18). So a stall within [VIDEO_STALL_RECUR_WINDOW_MS] of the
+         *  previous video-stall re-tune is a RECURRENCE, and a recurrence
+         *  skips straight to the strict-demux rung: the wedge already proved a
+         *  plain re-tune doesn't stick. Once strict itself has been re-tuned
+         *  [VIDEO_STALL_STRICT_MAX] times this tune and the wedge STILL
+         *  recurs, re-tuning has nothing left to offer: latch off and let the
+         *  imperfect-but-playing stream ride (audio was fine throughout).
+         *  Recurrence state survives frame flow — only a real zap or user
+         *  retry clears it — which is the whole point: the loop's own replays
+         *  must not launder it back to attempt 1. A genuine one-off transient
+         *  wedge heals, never recurs inside the window, and stays on the
+         *  cheap plain-re-tune path. */
+        private const val VIDEO_STALL_RECUR_WINDOW_MS = 180_000L
+        private const val VIDEO_STALL_STRICT_MAX = 2
+
+        /** The attempt number that means "strict demux" to the owner —
+         *  [Callbacks.performRetune]'s contract is that attempt ≥ 2 drops the
+         *  aggressive TS join flags (see performIptvLiveRetune). */
+        private const val VIDEO_STALL_STRICT_RUNG = 2
     }
 
     /** True after the machine gave up; cleared by [userRetry] or a real zap. */
@@ -143,6 +171,26 @@ class IptvLiveRecovery(
     private var framesBaselineRealtime = 0L
     private var videoStallAttempts = 0
     private var videoStallLatched = false
+
+    /** Elapsed-realtime of the last video-stall re-tune this TUNE, for the
+     *  loop circuit breaker's recurrence test (see
+     *  [VIDEO_STALL_RECUR_WINDOW_MS]). Deliberately NOT cleared when frames
+     *  start flowing again — only a real zap / user retry clears it, so an
+     *  intermittent wedge can't hide behind its own replays. */
+    private var lastVideoStallRetuneRealtime = 0L
+
+    /** How many strict-rung (effective attempt ≥ 2) video-stall re-tunes have
+     *  fired this TUNE. Monotonic under frame flow for the same reason as
+     *  [lastVideoStallRetuneRealtime]; at [VIDEO_STALL_STRICT_MAX] a further
+     *  recurrence trips [videoStallLoopTripped] instead of re-tuning. */
+    private var videoStallStrictRetunes = 0
+
+    /** Sticky sibling of [videoStallLatched]: once the loop breaker trips, it
+     *  STAYS tripped until a real zap / [cancel] / [userRetry]. [videoStallLatched]
+     *  alone is not enough — the frame-flow branch clears that every time a
+     *  re-tune's replayed buffer plays, which is exactly how the intermittent
+     *  wedge would slip the leash and resume looping. */
+    private var videoStallLoopTripped = false
 
     /** Set (and cleared) by the owner around a machine-driven re-tune so
      *  [onTuneStarted] can tell a recovery re-tune from a real zap. */
@@ -175,8 +223,19 @@ class IptvLiveRecovery(
         decoderAttempts = 0
         isSurrendered = false
         deferredSource = null
+        resetVideoStallState()
+    }
+
+    /** The full video-stall reset — ladder, sticky latch, and the loop
+     *  breaker's cross-episode evidence. ONLY a real zap, [cancel], or
+     *  [userRetry] may call this; frame flow must never reach the last two
+     *  fields (see [lastVideoStallRetuneRealtime]). */
+    private fun resetVideoStallState() {
         videoStallAttempts = 0
         videoStallLatched = false
+        videoStallLoopTripped = false
+        videoStallStrictRetunes = 0
+        lastVideoStallRetuneRealtime = 0L
     }
 
     fun onReady() {
@@ -275,13 +334,36 @@ class IptvLiveRecovery(
             return
         }
         // Count unchanged.
-        if (videoStallLatched || episodeActive || isSurrendered || pending != null) return
+        if (videoStallLatched || videoStallLoopTripped ||
+            episodeActive || isSurrendered || pending != null
+        ) return
         if (offline || !wantsPlayback || !readySeen) return
         // A stopped clock is the position detectors' business, not ours.
         if (now - lastAdvanceRealtime > POSITION_FRESH_MS) return
         if (now - framesBaselineRealtime < VIDEO_STALL_WINDOW_MS) return
         if (now - lastRetuneRealtime < RETUNE_DEBOUNCE_MS) return
         if (!callbacks.isEligible()) return
+        // Loop circuit breaker: a stall this soon after the last video-stall
+        // re-tune means the cure didn't stick (an intermittent wedge, not a
+        // one-off) — skip the plain rung and go straight to strict, and once
+        // strict itself has been retried out, stop fighting: looping the user
+        // through ~15s replays is worse than the glitch.
+        val recurrence = lastVideoStallRetuneRealtime != 0L &&
+            now - lastVideoStallRetuneRealtime <= VIDEO_STALL_RECUR_WINDOW_MS
+        if (!recurrence) {
+            // No re-tune inside the window behind this stall: a NEW wedge
+            // cluster, not the old one still failing. Strict budget spent on
+            // an earlier cluster is stale evidence — without this reset, a
+            // channel that wedge-clustered once would greet every later
+            // cluster with one plain re-tune and an instant sticky latch.
+            videoStallStrictRetunes = 0
+        }
+        if (recurrence && videoStallStrictRetunes >= VIDEO_STALL_STRICT_MAX) {
+            videoStallLatched = true
+            videoStallLoopTripped = true
+            callbacks.onRecovered()
+            return
+        }
         videoStallAttempts++
         framesBaselineRealtime = now // one judgment per window
         if (videoStallAttempts > VIDEO_STALL_MAX_ATTEMPTS) {
@@ -289,12 +371,12 @@ class IptvLiveRecovery(
             callbacks.onRecovered()
             return
         }
-        if (videoStallAttempts >= VIDEO_STALL_MAX_ATTEMPTS) {
-            // The first attempt stays invisible (the machine's own idiom: an
-            // instant heal that works shouldn't narrate). Still frozen by
-            // the second, the user deserves to know we're on it.
-            callbacks.onEpisodeVisible(videoStallAttempts)
-        }
+        // The rung actually re-tuned at: the per-episode climb, or the strict
+        // rung directly on a recurrence — the wedge already proved a plain
+        // re-tune doesn't stick. (videoStallAttempts is 1 or 2 here; the
+        // > MAX return above already fired for anything higher.)
+        val effectiveAttempt =
+            if (recurrence) VIDEO_STALL_STRICT_RUNG else videoStallAttempts
         // Post rather than call: the progress ticker is on the stack here, and
         // a synchronous performRetune would restartProgressUpdates from INSIDE
         // the tick — that post plus the tick's own tail post leaves two 5s
@@ -302,12 +384,24 @@ class IptvLiveRecovery(
         // [pending] also gives it the ladder's cancellation story (a real
         // zap's cancelPending kills it) and keeps the one-pending-retune
         // invariant literal.
-        val attemptNow = videoStallAttempts
         val runnable = Runnable {
             pending = null
             if (isSurrendered || offline || !callbacks.isEligible()) return@Runnable
+            // The breaker's evidence is committed HERE, past the bail guard —
+            // a pause/zap/offline landing between the post and this drain
+            // must not spend a strict slot or stamp the recurrence clock for
+            // a re-tune that never fired (nor raise a pill with nothing in
+            // flight).
+            if (effectiveAttempt >= VIDEO_STALL_STRICT_RUNG) {
+                videoStallStrictRetunes++
+                // The first attempt stays invisible (the machine's own idiom:
+                // an instant heal that works shouldn't narrate). Escalating
+                // to the strict rung, the user deserves to know we're on it.
+                callbacks.onEpisodeVisible(effectiveAttempt)
+            }
             lastRetuneRealtime = SystemClock.elapsedRealtime()
-            callbacks.performRetune("video-stall", attemptNow)
+            lastVideoStallRetuneRealtime = lastRetuneRealtime
+            callbacks.performRetune("video-stall", effectiveAttempt)
         }
         pending = runnable
         handler.post(runnable)
@@ -352,8 +446,7 @@ class IptvLiveRecovery(
         episodeVisible = false
         attempt = 0
         decoderAttempts = 0
-        videoStallAttempts = 0
-        videoStallLatched = false
+        resetVideoStallState()
         fire(source, immediate = true)
     }
 
@@ -366,8 +459,7 @@ class IptvLiveRecovery(
         decoderAttempts = 0
         isSurrendered = false
         deferredSource = null
-        videoStallAttempts = 0
-        videoStallLatched = false
+        resetVideoStallState()
         lastRenderedFrames = -1
     }
 

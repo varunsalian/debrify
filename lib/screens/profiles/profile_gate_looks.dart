@@ -453,7 +453,13 @@ class _ProfileMarqueeGateScreenState extends State<ProfileMarqueeGateScreen> {
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 700;
+              // A portrait tablet can be wider than a phone but still has no
+              // room for the side-by-side stage.  Treating it as a desktop
+              // layout makes the artwork overlap the copy and leaves the
+              // focused rail pressed against the bottom edge.
+              final wide =
+                  constraints.maxWidth >= 700 &&
+                  constraints.maxWidth >= constraints.maxHeight;
               return wide ? _wide(constraints) : _narrow(constraints);
             },
           ),
@@ -513,16 +519,46 @@ class _ProfileMarqueeGateScreenState extends State<ProfileMarqueeGateScreen> {
   }
 
   Widget _narrow(BoxConstraints constraints) {
+    const focusPaintInset = 12.0;
+    const topInset = 34.0;
+    const bottomInset = 42.0;
+    final minContentHeight = constraints.maxHeight > topInset + bottomInset
+        ? constraints.maxHeight - topInset - bottomInset
+        : 0.0;
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 30),
-      child: Column(
-        children: [
-          _stageArt((constraints.maxWidth * 0.42).clamp(120.0, 200.0)),
-          const SizedBox(height: 20),
-          ..._stageInfo(nameSize: 34, alignStart: false),
-          const SizedBox(height: 30),
-          _rail(dot: 62, wrap: true),
-        ],
+      // AnimatedScale paints beyond the rail dot's layout bounds.  Do not
+      // crop its focus ring/shadow while this vertical surface scrolls.
+      clipBehavior: Clip.none,
+      padding: const EdgeInsets.fromLTRB(26, topInset, 26, bottomInset),
+      child: Center(
+        child: ConstrainedBox(
+          // A wide portrait tablet should retain the composed phone layout,
+          // rather than stretching its stage copy across the whole display.
+          constraints: BoxConstraints(
+            maxWidth: 460,
+            minHeight: minContentHeight,
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _stageArt((constraints.maxWidth * 0.42).clamp(120.0, 200.0)),
+                const SizedBox(height: 20),
+                ..._stageInfo(nameSize: 34, alignStart: false),
+                const SizedBox(height: 30),
+                // Leave paint room around a scaled dot (and its lock badge),
+                // so the initial focused profile is wholly visible.
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: focusPaintInset,
+                  ),
+                  child: _rail(dot: 62, wrap: true),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
