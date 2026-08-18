@@ -1,3 +1,5 @@
+import '../utils/stremio_url.dart';
+
 /// Represents an extra parameter for a catalog (e.g., genre, search, skip)
 class StremioExtraParam {
   /// Parameter name (e.g., 'genre', 'search', 'skip')
@@ -743,10 +745,7 @@ class StremioAddon {
     }
 
     // Derive base URL from manifest URL
-    String baseUrl = manifestUrl;
-    if (baseUrl.endsWith('/manifest.json')) {
-      baseUrl = baseUrl.substring(0, baseUrl.length - '/manifest.json'.length);
-    }
+    final baseUrl = stremioBaseUriFromManifest(manifestUrl).toString();
 
     return StremioAddon(
       id: id,
