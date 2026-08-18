@@ -131,13 +131,11 @@ data class StremioAddon(
     val baseUrl: String,
     val resources: List<String>,
     val types: List<String>,
-    val enabled: Boolean
+    val enabled: Boolean,
+    val needsManifestHydration: Boolean = false
 ) {
     val supportsSubtitles: Boolean
         get() = resources.contains("subtitles")
-
-    val needsManifestHydration: Boolean
-        get() = !supportsSubtitles && manifestUrl.isNotBlank()
 
     val supportsMovies: Boolean
         get() = types.contains("movie")
@@ -168,7 +166,8 @@ data class StremioAddon(
                 baseUrl = json.optString("base_url", ""),
                 resources = resources,
                 types = types,
-                enabled = json.optBoolean("enabled", true)
+                enabled = json.optBoolean("enabled", true),
+                needsManifestHydration = json.optBoolean("needs_manifest_hydration", false)
             )
         }
     }

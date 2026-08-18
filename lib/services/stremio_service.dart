@@ -247,10 +247,12 @@ class StremioService {
           // the (network-long) hydration can never publish under the new
           // profile's scope.
           try {
-            return await _saveAddons(
-              addons,
-              initiatingAuthorization: authorization,
-            );
+            await _saveAddons(addons, initiatingAuthorization: authorization);
+            // _saveAddons reads the complete settings inventory back so its
+            // management callers retain disabled rows. Re-read through the
+            // execution path here; a playback caller must never receive that
+            // settings representation (including redacted shared addons).
+            return await getAddons();
           } catch (_) {
             debugPrint(
               'StremioService: could not persist hydrated addons; '
@@ -287,6 +289,45 @@ class StremioService {
       _addonsCache = [];
       return [];
     }
+  }
+
+  /// Returns a complete collection suitable for mutations and identity
+  /// checks. Settings reads retain disabled rows but redact borrowed addon
+  /// secrets; executable reads contain usable identities for enabled shared
+  /// rows. Merge the two by stable connection-resource identity.
+  Future<List<StremioAddon>> getAddonsForManagement() async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonUse,
+    );
+    final settings = await getAddons(forSettings: true);
+    if (!ProfileCollectionResourceFacade.active) return settings;
+
+    final executable = await getAddons();
+    if (authorization != null && !authorization.isCurrentlyActive) {
+      throw StateError('Profile session changed while loading addons');
+    }
+    final executableByResourceId = <String, StremioAddon>{
+      for (final addon in executable)
+        if (addon.connectionResourceId case final resourceId?)
+          resourceId: addon,
+    };
+    final merged = <StremioAddon>[];
+    final seenResourceIds = <String>{};
+    for (final addon in settings) {
+      final resourceId = addon.connectionResourceId;
+      final usable = resourceId == null
+          ? addon
+          : executableByResourceId[resourceId] ?? addon;
+      merged.add(usable);
+      if (resourceId != null) seenResourceIds.add(resourceId);
+    }
+    for (final addon in executable) {
+      final resourceId = addon.connectionResourceId;
+      if (resourceId == null || seenResourceIds.add(resourceId)) {
+        merged.add(addon);
+      }
+    }
+    return merged;
   }
 
   /// Id prefix marking a placeholder written for a restored addon whose
@@ -405,6 +446,10 @@ class StremioService {
                 sourceResourceId: addon.connectionResourceId,
               ),
           ],
+          // Collection saves must read disabled entries back too: settings are
+          // profile-local and a disabled resource is still part of the saved
+          // collection (and may be returned to the management caller).
+          forSettings: true,
         );
         return rows.map(StremioAddon.fromJson).toList(growable: false);
       } else {
@@ -424,7 +469,11 @@ class StremioService {
         throw StateError('Profile session changed before addon publication');
       }
     }
-    _addonsCache = saved;
+    // [saved] is the settings representation because management callers need
+    // disabled rows. It may also contain redacted borrowed rows, so it must
+    // never seed the executable cache; the next playback read rebuilds that
+    // cache from an authorized use-mode read.
+    _addonsCache = null;
     // Addon set changed — drop recommendation caches so a title viewed
     // before installing a "Watch Next"-style addon picks it up without an
     // app restart (and a removed addon stops contributing).
@@ -449,7 +498,9 @@ class StremioService {
     manifestUrl = _normalizeManifestUrl(manifestUrl);
 
     // Check if already exists
-    final existingAddons = await getAddons();
+    // This mutates the installed collection, so it must consider disabled
+    // entries too. The normal read path is deliberately playback-filtered.
+    final existingAddons = await getAddonsForManagement();
     final existing = existingAddons.where((a) => a.manifestUrl == manifestUrl);
     if (existing.isNotEmpty) {
       throw Exception('Addon already exists: ${existing.first.name}');
@@ -508,7 +559,11 @@ class StremioService {
       throw Exception('No Stremio addon descriptors were found in this JSON.');
     }
 
-    final addons = replaceExisting ? <StremioAddon>[] : await getAddons();
+    // Imports deduplicate against the complete installed collection, not just
+    // the enabled playback subset.
+    final addons = replaceExisting
+        ? <StremioAddon>[]
+        : await getAddonsForManagement();
     final knownUrlVariants = <String>{
       for (final addon in addons) ..._duplicateUrlVariants(addon.manifestUrl),
     };
@@ -607,7 +662,8 @@ class StremioService {
     final authorization = await ProfileAsyncAuthorization.capture(
       ProfileFeature.addonsAndEngines,
     );
-    final addons = await getAddons();
+    // A disabled addon remains installed and must still be removable.
+    final addons = await getAddonsForManagement();
     StremioAddon? target;
     for (final addon in addons) {
       if (addon.manifestUrl == manifestUrl) {
@@ -685,27 +741,42 @@ class StremioService {
       ProfileFeature.addonsAndEngines,
     );
     try {
-      final addons = await getAddons();
+      // Refresh is a management operation; disabled addons still have a
+      // manifest and remain eligible for an explicit update.
+      final addons = await getAddonsForManagement();
       final index = addons.indexWhere((a) => a.manifestUrl == manifestUrl);
       if (index >= 0) {
-        if (!addons[index].canManage) {
+        final old = addons[index];
+        if (!old.canManage) {
           throw const ResourceAuthorizationException(
             'A shared addon can only be managed by its owner',
           );
         }
         final newManifest = await fetchManifest(manifestUrl);
-        // Preserve enabled state
+        // Preserve the profile resource provenance alongside user-owned state.
+        // A fresh manifest has no connection-resource metadata, and dropping
+        // it would make _saveAddons treat this as a new resource.
         addons[index] = newManifest.copyWith(
-          enabled: addons[index].enabled,
-          addedAt: addons[index].addedAt,
+          enabled: old.enabled,
+          addedAt: old.addedAt,
+          connectionResourceId: old.connectionResourceId,
+          connectionResourceRevision: old.connectionResourceRevision,
+          connectionResourceReadOnly: old.connectionResourceReadOnly,
+          connectionResourceCredentialsRedacted:
+              old.connectionResourceCredentialsRedacted,
         );
         final saved = await _saveAddons(
           addons,
           initiatingAuthorization: authorization,
         );
-        return saved.singleWhere(
-          (item) => item.manifestUrl == newManifest.manifestUrl,
-        );
+        final resourceId = old.connectionResourceId;
+        return resourceId == null
+            ? saved.singleWhere(
+                (item) => item.manifestUrl == newManifest.manifestUrl,
+              )
+            : saved.singleWhere(
+                (item) => item.connectionResourceId == resourceId,
+              );
       }
       return null;
     } catch (_) {
@@ -721,7 +792,8 @@ class StremioService {
     final authorization = await ProfileAsyncAuthorization.capture(
       ProfileFeature.addonsAndEngines,
     );
-    final addons = await getAddons();
+    // "Update all" means every installed addon, including disabled ones.
+    final addons = await getAddonsForManagement();
     var updated = 0;
     var unchanged = 0;
     var failed = 0;
@@ -736,7 +808,17 @@ class StremioService {
       }
       try {
         final fresh = await fetchManifest(old.manifestUrl);
-        addons[i] = fresh.copyWith(enabled: old.enabled, addedAt: old.addedAt);
+        // Keep the existing connection resource as the replacement source.
+        // This is essential for disabled addons and shared resource handling.
+        addons[i] = fresh.copyWith(
+          enabled: old.enabled,
+          addedAt: old.addedAt,
+          connectionResourceId: old.connectionResourceId,
+          connectionResourceRevision: old.connectionResourceRevision,
+          connectionResourceReadOnly: old.connectionResourceReadOnly,
+          connectionResourceCredentialsRedacted:
+              old.connectionResourceCredentialsRedacted,
+        );
         if (fresh.version != old.version) {
           updated++;
           updatedNames.add(old.name);
@@ -2517,7 +2599,7 @@ class StremioService {
 
   /// Check if any addons are configured
   Future<bool> hasAddons() async {
-    final addons = await getAddons();
+    final addons = await getAddons(forSettings: true);
     return addons.isNotEmpty;
   }
 

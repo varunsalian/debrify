@@ -4,6 +4,7 @@ import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/services/profiles/profile_app_lifecycle_participant.dart';
 import 'package:debrify/services/profiles/profile_bootstrap.dart';
 import 'package:debrify/services/profiles/profile_cache_ledger.dart';
+import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_lifecycle.dart';
 import 'package:debrify/services/profiles/profile_registry.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
@@ -45,6 +46,7 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     ProfileRuntime.debugReset();
     ProfileCacheLedger.debugReset();
+    DeviceKeyProvider.debugReset();
     temporaryDirectory = await Directory.systemTemp.createTemp('live-switch-');
     final documents = Directory(p.join(temporaryDirectory.path, 'documents'));
     await documents.create(recursive: true);
@@ -64,6 +66,11 @@ void main() {
       activeProfileId: profileA,
       migratedLegacyInstall: false,
     );
+    final cipher = MemoryDeviceSecretCipher(
+      List<int>.generate(32, (index) => index + 1),
+    );
+    await cipher.initialize();
+    DeviceKeyProvider.debugInstallCipher(cipher);
     ProfileBootstrap.debugInstallRegistry(registry);
     ProfileRuntime.initializeCommitted(
       ProfileScope(profileId: profileA, dataGeneration: 1, sessionEpoch: 1),
@@ -74,6 +81,7 @@ void main() {
     ProfileRuntime.debugReset();
     ProfileBootstrap.debugInstallRegistry(null);
     ProfileCacheLedger.debugReset();
+    DeviceKeyProvider.debugReset();
     AppStorage.debugReset();
     await registry.close();
     await temporaryDirectory.delete(recursive: true);
