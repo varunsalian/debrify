@@ -354,11 +354,31 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // recomputes iptvStrictTsActive from the set. Segmented/HLS streams
         // never see the progressive extractor factory, so a stall there says
         // nothing about the flags — recording one would only poison the
-        // two-URLs-means-strict-device session escalation.
+        // two-URLs-means-strict-device session escalation. Same for a tune
+        // that was ALREADY strict (a twin — strict from birth — or a
+        // session-strict device): its wedge was observed with the aggressive
+        // flags off, so it is not evidence about them; without this gate two
+        // failed twin trials would flip the whole session strict.
         if (source == "video-stall" && attempt >= 2 &&
-            !isCurrentIptvSegmented() && iptvStrictTsUrls.add(url)
+            !isCurrentIptvSegmented() && !iptvStrictTsActive &&
+            iptvStrictTsUrls.add(url)
         ) {
             iptvTuneDiagnostics.onRecovery(source, "strict-ts")
+        }
+        // Segmented streams have no strict rung — but an Xtream `.m3u8` has a
+        // progressive `.ts` twin that does. Divert the strict-rung re-tune
+        // into a reversible twin trial (see the twin-trial fields for the
+        // full story). Only ever from an objectively detected video stall;
+        // no twin / already failed / twin known HLS-forced falls through to
+        // the plain re-tune below, exactly as before.
+        if (source == "video-stall" && attempt >= 2 && isCurrentIptvSegmented() &&
+            iptvTwinTrialOriginalUrl == null && !iptvTwinFailedUrls.contains(url)
+        ) {
+            val twin = xtreamTsTwin(url)
+            if (twin != null && !iptvHlsForcedUrls.contains(twin)) {
+                beginIptvTwinTrial(entry, url, twin)
+                return
+            }
         }
         // A same-URL reopen would append a fresh TS connection — reset
         // PCR/PTS, no discontinuity marker — into the active tee file, and
@@ -376,6 +396,200 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } finally {
             iptvLiveRetuneInFlight = false
         }
+    }
+
+    /** Start the reversible twin trial: tune the `.ts` twin under the
+     *  machine's episode (expectRetune keeps ladder state) with a verdict
+     *  deadline armed. A sustained advancing-frames streak accepts
+     *  ([judgeIptvTwinTrial]); an error on the twin or the deadline →
+     *  [failIptvTwinTrial]. */
+    private fun beginIptvTwinTrial(entry: IptvChannelEntry, original: String, twin: String) {
+        iptvTuneDiagnostics.onRecovery("video-stall", "twin-ts", "trial")
+        iptvTwinTrialOriginalUrl = original
+        iptvTwinTrialUrl = twin
+        iptvTwinTrialLastFrames = -1
+        iptvTwinTrialAdvanceSince = 0L
+        iptvTwinTrialStartedRealtime = SystemClock.elapsedRealtime()
+        scheduleIptvTwinTrialTimeout(IPTV_TWIN_TRIAL_TIMEOUT_MS)
+        iptvLiveRetuneInFlight = true
+        try {
+            setIptvMediaItem(entry, twin)
+        } finally {
+            iptvLiveRetuneInFlight = false
+        }
+    }
+
+    /** The trial's verdict, fed the rendered-frame counter by the 5s
+     *  progress ticker. First valid sample is a baseline; every later
+     *  sample must ADVANCE to keep the acceptance streak alive — a frozen
+     *  sample (or a counter reset, i.e. a decoder swap from an interleaved
+     *  machine re-tune) re-baselines and the streak starts over. Only a
+     *  streak of [IPTV_TWIN_TRIAL_STABLE_MS] accepts; anything short of
+     *  that leaves the verdict to the error path or the deadline. */
+    private fun judgeIptvTwinTrial(frames: Int) {
+        val twin = iptvTwinTrialUrl ?: return
+        if (currentIptvStreamUrl != twin || frames < 0) return
+        if (frames <= iptvTwinTrialLastFrames || iptvTwinTrialLastFrames < 0) {
+            // Baseline, stalled, or reset: no streak to speak of.
+            iptvTwinTrialLastFrames = frames
+            iptvTwinTrialAdvanceSince = 0L
+            return
+        }
+        iptvTwinTrialLastFrames = frames
+        val now = SystemClock.elapsedRealtime()
+        if (iptvTwinTrialAdvanceSince == 0L) {
+            iptvTwinTrialAdvanceSince = now
+            return
+        }
+        if (now - iptvTwinTrialAdvanceSince >= IPTV_TWIN_TRIAL_STABLE_MS) {
+            acceptIptvTwinTrial()
+        }
+    }
+
+    /** Frames advanced continuously for the stability window: keep the twin
+     *  for the session. The original→twin preference applies at zap time,
+     *  and the preferred twin keeps strict demux (both via the maps'
+     *  readers) — nothing is enrolled in [iptvStrictTsUrls], whose
+     *  two-URLs-means-strict-DEVICE escalation must only count wedges
+     *  observed under the aggressive flags, which the twin (strict from
+     *  birth) never was. */
+    private fun acceptIptvTwinTrial() {
+        val original = iptvTwinTrialOriginalUrl ?: return
+        val twin = iptvTwinTrialUrl ?: return
+        if (currentIptvStreamUrl != twin) return
+        clearIptvTwinTrial()
+        iptvTwinPreferredUrls[original] = twin
+        iptvTuneDiagnostics.onRecovery("video-stall", "twin-ts", "accepted")
+    }
+
+    /** The twin errored or never rendered: blacklist it for the session and
+     *  restore the original HLS stream under the machine's episode. The
+     *  machine handles what follows on its own — the restored stream's
+     *  frozen video recurs, the twin rung is now closed, and the recurrence
+     *  ladder latches: audio plays on, today's end state, never worse. */
+    private fun failIptvTwinTrial(reason: String) {
+        val original = iptvTwinTrialOriginalUrl ?: return
+        val twin = iptvTwinTrialUrl
+        clearIptvTwinTrial()
+        // A zap/teardown superseded the trial: nothing to restore, and the
+        // twin was never judged — don't blacklist it on an interruption.
+        if (twin == null || currentIptvStreamUrl != twin) return
+        if (isFinishing || isDestroyed) return
+        iptvTwinFailedUrls.add(original)
+        iptvTuneDiagnostics.onRecovery("video-stall", "twin-ts", "failed:$reason")
+        val entry = iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive } ?: return
+        iptvLiveRetuneInFlight = true
+        try {
+            setIptvMediaItem(entry, original)
+        } finally {
+            iptvLiveRetuneInFlight = false
+        }
+    }
+
+    /** A verdict timeout is recovery too, so it must respect explicit pause
+     *  just like [IptvLiveRecovery]. Park the original instead of calling
+     *  setIptvMediaItem (which deliberately starts playback); the next
+     *  explicit Play or foreground resume consumes the parked restore. */
+    private fun onIptvTwinTrialTimeout() {
+        if (player?.playWhenReady != true || sleepStopLatched) {
+            parkIptvTwinTrialRestore()
+            return
+        }
+        failIptvTwinTrial("timeout")
+    }
+
+    private fun scheduleIptvTwinTrialTimeout(delayMs: Long) {
+        iptvTwinTrialTimeout?.let { iptvTwinTrialHandler.removeCallbacks(it) }
+        val timeout = Runnable { onIptvTwinTrialTimeout() }
+        iptvTwinTrialTimeout = timeout
+        iptvTwinTrialHandler.postDelayed(timeout, delayMs.coerceAtLeast(0L))
+    }
+
+    /** Each READY on the twin restarts the verdict deadline at the
+     *  post-READY bound: the proof (baseline sample + advancing streak) can
+     *  only begin once rendering can, so prepare time — including an
+     *  interleaved tune-watchdog re-tune's — must not be charged against
+     *  the streak. Without this, a twin READY around the 20s watchdog
+     *  boundary would be killed by the trial-start deadline one sample
+     *  short of acceptance. */
+    private fun rearmIptvTwinTrialDeadline() {
+        val twin = iptvTwinTrialUrl ?: return
+        if (currentIptvStreamUrl != twin) return
+        val started = iptvTwinTrialStartedRealtime
+        if (started == 0L) return
+        val absoluteRemaining =
+            started + IPTV_TWIN_TRIAL_MAX_MS - SystemClock.elapsedRealtime()
+        scheduleIptvTwinTrialTimeout(
+            minOf(IPTV_TWIN_TRIAL_POST_READY_MS, absoluteRemaining)
+        )
+    }
+
+    /** Suspend an unjudged twin without changing the paused player's media
+     *  item. The pair is essential: a same-twin retry must preserve the
+     *  rollback, while a tune anywhere else invalidates it. */
+    private fun parkIptvTwinTrialRestore(): Boolean {
+        val original = iptvTwinTrialOriginalUrl ?: return false
+        val twin = iptvTwinTrialUrl ?: return false
+        if (currentIptvStreamUrl != twin) return false
+        iptvTwinTrialRestoreOriginal = original
+        iptvTwinTrialRestoreTwin = twin
+        clearIptvTwinTrial()
+        return true
+    }
+
+    /** Restore a trial parked by pause/onStop. Used by both lifecycle resume
+     *  and the explicit Play button because Play need not cause onStart. */
+    private fun restoreParkedIptvTwinIfNeeded(): Boolean {
+        val original = iptvTwinTrialRestoreOriginal ?: return false
+        val twin = iptvTwinTrialRestoreTwin
+        clearParkedIptvTwinRestore()
+        if (twin == null || currentIptvStreamUrl != twin) return false
+        val entry = iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive }
+            ?: return false
+        setIptvMediaItem(entry, original)
+        return true
+    }
+
+    private fun clearParkedIptvTwinRestore() {
+        iptvTwinTrialRestoreOriginal = null
+        iptvTwinTrialRestoreTwin = null
+    }
+
+    /** Disarm the trial without a verdict. Safe to call at any time; every
+     *  tune to a non-twin URL and both recovery-cancel sites go through
+     *  here, so a stale timeout can never restore an old channel's URL —
+     *  or restart playback from the background. */
+    private fun clearIptvTwinTrial() {
+        iptvTwinTrialTimeout?.let { iptvTwinTrialHandler.removeCallbacks(it) }
+        iptvTwinTrialTimeout = null
+        iptvTwinTrialOriginalUrl = null
+        iptvTwinTrialUrl = null
+        iptvTwinTrialLastFrames = -1
+        iptvTwinTrialAdvanceSince = 0L
+        iptvTwinTrialStartedRealtime = 0L
+    }
+
+    /** An accepted twin is still speculative provider infrastructure. If it
+     *  later becomes deterministically unavailable, revoke the preference
+     *  and give the original HLS endpoint one chance before AUTH surrender. */
+    private fun restoreAcceptedIptvTwinAfterAuth(error: PlaybackException): Boolean {
+        if (classifyIptvError(error) != IptvLiveRecovery.ErrorClass.AUTH) return false
+        val twin = currentIptvStreamUrl ?: return false
+        val preferred = iptvTwinPreferredUrls.entries.firstOrNull { it.value == twin }
+            ?: return false
+        val original = preferred.key
+        val entry = iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive }
+            ?: return false
+        iptvTwinPreferredUrls.remove(original)
+        iptvTwinFailedUrls.add(original)
+        iptvTuneDiagnostics.onRecovery("auth", "twin-ts", "revoked")
+        iptvLiveRetuneInFlight = true
+        try {
+            setIptvMediaItem(entry, original)
+        } finally {
+            iptvLiveRetuneInFlight = false
+        }
+        return true
     }
 
     /** 401/403/404 repeat deterministically; decoder failures repeat unless
@@ -580,6 +794,85 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /** The factory's per-tune switch: written on main before each prepare
      *  (setIptvMediaItem), read on the extractor's loader thread. */
     @Volatile private var iptvStrictTsActive = false
+
+    // ── Xtream HLS→TS twin trial ─────────────────────────────────────────
+    // Segmented streams never see the strict-demux remedy (they bypass the
+    // progressive extractor factory), so an Xtream `.m3u8` channel whose
+    // video wedges has nowhere to escalate — the ladder plain-re-tunes and
+    // latches with frozen video under running audio. But Xtream panels serve
+    // the SAME channel as one progressive `.ts` stream (xtreamTsTwin), which
+    // IS reachable by the demux path the browse preview proves works on
+    // strict decoders. So: at the video-stall strict rung on a segmented
+    // URL, trial the twin — reversibly. Frames rendering accepts it for the
+    // session; an error or a no-frames timeout restores the original HLS URL
+    // and blacklists the twin so the channel can't ping-pong. All state is
+    // session-scoped, like [iptvHlsForcedUrls].
+
+    /** Original `.m3u8` URL while its `.ts` twin is on trial; null = idle. */
+    private var iptvTwinTrialOriginalUrl: String? = null
+
+    /** The twin URL under trial. Its tune runs strict demux from the first
+     *  attempt: the stall already proved this device+channel wedges, and the
+     *  twin exists precisely to reach the demux mode that works — joining it
+     *  mid-GOP under the aggressive flags would recreate the wedge and doom
+     *  the trial. Read on main only (setIptvMediaItem computes the volatile
+     *  [iptvStrictTsActive] from it before prepare). */
+    private var iptvTwinTrialUrl: String? = null
+
+    /** Originals whose twin trial failed this session — never re-trialed. */
+    private val iptvTwinFailedUrls = HashSet<String>()
+
+    /** Accepted trials, original → twin: later zaps to the channel start on
+     *  the twin directly (still strict — see [iptvStrictTsActive]'s
+     *  computation), instead of wedging on HLS and re-earning it. */
+    private val iptvTwinPreferredUrls = HashMap<String, String>()
+
+    private var iptvTwinTrialTimeout: Runnable? = null
+    private val iptvTwinTrialHandler = Handler(Looper.getMainLooper())
+
+    /** Set by onStop when it abandons an UNJUDGED trial: the original HLS
+     *  URL onStart must re-tune to. Bookkeeping alone can't express this —
+     *  while backgrounded the player still holds the twin media item, and
+     *  lying about the identity would misroute error attribution, recording
+     *  eligibility and diagnostics on a quick resume. Consumed (and the
+     *  actual media item restored) at the top of onStart. */
+    private var iptvTwinTrialRestoreOriginal: String? = null
+
+    /** Twin paired with [iptvTwinTrialRestoreOriginal]. Same-twin recovery
+     *  keeps the parked rollback alive; any different tune discards it. */
+    private var iptvTwinTrialRestoreTwin: String? = null
+
+    /** Verdict sampling state, fed by the 5s progress ticker
+     *  (judgeIptvTwinTrial): last rendered-frame count seen on the twin, and
+     *  when its current uninterrupted advancing streak began (0 = none). */
+    private var iptvTwinTrialLastFrames = -1
+    private var iptvTwinTrialAdvanceSince = 0L
+    private var iptvTwinTrialStartedRealtime = 0L
+
+    /** Acceptance = frames advancing on EVERY 5s sample for this long —
+     *  the machine's own STABLE_MS idiom. One frame over baseline is not a
+     *  verdict: a twin that renders a moment and wedges must fail, not get
+     *  remembered as the channel's preferred URL. */
+    private val IPTV_TWIN_TRIAL_STABLE_MS = 15_000L
+
+    /** Verdict deadline from trial start — the PRE-READY bound: a twin that
+     *  can't even reach READY inside this (the machine's 20s watchdog gets
+     *  one same-URL re-tune in between) fails and HLS is restored. Every
+     *  READY on the twin re-arms the deadline to the post-READY bound below,
+     *  so prepare time is never charged against the proof itself. */
+    private val IPTV_TWIN_TRIAL_TIMEOUT_MS = 40_000L
+
+    /** Verdict deadline from (each) READY: a baseline sample (≤5s) + the
+     *  15s advancing streak + sampling jitter. Re-armed per READY, so a
+     *  mid-trial machine re-tune restarts the proof rather than inheriting
+     *  a clock its prepare already spent; the machine's own strict/latch
+     *  budgets bound how often that can happen. */
+    private val IPTV_TWIN_TRIAL_POST_READY_MS = 30_000L
+
+    /** Hard ceiling across every READY/rebuffer cycle. A pathological twin
+     *  cannot renew its post-READY deadline forever. */
+    private val IPTV_TWIN_TRIAL_MAX_MS = 90_000L
+
     private var currentIptvStreamUrl: String? = null
     private var iptvGuideOverlay: View? = null
     private var iptvGuideList: RecyclerView? = null
@@ -928,6 +1221,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         hasVideoTrack = it.videoFormat != null,
                         wantsPlayback = it.playWhenReady,
                     )
+                    // The twin trial's verdict rides the same counter: a
+                    // continuous advancing streak accepts, nothing else does
+                    // (see judgeIptvTwinTrial).
+                    judgeIptvTwinTrial(frames)
                 }
             }
             progressHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
@@ -955,7 +1252,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 Player.STATE_READY -> {
                     hasEverBeenReady = true
                     iptvTuneDiagnostics.onReady(player?.currentPosition ?: 0L)
-                    if (isIptvMode) iptvLiveRecovery.onReady()
+                    if (isIptvMode) {
+                        iptvLiveRecovery.onReady()
+                        rearmIptvTwinTrialDeadline()
+                    }
                     reportIptvStremioWinnerIfNeeded()
                     hideBufferingIndicator()
                     // Furthest-watched resume (same rule as the Dart player): seek
@@ -1188,6 +1488,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // failure to channel B — e.g. force-HLS-poisoning B's URL for the
             // whole session, or restarting A's stream under B's identity.
             val isLiveIptvError = isIptvMode && player?.playerError != null
+
+            // A twin trial owns every error on its `.ts` URL — an HLS-only
+            // panel can answer it with anything (404, playlist text the TS
+            // sniffer rejects, junk). The verdict is simply "twin failed,
+            // restore the original HLS": never surrender the channel over a
+            // speculative URL, and never let the unrecognized-format retry
+            // below force-HLS the twin for the session. MUST stay above that
+            // retry and the generic ladder.
+            if (isLiveIptvError && iptvTwinTrialUrl != null &&
+                currentIptvStreamUrl == iptvTwinTrialUrl
+            ) {
+                failIptvTwinTrial("error:${error.errorCodeName}")
+                return
+            }
+
+            // A twin that proved itself earlier can still disappear later.
+            // AUTH-class answers are deterministic, so retrying that twin is
+            // pointless; revoke it and restore the original HLS once.
+            if (isLiveIptvError && restoreAcceptedIptvTwinAfterAuth(error)) return
 
             // IPTV: a stream that failed extractor sniffing is almost always
             // an HLS playlist behind an extension-less URL (inferred as
@@ -5058,6 +5377,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             } else {
                 // An explicit press is the one thing that clears a sleep stop.
                 sleepStopLatched = false
+                // A verdict timeout or onStop may have parked the original
+                // HLS while leaving the paused twin media item installed.
+                // Resolve that identity before ordinary play/userRetry logic.
+                if (restoreParkedIptvTwinIfNeeded()) return@let
                 // LIVE: play on a dead stream must re-tune to the live edge.
                 // A bare play() on an ENDED/errored live stream either does
                 // nothing (media3 leaves it parked) or replays stale bytes —
@@ -11481,12 +11804,31 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // BEFORE the media item so the first playlist fetch already has them.
         currentIptvHttpHeaders = entry.httpHeaders
         currentIptvStreamUrl = streamUrl
+        // Any tune to a URL other than the twin under trial supersedes the
+        // trial (a zap, a Stremio candidate, a lifecycle rejoin — every path
+        // funnels through here). Without this, the trial's timeout could
+        // later fire against a different channel.
+        if (iptvTwinTrialUrl != null && streamUrl != iptvTwinTrialUrl) {
+            clearIptvTwinTrial()
+        }
+        // A same-twin recovery must not destroy a parked rollback (sleep can
+        // leave that twin errored before the user presses Play). Tuning the
+        // original consumes the restore; tuning anywhere else supersedes it.
+        if (iptvTwinTrialRestoreOriginal != null &&
+            streamUrl != iptvTwinTrialRestoreTwin
+        ) {
+            clearParkedIptvTwinRestore()
+        }
         // Demux mode for this tune: strict for channels that earned it — and
         // for the whole session once two did (that's a strict-decoder device,
         // not two odd channels). Read per media-period load by the extractor
-        // factory installed in setupPlayer.
+        // factory installed in setupPlayer. A twin — on trial or accepted —
+        // is always strict: it exists to reach the demux mode that works
+        // (see the twin-trial fields).
         iptvStrictTsActive =
-            iptvStrictTsUrls.contains(streamUrl) || iptvStrictTsUrls.size >= 2
+            iptvStrictTsUrls.contains(streamUrl) || iptvStrictTsUrls.size >= 2 ||
+            streamUrl == iptvTwinTrialUrl ||
+            iptvTwinPreferredUrls.containsValue(streamUrl)
         iptvTuneDiagnostics.onTuneStart(
             entry.name,
             streamUrl,
@@ -11657,7 +11999,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         currentIptvStreamUrl = null
 
         if (!isStremioIptvUrl(entry.url)) {
-            setIptvMediaItem(entry, entry.url)
+            // A channel whose `.m3u8` wedged and whose `.ts` twin proved
+            // itself this session starts on the twin directly.
+            setIptvMediaItem(entry, iptvTwinPreferredUrls[entry.url] ?: entry.url)
             return
         }
 
@@ -14571,7 +14915,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val liveEntry = if (isIptvMode) {
                 iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive }
             } else null
-            if (liveEntry != null &&
+            // A trial onStop abandoned mid-verdict: re-tune the original HLS
+            // stream instead of resuming (or live-edge-rejoining) the
+            // unjudged twin. A full tune, so player, identity, machine and
+            // diagnostics all agree again; it re-tunes to the live edge, so
+            // it subsumes the >30s rejoin too.
+            if (liveEntry != null && restoreParkedIptvTwinIfNeeded()) {
+                // Restored and started by setIptvMediaItem.
+            } else if (liveEntry != null &&
                 iptvStoppedAtRealtime > 0L &&
                 awayMs > IPTV_LIVE_REJOIN_AFTER_MS
             ) {
@@ -14596,6 +14947,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         finalizeIptvRecordingIfActive()
         // A recovery in flight must not fight the pause below (its re-tunes
         // set playWhenReady=true); onStart's rejoin re-arms recovery anyway.
+        // The twin trial goes with it — its timeout re-tunes too, and firing
+        // one while backgrounded would restart playback under the pause. An
+        // UNJUDGED twin must not survive as the channel's identity either:
+        // park its original for onStart to restore FOR REAL (media item, not
+        // just the bookkeeping field — the two disagreeing would misroute
+        // error attribution, recording eligibility and diagnostics on a
+        // quick resume).
+        if (!parkIptvTwinTrialRestore()) clearIptvTwinTrial()
         iptvLiveRecovery.cancel()
         hideIptvReconnectPill()
         iptvStoppedAtRealtime = SystemClock.elapsedRealtime()
@@ -14704,6 +15063,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         iptvTuneDiagnostics.onSessionEnd()
+        clearIptvTwinTrial()
         iptvLiveRecovery.cancel()
         iptvNetworkCallback?.let {
             try {
