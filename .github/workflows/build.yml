@@ -465,7 +465,7 @@ jobs:
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev patchelf
+        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libpulse-dev libva-dev libvdpau-dev libxpresent-dev patchelf
 
     - name: Build private libmpv
       run: |
@@ -579,7 +579,7 @@ jobs:
     - name: Install Linux dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev patchelf
+        sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev libpulse-dev libva-dev libvdpau-dev libxpresent-dev patchelf
 
     # Build inside Ubuntu 22.04 even though GitHub currently only offers the
     # native public ARM runner on 24.04. This keeps both AppImage architectures
