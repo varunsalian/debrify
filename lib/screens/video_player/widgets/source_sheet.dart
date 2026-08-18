@@ -38,7 +38,7 @@ class SourceSheet extends StatefulWidget {
   State<SourceSheet> createState() => _SourceSheetState();
 }
 
-enum _FocusZone { addons, sources }
+enum _FocusZone { addons, sources, close }
 
 class _SourceEntry {
   final int originalIndex;
@@ -336,6 +336,17 @@ class _SourceSheetState extends State<SourceSheet> {
       widget.onClose();
       return;
     }
+    if (_focusZone == _FocusZone.close) {
+      if (isActivateKey(event.logicalKey)) {
+        TvOverlayBack.mark();
+        widget.onClose();
+      } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+          event.logicalKey == LogicalKeyboardKey.arrowDown) {
+        setState(() => _focusZone = _FocusZone.sources);
+        _ensureFocusedVisible();
+      }
+      return;
+    }
     if (_focusZone == _FocusZone.addons) {
       final compact = MediaQuery.sizeOf(context).width < 700;
       final previousKey = compact
@@ -361,6 +372,8 @@ class _SourceSheetState extends State<SourceSheet> {
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       setState(() => _focusZone = _FocusZone.addons);
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      setState(() => _focusZone = _FocusZone.close);
     } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       final minimum = _loadMoreMode == null ? 0 : -1;
       if (_focusedSource > minimum) {
@@ -498,6 +511,8 @@ class _SourceSheetState extends State<SourceSheet> {
               ),
             ),
             Text('${_visibleEntries.length} sources', style: _mutedStyle),
+            const SizedBox(width: 14),
+            _buildCloseButton(),
           ],
         ),
         const SizedBox(height: 20),
@@ -563,6 +578,31 @@ class _SourceSheetState extends State<SourceSheet> {
       fontSize: 11,
       fontWeight: FontWeight.w600,
       letterSpacing: 2,
+    ),
+  );
+
+  Widget _buildCloseButton() => GestureDetector(
+    key: const ValueKey('source-sheet-close'),
+    onTap: widget.onClose,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 140),
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: _focusZone == _FocusZone.close
+            ? Colors.white
+            : Colors.white.withValues(alpha: .08),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withValues(alpha: .14)),
+      ),
+      child: Icon(
+        Icons.close_rounded,
+        size: 22,
+        color: _focusZone == _FocusZone.close
+            ? Colors.black
+            : Colors.white.withValues(alpha: .82),
+      ),
     ),
   );
 

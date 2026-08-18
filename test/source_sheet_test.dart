@@ -162,6 +162,29 @@ void main() {
     expect(searches, 1);
   });
 
+  testWidgets('closes from the visible DPAD close control', (tester) async {
+    var closed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SourceSheet(
+          sources: [_source(name: 'Current', source: 'stremio:torrentio')],
+          currentSourceIndex: 0,
+          resolveSource: (_) async => 'https://example.test/resolved',
+          onSourceSelected: (_, _) {},
+          onClose: () => closed = true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('source-sheet-close')), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(closed, isTrue);
+  });
+
   testWidgets('uses horizontal DPAD navigation for compact add-ons', (
     tester,
   ) async {
