@@ -1,9 +1,13 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/models/iptv_playlist.dart';
+import 'package:debrify/screens/settings/iptv_hidden_categories_page.dart';
 import 'package:debrify/services/iptv_catalog_db.dart';
 import 'package:debrify/services/iptv_catalog_key.dart';
+import 'package:debrify/utils/platform_util.dart';
 
 IptvChannel _ch(int i, {required String group, int? number}) => IptvChannel(
   channelNumber: number,
@@ -211,5 +215,71 @@ void main() {
     IptvCatalogDb.setGroupHidden(key, '', true);
     expect(IptvCatalogDb.hiddenGroups(key), isEmpty);
     expect(IptvCatalogDb.snapshot(key)!.count(), 6);
+  });
+
+  testWidgets('TV DPAD reveals category rows past the initial viewport', (
+    tester,
+  ) async {
+    PlatformUtil.debugSetAndroidTvCached(true);
+    addTearDown(() => PlatformUtil.debugSetAndroidTvCached(null));
+    await tester.binding.setSurfaceSize(const Size(1280, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final categories = List.generate(24, (i) => 'Category $i');
+    IptvCatalogDb.ingest(
+      dbPath: IptvCatalogDb.path,
+      catalogKey: key,
+      channels: [
+        for (var i = 0; i < categories.length; i++)
+          _ch(i, group: categories[i], number: i + 1),
+      ],
+      categories: categories,
+      numberingSourceKey: 'source-1',
+    );
+    final playlist = IptvPlaylist(
+      id: 'source-1',
+      name: 'Example playlist',
+      url: 'http://example/list.m3u',
+      addedAt: DateTime(2026),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: IptvHiddenCategoriesPage(playlist: playlist)),
+    );
+    // SettingsBackground has an intentionally continuous ambient animation,
+    // while the catalog GROUP BY runs in a real worker isolate. Wait for the
+    // query without waiting for the whole widget tree to become idle.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    await tester.pump();
+
+    final firstRow = find.byWidgetPredicate(
+      (widget) =>
+          widget is Focus &&
+          widget.focusNode?.debugLabel == 'iptv-hidden-row-0',
+    );
+    final firstNode = tester.widget<Focus>(firstRow).focusNode!;
+    firstNode.requestFocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+
+    final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+    final before = scrollable.position.pixels;
+    for (var i = 0; i < 10; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+
+    expect(
+      FocusManager.instance.primaryFocus?.debugLabel,
+      'iptv-hidden-row-10',
+    );
+    expect(
+      scrollable.position.pixels,
+      greaterThan(before),
+      reason: 'moving focus below the fold must scroll the category list',
+    );
   });
 }

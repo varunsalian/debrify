@@ -6,6 +6,7 @@ import '../../services/iptv_catalog_db.dart';
 import '../../services/iptv_catalog_key.dart';
 import '../../utils/platform_util.dart';
 import '../../utils/tv_keys.dart';
+import '../../utils/tv_reveal.dart';
 import '../../widgets/tv_text_field.dart';
 import 'widgets/settings_widgets.dart';
 import '../../theme/app_theme_scope.dart';
@@ -276,6 +277,7 @@ class _IptvHiddenCategoriesPageState extends State<IptvHiddenCategoriesPage> {
             itemBuilder: (context, i) => _CategoryTile(
               focusNode: _rowNode(i),
               row: rows[i],
+              isTelevision: _isTv,
               onToggle: () => _toggle(rows[i]),
               onUp: i == 0 ? _focusAbove : () => _rowNode(i - 1).requestFocus(),
               onDown: i == rows.length - 1
@@ -406,6 +408,7 @@ class _CategoryTile extends StatefulWidget {
   const _CategoryTile({
     required this.focusNode,
     required this.row,
+    required this.isTelevision,
     required this.onToggle,
     required this.onUp,
     required this.onDown,
@@ -413,6 +416,7 @@ class _CategoryTile extends StatefulWidget {
 
   final FocusNode focusNode;
   final _CategoryRow row;
+  final bool isTelevision;
   final VoidCallback onToggle;
   final VoidCallback? onUp;
   final VoidCallback? onDown;
@@ -438,7 +442,21 @@ class _CategoryTileState extends State<_CategoryTile> {
     final shown = !row.hidden;
     return Focus(
       focusNode: widget.focusNode,
-      onFocusChange: (_) => setState(() {}),
+      onFocusChange: (hasFocus) {
+        setState(() {});
+        if (!hasFocus || !widget.isTelevision) return;
+        // Rows move focus themselves for reliable DPAD traversal. Unlike
+        // default traversal, that does not ask the sliver to reveal its new
+        // child, so focus could walk below the initial viewport unseen.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && widget.focusNode.hasFocus) {
+            tvRevealMinimal(
+              context,
+              duration: const Duration(milliseconds: 120),
+            );
+          }
+        });
+      },
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
           return KeyEventResult.ignored;
@@ -466,32 +484,33 @@ class _CategoryTileState extends State<_CategoryTile> {
               : Colors.transparent,
           borderRadius: app.shape.br(10),
         ),
-        child: ListTile(
-          leading: Icon(
-            shown ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-            color: shown ? t.accent : t.dim2,
-          ),
-          title: Text(
-            row.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: shown ? app.core.tx : t.dim,
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: app.shape.br(10),
+          child: ListTile(
+            leading: Icon(
+              shown ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+              color: shown ? t.accent : t.dim2,
             ),
+            title: Text(
+              row.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: shown ? app.core.tx : t.dim,
+              ),
+            ),
+            subtitle: Text(
+              row.stale
+                  ? 'Not in this list any more — turn on to clear the rule'
+                  : '${row.count} channel${row.count == 1 ? '' : 's'}',
+              style: TextStyle(fontSize: 12, color: t.dim2),
+            ),
+            trailing: Switch(value: shown, onChanged: (_) => widget.onToggle()),
+            onTap: widget.onToggle,
           ),
-          subtitle: Text(
-            row.stale
-                ? 'Not in this list any more — turn on to clear the rule'
-                : '${row.count} channel${row.count == 1 ? '' : 's'}',
-            style: TextStyle(fontSize: 12, color: t.dim2),
-          ),
-          trailing: Switch(
-            value: shown,
-            onChanged: (_) => widget.onToggle(),
-          ),
-          onTap: widget.onToggle,
         ),
       ),
     );
