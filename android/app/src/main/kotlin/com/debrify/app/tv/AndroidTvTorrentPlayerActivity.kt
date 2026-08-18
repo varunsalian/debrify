@@ -6762,12 +6762,11 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
      * defaults loaded in onCreate).
      */
     private val recordingEngineEnabled: Boolean by lazy {
-        com.debrify.app.profiles.ProfilePreferenceProjection.isCommitted(this) ||
-            com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
-                this,
-                "recording_engine_enabled",
-                true,
-            )
+        com.debrify.app.profiles.ProfilePreferenceProjection.getBoolean(
+            this,
+            "recording_engine_enabled",
+            true,
+        )
     }
 
     /** Repaints the Record button whenever an engine capture starts or ends —

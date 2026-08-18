@@ -82,9 +82,9 @@ class LiveRecordingService : Service() {
 
 		/** The user-set cap (Settings → IPTV → Simultaneous recordings), read
 		 *  fresh at every start decision. shared_preferences stores Dart ints
-		 *  as longs; the getInt fallback covers any legacy write. */
+		 *  as longs; the numeric fallback covers any legacy native write. */
 		fun maxConcurrent(context: Context): Int {
-			val raw = com.debrify.app.profiles.ProfilePreferenceProjection.getLong(
+			val raw = com.debrify.app.profiles.ProfilePreferenceProjection.getDeviceLong(
 				context,
 				"recording_max_concurrent",
 				DEFAULT_MAX_CONCURRENT.toLong(),

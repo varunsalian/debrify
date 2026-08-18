@@ -35,21 +35,8 @@ class NativeProfileProjection {
     'com.debrify.app/profile_privacy',
   );
 
-  static const Set<String> logicalKeys = <String>{
-    'tv_trailer_underlay_enabled',
-    'tv_ui_scale_percent',
-    'tv_low_res_render',
-    'recording_engine_enabled',
-    'iptv_player_guide_style',
-    'subtitle_auto_sync_enabled',
-    'player_default_aspect_index_tv',
-    'player_night_mode_index',
-    'player_system_audio_effects',
-    'skip_segments_enabled',
-    'skip_segment_provider',
-    'player_default_subtitle_language',
-    'player_default_audio_language',
-  };
+  static const Set<String> logicalKeys =
+      ProfilePreferences.nativeProjectionKeys;
 
   static Future<void> publish(
     ProfileScope scope,

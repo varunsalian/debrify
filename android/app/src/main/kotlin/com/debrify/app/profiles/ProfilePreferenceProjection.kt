@@ -156,6 +156,18 @@ object ProfilePreferenceProjection {
         } else fallback
     }
 
+    /** Explicit read for registered device-owned settings. Unlike profile
+     * values, these remain available while the active projection is denied. */
+    @JvmStatic
+    fun getDeviceLong(context: Context, logicalKey: String, fallback: Long): Long {
+        val prefs = flutterPrefs(context)
+        return try {
+            prefs.getLong("flutter.$logicalKey", fallback)
+        } catch (_: ClassCastException) {
+            (prefs.all["flutter.$logicalKey"] as? Number)?.toLong() ?: fallback
+        }
+    }
+
     /** Native-only settings use one file per opaque profile ID. */
     @JvmStatic
     fun scopedPreferences(context: Context, legacyName: String): SharedPreferences {

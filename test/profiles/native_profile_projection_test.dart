@@ -113,6 +113,36 @@ void main() {
     },
   );
 
+  test(
+    'native preference writes refresh the active projection immediately',
+    () async {
+      final profile = (await registry.getProfile(adminId))!;
+      ProfileLockController.instance.activate(profile, unlocked: true);
+      ProfileNativeLockBridge.initialize();
+      await NativeProfileProjection.publish(scope);
+
+      final profilePrefs = await ProfilePreferences.instance();
+      await profilePrefs.setString('player_default_subtitle_language', 'es');
+      await profilePrefs.setString('player_default_audio_language', 'ja');
+
+      final prefs = await SharedPreferences.getInstance();
+      var projection =
+          jsonDecode(prefs.getString(NativeProfileProjection.deviceKey)!)
+              as Map<String, dynamic>;
+      var values = projection['values'] as Map<String, dynamic>;
+      expect(values['player_default_subtitle_language'], 'es');
+      expect(values['player_default_audio_language'], 'ja');
+
+      await profilePrefs.remove('player_default_subtitle_language');
+      projection =
+          jsonDecode(prefs.getString(NativeProfileProjection.deviceKey)!)
+              as Map<String, dynamic>;
+      values = projection['values'] as Map<String, dynamic>;
+      expect(values, isNot(contains('player_default_subtitle_language')));
+      expect(values['player_default_audio_language'], 'ja');
+    },
+  );
+
   test('a profile switch cannot relabel an in-flight addon read', () async {
     final actor = await ProfileAuthorizationContext.capture(registry);
     await ConnectionResourceService(registry: registry, cipher: cipher).create(

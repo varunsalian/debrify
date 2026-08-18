@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 
 import 'native_profile_projection.dart';
 import 'profile_lock_controller.dart';
+import 'profile_preferences.dart';
 import 'profile_runtime.dart';
+import 'profile_scope.dart';
 
 /// Keeps native profile authority aligned with the foreground profile gate.
 ///
@@ -20,6 +22,7 @@ class ProfileNativeLockBridge {
   static void initialize() {
     if (_installed) return;
     _installed = true;
+    ProfilePreferences.nativeProjectionPublisher = _publishPreferenceMutation;
     ProfileLockController.instance.authorityRevision.addListener(
       _authorityChanged,
     );
@@ -45,6 +48,19 @@ class ProfileNativeLockBridge {
         : NativeProfileProjection.invalidate();
   }
 
+  static Future<void> _publishPreferenceMutation(ProfileScope scope) {
+    if (!ProfileRuntime.isInitialized ||
+        !ProfileRuntime.isProfileCommitted ||
+        ProfileRuntime.isInMaintenance ||
+        ProfileRuntime.scope.value != scope) {
+      throw StateError('Profile changed while publishing native preference');
+    }
+    final lock = ProfileLockController.instance;
+    return lock.hasActivatedProfile && lock.isUnlocked
+        ? NativeProfileProjection.publish(scope)
+        : NativeProfileProjection.invalidate();
+  }
+
   @visibleForTesting
   static Future<void> debugSynchronize() => _synchronize();
 
@@ -55,6 +71,7 @@ class ProfileNativeLockBridge {
         _authorityChanged,
       );
     }
+    ProfilePreferences.nativeProjectionPublisher = null;
     _installed = false;
   }
 }
