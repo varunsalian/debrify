@@ -75,9 +75,11 @@ readelf -d "$PLUGIN" | grep -q 'Shared library: \[libmpv.so.2\]' || {
   exit 1
 }
 
-# Exercise the loader exactly as the AppImage will: no global library path,
-# plugin RUNPATH resolving mpv, and every remaining dependency from the host.
-loader_report="$(LD_LIBRARY_PATH= ldd "$PLUGIN")"
+# ldd inspects the plugin in isolation, so it does not inherit the executable's
+# $ORIGIN/lib RUNPATH that normally resolves libflutter_linux_gtk.so. Expose
+# only the existing Flutter bundle directory for this verification; libmpv is
+# deliberately absent there and must still resolve through the plugin RUNPATH.
+loader_report="$(LD_LIBRARY_PATH="$LIB" ldd "$PLUGIN")"
 if grep -q 'not found' <<<"$loader_report"; then
   echo "error: unresolved native dependency after private mpv installation:" >&2
   grep 'not found' <<<"$loader_report" >&2
