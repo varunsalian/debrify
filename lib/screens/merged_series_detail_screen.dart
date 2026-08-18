@@ -48,6 +48,7 @@ import '../theme/app_theme_controller.dart';
 import '../theme/theme_core_resolver.dart';
 import '../theme/theme_overrides.dart';
 import '../theme/shipped_themes.dart' show effectiveDetailTheme;
+import '../utils/artwork_url.dart';
 
 /// Merged series page (experimental, flag-gated): the detail screen and the
 /// episode drill-down fused into one Stremio-styled screen. Reached only from
@@ -905,7 +906,10 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
     // which is a plain field read and notifies nobody — without this line the
     // page you edited from would be the last one to change.
     AppThemeScope.of(context);
-    final backdropUrl = _item.background ?? _item.poster;
+    // The backdrop is the one display-sized detail hero. Keep the model's
+    // catalog URL intact for rails, but ask MetaHub for the large source here.
+    final backdropUrl =
+        highQualityArtworkUrl(_item.background ?? _item.poster);
     return PopScope(
       // While the trailer is fullscreen, Back closes it instead of leaving the
       // page — the same player stays alive and settles back into the backdrop.

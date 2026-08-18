@@ -11,6 +11,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/app_theme_scope.dart';
 import '../../theme/widgets/focus_expression.dart';
 import '../../theme/widgets/parallax_focus.dart';
+import '../../utils/artwork_url.dart';
 import '../../utils/dominant_color.dart';
 import 'row_tag_pill.dart';
 import '../../utils/platform_util.dart';
@@ -613,21 +614,25 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // Never an advance — see the cadence comment.
   }
 
-  /// Best full-bleed art for [item]: its own backdrop, else a metahub 16:9
+  /// Best full-bleed art for [item]: its own backdrop, else a MetaHub 16:9
   /// still derived from its IMDb id — the same synchronous trick the other
   /// stage layouts use, because catalog and Continue Watching items carry a
   /// poster but rarely a backdrop — and the poster only as a last resort.
-  /// The poster fallback is what blurry heroes are made of (~350px of 2:3
-  /// art cover-cropped over a full screen), so it is LAST, not second.
+  ///
+  /// This is intentionally the *large* MetaHub path. It feeds the single
+  /// full-screen hero only; shelf cards keep their medium artwork and small
+  /// decode budgets. The poster fallback is what blurry heroes are made of
+  /// (~350px of 2:3 art cover-cropped over a full screen), so it is LAST, not
+  /// second.
   static String? _heroArt(StremioMeta item) {
     final b = item.background;
-    if (b != null && b.isNotEmpty) return b;
+    if (b != null && b.isNotEmpty) return highQualityArtworkUrl(b);
     final tt = item.imdbId ?? (item.id.startsWith('tt') ? item.id : null);
     if (tt != null) {
-      return 'https://images.metahub.space/background/medium/$tt/img';
+      return 'https://images.metahub.space/background/large/$tt/img';
     }
     final p = item.poster;
-    return (p != null && p.isNotEmpty) ? p : null;
+    return (p != null && p.isNotEmpty) ? highQualityArtworkUrl(p) : null;
   }
 
   int get _heroIndex {
@@ -1240,6 +1245,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final url = _heroArt(item);
+    final posterUrl = highQualityArtworkUrl(item.poster);
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
     final rolling = _rolling;
@@ -1278,11 +1284,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
               // Same guess-404 fallback as the wide backdrop: derived
               // metahub art can miss, and the poster beats a blank hero.
               errorWidget: (_, __, ___) =>
-                  (item.poster != null &&
-                          item.poster!.isNotEmpty &&
-                          item.poster != url)
+                  (posterUrl != null &&
+                          posterUrl.isNotEmpty &&
+                          posterUrl != url)
                       ? CachedNetworkImage(
-                          imageUrl: item.poster!,
+                          imageUrl: posterUrl,
                           fit: BoxFit.cover,
                           cacheManager: DebrifyImageCache.manager,
                           memCacheWidth: 900,
@@ -1421,6 +1427,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     final item = _heroItem;
     if (item == null) return const SizedBox.shrink();
     final url = _heroArt(item);
+    final posterUrl = highQualityArtworkUrl(item.poster);
     final flip = _flip;
     // Both scrims below were tuned against a STILL, where they only have to
     // keep white text off busy artwork. Left at that strength over a moving
@@ -1470,11 +1477,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             // for that title), fall back to the poster rather than a flat
             // ground: a soft hero beats a blank one.
             errorWidget: (_, __, ___) =>
-                (item.poster != null &&
-                        item.poster!.isNotEmpty &&
-                        item.poster != url)
+                (posterUrl != null &&
+                        posterUrl.isNotEmpty &&
+                        posterUrl != url)
                     ? CachedNetworkImage(
-                        imageUrl: item.poster!,
+                        imageUrl: posterUrl,
                         fit: BoxFit.cover,
                         cacheManager: DebrifyImageCache.manager,
                         memCacheWidth: 1400,

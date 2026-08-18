@@ -18,6 +18,7 @@ import '../widgets/shimmer.dart';
 import '../widgets/trakt/trakt_menu_helpers.dart';
 import '../services/simkl/simkl_menu_helpers.dart';
 import '../services/simkl/simkl_service.dart';
+import '../utils/artwork_url.dart';
 import '../utils/tv_keys.dart';
 
 /// Cinematic detail screen for a catalog item.
@@ -487,7 +488,11 @@ class _CatalogItemDetailScreenState extends State<CatalogItemDetailScreen>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isWide = _wide;
-    final backdropUrl = _item.background ?? _item.poster;
+    // The detail backdrop is a display-sized hero, not a shelf card. Upgrade
+    // MetaHub's catalog-sized art here without changing the item's shared
+    // poster URL (recommendation shelves continue to use their medium source).
+    final backdropUrl =
+        highQualityArtworkUrl(_item.background ?? _item.poster);
 
     return ArtworkAccentScope(
       accent: _artworkAccent,
