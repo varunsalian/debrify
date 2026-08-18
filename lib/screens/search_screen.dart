@@ -1374,13 +1374,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         StorageService.getAmbientTrailerAudioEnabled(
           AmbientTrailerSurface.homeHero,
         ),
-        StorageService.getAmbientTrailerVolume(AmbientTrailerSurface.homeHero),
+      StorageService.getAmbientTrailerVolume(AmbientTrailerSurface.homeHero),
       ]).then((values) {
-        if (!mounted || !(values[0] as bool)) return;
-        _heroTrailerEnabled = true;
-        _heroTrailerVolume = (values[1] as bool)
-            ? (values[2] as int).toDouble()
-            : 0;
+        if (!mounted) return;
+        final enabled = values[0] as bool;
+        setState(() {
+          _heroTrailerEnabled = enabled;
+          _heroTrailerVolume = (values[1] as bool)
+              ? (values[2] as int).toDouble()
+              : 0;
+        });
+        if (!enabled) return;
         // The board usually seeds the hero before this read lands — kick the
         // current spotlight so the billboard still starts on cold open.
         final current = _heroItem.value;
@@ -5888,6 +5892,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               subtitle: 'LIVE',
               shape: SpotlightCardShape.channel,
               onOpen: () => _playIptvListChannel(ch),
+              previewBuilder: ch.isLive
+                  ? (_) => SpotlightIptvCardPreview(
+                      channel: ch,
+                      ambientVolume: _heroTrailerVolume,
+                    )
+                  : null,
             ),
         ],
       );
@@ -5941,6 +5951,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 subtitle: 'LIVE',
                 shape: SpotlightCardShape.channel,
                 onOpen: () => _playIptvChannel(ch),
+                previewBuilder: ch.isLive
+                    ? (_) => SpotlightIptvCardPreview(
+                        channel: ch,
+                        ambientVolume: _heroTrailerVolume,
+                      )
+                    : null,
               ),
           ],
         );
@@ -17954,6 +17970,129 @@ class _HeroTrailerLayerState extends State<_HeroTrailerLayer> {
       : _SpotlightSearchButton.rightInset +
             _SpotlightSearchButton.diameter +
             12;
+}
+
+/// Live IPTV preview drawn directly inside the active Spotlight card.
+///
+/// [SpotlightBoard] mounts this only for the pointer-hovered card on desktop
+/// or the DPAD-focused card on TV, so a shelf never opens more than one stream
+/// while the user browses. Stremio-backed channels retain the same candidate
+/// ladder as the full IPTV preview stage; plain M3U/Xtream channels open their
+/// declared URL directly. Its audio follows the user's Home ambient-audio
+/// setting, so the channel is audible without overriding an intentional mute.
+class SpotlightIptvCardPreview extends StatefulWidget {
+  final IptvChannel channel;
+  final double ambientVolume;
+
+  const SpotlightIptvCardPreview({
+    super.key,
+    required this.channel,
+    required this.ambientVolume,
+  });
+
+  @override
+  State<SpotlightIptvCardPreview> createState() =>
+      _SpotlightIptvCardPreviewState();
+}
+
+class _SpotlightIptvCardPreviewState extends State<SpotlightIptvCardPreview> {
+  String? _streamUrl;
+  List<String>? _candidates;
+  int _resolveTicket = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve(notify: false);
+  }
+
+  @override
+  void didUpdateWidget(SpotlightIptvCardPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A shelf can reorder/reload while its active card's State is retained.
+    // Never carry the previous channel's stream (or a late candidate resolve)
+    // into the card that inherited that State slot.
+    if (!identical(oldWidget.channel, widget.channel)) _resolve();
+  }
+
+  @override
+  void dispose() {
+    _resolveTicket++;
+    super.dispose();
+  }
+
+  void _resolve({bool notify = true}) {
+    final channel = widget.channel;
+    final ticket = ++_resolveTicket;
+    _candidates = null;
+    if (channel.contentType == 'series') {
+      _setStreamUrl(null, notify: notify);
+      return;
+    }
+    if (!StremioIptvService.isStremioChannelUrl(channel.url)) {
+      _setStreamUrl(channel.url, notify: notify);
+      return;
+    }
+
+    _setStreamUrl(null, notify: notify);
+    StremioIptvService.instance.resolveCandidates(channel.url).then((found) {
+      if (!mounted || ticket != _resolveTicket || found.isEmpty) return;
+      _candidates = [for (final candidate in found) candidate.url];
+      _setStreamUrl(_candidates!.first);
+    });
+  }
+
+  void _setStreamUrl(String? value, {bool notify = true}) {
+    if (_streamUrl == value) return;
+    if (!notify) {
+      _streamUrl = value;
+      return;
+    }
+    setState(() => _streamUrl = value);
+  }
+
+  void _onPlaybackFailed() {
+    final candidates = _candidates;
+    final current = _streamUrl;
+    if (candidates == null || current == null) return;
+    final next = candidates.indexOf(current) + 1;
+    if (next <= 0 || next >= candidates.length) {
+      StremioIptvService.instance.invalidate(widget.channel.url);
+      _setStreamUrl(null);
+      return;
+    }
+    _setStreamUrl(candidates[next]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = _streamUrl;
+    if (url == null) return const SizedBox.expand();
+    final channel = widget.channel;
+    return RepaintBoundary(
+      child: HeroTrailerBackdrop(
+        // A candidate-ladder step needs a fresh player; retaining a dead
+        // engine would leave the logo visible forever after its replacement
+        // URL was selected.
+        key: ValueKey('spotlight-iptv-card-${channel.url}-$url'),
+        imageUrl: null,
+        videoUrl: url,
+        enabled: true,
+        live: true,
+        httpHeaders: channel.playbackHeaders,
+        imageBlurSigma: 0,
+        videoBlurSigma: 0,
+        // The short dwell filters a pointer sweep / held DPAD move without
+        // making a deliberate card preview feel late.
+        startDelay: const Duration(milliseconds: 300),
+        ambientVolume: widget.ambientVolume,
+        onPlaybackFailed: _onPlaybackFailed,
+        firstFrameTimeout: StremioIptvService.isStremioChannelUrl(channel.url)
+            ? const Duration(seconds: 12)
+            : null,
+      ),
+    );
+  }
 }
 
 /// The boxed hero video region's IPTV-favourite variant: plays a focused

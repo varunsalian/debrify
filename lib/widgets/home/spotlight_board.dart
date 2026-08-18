@@ -40,6 +40,12 @@ class SpotlightCard {
   final VoidCallback? onOptions;
   final SpotlightCardShape shape;
 
+  /// A lightweight, in-card preview for the one card the user is actively
+  /// inspecting. It is built only while the card is hovered on pointer
+  /// surfaces, or holds DPAD focus on television; resting cards never mount a
+  /// player/decoder.
+  final WidgetBuilder? previewBuilder;
+
   const SpotlightCard({
     required this.title,
     required this.onOpen,
@@ -48,6 +54,7 @@ class SpotlightCard {
     this.progress,
     this.onOptions,
     this.shape = SpotlightCardShape.poster,
+    this.previewBuilder,
   });
 }
 
@@ -492,12 +499,45 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   /// engine stayed mounted.
   bool _rolling = false;
 
+  /// Desktop previews and the hero share the process-wide video-output lease.
+  /// Keep a small owner set rather than a bool: when the pointer moves from
+  /// one live card to another, MouseRegion enter/exit ordering must never
+  /// briefly restart the hero between the two previews.
+  final Set<Object> _desktopPreviewOwners = <Object>{};
+
   /// One funnel for leaving the rolling state, so no exit path can forget to
   /// tell the host to tear the video down.
   void _stopRolling() {
     if (!_rolling) return;
     if (mounted) setState(() => _rolling = false);
     widget.onTrailerStop?.call();
+  }
+
+  /// A desktop IPTV card is about to mount its own video decoder. The hero
+  /// must yield its output lease before that mount; otherwise MediaKit queues
+  /// the card behind an ambient trailer that loops indefinitely. Re-arm the
+  /// hero only when the pointer has left every live card.
+  void _onDesktopPreviewActivityChanged(Object owner, bool active) {
+    if (widget.dpad) return;
+    final hadPreview = _desktopPreviewOwners.isNotEmpty;
+    if (active) {
+      _desktopPreviewOwners.add(owner);
+    } else {
+      _desktopPreviewOwners.remove(owner);
+    }
+    final hasPreview = _desktopPreviewOwners.isNotEmpty;
+    if (hadPreview == hasPreview) return;
+
+    if (hasPreview) {
+      _cadence?.cancel();
+      _cadence = null;
+      if (_rolling && mounted) setState(() => _rolling = false);
+      // Also cancels a hero resolve that has not reached its first frame yet.
+      widget.onTrailerStop?.call();
+      return;
+    }
+
+    _restartCadence();
   }
 
   void _restartCadence() {
@@ -508,6 +548,10 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     _cadence = null;
     _rolling = false;
     if (!mounted) return;
+    // The active card owns the one available decoder. A rebuild caused by
+    // loading more shelves or resolving hero art must not re-arm the hero
+    // underneath it.
+    if (_desktopPreviewOwners.isNotEmpty) return;
     // The cadence's only job is the trailer dwell now — with no trailer to
     // arm there is nothing to time. The reel itself moves only on input.
     if (!widget.trailersEnabled || widget.onDwell == null) return;
@@ -1818,6 +1862,9 @@ class SpotlightBoardState extends State<SpotlightBoard> {
                 captionBlock: captions ? m.captionBlock : 0,
                 showCaption: captions,
                 hoverable: !widget.dpad,
+                dpad: widget.dpad,
+                onDesktopPreviewActivityChanged:
+                    _onDesktopPreviewActivityChanged,
               ),
             ),
           ),
@@ -2046,6 +2093,17 @@ class _Card extends StatefulWidget {
   /// exactly one at HEAD.
   final bool hoverable;
 
+  /// Selects the input that owns an optional card preview: hover on a pointer
+  /// board, focus on a DPAD board. This deliberately does not use `_f || _h`:
+  /// a desktop card that retains keyboard focus while the pointer rests on a
+  /// different card must not leave a second live stream decoding offscreen.
+  final bool dpad;
+
+  /// Announces a pointer-owned live preview before it mounts, so the board
+  /// can release the hero trailer's single video-output lease first.
+  final void Function(Object owner, bool active)?
+      onDesktopPreviewActivityChanged;
+
   const _Card({
     required this.card,
     required this.node,
@@ -2056,6 +2114,8 @@ class _Card extends StatefulWidget {
     this.captionBlock = 0,
     this.showCaption = true,
     this.hoverable = false,
+    this.dpad = true,
+    this.onDesktopPreviewActivityChanged,
   });
 
   @override
@@ -2070,6 +2130,46 @@ class _CardState extends State<_Card> {
   /// visual that a keyboard put there.
   bool _h = false;
 
+  final Object _previewOwner = Object();
+  bool _previewActivityReported = false;
+
+  void _setHover(bool hovered) {
+    if (_h == hovered) return;
+    setState(() => _h = hovered);
+    _reportDesktopPreviewActivity(hovered);
+  }
+
+  void _reportDesktopPreviewActivity(bool active) {
+    final report = active &&
+        !widget.dpad &&
+        widget.card.previewBuilder != null;
+    if (_previewActivityReported == report) return;
+    _previewActivityReported = report;
+    widget.onDesktopPreviewActivityChanged?.call(_previewOwner, report);
+  }
+
+  @override
+  void didUpdateWidget(_Card oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final shouldReport =
+        _h && !widget.dpad && widget.card.previewBuilder != null;
+    if (_previewActivityReported && !shouldReport) {
+      _previewActivityReported = false;
+      oldWidget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
+    } else if (!_previewActivityReported && shouldReport) {
+      _previewActivityReported = true;
+      widget.onDesktopPreviewActivityChanged?.call(_previewOwner, true);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_previewActivityReported) {
+      widget.onDesktopPreviewActivityChanged?.call(_previewOwner, false);
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = AppThemeScope.of(context);
@@ -2078,6 +2178,12 @@ class _CardState extends State<_Card> {
     final url = c.image;
     final contained = c.shape.fit == BoxFit.contain;
     final hasSubtitle = (c.subtitle ?? '').isNotEmpty;
+    final preview = c.previewBuilder;
+    // Exactly one card owns the decoder: desktop follows the pointer, TV
+    // follows the remote cursor. The preview is unmounted immediately when it
+    // stops being active, which tears its player down instead of leaving a
+    // decoder alive for every card crossed while browsing.
+    final previewActive = widget.dpad ? _f : _h;
 
     // The gradient remains part of the artwork so it covers and clips to the
     // whole poster as that poster grows. Only the glyph layer is counter-
@@ -2194,6 +2300,11 @@ class _CardState extends State<_Card> {
                     errorWidget: (_, __, ___) => const SizedBox.shrink(),
                   ),
                 ),
+              if (preview != null && previewActive)
+                // The art stays underneath until the first live frame lands,
+                // so a channel card never flashes to an empty/black plate
+                // while a stream resolves or buffers.
+                IgnorePointer(child: preview(context)),
               // Keep the gradient with the art: it must still grow to the
               // poster's full width and remain inside its rounded clip. The
               // text itself is the fixed-scale foreground above. No caption,
@@ -2289,8 +2400,8 @@ class _CardState extends State<_Card> {
     );
     final interactive = widget.hoverable
         ? MouseRegion(
-            onEnter: (_) => setState(() => _h = true),
-            onExit: (_) => setState(() => _h = false),
+            onEnter: (_) => _setHover(true),
+            onExit: (_) => _setHover(false),
             child: tappable,
           )
         : tappable;
