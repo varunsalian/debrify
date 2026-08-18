@@ -12178,7 +12178,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun umAppearanceRows(): List<UnifiedMenuController.Row> =
         // Shared with the Torbox player so the subtitle-appearance controls
         // can't drift between the two (see UnifiedMenuSections).
-        UnifiedMenuSections.appearanceRows(this) { applySubtitleSettings() }
+        UnifiedMenuSections.appearanceRows(this) { applyAndPersistSubtitleSettings() }
 
     private fun umTimingRows(): List<UnifiedMenuController.Row> {
         val ctx = this
@@ -12946,7 +12946,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         override fun onSearchSubtitle() { showSearchSubtitleDialog() }
         override fun getIdentityLabel(): String = currentSubtitleIdentityLabel()
-        override fun onSettingsChanged() { applySubtitleSettings() }
+        override fun onSettingsChanged() { applyAndPersistSubtitleSettings() }
         override fun onSyncOverlayRequested() { showSyncOverlay() }
         override fun onHidden() {
             subtitleSettingsVisible = false
@@ -13493,6 +13493,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             subtitleSeekHandler.removeCallbacks(subtitleSeekRunnable)
             subtitleSeekHandler.postDelayed(subtitleSeekRunnable, 150)
         }
+    }
+
+    private fun applyAndPersistSubtitleSettings() {
+        applySubtitleSettings()
+        MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
+            "saveSubtitleAppearance",
+            SubtitleSettings.profileAppearanceSnapshot(this),
+        )
     }
 
     // Aspect ratio

@@ -149,6 +149,39 @@ void main() {
     },
   );
 
+  test('native appearance batch publishes one coherent snapshot', () async {
+    final profile = (await registry.getProfile(adminId))!;
+    ProfileLockController.instance.activate(profile, unlocked: true);
+    ProfileNativeLockBridge.initialize();
+    await NativeProfileProjection.publish(scope);
+
+    var publications = 0;
+    NativeProfileProjection.debugAfterInvalidation = (_) async {
+      publications++;
+    };
+    final profilePrefs = await ProfilePreferences.instance();
+    expect(
+      await profilePrefs.setNativeProjectionBatch(<String, Object>{
+        'subtitle_size_index': 5,
+        'subtitle_color_index': 2,
+        'subtitle_bold': true,
+        'subtitle_selected_font_id': 'roboto',
+      }),
+      isTrue,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    final projection =
+        jsonDecode(prefs.getString(NativeProfileProjection.deviceKey)!)
+            as Map<String, dynamic>;
+    final values = projection['values'] as Map<String, dynamic>;
+    expect(publications, 1);
+    expect(values['subtitle_size_index'], 5);
+    expect(values['subtitle_color_index'], 2);
+    expect(values['subtitle_bold'], isTrue);
+    expect(values['subtitle_selected_font_id'], 'roboto');
+  });
+
   test('a profile switch cannot relabel an in-flight addon read', () async {
     final actor = await ProfileAuthorizationContext.capture(registry);
     await ConnectionResourceService(registry: registry, cipher: cipher).create(

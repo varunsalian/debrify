@@ -113,7 +113,9 @@ class ProfilePreferences implements SharedPreferences {
   void _assertWritable() {
     _assertReadable();
     if (_readOnlyAccess.contains(_capturedAccess)) {
-      throw StateError('${_capturedAccess!.name} preference access is read-only');
+      throw StateError(
+        '${_capturedAccess!.name} preference access is read-only',
+      );
     }
   }
 
@@ -216,6 +218,67 @@ class ProfilePreferences implements SharedPreferences {
     budgetValue: value,
   );
 
+  /// Persist a coherent group of native-consumed scalar settings and publish
+  /// their projection once. Used by native UI surfaces that return a complete
+  /// settings snapshot after one interaction.
+  Future<bool> setNativeProjectionBatch(Map<String, Object> values) async {
+    _assertWritable();
+    for (final entry in values.entries) {
+      if (!nativeProjectionKeys.contains(entry.key)) {
+        throw ArgumentError.value(
+          entry.key,
+          'key',
+          'Not a native projection key',
+        );
+      }
+      if (entry.value is! bool &&
+          entry.value is! int &&
+          entry.value is! String) {
+        throw ArgumentError.value(
+          entry.value,
+          entry.key,
+          'Unsupported scalar type',
+        );
+      }
+      final physical = _physical(entry.key);
+      if (_capturedAccess == null &&
+          !ProfilePreferenceBudget.admits(_delegate, physical, entry.value)) {
+        return false;
+      }
+    }
+
+    var success = true;
+    for (final entry in values.entries) {
+      _assertWritable();
+      final physical = _physical(entry.key);
+      success =
+          switch (entry.value) {
+            bool value => await _delegate.setBool(physical, value),
+            int value => await _delegate.setInt(physical, value),
+            String value => await _delegate.setString(physical, value),
+            _ => false,
+          } &&
+          success;
+    }
+    final scope = _scope;
+    final publisher = nativeProjectionPublisher;
+    _assertWritable();
+    if (success &&
+        scope != null &&
+        _capturedAccess == null &&
+        publisher != null) {
+      await publisher(scope);
+    }
+    if (success &&
+        scope != null &&
+        TvOsProfileRecoveryStore.supported &&
+        ProfileRuntime.isInitialized &&
+        ProfileRuntime.isProfileCommitted) {
+      await TvOsProfileRecoveryStore.checkpointPreferenceMutation();
+    }
+    return success;
+  }
+
   @override
   Future<bool> remove(String key) async {
     _assertWritable();
@@ -302,8 +365,7 @@ class DevicePreferences {
   /// These describe the running Flutter surface, not any user profile.
   static const String tvTrailerUnderlayEffectiveKey =
       'tv_trailer_underlay_effective';
-  static const String tvLowResRenderActiveKey =
-      'tv_low_res_render_active';
+  static const String tvLowResRenderActiveKey = 'tv_low_res_render_active';
   static const Set<String> nativeLaunchSnapshotKeys = <String>{
     tvTrailerUnderlayEffectiveKey,
     tvLowResRenderActiveKey,

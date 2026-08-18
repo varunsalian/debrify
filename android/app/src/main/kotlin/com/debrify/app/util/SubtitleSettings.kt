@@ -205,6 +205,25 @@ object SubtitleSettings {
             .toInt()
             .coerceIn(0, count - 1)
 
+    /** Complete profile-owned appearance state for the Flutter authority bridge. */
+    @JvmStatic
+    fun profileAppearanceSnapshot(context: Context): HashMap<String, Any> {
+        val authority = ProfilePreferenceProjection.activeJobContext(context)
+        return hashMapOf(
+            "profileId" to authority.profileId,
+            "dataGeneration" to authority.dataGeneration,
+            "sessionEpoch" to authority.sessionEpoch,
+            KEY_SIZE_INDEX to getSizeIndex(context),
+            KEY_STYLE_INDEX to getStyleIndex(context),
+            KEY_COLOR_INDEX to getColorIndex(context),
+            KEY_BG_INDEX to getBgIndex(context),
+            KEY_OUTLINE_COLOR_INDEX to getOutlineColorIndex(context),
+            KEY_ELEVATION_INDEX to getElevationIndex(context),
+            KEY_BOLD to getBold(context),
+            "subtitle_selected_font_id" to SubtitleFontManager.getProfileSelectedFontId(context),
+        )
+    }
+
     // Setters
     @JvmStatic
     fun setSizeIndex(context: Context, index: Int) {
