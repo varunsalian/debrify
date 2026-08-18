@@ -124,6 +124,9 @@ void main() {
       final profilePrefs = await ProfilePreferences.instance();
       await profilePrefs.setString('player_default_subtitle_language', 'es');
       await profilePrefs.setString('player_default_audio_language', 'ja');
+      await profilePrefs.setInt('subtitle_color_index', 3);
+      await profilePrefs.setBool('subtitle_bold', true);
+      await profilePrefs.setString('subtitle_selected_font_id', 'roboto');
 
       final prefs = await SharedPreferences.getInstance();
       var projection =
@@ -132,6 +135,9 @@ void main() {
       var values = projection['values'] as Map<String, dynamic>;
       expect(values['player_default_subtitle_language'], 'es');
       expect(values['player_default_audio_language'], 'ja');
+      expect(values['subtitle_color_index'], 3);
+      expect(values['subtitle_bold'], isTrue);
+      expect(values['subtitle_selected_font_id'], 'roboto');
 
       await profilePrefs.remove('player_default_subtitle_language');
       projection =

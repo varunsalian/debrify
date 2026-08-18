@@ -2016,6 +2016,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // Setup subtitle styling from saved preferences
         subtitleOverlay.setApplyEmbeddedStyles(false)
         subtitleOverlay.setApplyEmbeddedFontSizes(false)
+        SubtitleSettings.synchronizeProjectedAppearance(this)
+        SubtitleFontManager.synchronizeProjectedFont(this)
         // The sync offset is per-subtitle and in-memory: start this session at 0
         // and let SubtitleSettings scope it to whatever subtitle is on screen.
         SubtitleSettings.resetSyncOffset()

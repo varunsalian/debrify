@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
 import androidx.media3.ui.CaptionStyleCompat
+import com.debrify.app.profiles.ProfilePreferenceProjection
 
 /**
  * Subtitle customization settings manager.
@@ -178,6 +179,31 @@ object SubtitleSettings {
     fun getBold(context: Context): Boolean {
         return getPrefs(context).getBoolean(KEY_BOLD, DEFAULT_BOLD)
     }
+
+    /**
+     * Seed the native player's editable settings from Flutter's authoritative
+     * active-profile snapshot. The native panel continues writing the scoped
+     * file during playback, while every new player launch starts from Settings
+     * -> Playback instead of stale native-only values.
+     */
+    @JvmStatic
+    fun synchronizeProjectedAppearance(context: Context) {
+        if (!ProfilePreferenceProjection.isCommitted(context)) return
+        getPrefs(context).edit()
+            .putInt(KEY_SIZE_INDEX, projectedIndex(context, KEY_SIZE_INDEX, DEFAULT_SIZE_INDEX, SIZE_OPTIONS.size))
+            .putInt(KEY_STYLE_INDEX, projectedIndex(context, KEY_STYLE_INDEX, DEFAULT_STYLE_INDEX, STYLE_OPTIONS.size))
+            .putInt(KEY_COLOR_INDEX, projectedIndex(context, KEY_COLOR_INDEX, DEFAULT_COLOR_INDEX, COLOR_OPTIONS.size))
+            .putInt(KEY_BG_INDEX, projectedIndex(context, KEY_BG_INDEX, DEFAULT_BG_INDEX, BG_OPTIONS.size))
+            .putInt(KEY_OUTLINE_COLOR_INDEX, projectedIndex(context, KEY_OUTLINE_COLOR_INDEX, DEFAULT_OUTLINE_COLOR_INDEX, OUTLINE_COLOR_OPTIONS.size))
+            .putInt(KEY_ELEVATION_INDEX, projectedIndex(context, KEY_ELEVATION_INDEX, DEFAULT_ELEVATION_INDEX, ELEVATION_OPTIONS.size))
+            .putBoolean(KEY_BOLD, ProfilePreferenceProjection.getBoolean(context, KEY_BOLD, DEFAULT_BOLD))
+            .commit()
+    }
+
+    private fun projectedIndex(context: Context, key: String, fallback: Int, count: Int): Int =
+        ProfilePreferenceProjection.getLong(context, key, fallback.toLong())
+            .toInt()
+            .coerceIn(0, count - 1)
 
     // Setters
     @JvmStatic

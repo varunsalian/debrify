@@ -31,6 +31,8 @@ object SubtitleFontManager {
     private const val KEY_FONT_INDEX = "subtitle_font_index"
     private const val KEY_CUSTOM_FONT_PATH = "subtitle_custom_font_path"
     private const val KEY_CUSTOM_FONT_NAME = "subtitle_custom_font_name"
+    private const val FLUTTER_PREFS_NAME = "FlutterSharedPreferences"
+    private const val FLUTTER_CUSTOM_FONTS_KEY = "flutter.subtitle_custom_fonts"
     private const val KEY_PROFILE_MIGRATION = "subtitle_font_profile_migration_v1"
     private const val MIGRATED_ADMIN_PROFILE_ID = "legacy-admin-v1"
 
@@ -95,6 +97,61 @@ object SubtitleFontManager {
     @JvmStatic
     fun getFontIndex(context: Context): Int {
         return getPrefs(context).getInt(KEY_FONT_INDEX, DEFAULT_FONT_INDEX)
+    }
+
+    @JvmStatic
+    fun synchronizeProjectedFont(context: Context) {
+        if (!ProfilePreferenceProjection.isCommitted(context)) return
+        val id = ProfilePreferenceProjection.getString(
+            context,
+            "subtitle_selected_font_id",
+            "default",
+        ) ?: "default"
+        val directIndex = FONT_OPTIONS.indexOfFirst { it.id == id }
+        if (directIndex >= 0 && id != "custom") {
+            getPrefs(context).edit()
+                .putInt(KEY_FONT_INDEX, directIndex)
+                .remove(KEY_CUSTOM_FONT_PATH)
+                .remove(KEY_CUSTOM_FONT_NAME)
+                .commit()
+            return
+        }
+
+        val custom = resolveFlutterCustomFont(context, id)
+        if (custom != null && File(custom.second).isFile) {
+            getPrefs(context).edit()
+                .putInt(KEY_FONT_INDEX, FONT_OPTIONS.indexOfFirst { it.id == "custom" })
+                .putString(KEY_CUSTOM_FONT_NAME, custom.first)
+                .putString(KEY_CUSTOM_FONT_PATH, custom.second)
+                .commit()
+            cachedCustomTypeface = null
+            cachedCustomFontPath = null
+        } else {
+            getPrefs(context).edit()
+                .putInt(KEY_FONT_INDEX, DEFAULT_FONT_INDEX)
+                .remove(KEY_CUSTOM_FONT_PATH)
+                .remove(KEY_CUSTOM_FONT_NAME)
+                .commit()
+        }
+    }
+
+    /** Resolve Flutter's device-owned custom-font record by its profile-selected ID. */
+    private fun resolveFlutterCustomFont(context: Context, selectedId: String): Pair<String, String>? {
+        if (!selectedId.startsWith("custom_")) return null
+        val raw = context.getSharedPreferences(FLUTTER_PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(FLUTTER_CUSTOM_FONTS_KEY, null) ?: return null
+        return runCatching {
+            val fonts = org.json.JSONArray(raw)
+            for (index in 0 until fonts.length()) {
+                val font = fonts.optJSONObject(index) ?: continue
+                if (font.optString("id") != selectedId) continue
+                val path = font.optString("path").trim()
+                if (path.isEmpty()) return@runCatching null
+                val name = font.optString("label").trim().ifEmpty { "Custom Font" }
+                return@runCatching name to path
+            }
+            null
+        }.getOrNull()
     }
 
     /**

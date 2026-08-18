@@ -53,6 +53,14 @@ class ProfilePreferences implements SharedPreferences {
     'skip_segment_provider',
     'player_default_subtitle_language',
     'player_default_audio_language',
+    'subtitle_size_index',
+    'subtitle_style_index',
+    'subtitle_color_index',
+    'subtitle_bg_index',
+    'subtitle_outline_color_index',
+    'subtitle_elevation_index',
+    'subtitle_bold',
+    'subtitle_selected_font_id',
   };
 
   /// Installed by the native authority bridge after bootstrap. Keeping the
