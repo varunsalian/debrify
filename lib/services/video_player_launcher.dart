@@ -857,6 +857,19 @@ class VideoPlayerLauncher {
       );
     }
 
+    // Starting a saved title graduates it from My Watchlist into whichever
+    // Continue Watching owner applies above (local, Trakt, or Simkl). Keep
+    // this on the shared pre-launch path so opening details alone changes
+    // nothing and native Android TV playback follows the same rule.
+    if (args.contentType != null && args.stremioTvChannels == null) {
+      await StorageService.removeMyWatchlistItemForPlayback(
+        imdbId: args.contentImdbId,
+        contentType: args.contentType!,
+        title: args.contentTitle ?? args.title,
+        addonId: args.addonId,
+      );
+    }
+
     // Refresh both trackers' per-episode snapshots before either player is
     // launched. Trakt retains its legacy local-finished seed; Simkl stays in a
     // dedicated replaceable store so remote "unwatched" changes cannot leave

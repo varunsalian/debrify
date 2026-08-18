@@ -1,5 +1,6 @@
 import 'package:debrify/services/debrify_tv_database.dart';
 import 'package:debrify/services/iptv_media_store.dart';
+import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -158,6 +159,26 @@ void main() {
         '1': {1, 2},
       },
     );
+  });
+
+  test('playback removes the matching local watchlist title', () async {
+    final item = StremioMeta(
+      id: 'tt-watchlist-play',
+      imdbId: 'tt-watchlist-play',
+      type: 'movie',
+      name: 'Watchlist Movie',
+    );
+    await StorageService.setMyWatchlistItem(item, true);
+
+    expect(
+      await StorageService.removeMyWatchlistItemForPlayback(
+        imdbId: 'TT-WATCHLIST-PLAY',
+        contentType: 'movie',
+        title: 'Different presentation title',
+      ),
+      isTrue,
+    );
+    expect(await StorageService.getMyWatchlistItems(), isEmpty);
   });
 
   test(

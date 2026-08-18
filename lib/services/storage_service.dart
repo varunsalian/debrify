@@ -4464,6 +4464,60 @@ class StorageService {
     }
   }
 
+  /// Removes a saved movie/series once actual playback is about to launch.
+  /// IMDb is authoritative. Older/addon-local items without IMDb metadata use
+  /// a conservative title/source fallback and are removed only when unique.
+  static Future<bool> removeMyWatchlistItemForPlayback({
+    String? imdbId,
+    required String contentType,
+    required String title,
+    String? addonId,
+  }) async {
+    final type = contentType.trim().toLowerCase();
+    if (type != 'movie' && type != 'series') return false;
+    final normalizedImdb = imdbId?.trim().toLowerCase();
+    final normalizedTitle = title.trim().toLowerCase();
+    final normalizedAddon = addonId?.trim().toLowerCase();
+    final prefs = await ProfilePreferences.instance();
+    final rows = await _readMyWatchlistRows();
+    final matches = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      final raw = row['item'];
+      if (raw is! Map) continue;
+      try {
+        final item = StremioMeta.fromJson(Map<String, dynamic>.from(raw));
+        if (item.type.trim().toLowerCase() != type) continue;
+        final itemImdb = item.effectiveImdbId?.trim().toLowerCase();
+        if (normalizedImdb != null && normalizedImdb.isNotEmpty) {
+          if (itemImdb == normalizedImdb) matches.add(row);
+          continue;
+        }
+        if (itemImdb != null && itemImdb.isNotEmpty) continue;
+        if (normalizedTitle.isEmpty ||
+            item.name.trim().toLowerCase() != normalizedTitle) {
+          continue;
+        }
+        final itemAddon = item.sourceAddon?.id.trim().toLowerCase();
+        if (normalizedAddon != null &&
+            normalizedAddon.isNotEmpty &&
+            itemAddon != normalizedAddon) {
+          continue;
+        }
+        matches.add(row);
+      } catch (_) {
+        // Malformed rows are ignored rather than making playback fail.
+      }
+    }
+    if (matches.length != 1) return false;
+    rows.remove(matches.single);
+    if (rows.isEmpty) {
+      await prefs.remove(_myWatchlistKey);
+    } else {
+      await prefs.setString(_myWatchlistKey, jsonEncode(rows));
+    }
+    return true;
+  }
+
   static Future<void> clearMyWatchlist() async {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_myWatchlistKey);
