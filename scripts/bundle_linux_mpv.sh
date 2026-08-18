@@ -86,7 +86,7 @@ if grep -q 'not found' <<<"$loader_report"; then
   exit 1
 fi
 resolved_mpv="$(awk '/libmpv\.so\.2 =>/{print $3; exit}' <<<"$loader_report")"
-[ "$resolved_mpv" = "$PRIVATE/libmpv.so.2" ] || {
+[ "$(readlink -f "$resolved_mpv")" = "$(readlink -f "$PRIVATE/libmpv.so.2")" ] || {
   echo "error: plugin resolved libmpv outside its private directory: $resolved_mpv" >&2
   exit 1
 }
