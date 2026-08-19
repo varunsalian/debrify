@@ -82,7 +82,13 @@ enum SpotlightCardShape {
   channel(1, BoxFit.contain),
 
   /// 16:9, cropped. Containers and wide art.
-  wide(16 / 9, BoxFit.cover);
+  wide(16 / 9, BoxFit.cover),
+
+  /// 16:9, mark CONTAINED on a plate — a channel tile at the landscape
+  /// rail's full card size. The logo is never cropped to fill (that cuts
+  /// wordmarks in half); the live preview, which IS 16:9, fills the tile
+  /// edge to edge on focus/hover.
+  wideChannel(16 / 9, BoxFit.contain);
 
   const SpotlightCardShape(this.aspect, this.fit);
 
@@ -228,13 +234,6 @@ class SpotlightBoard extends StatefulWidget {
   /// stay a TV.
   final bool dpad;
 
-  /// True when the Home Cards orientation is landscape. Title shelves carry
-  /// that in their card shapes already; this flag lets the NON-title shelves
-  /// that keep their own card shape (square channel marks) drop to the
-  /// landscape rail height too, so the board scrolls one row rhythm instead
-  /// of tall channel bands between short backdrop rails.
-  final bool wideRows;
-
   const SpotlightBoard({
     super.key,
     required this.hero,
@@ -250,7 +249,6 @@ class SpotlightBoard extends StatefulWidget {
     this.trailersEnabled = true,
     this.onAmbient,
     this.dpad = true,
-    this.wideRows = false,
   });
 
   /// The scrolled ground, taken from the THEME.
@@ -1853,22 +1851,15 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   Widget _shelf(int i, _M m) {
     final section = widget.sections[i];
     final nodes = section.nodes;
-    // Wide title cards use their own rail width. Keeping the portrait card's
-    // width makes a 16:9 tile too short to read, while keeping its height makes
-    // it enormous and leaves only two titles on a TV row. Non-title shelves
-    // (square channel marks and portrait playlist containers) retain their
-    // native geometry — except under [SpotlightBoard.wideRows], where channel
-    // shelves take the landscape rail height too (smaller squares, same row
-    // rhythm); the marks stay 1:1 CONTAINED, never cropped to 16:9.
+    // Wide cards use their own rail width. Keeping the portrait card's
+    // width makes a 16:9 tile too short to read, while keeping its height
+    // makes it enormous and leaves only two titles on a TV row. The rule is
+    // by ASPECT, so wide title cards and wide channel tiles share one rail;
+    // shelves of portrait/square cards retain their native geometry.
     final uniformlyWide =
         section.items.isNotEmpty &&
-        section.items.every((item) => item.shape == SpotlightCardShape.wide);
-    final uniformlyChannel =
-        section.items.isNotEmpty &&
-        section.items.every(
-          (item) => item.shape == SpotlightCardShape.channel,
-        );
-    final cardHeight = uniformlyWide || (widget.wideRows && uniformlyChannel)
+        section.items.every((item) => item.shape.aspect > 1);
+    final cardHeight = uniformlyWide
         ? m.wideCardW / SpotlightCardShape.wide.aspect
         : m.posterH;
     // Caption-free rows off TV (see [SpotlightShelf.captions]); TV keeps its
@@ -2357,7 +2348,14 @@ class _CardState extends State<_Card> {
               ),
               if (url != null && url.isNotEmpty)
                 Padding(
-                  padding: EdgeInsets.all(contained ? w * 0.14 : 0),
+                  // The breathing room around a contained mark keys off the
+                  // SHORTER side: on a wide channel tile a width-derived
+                  // inset would eat a quarter of the height.
+                  padding: EdgeInsets.all(
+                    contained
+                        ? (w < widget.height ? w : widget.height) * 0.14
+                        : 0,
+                  ),
                   child: CachedNetworkImage(
                     imageUrl: url,
                     fit: c.shape.fit,

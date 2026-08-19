@@ -5945,7 +5945,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               image: ch.logoUrl,
               title: ch.name,
               subtitle: 'LIVE',
-              shape: SpotlightCardShape.channel,
+              shape: _homeLandscapeCards
+                  ? SpotlightCardShape.wideChannel
+                  : SpotlightCardShape.channel,
               onOpen: () => _playIptvListChannel(ch),
               previewBuilder: ch.isLive
                   ? (_) => SpotlightIptvCardPreview(
@@ -6013,7 +6015,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                 image: ch.logoUrl,
                 title: ch.name,
                 subtitle: 'LIVE',
-                shape: SpotlightCardShape.channel,
+                shape: _homeLandscapeCards
+                    ? SpotlightCardShape.wideChannel
+                    : SpotlightCardShape.channel,
                 onOpen: () => _playIptvChannel(ch),
                 previewBuilder: ch.isLive
                     ? (_) => SpotlightIptvCardPreview(
@@ -6033,7 +6037,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
               SpotlightCard(
                 title: ch.name,
                 subtitle: 'CHANNEL ${ch.channelNumber}',
-                shape: SpotlightCardShape.channel,
+                shape: _homeLandscapeCards
+                    ? SpotlightCardShape.wideChannel
+                    : SpotlightCardShape.channel,
                 onOpen: () => _playChannel(ch),
               ),
           ],
@@ -6092,9 +6098,6 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       heroNode: _spotlightHeroNode,
       heroAddon: _spotlightHeroSection?.addon,
       dpad: widget.isTelevision,
-      // Landscape mode: channel shelves (IPTV, Debrify TV) drop to the
-      // landscape rail height so the whole board scrolls one row rhythm.
-      wideRows: _homeLandscapeCards,
       onHeroOpen: _openItem,
       onLoadMoreRow: (row) {
         if (row < 0 || row >= rails.length) return;
