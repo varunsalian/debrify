@@ -228,6 +228,13 @@ class SpotlightBoard extends StatefulWidget {
   /// stay a TV.
   final bool dpad;
 
+  /// True when the Home Cards orientation is landscape. Title shelves carry
+  /// that in their card shapes already; this flag lets the NON-title shelves
+  /// that keep their own card shape (square channel marks) drop to the
+  /// landscape rail height too, so the board scrolls one row rhythm instead
+  /// of tall channel bands between short backdrop rails.
+  final bool wideRows;
+
   const SpotlightBoard({
     super.key,
     required this.hero,
@@ -243,6 +250,7 @@ class SpotlightBoard extends StatefulWidget {
     this.trailersEnabled = true,
     this.onAmbient,
     this.dpad = true,
+    this.wideRows = false,
   });
 
   /// The scrolled ground, taken from the THEME.
@@ -1849,11 +1857,18 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     // width makes a 16:9 tile too short to read, while keeping its height makes
     // it enormous and leaves only two titles on a TV row. Non-title shelves
     // (square channel marks and portrait playlist containers) retain their
-    // native geometry.
+    // native geometry — except under [SpotlightBoard.wideRows], where channel
+    // shelves take the landscape rail height too (smaller squares, same row
+    // rhythm); the marks stay 1:1 CONTAINED, never cropped to 16:9.
     final uniformlyWide =
         section.items.isNotEmpty &&
         section.items.every((item) => item.shape == SpotlightCardShape.wide);
-    final cardHeight = uniformlyWide
+    final uniformlyChannel =
+        section.items.isNotEmpty &&
+        section.items.every(
+          (item) => item.shape == SpotlightCardShape.channel,
+        );
+    final cardHeight = uniformlyWide || (widget.wideRows && uniformlyChannel)
         ? m.wideCardW / SpotlightCardShape.wide.aspect
         : m.posterH;
     // Caption-free rows off TV (see [SpotlightShelf.captions]); TV keeps its

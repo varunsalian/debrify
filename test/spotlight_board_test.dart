@@ -83,6 +83,7 @@ void main() {
     List<StremioMeta> heroItems,
     List<SpotlightShelf> sections, {
     bool dpad = true,
+    bool wideRows = false,
     void Function(StremioMeta item)? onDwell,
     VoidCallback? onTrailerStop,
   }) =>
@@ -99,6 +100,7 @@ void main() {
               onDwell: onDwell,
               onTrailerStop: onTrailerStop,
               dpad: dpad,
+              wideRows: wideRows,
             ),
           ),
         ),
@@ -873,6 +875,43 @@ void main() {
 
     expect(box.width, closeTo(expectedWidth, 0.5));
     expect(box.width / box.height, closeTo(16 / 9, 0.005));
+  });
+
+  testWidgets(
+      'under wideRows a channel shelf takes the landscape rail height — '
+      'square marks, shorter row', (tester) async {
+    await tester.pumpWidget(host(
+      [_meta('tt1', 'Alpha')],
+      [
+        SpotlightShelf(
+          title: 'IPTV Favourites',
+          nodes: rows[0],
+          items: [
+            for (final name in ['One', 'Two'])
+              SpotlightCard(
+                title: name,
+                subtitle: 'LIVE',
+                shape: SpotlightCardShape.channel,
+                onOpen: _noop,
+              ),
+          ],
+        ),
+      ],
+      wideRows: true,
+    ));
+    await tester.pumpAndSettle();
+
+    final board = tester.getSize(find.byType(SpotlightBoard)).width;
+    final expectedH = board * (470 / 1920) * 9 / 16;
+    final cardHost = tester
+        .widgetList<ParallaxFocus>(find.byType(ParallaxFocus))
+        .firstWhere((p) => p.fixedScaleForeground != null);
+    final box = tester.getSize(find.byWidget(cardHost));
+
+    expect(box.height, closeTo(expectedH, 0.5),
+        reason: 'channel rows must share the landscape rail height');
+    expect(box.width, closeTo(box.height, 0.5),
+        reason: 'the mark stays a square, only the row shrinks');
   });
 
   testWidgets('TV card titles use the crisp fixed-scale label treatment',

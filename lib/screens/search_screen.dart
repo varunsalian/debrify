@@ -6092,6 +6092,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       heroNode: _spotlightHeroNode,
       heroAddon: _spotlightHeroSection?.addon,
       dpad: widget.isTelevision,
+      // Landscape mode: channel shelves (IPTV, Debrify TV) drop to the
+      // landscape rail height so the whole board scrolls one row rhythm.
+      wideRows: _homeLandscapeCards,
       onHeroOpen: _openItem,
       onLoadMoreRow: (row) {
         if (row < 0 || row >= rails.length) return;
