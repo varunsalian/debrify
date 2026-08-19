@@ -5346,11 +5346,13 @@ class StorageService {
     await prefs.setString(_homeFavoritesOpenFolderKey, value);
   }
 
+  /// Landscape is the DEFAULT (since 0.8.4): the absence of the key means
+  /// landscape, so only an explicit 'portrait' choice reads as portrait.
   static Future<HomeCardOrientation> getHomeCardOrientation() async {
     final prefs = await ProfilePreferences.instance();
-    return prefs.getString(_homeCardOrientationKey) == 'landscape'
-        ? HomeCardOrientation.landscape
-        : HomeCardOrientation.portrait;
+    return prefs.getString(_homeCardOrientationKey) == 'portrait'
+        ? HomeCardOrientation.portrait
+        : HomeCardOrientation.landscape;
   }
 
   static Future<void> setHomeCardOrientation(

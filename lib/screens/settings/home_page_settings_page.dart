@@ -36,7 +36,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   bool _tvTrailerUnderlayEnabled = true;
   String _tvHomeStyle = 'canvas';
   HomeCardOrientation _homeCardOrientation =
-      HomeCardOrientation.portrait;
+      HomeCardOrientation.landscape;
   HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.random, ids: []);
   List<StremioAddon> _addons = [];
 

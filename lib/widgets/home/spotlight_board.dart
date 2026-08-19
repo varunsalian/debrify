@@ -1073,19 +1073,28 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: (_, e) => _onKey(e),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final m = _M(constraints.maxWidth, dpad: widget.dpad);
-          // The hero is measured against the board's real height, so it is the
-          // same share of the screen on every panel.
-          final viewport = constraints.maxHeight.isFinite
-              ? constraints.maxHeight
-              : MediaQuery.sizeOf(context).height;
-          return _board(
-            m,
-            viewport * (m.compact ? _heroFractionCompact : _heroFraction),
-          );
-        },
+      // The FULL parallax (spring, velocity tilt, travelling glare) on
+      // Android TV — the same opt-in the detail Showcase carries. The board
+      // originally stayed on the lite body because a Mali box couldn't
+      // afford it, but that budget was spent on oversized card textures:
+      // with cards decoding at display size (2026-08-19) the box renders
+      // the rich cursor smoothly, and only two cards ever animate per step.
+      // The board's walk already notes travel direction for the lean.
+      child: ParallaxRichScope(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final m = _M(constraints.maxWidth, dpad: widget.dpad);
+            // The hero is measured against the board's real height, so it is
+            // the same share of the screen on every panel.
+            final viewport = constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : MediaQuery.sizeOf(context).height;
+            return _board(
+              m,
+              viewport * (m.compact ? _heroFractionCompact : _heroFraction),
+            );
+          },
+        ),
       ),
     );
   }

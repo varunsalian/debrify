@@ -58,12 +58,14 @@ void main() {
       ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 1),
     );
 
+    // Landscape is the unset default; an explicit portrait choice is the
+    // per-profile state that must not leak.
     expect(
       await StorageService.getHomeCardOrientation(),
-      HomeCardOrientation.portrait,
+      HomeCardOrientation.landscape,
     );
     await StorageService.setHomeCardOrientation(
-      HomeCardOrientation.landscape,
+      HomeCardOrientation.portrait,
     );
 
     ProfileRuntime.publish(
@@ -71,7 +73,7 @@ void main() {
     );
     expect(
       await StorageService.getHomeCardOrientation(),
-      HomeCardOrientation.portrait,
+      HomeCardOrientation.landscape,
     );
 
     ProfileRuntime.publish(
@@ -79,7 +81,7 @@ void main() {
     );
     expect(
       await StorageService.getHomeCardOrientation(),
-      HomeCardOrientation.landscape,
+      HomeCardOrientation.portrait,
     );
   });
 

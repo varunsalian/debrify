@@ -5048,8 +5048,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// boot there, and resolves to classic off-TV.
   String _tvHomeStyle = StorageService.tvHomeStyleCached;
 
+  // Landscape default matches the stored default, so a fresh boot doesn't
+  // flash portrait rows before the async pref read lands.
   HomeCardOrientation _homeCardOrientation =
-      HomeCardOrientation.portrait;
+      HomeCardOrientation.landscape;
 
   bool get _homeLandscapeCards =>
       _homeCardOrientation == HomeCardOrientation.landscape;
