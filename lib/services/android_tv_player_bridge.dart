@@ -87,6 +87,11 @@ class AndroidTvPlayerBridge {
     int? episode,
   })?
   _addonSourcesProvider;
+  // Episode-guide fetch: quick-plays an absent (season, episode) without
+  // leaving the native player — resolves it to a ready playlist plus the
+  // grown source list; null/throw keeps native on its old finish fallback.
+  static Future<Map<String, dynamic>?> Function(int season, int episode)?
+  _episodeFetchProvider;
   static Future<Map<String, dynamic>?> Function(List<String>)?
   _stremioTvGuideDataProvider;
   static Future<Map<String, dynamic>?> Function(String)?
@@ -100,6 +105,8 @@ class AndroidTvPlayerBridge {
 
   // Store pending metadata updates for when activity requests them
   static List<Map<String, dynamic>>? _pendingMetadataUpdates;
+  // Full-show episode guide (TVMaze) pending alongside the metadata updates.
+  static List<Map<String, dynamic>>? _pendingGuideEpisodes;
   // Store pending IMDB ID discovered from TVMaze (for Stremio subtitles)
   static String? _pendingImdbId;
 
@@ -589,6 +596,34 @@ class AndroidTvPlayerBridge {
               message: e.toString(),
             );
           }
+        case 'requestEpisodeFetch':
+          // Episode-guide fetch: an absent episode was clicked (or next/prev
+          // crossed the pack boundary). Null/failed throws so native can fall
+          // back or surface the failure.
+          final episodeFetchProvider = _episodeFetchProvider;
+          if (episodeFetchProvider == null) return null;
+          final episodeFetchArgs = call.arguments;
+          if (episodeFetchArgs is! Map) return null;
+          final fetchSeason = episodeFetchArgs['season'] as int?;
+          final fetchEpisode = episodeFetchArgs['episode'] as int?;
+          if (fetchSeason == null || fetchEpisode == null) return null;
+          try {
+            final result = await episodeFetchProvider(fetchSeason, fetchEpisode);
+            if (result == null) {
+              throw PlatformException(
+                code: 'episode_fetch_failed',
+                message: 'No playable source found',
+              );
+            }
+            return result;
+          } on PlatformException {
+            rethrow;
+          } catch (e) {
+            throw PlatformException(
+              code: 'episode_fetch_failed',
+              message: e.toString(),
+            );
+          }
         case 'torrentPlaybackFinished':
           _lastPlaybackHeartbeat =
               null; // reset so the next watch isn't throttled
@@ -601,6 +636,7 @@ class AndroidTvPlayerBridge {
           _sourcePlaylistResolver = null;
           _moreSourcesProvider = null;
           _addonSourcesProvider = null;
+          _episodeFetchProvider = null;
           _stremioTvGuideDataProvider = null;
           _stremioTvChannelSwitchProvider = null;
           _stremioTvNextProvider = null;
@@ -918,15 +954,23 @@ class AndroidTvPlayerBridge {
           );
           final pending = _pendingMetadataUpdates;
           final pendingImdb = _pendingImdbId;
-          if ((pending != null && pending.isNotEmpty) || pendingImdb != null) {
+          final pendingGuide = _pendingGuideEpisodes;
+          if ((pending != null && pending.isNotEmpty) ||
+              pendingImdb != null ||
+              (pendingGuide != null && pendingGuide.isNotEmpty)) {
             debugPrint(
               'TVMazeUpdate: Sending ${pending?.length ?? 0} pending metadata updates, imdbId=$pendingImdb',
             );
             // Send the pending updates via broadcast (including IMDB ID for subtitles)
-            await updateEpisodeMetadata(pending ?? [], imdbId: pendingImdb);
+            await updateEpisodeMetadata(
+              pending ?? [],
+              imdbId: pendingImdb,
+              guideEpisodes: pendingGuide,
+            );
             // Clear pending updates after sending
             _pendingMetadataUpdates = null;
             _pendingImdbId = null;
+            _pendingGuideEpisodes = null;
           } else {
             debugPrint('TVMazeUpdate: No pending metadata updates to send');
           }
@@ -1318,6 +1362,8 @@ class AndroidTvPlayerBridge {
       int? episode,
     })?
     onRequestAddonSources,
+    Future<Map<String, dynamic>?> Function(int season, int episode)?
+    onRequestEpisodeFetch,
     Future<Map<String, dynamic>?> Function(List<String>)?
     onRequestStremioTvGuideData,
     Future<Map<String, dynamic>?> Function(String)?
@@ -1342,6 +1388,7 @@ class AndroidTvPlayerBridge {
     _sourcePlaylistResolver = onResolveSourcePlaylist;
     _moreSourcesProvider = onRequestMoreSources;
     _addonSourcesProvider = onRequestAddonSources;
+    _episodeFetchProvider = onRequestEpisodeFetch;
     _stremioTvGuideDataProvider = onRequestStremioTvGuideData;
     _stremioTvChannelSwitchProvider = onRequestStremioTvChannelSwitch;
     _stremioTvNextProvider = onRequestStremioTvNext;
@@ -1350,6 +1397,7 @@ class AndroidTvPlayerBridge {
     // Clear any stale pending metadata from previous sessions
     _pendingMetadataUpdates = null;
     _pendingImdbId = null;
+    _pendingGuideEpisodes = null;
 
     try {
       // Get custom font info for Android TV player
@@ -1402,6 +1450,7 @@ class AndroidTvPlayerBridge {
     _sourcePlaylistResolver = null;
     _moreSourcesProvider = null;
     _addonSourcesProvider = null;
+    _episodeFetchProvider = null;
     _stremioTvGuideDataProvider = null;
     _stremioTvChannelSwitchProvider = null;
     _stremioTvNextProvider = null;
@@ -1416,6 +1465,7 @@ class AndroidTvPlayerBridge {
     List<Map<String, dynamic>> updates, {
     String? sessionId,
     String? imdbId,
+    List<Map<String, dynamic>>? guideEpisodes,
   }) {
     // Discard updates if session ID doesn't match current session
     if (sessionId != null && sessionId != _currentSessionId) {
@@ -1429,6 +1479,7 @@ class AndroidTvPlayerBridge {
     );
     _pendingMetadataUpdates = updates;
     _pendingImdbId = imdbId;
+    _pendingGuideEpisodes = guideEpisodes;
   }
 
   /// Set the current session ID for metadata tracking
@@ -1454,11 +1505,14 @@ class AndroidTvPlayerBridge {
     List<Map<String, dynamic>> metadataUpdates, {
     String? sessionId,
     String? imdbId,
+    List<Map<String, dynamic>>? guideEpisodes,
   }) async {
     if (!Platform.isAndroid) {
       return false;
     }
-    if (metadataUpdates.isEmpty && imdbId == null) {
+    if (metadataUpdates.isEmpty &&
+        imdbId == null &&
+        (guideEpisodes == null || guideEpisodes.isEmpty)) {
       return false;
     }
 
@@ -1476,7 +1530,12 @@ class AndroidTvPlayerBridge {
       );
       final bool? success = await _channel.invokeMethod<bool>(
         'updateEpisodeMetadata',
-        {'updates': metadataUpdates, if (imdbId != null) 'imdbId': imdbId},
+        {
+          'updates': metadataUpdates,
+          if (imdbId != null) 'imdbId': imdbId,
+          if (guideEpisodes != null && guideEpisodes.isNotEmpty)
+            'guideEpisodes': guideEpisodes,
+        },
       );
       debugPrint('AndroidTvPlayerBridge: Metadata update result: $success');
       return success == true;

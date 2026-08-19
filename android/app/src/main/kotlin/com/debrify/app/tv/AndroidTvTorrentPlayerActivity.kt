@@ -1464,10 +1464,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             return
                         }
 
-                        // No next in playlist — request Quick Play next episode for series
+                        // No next in playlist — fetch the next episode
+                        // in-player when possible; else hand back for a
+                        // quick-play relaunch.
                         val currentItem = model.items[currentIndex]
-                        if (model.contentType == "series" && currentItem.season != null && currentItem.episode != null && model.imdbId != null) {
-                            requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
+                        if (model.contentType == "series" && currentItem.season != null && currentItem.episode != null) {
+                            val nextTarget = guideAdjacent(model, currentItem, 1)
+                            if (nextTarget != null && hasPlaylistResolver) {
+                                requestEpisodeFetch(nextTarget.season, nextTarget.episode)
+                                return
+                            }
+                            if (model.imdbId != null) {
+                                requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
+                            }
                         }
                         finish()
                     }
@@ -1720,7 +1729,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
                 val updatesJson = intent?.getStringExtra("metadataUpdates")
                 val imdbId = intent?.getStringExtra("imdbId")
-                handleMetadataUpdate(updatesJson, imdbId)
+                val guideJson = intent?.getStringExtra("guideEpisodes")
+                handleMetadataUpdate(updatesJson, imdbId, guideJson)
             }
         }
 
@@ -1736,7 +1746,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         requestMetadataFromFlutter()
     }
 
-    private fun handleMetadataUpdate(updatesJson: String?, imdbId: String?) {
+    private fun handleMetadataUpdate(updatesJson: String?, imdbId: String?, guideJson: String? = null) {
         android.util.Log.d("TVMazeUpdate", "handleMetadataUpdate CALLED")
         android.util.Log.d("TVMazeUpdate", "updatesJson length=${updatesJson?.length ?: 0}, imdbId=$imdbId")
 
@@ -1759,6 +1769,46 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     android.util.Log.d("TVMazeUpdate", "Fetching Stremio subtitles with discovered IMDB ID")
                     fetchStremioSubtitles(currentItem)
                 }
+            }
+        }
+
+        // Full-show episode guide: adopt it and rebuild the series playlist so
+        // absent episodes render as fetchable rows (this also enables the
+        // playlist overlay for single-stream launches).
+        if (!guideJson.isNullOrEmpty()) {
+            try {
+                val guideArray = JSONArray(guideJson)
+                val parsed = mutableListOf<GuideEpisode>()
+                for (i in 0 until guideArray.length()) {
+                    val g = guideArray.getJSONObject(i)
+                    val season = g.optInt("season", -1)
+                    val episode = g.optInt("episode", -1)
+                    if (season < 0 || episode < 0) continue
+                    parsed.add(
+                        GuideEpisode(
+                            season = season,
+                            episode = episode,
+                            title = if (g.has("title")) g.optString("title") else null,
+                            artwork = if (g.has("artwork")) g.optString("artwork") else null,
+                            description = if (g.has("description")) g.optString("description") else null,
+                            rating = if (g.has("rating")) g.optDouble("rating") else null,
+                            runtime = if (g.has("runtime")) g.optInt("runtime") else null,
+                        )
+                    )
+                }
+                if (parsed.isNotEmpty()) {
+                    model.guideEpisodes.clear()
+                    model.guideEpisodes.addAll(parsed)
+                    android.util.Log.d("TVMazeUpdate", "Adopted ${parsed.size} guide episodes")
+                    runOnUiThread {
+                        if (model.contentType.lowercase(Locale.US) == "series") {
+                            rebuildPlaylistContent()
+                            seriesPlaylistAdapter?.setActiveIndex(currentIndex)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("TVMazeUpdate", "Failed to parse guide episodes: ${e.message}", e)
             }
         }
 
@@ -2508,9 +2558,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         playlistMode = PlaylistMode.NONE
 
         if (items.size <= 1) {
-            playlistView.adapter = null
-            seasonTabsContainer.visibility = View.GONE
-            return
+            // Single stream: with a full-show guide + a playlist resolver the
+            // series overlay still renders (absent rows fetch in-player),
+            // matching the Flutter player's synthetic guide.
+            val guideCapable = hasPlaylistResolver &&
+                model.contentType.lowercase(Locale.US) == "series" &&
+                model.guideEpisodes.isNotEmpty()
+            if (!guideCapable) {
+                playlistView.adapter = null
+                seasonTabsContainer.visibility = View.GONE
+                return
+            }
         }
 
         when (model.contentType.lowercase(Locale.US)) {
@@ -2522,7 +2580,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun setupSeriesPlaylist(items: List<PlaybackItem>) {
-        val adapter = PlaylistAdapter(items) { index ->
+        // Full-guide mode only when absent rows can actually be fetched.
+        val guide = if (hasPlaylistResolver) {
+            payload?.guideEpisodes ?: emptyList()
+        } else {
+            emptyList()
+        }
+        val adapter = PlaylistAdapter(
+            items,
+            guide = guide,
+            onFetchEpisode = if (guide.isEmpty()) null else { season, episode ->
+                hidePlaylist()
+                requestEpisodeFetch(season, episode)
+            },
+        ) { index ->
             hidePlaylist()
             playItem(index)
         }
@@ -3745,14 +3816,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 return
             }
 
-            // No next in playlist — request Quick Play next episode for series
+            // No next in playlist — fetch the next episode IN-PLAYER when the
+            // guide + resolver allow it, else fall back to the quick-play
+            // relaunch hand-back.
             val model = payload
             val currentItem = model?.items?.getOrNull(currentIndex)
             if (model != null && currentItem != null &&
                 model.contentType == "series" && currentItem.season != null &&
-                currentItem.episode != null && model.imdbId != null) {
-                requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
-                finish()
+                currentItem.episode != null) {
+                val nextTarget = guideAdjacent(model, currentItem, 1)
+                if (nextTarget != null && hasPlaylistResolver) {
+                    requestEpisodeFetch(nextTarget.season, nextTarget.episode)
+                    return
+                }
+                if (model.imdbId != null) {
+                    requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
+                    finish()
+                } else {
+                    Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
+                }
             } else {
                 Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
             }
@@ -14115,6 +14197,80 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackFinished", null)
     }
 
+    /** The guide episode adjacent to the current item (specials excluded). */
+    private fun guideAdjacent(model: PlaybackPayload, currentItem: PlaybackItem?, direction: Int): SeasonEpisode? {
+        val s = currentItem?.season ?: return null
+        val e = currentItem.episode ?: return null
+        val eps = model.guideEpisodes
+            .filter { it.season > 0 }
+            .sortedWith(compareBy({ it.season }, { it.episode }))
+        if (eps.isEmpty()) return null
+        val idx = eps.indexOfFirst { it.season == s && it.episode == e }
+        if (idx < 0) return null
+        val t = idx + direction
+        if (t < 0 || t >= eps.size) return null
+        return SeasonEpisode(eps[t].season, eps[t].episode)
+    }
+
+    private var episodeFetchInFlight = false
+
+    /** In-player quick play of an episode that isn't in the playlist: asks
+     * Flutter to find + resolve a source (existing packs → episode fetch →
+     * pack fetch) and swaps playlists in place — no activity relaunch. */
+    private fun requestEpisodeFetch(season: Int, episode: Int) {
+        if (episodeFetchInFlight) return
+        val label = String.format(java.util.Locale.US, "S%02dE%02d", season, episode)
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        if (channel == null) {
+            showStatusPillTransient("Couldn't fetch $label")
+            return
+        }
+        episodeFetchInFlight = true
+        val token = ++stremioResolutionToken
+        showStatusPillTransient("Fetching $label…")
+        channel.invokeMethod(
+            "requestEpisodeFetch",
+            hashMapOf<String, Any>("season" to season, "episode" to episode),
+            object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        if (token != stremioResolutionToken) return@runOnUiThread
+                        val map = result as? Map<*, *>
+                        val items = map?.get("items") as? List<*>
+                        val fetchedSourceIndex = (map?.get("sourceIndex") as? Number)?.toInt()
+                        if (map == null || items.isNullOrEmpty() || fetchedSourceIndex == null) {
+                            showStatusPillTransient("No playable source found for $label")
+                            return@runOnUiThread
+                        }
+                        adoptSourceList(map)
+                        switchToSourcePlaylist(
+                            fetchedSourceIndex,
+                            items,
+                            targetSeason = season,
+                            targetEpisode = episode,
+                        )
+                    }
+                }
+
+                override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        if (token != stremioResolutionToken) return@runOnUiThread
+                        showStatusPillTransient("No playable source found for $label")
+                    }
+                }
+
+                override fun notImplemented() {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        showStatusPillTransient("Couldn't fetch $label")
+                    }
+                }
+            }
+        )
+    }
+
     private fun requestQuickPlayNextEpisode(imdbId: String, season: Int, episode: Int) {
         android.util.Log.d("AndroidTvPlayer", "Requesting Quick Play next episode after S${season}E${episode} for $imdbId")
         MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
@@ -14612,17 +14768,27 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         sourceBrowser?.render()
     }
 
-    private fun switchToSourcePlaylist(sourceIndex: Int, rawItems: List<*>) {
-        android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist: sourceIndex=$sourceIndex, rawItems=${rawItems.size}")
+    private fun switchToSourcePlaylist(
+        sourceIndex: Int,
+        rawItems: List<*>,
+        targetSeason: Int? = null,
+        targetEpisode: Int? = null,
+    ) {
+        android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist: sourceIndex=$sourceIndex, rawItems=${rawItems.size}, target=S${targetSeason}E${targetEpisode}")
 
         val model = payload ?: return
 
         // Capture playback position + current item identity so the new source
         // resumes the same content instead of restarting from the beginning.
+        // An explicit episode-guide target is different content: land there
+        // instead, and never carry the current position onto it.
         val resumePositionMs = (player?.currentPosition ?: 0L).coerceAtLeast(0L)
         val currentItem = model.items.getOrNull(currentIndex)
-        val resumeSeason = currentItem?.season
-        val resumeEpisode = currentItem?.episode
+        val explicitTarget = targetSeason != null && targetEpisode != null
+        val resumeSeason = targetSeason ?: currentItem?.season
+        val resumeEpisode = targetEpisode ?: currentItem?.episode
+        val sameContent = !explicitTarget ||
+            (targetSeason == currentItem?.season && targetEpisode == currentItem?.episode)
 
         // Parse metadata entry (first item with __meta__ flag)
         var contentType = model.contentType
@@ -14678,14 +14844,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         var matchedSameContent = false
         if (newItems.size == 1) {
             targetIndex = 0
-            matchedSameContent = true
+            matchedSameContent = sameContent
         } else if (resumeSeason != null && resumeEpisode != null) {
             val matched = newItems.indexOfFirst {
                 it.season == resumeSeason && it.episode == resumeEpisode
             }
             if (matched >= 0) {
                 targetIndex = matched
-                matchedSameContent = true
+                matchedSameContent = sameContent
             } else {
                 // The exact episode isn't in this source. Do NOT fall back to
                 // file 0 — in torrent order that's often an extras/bonus clip
@@ -16196,6 +16362,21 @@ private data class PlaybackPayload(
     val localCompletionTracking: Boolean = false,
     val movieCompletionThreshold: Int = 80,
     val episodeCompletionThreshold: Int = 80,
+    // Full-show episode guide (TVMaze), delivered post-launch via the
+    // metadata broadcast: every episode of the show, present in the
+    // playlist or not. Empty until (unless) the fetch lands.
+    val guideEpisodes: MutableList<GuideEpisode> = mutableListOf(),
+)
+
+/** One episode of the show's full TVMaze list, for the episode guide. */
+private data class GuideEpisode(
+    val season: Int,
+    val episode: Int,
+    val title: String?,
+    val artwork: String?,
+    val description: String?,
+    val rating: Double?,
+    val runtime: Int?,
 )
 
 private data class PlaybackItem(
@@ -16309,18 +16490,23 @@ private data class SeasonEpisode(
 private sealed class PlaylistListItem {
     data class SeasonHeader(val season: Int, val episodeCount: Int) : PlaylistListItem()
     data class Episode(val itemIndex: Int) : PlaylistListItem()
+    // Full-guide mode: an episode of the show that is NOT in the playlist —
+    // rendered dimmed; clicking it fetches the episode in-player.
+    data class MissingEpisode(val guideIndex: Int) : PlaylistListItem()
 }
 
 private class PlaylistAdapter(
     private val items: List<PlaybackItem>,
-    private val onItemClick: (Int) -> Unit
+    private val guide: List<GuideEpisode> = emptyList(),
+    private val onFetchEpisode: ((Int, Int) -> Unit)? = null,
+    private val onItemClick: (Int) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), PlaylistOverlayAdapter {
     private var activeItemIndex = -1
     private val listItems = mutableListOf<PlaylistListItem>()
     private var selectedSeason: Int? = null
 
     val availableSeasons: List<Int> by lazy {
-        items.mapNotNull { it.season }.distinct().sorted()
+        (items.mapNotNull { it.season } + guide.map { it.season }).distinct().sorted()
     }
 
     init {
@@ -16337,9 +16523,11 @@ private class PlaylistAdapter(
     private fun buildList(filterSeason: Int?) {
         listItems.clear()
 
-        // Group episodes by season
+        // Group episodes by season; in full-guide mode the seasons and rows
+        // are the union of the playlist and the show's TVMaze episode list.
         val grouped = items.groupBy { it.season ?: 0 }
-        val sortedSeasons = grouped.keys.sorted()
+        val guideGrouped = guide.groupBy { it.season }
+        val sortedSeasons = (grouped.keys + guideGrouped.keys).distinct().sorted()
 
         for (season in sortedSeasons) {
             // Skip seasons that don't match filter
@@ -16347,20 +16535,41 @@ private class PlaylistAdapter(
                 continue
             }
 
-            val episodesInSeason = grouped[season] ?: continue
+            val episodesInSeason = grouped[season] ?: emptyList()
+            val guideInSeason = (guideGrouped[season] ?: emptyList()).sortedBy { it.episode }
 
-            // Don't show season header when filtering (tabs show the season)
-            // Only show header when showing all seasons
-            if (filterSeason == null && season > 0) {
-                listItems.add(PlaylistListItem.SeasonHeader(season, episodesInSeason.size))
+            // Guide order first: playlist row when present, fetchable
+            // placeholder when not. Playlist files the guide doesn't know
+            // about keep showing after them, in episode order.
+            val rows = mutableListOf<PlaylistListItem>()
+            val usedIndices = mutableSetOf<Int>()
+            for (g in guideInSeason) {
+                val matchIdx = items.indexOfFirst {
+                    (it.season ?: 0) == season && it.episode == g.episode
+                }
+                if (matchIdx >= 0) {
+                    rows.add(PlaylistListItem.Episode(matchIdx))
+                    usedIndices.add(matchIdx)
+                } else {
+                    rows.add(PlaylistListItem.MissingEpisode(guide.indexOf(g)))
+                }
             }
-
             // Sort episodes by episode number (integer comparison to avoid "1", "10", "11", "2" string sorting)
             val sortedEpisodes = episodesInSeason.sortedBy { it.episode ?: 0 }
             for (episode in sortedEpisodes) {
                 val originalIndex = items.indexOf(episode)
-                listItems.add(PlaylistListItem.Episode(originalIndex))
+                if (originalIndex in usedIndices) continue
+                rows.add(PlaylistListItem.Episode(originalIndex))
             }
+
+            if (rows.isEmpty()) continue
+
+            // Don't show season header when filtering (tabs show the season)
+            // Only show header when showing all seasons
+            if (filterSeason == null && season > 0) {
+                listItems.add(PlaylistListItem.SeasonHeader(season, rows.size))
+            }
+            listItems.addAll(rows)
         }
     }
 
@@ -16368,6 +16577,7 @@ private class PlaylistAdapter(
         return when (listItems[position]) {
             is PlaylistListItem.SeasonHeader -> VIEW_TYPE_HEADER
             is PlaylistListItem.Episode -> VIEW_TYPE_EPISODE
+            is PlaylistListItem.MissingEpisode -> VIEW_TYPE_EPISODE
         }
     }
 
@@ -16396,6 +16606,29 @@ private class PlaylistAdapter(
                 val item = items[itemIndex]  // Fetch current item from items list
                 val isActive = itemIndex == activeItemIndex
                 (holder as EpisodeViewHolder).bind(item, itemIndex, isActive)
+            }
+            is PlaylistListItem.MissingEpisode -> {
+                val g = guide[listItem.guideIndex]
+                val synthetic = PlaybackItem(
+                    id = "guide_${g.season}_${g.episode}",
+                    title = g.title ?: "Episode ${g.episode}",
+                    url = "",
+                    index = -1,
+                    season = g.season,
+                    episode = g.episode,
+                    artwork = g.artwork,
+                    description = g.description,
+                    resumePositionMs = 0,
+                    durationMs = (g.runtime ?: 0) * 60_000L,
+                    updatedAt = 0,
+                    resumeId = null,
+                    sizeBytes = null,
+                    rating = g.rating,
+                    provider = null,
+                )
+                (holder as EpisodeViewHolder).bindMissing(synthetic) {
+                    onFetchEpisode?.invoke(g.season, g.episode)
+                }
             }
         }
     }
@@ -16510,6 +16743,9 @@ private class PlaylistAdapter(
         private var pulseAnimator: android.animation.ObjectAnimator? = null
 
         fun bind(item: PlaybackItem, itemIndex: Int, isActive: Boolean) {
+            // Recycled views may come back from a dimmed missing-episode row.
+            itemView.alpha = 1.0f
+
             // Episode badge with cleaner format
             val seasonNum = item.season
             val episodeNum = item.episode
@@ -16634,6 +16870,13 @@ private class PlaylistAdapter(
                     focusBorder?.visibility = View.GONE
                 }
             }
+        }
+
+        /** Absent guide episode: dimmed, and the click fetches instead of playing. */
+        fun bindMissing(item: PlaybackItem, onFetch: () -> Unit) {
+            bind(item, itemIndex = -1, isActive = false)
+            itemView.alpha = 0.55f
+            itemView.setOnClickListener { onFetch() }
         }
 
         fun updateProgress(item: PlaybackItem, isActive: Boolean) {

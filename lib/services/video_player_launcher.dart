@@ -2254,6 +2254,180 @@ class VideoPlayerLauncher {
             };
       }
 
+      // In-player fetch of an episode that isn't in the current playlist
+      // (episode guide click / next-prev beyond the pack boundary): quick-play
+      // semantics without finishing the activity. Candidate ladder mirrors the
+      // Flutter player's _fetchAndPlayEpisode: existing sources (exact-episode
+      // singles, packs covering the season) → episode-targeted fetch → pack
+      // fetch. Candidates are pre-verified with a RAW resolve so a rejected
+      // pack never disturbs the lazy-stream resolver; only the winner goes
+      // through sourcePlaylistResolverForTv (which owns switch tokens and
+      // entry replacement).
+      Future<Map<String, dynamic>?> Function(int season, int episode)?
+      episodeFetchProviderForTv;
+      final resolvePlaylistForTv = sourcePlaylistResolverForTv;
+      if (seriesFetcher != null &&
+          !seriesFetcher.isMovie &&
+          resolvePlaylistForTv != null &&
+          resolveSourceToPlaylist != null &&
+          args.stremioTvChannels == null) {
+        bool packCoversSeason(Torrent t, int season) {
+          switch (t.coverageType) {
+            case 'completeSeries':
+              final start = t.startSeason;
+              final end = t.endSeason;
+              if (start == null && end == null) return true;
+              return season >= (start ?? 1) && season <= (end ?? season);
+            case 'multiSeasonPack':
+              final start = t.startSeason;
+              final end = t.endSeason;
+              return start != null &&
+                  end != null &&
+                  season >= start &&
+                  season <= end;
+            case 'seasonPack':
+              return t.seasonNumber == season;
+            default:
+              return false;
+          }
+        }
+
+        episodeFetchProviderForTv = (int season, int episode) async {
+          final generation = stremioSourcesGeneration;
+          bool stale() => generation != stremioSourcesGeneration;
+
+          // Raw pre-verification: does this candidate actually contain the
+          // target episode? (1-entry unparseable streams count — they get the
+          // target identity stamped on.)
+          Future<bool> candidateHasTarget(Torrent t) async {
+            List<PlaylistEntry>? entries;
+            try {
+              entries = await resolveSourceToPlaylist(t);
+            } catch (_) {
+              entries = null;
+            }
+            if (entries == null || entries.isEmpty) return false;
+            if (entries.length == 1) {
+              final info = SeriesParser.parseFilename(entries.first.title);
+              if (info.season == null || info.episode == null) return true;
+              return info.season == season && info.episode == episode;
+            }
+            final sp = SeriesPlaylist.fromPlaylistEntries(entries);
+            return sp.findOriginalIndexBySeasonEpisode(season, episode) >= 0;
+          }
+
+          Future<Map<String, dynamic>?> winWith(int i) async {
+            final items = await resolvePlaylistForTv(i);
+            if (stale() || items == null || items.length < 2) return null;
+            // items[0] is the '__meta__' map; stamp the target identity onto
+            // a lone unparseable stream so native lands on the right episode.
+            if (items.length == 2) {
+              final row = Map<String, dynamic>.from(items[1]);
+              if (row['season'] == null || row['episode'] == null) {
+                row['season'] = season;
+                row['episode'] = episode;
+                items[1] = row;
+              }
+            }
+            return {
+              'sourceIndex': i,
+              'items': items,
+              'stremioSources': currentStremioSources
+                  .map((t) => t.toJson())
+                  .toList(),
+            };
+          }
+
+          Future<Map<String, dynamic>?> tryRange(
+            int from,
+            int cap, {
+            bool packsOnly = false,
+          }) async {
+            var attempts = 0;
+            for (
+              var i = from;
+              i < currentStremioSources.length && attempts < cap;
+              i++
+            ) {
+              final t = currentStremioSources[i];
+              if (t.streamType == StreamType.externalUrl) continue;
+              if (packsOnly) {
+                if (t.streamType != StreamType.torrent) continue;
+                if (t.coverageType != null && !packCoversSeason(t, season)) {
+                  continue;
+                }
+              } else {
+                final info = SeriesParser.parseFilename(t.displayTitle);
+                final matches =
+                    info.season == season && info.episode == episode;
+                final covers =
+                    t.streamType == StreamType.torrent &&
+                    packCoversSeason(t, season);
+                if (!matches && !covers) continue;
+              }
+              attempts++;
+              if (!await candidateHasTarget(t)) {
+                if (stale()) return null;
+                continue;
+              }
+              if (stale()) return null;
+              final win = await winWith(i);
+              if (win != null || stale()) return win;
+            }
+            return null;
+          }
+
+          // 1. Existing sources.
+          var result = await tryRange(0, 4);
+          if (result != null || stale()) return result;
+
+          // 2. Episode-targeted fetch.
+          List<Torrent>? fetched;
+          try {
+            fetched = await seriesFetcher.fetch(
+              SeriesSourceFetcher.modeEpisodes,
+              season: season,
+              episode: episode,
+            );
+          } catch (_) {
+            fetched = null;
+          }
+          if (stale()) return null;
+          if (fetched != null && fetched.isNotEmpty) {
+            final from = currentStremioSources.length;
+            currentStremioSources = SeriesSourceFetcher.mergeSources(
+              currentStremioSources,
+              fetched,
+            );
+            result = await tryRange(from, 5);
+            if (result != null || stale()) return result;
+          }
+
+          // 3. Fresh pack search for that season.
+          List<Torrent>? packs;
+          try {
+            packs = await seriesFetcher.fetch(
+              SeriesSourceFetcher.modePacks,
+              season: season,
+              episode: episode,
+            );
+          } catch (_) {
+            packs = null;
+          }
+          if (stale()) return null;
+          if (packs != null && packs.isNotEmpty) {
+            final from = currentStremioSources.length;
+            currentStremioSources = SeriesSourceFetcher.mergeSources(
+              currentStremioSources,
+              packs,
+            );
+            result = await tryRange(from, 3, packsOnly: true);
+            if (result != null || stale()) return result;
+          }
+          return null;
+        };
+      }
+
       // Build Stremio TV channel switch wrapper that updates mutable sources holder
       Map<String, dynamic>? prepareStremioTvPlaybackResult(
         Map<String, dynamic>? playbackResult,
@@ -2416,6 +2590,7 @@ class VideoPlayerLauncher {
         onResolveSourcePlaylist: sourcePlaylistResolverForTv,
         onRequestMoreSources: moreSourcesProviderForTv,
         onRequestAddonSources: addonSourcesProviderForTv,
+        onRequestEpisodeFetch: episodeFetchProviderForTv,
         onRequestStremioTvGuideData: args.stremioTvGuideDataProvider,
         onRequestStremioTvChannelSwitch: channelSwitchForTv,
         onRequestStremioTvNext: stremioTvNextForTv,
@@ -2639,11 +2814,16 @@ class VideoPlayerLauncher {
       return;
     }
 
-    // Create SeriesPlaylist for TVMaze lookup
+    // Create SeriesPlaylist for TVMaze lookup. Single-entry launches used to
+    // be skipped entirely; with a catalog IMDb id they now run too, solely to
+    // fetch the show's FULL episode list for the native episode guide (their
+    // per-item decoration is skipped — a lone unparseable file would be
+    // misattributed to S1E1).
     final playlistEntries = entries.map((e) => e.entry).toList();
-    if (playlistEntries.length < 2) {
+    final singleEntryGuideOnly = playlistEntries.length < 2;
+    if (singleEntryGuideOnly && contentImdbId == null) {
       debugPrint(
-        'TVMazeAsync: SKIPPED - less than 2 entries (${playlistEntries.length})',
+        'TVMazeAsync: SKIPPED - less than 2 entries and no IMDb id',
       );
       return;
     }
@@ -2747,24 +2927,47 @@ class VideoPlayerLauncher {
           webDavPath: webDavPath,
         );
 
-        // Build metadata updates for each item
+        // Build metadata updates for each item. Skipped for single-entry
+        // guide-only runs: a lone unparseable file classifies as S1E1 and
+        // would be decorated with the wrong episode's info.
         final metadataUpdates = <Map<String, dynamic>>[];
         int episodesWithInfo = 0;
         int episodesWithoutInfo = 0;
-        for (final episode in seriesPlaylist.allEpisodes) {
-          if (episode.episodeInfo == null) {
-            episodesWithoutInfo++;
-            continue;
-          }
-          episodesWithInfo++;
+        if (!singleEntryGuideOnly) {
+          for (final episode in seriesPlaylist.allEpisodes) {
+            if (episode.episodeInfo == null) {
+              episodesWithoutInfo++;
+              continue;
+            }
+            episodesWithInfo++;
 
-          final info = episode.episodeInfo!;
-          metadataUpdates.add({
-            'originalIndex': episode.originalIndex,
-            'title': info.title,
-            'description': info.plot,
-            'artwork': info.poster,
-            'rating': info.rating,
+            final info = episode.episodeInfo!;
+            metadataUpdates.add({
+              'originalIndex': episode.originalIndex,
+              'title': info.title,
+              'description': info.plot,
+              'artwork': info.poster,
+              'rating': info.rating,
+            });
+          }
+        }
+
+        // The show's FULL episode list for the native episode guide (every
+        // episode, present in the pack or not).
+        final guideEpisodes = <Map<String, dynamic>>[];
+        for (final m in seriesPlaylist.fullTvmazeEpisodes) {
+          final season = m['season'] as int?;
+          final number = m['number'] as int?;
+          if (season == null || number == null) continue;
+          final info = EpisodeInfo.fromTVMaze(m);
+          guideEpisodes.add({
+            'season': season,
+            'episode': number,
+            if (info.title != null) 'title': info.title,
+            if (info.poster != null) 'artwork': info.poster,
+            if (info.plot != null) 'description': info.plot,
+            if (info.rating != null) 'rating': info.rating,
+            if (info.runtime != null) 'runtime': info.runtime,
           });
         }
 
@@ -2778,7 +2981,9 @@ class VideoPlayerLauncher {
           'TVMazeAsync: Discovered IMDB ID from TVMaze: $discoveredImdbId',
         );
 
-        if (metadataUpdates.isEmpty && discoveredImdbId == null) {
+        if (metadataUpdates.isEmpty &&
+            discoveredImdbId == null &&
+            guideEpisodes.isEmpty) {
           debugPrint(
             'TVMazeAsync: SKIPPED push - no metadata updates and no IMDB ID',
           );
@@ -2803,17 +3008,20 @@ class VideoPlayerLauncher {
           metadataUpdates,
           sessionId: sessionId,
           imdbId: discoveredImdbId,
+          guideEpisodes: guideEpisodes,
         );
 
         // Push metadata updates directly to native player (don't wait for request)
         // Include discovered IMDB ID for Stremio subtitle fetching
         debugPrint(
-          'TVMazeAsync: Pushing ${metadataUpdates.length} metadata updates to native player (imdbId=$discoveredImdbId)',
+          'TVMazeAsync: Pushing ${metadataUpdates.length} metadata updates + '
+          '${guideEpisodes.length} guide episodes to native player (imdbId=$discoveredImdbId)',
         );
         await AndroidTvPlayerBridge.updateEpisodeMetadata(
           metadataUpdates,
           sessionId: sessionId,
           imdbId: discoveredImdbId,
+          guideEpisodes: guideEpisodes,
         );
         debugPrint('TVMazeAsync: Metadata push complete');
       } catch (e, stack) {

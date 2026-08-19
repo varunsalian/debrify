@@ -184,6 +184,9 @@ class TorrentPlaybackService {
     // involved, so the advance goes bound-sources → addon-stream flow.
     if (torrent.streamType == StreamType.directUrl &&
         (torrent.directUrl?.isNotEmpty ?? false)) {
+      final fetcher = meta?.contentType == 'movie'
+          ? movieFetcherFor(meta: meta)
+          : seriesFetcherFor(meta: meta, episodesFetched: sources != null);
       await VideoPlayerLauncher.push(
         context,
         _playerArgs(
@@ -192,9 +195,11 @@ class TorrentPlaybackService {
           subtitle: torrent.source.isNotEmpty ? torrent.source : null,
           stremioSources: sources,
           stremioCurrentSourceIndex: sources != null ? sourceIndex : null,
-          resolveSourceToPlaylist: (sources != null && sources.length > 1)
+          resolveSourceToPlaylist:
+              ((sources != null && sources.length > 1) || fetcher != null)
               ? _lazyProviderResolver()
               : null,
+          seriesSourceFetcher: fetcher,
           meta: meta,
         ),
         onQuickPlayNextEpisode: _nextEpisodeHandlerFor(context, meta),

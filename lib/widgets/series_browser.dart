@@ -7,6 +7,7 @@ import '../services/episode_info_service.dart';
 import '../services/storage_service.dart';
 import '../services/tvmaze_service.dart';
 import '../utils/episode_progress_merge.dart';
+import '../utils/series_parser.dart';
 import 'tvmaze_search_dialog.dart';
 
 /// Palette for the series playlist sheet.
@@ -44,6 +45,13 @@ class SeriesBrowser extends StatefulWidget {
   final Map<String, dynamic>? playlistItem; // For Fix Metadata feature
   final String? imdbId; // Show IMDb id, for per-episode Trakt progress lookup
 
+  /// Full-guide mode: render EVERY episode of the show (from TVMaze), not
+  /// just the ones present in the pack. Absent episodes show dimmed with a
+  /// fetch affordance; tapping one still calls [onEpisodeSelected], and the
+  /// host resolves it to a fetch (the S/E won't map to a playlist index).
+  /// Only enable when the host can actually fetch absent episodes.
+  final bool showAllEpisodes;
+
   const SeriesBrowser({
     super.key,
     required this.seriesPlaylist,
@@ -51,6 +59,7 @@ class SeriesBrowser extends StatefulWidget {
     required this.currentEpisodeIndex,
     this.playlistItem, // Optional playlist item data
     this.imdbId,
+    this.showAllEpisodes = false,
   });
 
   @override
@@ -63,8 +72,17 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   bool _tvmazeChecked = false; // True once the availability probe has resolved
   int _selectedSeason = 1;
   bool _denseView = false;
-  // originalIndex of episodes expanded to show their description in dense view.
-  final Set<int> _expandedDense = {};
+  // Episodes expanded to show their description in dense view, keyed by
+  // season/episode/originalIndex — placeholders share originalIndex -1, so a
+  // bare index would expand every placeholder at once.
+  final Set<String> _expandedDense = {};
+
+  // Full-guide mode: the show's complete TVMaze episode list and the merged
+  // (pack ∪ TVMaze) per-season views derived from it. Placeholder rows for
+  // absent episodes are synthesized once and cached so their identity is
+  // stable across rebuilds.
+  List<Map<String, dynamic>> _fullEpisodes = [];
+  final Map<int, List<SeriesEpisode>> _mergedSeasonCache = {};
   final ScrollController _scrollController = ScrollController();
   Map<String, dynamic>? _lastPlayedEpisode;
   Map<String, Set<int>> _finishedEpisodes =
@@ -96,6 +114,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   @override
   void initState() {
     super.initState();
+    // Full list may already have been fetched by the player's own TVMaze pass.
+    _fullEpisodes = widget.seriesPlaylist.fullTvmazeEpisodes;
     _initializeSeason();
     _loadViewMode();
     _checkTVMazeAvailability();
@@ -194,16 +214,11 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   }
 
   Future<void> _loadEpisodeInfoInBackground() async {
-    final selectedSeason = widget.seriesPlaylist.getSeason(_selectedSeason);
-    if (selectedSeason == null) {
-      return;
-    }
-
     // Clear previous loading states for this season
     _loadingEpisodes.clear();
 
     // Fetch all episodes ONCE upfront (avoid per-episode API calls)
-    List<Map<String, dynamic>> allEpisodes = [];
+    List<Map<String, dynamic>> allEpisodes = _fullEpisodes;
 
     // Try to get show ID from: 1) SeriesPlaylist, 2) saved mapping, 3) IMDB lookup
     int? showId =
@@ -225,12 +240,32 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       }
     }
 
-    if (showId != null) {
+    if (allEpisodes.isEmpty && showId != null) {
       try {
         allEpisodes = await TVMazeService.getEpisodes(showId);
       } catch (e) {
         debugPrint('Error fetching episodes for show ID $showId: $e');
       }
+    }
+
+    // Retain the full list: the guide's full-mode view is derived from it,
+    // and the SeriesPlaylist keeps it for the player (next/prev beyond pack).
+    if (allEpisodes.isNotEmpty && !identical(allEpisodes, _fullEpisodes)) {
+      widget.seriesPlaylist.fullTvmazeEpisodes = allEpisodes;
+      if (mounted) {
+        setState(() {
+          _fullEpisodes = allEpisodes;
+          _mergedSeasonCache.clear();
+        });
+      } else {
+        _fullEpisodes = allEpisodes;
+        _mergedSeasonCache.clear();
+      }
+    }
+
+    final selectedSeason = widget.seriesPlaylist.getSeason(_selectedSeason);
+    if (selectedSeason == null) {
+      return;
     }
 
     // Process each episode using pre-fetched list or fallback to title search
@@ -587,12 +622,9 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
   void _recenterCurrentEpisode({bool animate = true}) {
     if (!_scrollController.hasClients) return;
 
-    final selectedSeason = widget.seriesPlaylist.getSeason(_selectedSeason);
-    final episodeIndexInSeason =
-        selectedSeason?.episodes.indexWhere(
-          (episode) => episode.originalIndex == widget.currentEpisodeIndex,
-        ) ??
-        -1;
+    final episodeIndexInSeason = _episodesForSeason(_selectedSeason).indexWhere(
+      (episode) => episode.originalIndex == widget.currentEpisodeIndex,
+    );
 
     if (widget.currentEpisodeIndex < 0 || episodeIndexInSeason == -1) {
       _scrollController.jumpTo(0);
@@ -656,6 +688,87 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
 
   String _seasonLabel(int seasonNumber) {
     return seasonNumber == 0 ? 'Specials' : 'Season $seasonNumber';
+  }
+
+  /// Seasons for the picker: the pack's seasons, plus (in full-guide mode)
+  /// every season TVMaze knows about. Specials (season 0) sort last.
+  List<({int number, int count})> _guideSeasons() {
+    final counts = <int, int>{};
+    for (final s in widget.seriesPlaylist.seasons) {
+      counts[s.seasonNumber] = s.episodes.length;
+    }
+    if (widget.showAllEpisodes) {
+      final tvCounts = <int, int>{};
+      for (final ep in _fullEpisodes) {
+        final s = ep['season'] as int?;
+        if (s == null) continue;
+        tvCounts[s] = (tvCounts[s] ?? 0) + 1;
+      }
+      tvCounts.forEach((s, c) {
+        final existing = counts[s];
+        counts[s] = existing == null ? c : math.max(existing, c);
+      });
+    }
+    final numbers = counts.keys.toList()..sort();
+    if (numbers.remove(0)) numbers.add(0);
+    return [for (final n in numbers) (number: n, count: counts[n]!)];
+  }
+
+  /// Episodes for [seasonNumber]: the pack's files as-is, or (in full-guide
+  /// mode) the union with TVMaze — absent episodes become placeholder rows
+  /// with originalIndex -1 that render dimmed and resolve to a fetch on tap.
+  /// Placeholders are cached so their identity is stable across rebuilds.
+  List<SeriesEpisode> _episodesForSeason(int seasonNumber) {
+    final pack =
+        widget.seriesPlaylist.getSeason(seasonNumber)?.episodes ??
+        const <SeriesEpisode>[];
+    if (!widget.showAllEpisodes || _fullEpisodes.isEmpty) return pack;
+    final cached = _mergedSeasonCache[seasonNumber];
+    if (cached != null) return cached;
+
+    final byNumber = <int, SeriesEpisode>{};
+    for (final ep in pack) {
+      final n = ep.seriesInfo.episode;
+      if (n != null) byNumber.putIfAbsent(n, () => ep);
+    }
+    final tvEpisodes =
+        _fullEpisodes.where((m) => m['season'] == seasonNumber).toList()..sort(
+          (a, b) => ((a['number'] as int?) ?? 0).compareTo(
+            (b['number'] as int?) ?? 0,
+          ),
+        );
+    final merged = <SeriesEpisode>[];
+    final used = <SeriesEpisode>{};
+    for (final tv in tvEpisodes) {
+      final n = tv['number'] as int?;
+      if (n == null) continue;
+      final packEp = byNumber[n];
+      if (packEp != null) {
+        merged.add(packEp);
+        used.add(packEp);
+      } else {
+        merged.add(
+          SeriesEpisode(
+            url: '',
+            title: (tv['name'] as String?) ?? 'Episode $n',
+            filename: '',
+            seriesInfo: SeriesInfo(
+              title: widget.seriesPlaylist.seriesTitle,
+              season: seasonNumber,
+              episode: n,
+              isSeries: true,
+            ),
+            originalIndex: -1,
+          )..episodeInfo = EpisodeInfo.fromTVMaze(tv),
+        );
+      }
+    }
+    // Pack files TVMaze doesn't know about keep showing, after the known ones.
+    for (final ep in pack) {
+      if (!used.contains(ep)) merged.add(ep);
+    }
+    _mergedSeasonCache[seasonNumber] = merged;
+    return merged;
   }
 
   double _progressFor(SeriesEpisode episode) {
@@ -729,22 +842,25 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     }
   }
 
-  void _toggleDenseExpanded(int originalIndex) {
+  String _denseKey(SeriesEpisode episode) =>
+      '${episode.seriesInfo.season}_${episode.seriesInfo.episode}_${episode.originalIndex}';
+
+  void _toggleDenseExpanded(SeriesEpisode episode) {
+    final key = _denseKey(episode);
     setState(() {
-      if (!_expandedDense.remove(originalIndex)) {
-        _expandedDense.add(originalIndex);
+      if (!_expandedDense.remove(key)) {
+        _expandedDense.add(key);
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final selectedSeason = widget.seriesPlaylist.getSeason(_selectedSeason);
-    if (selectedSeason == null) {
+    final episodes = _episodesForSeason(_selectedSeason);
+    if (episodes.isEmpty &&
+        widget.seriesPlaylist.getSeason(_selectedSeason) == null) {
       return const Center(child: CircularProgressIndicator());
     }
-
-    final episodes = selectedSeason.episodes;
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
       clipBehavior: Clip.antiAlias,
@@ -799,7 +915,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
 
   Widget _buildHeader(double hPad) {
     final seriesTitle = widget.seriesPlaylist.seriesTitle;
-    final seasons = widget.seriesPlaylist.seasons;
+    final seasons = _guideSeasons();
 
     return Padding(
       padding: EdgeInsets.fromLTRB(hPad, 8, hPad, 10),
@@ -892,7 +1008,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     );
   }
 
-  Widget _buildSeasonPicker(List<SeriesSeason> seasons) {
+  Widget _buildSeasonPicker(List<({int number, int count})> seasons) {
     final label = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -930,13 +1046,13 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
       position: PopupMenuPosition.under,
       onSelected: _onSeasonChanged,
       itemBuilder: (context) => seasons.map((season) {
-        final isSelected = season.seasonNumber == _selectedSeason;
+        final isSelected = season.number == _selectedSeason;
         return PopupMenuItem<int>(
-          value: season.seasonNumber,
+          value: season.number,
           child: Row(
             children: [
               Text(
-                _seasonLabel(season.seasonNumber),
+                _seasonLabel(season.number),
                 style: TextStyle(
                   color: isSelected
                       ? _BrowserColors.accent
@@ -947,7 +1063,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
               ),
               const Spacer(),
               Text(
-                '${season.episodeCount} ep',
+                '${season.count} ep',
                 style: const TextStyle(
                   color: _BrowserColors.inkFaint,
                   fontSize: 12,
@@ -1219,6 +1335,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     required int plotLines,
   }) {
     final plot = episode.episodeInfo?.plot;
+    final available = episode.originalIndex >= 0;
 
     return Material(
       color: isCurrent ? _BrowserColors.accentSoft : _BrowserColors.surface,
@@ -1239,13 +1356,16 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _buildThumbnail(
-                episode: episode,
-                index: index,
-                width: thumbWidth,
-                height: thumbHeight,
-                progress: progress,
-                isFinished: isFinished,
+              Opacity(
+                opacity: available ? 1.0 : 0.55,
+                child: _buildThumbnail(
+                  episode: episode,
+                  index: index,
+                  width: thumbWidth,
+                  height: thumbHeight,
+                  progress: progress,
+                  isFinished: isFinished,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -1274,8 +1394,10 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                             episode.displayTitle,
                             maxLines: plot == null || plot.isEmpty ? 2 : 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: _BrowserColors.ink,
+                            style: TextStyle(
+                              color: available
+                                  ? _BrowserColors.ink
+                                  : _BrowserColors.inkDim,
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
                               letterSpacing: -0.1,
@@ -1304,6 +1426,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                       isFinished: isFinished,
                       isLastPlayed: isLastPlayed,
                       progress: progress,
+                      available: available,
                     ),
                   ],
                 ),
@@ -1418,8 +1541,33 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     required bool isFinished,
     required bool isLastPlayed,
     required double progress,
+    bool available = true,
   }) {
     final tags = <Widget>[];
+
+    if (!available) {
+      tags.add(
+        const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.download_rounded,
+              color: _BrowserColors.inkFaint,
+              size: 14,
+            ),
+            SizedBox(width: 3),
+            Text(
+              'Tap to fetch',
+              style: TextStyle(
+                color: _BrowserColors.inkFaint,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     if (isCurrent) {
       tags.add(
@@ -1534,7 +1682,8 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
     required bool showDivider,
   }) {
     final runtime = episode.episodeInfo?.runtime;
-    final expanded = _expandedDense.contains(episode.originalIndex);
+    final expanded = _expandedDense.contains(_denseKey(episode));
+    final available = episode.originalIndex >= 0;
 
     final collapsedRow = SizedBox(
       height: collapsedHeight,
@@ -1542,12 +1691,15 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Row(
           children: [
-            _buildMiniThumb(
-              episode: episode,
-              index: index,
-              progress: progress,
-              isFinished: isFinished,
-              isCurrent: isCurrent,
+            Opacity(
+              opacity: available ? 1.0 : 0.55,
+              child: _buildMiniThumb(
+                episode: episode,
+                index: index,
+                progress: progress,
+                isFinished: isFinished,
+                isCurrent: isCurrent,
+              ),
             ),
             const SizedBox(width: 12),
             SizedBox(
@@ -1570,13 +1722,21 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: _BrowserColors.ink,
+                  color: available ? _BrowserColors.ink : _BrowserColors.inkDim,
                   fontSize: 14,
                   fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
             ),
             const SizedBox(width: 10),
+            if (!available) ...[
+              const Icon(
+                Icons.download_rounded,
+                color: _BrowserColors.inkFaint,
+                size: 15,
+              ),
+              const SizedBox(width: 10),
+            ],
             if (progress > 0.01 && !isFinished && !isCurrent) ...[
               Text(
                 '${(progress * 100).round()}%',
@@ -1600,7 +1760,7 @@ class _SeriesBrowserState extends State<SeriesBrowser> {
               ),
             // Expand arrow — opens the description without starting playback.
             IconButton(
-              onPressed: () => _toggleDenseExpanded(episode.originalIndex),
+              onPressed: () => _toggleDenseExpanded(episode),
               padding: EdgeInsets.zero,
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints(minWidth: 34, minHeight: 34),

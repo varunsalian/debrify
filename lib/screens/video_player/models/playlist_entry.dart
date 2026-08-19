@@ -43,4 +43,28 @@ class PlaylistEntry {
     this.premiumizeItemId,
     this.allDebridLink,
   });
+
+  /// Same entry under a different display title (used to stamp a parseable
+  /// S##E## identity onto an unparseable fetched stream name).
+  PlaylistEntry copyWithTitle(String newTitle) => PlaylistEntry(
+    url: url,
+    title: newTitle,
+    hdVideoUrl: hdVideoUrl,
+    audioUrl: audioUrl,
+    relativePath: relativePath,
+    restrictedLink: restrictedLink,
+    torrentHash: torrentHash,
+    sizeBytes: sizeBytes,
+    provider: provider,
+    torboxTorrentId: torboxTorrentId,
+    torboxWebDownloadId: torboxWebDownloadId,
+    torboxFileId: torboxFileId,
+    pikpakFileId: pikpakFileId,
+    rdTorrentId: rdTorrentId,
+    rdLinkIndex: rdLinkIndex,
+    premiumizeHash: premiumizeHash,
+    premiumizePath: premiumizePath,
+    premiumizeItemId: premiumizeItemId,
+    allDebridLink: allDebridLink,
+  );
 }

@@ -4301,7 +4301,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Check if there's a previous episode available
   bool _hasPreviousEpisode() {
-    return _findPreviousEpisodeIndex() != -1;
+    if (_findPreviousEpisodeIndex() != -1) return true;
+    // Beyond the pack's start: a previous episode may exist show-wide and be
+    // fetchable in-player (metadata-list adjacency decides at press time).
+    if (_canFetchEpisodes) {
+      final se = _traktSeasonEpisode();
+      if (se.season != null && se.episode != null) {
+        return _adjacentEpisode(se.season!, se.episode!, -1) != null;
+      }
+    }
+    return false;
   }
 
   void _clearBufferingIndicator() {
@@ -4350,6 +4359,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (_hasStremioTvNext) {
       final handled = await _goToNextStremioTvSlot();
       if (handled) return;
+    }
+
+    // Series content beyond the pack: fetch the next episode IN-PLAYER when
+    // possible (no relaunch), falling back to the pop-and-quick-play handoff.
+    if (_canFetchEpisodes) {
+      final se = _traktSeasonEpisode();
+      if (se.season != null && se.episode != null) {
+        var next = _adjacentEpisode(se.season!, se.episode!, 1);
+        if (next == null && widget.contentImdbId != null) {
+          final nextEp = await NextEpisodeService.findNextEpisode(
+            widget.contentImdbId!,
+            se.season!,
+            se.episode!,
+          );
+          if (nextEp != null) next = (nextEp.season, nextEp.episode);
+          if (!mounted) return;
+        }
+        if (next != null) {
+          await _fetchAndPlayEpisode(next.$1, next.$2);
+          return;
+        }
+      }
     }
 
     // Series content without season pack: find next episode and trigger Quick Play
@@ -6777,14 +6808,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   Future<void> _switchToSourcePlaylist(
     int sourceIndex,
-    List<PlaylistEntry> newPlaylist,
-  ) async {
+    List<PlaylistEntry> newPlaylist, {
+    int? targetSeason,
+    int? targetEpisode,
+  }) async {
     _hideSourceSheet();
     _clearBufferingIndicator();
     // Capture the episode we're on BEFORE swapping the playlist, so we can
     // land on it in the new source instead of jumping to the pack's first
     // entry (S1E1). Read from the current playlist entry (tracks auto-advance).
-    final se = _traktSeasonEpisode();
+    // An episode-guide fetch targets a DIFFERENT episode: land there instead.
+    final current = _traktSeasonEpisode();
+    final explicitTarget = targetSeason != null && targetEpisode != null;
+    final se = explicitTarget
+        ? (season: targetSeason, episode: targetEpisode)
+        : current;
     // Checkpoint the OUTGOING episode now, while _activePlaylist/_currentIndex
     // still point at it — after the swap the index would resolve against the
     // new playlist. _loadPlaylistIndex below is told to skip its own save.
@@ -6802,12 +6840,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     } catch (_) {}
     if (!mounted) return;
 
-    // Replace playlist and invalidate series cache
+    // Replace playlist and invalidate series cache. A source/episode switch
+    // stays within the same show, so the full TVMaze episode list carries
+    // over — without it, guide adjacency and the full episode sheet would go
+    // dark until another TVMaze fetch succeeds (never, when offline).
+    final carriedGuide = _seriesPlaylist?.fullTvmazeEpisodes.isNotEmpty == true
+        ? _seriesPlaylist!.fullTvmazeEpisodes
+        : _syntheticGuidePlaylist?.fullTvmazeEpisodes;
     setState(() {
       _activePlaylist = newPlaylist;
       _cachedSeriesPlaylist = null;
       _playlistIdentityToken++;
     });
+    if (carriedGuide != null && carriedGuide.isNotEmpty) {
+      final rebuilt = _seriesPlaylist;
+      if (rebuilt != null && rebuilt.fullTvmazeEpisodes.isEmpty) {
+        rebuilt.fullTvmazeEpisodes = carriedGuide;
+      }
+    }
 
     // Resume the SAME episode from the new source (a season/complete pack would
     // otherwise restart at S1E1); _loadPlaylistIndex restores its saved
@@ -6816,13 +6866,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // Whether the new source landed on the SAME content we were watching — only
     // then does "prefer the checkpointed local position over Trakt" apply. When
     // we fall back to a different episode, its own Trakt resume must still work.
-    var landedOnSameContent = true;
+    // An explicit episode-guide target is different content by definition.
+    var landedOnSameContent =
+        !explicitTarget ||
+        (targetSeason == current.season && targetEpisode == current.episode);
     if (se.season != null && se.episode != null) {
       final sp = _seriesPlaylist;
       final idx =
           sp?.findOriginalIndexBySeasonEpisode(se.season!, se.episode!) ?? -1;
       if (idx >= 0) {
         targetIndex = idx;
+      } else if (explicitTarget && newPlaylist.length == 1) {
+        // A fetched single stream often has an unparseable name ("Torrentio
+        // 1080p"); its one entry IS the target episode — no warning needed.
+        targetIndex = 0;
       } else {
         landedOnSameContent = false;
         // The exact episode isn't in this source. Don't fall back to raw entry
@@ -7487,6 +7544,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _setManualSelectionMode();
       await _loadPlaylistIndex(previousIndex, autoplay: true);
     } else {
+      // Beyond the pack's start: fetch the previous episode in-player.
+      if (_canFetchEpisodes) {
+        final se = _traktSeasonEpisode();
+        final prev = (se.season != null && se.episode != null)
+            ? _adjacentEpisode(se.season!, se.episode!, -1)
+            : null;
+        if (prev != null) {
+          await _fetchAndPlayEpisode(prev.$1, prev.$2);
+          return;
+        }
+      }
       // Clear transition state if no previous episode found
       if (mounted) {
         setState(() {
@@ -9682,7 +9750,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           onNextChannel: widget.requestNextChannel != null
               ? _goToNextChannel
               : null,
-          onShowPlaylist: _activePlaylist != null && _activePlaylist!.isNotEmpty
+          onShowPlaylist:
+              (_activePlaylist != null && _activePlaylist!.isNotEmpty) ||
+                  _canFetchEpisodes
               ? () => _showPlaylistSheet(context)
               : null,
           onShowSources: hasSources ? _showSourceSheetOverlay : null,
@@ -10716,19 +10786,290 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   double? _getCustomAspectRatio() =>
       AspectModeUtils.getAspectRatioValue(_aspectMode);
 
+  // ─── Episode guide: in-player fetch of absent episodes ────────────────
+
+  /// Whether an episode that isn't in the current playlist can be fetched
+  /// and played without leaving the player: catalog series content with a
+  /// live fetcher + resolver, outside the channel-style modes (Stremio TV /
+  /// IPTV / Debrify TV own their identity and next/prev semantics).
+  bool get _canFetchEpisodes =>
+      widget.seriesSourceFetcher != null &&
+      !widget.seriesSourceFetcher!.isMovie &&
+      widget.resolveSourceToPlaylist != null &&
+      _stremioSourcesOverride == null &&
+      _effectiveStremioTvChannels == null &&
+      _effectiveIptvChannels == null &&
+      widget.requestMagicNext == null;
+
+  bool _episodeFetchInProgress = false;
+
+  // Synthetic 1-entry guide backing for single-stream launches (no playlist):
+  // lets the episode guide open and offer the show's full episode list.
+  SeriesPlaylist? _syntheticGuidePlaylist;
+  List<PlaylistEntry>? _syntheticGuideEntries;
+
+  static String _pad2(int n) => n.toString().padLeft(2, '0');
+
+  (SeriesPlaylist, List<PlaylistEntry>)? _buildSyntheticGuide() {
+    final existingSp = _syntheticGuidePlaylist;
+    final existingEntries = _syntheticGuideEntries;
+    if (existingSp != null && existingEntries != null) {
+      return (existingSp, existingEntries);
+    }
+    final se = _traktSeasonEpisode();
+    if (se.season == null || se.episode == null) return null;
+    var title = widget.title;
+    final info = SeriesParser.parseFilename(title);
+    if (info.season == null || info.episode == null) {
+      // Stamp the playing episode's identity so the guide groups it right.
+      title = 'S${_pad2(se.season!)}E${_pad2(se.episode!)} $title';
+    }
+    final entries = [PlaylistEntry(url: widget.videoUrl, title: title)];
+    final sp = SeriesPlaylist.fromPlaylistEntries(
+      entries,
+      collectionTitle: widget.contentTitle ?? widget.title,
+      forceSeries: true,
+    );
+    sp.imdbId = widget.contentImdbId;
+    _syntheticGuidePlaylist = sp;
+    _syntheticGuideEntries = entries;
+    return (sp, entries);
+  }
+
+  bool _packCoversSeason(Torrent t, int season) {
+    switch (t.coverageType) {
+      case 'completeSeries':
+        final start = t.startSeason;
+        final end = t.endSeason;
+        if (start == null && end == null) return true;
+        return season >= (start ?? 1) && season <= (end ?? season);
+      case 'multiSeasonPack':
+        final start = t.startSeason;
+        final end = t.endSeason;
+        return start != null && end != null && season >= start && season <= end;
+      case 'seasonPack':
+        return t.seasonNumber == season;
+      default:
+        return false;
+    }
+  }
+
+  /// Quick-play an episode that isn't in the current playlist, WITHOUT
+  /// leaving the player: try packs already in the source list, then an
+  /// episode-targeted fetch, then a fresh pack search — switching to the
+  /// first candidate that resolves and actually contains the episode.
+  Future<void> _fetchAndPlayEpisode(int season, int episode) async {
+    if (!_canFetchEpisodes || _episodeFetchInProgress) {
+      // A next/prev press may have raised the transition curtain already;
+      // never leave it up when the request can't run.
+      if (mounted && _isTransitioning) {
+        setState(() => _isTransitioning = false);
+      }
+      return;
+    }
+    final fetcher = widget.seriesSourceFetcher!;
+    _episodeFetchInProgress = true;
+    final messenger = ScaffoldMessenger.of(context);
+    final label = 'S${_pad2(season)}E${_pad2(episode)}';
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Fetching $label…'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    try {
+      final token = _playlistIdentityToken;
+
+      // 1. Try what's already in the source list: exact-episode singles and
+      // packs covering the season (often already unlocked on the account).
+      final existing = List<Torrent>.of(_effectiveSources ?? const <Torrent>[]);
+      var attempts = 0;
+      for (var i = 0; i < existing.length && attempts < 4; i++) {
+        if (i == _currentSourceIndex) continue;
+        final t = existing[i];
+        if (t.streamType == StreamType.externalUrl) continue;
+        final info = SeriesParser.parseFilename(t.displayTitle);
+        final matchesEpisode = info.season == season && info.episode == episode;
+        final coversAsPack =
+            t.streamType == StreamType.torrent && _packCoversSeason(t, season);
+        if (!matchesEpisode && !coversAsPack) continue;
+        attempts++;
+        if (await _tryEpisodeCandidate(i, t, season, episode, token)) return;
+        if (!mounted || token != _playlistIdentityToken) return;
+      }
+
+      // 2. Episode-targeted fetch (direct links resolve instantly).
+      List<Torrent>? fetched;
+      try {
+        fetched = await fetcher.fetch(
+          SeriesSourceFetcher.modeEpisodes,
+          season: season,
+          episode: episode,
+        );
+      } catch (_) {
+        fetched = null;
+      }
+      if (!mounted || token != _playlistIdentityToken) return;
+      if (fetched != null && fetched.isNotEmpty) {
+        final base = _effectiveSources ?? const <Torrent>[];
+        final merged = SeriesSourceFetcher.mergeSources(base, fetched);
+        setState(() => _augmentedSources = merged);
+        attempts = 0;
+        for (var i = base.length; i < merged.length && attempts < 5; i++) {
+          final t = merged[i];
+          if (t.streamType == StreamType.externalUrl) continue;
+          attempts++;
+          if (await _tryEpisodeCandidate(i, t, season, episode, token)) return;
+          if (!mounted || token != _playlistIdentityToken) return;
+        }
+      }
+
+      // 3. Last resort: a fresh pack search for that season.
+      List<Torrent>? packs;
+      try {
+        packs = await fetcher.fetch(
+          SeriesSourceFetcher.modePacks,
+          season: season,
+          episode: episode,
+        );
+      } catch (_) {
+        packs = null;
+      }
+      if (!mounted || token != _playlistIdentityToken) return;
+      if (packs != null && packs.isNotEmpty) {
+        final base = _effectiveSources ?? const <Torrent>[];
+        final merged = SeriesSourceFetcher.mergeSources(base, packs);
+        setState(() => _augmentedSources = merged);
+        attempts = 0;
+        for (var i = base.length; i < merged.length && attempts < 3; i++) {
+          final t = merged[i];
+          if (t.streamType != StreamType.torrent) continue;
+          // Pack-search results are season-targeted; only skip ones whose
+          // detected coverage positively excludes the season.
+          if (t.coverageType != null && !_packCoversSeason(t, season)) {
+            continue;
+          }
+          attempts++;
+          if (await _tryEpisodeCandidate(i, t, season, episode, token)) return;
+          if (!mounted || token != _playlistIdentityToken) return;
+        }
+      }
+
+      if (mounted && token == _playlistIdentityToken) {
+        // A next/prev press raised the transition curtain before calling in
+        // here — drop it, or a failed fetch leaves the screen black.
+        if (_isTransitioning) {
+          setState(() => _isTransitioning = false);
+        }
+        messenger.showSnackBar(
+          SnackBar(content: Text('No playable source found for $label')),
+        );
+      }
+    } finally {
+      _episodeFetchInProgress = false;
+    }
+  }
+
+  /// Resolve one candidate and switch to it when it actually contains the
+  /// target episode. Returns true when playback switched (or when the
+  /// attempt went stale and the loop must stop).
+  Future<bool> _tryEpisodeCandidate(
+    int sourceIndex,
+    Torrent t,
+    int season,
+    int episode,
+    int token,
+  ) async {
+    List<PlaylistEntry>? playlist;
+    try {
+      playlist = await widget.resolveSourceToPlaylist!(t);
+    } catch (_) {
+      playlist = null;
+    }
+    if (!mounted || token != _playlistIdentityToken) return true;
+    if (playlist == null || playlist.isEmpty) return false;
+    if (playlist.length == 1) {
+      final info = SeriesParser.parseFilename(playlist.first.title);
+      if (info.season == null || info.episode == null) {
+        // Unparseable single stream: stamp the target identity into the
+        // title so parsing (titles, scrobbling, the guide) stays coherent.
+        playlist = [
+          playlist.first.copyWithTitle(
+            'S${_pad2(season)}E${_pad2(episode)} ${playlist.first.title}',
+          ),
+        ];
+      } else if (info.season != season || info.episode != episode) {
+        return false; // resolves to a DIFFERENT episode — wrong result
+      }
+    } else {
+      final sp = SeriesPlaylist.fromPlaylistEntries(
+        playlist,
+        collectionTitle: widget.title,
+        forceSeries: true,
+      );
+      if (sp.findOriginalIndexBySeasonEpisode(season, episode) < 0) {
+        return false; // pack without the target — try the next candidate
+      }
+    }
+    _setManualSelectionMode(allowResume: true);
+    await _switchToSourcePlaylist(
+      sourceIndex,
+      playlist,
+      targetSeason: season,
+      targetEpisode: episode,
+    );
+    return true;
+  }
+
+  /// The episode adjacent to (season, episode) in the show's full TVMaze
+  /// list (specials excluded); null when unknown or out of range.
+  (int, int)? _adjacentEpisode(int season, int episode, int direction) {
+    final full = _seriesPlaylist?.fullTvmazeEpisodes.isNotEmpty == true
+        ? _seriesPlaylist!.fullTvmazeEpisodes
+        : (_syntheticGuidePlaylist?.fullTvmazeEpisodes ??
+              const <Map<String, dynamic>>[]);
+    if (full.isEmpty) return null;
+    final eps = <(int, int)>[
+      for (final m in full)
+        if (m['season'] is int && m['number'] is int && (m['season'] as int) > 0)
+          ((m['season'] as int), (m['number'] as int)),
+    ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
+    final idx = eps.indexWhere((p) => p.$1 == season && p.$2 == episode);
+    if (idx < 0) return null;
+    final target = idx + direction;
+    if (target < 0 || target >= eps.length) return null;
+    return eps[target];
+  }
+
   Future<void> _showPlaylistSheet(BuildContext context) async {
+    var playlist = _activePlaylist ?? const <PlaylistEntry>[];
+    var seriesPlaylist = _seriesPlaylist;
+    var currentIndex = _currentIndex;
+    final canFetch = _canFetchEpisodes;
+    if (playlist.isEmpty && canFetch) {
+      // Single stream without a playlist: back the guide with a synthetic
+      // 1-entry playlist so the full episode list can render.
+      final synthetic = _buildSyntheticGuide();
+      if (synthetic == null) return;
+      seriesPlaylist = synthetic.$1;
+      playlist = synthetic.$2;
+      currentIndex = 0;
+    }
     await PlaylistSheet.show(
       context,
-      playlist: _activePlaylist ?? const [],
-      currentIndex: _currentIndex,
-      seriesPlaylist: _seriesPlaylist,
+      playlist: playlist,
+      currentIndex: currentIndex,
+      seriesPlaylist: seriesPlaylist,
       playlistItemData: _constructPlaylistItemData(),
       imdbId: widget.contentImdbId,
       viewMode: widget.viewMode,
       onSelect: (index, {bool allowResume = false}) async {
+        // Synthetic guide: its only playlist row IS the playing stream.
+        if (_activePlaylist == null || _activePlaylist!.isEmpty) return;
         _setManualSelectionMode(allowResume: allowResume);
         await _loadPlaylistIndex(index, autoplay: true);
       },
+      onFetchEpisode: canFetch ? _fetchAndPlayEpisode : null,
     );
   }
 
@@ -11423,8 +11764,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                   isLandscape: _landscapeLocked,
                                   onRotate: _toggleOrientation,
                                   hasPlaylist:
-                                      _activePlaylist != null &&
-                                      _activePlaylist!.isNotEmpty,
+                                      (_activePlaylist != null &&
+                                          _activePlaylist!.isNotEmpty) ||
+                                      _canFetchEpisodes,
                                   onShowPlaylist: () =>
                                       _showPlaylistSheet(context),
                                   onShowTracks: () => _showTracksSheet(context),
@@ -12912,7 +13254,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       sleepMinutesLeft: _sleepTimerMinutesLeft,
       allowEndOfItem: _currentIptvChannel?.isLive != true,
       onSleepSelected: _applySleepTimerSelection,
-      hasPlaylist: _activePlaylist != null && _activePlaylist!.isNotEmpty,
+      hasPlaylist:
+          (_activePlaylist != null && _activePlaylist!.isNotEmpty) ||
+          _canFetchEpisodes,
       continuousShuffle: _continuousShuffleEnabled,
       onShuffleOnce: () {
         _hidePlayerMenu();

@@ -25,6 +25,9 @@ class PlaylistSheet {
   /// - [imdbId]: Show IMDb id, used to look up per-episode tracker progress
   /// - [onSelect]: Callback when episode/movie is selected (index, allowResume)
   /// - [viewMode]: Optional view mode to determine collection organization
+  /// - [onFetchEpisode]: When set, the series guide lists EVERY episode of
+  ///   the show; tapping one that isn't in the playlist fetches it in-player
+  ///   instead of failing with a snackbar.
   static Future<void> show(
     BuildContext context, {
     required List<PlaylistEntry> playlist,
@@ -34,6 +37,7 @@ class PlaylistSheet {
     String? imdbId,
     required Future<void> Function(int index, {bool allowResume}) onSelect,
     PlaylistViewMode? viewMode,
+    Future<void> Function(int season, int episode)? onFetchEpisode,
   }) async {
     if (playlist.isEmpty) return;
 
@@ -62,6 +66,7 @@ class PlaylistSheet {
                     currentEpisodeIndex: currentIndex,
                     playlistItem: playlistItemData,
                     imdbId: imdbId,
+                    showAllEpisodes: onFetchEpisode != null,
                     onEpisodeSelected: (season, episode) async {
                       // Find the original index in the PlaylistEntry array
                       final originalIndex = seriesPlaylist
@@ -98,6 +103,10 @@ class PlaylistSheet {
                           originalIndex,
                           allowResume: playbackState != null || hasTracker,
                         );
+                      } else if (onFetchEpisode != null) {
+                        // Not in the playlist: fetch it in-player (the guide
+                        // only offers absent episodes when the host can).
+                        await onFetchEpisode(season, episode);
                       } else {
                         // Show error message to user
                         if (context.mounted) {
