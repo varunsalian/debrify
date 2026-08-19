@@ -538,17 +538,16 @@ class ShowcaseIdentity extends StatelessWidget {
         onTap: m.onTrailer,
       ));
     }
-    // The movie source BROWSE — the full searchable list, where a tap plays.
+    // The source BROWSE. For a movie: the full searchable list, where a tap
+    // plays. For a series: the season-pack search — the same thing the More
+    // menu's "Search season packs" row opens, surfaced as its own button.
     // Distinct from the Sources band below, whose cards and "Pin source"
-    // tile land on the title-level BINDING manager. Series don't mount it:
-    // their episode list is the picker. Every other layout kept this button
-    // (detail_identity.dart, Stage); Showcase shipped without it, which left
-    // a movie with no path to the source list at all.
-    if (m.isMovie && m.onBrowse != null && i < actionNodes.length) {
+    // tile land on the title-level BINDING manager.
+    if (m.onBrowse != null && i < actionNodes.length) {
       actions.add(_Circle(
         node: next(),
         icon: Icons.layers_rounded,
-        label: 'Sources',
+        label: m.isMovie ? 'Sources' : 'Season packs',
         onTap: m.onBrowse!,
       ));
     }
@@ -1952,11 +1951,15 @@ class ShowcaseSources extends StatelessWidget {
   final List<FocusNode> nodes;
   final VoidCallback? onOpen;
 
-  /// Movie only: the full browse/search source list (a tap there PLAYS).
-  /// When non-null the band gets a second entry card after "Pin source",
-  /// and the layout supplies one extra node — topology always matches
-  /// rendering.
+  /// The full browse/search source list (movies: a tap there PLAYS) or the
+  /// season-pack search (series). When non-null the band gets a second entry
+  /// card after "Pin source", and the layout supplies one extra node —
+  /// topology always matches rendering.
   final VoidCallback? onBrowseAll;
+
+  /// What that second entry card says — the layout words it per type,
+  /// because a series' browse lands on the pack search, not "all sources".
+  final String browseAllLabel;
 
   const ShowcaseSources({
     super.key,
@@ -1964,6 +1967,7 @@ class ShowcaseSources extends StatelessWidget {
     required this.nodes,
     required this.onOpen,
     this.onBrowseAll,
+    this.browseAllLabel = '⌕  Browse all',
   });
 
   @override
@@ -1991,7 +1995,7 @@ class ShowcaseSources extends StatelessWidget {
                 node: nodes[i],
                 onTap: onBrowseAll,
                 add: true,
-                addLabel: '⌕  Browse all',
+                addLabel: browseAllLabel,
               );
             }
             return _SourceCard(

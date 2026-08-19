@@ -1229,7 +1229,19 @@ class _MergedDetailScreenState extends State<MergedDetailScreen>
       simklRating: _simklStatus?.rating,
       showPrimary: widget.showQuickPlay,
       onPrimary: widget.onResume,
-      onBrowse: _isMovie ? widget.onBrowse : null,
+      // A movie browses the full source list the host supplies; a series
+      // browses season packs — the same search the More menu's "Search
+      // season packs" row opens, promoted to a first-class button. Gated on
+      // that row actually being in the menu so the button never mounts for a
+      // host that didn't offer the action.
+      onBrowse: _isMovie
+          ? widget.onBrowse
+          : (widget.onTraktAction != null &&
+                  _appMenuOptions.any(
+                    (o) => o.action == TraktItemMenuAction.searchPacks,
+                  ))
+              ? () => widget.onTraktAction!(TraktItemMenuAction.searchPacks)
+              : null,
       onTrailer: _playTrailer,
       onSelectSource: widget.onSelectSource == null
           ? null
