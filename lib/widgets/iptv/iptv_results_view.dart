@@ -1022,6 +1022,42 @@ class IptvResultsViewState extends State<IptvResultsView>
     super.dispose();
   }
 
+  /// The error screen's Retry. Re-reads the stored playlists before loading:
+  /// the in-memory record's connection authority can be stale — saving IPTV
+  /// sources anywhere (the main Settings page included) rewrites the whole
+  /// collection and bumps EVERY source's authorization revision, not just the
+  /// edited one — and replaying the same object can then never succeed
+  /// ("Connection authority changed" on every press).
+  Future<void> _retryLoad() async {
+    final current = _selectedPlaylist;
+    if (current == null) return;
+    var target = current;
+    if (!current.isVirtual) {
+      try {
+        final stored = await StorageService.getIptvPlaylists(
+          forSettings: false,
+        );
+        final byId = {for (final p in stored) p.id: p};
+        if (!mounted) return;
+        setState(() {
+          // Refresh every real entry the rail holds too — they were all
+          // invalidated by the same collection write, so a tap on a sibling
+          // source would otherwise fail the same way.
+          _playlists = [
+            for (final p in _playlists)
+              if (p.isVirtual) p else byId[p.id] ?? p,
+          ];
+          target = byId[current.id] ?? current;
+          _selectedPlaylist = target;
+        });
+      } catch (_) {
+        // Re-read failed; retry with the in-memory record. _loadPlaylist
+        // lands any failure back in this same error state.
+      }
+    }
+    await _loadPlaylist(target, userRequested: true);
+  }
+
   /// [userRequested] marks a load the user explicitly asked for (the error
   /// screen's Retry, a settings round-trip). Such a load ignores the
   /// interrupted-refresh backoff — that guard exists to stop the page from
@@ -6112,8 +6148,7 @@ class IptvResultsViewState extends State<IptvResultsView>
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () =>
-                    _loadPlaylist(_selectedPlaylist!, userRequested: true),
+                onPressed: _retryLoad,
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry'),
               ),
