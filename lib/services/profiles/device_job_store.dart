@@ -126,6 +126,19 @@ class DeviceJobStore {
         grant.allows(requiredResourcePermission);
   }
 
+  /// The resource's LIVE authorization revision — for re-stamping a job
+  /// replayed from a durable record before handing it to a validator that
+  /// checks strictly (the Android native downloader, plugin task metadata).
+  /// Null when the resource is gone or profile mode is not committed.
+  static Future<int?> currentResourceRevision(String? resourceId) async {
+    if (resourceId == null) return null;
+    if (!ProfileRuntime.isInitialized || !ProfileRuntime.isProfileCommitted) {
+      return null;
+    }
+    final resource = await ProfileBootstrap.registry.getResource(resourceId);
+    return resource?.authorizationRevision;
+  }
+
   static Future<void> markTerminal({
     required String backend,
     required String externalJobId,

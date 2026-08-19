@@ -225,6 +225,13 @@ class DownloadService {
       !ProfileRuntime.isProfileCommitted ||
       _pluginOwner(task) == _activeOwnerProfileId;
 
+  // Both validators check jobs REPLAYED from durable records (the pending
+  // queue, plugin task metadata), whose revisions were stamped at enqueue.
+  // Any collection save bumps every retained resource's revision and the
+  // owner profile's, so strict equality here silently canceled every queued
+  // download over one unrelated source edit. Drift keeps the live gates
+  // (profile enabled + downloads feature, resource present and enabled,
+  // grant) — real revocation still refuses.
   Future<bool> _pluginAuthorizationValid(Task task) async {
     if (!ProfileRuntime.isProfileCommitted) return true;
     return DeviceJobStore.validateAuthorization(
@@ -233,6 +240,7 @@ class DownloadService {
       feature: ProfileFeature.downloads,
       resourceId: _pluginResourceId(task),
       resourceAuthorizationRevision: _pluginResourceAuthorizationRevision(task),
+      allowRevisionDrift: true,
     );
   }
 
@@ -247,6 +255,7 @@ class DownloadService {
       feature: ProfileFeature.downloads,
       resourceId: pending.connectionResourceId,
       resourceAuthorizationRevision: pending.resourceAuthorizationRevision,
+      allowRevisionDrift: true,
     );
   }
 
@@ -1836,6 +1845,22 @@ class DownloadService {
             );
             final bool dup = _pending.any((p) => p.contentKey == ck);
             if (!dup) {
+              // Re-enqueue with the LIVE revision — enqueueDownload validates
+              // strictly, and the stored one predates any collection save
+              // made since this record was written. A bound connection that
+              // no longer exists means the download may not run at all.
+              final storedResourceId = rec?['connectionResourceId'] as String?;
+              final liveRevision = await DeviceJobStore.currentResourceRevision(
+                storedResourceId,
+              );
+              if (storedResourceId != null &&
+                  liveRevision == null &&
+                  ProfileRuntime.isProfileCommitted) {
+                debugPrint(
+                  'DL INIT: skip re-enqueue — bound connection is gone',
+                );
+                return;
+              }
               await enqueueDownload(
                 url: url ?? '',
                 fileName: displayName,
@@ -1844,8 +1869,9 @@ class DownloadService {
                 insertAtFront: insertFront,
                 destPath: rec?['destPath'] as String?,
                 relativeSubDir: rec?['relativeSubDir'] as String?,
-                connectionResourceId: rec?['connectionResourceId'] as String?,
+                connectionResourceId: storedResourceId,
                 resourceAuthorizationRevision:
+                    liveRevision ??
                     (rec?['resourceAuthorizationRevision'] as num?)?.toInt(),
               );
             } else {
@@ -2983,6 +3009,12 @@ class DownloadService {
     final rec = recId != null ? _records[recId] : null;
     if (!await _recordAuthorizationValid(recId)) return false;
     final name = (rec?['displayName'] ?? 'download').toString();
+    // Restamp with the live revision — the record's value predates any
+    // collection save since enqueue, and native start validates strictly.
+    final adoptResourceId = rec?['connectionResourceId'] as String?;
+    final adoptRevision =
+        await DeviceJobStore.currentResourceRevision(adoptResourceId) ??
+        (rec?['resourceAuthorizationRevision'] as num?)?.toInt();
     final res = await AndroidNativeDownloader.start(
       taskId: taskId,
       url: url,
@@ -2993,9 +3025,8 @@ class DownloadService {
       subDir: _subDirForRecord(rec),
       headers: (rec?['headers'] as Map?)?.cast<String, String>(),
       treeUri: rec?['treeUri'] as String?,
-      connectionResourceId: rec?['connectionResourceId'] as String?,
-      resourceAuthorizationRevision:
-          (rec?['resourceAuthorizationRevision'] as num?)?.toInt(),
+      connectionResourceId: adoptResourceId,
+      resourceAuthorizationRevision: adoptRevision,
     );
     if (!res.ok) {
       debugPrint('DL ADOPT: start failed code=${res.errorCode}');
@@ -3601,6 +3632,16 @@ class DownloadService {
         }
         if (!await _pendingAuthorizationValid(p)) {
           throw StateError('Download authorization changed');
+        }
+        // Hand the start paths (native downloader, plugin metadata) the LIVE
+        // revision: the one carried since enqueue predates any collection
+        // save made in between, and those validators check strictly.
+        if (p.connectionResourceId != null) {
+          p.resourceAuthorizationRevision =
+              await DeviceJobStore.currentResourceRevision(
+                p.connectionResourceId,
+              ) ??
+              p.resourceAuthorizationRevision;
         }
 
         // Fresh-link policy: if start fails due to expired URL, we'll refresh below in catch
@@ -4301,7 +4342,11 @@ class _PendingRequest {
   final String? treeUri;
   final int? profileAuthorizationRevision;
   final String? connectionResourceId;
-  final int? resourceAuthorizationRevision;
+
+  /// Mutable: refreshed to the LIVE revision just before a start handoff —
+  /// the enqueue-time value goes stale on any collection save, and the
+  /// native/plugin validators it is handed to check strictly.
+  int? resourceAuthorizationRevision;
 
   _PendingRequest({
     required this.queuedId,
