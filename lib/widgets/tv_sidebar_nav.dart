@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/main_page_bridge.dart';
+import '../utils/home_perf.dart';
 import '../utils/platform_util.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
@@ -143,6 +144,9 @@ class TvSidebarNavState extends State<TvSidebarNav>
     super.initState();
     _initFocusNodes();
     _focusedIndex = widget.currentIndex;
+    // DBRF-PERF: temporary jank instrumentation (see HomePerf). The sidebar
+    // mounts on every TV tab, so this is the earliest shell-wide hook.
+    HomePerf.install();
     _expandController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
@@ -206,6 +210,10 @@ class TvSidebarNavState extends State<TvSidebarNav>
   }
 
   void _onExpandStatus(AnimationStatus status) {
+    // DBRF-PERF: every transition of the drawer tween, with the style — a
+    // style-specific cost (e.g. a blur) shows itself as jank bracketed by
+    // forward/completed under one style and not another.
+    HomePerf.mark('sidebar ${status.name} style=$_style');
     if (status == AnimationStatus.dismissed) _showPill();
   }
 
