@@ -75,8 +75,11 @@ class _SourceSheetState extends State<SourceSheet> {
   /// results" row) instead of being invisible.
   List<SourceAddonRef> _allAddons = const [];
 
-  /// Group id → addon id, for the per-group fetch.
-  final Map<String, String> _addonIdByGroup = {};
+  /// Group id → ALL addon ids sharing it. Group identity must stay the
+  /// name-derived sourceKey (fetched rows carry `stremio:<name>` and nothing
+  /// else), so two same-named addons share one group — the fetch then asks
+  /// every addon in it rather than silently dropping all but the first.
+  final Map<String, List<String>> _addonIdsByGroup = {};
 
   /// Per-group fetch state: episode fetch in flight / lazy pack probe in
   /// flight / last fetch failed (the group's Fetch row doubles as retry).
@@ -175,17 +178,20 @@ class _SourceSheetState extends State<SourceSheet> {
     }
     // Placeholder groups for applicable addons with no results yet — the
     // group id is the addon's sourceKey, so its fetched rows land in the
-    // same bucket the placeholder occupied.
-    _addonIdByGroup.clear();
+    // same bucket the placeholder occupied. Same-named addons share one
+    // placeholder (the set guard), never two duplicate groups.
+    _addonIdsByGroup.clear();
     for (final addon in _allAddons) {
-      _addonIdByGroup[addon.sourceKey] = addon.id;
+      (_addonIdsByGroup[addon.sourceKey] ??= <String>[]).add(addon.id);
     }
+    final placeholderKeys = <String>{};
     _groups = <_AddonGroup>[
       _AddonGroup('all', 'All add-ons', all),
       for (final bucket in buckets.entries)
         _AddonGroup(bucket.key, labels[bucket.key]!, bucket.value),
       for (final addon in _allAddons)
-        if (!buckets.containsKey(addon.sourceKey))
+        if (!buckets.containsKey(addon.sourceKey) &&
+            placeholderKeys.add(addon.sourceKey))
           _AddonGroup(addon.sourceKey, addon.name, const <_SourceEntry>[]),
     ];
     final nextGroup = _groups.indexWhere((g) => g.id == selectedId);
@@ -381,7 +387,7 @@ class _SourceSheetState extends State<SourceSheet> {
     if (widget.seriesFetcher?.fetchAddonEpisodes == null) return false;
     if (_groups.isEmpty) return false;
     final group = _groups[_selectedGroup];
-    return group.entries.isEmpty && _addonIdByGroup.containsKey(group.id);
+    return group.entries.isEmpty && _addonIdsByGroup.containsKey(group.id);
   }
 
   /// Per-addon fetch: episode results first — they render the instant the
@@ -394,8 +400,12 @@ class _SourceSheetState extends State<SourceSheet> {
     final search = fetcher?.fetchAddonEpisodes;
     if (fetcher == null || search == null || _groups.isEmpty) return;
     final group = _groups[_selectedGroup];
-    final addonId = _addonIdByGroup[group.id];
-    if (addonId == null || _fetchingGroups.contains(group.id)) return;
+    final addonIds = _addonIdsByGroup[group.id];
+    if (addonIds == null ||
+        addonIds.isEmpty ||
+        _fetchingGroups.contains(group.id)) {
+      return;
+    }
     setState(() {
       _fetchingGroups.add(group.id);
       _failedGroups.remove(group.id);
@@ -403,7 +413,13 @@ class _SourceSheetState extends State<SourceSheet> {
     });
     final s = widget.currentSeason ?? fetcher.season;
     final e = widget.currentEpisode ?? fetcher.episode;
-    final episodes = await search(addonId, s, e);
+    // Every addon sharing this group's name. Failed only when ALL failed —
+    // a partial success is results the user asked for.
+    List<Torrent>? episodes;
+    for (final addonId in addonIds) {
+      final fetched = await search(addonId, s, e);
+      if (fetched != null) (episodes ??= <Torrent>[]).addAll(fetched);
+    }
     if (!mounted) return;
     if (episodes == null) {
       setState(() {
@@ -430,7 +446,11 @@ class _SourceSheetState extends State<SourceSheet> {
     );
     if (fetcher.isMovie || packSearch == null || !hasMagnet) return;
     setState(() => _packProbing.add(group.id));
-    final packs = await packSearch(addonId, s);
+    List<Torrent>? packs;
+    for (final addonId in addonIds) {
+      final fetched = await packSearch(addonId, s);
+      if (fetched != null) (packs ??= <Torrent>[]).addAll(fetched);
+    }
     if (!mounted) return;
     setState(() => _packProbing.remove(group.id));
     if (packs != null && packs.isNotEmpty) {

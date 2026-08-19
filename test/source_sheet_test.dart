@@ -324,6 +324,57 @@ void main() {
     },
   );
 
+  testWidgets(
+    'same-named addons share ONE group and Fetch asks every one of them',
+    (tester) async {
+      final fetchedIds = <String>[];
+      final fetcher = SeriesSourceFetcher(
+        season: 1,
+        episode: 2,
+        searchPacks: (_, _) async => <Torrent>[],
+        searchEpisodes: (_, _) async => <Torrent>[],
+        packsFetched: true,
+        episodesFetched: true,
+        listAddons: () async => const [
+          SourceAddonRef('comet-a', 'Comet'),
+          SourceAddonRef('comet-b', 'Comet'),
+        ],
+        fetchAddonEpisodes: (addonId, _, _) async {
+          fetchedIds.add(addonId);
+          return addonId == 'comet-b'
+              ? [
+                  _source(
+                    name: 'Comet B direct',
+                    source: 'stremio:comet',
+                    type: StreamType.directUrl,
+                    hash: '',
+                  ),
+                ]
+              : <Torrent>[];
+        },
+      );
+      await tester.pumpWidget(
+        _Host(
+          initial: [_source(name: 'Pinned pack', source: 'pinned')],
+          fetcher: fetcher,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // One group, not two duplicates.
+      expect(find.text('Comet'), findsOneWidget);
+      await tester.tap(find.text('Comet'));
+      await tester.pump();
+      await tester.tap(find.text('Fetch results'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(fetchedIds, ['comet-a', 'comet-b']);
+      expect(find.text('Comet B direct'), findsOneWidget);
+    },
+  );
+
   testWidgets('a failed per-addon fetch keeps the row as a retry', (
     tester,
   ) async {

@@ -76,11 +76,12 @@ class AndroidTvPlayerBridge {
   })?
   _moreSourcesProvider;
   // Per-addon fetch for the source browser's placeholder groups: mode
-  // 'episodes' fetches + merges one addon's episode results and reports
-  // whether they carried torrent magnets (probePacks); mode 'packs' runs the
-  // lazy season-pack probe as a follow-up call.
+  // 'episodes' fetches + merges the group's addons' episode results (a group
+  // can hold several same-named addons) and reports whether they carried
+  // torrent magnets (probePacks); mode 'packs' runs the lazy season-pack
+  // probe as a follow-up call.
   static Future<Map<String, dynamic>?> Function(
-    String addonId,
+    List<String> addonIds,
     String mode, {
     int? season,
     int? episode,
@@ -559,14 +560,16 @@ class AndroidTvPlayerBridge {
           if (addonProvider == null) return null;
           final addonArgs = call.arguments;
           if (addonArgs is! Map) return null;
-          final addonId = addonArgs['addonId'] as String?;
+          final addonIds = (addonArgs['addonIds'] as List?)
+              ?.whereType<String>()
+              .toList();
           final addonMode = addonArgs['mode'] as String?;
-          if (addonId == null || addonId.isEmpty || addonMode == null) {
+          if (addonIds == null || addonIds.isEmpty || addonMode == null) {
             return null;
           }
           try {
             final result = await addonProvider(
-              addonId,
+              addonIds,
               addonMode,
               season: addonArgs['season'] as int?,
               episode: addonArgs['episode'] as int?,
@@ -1309,7 +1312,7 @@ class AndroidTvPlayerBridge {
     Future<Map<String, dynamic>?> Function(String, {int? season, int? episode})?
     onRequestMoreSources,
     Future<Map<String, dynamic>?> Function(
-      String addonId,
+      List<String> addonIds,
       String mode, {
       int? season,
       int? episode,

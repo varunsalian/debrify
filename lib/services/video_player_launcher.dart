@@ -1933,6 +1933,11 @@ class VideoPlayerLauncher {
       // Build stremio source resolver for Android TV (if stremio sources are available)
       // Uses a mutable sources holder so channel switches can update the source list
       var currentStremioSources = List<Torrent>.from(args.stremioSources ?? []);
+      // Bumped whenever the holder is REPLACED (a Stremio TV channel switch),
+      // as opposed to appended to. Fetch providers capture it before their
+      // awaits and discard stale responses — a late merge from the previous
+      // content must never contaminate the replacement list.
+      var stremioSourcesGeneration = 0;
       var currentStremioResolver = args.resolveStremioSource;
       Future<String?> Function(int)? stremioSourceResolverForTv;
       if (currentStremioSources.isNotEmpty && currentStremioResolver != null) {
@@ -2135,6 +2140,7 @@ class VideoPlayerLauncher {
       if (seriesFetcher != null && currentStremioSources.isNotEmpty) {
         moreSourcesProviderForTv =
             (String mode, {int? season, int? episode}) async {
+              final generation = stremioSourcesGeneration;
               // season/episode = what the native player is CURRENTLY on (a pack
               // playlist auto-advances without relaunching); the fetcher falls
               // back to the launch episode when absent.
@@ -2144,6 +2150,9 @@ class VideoPlayerLauncher {
                 episode: episode,
               );
               if (fetched == null) return null;
+              // The holder was replaced mid-fetch (channel switch): these
+              // results belong to the previous content — drop them.
+              if (generation != stremioSourcesGeneration) return null;
               currentStremioSources = SeriesSourceFetcher.mergeSources(
                 currentStremioSources,
                 fetched,
@@ -2169,7 +2178,7 @@ class VideoPlayerLauncher {
       // (probePacks) — the native side then makes the SECOND, lazy call with
       // 'packs'. Null (fetch failed) keeps the native Fetch row as a retry.
       Future<Map<String, dynamic>?> Function(
-        String addonId,
+        List<String> addonIds,
         String mode, {
         int? season,
         int? episode,
@@ -2177,30 +2186,49 @@ class VideoPlayerLauncher {
       addonSourcesProviderForTv;
       if (seriesFetcher != null && seriesFetcher.fetchAddonEpisodes != null) {
         addonSourcesProviderForTv =
-            (String addonId, String mode, {int? season, int? episode}) async {
+            (List<String> addonIds, String mode, {
+              int? season,
+              int? episode,
+            }) async {
+              final generation = stremioSourcesGeneration;
               List<Map<String, dynamic>> serialized() => currentStremioSources
                   .map((t) => t.toJson())
                   .toList();
+              // Stale = the holder was replaced (channel switch) while this
+              // fetch ran; its results belong to the previous content.
+              bool stale() => generation != stremioSourcesGeneration;
               if (mode == 'packs') {
-                final packs = await seriesFetcher.fetchAddonPacks?.call(
-                  addonId,
-                  season ?? seriesFetcher.season,
-                );
-                if (packs != null && packs.isNotEmpty) {
-                  currentStremioSources = SeriesSourceFetcher.mergeSources(
-                    currentStremioSources,
-                    packs,
+                for (final addonId in addonIds) {
+                  final packs = await seriesFetcher.fetchAddonPacks?.call(
+                    addonId,
+                    season ?? seriesFetcher.season,
                   );
+                  if (stale()) return null;
+                  if (packs != null && packs.isNotEmpty) {
+                    currentStremioSources = SeriesSourceFetcher.mergeSources(
+                      currentStremioSources,
+                      packs,
+                    );
+                  }
                 }
                 // Best-effort: a failed probe still answers with the current
                 // list so the native probing note simply clears.
                 return {'stremioSources': serialized()};
               }
-              final episodes = await seriesFetcher.fetchAddonEpisodes!(
-                addonId,
-                season ?? seriesFetcher.season,
-                episode ?? seriesFetcher.episode,
-              );
+              // Every addon sharing the group's name; failed only when ALL
+              // failed — a partial success is results the user asked for.
+              List<Torrent>? episodes;
+              for (final addonId in addonIds) {
+                final fetched = await seriesFetcher.fetchAddonEpisodes!(
+                  addonId,
+                  season ?? seriesFetcher.season,
+                  episode ?? seriesFetcher.episode,
+                );
+                if (stale()) return null;
+                if (fetched != null) {
+                  (episodes ??= <Torrent>[]).addAll(fetched);
+                }
+              }
               if (episodes == null) return null;
               if (episodes.isNotEmpty) {
                 currentStremioSources = SeriesSourceFetcher.mergeSources(
@@ -2234,6 +2262,9 @@ class VideoPlayerLauncher {
           currentStremioSources = newSourcesList
               .map((s) => Torrent.fromJson(Map<String, dynamic>.from(s as Map)))
               .toList();
+          // Wholesale replacement — invalidate every in-flight fetch so a
+          // late response can't merge the previous content's sources in.
+          stremioSourcesGeneration++;
         }
         if (newResolver != null) {
           currentStremioResolver = newResolver;
