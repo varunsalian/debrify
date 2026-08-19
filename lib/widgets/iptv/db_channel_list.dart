@@ -133,7 +133,7 @@ class DbChannelList extends ListBase<IptvChannel> {
       // the view somehow never re-pinned (two refreshes without a present) —
       // render a placeholder row instead of throwing mid-build.
       debugPrint(
-        'DbChannelList: page ${pageIndex} short '
+        'DbChannelList: page $pageIndex short '
         '(${page.length} rows, wanted #$offsetInPage) — stale generation?',
       );
       return _placeholders.putIfAbsent(

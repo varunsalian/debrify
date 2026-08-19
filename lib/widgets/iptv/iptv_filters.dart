@@ -861,7 +861,7 @@ class _PlaylistPickerSheetState extends State<_PlaylistPickerSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: colorScheme.onSurfaceVariant.withOpacity(0.4),
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -1090,7 +1090,7 @@ class _CategoryPickerSheetState extends State<_CategoryPickerSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: colorScheme.onSurfaceVariant.withOpacity(0.4),
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -1410,7 +1410,7 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
                     style: TextStyle(
                       fontSize: 12,
                       color: _isFocused
-                          ? colorScheme.onPrimaryContainer.withOpacity(0.7)
+                          ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
                           : colorScheme.onSurfaceVariant,
                     ),
                     maxLines: 1,
@@ -1425,7 +1425,7 @@ class _FocusablePickerTileState extends State<_FocusablePickerTile> {
                         Icons.visibility_off_outlined,
                         size: 20,
                         color: _isFocused
-                            ? colorScheme.onPrimaryContainer.withOpacity(0.7)
+                            ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
                             : colorScheme.onSurfaceVariant,
                       ),
                       onPressed: widget.onTrailingTap,
