@@ -89,8 +89,16 @@ class DeviceJobStore {
   /// revisions only prove what the job was bound to; the live checks
   /// (profile present, enabled and allowing the feature; resource present
   /// and enabled; grant with the required permission) remain the gate, so
-  /// real revocation still refuses. Callers validating values they JUST
-  /// read must keep this false.
+  /// delete/disable/revoke/feature-off still refuse. Callers validating
+  /// values they JUST read must keep this false.
+  ///
+  /// Known trade-off: a collection save and a secret ROTATION both look like
+  /// "revision bumped", so with drift a rotation no longer kills pending
+  /// jobs — a schedule or download bound to a rotated credential runs with
+  /// the credentials it captured (which the server will typically refuse).
+  /// If rotation must become a kill switch again, add a drift-exempt
+  /// secretPayloadVersion comparison rather than resurrecting the revision
+  /// equality.
   static Future<bool> validateAuthorization({
     required String profileId,
     required int profileAuthorizationRevision,

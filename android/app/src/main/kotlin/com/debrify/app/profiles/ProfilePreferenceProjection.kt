@@ -94,8 +94,10 @@ object ProfilePreferenceProjection {
      * any unrelated source edit — strict equality there silently killed every
      * pending job. With drift the stored revisions are provenance only; the
      * live projection gates (profile enabled + feature, resource granted with
-     * the required permission) still refuse real revocation. Callers checking
-     * values they JUST captured keep the default. */
+     * the required permission) still refuse delete/disable/revoke/feature-off.
+     * Known trade-off: a secret rotation is indistinguishable from a
+     * collection save here, so rotation alone no longer kills pending jobs.
+     * Callers checking values they JUST captured keep the default. */
     @JvmStatic
     @JvmOverloads
     fun jobAuthorizationValid(
