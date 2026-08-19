@@ -14,6 +14,39 @@ import 'profiles/profile_async_authorization.dart';
 import '../models/profiles/connection_resource.dart';
 import '../models/profiles/profile_policy.dart';
 
+/// One addon's outcome for a single stream search — drives the source list's
+/// per-addon status strip, which shows EVERY applicable addon including the
+/// ones that failed or returned nothing (the count maps alone lose zero-count
+/// addons once counts are rebuilt from the final rows).
+///
+/// [sourceKey] matches `Torrent.source` (`stremio:<name>` lowercased);
+/// [count] is the addon's RAW stream count before cross-addon dedupe, so
+/// "returned something that deduped away" still reads as activity.
+class AddonSearchStatus {
+  final String addonId;
+  final String name;
+  final String sourceKey;
+  final int count;
+  final String? error;
+
+  const AddonSearchStatus({
+    required this.addonId,
+    required this.name,
+    required this.sourceKey,
+    required this.count,
+    this.error,
+  });
+
+  bool get failed => error != null;
+
+  AddonSearchStatus withResult(int count) => AddonSearchStatus(
+    addonId: addonId,
+    name: name,
+    sourceKey: sourceKey,
+    count: count,
+  );
+}
+
 class StremioAddonImportResult {
   final int discovered;
   final int imported;
@@ -965,6 +998,7 @@ class StremioService {
         'torrents': <Torrent>[],
         'addonCounts': addonCounts,
         'addonErrors': addonErrors,
+        'addonStatuses': const <AddonSearchStatus>[],
       };
     }
 
@@ -1006,6 +1040,7 @@ class StremioService {
         'torrents': <Torrent>[],
         'addonCounts': addonCounts,
         'addonErrors': addonErrors,
+        'addonStatuses': const <AddonSearchStatus>[],
       };
     }
 
@@ -1015,7 +1050,7 @@ class StremioService {
         type == 'series' && season == null && episode == null;
 
     if (needsSmartFallback) {
-      return _searchStreamsWithSmartFallback(
+      final result = await _searchStreamsWithSmartFallback(
         applicableAddons: applicableAddons,
         imdbId: imdbId,
         availableSeasons: availableSeasons,
@@ -1023,6 +1058,12 @@ class StremioService {
         addonErrors: addonErrors,
         timeout: timeout,
         preserveOrder: preserveOrder,
+      );
+      return _withAddonStatuses(
+        result,
+        applicableAddons,
+        addonCounts,
+        addonErrors,
       );
     }
 
@@ -1065,11 +1106,65 @@ class StremioService {
       preserveOrder: preserveOrder,
     );
 
-    return {
+    return _withAddonStatuses({
       'torrents': torrents,
       'addonCounts': addonCounts,
       'addonErrors': addonErrors,
-    };
+    }, applicableAddons, addonCounts, addonErrors);
+  }
+
+  /// Attaches the structured per-addon outcome list — built from the
+  /// APPLICABLE addon set, not the count maps, so addons with zero results
+  /// (or whose results all deduped away) still appear.
+  Map<String, dynamic> _withAddonStatuses(
+    Map<String, dynamic> result,
+    List<StremioAddon> applicableAddons,
+    Map<String, int> addonCounts,
+    Map<String, String> addonErrors,
+  ) {
+    result['addonStatuses'] = <AddonSearchStatus>[
+      for (final addon in applicableAddons)
+        AddonSearchStatus(
+          addonId: addon.id,
+          name: addon.name,
+          sourceKey: 'stremio:${addon.name}'.toLowerCase(),
+          count: addonCounts['stremio:${addon.name}'.toLowerCase()] ?? 0,
+          error: addonErrors['stremio:${addon.name}'.toLowerCase()],
+        ),
+    ];
+    return result;
+  }
+
+  /// Re-runs the stream fetch for ONE addon — the status strip's Retry.
+  /// Returns the converted rows (empty when the addon genuinely has nothing).
+  /// The series smart fallback is deliberately not replayed: a single-addon
+  /// retry probes the one streamId the current scope implies, which covers
+  /// the recovery case (the addon was down); the full probe ladder belongs
+  /// to a full re-search.
+  Future<List<Torrent>> retryAddonStreams({
+    required String addonId,
+    required String type,
+    required String imdbId,
+    int? season,
+    int? episode,
+    Duration? timeout,
+  }) async {
+    StremioAddon? addon;
+    for (final candidate in await getStreamingAddons()) {
+      if (candidate.id == addonId) {
+        addon = candidate;
+        break;
+      }
+    }
+    if (addon == null) return const <Torrent>[];
+    final streamId = _buildStreamId(imdbId, season, episode);
+    final streams = await _fetchStreamsFromAddon(
+      addon,
+      type,
+      streamId,
+      timeout: timeout,
+    );
+    return _convertToTorrents(streams);
   }
 
   /// Smart fallback for series search without specific season/episode

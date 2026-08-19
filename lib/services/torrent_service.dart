@@ -498,9 +498,13 @@ class TorrentService {
     // Combine results
     final Map<String, int> combinedCounts = {};
     final Map<String, String> combinedErrors = {};
+    final List<AddonSearchStatus> combinedAddonStatuses = [];
     final List<List<Torrent>> allTorrentLists = [];
 
     for (final result in results) {
+      combinedAddonStatuses.addAll(
+        result['addonStatuses'] as List<AddonSearchStatus>? ?? const [],
+      );
       final torrents = result['torrents'] as List<Torrent>? ?? [];
       final counts = result['engineCounts'] as Map<String, int>? ?? {};
       final errors =
@@ -566,6 +570,7 @@ class TorrentService {
       'torrents': torrents,
       'engineCounts': actualCounts,
       'engineErrors': combinedErrors,
+      'addonStatuses': combinedAddonStatuses,
     };
   }
 
@@ -640,6 +645,9 @@ class TorrentService {
         'torrents': result['torrents'] as List<Torrent>? ?? [],
         'addonCounts': result['addonCounts'] as Map<String, int>? ?? {},
         'addonErrors': result['addonErrors'] as Map<String, String>? ?? {},
+        'addonStatuses':
+            result['addonStatuses'] as List<AddonSearchStatus>? ??
+            const <AddonSearchStatus>[],
       };
     } catch (_) {
       debugPrint('TorrentService: Stremio addon search failed');
@@ -647,6 +655,7 @@ class TorrentService {
         'torrents': <Torrent>[],
         'addonCounts': <String, int>{},
         'addonErrors': <String, String>{'Stremio': 'Search failed'},
+        'addonStatuses': const <AddonSearchStatus>[],
       };
     }
   }

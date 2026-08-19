@@ -21906,6 +21906,22 @@ class _SourcesScreenState extends State<_SourcesScreen> {
   /// (the list otherwise consumes UP and the toolbar is unreachable).
   final FocusNode _filterFocus = FocusNode(debugLabel: 'src_filter');
 
+  /// Per-addon outcomes for the current search — every APPLICABLE Stremio
+  /// addon, including failed and zero-result ones (which the result list
+  /// alone makes invisible). Drives the status strip under the toolbar.
+  List<AddonSearchStatus> _addonStatuses = [];
+
+  /// Addon ids with a retry in flight — their chip shows a spinner.
+  final Set<String> _retryingAddons = {};
+
+  /// D-pad anchor for the addon strip: one node for the whole strip;
+  /// LEFT/RIGHT move [_stripIndex] across chips, OK retries the highlighted
+  /// chip when it is actionable (failed or zero results).
+  final FocusNode _addonStripFocus = FocusNode(debugLabel: 'src_addon_strip');
+  int _stripIndex = 0;
+
+  bool get _stripVisible => _redesign && !_keywordMode && _addonStatuses.isNotEmpty;
+
   // --- cached-availability badges (redesign only): checked async after results
   // arrive, only for TorBox / Premiumize when their cache-check pref is on and
   // the provider is configured. Maps: infohash(lowercased) -> isCached. ---
@@ -22073,6 +22089,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     _kwCtrl.dispose();
     _filterFocus.removeListener(_onFilterFocusChanged);
     _filterFocus.dispose();
+    _addonStripFocus.dispose();
     _pillFocus.dispose();
     for (final n in _nodes) {
       n.dispose();
@@ -22207,6 +22224,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       setState(() {
         _loading = true;
         _error = null;
+        _addonStatuses = const [];
+        _retryingAddons.clear();
+        _stripIndex = 0;
       });
     }
     for (final n in _nodes) {
@@ -22259,6 +22279,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
             );
       if (!mounted || token != _searchToken) return;
       _searching = false;
+      // Keyword search runs engines only — no addon statuses to show.
+      _addonStatuses =
+          res['addonStatuses'] as List<AddonSearchStatus>? ?? const [];
       _presentStreaming((res['torrents'] as List).cast<Torrent>(), token);
       _finishSearch(token);
     } catch (e) {
@@ -22732,6 +22755,7 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                           (_torrents.isNotEmpty || _seasonChipVisible))
                         _redesignToolbar(scheme),
                       if (_searching) _searchingStrip(),
+                      if (_stripVisible) _addonStrip(),
                       if (_bound.isNotEmpty) _pinnedBanner(),
                       Expanded(
                         child: Stack(
@@ -22828,6 +22852,186 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     );
   }
 
+  /// Whether a chip is worth pressing: a failed addon retries, and a
+  /// zero-result addon re-asks (transient upstream failures often read as
+  /// empty rather than as an error).
+  bool _stripActionable(AddonSearchStatus s) => s.failed || s.count == 0;
+
+  /// Per-addon status strip: one chip per APPLICABLE addon — count, zero, or
+  /// failed — with retry on the failed/zero ones. This is where a down addon
+  /// stops being invisible ("results just look thin") and becomes a chip you
+  /// can see and poke.
+  Widget _addonStrip() {
+    final app = AppThemeScope.of(context);
+    final accent = app.home.chromeAccent;
+    final dim = app.fade(app.core.tx, 0.55);
+    return ListenableBuilder(
+      listenable: _addonStripFocus,
+      builder: (context, _) {
+        final stripFocused = _addonStripFocus.hasFocus;
+        return Focus(
+          focusNode: _addonStripFocus,
+          onKeyEvent: (node, e) {
+            if (e is! KeyDownEvent) return KeyEventResult.ignored;
+            if (e.logicalKey == LogicalKeyboardKey.arrowLeft) {
+              if (_stripIndex > 0) setState(() => _stripIndex--);
+              return KeyEventResult.handled;
+            }
+            if (e.logicalKey == LogicalKeyboardKey.arrowRight) {
+              if (_stripIndex < _addonStatuses.length - 1) {
+                setState(() => _stripIndex++);
+              }
+              return KeyEventResult.handled;
+            }
+            if (isActivateKey(e.logicalKey)) {
+              final s = _addonStatuses.elementAtOrNull(_stripIndex);
+              if (s != null && _stripActionable(s)) {
+                unawaited(_retryAddon(s));
+              }
+              return KeyEventResult.handled;
+            }
+            if (e.logicalKey == LogicalKeyboardKey.arrowUp) {
+              if (_filterFocus.context != null) {
+                _filterFocus.requestFocus();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            }
+            if (e.logicalKey == LogicalKeyboardKey.arrowDown) {
+              if (_pendingNewCount > 0) {
+                _pillFocus.requestFocus();
+              } else if (_nodes.isNotEmpty) {
+                _nodes.first.requestFocus();
+              }
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: SizedBox(
+            height: 34,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+              itemCount: _addonStatuses.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              itemBuilder: (context, i) {
+                final s = _addonStatuses[i];
+                final retrying = _retryingAddons.contains(s.addonId);
+                final actionable = _stripActionable(s);
+                final highlighted = stripFocused && i == _stripIndex;
+                final Color tint = s.failed
+                    ? Theme.of(context).colorScheme.error
+                    : s.count == 0
+                    ? dim
+                    : app.fade(app.core.tx, 0.8);
+                final chip = Container(
+                  key: ValueKey('addon-chip-${s.addonId}'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: app.fade(app.core.tx, 0.05),
+                    border: Border.all(
+                      color: highlighted
+                          ? accent
+                          : s.failed
+                          ? app.fade(Theme.of(context).colorScheme.error, 0.5)
+                          : app.fade(app.core.tx, 0.12),
+                      width: highlighted ? 1.5 : 1,
+                    ),
+                    borderRadius: app.shape.brPill,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 110),
+                        child: Text(
+                          s.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: tint,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        s.failed ? 'failed' : '${s.count}',
+                        style: TextStyle(fontSize: 11.5, color: tint),
+                      ),
+                      if (retrying) ...[
+                        const SizedBox(width: 5),
+                        const SizedBox(
+                          width: 10,
+                          height: 10,
+                          child: CircularProgressIndicator(strokeWidth: 1.4),
+                        ),
+                      ] else if (actionable) ...[
+                        const SizedBox(width: 5),
+                        Icon(Icons.refresh_rounded, size: 13, color: tint),
+                      ],
+                    ],
+                  ),
+                );
+                if (!actionable) return chip;
+                return MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => unawaited(_retryAddon(s)),
+                    child: chip,
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Re-fetch ONE addon and fold whatever it returns into the list through
+  /// the normal streaming-merge path — so retry results respect the same
+  /// dedupe, series-pack post-processing, and the frozen-list "+N new
+  /// sources" pill as any live batch.
+  Future<void> _retryAddon(AddonSearchStatus status) async {
+    if (_retryingAddons.contains(status.addonId)) return;
+    final token = _searchToken;
+    setState(() => _retryingAddons.add(status.addonId));
+    try {
+      final sel = _effectiveSelection;
+      final batch = await StremioService.instance.retryAddonStreams(
+        addonId: status.addonId,
+        type: sel.contentType ?? (sel.isSeries ? 'series' : 'movie'),
+        imdbId: sel.imdbId,
+        season: sel.season,
+        episode: sel.episode,
+      );
+      if (!mounted || token != _searchToken) return;
+      setState(() {
+        _retryingAddons.remove(status.addonId);
+        _addonStatuses = [
+          for (final s in _addonStatuses)
+            s.addonId == status.addonId ? status.withResult(batch.length) : s,
+        ];
+      });
+      if (batch.isEmpty) return;
+      _streamBatches.add(batch);
+      _presentStreaming(
+        TorrentService.mergeSearchResults(_streamBatches),
+        token,
+      );
+      _maybeCheckCache(batch);
+    } catch (_) {
+      if (!mounted || token != _searchToken) return;
+      // Keep the failed state on the chip — it IS the error indicator.
+      setState(() => _retryingAddons.remove(status.addonId));
+    }
+  }
+
   /// Slim "still searching" strip under the toolbar while engines are in
   /// flight — rows are already usable, this just says more may arrive.
   Widget _searchingStrip() {
@@ -22874,6 +23078,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
           return KeyEventResult.handled;
         }
         if (e.logicalKey == LogicalKeyboardKey.arrowUp) {
+          // The addon strip sits between the pill and the toolbar.
+          if (_stripVisible) {
+            _addonStripFocus.requestFocus();
+            return KeyEventResult.handled;
+          }
           // The toolbar funnel only exists in redesign mode — in the classic
           // list _filterFocus is never attached, so let the key fall through
           // rather than focusing a parentless node (dead D-pad stop).
@@ -23193,9 +23402,14 @@ class _SourcesScreenState extends State<_SourcesScreen> {
                     unawaited(_openFilters());
                     return KeyEventResult.handled;
                   }
-                  // DOWN returns to the list; the funnel is the toolbar anchor.
+                  // DOWN reaches the addon strip when it's showing, else
+                  // returns to the list; the funnel is the toolbar anchor.
                   if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                    if (_nodes.isNotEmpty) _nodes.first.requestFocus();
+                    if (_stripVisible) {
+                      _addonStripFocus.requestFocus();
+                    } else if (_nodes.isNotEmpty) {
+                      _nodes.first.requestFocus();
+                    }
                     return KeyEventResult.handled;
                   }
                   return KeyEventResult.ignored;
@@ -23517,6 +23731,9 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         } else if (_pendingNewCount > 0) {
           // From the first row, UP reaches the "+N new sources" pill first.
           _pillFocus.requestFocus();
+        } else if (widget.isTelevision && _stripVisible) {
+          // Then the addon status strip, then the toolbar above it.
+          _addonStripFocus.requestFocus();
         } else if (widget.isTelevision) {
           // From the first row, UP reaches the toolbar (otherwise unreachable
           // by remote — the list consumes UP).
