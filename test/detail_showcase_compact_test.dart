@@ -380,7 +380,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.layers_rounded));
     expect(browsed, 1);
 
-    // And the band's labelled entry beside "Find sources".
+    // And the band's labelled entry beside "Pin source".
     await tester.drag(find.byType(DetailShowcase), const Offset(0, -900));
     await tester.pumpAndSettle();
     final browseCard = find.text('⌕  Browse all', skipOffstage: false);

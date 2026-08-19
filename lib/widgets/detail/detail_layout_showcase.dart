@@ -941,7 +941,7 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         'sources',
         _grow(
           _sourceNodes,
-          // Bound cards + "Find sources" + (movies) "Browse all". The count
+          // Bound cards + "Pin source" + (movies) "Browse all". The count
           // mirrors ShowcaseSources' itemCount exactly — a node the rendering
           // doesn't mount is a place arrow keys can strand focus.
           m.boundSources.length + 1 + (m.isMovie && m.onBrowse != null ? 1 : 0),

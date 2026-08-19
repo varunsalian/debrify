@@ -161,7 +161,7 @@ class DetailModel {
   final VoidCallback? onTrackersSecondary;
 
   /// Open the title-level source manager. There is no per-source host API, so
-  /// a card in the Sources band and the "Find sources" tile both land here.
+  /// a card in the Sources band and the "Pin source" tile both land here.
   final VoidCallback? onManageSources;
   final void Function(StremioMeta)? onRecommendationTap;
 
