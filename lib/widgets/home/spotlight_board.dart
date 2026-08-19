@@ -2491,6 +2491,14 @@ class _CardState extends State<_Card> {
     if (widget.node == null) return interactive;
     return Focus(
       focusNode: widget.node,
+      // Same rule as the hero: a cell is reached ONLY by the board's
+      // explicit walk (requestFocus), never by geometric search. Without
+      // this, the shell's LEFT fallback (focusInDirection before the
+      // sidebar) could land on another row's cells — including cached
+      // off-screen ones a scrolled ListView keeps alive to the LEFT of
+      // column 0 — so LEFT-at-the-edge only opened the sidebar when no
+      // neighbouring row happened to be scrolled.
+      skipTraversal: true,
       onFocusChange: (v) {
         setState(() => _f = v);
         if (v && context.findRenderObject() is RenderBox) {

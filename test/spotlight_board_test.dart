@@ -187,6 +187,28 @@ void main() {
     expect(sawLeft, isTrue);
   });
 
+  testWidgets('cells hide from geometric search — the LEFT fallback can '
+      'never land on another row instead of the sidebar', (tester) async {
+    // The shell's LEFT handler tries focusInDirection first and only opens
+    // the sidebar when that search fails. A scrolled neighbouring row keeps
+    // cached cells alive to the LEFT of column 0, so a traversable cell
+    // means LEFT-at-the-edge sometimes browsed instead of opening the rail.
+    final a = _meta('tt1', 'Alpha');
+    final b = _meta('tt2', 'Bravo');
+    await tester
+        .pumpWidget(host([a, b], [_section('Top', [a, b], nodes: rows[0])]));
+    await tester.pumpAndSettle();
+
+    rows[0][1].requestFocus();
+    await tester.pumpAndSettle();
+
+    expect(rows[0][1].skipTraversal, isTrue,
+        reason: 'cells must be reachable only by the board\'s explicit walk');
+    expect(rows[0][1].focusInDirection(TraversalDirection.left), isFalse,
+        reason: 'a geometric LEFT search must find nothing inside the board');
+    expect(rows[0][0].hasFocus, isFalse);
+  });
+
   testWidgets('the reel NEVER advances on its own — only a deliberate move '
       'pages it', (tester) async {
     // This pins the removal of auto-advance (user call, every device): the
