@@ -5849,9 +5849,13 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   ];
 
   SpotlightShelf _spotlightShelfForRail(_CanvasRail rail) {
+    // Rail identity — the same key Canvas/Atrium key their rails by — so the
+    // board reuses shelf subtrees when tracker rows front-insert.
+    final railKey = _canvasRailKeyOf(rail);
     final row = rail.cw;
     if (row != null) {
       return SpotlightShelf(
+        id: railKey,
         title: row.title,
         // The tag used to be folded into the title text; now it IS the tag —
         // the same pill grammar the catalog rows wear.
@@ -5890,9 +5894,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       );
     }
     final fav = rail.favKind;
-    if (fav != null) return _spotlightFavShelf(fav);
+    if (fav != null) return _spotlightFavShelf(fav, id: railKey);
     final i = rail.sectionIndex!;
     return SpotlightShelf(
+      id: railKey,
       title: _sections[i].title,
       tag: _sectionTag(_sections[i]),
       nodes: i < _rowNodes.length ? _rowNodes[i] : const [],
@@ -5932,11 +5937,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// says how many items it holds. The three channel kinds carry LOGOS — wide,
   /// frequently transparent marks — which a 2:3 crop cuts in half, so they get
   /// a square tile that contains the art on a plate instead of filling with it.
-  SpotlightShelf _spotlightFavShelf(_FavRowRef ref) {
+  SpotlightShelf _spotlightFavShelf(_FavRowRef ref, {String? id}) {
     final nodes = _favNodesFor(ref);
     if (ref.isIptvList) {
       final row = _iptvListRows[ref.list];
       return SpotlightShelf(
+        id: id,
         title: row.title,
         nodes: nodes,
         items: [
@@ -5965,6 +5971,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         final isMovies = ref.kind == _FavKind.watchlistMovies;
         final items = isMovies ? _watchlistMovieItems : _watchlistSeriesItems;
         return SpotlightShelf(
+          id: id,
           title: isMovies ? 'Watchlist Movies' : 'Watchlist Series',
           nodes: nodes,
           // Same rule as the catalog rows off TV: pure poster cards in
@@ -5993,6 +6000,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         );
       case _FavKind.playlist:
         return SpotlightShelf(
+          id: id,
           title: 'Playlists',
           nodes: nodes,
           items: [
@@ -6007,6 +6015,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         );
       case _FavKind.iptv:
         return SpotlightShelf(
+          id: id,
           title: 'IPTV Favourites',
           nodes: nodes,
           items: [
@@ -6030,6 +6039,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         );
       case _FavKind.debrify:
         return SpotlightShelf(
+          id: id,
           title: 'Debrify TV',
           nodes: nodes,
           items: [
@@ -6046,6 +6056,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         );
       case _FavKind.stremio:
         return SpotlightShelf(
+          id: id,
           title: 'Stremio TV',
           nodes: nodes,
           items: [

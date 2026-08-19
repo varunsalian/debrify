@@ -129,6 +129,14 @@ class SpotlightShelf {
   /// captions regardless — this flag is a non-TV presentation choice.
   final bool captions;
 
+  /// Stable identity for element reuse across board updates. Tracker rows
+  /// stream in and FRONT-INSERT above the catalog rows; without identity the
+  /// board's list reconciles shelves by position and remounts every shelf
+  /// below the insertion point — horizontal scroll offsets reset and every
+  /// visible card's texture re-resolves and re-uploads, which a Mali box
+  /// renders as a jank burst. Null falls back to positional (no reuse).
+  final String? id;
+
   const SpotlightShelf({
     required this.title,
     required this.items,
@@ -136,6 +144,7 @@ class SpotlightShelf {
     this.onSeeAll,
     this.tag,
     this.captions = true,
+    this.id,
   });
 }
 
@@ -1109,10 +1118,40 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     _heroBandH = heroH;
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
-    final list = ListView(
+    // One key per shelf, by rail IDENTITY (see [SpotlightShelf.id]).
+    String shelfKey(int i) {
+      final s = widget.sections[i];
+      return 'shelf-${s.id ?? 'pos-$i'}';
+    }
+
+    // BUILDER, not children — and no Column around the shelves. A Column is
+    // one child, so it defeated the vertical list's laziness: all 11-13
+    // shelves (and each one's first screenful of cards) built, decoded and
+    // uploaded textures in the first frames of every mount — and the shell
+    // remounts Home per tab switch, so every tab return paid the full-board
+    // texture burst again (measured on the Mi Box: ~8s of 100-200ms raster
+    // frames). Lazily built, only the on-screen shelves pay at mount and the
+    // rest stream in with the scroll — texture uploads paced for free.
+    //
+    // cacheExtent is one TV viewport rather than the 250 default: DOWN moves
+    // focus one row at a time via requestFocus, which needs the target
+    // shelf's nodes ATTACHED — a viewport of lead keeps the next rows built
+    // ahead of the cursor without resurrecting the build-everything burst.
+    final list = ListView.builder(
       controller: _scroll,
       padding: EdgeInsets.zero,
-      children: [
+      cacheExtent: 600,
+      itemCount: widget.sections.length + 2,
+      findChildIndexCallback: (key) {
+        if (key is! ValueKey<String>) return null;
+        if (key.value == 'spotlight-hero-band') return 0;
+        if (key.value == 'spotlight-tail') return widget.sections.length + 1;
+        for (var i = 0; i < widget.sections.length; i++) {
+          if (shelfKey(i) == key.value) return i + 1;
+        }
+        return null;
+      },
+      itemBuilder: (context, index) {
         // Laid out 88 short so the first shelf sits over the hero's lower
         // edge; the band overflows to the hero's full height so its contents
         // lay out against the same geometry the pinned art is drawn in. On
@@ -1121,16 +1160,6 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         // the list in the Stack below. Compact has no overlap and keeps art
         // and identity together in flow — the hero fades to ground and the
         // rows follow.
-        SizedBox(
-          height: heroH * (1 - (m.compact ? 0 : _shelfOverlapFraction)),
-          child: OverflowBox(
-            alignment: Alignment.topCenter,
-            maxHeight: heroH,
-            child: SizedBox(height: heroH, child: _hero(m, heroH)),
-          ),
-        ),
-        // The first shelf overlaps the hero's lower edge — the tell that
-        // the page continues.
         //
         // The hero is drawn 88 SHORTER than its visual height rather than
         // the shelves being transformed up over it. A `Transform` moves
@@ -1138,17 +1167,26 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         // the overlap reappears as a phantom 88px gap at the bottom and
         // the page overscrolls past its own last shelf. Sizing the hero
         // box is the version the scroll extent agrees with.
-        Padding(
-          padding: EdgeInsets.zero,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < widget.sections.length; i++) _shelf(i, m),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-      ],
+        if (index == 0) {
+          return SizedBox(
+            key: const ValueKey('spotlight-hero-band'),
+            height: heroH * (1 - (m.compact ? 0 : _shelfOverlapFraction)),
+            child: OverflowBox(
+              alignment: Alignment.topCenter,
+              maxHeight: heroH,
+              child: SizedBox(height: heroH, child: _hero(m, heroH)),
+            ),
+          );
+        }
+        if (index == widget.sections.length + 1) {
+          return const SizedBox(key: ValueKey('spotlight-tail'), height: 24);
+        }
+        final i = index - 1;
+        return KeyedSubtree(
+          key: ValueKey(shelfKey(i)),
+          child: _shelf(i, m),
+        );
+      },
     );
     // A board reload can SHRINK the list under a parked scroll. The framework
     // clamps the offset during layout WITHOUT notifying the controller, so
@@ -1903,6 +1941,11 @@ class SpotlightBoardState extends State<SpotlightBoard> {
             // at [cardHeight], so the ratio guard still holds.
             height: cardHeight + (captions ? m.captionBlock : 0),
             child: ListView.separated(
+              // Now that the board unbuilds far-off shelves, a rebuilt row
+              // would otherwise come back rewound to column 0 — PageStorage
+              // carries the offset across the unbuild (DPAD re-lands via
+              // focus anyway; this is for touch scroll positions).
+              key: PageStorageKey('spotlight-row-${section.id ?? i}'),
               // The lift paints into the padding above and below rather than
               // being sliced off at the viewport edge.
               clipBehavior: Clip.none,

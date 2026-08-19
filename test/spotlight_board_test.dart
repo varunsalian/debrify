@@ -209,6 +209,68 @@ void main() {
     expect(rows[0][0].hasFocus, isFalse);
   });
 
+  testWidgets('the board is LAZY — off-screen shelves do not build at mount',
+      (tester) async {
+    // A Column of shelves inside the vertical list once defeated its
+    // laziness: every shelf built, decoded and uploaded textures on mount,
+    // the measured first-seconds burst on a Mali box.
+    final sections = [
+      for (var r = 0; r < 12; r++)
+        SpotlightShelf(
+          title: 'Row $r',
+          id: 'row-$r',
+          nodes: const [],
+          items: [
+            for (var c = 0; c < 2; c++)
+              SpotlightCard(title: 'R$r-C$c', onOpen: _noop),
+          ],
+        ),
+    ];
+    await tester.pumpWidget(host([_meta('tt1', 'Alpha')], sections));
+    await tester.pumpAndSettle();
+
+    expect(find.text('R0-C0'), findsOneWidget,
+        reason: 'the first shelf is on screen and must build');
+    expect(find.text('R11-C0'), findsNothing,
+        reason: 'a shelf far below the fold must not build at mount');
+  });
+
+  testWidgets('a front-inserted shelf REUSES the shelves below it',
+      (tester) async {
+    // Tracker rows stream in above the catalog rows. Identity keys mean the
+    // insert must not remount existing shelves (remount = scroll reset +
+    // full texture re-upload of every visible card).
+    //
+    // A tall viewport, or the insert legitimately pushes the catalog shelf
+    // past the lazy list's build window and there is no element to compare.
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final below = SpotlightShelf(
+      title: 'Catalog',
+      id: 'catalog-a',
+      nodes: rows[0],
+      items: [SpotlightCard(title: 'CardOnShelf', onOpen: _noop)],
+    );
+    await tester.pumpWidget(host([_meta('tt1', 'Alpha')], [below]));
+    await tester.pumpAndSettle();
+    final before = tester.element(find.text('CardOnShelf'));
+
+    final inserted = SpotlightShelf(
+      title: 'Continue Watching',
+      id: 'cw',
+      nodes: const [],
+      items: [SpotlightCard(title: 'Bravo', onOpen: _noop)],
+    );
+    await tester
+        .pumpWidget(host([_meta('tt1', 'Alpha')], [inserted, below]));
+    await tester.pumpAndSettle();
+    final after = tester.element(find.text('CardOnShelf'));
+
+    expect(identical(before, after), isTrue,
+        reason: 'the shelf below the insert must keep its element subtree');
+  });
+
   testWidgets('the reel NEVER advances on its own — only a deliberate move '
       'pages it', (tester) async {
     // This pins the removal of auto-advance (user call, every device): the
