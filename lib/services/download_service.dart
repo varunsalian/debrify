@@ -96,16 +96,18 @@ class DownloadService {
 
   ConnectivityResult _computeEffectiveNet(List<ConnectivityResult> results) {
     if (results.isEmpty) return ConnectivityResult.none;
-    if (results.contains(ConnectivityResult.none))
+    if (results.contains(ConnectivityResult.none)) {
       return ConnectivityResult.none;
+    }
     // Treat ethernet/wired/vpn as acceptable like Wi-Fi for large downloads
     if (results.contains(ConnectivityResult.wifi) ||
         results.contains(ConnectivityResult.ethernet) ||
         results.contains(ConnectivityResult.vpn)) {
       return ConnectivityResult.wifi;
     }
-    if (results.contains(ConnectivityResult.mobile))
+    if (results.contains(ConnectivityResult.mobile)) {
       return ConnectivityResult.mobile;
+    }
     // Fallback to the first known state
     return results.first;
   }
@@ -1525,11 +1527,12 @@ class DownloadService {
               _preservedProgress(taskId),
             );
             _statusController.add(TaskStatusUpdate(task, TaskStatus.running));
-            if (recId != null)
+            if (recId != null) {
               _upsertRecord(recId, {
                 'state': 'running',
                 'pluginTaskId': taskId,
               });
+            }
             break;
           case 'progress':
             final total = (event['total'] as num?)?.toInt() ?? 0;
@@ -1964,8 +1967,9 @@ class DownloadService {
           }
         }
       }
-      if (seeded > 0)
+      if (seeded > 0) {
         debugPrint('DL INIT: android seeded $seeded tasks for resume');
+      }
     }
     _started = true;
     _initializing = false;
@@ -2587,8 +2591,9 @@ class DownloadService {
         .toList(growable: false);
     // Overlay queued placeholders and queued-resume status
     if (_nonAndroidQueuedRecords.isEmpty &&
-        _nonAndroidResumeQueuedOverlay.isEmpty)
+        _nonAndroidResumeQueuedOverlay.isEmpty) {
       return dbRecords;
+    }
     final List<TaskRecord> adjusted = dbRecords.map((r) {
       if (_nonAndroidResumeQueuedOverlay.contains(r.taskId)) {
         return TaskRecord(

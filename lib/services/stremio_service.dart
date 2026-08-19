@@ -222,7 +222,7 @@ class StremioService {
     }
 
     if (ProfileCollectionResourceFacade.active) {
-      final read = () => ProfileCollectionResourceFacade.read(
+      Future<List<Map<String, dynamic>>> read() => ProfileCollectionResourceFacade.read(
         types: const <ConnectionResourceType>{
           ConnectionResourceType.stremioAddon,
         },

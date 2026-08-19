@@ -2891,8 +2891,9 @@ class TorrentPlaybackService {
     String? fallbackHint;
 
     for (final source in usable) {
-      if (cancel.cancelled)
+      if (cancel.cancelled) {
         return true; // Cancel already dismissed the overlay.
+      }
 
       // Cheap skip: a bound DEBRID source whose name is a single specific
       // episode can only serve that episode — skip it (no debrid round-trip)
@@ -4888,8 +4889,9 @@ class TorrentPlaybackService {
           fileName: '$torrentName.zip',
           torrentName: torrentName,
         );
-        if (context.mounted)
+        if (context.mounted) {
           _snack(context, 'ZIP download queued successfully.');
+        }
       }
     } catch (_) {
       if (context.mounted) {

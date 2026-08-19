@@ -1212,7 +1212,7 @@ class VideoPlayerLauncher {
                       seriesPlaylist.allEpisodes[currentEpisodeIdx + 1];
                   startIndex = nextEpisode.originalIndex;
                   debugPrint(
-                    'ExternalPlayer: E${lastEpisodeNum} finished, advancing to next at index $startIndex',
+                    'ExternalPlayer: E$lastEpisodeNum finished, advancing to next at index $startIndex',
                   );
                 }
               } else {

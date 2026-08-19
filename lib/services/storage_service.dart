@@ -3664,13 +3664,13 @@ class StorageService {
       final String torboxId = torboxIdRaw.toString();
       final dynamic singleFileId = item['torboxFileId'];
       if (singleFileId != null) {
-        final fileKey = 'torbox:${torboxId}:file:${singleFileId.toString()}';
+        final fileKey = 'torbox:$torboxId:file:${singleFileId.toString()}';
         return '$provider|${fileKey.toLowerCase()}';
       }
       final dynamic multiFileIds = item['torboxFileIds'];
       if (multiFileIds is List && multiFileIds.isNotEmpty) {
         final joined = multiFileIds.map((e) => e.toString()).join(',');
-        final filesKey = 'torbox:${torboxId}:files:$joined';
+        final filesKey = 'torbox:$torboxId:files:$joined';
         return '$provider|${filesKey.toLowerCase()}';
       }
       return '$provider|torbox:${torboxId.toLowerCase()}';
@@ -3705,7 +3705,7 @@ class StorageService {
         (item['url'] as String?)?.trim() ??
         '';
     final String title = (item['title'] as String?)?.trim() ?? '';
-    final legacyKey = '${source}|${title}'.toLowerCase();
+    final legacyKey = '$source|$title'.toLowerCase();
     return '$provider|$legacyKey';
   }
 
