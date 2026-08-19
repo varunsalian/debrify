@@ -107,7 +107,9 @@ import 'alldebrid/alldebrid_files_screen.dart';
 import 'pikpak/pikpak_files_screen.dart';
 
 part 'search/search_sources.dart';
-part 'search/search_widgets.dart';
+part 'search/search_card_widgets.dart';
+part 'search/search_hero_widgets.dart';
+part 'search/search_stage_widgets.dart';
 
 /// TV focus ring for board cards — violet-300, deliberately LIGHTER than the
 /// board's chrome accent: a light ring over dark art pops at 10ft, while the
