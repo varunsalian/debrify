@@ -129,6 +129,7 @@ class _ExternalPlayerSettingsPageState
   final FocusNode _tvosForceStereoFocusNode = FocusNode();
   final FocusNode _tvosLegacyAudioFocusNode = FocusNode();
   final FocusNode _androidVideoRendererFocusNode = FocusNode();
+  final FocusNode _iptvDecoderFocusNode = FocusNode();
   final FocusNode _startPortraitFocusNode = FocusNode();
   final FocusNode _subtitleAutoSyncFocusNode = FocusNode();
   final FocusNode _movieCompletionThresholdFocusNode = FocusNode();
@@ -153,6 +154,8 @@ class _ExternalPlayerSettingsPageState
   bool _tvosForceStereoFocused = false;
   bool _tvosLegacyAudioFocused = false;
   bool _androidVideoRendererFocused = false;
+  bool _iptvDecoderFocused = false;
+  String _iptvDecoderMode = 'auto';
   bool _startPortraitFocused = false;
   bool _subtitleAutoSyncFocused = false;
   bool _movieCompletionThresholdFocused = false;
@@ -292,6 +295,12 @@ class _ExternalPlayerSettingsPageState
         _androidVideoRendererFocused = _androidVideoRendererFocusNode.hasFocus;
       });
     });
+    _iptvDecoderFocusNode.addListener(() {
+      if (!mounted) return;
+      setState(() {
+        _iptvDecoderFocused = _iptvDecoderFocusNode.hasFocus;
+      });
+    });
     _startPortraitFocusNode.addListener(() {
       if (!mounted) return;
       setState(() {
@@ -406,6 +415,7 @@ class _ExternalPlayerSettingsPageState
     _tvosForceStereoFocusNode.dispose();
     _tvosLegacyAudioFocusNode.dispose();
     _androidVideoRendererFocusNode.dispose();
+    _iptvDecoderFocusNode.dispose();
     _startPortraitFocusNode.dispose();
     _subtitleAutoSyncFocusNode.dispose();
     _movieCompletionThresholdFocusNode.dispose();
@@ -555,6 +565,7 @@ class _ExternalPlayerSettingsPageState
       final defaultAudioLanguage =
           await StorageService.getDefaultAudioLanguage();
       final netPatience = await StorageService.getNetworkConnectPatience();
+      final iptvDecoderMode = await StorageService.getIptvDecoderMode();
       final netBuffer = await StorageService.getNetworkBufferSize();
 
       // Load subtitle settings
@@ -600,6 +611,7 @@ class _ExternalPlayerSettingsPageState
         _tvosForceStereo = tvosForceStereo;
         _tvosLegacyAudioOutput = tvosLegacyAudioOutput;
         _androidVideoRendererMode = androidVideoRendererMode;
+        _iptvDecoderMode = iptvDecoderMode;
         _startPortrait = startPortrait;
         _subtitleAutoSync = subtitleAutoSync;
         _movieCompletionThreshold = movieCompletionThreshold;
@@ -1098,6 +1110,11 @@ class _ExternalPlayerSettingsPageState
     final mode = AndroidVideoRendererMode.fromStorage(storageKey);
     setState(() => _androidVideoRendererMode = mode);
     await StorageService.setAndroidVideoRendererMode(mode);
+  }
+
+  Future<void> _setIptvDecoderMode(String value) async {
+    setState(() => _iptvDecoderMode = value);
+    await StorageService.setIptvDecoderMode(value);
   }
 
   Future<void> _setStartPortrait(bool enabled) async {
@@ -2305,6 +2322,43 @@ class _ExternalPlayerSettingsPageState
                               onChanged: _setSubtitleAutoSync,
                               focusNode: _subtitleAutoSyncFocusNode,
                               isFocused: _subtitleAutoSyncFocused,
+                            ),
+                          ],
+
+                          // Android TV only. A frozen picture with running
+                          // audio on live IPTV is almost always the box's
+                          // hardware decoder choking on the stream — a device
+                          // defect, which is why every IPTV player ships this
+                          // switch rather than trying to auto-detect it.
+                          if (Platform.isAndroid && _isAndroidTv) ...[
+                            const SizedBox(height: 12),
+                            _buildDropdownSetting(
+                              context,
+                              label: 'IPTV decoder',
+                              value: _iptvDecoderMode,
+                              items: const {
+                                'auto': 'Automatic',
+                                'hardware': 'Hardware',
+                                'software': 'Software',
+                              },
+                              onChanged: _setIptvDecoderMode,
+                              focusNode: _iptvDecoderFocusNode,
+                              isFocused: _iptvDecoderFocused,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _iptvDecoderMode == 'software'
+                                  ? 'Software decoding fixes channels that freeze '
+                                        'while audio keeps playing, at the cost of '
+                                        'more CPU. Re-open the channel to apply.'
+                                  : 'Switch to Software if a channel freezes but '
+                                        'audio keeps playing. Re-open the channel '
+                                        'to apply.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: _iptvDecoderMode == 'auto'
+                                    ? t.dim
+                                    : t.warning,
+                              ),
                             ),
                           ],
 

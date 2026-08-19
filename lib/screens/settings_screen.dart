@@ -2452,6 +2452,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             '10-bit',
           ],
         ),
+      if (_isAndroid && PlatformUtil.isAndroidTvCached)
+        leaf(
+          'Playback',
+          'IPTV decoder',
+          'Switch to software decoding when a channel freezes',
+          const [
+            'iptv',
+            'decoder',
+            'software',
+            'hardware',
+            'freeze',
+            'frozen',
+            'audio only',
+            'no picture',
+          ],
+        ),
       if (_isAndroid && !PlatformUtil.isAndroidTvCached)
         leaf(
           'Playback',

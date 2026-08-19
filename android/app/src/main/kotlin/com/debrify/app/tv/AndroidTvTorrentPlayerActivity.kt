@@ -64,6 +64,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.source.UnrecognizedInputFormatException
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -982,6 +983,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     // untouched — the invariant that keeps this feature regression-free.
     private var networkPatience = "standard"
     private var networkBuffer = "standard"
+    /** 'auto' | 'hardware' | 'software' — see StorageService.iptvDecoderModes.
+     *  Only ever non-auto when the user picked a decoder in Playback settings
+     *  (a frozen picture with running audio is a box decoder defect). */
+    private var iptvDecoderMode = "auto"
     // Series source tabs (payload-gated): torrent sources split into
     // "Season packs" / "Episodes" columns, each offering "Load more sources"
     // until its dedicated fetch has run (a series play arrives with only one
@@ -2086,6 +2091,39 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         return "$scheme://$host:$port"
     }
 
+    /**
+     * Video decoder order for IPTV, honouring the user's Playback setting.
+     *
+     * A frozen picture with running audio on live TV is the box's hardware
+     * decoder mishandling the stream (MediaTek/Amlogic boxes are the usual
+     * reports, and ExoPlayer issue #10369 is the same signature) — it can't
+     * be fixed from the app, only routed around, which is why every IPTV
+     * player exposes this switch. 'software' promotes Android's own software
+     * codecs; the rejected decoders stay in the list as fallbacks because
+     * setEnableDecoderFallback(true) can still reach them. Audio decoding and
+     * every non-IPTV playback keep the platform's own order.
+     */
+    private fun iptvMediaCodecSelector(): MediaCodecSelector {
+        return MediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+            val infos = MediaCodecSelector.DEFAULT.getDecoderInfos(
+                mimeType,
+                requiresSecureDecoder,
+                requiresTunnelingDecoder,
+            )
+            if (!isIptvMode || iptvDecoderMode == "auto" || !MimeTypes.isVideo(mimeType)) {
+                infos
+            } else {
+                val preferSoftware = iptvDecoderMode == "software"
+                val preferred = infos.filter { it.softwareOnly == preferSoftware }
+                if (preferred.isEmpty()) {
+                    infos
+                } else {
+                    preferred + infos.filterNot { it.softwareOnly == preferSoftware }
+                }
+            }
+        }
+    }
+
     private fun setupPlayer() {
         trackSelector = DefaultTrackSelector(this)
 
@@ -2097,6 +2135,16 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val paramsBuilder = trackSelector?.buildUponParameters()
             ?.setPreferredAudioMimeType("audio/opus")
             ?.setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+
+        // Live IPTV: never adapt between video tracks in a way that forces a
+        // codec reconfigure. That switch — not the stream itself — is where
+        // strict decoders wedge into "frozen picture, audio still running"
+        // (ExoPlayer #10369, an ABR switch on an Amlogic STB with no
+        // MediaCodec error at all). Seamless adaptation within one codec
+        // configuration is untouched, so multi-variant channels still adapt.
+        if (isIptvMode) {
+            paramsBuilder?.setAllowVideoNonSeamlessAdaptiveness(false)
+        }
 
         // Apply audio language preference
         if (defaultAudioLang != null) {
@@ -2163,6 +2211,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
+            .setMediaCodecSelector(iptvMediaCodecSelector())
         val renderersFactory = OffsetRenderersFactory(baseRenderersFactory)
             .also { offsetRenderersFactory = it }
 
@@ -6771,6 +6820,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private fun initIptvMode(json: JSONObject) {
         isIptvMode = true
         android.util.Log.d("AndroidTvPlayer", "initIptvMode: Starting IPTV mode")
+
+        // IPTV mode returns before parsePayload, so the decoder preference is
+        // read here too — this is the ONLY path where it has any effect.
+        iptvDecoderMode = json.optString("iptvDecoder", "auto")
 
         iptvSourceId = json.optString("sourceId").takeIf { it.isNotEmpty() }
         iptvSourceName = json.optString("sourceName").takeIf { it.isNotEmpty() } ?: "IPTV"
@@ -15175,6 +15228,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // inherit stale tuning.
             networkPatience = obj.optString("networkPatience", "standard")
             networkBuffer = obj.optString("networkBuffer", "standard")
+            iptvDecoderMode = obj.optString("iptvDecoder", "auto")
 
             // Series source tabs: pack/episode split + per-tab "Load more"
             // availability. Parsed unconditionally (defaults off) so a

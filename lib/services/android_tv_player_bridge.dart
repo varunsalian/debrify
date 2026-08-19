@@ -1423,6 +1423,12 @@ class AndroidTvPlayerBridge {
         if (buffer != 'standard') {
           payloadWithFont['networkBuffer'] = buffer;
         }
+        // Android TV IPTV decoder preference ('auto' = platform order
+        // untouched, so it is only sent when the user picked otherwise).
+        final iptvDecoder = await StorageService.getIptvDecoderMode();
+        if (iptvDecoder != 'auto') {
+          payloadWithFont['iptvDecoder'] = iptvDecoder;
+        }
       } catch (e) {
         debugPrint('AndroidTvPlayerBridge: network tuning read failed: $e');
       }

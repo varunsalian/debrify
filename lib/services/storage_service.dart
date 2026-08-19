@@ -316,6 +316,7 @@ class StorageService {
   // Network tuning (Debrify player). 'standard' = leave the player's own
   // defaults completely untouched — see NetworkTuning.
   static const String _networkConnectPatienceKey = 'network_connect_patience';
+  static const String _iptvDecoderModeKey = 'iptv_decoder_mode';
   static const String _networkBufferSizeKey = 'network_buffer_size';
   static const String _updateAutoCheckEnabledKey = 'update_auto_check_enabled';
   static const String _updateIgnoredVersionKey = 'update_ignored_version';
@@ -5692,6 +5693,30 @@ class StorageService {
   static Future<void> setYoutubeMaxHeight(int height) async {
     final prefs = await ProfilePreferences.instance();
     await prefs.setInt(_youtubeMaxHeightKey, height);
+  }
+
+  /// Android TV IPTV video decoder: 'auto' | 'hardware' | 'software'.
+  ///
+  /// Some TV boxes (MediaTek/Amlogic especially) freeze the picture while
+  /// audio keeps playing when their hardware decoder is handed a live stream
+  /// it mishandles — a device defect no app can work around reliably, which
+  /// is why every IPTV player ships this switch. 'software' puts Android's
+  /// own software codecs (c2.android.* / OMX.google.*) first; 'auto' leaves
+  /// the platform's decoder order untouched.
+  static const List<String> iptvDecoderModes = ['auto', 'hardware', 'software'];
+
+  static Future<String> getIptvDecoderMode() async {
+    final prefs = await ProfilePreferences.instance();
+    final value = prefs.getString(_iptvDecoderModeKey) ?? 'auto';
+    return iptvDecoderModes.contains(value) ? value : 'auto';
+  }
+
+  static Future<void> setIptvDecoderMode(String value) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(
+      _iptvDecoderModeKey,
+      iptvDecoderModes.contains(value) ? value : 'auto',
+    );
   }
 
   // Network tuning (Debrify player)
