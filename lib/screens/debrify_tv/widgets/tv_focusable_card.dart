@@ -187,7 +187,7 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                       ]
                     : [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           blurRadius: 8,
                           spreadRadius: 0,
                         ),
@@ -213,7 +213,7 @@ class _TvFocusableCardState extends State<TvFocusableCard> {
                     decoration: BoxDecoration(
                       // Black glass floating over the card's artwork — it stays
                       // black on every theme, so its ink is `onGlass`.
-                      color: Colors.black.withOpacity(0.7),
+                      color: Colors.black.withValues(alpha: 0.7),
                       borderRadius: app.shape.br(6),
                       border: Border.all(
                         color: app.onGlass.withAlpha(77),

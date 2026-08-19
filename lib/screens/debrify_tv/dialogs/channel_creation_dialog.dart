@@ -90,7 +90,7 @@ class _ChannelCreationDialogState extends State<ChannelCreationDialog> {
           border: Border.all(color: tv.fillWeak, width: 1.4),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.45),
+              color: Colors.black.withValues(alpha: 0.45),
               blurRadius: 24,
               offset: const Offset(0, 14),
             ),

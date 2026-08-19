@@ -78,21 +78,21 @@ class _TvCompactButtonState extends State<TvCompactButton> {
             ),
             decoration: BoxDecoration(
               color: isDisabled
-                  ? Colors.grey.withOpacity(0.3)
-                  : widget.backgroundColor.withOpacity(_isFocused ? 1.0 : 0.8),
+                  ? Colors.grey.withValues(alpha: 0.3)
+                  : widget.backgroundColor.withValues(alpha: _isFocused ? 1.0 : 0.8),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: _isFocused
                     ? Colors.white
                     : (isDisabled
-                          ? Colors.grey.withOpacity(0.2)
+                          ? Colors.grey.withValues(alpha: 0.2)
                           : Colors.white24),
                 width: _isFocused ? 2 : 1,
               ),
               boxShadow: _isFocused
                   ? [
                       BoxShadow(
-                        color: widget.backgroundColor.withOpacity(0.3),
+                        color: widget.backgroundColor.withValues(alpha: 0.3),
                         blurRadius: 8,
                         spreadRadius: 0,
                       ),
