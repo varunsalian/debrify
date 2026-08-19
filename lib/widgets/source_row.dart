@@ -266,6 +266,11 @@ class _SourceRowState extends State<SourceRow> {
           : FocusExpressionBox(
               focused: _isFocused,
               radius: 14,
+              // Full-width row: the poster-scale parallax lift pushed 5% of
+              // the row past both screen edges — the focused source read as
+              // cut off on the left. settingsRow lifts just enough to
+              // separate from its neighbours.
+              shape: ParallaxShape.settingsRow,
               // The focused fill is what the ring lands on, and it is nearly
               // black — a theme with a dark cursor needs the rescue here.
               on: _surfaceHi,

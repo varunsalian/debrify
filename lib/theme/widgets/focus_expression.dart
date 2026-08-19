@@ -6,6 +6,9 @@ import '../app_motion.dart';
 import '../app_theme_scope.dart';
 import 'parallax_focus.dart';
 
+// Callers pick their lift shape at the same site they build the box.
+export 'parallax_focus.dart' show ParallaxShape;
+
 /// The cursor, as the theme expresses it.
 ///
 /// On a TV this is what the user looks at essentially all of the time, and
@@ -36,6 +39,13 @@ class FocusExpressionBox extends StatelessWidget {
   /// ink.
   final Widget Function(BuildContext, Color ink)? inverted;
 
+  /// What KIND of thing this cursor lifts, under the parallax expression —
+  /// it sets how far the lift may scale. The poster default suits cards that
+  /// grow into their rail gap; a FULL-WIDTH row must pass
+  /// [ParallaxShape.settingsRow], or the 1.10 poster lift pushes 5% of the
+  /// row past BOTH screen edges and the focused row reads as cut off.
+  final ParallaxShape shape;
+
   const FocusExpressionBox({
     super.key,
     required this.child,
@@ -43,6 +53,7 @@ class FocusExpressionBox extends StatelessWidget {
     required this.radius,
     this.on,
     this.inverted,
+    this.shape = ParallaxShape.poster,
   });
 
   @override
@@ -82,6 +93,7 @@ class FocusExpressionBox extends StatelessWidget {
     if (f.expression == FocusExpression.parallax) {
       return ParallaxFocus(
         focused: focused,
+        shape: shape,
         radius: app.shape.br(radius),
         child: child,
       );

@@ -598,6 +598,9 @@ class _CloudFileRowState extends State<CloudFileRow> {
           : FocusExpressionBox(
               focused: focused,
               radius: radius,
+              // Full-width row — same rule as SourceRow: the poster-scale
+              // lift would push the row past both screen edges.
+              shape: ParallaxShape.settingsRow,
               on: app.core.ground,
               child: child,
             );
