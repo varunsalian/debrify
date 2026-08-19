@@ -49,6 +49,9 @@ object RecordingScheduleStore {
 					"recordings",
 					schedule.connectionResourceId,
 					schedule.resourceAuthorizationRevision,
+					// A schedule waits hours between creation and fire, and the
+					// alarm receiver re-puts it — see the projection's drift note.
+					allowRevisionDrift = true,
 				)
 			) throw SecurityException("Schedule profile authorization changed")
 			val stored = if (!committed) {

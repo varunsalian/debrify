@@ -84,8 +84,15 @@ class BackupRestoreService {
       // routinely embed debrid API keys in the path (Torrentio/Comet-style
       // configure strings), and there is no reliable way to scrub them.
       try {
-        final addons = await StremioService.instance.getAddons();
-        addonUrls = addons.map((a) => a.manifestUrl).toList();
+        // Retain disabled owned addons, but do not bypass settings redaction
+        // for borrowed resources: a use-only grant must not turn into an
+        // exported configured URL. Redacted empty URLs are omitted below.
+        final addons = await StremioService.instance.getAddons(
+          forSettings: true,
+        );
+        addonUrls = backupAddonManifestUrls(
+          addons.map((addon) => addon.manifestUrl),
+        );
       } catch (_) {
         throw StateError('Could not read Stremio addons for backup');
       }
@@ -95,7 +102,7 @@ class BackupRestoreService {
     try {
       final servers = await StorageService.getWebDavServers();
       webDavServers = servers.map((s) {
-        final json = s.toJson();
+        final json = s.toTransferJson();
         if (!includeCredentials) json['password'] = '';
         return json;
       }).toList();
@@ -110,7 +117,7 @@ class BackupRestoreService {
       // just advertise a category that always fails to import.
       try {
         final configs = await StorageService.getIndexerManagerConfigs();
-        indexerManagers = configs.map((c) => c.toJson()).toList();
+        indexerManagers = configs.map((c) => c.toTransferJson()).toList();
       } catch (_) {
         throw StateError('Could not read indexer managers for backup');
       }
@@ -192,6 +199,13 @@ class BackupRestoreService {
       if (iptvLists.isNotEmpty) 'iptvLists': iptvLists,
     };
   }
+
+  @visibleForTesting
+  static List<String> backupAddonManifestUrls(Iterable<String> urls) =>
+      <String>{
+        for (final url in urls)
+          if (url.trim().isNotEmpty) url.trim(),
+      }.toList(growable: false);
 
   /// Summarize what's inside a parsed backup map (for the confirm dialog).
   static BackupSummary summarize(Map<String, dynamic> map) {
@@ -669,7 +683,9 @@ class BackupRestoreService {
           continue;
         }
         try {
-          final config = WebDavConfig.fromJson(Map<String, dynamic>.from(raw));
+          final config = WebDavConfig.fromTransferJson(
+            Map<String, dynamic>.from(raw),
+          );
           if (config.baseUrl.trim().isEmpty) {
             report.webDavServersFailed++;
             continue;
@@ -715,7 +731,7 @@ class BackupRestoreService {
           continue;
         }
         try {
-          final config = IndexerManagerConfig.fromJson(
+          final config = IndexerManagerConfig.fromTransferJson(
             Map<String, dynamic>.from(raw),
           );
           if (config.baseUrl.trim().isEmpty || config.apiKey.trim().isEmpty) {
@@ -805,7 +821,9 @@ class BackupRestoreService {
     RestoreReport report,
   ) async {
     try {
-      final existing = await StremioService.instance.getAddons();
+      // Avoid importing duplicates of disabled owned addons or executable
+      // shared addons whose settings representation redacts its URL.
+      final existing = await StremioService.instance.getAddonsForManagement();
       final existingUrls = existing.map((a) => a.manifestUrl).toSet();
       for (final url in urls) {
         if (existingUrls.contains(url)) {

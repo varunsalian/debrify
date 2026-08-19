@@ -941,10 +941,11 @@ class _DetailShowcaseState extends State<DetailShowcase> {
         'sources',
         _grow(
           _sourceNodes,
-          // Bound cards + "Find sources" + (movies) "Browse all". The count
-          // mirrors ShowcaseSources' itemCount exactly — a node the rendering
-          // doesn't mount is a place arrow keys can strand focus.
-          m.boundSources.length + 1 + (m.isMovie && m.onBrowse != null ? 1 : 0),
+          // Bound cards + "Pin source" + the browse entry (movies: "Browse
+          // all"; series: "Season packs"). The count mirrors ShowcaseSources'
+          // itemCount exactly — a node the rendering doesn't mount is a place
+          // arrow keys can strand focus.
+          m.boundSources.length + 1 + (m.onBrowse != null ? 1 : 0),
           'showcase-source',
         ),
         _sourcesKey,
@@ -1090,7 +1091,16 @@ class _DetailShowcaseState extends State<DetailShowcase> {
           child: IgnorePointer(
             ignoring: opening,
             child: AnimatedOpacity(
-              opacity: opening ? 0 : 1,
+              // Near-zero, never zero, while opening: at exactly 0 the
+              // framework SKIPS painting the subtree, so none of the warmed
+              // images got their GPU textures uploaded behind the skeleton —
+              // the reveal's first frame then painted the whole page and
+              // uploaded ~26 textures at once, which IS the reveal hitch on
+              // a weak TV GPU. At alpha 1/255 the page paints invisibly
+              // under the opaque cover and each texture lands as its decode
+              // completes, spread across the warm frames — the smoothing the
+              // opening gate always intended.
+              opacity: opening ? (1 / 255) : 1,
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
               child: ListView(
@@ -1189,11 +1199,13 @@ class _DetailShowcaseState extends State<DetailShowcase> {
                         _sourceNodes,
                         m.boundSources.length +
                             1 +
-                            (m.isMovie && m.onBrowse != null ? 1 : 0),
+                            (m.onBrowse != null ? 1 : 0),
                         'showcase-source',
                       ),
                       onOpen: m.onManageSources ?? m.onSelectSource,
-                      onBrowseAll: m.isMovie ? m.onBrowse : null,
+                      onBrowseAll: m.onBrowse,
+                      browseAllLabel:
+                          m.isMovie ? '⌕  Browse all' : '⌕  Season packs',
                     ),
                   ),
                   if (m.recommendations.isNotEmpty)
@@ -1260,9 +1272,10 @@ class _DetailShowcaseState extends State<DetailShowcase> {
     if (m.onTrackers != null) n++;
     if (m.onTrackersSecondary != null) n++;
     if (m.hasTrailer) n++;
-    // The movie source browse — mounted between trailer and the app menu by
-    // ShowcaseIdentity; the count here is what keeps its node real.
-    if (m.isMovie && m.onBrowse != null) n++;
+    // The source browse (movie list / series pack search) — mounted between
+    // trailer and the app menu by ShowcaseIdentity; the count here is what
+    // keeps its node real.
+    if (m.onBrowse != null) n++;
     if (m.onAppMenu != null) n++;
     return n;
   }

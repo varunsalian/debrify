@@ -349,9 +349,29 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
       channel.attributes['series_playlist_id'] ??
       _sourceId;
 
-  ({String id, int revision})? _recordingResource(IptvChannel channel) {
+  Future<({String id, int revision})?> _recordingResource(
+    IptvChannel channel,
+  ) async {
     final sourceId = _originSourceId(channel);
     if (sourceId == null) return null;
+    // Fresh read first: `_sources` is the payload captured at player launch,
+    // and every sources save bumps every source's revision — a schedule
+    // seeded from the stale copy would be refused when it fires.
+    try {
+      final playlists = await StorageService.getIptvPlaylists(
+        forSettings: false,
+      );
+      for (final playlist in playlists) {
+        if (playlist.id != sourceId) continue;
+        final id = playlist.connectionResourceId;
+        final revision = playlist.connectionResourceRevision;
+        if (id != null && id.isNotEmpty && revision != null) {
+          return (id: id, revision: revision);
+        }
+      }
+    } catch (_) {
+      // Storage unavailable mid-session: fall through to the launch payload.
+    }
     for (final source in _sources) {
       if (source['id'] != sourceId) continue;
       final id = source['connectionResourceId']?.toString();
@@ -1889,7 +1909,8 @@ class IptvChannelSheetState extends State<IptvChannelSheet>
       ),
     );
     if (confirmed != true || !mounted) return;
-    final resource = _recordingResource(channel);
+    final resource = await _recordingResource(channel);
+    if (!mounted) return;
     final result = DesktopScheduleService.instance.isSupported
         ? await DesktopScheduleService.instance.add(
             url: recordUrl,

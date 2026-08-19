@@ -37,6 +37,14 @@ class WebDavConfig {
     if (credentialsRedacted) '_connectionResourceCredentialsRedacted': true,
   };
 
+  Map<String, dynamic> toTransferJson() => {
+    'id': id,
+    'name': name,
+    'baseUrl': baseUrl,
+    'username': username,
+    'password': password,
+  };
+
   factory WebDavConfig.fromJson(Map<String, dynamic> json) {
     final baseUrl = (json['baseUrl'] ?? '').toString();
     final id = (json['id'] ?? '').toString().trim();
@@ -56,6 +64,13 @@ class WebDavConfig {
           json['_connectionResourceCredentialsRedacted'] as bool? ?? false,
     );
   }
+
+  factory WebDavConfig.fromTransferJson(Map<String, dynamic> json) =>
+      WebDavConfig.fromJson(<String, dynamic>{
+        for (final entry in json.entries)
+          if (!entry.key.startsWith('_connectionResource'))
+            entry.key: entry.value,
+      });
 
   static String _defaultNameForUrl(String baseUrl) {
     final uri = Uri.tryParse(baseUrl);

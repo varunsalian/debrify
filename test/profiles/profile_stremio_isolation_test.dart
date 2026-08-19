@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:debrify/models/profiles/connection_resource.dart';
 import 'package:debrify/models/profiles/profile_policy.dart';
 import 'package:debrify/models/stremio_addon.dart';
+import 'package:debrify/services/backup_restore_service.dart';
 import 'package:debrify/services/profiles/connection_resource_service.dart';
 import 'package:debrify/services/profiles/device_key_provider.dart';
 import 'package:debrify/services/profiles/profile_authorization.dart';
@@ -189,5 +191,168 @@ void main() {
       throwsA(isA<ArgumentError>()),
     );
     expect((await service.getAddons(forSettings: true)).single.enabled, isTrue);
+  });
+
+  test(
+    'shared addons keep executable identity across management and saves',
+    () async {
+      const sharedManifestUrl =
+          'https://addon.invalid/shared-key/manifest.json';
+      final resourceService = ConnectionResourceService(
+        registry: registry,
+        cipher: cipher,
+      );
+      final shared = await resourceService.create(
+        context: await ProfileAuthorizationContext.capture(registry),
+        type: ConnectionResourceType.stremioAddon,
+        label: 'Shared addon',
+        publicConfig: const <String, dynamic>{
+          'addonName': 'Shared addon',
+          'contentKinds': <String>['movie'],
+        },
+        secretConfig: const <String, dynamic>{
+          'id': 'shared-addon',
+          'name': 'Shared addon',
+          'manifest_url': sharedManifestUrl,
+          'base_url': 'https://addon.invalid/shared-key',
+          'enabled': true,
+          'types': <String>['movie'],
+          'resources': <String>['stream', 'subtitles'],
+        },
+      );
+      await resourceService.grant(
+        actor: await ProfileAuthorizationContext.capture(registry),
+        targetProfileId: secondId,
+        resourceId: shared.id,
+        permissions: const <ResourcePermission>{ResourcePermission.use},
+      );
+      await registry.setActiveProfile(secondId);
+      ProfileRuntime.publish(
+        ProfileScope(profileId: secondId, dataGeneration: 1, sessionEpoch: 2),
+      );
+      service.invalidateCache();
+
+      final settings = (await service.getAddons(forSettings: true)).single;
+      expect(settings.connectionResourceCredentialsRedacted, isTrue);
+      expect(settings.manifestUrl, isEmpty);
+
+      final management = (await service.getAddonsForManagement()).single;
+      expect(management.connectionResourceId, shared.id);
+      expect(management.manifestUrl, sharedManifestUrl);
+      expect(
+        management.resources,
+        containsAll(<String>['stream', 'subtitles']),
+      );
+
+      await expectLater(
+        () => service.addAddon(sharedManifestUrl),
+        throwsA(isA<Exception>()),
+      );
+      final imported = await service.importAddonsFromJson('''{
+          "addons": [{
+            "manifest": {
+              "id": "shared-addon",
+              "name": "Shared addon",
+              "resources": ["stream", "subtitles"],
+              "types": ["movie"]
+            },
+            "transportUrl": "$sharedManifestUrl"
+          }]
+        }''');
+      expect(imported.imported, 0);
+      expect(imported.skippedDuplicates, 1);
+
+      service.debugManifestFetcher = (manifestUrl) async => StremioAddon(
+        id: 'owned-addon',
+        name: 'Owned addon',
+        manifestUrl: manifestUrl,
+        baseUrl: 'https://addon.invalid/owned',
+        types: const <String>['movie'],
+        resources: const <String>['stream'],
+      );
+      await service.addAddon('https://addon.invalid/owned/manifest.json');
+
+      final playback = await service.getAddons();
+      expect(playback, hasLength(2));
+      final executableShared = playback.singleWhere(
+        (addon) => addon.connectionResourceId == shared.id,
+      );
+      expect(executableShared.manifestUrl, sharedManifestUrl);
+      expect(executableShared.resources, contains('subtitles'));
+      expect(executableShared.connectionResourceCredentialsRedacted, isFalse);
+
+      expect(
+        BackupRestoreService.backupAddonManifestUrls(<String>[
+          settings.manifestUrl,
+        ]),
+        isEmpty,
+      );
+    },
+  );
+
+  test('management operations retain disabled addons', () async {
+    var version = '1.0.0';
+    service.debugManifestFetcher = (manifestUrl) async => StremioAddon(
+      id: 'managed-disabled-addon',
+      name: 'Managed disabled addon',
+      version: version,
+      manifestUrl: manifestUrl,
+      baseUrl: 'https://addon.invalid/managed-disabled',
+      types: const <String>['movie'],
+      resources: const <String>['stream'],
+    );
+    final added = await service.addAddon(
+      'https://addon.invalid/managed-disabled/manifest.json',
+    );
+    await service.setAddonEnabled(added.storageKey, false);
+    expect(await service.getAddons(), isEmpty);
+
+    // Management reads must still find the hidden playback row: adding or
+    // importing it cannot create a duplicate, and updates/removal still work.
+    await expectLater(
+      () => service.addAddon(added.manifestUrl),
+      throwsA(isA<Exception>()),
+    );
+    final imported = await service.importAddonsFromJson('''{
+        "addons": [{
+          "manifest": {
+            "id": "managed-disabled-addon",
+            "name": "Managed disabled addon",
+            "version": "1.0.0",
+            "resources": ["stream"],
+            "types": ["movie"]
+          },
+          "transportUrl": "https://addon.invalid/managed-disabled/manifest.json"
+        }]
+      }''');
+    expect(imported.imported, 0);
+    expect(imported.skippedDuplicates, 1);
+
+    version = '1.5.0';
+    final singlyRefreshed = await service.refreshAddon(added.manifestUrl);
+    expect(singlyRefreshed, isNotNull);
+    expect(singlyRefreshed!.version, '1.5.0');
+    expect(singlyRefreshed.enabled, isFalse);
+    expect(singlyRefreshed.connectionResourceId, added.connectionResourceId);
+    expect(
+      singlyRefreshed.connectionResourceRevision,
+      greaterThan(added.connectionResourceRevision!),
+    );
+
+    version = '2.0.0';
+    final refreshed = await service.refreshAllAddons();
+    expect(refreshed.updated, 1);
+    final disabled = (await service.getAddons(forSettings: true)).single;
+    expect(disabled.version, '2.0.0');
+    expect(disabled.enabled, isFalse);
+    expect(disabled.connectionResourceId, added.connectionResourceId);
+    expect(
+      disabled.connectionResourceRevision,
+      greaterThan(singlyRefreshed.connectionResourceRevision!),
+    );
+    expect(await service.getAddons(), isEmpty);
+
+    await service.removeAddon(disabled.manifestUrl);
+    expect(await service.getAddons(forSettings: true), isEmpty);
   });
 }

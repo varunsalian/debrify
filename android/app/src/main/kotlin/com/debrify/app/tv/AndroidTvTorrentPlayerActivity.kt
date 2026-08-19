@@ -354,11 +354,31 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // recomputes iptvStrictTsActive from the set. Segmented/HLS streams
         // never see the progressive extractor factory, so a stall there says
         // nothing about the flags — recording one would only poison the
-        // two-URLs-means-strict-device session escalation.
+        // two-URLs-means-strict-device session escalation. Same for a tune
+        // that was ALREADY strict (a twin — strict from birth — or a
+        // session-strict device): its wedge was observed with the aggressive
+        // flags off, so it is not evidence about them; without this gate two
+        // failed twin trials would flip the whole session strict.
         if (source == "video-stall" && attempt >= 2 &&
-            !isCurrentIptvSegmented() && iptvStrictTsUrls.add(url)
+            !isCurrentIptvSegmented() && !iptvStrictTsActive &&
+            iptvStrictTsUrls.add(url)
         ) {
             iptvTuneDiagnostics.onRecovery(source, "strict-ts")
+        }
+        // Segmented streams have no strict rung — but an Xtream `.m3u8` has a
+        // progressive `.ts` twin that does. Divert the strict-rung re-tune
+        // into a reversible twin trial (see the twin-trial fields for the
+        // full story). Only ever from an objectively detected video stall;
+        // no twin / already failed / twin known HLS-forced falls through to
+        // the plain re-tune below, exactly as before.
+        if (source == "video-stall" && attempt >= 2 && isCurrentIptvSegmented() &&
+            iptvTwinTrialOriginalUrl == null && !iptvTwinFailedUrls.contains(url)
+        ) {
+            val twin = xtreamTsTwin(url)
+            if (twin != null && !iptvHlsForcedUrls.contains(twin)) {
+                beginIptvTwinTrial(entry, url, twin)
+                return
+            }
         }
         // A same-URL reopen would append a fresh TS connection — reset
         // PCR/PTS, no discontinuity marker — into the active tee file, and
@@ -376,6 +396,200 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         } finally {
             iptvLiveRetuneInFlight = false
         }
+    }
+
+    /** Start the reversible twin trial: tune the `.ts` twin under the
+     *  machine's episode (expectRetune keeps ladder state) with a verdict
+     *  deadline armed. A sustained advancing-frames streak accepts
+     *  ([judgeIptvTwinTrial]); an error on the twin or the deadline →
+     *  [failIptvTwinTrial]. */
+    private fun beginIptvTwinTrial(entry: IptvChannelEntry, original: String, twin: String) {
+        iptvTuneDiagnostics.onRecovery("video-stall", "twin-ts", "trial")
+        iptvTwinTrialOriginalUrl = original
+        iptvTwinTrialUrl = twin
+        iptvTwinTrialLastFrames = -1
+        iptvTwinTrialAdvanceSince = 0L
+        iptvTwinTrialStartedRealtime = SystemClock.elapsedRealtime()
+        scheduleIptvTwinTrialTimeout(IPTV_TWIN_TRIAL_TIMEOUT_MS)
+        iptvLiveRetuneInFlight = true
+        try {
+            setIptvMediaItem(entry, twin)
+        } finally {
+            iptvLiveRetuneInFlight = false
+        }
+    }
+
+    /** The trial's verdict, fed the rendered-frame counter by the 5s
+     *  progress ticker. First valid sample is a baseline; every later
+     *  sample must ADVANCE to keep the acceptance streak alive — a frozen
+     *  sample (or a counter reset, i.e. a decoder swap from an interleaved
+     *  machine re-tune) re-baselines and the streak starts over. Only a
+     *  streak of [IPTV_TWIN_TRIAL_STABLE_MS] accepts; anything short of
+     *  that leaves the verdict to the error path or the deadline. */
+    private fun judgeIptvTwinTrial(frames: Int) {
+        val twin = iptvTwinTrialUrl ?: return
+        if (currentIptvStreamUrl != twin || frames < 0) return
+        if (frames <= iptvTwinTrialLastFrames || iptvTwinTrialLastFrames < 0) {
+            // Baseline, stalled, or reset: no streak to speak of.
+            iptvTwinTrialLastFrames = frames
+            iptvTwinTrialAdvanceSince = 0L
+            return
+        }
+        iptvTwinTrialLastFrames = frames
+        val now = SystemClock.elapsedRealtime()
+        if (iptvTwinTrialAdvanceSince == 0L) {
+            iptvTwinTrialAdvanceSince = now
+            return
+        }
+        if (now - iptvTwinTrialAdvanceSince >= IPTV_TWIN_TRIAL_STABLE_MS) {
+            acceptIptvTwinTrial()
+        }
+    }
+
+    /** Frames advanced continuously for the stability window: keep the twin
+     *  for the session. The original→twin preference applies at zap time,
+     *  and the preferred twin keeps strict demux (both via the maps'
+     *  readers) — nothing is enrolled in [iptvStrictTsUrls], whose
+     *  two-URLs-means-strict-DEVICE escalation must only count wedges
+     *  observed under the aggressive flags, which the twin (strict from
+     *  birth) never was. */
+    private fun acceptIptvTwinTrial() {
+        val original = iptvTwinTrialOriginalUrl ?: return
+        val twin = iptvTwinTrialUrl ?: return
+        if (currentIptvStreamUrl != twin) return
+        clearIptvTwinTrial()
+        iptvTwinPreferredUrls[original] = twin
+        iptvTuneDiagnostics.onRecovery("video-stall", "twin-ts", "accepted")
+    }
+
+    /** The twin errored or never rendered: blacklist it for the session and
+     *  restore the original HLS stream under the machine's episode. The
+     *  machine handles what follows on its own — the restored stream's
+     *  frozen video recurs, the twin rung is now closed, and the recurrence
+     *  ladder latches: audio plays on, today's end state, never worse. */
+    private fun failIptvTwinTrial(reason: String) {
+        val original = iptvTwinTrialOriginalUrl ?: return
+        val twin = iptvTwinTrialUrl
+        clearIptvTwinTrial()
+        // A zap/teardown superseded the trial: nothing to restore, and the
+        // twin was never judged — don't blacklist it on an interruption.
+        if (twin == null || currentIptvStreamUrl != twin) return
+        if (isFinishing || isDestroyed) return
+        iptvTwinFailedUrls.add(original)
+        iptvTuneDiagnostics.onRecovery("video-stall", "twin-ts", "failed:$reason")
+        val entry = iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive } ?: return
+        iptvLiveRetuneInFlight = true
+        try {
+            setIptvMediaItem(entry, original)
+        } finally {
+            iptvLiveRetuneInFlight = false
+        }
+    }
+
+    /** A verdict timeout is recovery too, so it must respect explicit pause
+     *  just like [IptvLiveRecovery]. Park the original instead of calling
+     *  setIptvMediaItem (which deliberately starts playback); the next
+     *  explicit Play or foreground resume consumes the parked restore. */
+    private fun onIptvTwinTrialTimeout() {
+        if (player?.playWhenReady != true || sleepStopLatched) {
+            parkIptvTwinTrialRestore()
+            return
+        }
+        failIptvTwinTrial("timeout")
+    }
+
+    private fun scheduleIptvTwinTrialTimeout(delayMs: Long) {
+        iptvTwinTrialTimeout?.let { iptvTwinTrialHandler.removeCallbacks(it) }
+        val timeout = Runnable { onIptvTwinTrialTimeout() }
+        iptvTwinTrialTimeout = timeout
+        iptvTwinTrialHandler.postDelayed(timeout, delayMs.coerceAtLeast(0L))
+    }
+
+    /** Each READY on the twin restarts the verdict deadline at the
+     *  post-READY bound: the proof (baseline sample + advancing streak) can
+     *  only begin once rendering can, so prepare time — including an
+     *  interleaved tune-watchdog re-tune's — must not be charged against
+     *  the streak. Without this, a twin READY around the 20s watchdog
+     *  boundary would be killed by the trial-start deadline one sample
+     *  short of acceptance. */
+    private fun rearmIptvTwinTrialDeadline() {
+        val twin = iptvTwinTrialUrl ?: return
+        if (currentIptvStreamUrl != twin) return
+        val started = iptvTwinTrialStartedRealtime
+        if (started == 0L) return
+        val absoluteRemaining =
+            started + IPTV_TWIN_TRIAL_MAX_MS - SystemClock.elapsedRealtime()
+        scheduleIptvTwinTrialTimeout(
+            minOf(IPTV_TWIN_TRIAL_POST_READY_MS, absoluteRemaining)
+        )
+    }
+
+    /** Suspend an unjudged twin without changing the paused player's media
+     *  item. The pair is essential: a same-twin retry must preserve the
+     *  rollback, while a tune anywhere else invalidates it. */
+    private fun parkIptvTwinTrialRestore(): Boolean {
+        val original = iptvTwinTrialOriginalUrl ?: return false
+        val twin = iptvTwinTrialUrl ?: return false
+        if (currentIptvStreamUrl != twin) return false
+        iptvTwinTrialRestoreOriginal = original
+        iptvTwinTrialRestoreTwin = twin
+        clearIptvTwinTrial()
+        return true
+    }
+
+    /** Restore a trial parked by pause/onStop. Used by both lifecycle resume
+     *  and the explicit Play button because Play need not cause onStart. */
+    private fun restoreParkedIptvTwinIfNeeded(): Boolean {
+        val original = iptvTwinTrialRestoreOriginal ?: return false
+        val twin = iptvTwinTrialRestoreTwin
+        clearParkedIptvTwinRestore()
+        if (twin == null || currentIptvStreamUrl != twin) return false
+        val entry = iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive }
+            ?: return false
+        setIptvMediaItem(entry, original)
+        return true
+    }
+
+    private fun clearParkedIptvTwinRestore() {
+        iptvTwinTrialRestoreOriginal = null
+        iptvTwinTrialRestoreTwin = null
+    }
+
+    /** Disarm the trial without a verdict. Safe to call at any time; every
+     *  tune to a non-twin URL and both recovery-cancel sites go through
+     *  here, so a stale timeout can never restore an old channel's URL —
+     *  or restart playback from the background. */
+    private fun clearIptvTwinTrial() {
+        iptvTwinTrialTimeout?.let { iptvTwinTrialHandler.removeCallbacks(it) }
+        iptvTwinTrialTimeout = null
+        iptvTwinTrialOriginalUrl = null
+        iptvTwinTrialUrl = null
+        iptvTwinTrialLastFrames = -1
+        iptvTwinTrialAdvanceSince = 0L
+        iptvTwinTrialStartedRealtime = 0L
+    }
+
+    /** An accepted twin is still speculative provider infrastructure. If it
+     *  later becomes deterministically unavailable, revoke the preference
+     *  and give the original HLS endpoint one chance before AUTH surrender. */
+    private fun restoreAcceptedIptvTwinAfterAuth(error: PlaybackException): Boolean {
+        if (classifyIptvError(error) != IptvLiveRecovery.ErrorClass.AUTH) return false
+        val twin = currentIptvStreamUrl ?: return false
+        val preferred = iptvTwinPreferredUrls.entries.firstOrNull { it.value == twin }
+            ?: return false
+        val original = preferred.key
+        val entry = iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive }
+            ?: return false
+        iptvTwinPreferredUrls.remove(original)
+        iptvTwinFailedUrls.add(original)
+        iptvTuneDiagnostics.onRecovery("auth", "twin-ts", "revoked")
+        iptvLiveRetuneInFlight = true
+        try {
+            setIptvMediaItem(entry, original)
+        } finally {
+            iptvLiveRetuneInFlight = false
+        }
+        return true
     }
 
     /** 401/403/404 repeat deterministically; decoder failures repeat unless
@@ -580,6 +794,85 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     /** The factory's per-tune switch: written on main before each prepare
      *  (setIptvMediaItem), read on the extractor's loader thread. */
     @Volatile private var iptvStrictTsActive = false
+
+    // ── Xtream HLS→TS twin trial ─────────────────────────────────────────
+    // Segmented streams never see the strict-demux remedy (they bypass the
+    // progressive extractor factory), so an Xtream `.m3u8` channel whose
+    // video wedges has nowhere to escalate — the ladder plain-re-tunes and
+    // latches with frozen video under running audio. But Xtream panels serve
+    // the SAME channel as one progressive `.ts` stream (xtreamTsTwin), which
+    // IS reachable by the demux path the browse preview proves works on
+    // strict decoders. So: at the video-stall strict rung on a segmented
+    // URL, trial the twin — reversibly. Frames rendering accepts it for the
+    // session; an error or a no-frames timeout restores the original HLS URL
+    // and blacklists the twin so the channel can't ping-pong. All state is
+    // session-scoped, like [iptvHlsForcedUrls].
+
+    /** Original `.m3u8` URL while its `.ts` twin is on trial; null = idle. */
+    private var iptvTwinTrialOriginalUrl: String? = null
+
+    /** The twin URL under trial. Its tune runs strict demux from the first
+     *  attempt: the stall already proved this device+channel wedges, and the
+     *  twin exists precisely to reach the demux mode that works — joining it
+     *  mid-GOP under the aggressive flags would recreate the wedge and doom
+     *  the trial. Read on main only (setIptvMediaItem computes the volatile
+     *  [iptvStrictTsActive] from it before prepare). */
+    private var iptvTwinTrialUrl: String? = null
+
+    /** Originals whose twin trial failed this session — never re-trialed. */
+    private val iptvTwinFailedUrls = HashSet<String>()
+
+    /** Accepted trials, original → twin: later zaps to the channel start on
+     *  the twin directly (still strict — see [iptvStrictTsActive]'s
+     *  computation), instead of wedging on HLS and re-earning it. */
+    private val iptvTwinPreferredUrls = HashMap<String, String>()
+
+    private var iptvTwinTrialTimeout: Runnable? = null
+    private val iptvTwinTrialHandler = Handler(Looper.getMainLooper())
+
+    /** Set by onStop when it abandons an UNJUDGED trial: the original HLS
+     *  URL onStart must re-tune to. Bookkeeping alone can't express this —
+     *  while backgrounded the player still holds the twin media item, and
+     *  lying about the identity would misroute error attribution, recording
+     *  eligibility and diagnostics on a quick resume. Consumed (and the
+     *  actual media item restored) at the top of onStart. */
+    private var iptvTwinTrialRestoreOriginal: String? = null
+
+    /** Twin paired with [iptvTwinTrialRestoreOriginal]. Same-twin recovery
+     *  keeps the parked rollback alive; any different tune discards it. */
+    private var iptvTwinTrialRestoreTwin: String? = null
+
+    /** Verdict sampling state, fed by the 5s progress ticker
+     *  (judgeIptvTwinTrial): last rendered-frame count seen on the twin, and
+     *  when its current uninterrupted advancing streak began (0 = none). */
+    private var iptvTwinTrialLastFrames = -1
+    private var iptvTwinTrialAdvanceSince = 0L
+    private var iptvTwinTrialStartedRealtime = 0L
+
+    /** Acceptance = frames advancing on EVERY 5s sample for this long —
+     *  the machine's own STABLE_MS idiom. One frame over baseline is not a
+     *  verdict: a twin that renders a moment and wedges must fail, not get
+     *  remembered as the channel's preferred URL. */
+    private val IPTV_TWIN_TRIAL_STABLE_MS = 15_000L
+
+    /** Verdict deadline from trial start — the PRE-READY bound: a twin that
+     *  can't even reach READY inside this (the machine's 20s watchdog gets
+     *  one same-URL re-tune in between) fails and HLS is restored. Every
+     *  READY on the twin re-arms the deadline to the post-READY bound below,
+     *  so prepare time is never charged against the proof itself. */
+    private val IPTV_TWIN_TRIAL_TIMEOUT_MS = 40_000L
+
+    /** Verdict deadline from (each) READY: a baseline sample (≤5s) + the
+     *  15s advancing streak + sampling jitter. Re-armed per READY, so a
+     *  mid-trial machine re-tune restarts the proof rather than inheriting
+     *  a clock its prepare already spent; the machine's own strict/latch
+     *  budgets bound how often that can happen. */
+    private val IPTV_TWIN_TRIAL_POST_READY_MS = 30_000L
+
+    /** Hard ceiling across every READY/rebuffer cycle. A pathological twin
+     *  cannot renew its post-READY deadline forever. */
+    private val IPTV_TWIN_TRIAL_MAX_MS = 90_000L
+
     private var currentIptvStreamUrl: String? = null
     private var iptvGuideOverlay: View? = null
     private var iptvGuideList: RecyclerView? = null
@@ -702,6 +995,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var movieMoreSources = false
     private var movieSourcesFetched = true
     private var moreSourcesLoadingMode: String? = null // in-flight "Load more" tab
+
+    // Per-addon fetch: every applicable addon rides the payload so the source
+    // browser can show zero-result addons as placeholder groups with a
+    // "Fetch results" row. State is keyed by the addon's sourceKey (= its
+    // browser group id): "fetching" / "failed" / "fetched".
+    data class TvSourceAddon(val id: String, val name: String, val sourceKey: String)
+    private var sourceAddons: List<TvSourceAddon> = emptyList()
+    private val addonFetchState = mutableMapOf<String, String>()
+    private val addonPackProbing = mutableSetOf<String>()
 
     // Stremio TV Guide state
     private var isStremioTvMode = false
@@ -928,6 +1230,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                         hasVideoTrack = it.videoFormat != null,
                         wantsPlayback = it.playWhenReady,
                     )
+                    // The twin trial's verdict rides the same counter: a
+                    // continuous advancing streak accepts, nothing else does
+                    // (see judgeIptvTwinTrial).
+                    judgeIptvTwinTrial(frames)
                 }
             }
             progressHandler.postDelayed(this, PROGRESS_INTERVAL_MS)
@@ -955,7 +1261,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 Player.STATE_READY -> {
                     hasEverBeenReady = true
                     iptvTuneDiagnostics.onReady(player?.currentPosition ?: 0L)
-                    if (isIptvMode) iptvLiveRecovery.onReady()
+                    if (isIptvMode) {
+                        iptvLiveRecovery.onReady()
+                        rearmIptvTwinTrialDeadline()
+                    }
                     reportIptvStremioWinnerIfNeeded()
                     hideBufferingIndicator()
                     // Furthest-watched resume (same rule as the Dart player): seek
@@ -1155,10 +1464,19 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                             return
                         }
 
-                        // No next in playlist — request Quick Play next episode for series
+                        // No next in playlist — fetch the next episode
+                        // in-player when possible; else hand back for a
+                        // quick-play relaunch.
                         val currentItem = model.items[currentIndex]
-                        if (model.contentType == "series" && currentItem.season != null && currentItem.episode != null && model.imdbId != null) {
-                            requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
+                        if (model.contentType == "series" && currentItem.season != null && currentItem.episode != null) {
+                            val nextTarget = guideAdjacent(model, currentItem, 1)
+                            if (nextTarget != null && hasPlaylistResolver) {
+                                requestEpisodeFetch(nextTarget.season, nextTarget.episode)
+                                return
+                            }
+                            if (model.imdbId != null) {
+                                requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
+                            }
                         }
                         finish()
                     }
@@ -1188,6 +1506,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             // failure to channel B — e.g. force-HLS-poisoning B's URL for the
             // whole session, or restarting A's stream under B's identity.
             val isLiveIptvError = isIptvMode && player?.playerError != null
+
+            // A twin trial owns every error on its `.ts` URL — an HLS-only
+            // panel can answer it with anything (404, playlist text the TS
+            // sniffer rejects, junk). The verdict is simply "twin failed,
+            // restore the original HLS": never surrender the channel over a
+            // speculative URL, and never let the unrecognized-format retry
+            // below force-HLS the twin for the session. MUST stay above that
+            // retry and the generic ladder.
+            if (isLiveIptvError && iptvTwinTrialUrl != null &&
+                currentIptvStreamUrl == iptvTwinTrialUrl
+            ) {
+                failIptvTwinTrial("error:${error.errorCodeName}")
+                return
+            }
+
+            // A twin that proved itself earlier can still disappear later.
+            // AUTH-class answers are deterministic, so retrying that twin is
+            // pointless; revoke it and restore the original HLS once.
+            if (isLiveIptvError && restoreAcceptedIptvTwinAfterAuth(error)) return
 
             // IPTV: a stream that failed extractor sniffing is almost always
             // an HLS playlist behind an extension-less URL (inferred as
@@ -1392,7 +1729,8 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
                 val updatesJson = intent?.getStringExtra("metadataUpdates")
                 val imdbId = intent?.getStringExtra("imdbId")
-                handleMetadataUpdate(updatesJson, imdbId)
+                val guideJson = intent?.getStringExtra("guideEpisodes")
+                handleMetadataUpdate(updatesJson, imdbId, guideJson)
             }
         }
 
@@ -1408,7 +1746,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         requestMetadataFromFlutter()
     }
 
-    private fun handleMetadataUpdate(updatesJson: String?, imdbId: String?) {
+    private fun handleMetadataUpdate(updatesJson: String?, imdbId: String?, guideJson: String? = null) {
         android.util.Log.d("TVMazeUpdate", "handleMetadataUpdate CALLED")
         android.util.Log.d("TVMazeUpdate", "updatesJson length=${updatesJson?.length ?: 0}, imdbId=$imdbId")
 
@@ -1431,6 +1769,46 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                     android.util.Log.d("TVMazeUpdate", "Fetching Stremio subtitles with discovered IMDB ID")
                     fetchStremioSubtitles(currentItem)
                 }
+            }
+        }
+
+        // Full-show episode guide: adopt it and rebuild the series playlist so
+        // absent episodes render as fetchable rows (this also enables the
+        // playlist overlay for single-stream launches).
+        if (!guideJson.isNullOrEmpty()) {
+            try {
+                val guideArray = JSONArray(guideJson)
+                val parsed = mutableListOf<GuideEpisode>()
+                for (i in 0 until guideArray.length()) {
+                    val g = guideArray.getJSONObject(i)
+                    val season = g.optInt("season", -1)
+                    val episode = g.optInt("episode", -1)
+                    if (season < 0 || episode < 0) continue
+                    parsed.add(
+                        GuideEpisode(
+                            season = season,
+                            episode = episode,
+                            title = if (g.has("title")) g.optString("title") else null,
+                            artwork = if (g.has("artwork")) g.optString("artwork") else null,
+                            description = if (g.has("description")) g.optString("description") else null,
+                            rating = if (g.has("rating")) g.optDouble("rating") else null,
+                            runtime = if (g.has("runtime")) g.optInt("runtime") else null,
+                        )
+                    )
+                }
+                if (parsed.isNotEmpty()) {
+                    model.guideEpisodes.clear()
+                    model.guideEpisodes.addAll(parsed)
+                    android.util.Log.d("TVMazeUpdate", "Adopted ${parsed.size} guide episodes")
+                    runOnUiThread {
+                        if (model.contentType.lowercase(Locale.US) == "series") {
+                            rebuildPlaylistContent()
+                            seriesPlaylistAdapter?.setActiveIndex(currentIndex)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("TVMazeUpdate", "Failed to parse guide episodes: ${e.message}", e)
             }
         }
 
@@ -1643,6 +2021,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
                     override fun requestLoadMore(mode: String) {
                         requestMoreTorrentSources(mode)
+                    }
+
+                    override fun placeholderGroups(): List<Pair<String, String>> =
+                        sourceAddons.map { it.sourceKey to it.name }
+
+                    override fun groupFetchState(groupId: String): String? {
+                        if (sourceAddons.none { it.sourceKey == groupId }) return null
+                        return addonFetchState[groupId] ?: "idle"
+                    }
+
+                    override fun isGroupProbing(groupId: String): Boolean =
+                        addonPackProbing.contains(groupId)
+
+                    override fun requestGroupFetch(groupId: String) {
+                        requestAddonTorrentSources(groupId)
                     }
 
                     override fun onSourceSelected(index: Int) {
@@ -2165,9 +2558,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         playlistMode = PlaylistMode.NONE
 
         if (items.size <= 1) {
-            playlistView.adapter = null
-            seasonTabsContainer.visibility = View.GONE
-            return
+            // Single stream: with a full-show guide + a playlist resolver the
+            // series overlay still renders (absent rows fetch in-player),
+            // matching the Flutter player's synthetic guide.
+            val guideCapable = hasPlaylistResolver &&
+                model.contentType.lowercase(Locale.US) == "series" &&
+                model.guideEpisodes.isNotEmpty()
+            if (!guideCapable) {
+                playlistView.adapter = null
+                seasonTabsContainer.visibility = View.GONE
+                return
+            }
         }
 
         when (model.contentType.lowercase(Locale.US)) {
@@ -2179,7 +2580,20 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     }
 
     private fun setupSeriesPlaylist(items: List<PlaybackItem>) {
-        val adapter = PlaylistAdapter(items) { index ->
+        // Full-guide mode only when absent rows can actually be fetched.
+        val guide = if (hasPlaylistResolver) {
+            payload?.guideEpisodes ?: emptyList()
+        } else {
+            emptyList()
+        }
+        val adapter = PlaylistAdapter(
+            items,
+            guide = guide,
+            onFetchEpisode = if (guide.isEmpty()) null else { season, episode ->
+                hidePlaylist()
+                requestEpisodeFetch(season, episode)
+            },
+        ) { index ->
             hidePlaylist()
             playItem(index)
         }
@@ -3402,14 +3816,25 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 return
             }
 
-            // No next in playlist — request Quick Play next episode for series
+            // No next in playlist — fetch the next episode IN-PLAYER when the
+            // guide + resolver allow it, else fall back to the quick-play
+            // relaunch hand-back.
             val model = payload
             val currentItem = model?.items?.getOrNull(currentIndex)
             if (model != null && currentItem != null &&
                 model.contentType == "series" && currentItem.season != null &&
-                currentItem.episode != null && model.imdbId != null) {
-                requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
-                finish()
+                currentItem.episode != null) {
+                val nextTarget = guideAdjacent(model, currentItem, 1)
+                if (nextTarget != null && hasPlaylistResolver) {
+                    requestEpisodeFetch(nextTarget.season, nextTarget.episode)
+                    return
+                }
+                if (model.imdbId != null) {
+                    requestQuickPlayNextEpisode(model.imdbId!!, currentItem.season, currentItem.episode)
+                    finish()
+                } else {
+                    Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
+                }
             } else {
                 Toast.makeText(this, "End of playlist", Toast.LENGTH_SHORT).show()
             }
@@ -5058,6 +5483,10 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             } else {
                 // An explicit press is the one thing that clears a sleep stop.
                 sleepStopLatched = false
+                // A verdict timeout or onStop may have parked the original
+                // HLS while leaving the paused twin media item installed.
+                // Resolve that identity before ordinary play/userRetry logic.
+                if (restoreParkedIptvTwinIfNeeded()) return@let
                 // LIVE: play on a dead stream must re-tune to the live edge.
                 // A bare play() on an ENDED/errored live stream either does
                 // nothing (media3 leaves it parked) or replays stale bytes —
@@ -7015,9 +7444,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val resource = recordingResourceFor(entry)
         val owner = com.debrify.app.profiles.ProfilePreferenceProjection
             .activeJobContext(this)
+        // Drift-tolerant: the channel's resource revision rode in with the
+        // launch payload and a sources edit since then bumped every revision.
+        // The live grant/feature checks still refuse real revocation.
         if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
                 this, owner.profileId, owner.authorizationRevision, "recordings",
                 resource?.connectionResourceId, resource?.connectionResourceRevision,
+                allowRevisionDrift = true,
             )
         ) {
             Toast.makeText(this, "Recording is disabled for this profile", Toast.LENGTH_SHORT).show()
@@ -7125,9 +7558,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val owner = com.debrify.app.profiles.ProfilePreferenceProjection
                     .activeJobContext(this)
                 val resource = recordingResourceFor(entry)
+                // Drift-tolerant: the payload's resource revision predates any
+                // sources edit made since launch — see the projection's note.
                 if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
                         this, owner.profileId, owner.authorizationRevision, "recordings",
                         resource?.connectionResourceId, resource?.connectionResourceRevision,
+                        allowRevisionDrift = true,
                     )
                 ) {
                     Toast.makeText(this, "Recording is disabled for this profile", Toast.LENGTH_SHORT).show()
@@ -11481,12 +11917,31 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         // BEFORE the media item so the first playlist fetch already has them.
         currentIptvHttpHeaders = entry.httpHeaders
         currentIptvStreamUrl = streamUrl
+        // Any tune to a URL other than the twin under trial supersedes the
+        // trial (a zap, a Stremio candidate, a lifecycle rejoin — every path
+        // funnels through here). Without this, the trial's timeout could
+        // later fire against a different channel.
+        if (iptvTwinTrialUrl != null && streamUrl != iptvTwinTrialUrl) {
+            clearIptvTwinTrial()
+        }
+        // A same-twin recovery must not destroy a parked rollback (sleep can
+        // leave that twin errored before the user presses Play). Tuning the
+        // original consumes the restore; tuning anywhere else supersedes it.
+        if (iptvTwinTrialRestoreOriginal != null &&
+            streamUrl != iptvTwinTrialRestoreTwin
+        ) {
+            clearParkedIptvTwinRestore()
+        }
         // Demux mode for this tune: strict for channels that earned it — and
         // for the whole session once two did (that's a strict-decoder device,
         // not two odd channels). Read per media-period load by the extractor
-        // factory installed in setupPlayer.
+        // factory installed in setupPlayer. A twin — on trial or accepted —
+        // is always strict: it exists to reach the demux mode that works
+        // (see the twin-trial fields).
         iptvStrictTsActive =
-            iptvStrictTsUrls.contains(streamUrl) || iptvStrictTsUrls.size >= 2
+            iptvStrictTsUrls.contains(streamUrl) || iptvStrictTsUrls.size >= 2 ||
+            streamUrl == iptvTwinTrialUrl ||
+            iptvTwinPreferredUrls.containsValue(streamUrl)
         iptvTuneDiagnostics.onTuneStart(
             entry.name,
             streamUrl,
@@ -11657,7 +12112,9 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         currentIptvStreamUrl = null
 
         if (!isStremioIptvUrl(entry.url)) {
-            setIptvMediaItem(entry, entry.url)
+            // A channel whose `.m3u8` wedged and whose `.ts` twin proved
+            // itself this session starts on the twin directly.
+            setIptvMediaItem(entry, iptvTwinPreferredUrls[entry.url] ?: entry.url)
             return
         }
 
@@ -13740,6 +14197,80 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         MainActivity.getAndroidTvPlayerChannel()?.invokeMethod("torrentPlaybackFinished", null)
     }
 
+    /** The guide episode adjacent to the current item (specials excluded). */
+    private fun guideAdjacent(model: PlaybackPayload, currentItem: PlaybackItem?, direction: Int): SeasonEpisode? {
+        val s = currentItem?.season ?: return null
+        val e = currentItem.episode ?: return null
+        val eps = model.guideEpisodes
+            .filter { it.season > 0 }
+            .sortedWith(compareBy({ it.season }, { it.episode }))
+        if (eps.isEmpty()) return null
+        val idx = eps.indexOfFirst { it.season == s && it.episode == e }
+        if (idx < 0) return null
+        val t = idx + direction
+        if (t < 0 || t >= eps.size) return null
+        return SeasonEpisode(eps[t].season, eps[t].episode)
+    }
+
+    private var episodeFetchInFlight = false
+
+    /** In-player quick play of an episode that isn't in the playlist: asks
+     * Flutter to find + resolve a source (existing packs → episode fetch →
+     * pack fetch) and swaps playlists in place — no activity relaunch. */
+    private fun requestEpisodeFetch(season: Int, episode: Int) {
+        if (episodeFetchInFlight) return
+        val label = String.format(java.util.Locale.US, "S%02dE%02d", season, episode)
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        if (channel == null) {
+            showStatusPillTransient("Couldn't fetch $label")
+            return
+        }
+        episodeFetchInFlight = true
+        val token = ++stremioResolutionToken
+        showStatusPillTransient("Fetching $label…")
+        channel.invokeMethod(
+            "requestEpisodeFetch",
+            hashMapOf<String, Any>("season" to season, "episode" to episode),
+            object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        if (token != stremioResolutionToken) return@runOnUiThread
+                        val map = result as? Map<*, *>
+                        val items = map?.get("items") as? List<*>
+                        val fetchedSourceIndex = (map?.get("sourceIndex") as? Number)?.toInt()
+                        if (map == null || items.isNullOrEmpty() || fetchedSourceIndex == null) {
+                            showStatusPillTransient("No playable source found for $label")
+                            return@runOnUiThread
+                        }
+                        adoptSourceList(map)
+                        switchToSourcePlaylist(
+                            fetchedSourceIndex,
+                            items,
+                            targetSeason = season,
+                            targetEpisode = episode,
+                        )
+                    }
+                }
+
+                override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        if (token != stremioResolutionToken) return@runOnUiThread
+                        showStatusPillTransient("No playable source found for $label")
+                    }
+                }
+
+                override fun notImplemented() {
+                    runOnUiThread {
+                        episodeFetchInFlight = false
+                        showStatusPillTransient("Couldn't fetch $label")
+                    }
+                }
+            }
+        )
+    }
+
     private fun requestQuickPlayNextEpisode(imdbId: String, season: Int, episode: Int) {
         android.util.Log.d("AndroidTvPlayer", "Requesting Quick Play next episode after S${season}E${episode} for $imdbId")
         MainActivity.getAndroidTvPlayerChannel()?.invokeMethod(
@@ -14110,6 +14641,122 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         sourceBrowser?.render()
     }
 
+    /** Per-addon fetch from the source browser: episode results first — the
+     * response merges them into the list AND says whether they carried
+     * torrent magnets (probePacks). Only then does the lazy season-pack probe
+     * run as a SECOND call, so direct links render the moment they arrive. */
+    private fun requestAddonTorrentSources(groupId: String) {
+        // Every addon sharing this group's name — same-named addons collapse
+        // into one group (results only carry the name), so the fetch asks all.
+        val addonIds = sourceAddons.filter { it.sourceKey == groupId }.map { it.id }
+        if (addonIds.isEmpty()) return
+        if (addonFetchState[groupId] == "fetching") return
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        if (channel == null) {
+            sourceBrowser?.showError("Couldn't fetch — try again")
+            return
+        }
+        addonFetchState[groupId] = "fetching"
+        sourceBrowser?.render()
+        val curItem = payload?.items?.getOrNull(currentIndex)
+        channel.invokeMethod(
+            "requestAddonTorrentSources",
+            hashMapOf<String, Any?>(
+                "addonIds" to addonIds,
+                "mode" to "episodes",
+                "season" to curItem?.season,
+                "episode" to curItem?.episode,
+            ),
+            object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    runOnUiThread {
+                        applyAddonEpisodeSources(groupId, result as? Map<*, *>, curItem?.season)
+                    }
+                }
+
+                override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                    runOnUiThread { failAddonFetch(groupId) }
+                }
+
+                override fun notImplemented() {
+                    runOnUiThread { failAddonFetch(groupId) }
+                }
+            }
+        )
+    }
+
+    private fun applyAddonEpisodeSources(groupId: String, map: Map<*, *>?, season: Int?) {
+        if (map == null) {
+            failAddonFetch(groupId)
+            return
+        }
+        addonFetchState[groupId] = "fetched"
+        adoptSourceList(map)
+        // Only the ids whose own episode results carried a magnet get the
+        // pack probe — the response names them; empty = nothing to probe.
+        val packIds = (map["packAddonIds"] as? List<*>)?.filterIsInstance<String>().orEmpty()
+        if (packIds.isEmpty()) {
+            sourceBrowser?.render()
+            return
+        }
+        addonPackProbing.add(groupId)
+        sourceBrowser?.render()
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        if (channel == null) {
+            addonPackProbing.remove(groupId)
+            sourceBrowser?.render()
+            return
+        }
+        channel.invokeMethod(
+            "requestAddonTorrentSources",
+            hashMapOf<String, Any?>("addonIds" to packIds, "mode" to "packs", "season" to season),
+            object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    runOnUiThread {
+                        addonPackProbing.remove(groupId)
+                        adoptSourceList(result as? Map<*, *>)
+                        sourceBrowser?.render()
+                    }
+                }
+
+                override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                    runOnUiThread {
+                        addonPackProbing.remove(groupId)
+                        sourceBrowser?.render()
+                    }
+                }
+
+                override fun notImplemented() {
+                    runOnUiThread {
+                        addonPackProbing.remove(groupId)
+                        sourceBrowser?.render()
+                    }
+                }
+            }
+        )
+    }
+
+    private fun failAddonFetch(groupId: String) {
+        addonFetchState[groupId] = "failed"
+        sourceBrowser?.render()
+    }
+
+    /** Adopt a full replacement source list from a per-addon fetch response —
+     * the same append-only swap [applyMoreTorrentSources] performs. */
+    private fun adoptSourceList(map: Map<*, *>?) {
+        val newSources = (map?.get("stremioSources") as? List<*>) ?: return
+        if (newSources.isEmpty()) return
+        stremioSources.clear()
+        for ((idx, src) in newSources.withIndex()) {
+            val srcMap = src as? Map<*, *> ?: continue
+            stremioSources.add(StremioSource.fromMap(srcMap, idx))
+        }
+        currentStremioSourceIndex = currentStremioSourceIndex
+            .coerceIn(0, stremioSources.lastIndex.coerceAtLeast(0))
+        updateStremioQualityBadge()
+        unifiedMenu?.render()
+    }
+
     private fun failMoreTorrentSources(alreadyCleared: Boolean = false) {
         if (!alreadyCleared) moreSourcesLoadingMode = null
         if (sourceBrowser?.isVisible == true) {
@@ -14121,17 +14768,27 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         sourceBrowser?.render()
     }
 
-    private fun switchToSourcePlaylist(sourceIndex: Int, rawItems: List<*>) {
-        android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist: sourceIndex=$sourceIndex, rawItems=${rawItems.size}")
+    private fun switchToSourcePlaylist(
+        sourceIndex: Int,
+        rawItems: List<*>,
+        targetSeason: Int? = null,
+        targetEpisode: Int? = null,
+    ) {
+        android.util.Log.d("AndroidTvPlayer", "switchToSourcePlaylist: sourceIndex=$sourceIndex, rawItems=${rawItems.size}, target=S${targetSeason}E${targetEpisode}")
 
         val model = payload ?: return
 
         // Capture playback position + current item identity so the new source
         // resumes the same content instead of restarting from the beginning.
+        // An explicit episode-guide target is different content: land there
+        // instead, and never carry the current position onto it.
         val resumePositionMs = (player?.currentPosition ?: 0L).coerceAtLeast(0L)
         val currentItem = model.items.getOrNull(currentIndex)
-        val resumeSeason = currentItem?.season
-        val resumeEpisode = currentItem?.episode
+        val explicitTarget = targetSeason != null && targetEpisode != null
+        val resumeSeason = targetSeason ?: currentItem?.season
+        val resumeEpisode = targetEpisode ?: currentItem?.episode
+        val sameContent = !explicitTarget ||
+            (targetSeason == currentItem?.season && targetEpisode == currentItem?.episode)
 
         // Parse metadata entry (first item with __meta__ flag)
         var contentType = model.contentType
@@ -14187,14 +14844,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         var matchedSameContent = false
         if (newItems.size == 1) {
             targetIndex = 0
-            matchedSameContent = true
+            matchedSameContent = sameContent
         } else if (resumeSeason != null && resumeEpisode != null) {
             val matched = newItems.indexOfFirst {
                 it.season == resumeSeason && it.episode == resumeEpisode
             }
             if (matched >= 0) {
                 targetIndex = matched
-                matchedSameContent = true
+                matchedSameContent = sameContent
             } else {
                 // The exact episode isn't in this source. Do NOT fall back to
                 // file 0 — in torrent order that's often an extras/bonus clip
@@ -14528,6 +15185,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             movieMoreSources = obj.optBoolean("movieMoreSources", false)
             movieSourcesFetched = obj.optBoolean("movieSourcesFetched", true)
             moreSourcesLoadingMode = null
+            // Per-addon placeholder groups. Parsed unconditionally so a
+            // relaunch/next-episode payload can never inherit stale addons.
+            sourceAddons = obj.optJSONArray("sourceAddons")?.let { arr ->
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val a = arr.optJSONObject(i) ?: continue
+                        val id = a.optString("id")
+                        val key = a.optString("sourceKey")
+                        if (id.isNotEmpty() && key.isNotEmpty()) {
+                            add(TvSourceAddon(id, a.optString("name", id), key))
+                        }
+                    }
+                }
+            } ?: emptyList()
+            addonFetchState.clear()
+            addonPackProbing.clear()
             locallyCompletedItemIndices.clear()
 
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
@@ -14571,7 +15244,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             val liveEntry = if (isIptvMode) {
                 iptvChannels.getOrNull(currentIptvIndex)?.takeIf { it.isLive }
             } else null
-            if (liveEntry != null &&
+            // A trial onStop abandoned mid-verdict: re-tune the original HLS
+            // stream instead of resuming (or live-edge-rejoining) the
+            // unjudged twin. A full tune, so player, identity, machine and
+            // diagnostics all agree again; it re-tunes to the live edge, so
+            // it subsumes the >30s rejoin too.
+            if (liveEntry != null && restoreParkedIptvTwinIfNeeded()) {
+                // Restored and started by setIptvMediaItem.
+            } else if (liveEntry != null &&
                 iptvStoppedAtRealtime > 0L &&
                 awayMs > IPTV_LIVE_REJOIN_AFTER_MS
             ) {
@@ -14596,6 +15276,14 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         finalizeIptvRecordingIfActive()
         // A recovery in flight must not fight the pause below (its re-tunes
         // set playWhenReady=true); onStart's rejoin re-arms recovery anyway.
+        // The twin trial goes with it — its timeout re-tunes too, and firing
+        // one while backgrounded would restart playback under the pause. An
+        // UNJUDGED twin must not survive as the channel's identity either:
+        // park its original for onStart to restore FOR REAL (media item, not
+        // just the bookkeeping field — the two disagreeing would misroute
+        // error attribution, recording eligibility and diagnostics on a
+        // quick resume).
+        if (!parkIptvTwinTrialRestore()) clearIptvTwinTrial()
         iptvLiveRecovery.cancel()
         hideIptvReconnectPill()
         iptvStoppedAtRealtime = SystemClock.elapsedRealtime()
@@ -14704,6 +15392,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         iptvTuneDiagnostics.onSessionEnd()
+        clearIptvTwinTrial()
         iptvLiveRecovery.cancel()
         iptvNetworkCallback?.let {
             try {
@@ -15673,6 +16362,21 @@ private data class PlaybackPayload(
     val localCompletionTracking: Boolean = false,
     val movieCompletionThreshold: Int = 80,
     val episodeCompletionThreshold: Int = 80,
+    // Full-show episode guide (TVMaze), delivered post-launch via the
+    // metadata broadcast: every episode of the show, present in the
+    // playlist or not. Empty until (unless) the fetch lands.
+    val guideEpisodes: MutableList<GuideEpisode> = mutableListOf(),
+)
+
+/** One episode of the show's full TVMaze list, for the episode guide. */
+private data class GuideEpisode(
+    val season: Int,
+    val episode: Int,
+    val title: String?,
+    val artwork: String?,
+    val description: String?,
+    val rating: Double?,
+    val runtime: Int?,
 )
 
 private data class PlaybackItem(
@@ -15786,18 +16490,23 @@ private data class SeasonEpisode(
 private sealed class PlaylistListItem {
     data class SeasonHeader(val season: Int, val episodeCount: Int) : PlaylistListItem()
     data class Episode(val itemIndex: Int) : PlaylistListItem()
+    // Full-guide mode: an episode of the show that is NOT in the playlist —
+    // rendered dimmed; clicking it fetches the episode in-player.
+    data class MissingEpisode(val guideIndex: Int) : PlaylistListItem()
 }
 
 private class PlaylistAdapter(
     private val items: List<PlaybackItem>,
-    private val onItemClick: (Int) -> Unit
+    private val guide: List<GuideEpisode> = emptyList(),
+    private val onFetchEpisode: ((Int, Int) -> Unit)? = null,
+    private val onItemClick: (Int) -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), PlaylistOverlayAdapter {
     private var activeItemIndex = -1
     private val listItems = mutableListOf<PlaylistListItem>()
     private var selectedSeason: Int? = null
 
     val availableSeasons: List<Int> by lazy {
-        items.mapNotNull { it.season }.distinct().sorted()
+        (items.mapNotNull { it.season } + guide.map { it.season }).distinct().sorted()
     }
 
     init {
@@ -15814,9 +16523,11 @@ private class PlaylistAdapter(
     private fun buildList(filterSeason: Int?) {
         listItems.clear()
 
-        // Group episodes by season
+        // Group episodes by season; in full-guide mode the seasons and rows
+        // are the union of the playlist and the show's TVMaze episode list.
         val grouped = items.groupBy { it.season ?: 0 }
-        val sortedSeasons = grouped.keys.sorted()
+        val guideGrouped = guide.groupBy { it.season }
+        val sortedSeasons = (grouped.keys + guideGrouped.keys).distinct().sorted()
 
         for (season in sortedSeasons) {
             // Skip seasons that don't match filter
@@ -15824,20 +16535,41 @@ private class PlaylistAdapter(
                 continue
             }
 
-            val episodesInSeason = grouped[season] ?: continue
+            val episodesInSeason = grouped[season] ?: emptyList()
+            val guideInSeason = (guideGrouped[season] ?: emptyList()).sortedBy { it.episode }
 
-            // Don't show season header when filtering (tabs show the season)
-            // Only show header when showing all seasons
-            if (filterSeason == null && season > 0) {
-                listItems.add(PlaylistListItem.SeasonHeader(season, episodesInSeason.size))
+            // Guide order first: playlist row when present, fetchable
+            // placeholder when not. Playlist files the guide doesn't know
+            // about keep showing after them, in episode order.
+            val rows = mutableListOf<PlaylistListItem>()
+            val usedIndices = mutableSetOf<Int>()
+            for (g in guideInSeason) {
+                val matchIdx = items.indexOfFirst {
+                    (it.season ?: 0) == season && it.episode == g.episode
+                }
+                if (matchIdx >= 0) {
+                    rows.add(PlaylistListItem.Episode(matchIdx))
+                    usedIndices.add(matchIdx)
+                } else {
+                    rows.add(PlaylistListItem.MissingEpisode(guide.indexOf(g)))
+                }
             }
-
             // Sort episodes by episode number (integer comparison to avoid "1", "10", "11", "2" string sorting)
             val sortedEpisodes = episodesInSeason.sortedBy { it.episode ?: 0 }
             for (episode in sortedEpisodes) {
                 val originalIndex = items.indexOf(episode)
-                listItems.add(PlaylistListItem.Episode(originalIndex))
+                if (originalIndex in usedIndices) continue
+                rows.add(PlaylistListItem.Episode(originalIndex))
             }
+
+            if (rows.isEmpty()) continue
+
+            // Don't show season header when filtering (tabs show the season)
+            // Only show header when showing all seasons
+            if (filterSeason == null && season > 0) {
+                listItems.add(PlaylistListItem.SeasonHeader(season, rows.size))
+            }
+            listItems.addAll(rows)
         }
     }
 
@@ -15845,6 +16577,7 @@ private class PlaylistAdapter(
         return when (listItems[position]) {
             is PlaylistListItem.SeasonHeader -> VIEW_TYPE_HEADER
             is PlaylistListItem.Episode -> VIEW_TYPE_EPISODE
+            is PlaylistListItem.MissingEpisode -> VIEW_TYPE_EPISODE
         }
     }
 
@@ -15873,6 +16606,29 @@ private class PlaylistAdapter(
                 val item = items[itemIndex]  // Fetch current item from items list
                 val isActive = itemIndex == activeItemIndex
                 (holder as EpisodeViewHolder).bind(item, itemIndex, isActive)
+            }
+            is PlaylistListItem.MissingEpisode -> {
+                val g = guide[listItem.guideIndex]
+                val synthetic = PlaybackItem(
+                    id = "guide_${g.season}_${g.episode}",
+                    title = g.title ?: "Episode ${g.episode}",
+                    url = "",
+                    index = -1,
+                    season = g.season,
+                    episode = g.episode,
+                    artwork = g.artwork,
+                    description = g.description,
+                    resumePositionMs = 0,
+                    durationMs = (g.runtime ?: 0) * 60_000L,
+                    updatedAt = 0,
+                    resumeId = null,
+                    sizeBytes = null,
+                    rating = g.rating,
+                    provider = null,
+                )
+                (holder as EpisodeViewHolder).bindMissing(synthetic) {
+                    onFetchEpisode?.invoke(g.season, g.episode)
+                }
             }
         }
     }
@@ -15987,6 +16743,9 @@ private class PlaylistAdapter(
         private var pulseAnimator: android.animation.ObjectAnimator? = null
 
         fun bind(item: PlaybackItem, itemIndex: Int, isActive: Boolean) {
+            // Recycled views may come back from a dimmed missing-episode row.
+            itemView.alpha = 1.0f
+
             // Episode badge with cleaner format
             val seasonNum = item.season
             val episodeNum = item.episode
@@ -16111,6 +16870,13 @@ private class PlaylistAdapter(
                     focusBorder?.visibility = View.GONE
                 }
             }
+        }
+
+        /** Absent guide episode: dimmed, and the click fetches instead of playing. */
+        fun bindMissing(item: PlaybackItem, onFetch: () -> Unit) {
+            bind(item, itemIndex = -1, isActive = false)
+            itemView.alpha = 0.55f
+            itemView.setOnClickListener { onFetch() }
         }
 
         fun updateProgress(item: PlaybackItem, isActive: Boolean) {

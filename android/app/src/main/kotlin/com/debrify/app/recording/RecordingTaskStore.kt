@@ -86,6 +86,9 @@ object RecordingTaskStore {
 					"recordings",
 					entry.connectionResourceId,
 					entry.resourceAuthorizationRevision,
+					// Entries carry start-time revisions and are re-persisted
+					// throughout the capture — see the projection's drift note.
+					allowRevisionDrift = true,
 				)
 			) throw SecurityException("Recording profile authorization changed")
 			val map = loadJson(context)

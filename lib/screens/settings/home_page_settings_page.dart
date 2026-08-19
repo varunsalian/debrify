@@ -35,6 +35,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
   int _ambientTrailerVolume = 70;
   bool _tvTrailerUnderlayEnabled = true;
   String _tvHomeStyle = 'canvas';
+  HomeCardOrientation _homeCardOrientation =
+      HomeCardOrientation.landscape;
   HomeHeroSource _heroSource = (mode: HomeHeroSourceMode.random, ids: []);
   List<StremioAddon> _addons = [];
 
@@ -163,6 +165,8 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
       final tvTrailerUnderlayEnabled =
           await StorageService.getTvTrailerUnderlayEnabled();
       final tvHomeStyle = await StorageService.getTvHomeStyle();
+      final spotlightCardOrientation =
+          await StorageService.getHomeCardOrientation();
       final heroSource = await StorageService.getHomeHeroSource();
 
       // Only the two views that the current Home screen can render are valid.
@@ -193,6 +197,7 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
         _ambientTrailerVolume = ambientTrailerVolume;
         _tvTrailerUnderlayEnabled = tvTrailerUnderlayEnabled;
         _tvHomeStyle = tvHomeStyle;
+        _homeCardOrientation = spotlightCardOrientation;
         _heroSource = heroSource;
         _loading = false;
       });
@@ -248,6 +253,23 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to save setting: $e')));
       }
+    }
+  }
+
+  Future<void> _setHomeLandscapeCards(bool enabled) async {
+    final orientation = enabled
+        ? HomeCardOrientation.landscape
+        : HomeCardOrientation.portrait;
+    try {
+      await StorageService.setHomeCardOrientation(orientation);
+      if (!mounted) return;
+      setState(() => _homeCardOrientation = orientation);
+      MainPageBridge.notifyHomeSettingsChanged();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save setting: $e')),
+      );
     }
   }
 
@@ -385,6 +407,21 @@ class _HomePageSettingsPageState extends State<HomePageSettingsPage> {
                       tag: 'SPOTLIGHT',
                       enabled: _spotlightLayoutActive,
                       onTap: _openSpotlightHeroSource,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SettingsSection(
+                  title: 'Home Cards',
+                  children: [
+                    SettingsToggleTile(
+                      icon: Icons.view_carousel_rounded,
+                      title: 'Landscape Cards',
+                      subtitle:
+                          'Use wide 16:9 artwork instead of portrait posters',
+                      value: _homeCardOrientation ==
+                          HomeCardOrientation.landscape,
+                      onChanged: _setHomeLandscapeCards,
                     ),
                   ],
                 ),

@@ -1512,6 +1512,10 @@ class _IptvSettingsPageState extends State<IptvSettingsPage>
       password: playlist.isXtreamCodes ? result.password : playlist.password,
       epgUrl: epg.isEmpty ? null : epg,
       addedAt: playlist.addedAt,
+      connectionResourceId: playlist.connectionResourceId,
+      connectionResourceRevision: playlist.connectionResourceRevision,
+      connectionReadOnly: playlist.connectionReadOnly,
+      credentialsRedacted: playlist.credentialsRedacted,
     );
 
     // Drop the stale caches when the source changed so the next load doesn't

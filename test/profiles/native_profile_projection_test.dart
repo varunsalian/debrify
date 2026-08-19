@@ -305,6 +305,37 @@ void main() {
     );
     expect(addons.single['base_url'], 'https://subtitles.invalid/config');
     expect(addons.single['resources'], isEmpty);
+    expect(addons.single['needs_manifest_hydration'], isTrue);
+  });
+
+  test('does not hydrate complete non-subtitle addons', () async {
+    final actor = await ProfileAuthorizationContext.capture(registry);
+    await ConnectionResourceService(registry: registry, cipher: cipher).create(
+      context: actor,
+      type: ConnectionResourceType.stremioAddon,
+      label: 'Cinemeta',
+      publicConfig: const <String, dynamic>{'addonName': 'Cinemeta'},
+      secretConfig: const <String, dynamic>{
+        'id': 'com.stremio.cinemeta',
+        'name': 'Cinemeta',
+        'manifest_url': 'https://v3-cinemeta.strem.io/manifest.json',
+        'base_url': 'https://v3-cinemeta.strem.io',
+        'resources': <String>['catalog', 'meta'],
+        'types': <String>['movie', 'series'],
+        'enabled': true,
+      },
+    );
+
+    await NativeProfileProjection.publish(scope);
+
+    final prefs = await SharedPreferences.getInstance();
+    final projection =
+        jsonDecode(prefs.getString(NativeProfileProjection.deviceKey)!)
+            as Map<String, dynamic>;
+    final values = projection['values'] as Map<String, dynamic>;
+    final addons = jsonDecode(values['stremio_addons_v1'] as String) as List;
+    expect(addons.single['resources'], isNot(contains('subtitles')));
+    expect(addons.single['needs_manifest_hydration'], isFalse);
   });
 
   test(

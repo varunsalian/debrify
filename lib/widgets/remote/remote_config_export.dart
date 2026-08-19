@@ -541,7 +541,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
           ConfigCommand.webDav,
           targetIp,
           configData: jsonEncode([
-            for (final server in servers) server.toJson(),
+            for (final server in servers) server.toTransferJson(),
           ]),
         );
       });
@@ -558,7 +558,7 @@ class _RemoteConfigExportState extends State<RemoteConfigExport> {
             ConfigCommand.indexerManagers,
             targetIp,
             configData: jsonEncode([
-              for (final manager in managers) manager.toJson(),
+              for (final manager in managers) manager.toTransferJson(),
             ]),
           );
         },

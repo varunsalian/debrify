@@ -14,6 +14,39 @@ import 'profiles/profile_async_authorization.dart';
 import '../models/profiles/connection_resource.dart';
 import '../models/profiles/profile_policy.dart';
 
+/// One addon's outcome for a single stream search — drives the source list's
+/// per-addon status strip, which shows EVERY applicable addon including the
+/// ones that failed or returned nothing (the count maps alone lose zero-count
+/// addons once counts are rebuilt from the final rows).
+///
+/// [sourceKey] matches `Torrent.source` (`stremio:<name>` lowercased);
+/// [count] is the addon's RAW stream count before cross-addon dedupe, so
+/// "returned something that deduped away" still reads as activity.
+class AddonSearchStatus {
+  final String addonId;
+  final String name;
+  final String sourceKey;
+  final int count;
+  final String? error;
+
+  const AddonSearchStatus({
+    required this.addonId,
+    required this.name,
+    required this.sourceKey,
+    required this.count,
+    this.error,
+  });
+
+  bool get failed => error != null;
+
+  AddonSearchStatus withResult(int count) => AddonSearchStatus(
+    addonId: addonId,
+    name: name,
+    sourceKey: sourceKey,
+    count: count,
+  );
+}
+
 class StremioAddonImportResult {
   final int discovered;
   final int imported;
@@ -247,10 +280,12 @@ class StremioService {
           // the (network-long) hydration can never publish under the new
           // profile's scope.
           try {
-            return await _saveAddons(
-              addons,
-              initiatingAuthorization: authorization,
-            );
+            await _saveAddons(addons, initiatingAuthorization: authorization);
+            // _saveAddons reads the complete settings inventory back so its
+            // management callers retain disabled rows. Re-read through the
+            // execution path here; a playback caller must never receive that
+            // settings representation (including redacted shared addons).
+            return await getAddons();
           } catch (_) {
             debugPrint(
               'StremioService: could not persist hydrated addons; '
@@ -287,6 +322,45 @@ class StremioService {
       _addonsCache = [];
       return [];
     }
+  }
+
+  /// Returns a complete collection suitable for mutations and identity
+  /// checks. Settings reads retain disabled rows but redact borrowed addon
+  /// secrets; executable reads contain usable identities for enabled shared
+  /// rows. Merge the two by stable connection-resource identity.
+  Future<List<StremioAddon>> getAddonsForManagement() async {
+    final authorization = await ProfileAsyncAuthorization.capture(
+      ProfileFeature.addonUse,
+    );
+    final settings = await getAddons(forSettings: true);
+    if (!ProfileCollectionResourceFacade.active) return settings;
+
+    final executable = await getAddons();
+    if (authorization != null && !authorization.isCurrentlyActive) {
+      throw StateError('Profile session changed while loading addons');
+    }
+    final executableByResourceId = <String, StremioAddon>{
+      for (final addon in executable)
+        if (addon.connectionResourceId case final resourceId?)
+          resourceId: addon,
+    };
+    final merged = <StremioAddon>[];
+    final seenResourceIds = <String>{};
+    for (final addon in settings) {
+      final resourceId = addon.connectionResourceId;
+      final usable = resourceId == null
+          ? addon
+          : executableByResourceId[resourceId] ?? addon;
+      merged.add(usable);
+      if (resourceId != null) seenResourceIds.add(resourceId);
+    }
+    for (final addon in executable) {
+      final resourceId = addon.connectionResourceId;
+      if (resourceId == null || seenResourceIds.add(resourceId)) {
+        merged.add(addon);
+      }
+    }
+    return merged;
   }
 
   /// Id prefix marking a placeholder written for a restored addon whose
@@ -405,6 +479,10 @@ class StremioService {
                 sourceResourceId: addon.connectionResourceId,
               ),
           ],
+          // Collection saves must read disabled entries back too: settings are
+          // profile-local and a disabled resource is still part of the saved
+          // collection (and may be returned to the management caller).
+          forSettings: true,
         );
         return rows.map(StremioAddon.fromJson).toList(growable: false);
       } else {
@@ -424,7 +502,11 @@ class StremioService {
         throw StateError('Profile session changed before addon publication');
       }
     }
-    _addonsCache = saved;
+    // [saved] is the settings representation because management callers need
+    // disabled rows. It may also contain redacted borrowed rows, so it must
+    // never seed the executable cache; the next playback read rebuilds that
+    // cache from an authorized use-mode read.
+    _addonsCache = null;
     // Addon set changed — drop recommendation caches so a title viewed
     // before installing a "Watch Next"-style addon picks it up without an
     // app restart (and a removed addon stops contributing).
@@ -449,7 +531,9 @@ class StremioService {
     manifestUrl = _normalizeManifestUrl(manifestUrl);
 
     // Check if already exists
-    final existingAddons = await getAddons();
+    // This mutates the installed collection, so it must consider disabled
+    // entries too. The normal read path is deliberately playback-filtered.
+    final existingAddons = await getAddonsForManagement();
     final existing = existingAddons.where((a) => a.manifestUrl == manifestUrl);
     if (existing.isNotEmpty) {
       throw Exception('Addon already exists: ${existing.first.name}');
@@ -508,7 +592,11 @@ class StremioService {
       throw Exception('No Stremio addon descriptors were found in this JSON.');
     }
 
-    final addons = replaceExisting ? <StremioAddon>[] : await getAddons();
+    // Imports deduplicate against the complete installed collection, not just
+    // the enabled playback subset.
+    final addons = replaceExisting
+        ? <StremioAddon>[]
+        : await getAddonsForManagement();
     final knownUrlVariants = <String>{
       for (final addon in addons) ..._duplicateUrlVariants(addon.manifestUrl),
     };
@@ -607,7 +695,8 @@ class StremioService {
     final authorization = await ProfileAsyncAuthorization.capture(
       ProfileFeature.addonsAndEngines,
     );
-    final addons = await getAddons();
+    // A disabled addon remains installed and must still be removable.
+    final addons = await getAddonsForManagement();
     StremioAddon? target;
     for (final addon in addons) {
       if (addon.manifestUrl == manifestUrl) {
@@ -685,27 +774,42 @@ class StremioService {
       ProfileFeature.addonsAndEngines,
     );
     try {
-      final addons = await getAddons();
+      // Refresh is a management operation; disabled addons still have a
+      // manifest and remain eligible for an explicit update.
+      final addons = await getAddonsForManagement();
       final index = addons.indexWhere((a) => a.manifestUrl == manifestUrl);
       if (index >= 0) {
-        if (!addons[index].canManage) {
+        final old = addons[index];
+        if (!old.canManage) {
           throw const ResourceAuthorizationException(
             'A shared addon can only be managed by its owner',
           );
         }
         final newManifest = await fetchManifest(manifestUrl);
-        // Preserve enabled state
+        // Preserve the profile resource provenance alongside user-owned state.
+        // A fresh manifest has no connection-resource metadata, and dropping
+        // it would make _saveAddons treat this as a new resource.
         addons[index] = newManifest.copyWith(
-          enabled: addons[index].enabled,
-          addedAt: addons[index].addedAt,
+          enabled: old.enabled,
+          addedAt: old.addedAt,
+          connectionResourceId: old.connectionResourceId,
+          connectionResourceRevision: old.connectionResourceRevision,
+          connectionResourceReadOnly: old.connectionResourceReadOnly,
+          connectionResourceCredentialsRedacted:
+              old.connectionResourceCredentialsRedacted,
         );
         final saved = await _saveAddons(
           addons,
           initiatingAuthorization: authorization,
         );
-        return saved.singleWhere(
-          (item) => item.manifestUrl == newManifest.manifestUrl,
-        );
+        final resourceId = old.connectionResourceId;
+        return resourceId == null
+            ? saved.singleWhere(
+                (item) => item.manifestUrl == newManifest.manifestUrl,
+              )
+            : saved.singleWhere(
+                (item) => item.connectionResourceId == resourceId,
+              );
       }
       return null;
     } catch (_) {
@@ -721,7 +825,8 @@ class StremioService {
     final authorization = await ProfileAsyncAuthorization.capture(
       ProfileFeature.addonsAndEngines,
     );
-    final addons = await getAddons();
+    // "Update all" means every installed addon, including disabled ones.
+    final addons = await getAddonsForManagement();
     var updated = 0;
     var unchanged = 0;
     var failed = 0;
@@ -736,7 +841,17 @@ class StremioService {
       }
       try {
         final fresh = await fetchManifest(old.manifestUrl);
-        addons[i] = fresh.copyWith(enabled: old.enabled, addedAt: old.addedAt);
+        // Keep the existing connection resource as the replacement source.
+        // This is essential for disabled addons and shared resource handling.
+        addons[i] = fresh.copyWith(
+          enabled: old.enabled,
+          addedAt: old.addedAt,
+          connectionResourceId: old.connectionResourceId,
+          connectionResourceRevision: old.connectionResourceRevision,
+          connectionResourceReadOnly: old.connectionResourceReadOnly,
+          connectionResourceCredentialsRedacted:
+              old.connectionResourceCredentialsRedacted,
+        );
         if (fresh.version != old.version) {
           updated++;
           updatedNames.add(old.name);
@@ -883,37 +998,14 @@ class StremioService {
         'torrents': <Torrent>[],
         'addonCounts': addonCounts,
         'addonErrors': addonErrors,
+        'addonStatuses': const <AddonSearchStatus>[],
       };
     }
 
     // Filter addons that support the content type AND the content ID prefix
-    final applicableAddons = addons.where((a) {
-      // Check content type support. An addon that declares NO types is treated
-      // as unrestricted — the same rule the `else` branch below already used,
-      // and the one Stremio itself follows. Without it, movie and series were
-      // the only queries that could silently drop an addon for saying nothing.
-      // "Saying nothing" is common, not exotic: manifests that use the
-      // object form of `resources` put their types inside the resource and
-      // leave the top level empty (StremThru Torz does), and fromManifest
-      // deliberately leaves those unread — hoisting them would narrow the
-      // filters that treat empty as unrestricted. Fixing it HERE also rescues
-      // addons already stored with empty types, with no re-add needed.
-      bool supportsType = true;
-      if (type == 'movie') {
-        supportsType = a.supportsMovies || a.types.isEmpty;
-      } else if (type == 'series') {
-        supportsType = a.supportsSeries || a.types.isEmpty;
-      }
-      // For other types (anime, tv, channel, etc.), allow if addon declares that type
-      else {
-        supportsType = a.types.contains(type) || a.types.isEmpty;
-      }
-
-      // Check if addon supports the content ID prefix (smart routing)
-      final supportsId = a.supportsContentId(imdbId);
-
-      return supportsType && supportsId;
-    }).toList();
+    final applicableAddons = addons
+        .where((a) => _isApplicable(a, type, imdbId))
+        .toList();
 
     if (applicableAddons.isEmpty) {
       final prefix = StremioAddon.extractIdPrefix(imdbId);
@@ -924,6 +1016,7 @@ class StremioService {
         'torrents': <Torrent>[],
         'addonCounts': addonCounts,
         'addonErrors': addonErrors,
+        'addonStatuses': const <AddonSearchStatus>[],
       };
     }
 
@@ -933,7 +1026,7 @@ class StremioService {
         type == 'series' && season == null && episode == null;
 
     if (needsSmartFallback) {
-      return _searchStreamsWithSmartFallback(
+      final result = await _searchStreamsWithSmartFallback(
         applicableAddons: applicableAddons,
         imdbId: imdbId,
         availableSeasons: availableSeasons,
@@ -941,6 +1034,12 @@ class StremioService {
         addonErrors: addonErrors,
         timeout: timeout,
         preserveOrder: preserveOrder,
+      );
+      return _withAddonStatuses(
+        result,
+        applicableAddons,
+        addonCounts,
+        addonErrors,
       );
     }
 
@@ -983,11 +1082,142 @@ class StremioService {
       preserveOrder: preserveOrder,
     );
 
-    return {
+    return _withAddonStatuses({
       'torrents': torrents,
       'addonCounts': addonCounts,
       'addonErrors': addonErrors,
-    };
+    }, applicableAddons, addonCounts, addonErrors);
+  }
+
+  /// Whether [addon] would be queried for [type]/[contentId] — the stream
+  /// search's applicability rule, shared with [applicableStreamingAddons].
+  ///
+  /// An addon that declares NO types is treated as unrestricted — the same
+  /// rule Stremio itself follows. "Saying nothing" is common, not exotic:
+  /// manifests that use the object form of `resources` put their types inside
+  /// the resource and leave the top level empty (StremThru Torz does), and
+  /// fromManifest deliberately leaves those unread — hoisting them would
+  /// narrow the filters that treat empty as unrestricted. Handling it HERE
+  /// also rescues addons already stored with empty types, with no re-add
+  /// needed.
+  bool _isApplicable(StremioAddon a, String type, String contentId) {
+    bool supportsType = true;
+    if (type == 'movie') {
+      supportsType = a.supportsMovies || a.types.isEmpty;
+    } else if (type == 'series') {
+      supportsType = a.supportsSeries || a.types.isEmpty;
+    } else {
+      // Other types (anime, tv, channel, etc.): allow if declared.
+      supportsType = a.types.contains(type) || a.types.isEmpty;
+    }
+    return supportsType && a.supportsContentId(contentId);
+  }
+
+  /// The enabled streaming addons a search for [type]/[contentId] would
+  /// query — public so the players' source sheets can show EVERY applicable
+  /// addon as a group, zero-result and failed ones included.
+  Future<List<StremioAddon>> applicableStreamingAddons({
+    required String type,
+    required String contentId,
+  }) async {
+    final addons = await getStreamingAddons();
+    return [
+      for (final addon in addons)
+        if (_isApplicable(addon, type, contentId)) addon,
+    ];
+  }
+
+  /// Season packs from ONE addon — the lazy half of the sheets' per-addon
+  /// fetch, run only after its episode results proved it serves torrents.
+  /// A bare-id fetch plus a single S{season}E1 probe (the multi-season probe
+  /// ladder belongs to the full search's smart fallback), filtered to packs.
+  /// Best-effort by design: a failed half contributes nothing rather than
+  /// failing the probe — the episodes tab has already delivered.
+  Future<List<Torrent>> fetchAddonSeasonPacks({
+    required String addonId,
+    required String imdbId,
+    required int season,
+    Duration? timeout,
+  }) async {
+    StremioAddon? addon;
+    for (final candidate in await getStreamingAddons()) {
+      if (candidate.id == addonId) {
+        addon = candidate;
+        break;
+      }
+    }
+    if (addon == null) return const <Torrent>[];
+    final results = await Future.wait([
+      _fetchStreamsFromAddon(
+        addon,
+        'series',
+        imdbId,
+        timeout: timeout,
+      ).catchError((_) => <StremioStream>[]),
+      _fetchStreamsFromAddon(
+        addon,
+        'series',
+        _buildStreamId(imdbId, season, 1),
+        timeout: timeout,
+      ).catchError((_) => <StremioStream>[]),
+    ]);
+    return _filterToPacksOnly(
+      _convertToTorrents([...results[0], ...results[1]]),
+    );
+  }
+
+  /// Attaches the structured per-addon outcome list — built from the
+  /// APPLICABLE addon set, not the count maps, so addons with zero results
+  /// (or whose results all deduped away) still appear.
+  Map<String, dynamic> _withAddonStatuses(
+    Map<String, dynamic> result,
+    List<StremioAddon> applicableAddons,
+    Map<String, int> addonCounts,
+    Map<String, String> addonErrors,
+  ) {
+    result['addonStatuses'] = <AddonSearchStatus>[
+      for (final addon in applicableAddons)
+        AddonSearchStatus(
+          addonId: addon.id,
+          name: addon.name,
+          sourceKey: 'stremio:${addon.name}'.toLowerCase(),
+          count: addonCounts['stremio:${addon.name}'.toLowerCase()] ?? 0,
+          error: addonErrors['stremio:${addon.name}'.toLowerCase()],
+        ),
+    ];
+    return result;
+  }
+
+  /// Re-runs the stream fetch for ONE addon — the status strip's Retry.
+  /// Returns the converted rows (empty when the addon genuinely has nothing).
+  /// The series smart fallback is deliberately not replayed: a single-addon
+  /// retry probes the one streamId the current scope implies, which covers
+  /// the recovery case (the addon was down); the full probe ladder belongs
+  /// to a full re-search.
+  Future<List<Torrent>> retryAddonStreams({
+    required String addonId,
+    required String type,
+    required String imdbId,
+    int? season,
+    int? episode,
+    Duration? timeout,
+  }) async {
+    StremioAddon? addon;
+    for (final candidate in await getStreamingAddons()) {
+      if (candidate.id == addonId) {
+        addon = candidate;
+        break;
+      }
+    }
+    if (addon == null) return const <Torrent>[];
+    final streamId = _buildStreamId(imdbId, season, episode);
+    final streams = await _fetchStreamsFromAddon(
+      addon,
+      type,
+      streamId,
+      timeout: timeout,
+    );
+    return _convertToTorrents(streams);
   }
 
   /// Smart fallback for series search without specific season/episode
@@ -2517,7 +2747,7 @@ class StremioService {
 
   /// Check if any addons are configured
   Future<bool> hasAddons() async {
-    final addons = await getAddons();
+    final addons = await getAddons(forSettings: true);
     return addons.isNotEmpty;
   }
 

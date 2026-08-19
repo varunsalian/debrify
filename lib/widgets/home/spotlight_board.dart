@@ -29,11 +29,20 @@ import '../../utils/wide_touch_scale.dart';
 class SpotlightCard {
   /// Poster, channel logo, or a user override. Null draws the placeholder.
   final String? image;
+
+  /// Used when [image] fails to load. Landscape title cards point this at the
+  /// portrait poster because synchronously-derived MetaHub backdrops can 404.
+  final String? fallbackImage;
   final String title;
 
   /// Item count, "LIVE", a genre — whatever this KIND of thing is identified
   /// by beyond its name.
   final String? subtitle;
+
+  /// IMDb rating (0–10) for TITLE cards, drawn as "★ 8.1" on the caption's
+  /// meta line. Null or non-positive draws nothing — catalog list items
+  /// frequently omit the rating, and an empty star would read as a zero.
+  final double? rating;
 
   /// 0..100, or null.
   final double? progress;
@@ -57,7 +66,9 @@ class SpotlightCard {
     required this.title,
     required this.onOpen,
     this.image,
+    this.fallbackImage,
     this.subtitle,
+    this.rating,
     this.progress,
     this.onOptions,
     this.shape = SpotlightCardShape.poster,
@@ -77,7 +88,13 @@ enum SpotlightCardShape {
   channel(1, BoxFit.contain),
 
   /// 16:9, cropped. Containers and wide art.
-  wide(16 / 9, BoxFit.cover);
+  wide(16 / 9, BoxFit.cover),
+
+  /// 16:9, mark CONTAINED on a plate — a channel tile at the landscape
+  /// rail's full card size. The logo is never cropped to fill (that cuts
+  /// wordmarks in half); the live preview, which IS 16:9, fills the tile
+  /// edge to edge on focus/hover.
+  wideChannel(16 / 9, BoxFit.contain);
 
   const SpotlightCardShape(this.aspect, this.fit);
 
@@ -118,6 +135,14 @@ class SpotlightShelf {
   /// captions regardless — this flag is a non-TV presentation choice.
   final bool captions;
 
+  /// Stable identity for element reuse across board updates. Tracker rows
+  /// stream in and FRONT-INSERT above the catalog rows; without identity the
+  /// board's list reconciles shelves by position and remounts every shelf
+  /// below the insertion point — horizontal scroll offsets reset and every
+  /// visible card's texture re-resolves and re-uploads, which a Mali box
+  /// renders as a jank burst. Null falls back to positional (no reuse).
+  final String? id;
+
   const SpotlightShelf({
     required this.title,
     required this.items,
@@ -125,6 +150,7 @@ class SpotlightShelf {
     this.onSeeAll,
     this.tag,
     this.captions = true,
+    this.id,
   });
 }
 
@@ -353,6 +379,16 @@ class _M {
         _Tier.wide => w * (260 / 1920),
       };
   double get posterH => poster * (390 / 260);
+  /// Landscape title-card width. Sized so a 16:9 card keeps roughly
+  /// two-thirds of the poster row's height — at the poster's own width a
+  /// wide card is barely half as tall and the whole rail reads shrunken.
+  /// TV shows ~3.4 cards per band, tablet ~2.6, phone ~1.7 with a peek
+  /// (user-tuned 2026-08: the first pass a step smaller read too timid).
+  double get wideCardW => switch (tier) {
+        _Tier.compact => w * 0.50,
+        _Tier.mid => w * 0.33,
+        _Tier.wide => w * (470 / 1920),
+      };
   double get gap => switch (tier) {
         _Tier.compact => w * 0.034,
         _Tier.mid => w * 0.026,
@@ -381,10 +417,12 @@ class _M {
   ///
   /// Zero on compact: nothing there ever focuses or hovers, so the lift
   /// never fires and the reservation would just be dead air between rows.
-  double get liftUp => compact ? 0 : posterH * 0.05 + 7;
+  double liftUpFor(double cardHeight) =>
+      compact ? 0 : cardHeight * 0.05 + 7;
 
   /// Downward the rise works in our favour, so only the growth is reserved.
-  double get liftDown => compact ? 0 : posterH * 0.05;
+  double liftDownFor(double cardHeight) =>
+      compact ? 0 : cardHeight * 0.05;
   double get title => compact ? 19.0 : w * (26 / 1920);
   double get caption => compact ? 12.0 : w * (21 / 1920);
 
@@ -704,6 +742,32 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       // uncalled-for restart is a no-op, not a stolen cadence.
       _restartCadence();
     }
+    // The cursor bookkeeping is positional, but tracker rows FRONT-INSERT:
+    // after `rows=9to11` every `_col[i]` describes a different shelf than it
+    // was recorded for, and a stale column pointing outside the target row's
+    // built cells makes the next DOWN/UP focus a detached node — a silently
+    // eaten keypress. Re-key both by shelf IDENTITY across the update.
+    if (!identical(old.sections, widget.sections)) {
+      int remap(int oldIndex) {
+        if (oldIndex < 0 || oldIndex >= old.sections.length) return -1;
+        final id = old.sections[oldIndex].id;
+        if (id == null) return oldIndex;
+        return widget.sections.indexWhere((s) => s.id == id);
+      }
+
+      final remappedCols = <int, int>{};
+      for (final entry in _col.entries) {
+        final ni = remap(entry.key);
+        if (ni >= 0) remappedCols[ni] = entry.value;
+      }
+      _col
+        ..clear()
+        ..addAll(remappedCols);
+      if (_row >= 0) {
+        final ni = remap(_row);
+        if (ni >= 0) _row = ni;
+      }
+    }
     // A board reload can shrink or reorder the shelves under a parked cursor.
     // `_row` is positional, so without this the next arrow key indexes past
     // the end of `rowNodes` and throws.
@@ -930,12 +994,52 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     _focusRow(_row, const Offset(0, -1));
   }
 
-  void _focusRow(int row, Offset dir) {
+  void _focusRow(int row, Offset dir, {bool retried = false}) {
     if (row < 0 || row >= widget.sections.length) return;
     final nodes = widget.sections[row].nodes;
     if (nodes.isEmpty) return;
     final col = (_col[row] ?? 0).clamp(0, nodes.length - 1);
-    _go(nodes[col], dir);
+    bool attached(FocusNode n) => n.context?.mounted ?? false;
+    final target = nodes[col];
+    if (attached(target)) {
+      _go(target, dir);
+      return;
+    }
+    // The remembered column's CELL isn't built — the row is parked at a
+    // different offset (its ListView only builds near its own scroll
+    // position), or a stale column survived a shelf insert. Focusing a
+    // detached node is a silent no-op, which read as "DOWN sometimes does
+    // nothing". Land on the nearest BUILT cell instead; the remembered
+    // column follows so the next vertical move starts from reality.
+    FocusNode? nearest;
+    var bestDistance = 1 << 30;
+    for (var i = 0; i < nodes.length; i++) {
+      final d = (i - col).abs();
+      if (d < bestDistance && attached(nodes[i])) {
+        bestDistance = d;
+        nearest = nodes[i];
+        _col[row] = i;
+      }
+    }
+    if (nearest != null) {
+      _go(nearest, dir);
+      return;
+    }
+    // The whole row is outside the lazy build window. Nudge the board's
+    // scroll toward it so the builder mounts it, then finish the move next
+    // frame — once only, so a row that stays unbuildable can't loop.
+    if (retried || !_scroll.hasClients) return;
+    final position = _scroll.position;
+    final step = (dir.dy >= 0 ? 1.0 : -1.0) * 300.0;
+    position.moveTo(
+      (position.pixels + step).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusRow(row, dir, retried: true);
+    });
   }
 
   /// Where the cursor ACTUALLY is in [nodes].
@@ -1056,19 +1160,28 @@ class SpotlightBoardState extends State<SpotlightBoard> {
       canRequestFocus: false,
       skipTraversal: true,
       onKeyEvent: (_, e) => _onKey(e),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final m = _M(constraints.maxWidth, dpad: widget.dpad);
-          // The hero is measured against the board's real height, so it is the
-          // same share of the screen on every panel.
-          final viewport = constraints.maxHeight.isFinite
-              ? constraints.maxHeight
-              : MediaQuery.sizeOf(context).height;
-          return _board(
-            m,
-            viewport * (m.compact ? _heroFractionCompact : _heroFraction),
-          );
-        },
+      // The FULL parallax (spring, velocity tilt, travelling glare) on
+      // Android TV — the same opt-in the detail Showcase carries. The board
+      // originally stayed on the lite body because a Mali box couldn't
+      // afford it, but that budget was spent on oversized card textures:
+      // with cards decoding at display size (2026-08-19) the box renders
+      // the rich cursor smoothly, and only two cards ever animate per step.
+      // The board's walk already notes travel direction for the lean.
+      child: ParallaxRichScope(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final m = _M(constraints.maxWidth, dpad: widget.dpad);
+            // The hero is measured against the board's real height, so it is
+            // the same share of the screen on every panel.
+            final viewport = constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : MediaQuery.sizeOf(context).height;
+            return _board(
+              m,
+              viewport * (m.compact ? _heroFractionCompact : _heroFraction),
+            );
+          },
+        ),
       ),
     );
   }
@@ -1077,10 +1190,40 @@ class SpotlightBoardState extends State<SpotlightBoard> {
     _heroBandH = heroH;
     final app = AppThemeScope.of(context);
     final ground = SpotlightBoard.groundOf(app);
-    final list = ListView(
+    // One key per shelf, by rail IDENTITY (see [SpotlightShelf.id]).
+    String shelfKey(int i) {
+      final s = widget.sections[i];
+      return 'shelf-${s.id ?? 'pos-$i'}';
+    }
+
+    // BUILDER, not children — and no Column around the shelves. A Column is
+    // one child, so it defeated the vertical list's laziness: all 11-13
+    // shelves (and each one's first screenful of cards) built, decoded and
+    // uploaded textures in the first frames of every mount — and the shell
+    // remounts Home per tab switch, so every tab return paid the full-board
+    // texture burst again (measured on the Mi Box: ~8s of 100-200ms raster
+    // frames). Lazily built, only the on-screen shelves pay at mount and the
+    // rest stream in with the scroll — texture uploads paced for free.
+    //
+    // cacheExtent is one TV viewport rather than the 250 default: DOWN moves
+    // focus one row at a time via requestFocus, which needs the target
+    // shelf's nodes ATTACHED — a viewport of lead keeps the next rows built
+    // ahead of the cursor without resurrecting the build-everything burst.
+    final list = ListView.builder(
       controller: _scroll,
       padding: EdgeInsets.zero,
-      children: [
+      cacheExtent: 600,
+      itemCount: widget.sections.length + 2,
+      findChildIndexCallback: (key) {
+        if (key is! ValueKey<String>) return null;
+        if (key.value == 'spotlight-hero-band') return 0;
+        if (key.value == 'spotlight-tail') return widget.sections.length + 1;
+        for (var i = 0; i < widget.sections.length; i++) {
+          if (shelfKey(i) == key.value) return i + 1;
+        }
+        return null;
+      },
+      itemBuilder: (context, index) {
         // Laid out 88 short so the first shelf sits over the hero's lower
         // edge; the band overflows to the hero's full height so its contents
         // lay out against the same geometry the pinned art is drawn in. On
@@ -1089,16 +1232,6 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         // the list in the Stack below. Compact has no overlap and keeps art
         // and identity together in flow — the hero fades to ground and the
         // rows follow.
-        SizedBox(
-          height: heroH * (1 - (m.compact ? 0 : _shelfOverlapFraction)),
-          child: OverflowBox(
-            alignment: Alignment.topCenter,
-            maxHeight: heroH,
-            child: SizedBox(height: heroH, child: _hero(m, heroH)),
-          ),
-        ),
-        // The first shelf overlaps the hero's lower edge — the tell that
-        // the page continues.
         //
         // The hero is drawn 88 SHORTER than its visual height rather than
         // the shelves being transformed up over it. A `Transform` moves
@@ -1106,17 +1239,26 @@ class SpotlightBoardState extends State<SpotlightBoard> {
         // the overlap reappears as a phantom 88px gap at the bottom and
         // the page overscrolls past its own last shelf. Sizing the hero
         // box is the version the scroll extent agrees with.
-        Padding(
-          padding: EdgeInsets.zero,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < widget.sections.length; i++) _shelf(i, m),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
-      ],
+        if (index == 0) {
+          return SizedBox(
+            key: const ValueKey('spotlight-hero-band'),
+            height: heroH * (1 - (m.compact ? 0 : _shelfOverlapFraction)),
+            child: OverflowBox(
+              alignment: Alignment.topCenter,
+              maxHeight: heroH,
+              child: SizedBox(height: heroH, child: _hero(m, heroH)),
+            ),
+          );
+        }
+        if (index == widget.sections.length + 1) {
+          return const SizedBox(key: ValueKey('spotlight-tail'), height: 24);
+        }
+        final i = index - 1;
+        return KeyedSubtree(
+          key: ValueKey(shelfKey(i)),
+          child: _shelf(i, m),
+        );
+      },
     );
     // A board reload can SHRINK the list under a parked scroll. The framework
     // clamps the offset during layout WITHOUT notifying the controller, so
@@ -1819,6 +1961,17 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   Widget _shelf(int i, _M m) {
     final section = widget.sections[i];
     final nodes = section.nodes;
+    // Wide cards use their own rail width. Keeping the portrait card's
+    // width makes a 16:9 tile too short to read, while keeping its height
+    // makes it enormous and leaves only two titles on a TV row. The rule is
+    // by ASPECT, so wide title cards and wide channel tiles share one rail;
+    // shelves of portrait/square cards retain their native geometry.
+    final uniformlyWide =
+        section.items.isNotEmpty &&
+        section.items.every((item) => item.shape.aspect > 1);
+    final cardHeight = uniformlyWide
+        ? m.wideCardW / SpotlightCardShape.wide.aspect
+        : m.posterH;
     // Caption-free rows off TV (see [SpotlightShelf.captions]); TV keeps its
     // overlay captions everywhere — a non-TV presentation choice only.
     final captions = widget.dpad || section.captions;
@@ -1848,15 +2001,23 @@ class SpotlightBoardState extends State<SpotlightBoard> {
           // so every card was stretched to `posterH * 1.10 + 24` while its
           // width was still computed from `posterH`. A 2:3 poster drew at
           // 0.53:1. No amount of re-deriving the ratio could have fixed it.
-          padding: EdgeInsets.only(top: m.liftUp, bottom: m.liftDown),
+          padding: EdgeInsets.only(
+            top: m.liftUpFor(cardHeight),
+            bottom: m.liftDownFor(cardHeight),
+          ),
           child: SizedBox(
             // The viewport IS the card now, so the tight cross-axis constraint
             // hands each card exactly the height it asked for. On compact the
             // caption strip below the art is part of the card, and the
             // viewport grows by exactly that strip — the art box itself stays
-            // posterH, so the ratio guard still holds.
-            height: m.posterH + (captions ? m.captionBlock : 0),
+            // at [cardHeight], so the ratio guard still holds.
+            height: cardHeight + (captions ? m.captionBlock : 0),
             child: ListView.separated(
+              // Now that the board unbuilds far-off shelves, a rebuilt row
+              // would otherwise come back rewound to column 0 — PageStorage
+              // carries the offset across the unbuild (DPAD re-lands via
+              // focus anyway; this is for touch scroll positions).
+              key: PageStorageKey('spotlight-row-${section.id ?? i}'),
               // The lift paints into the padding above and below rather than
               // being sliced off at the viewport edge.
               clipBehavior: Clip.none,
@@ -1870,7 +2031,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
                 // Every shape shares the ROW's height and takes the width its
                 // aspect implies, so a shelf that mixes posters and channel
                 // tiles sits on one baseline instead of stepping up and down.
-                height: m.posterH,
+                height: cardHeight,
                 caption: m.caption,
                 radius: m.radius,
                 captionBelow: m.compact && captions,
@@ -2190,9 +2351,27 @@ class _CardState extends State<_Card> {
     final app = AppThemeScope.of(context);
     final c = widget.card;
     final w = widget.height * c.shape.aspect;
+    // Decode at the card's own PHYSICAL width plus the 10% focus growth —
+    // never a fixed constant. The hardcoded 400/800 decoded ~1.7× oversized
+    // on a TV board, and the TV image cache is byte-capped (56MB, see
+    // _capImageCache): measured on the Mi Box 2026-08-19, oversized
+    // landscape stills meant the cache held 39 images while 47 were live,
+    // so every DPAD step into an evicted row re-decoded and re-uploaded —
+    // the sometimes-laggy navigation. Right-sizing fits a screenful with
+    // headroom and makes each upload cheaper.
+    final decodeW = (w * MediaQuery.devicePixelRatioOf(context) * 1.1)
+        .round()
+        .clamp(100, 1000);
     final url = c.image;
+    final fallbackUrl = c.fallbackImage;
     final contained = c.shape.fit == BoxFit.contain;
-    final hasSubtitle = (c.subtitle ?? '').isNotEmpty;
+    // The caption's second line — kind and/or rating, dot-joined. One line
+    // whatever it carries, so the caption bed math stays two-state.
+    final metaLine = [
+      if ((c.subtitle ?? '').isNotEmpty) c.subtitle!,
+      if ((c.rating ?? 0) > 0) '★ ${c.rating!.toStringAsFixed(1)}',
+    ].join(' · ');
+    final hasSubtitle = metaLine.isNotEmpty;
     final preview = c.previewBuilder;
     // Exactly one card owns the decoder: desktop follows the pointer, TV
     // follows the remote cursor. The preview is unmounted immediately when it
@@ -2240,7 +2419,7 @@ class _CardState extends State<_Card> {
                       ),
                       if (hasSubtitle)
                         Text(
-                          c.subtitle!,
+                          metaLine,
                           maxLines: 1,
                           textAlign: TextAlign.center,
                           overflow: TextOverflow.ellipsis,
@@ -2290,29 +2469,52 @@ class _CardState extends State<_Card> {
               ),
               if (url != null && url.isNotEmpty)
                 Padding(
-                  padding: EdgeInsets.all(contained ? w * 0.14 : 0),
+                  // The breathing room around a contained mark keys off the
+                  // SHORTER side: on a wide channel tile a width-derived
+                  // inset would eat a quarter of the height.
+                  padding: EdgeInsets.all(
+                    contained
+                        ? (w < widget.height ? w : widget.height) * 0.14
+                        : 0,
+                  ),
                   child: CachedNetworkImage(
                     imageUrl: url,
                     fit: c.shape.fit,
                     cacheManager: DebrifyImageCache.manager,
-                    memCacheWidth: 400,
-                    // Android TV pops, no fade. The package defaults are a
-                    // 500ms image fade over a 1000ms placeholder fade —
-                    // fine for one image, but a board entry lands 20-30
-                    // posters inside a few seconds, and that many
-                    // concurrent per-frame opacity composites is exactly
-                    // the first-seconds jank a MiBox reports. Fades never
-                    // run again once the memory cache is warm, which is
-                    // why the page "becomes smooth" — this makes the first
-                    // seconds behave like every second after them.
+                    memCacheWidth: decodeW,
+                    // Android TV used to POP (Duration.zero): a board mount
+                    // once landed 20-30 posters inside a few seconds, and
+                    // that many concurrent per-frame opacity composites was
+                    // the first-seconds jank a MiBox reports. The lazy board
+                    // ended that era — only the on-screen shelves' art lands
+                    // at once now — and the bare pop reads as art snapping
+                    // in. A short fade over the plate is the soft landing;
+                    // still well under the package's 500/1000 defaults,
+                    // whose long placeholder cross-fade is the part a weak
+                    // GPU actually pays for.
                     fadeInDuration: PlatformUtil.isAndroidTvCached
-                        ? Duration.zero
+                        ? const Duration(milliseconds: 220)
                         : const Duration(milliseconds: 500),
                     fadeOutDuration: PlatformUtil.isAndroidTvCached
-                        ? Duration.zero
+                        ? const Duration(milliseconds: 180)
                         : const Duration(milliseconds: 1000),
                     placeholder: (_, __) => const SizedBox.shrink(),
-                    errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                    errorWidget: (_, __, ___) =>
+                        fallbackUrl != null &&
+                            fallbackUrl.isNotEmpty &&
+                            fallbackUrl != url
+                        ? CachedNetworkImage(
+                            imageUrl: fallbackUrl,
+                            fit: c.shape.fit,
+                            cacheManager: DebrifyImageCache.manager,
+                            memCacheWidth: decodeW,
+                            fadeInDuration:
+                                const Duration(milliseconds: 220),
+                            placeholder: (_, __) => const SizedBox.shrink(),
+                            errorWidget: (_, __, ___) =>
+                                const SizedBox.shrink(),
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 ),
               if (preview != null && previewActive)
@@ -2434,6 +2636,14 @@ class _CardState extends State<_Card> {
     if (widget.node == null) return interactive;
     return Focus(
       focusNode: widget.node,
+      // Same rule as the hero: a cell is reached ONLY by the board's
+      // explicit walk (requestFocus), never by geometric search. Without
+      // this, the shell's LEFT fallback (focusInDirection before the
+      // sidebar) could land on another row's cells — including cached
+      // off-screen ones a scrolled ListView keeps alive to the LEFT of
+      // column 0 — so LEFT-at-the-edge only opened the sidebar when no
+      // neighbouring row happened to be scrolled.
+      skipTraversal: true,
       onFocusChange: (v) {
         setState(() => _f = v);
         if (v && context.findRenderObject() is RenderBox) {

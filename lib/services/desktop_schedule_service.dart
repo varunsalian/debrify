@@ -483,6 +483,11 @@ class DesktopScheduleService {
       feature: ProfileFeature.recordings,
       resourceId: schedule.connectionResourceId,
       resourceAuthorizationRevision: schedule.resourceAuthorizationRevision,
+      // The revision was stamped at schedule time, and saving ANY IPTV
+      // source bumps every source's revision — without drift tolerance an
+      // unrelated edit would silently delete every pending schedule below.
+      // The live resource/grant/profile checks still refuse real revocation.
+      allowRevisionDrift: true,
     )) {
       await _save(schedules.where((s) => s.id != schedule.id).toList());
       _timers.remove(schedule.id)?.cancel();

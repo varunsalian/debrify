@@ -58,6 +58,9 @@ object DownloadTaskStore {
 					"downloads",
 					entry.connectionResourceId,
 					entry.resourceAuthorizationRevision,
+					// Entries carry enqueue-time revisions and are re-persisted
+					// for the whole download — see the projection's drift note.
+					allowRevisionDrift = true,
 				)
 			) throw SecurityException("Download profile authorization changed")
 			val map = loadJson(context)

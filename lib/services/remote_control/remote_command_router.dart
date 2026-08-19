@@ -2186,7 +2186,9 @@ class RemoteCommandRouter {
           continue;
         }
         try {
-          final config = WebDavConfig.fromJson(Map<String, dynamic>.from(raw));
+          final config = WebDavConfig.fromTransferJson(
+            Map<String, dynamic>.from(raw),
+          );
           if (config.baseUrl.trim().isEmpty) {
             skipped++;
             continue;
@@ -2256,7 +2258,7 @@ class RemoteCommandRouter {
           continue;
         }
         try {
-          final config = IndexerManagerConfig.fromJson(
+          final config = IndexerManagerConfig.fromTransferJson(
             Map<String, dynamic>.from(raw),
           );
           if (config.baseUrl.trim().isEmpty || config.apiKey.trim().isEmpty) {

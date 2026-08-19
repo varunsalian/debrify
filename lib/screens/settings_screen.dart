@@ -2209,34 +2209,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Quick Play
       leaf(
         'Quick Play',
-        'Quick Play Timeout',
-        'Max wait for search before playback',
-        const ['timeout', 'wait', 'seconds'],
+        'Addon Priority',
+        'Order engines and addons are tried',
+        const ['priority', 'order', 'addons', 'engines', 'reorder', 'sources'],
       ),
       leaf(
         'Quick Play',
-        'Sources Timeout',
-        'Max wait per Stremio addon',
-        const ['sources', 'timeout', 'stremio', 'addon', 'seconds'],
+        'Prefer torrents',
+        'Torrents first, or addon direct links first',
+        const ['torrents', 'direct links', 'addons', 'prefer'],
       ),
       leaf(
         'Quick Play',
-        'Prefer and pin series packs',
-        'Search packs first and pin the source',
-        const ['series', 'packs', 'pin', 'season pack', 'auto-pin'],
-      ),
-      leaf(
-        'Quick Play',
-        'Cache Fallback',
-        'What to do when a torrent is not cached',
-        const [
-          'cache',
-          'not cached',
-          'fallback',
-          'try multiple',
-          'retry',
-          'max torrents',
-        ],
+        'Prefer season packs',
+        'Grab whole seasons, or fetch one episode',
+        const ['series', 'packs', 'season pack', 'episode'],
       ),
 
       // Home Page

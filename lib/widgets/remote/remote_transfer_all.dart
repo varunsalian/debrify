@@ -733,7 +733,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ConfigCommand.webDav,
           targetIp,
           configData: jsonEncode([
-            for (final server in servers) server.toJson(),
+            for (final server in servers) server.toTransferJson(),
           ]),
         );
       case ConfigCommand.indexerManagers:
@@ -746,7 +746,7 @@ class _RemoteTransferAllState extends State<RemoteTransferAll> {
           ConfigCommand.indexerManagers,
           targetIp,
           configData: jsonEncode([
-            for (final manager in managers) manager.toJson(),
+            for (final manager in managers) manager.toTransferJson(),
           ]),
         );
       // The IPTV payloads routinely outgrow a single datagram — a few hundred

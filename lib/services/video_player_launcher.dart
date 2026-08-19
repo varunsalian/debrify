@@ -1933,6 +1933,11 @@ class VideoPlayerLauncher {
       // Build stremio source resolver for Android TV (if stremio sources are available)
       // Uses a mutable sources holder so channel switches can update the source list
       var currentStremioSources = List<Torrent>.from(args.stremioSources ?? []);
+      // Bumped whenever the holder is REPLACED (a Stremio TV channel switch),
+      // as opposed to appended to. Fetch providers capture it before their
+      // awaits and discard stale responses — a late merge from the previous
+      // content must never contaminate the replacement list.
+      var stremioSourcesGeneration = 0;
       var currentStremioResolver = args.resolveStremioSource;
       Future<String?> Function(int)? stremioSourceResolverForTv;
       if (currentStremioSources.isNotEmpty && currentStremioResolver != null) {
@@ -2135,6 +2140,7 @@ class VideoPlayerLauncher {
       if (seriesFetcher != null && currentStremioSources.isNotEmpty) {
         moreSourcesProviderForTv =
             (String mode, {int? season, int? episode}) async {
+              final generation = stremioSourcesGeneration;
               // season/episode = what the native player is CURRENTLY on (a pack
               // playlist auto-advances without relaunching); the fetcher falls
               // back to the launch episode when absent.
@@ -2144,6 +2150,9 @@ class VideoPlayerLauncher {
                 episode: episode,
               );
               if (fetched == null) return null;
+              // The holder was replaced mid-fetch (channel switch): these
+              // results belong to the previous content — drop them.
+              if (generation != stremioSourcesGeneration) return null;
               currentStremioSources = SeriesSourceFetcher.mergeSources(
                 currentStremioSources,
                 fetched,
@@ -2163,6 +2172,262 @@ class VideoPlayerLauncher {
             };
       }
 
+      // Per-addon fetch for the source browser's placeholder groups.
+      // 'episodes' fetches one addon's episode results, merges them
+      // append-only, and reports whether they carried a torrent magnet
+      // (probePacks) — the native side then makes the SECOND, lazy call with
+      // 'packs'. Null (fetch failed) keeps the native Fetch row as a retry.
+      Future<Map<String, dynamic>?> Function(
+        List<String> addonIds,
+        String mode, {
+        int? season,
+        int? episode,
+      })?
+      addonSourcesProviderForTv;
+      if (seriesFetcher != null && seriesFetcher.fetchAddonEpisodes != null) {
+        addonSourcesProviderForTv =
+            (List<String> addonIds, String mode, {
+              int? season,
+              int? episode,
+            }) async {
+              final generation = stremioSourcesGeneration;
+              List<Map<String, dynamic>> serialized() => currentStremioSources
+                  .map((t) => t.toJson())
+                  .toList();
+              // Stale = the holder was replaced (channel switch) while this
+              // fetch ran; its results belong to the previous content.
+              bool stale() => generation != stremioSourcesGeneration;
+              if (mode == 'packs') {
+                for (final addonId in addonIds) {
+                  final packs = await seriesFetcher.fetchAddonPacks?.call(
+                    addonId,
+                    season ?? seriesFetcher.season,
+                  );
+                  if (stale()) return null;
+                  if (packs != null && packs.isNotEmpty) {
+                    currentStremioSources = SeriesSourceFetcher.mergeSources(
+                      currentStremioSources,
+                      packs,
+                    );
+                  }
+                }
+                // Best-effort: a failed probe still answers with the current
+                // list so the native probing note simply clears.
+                return {'stremioSources': serialized()};
+              }
+              // Every addon sharing the group's name; failed only when ALL
+              // failed — a partial success is results the user asked for.
+              // Only ids whose OWN results carried a magnet earn the pack
+              // probe: a direct-only or empty sibling has no packs to find.
+              List<Torrent>? episodes;
+              final magnetIds = <String>[];
+              for (final addonId in addonIds) {
+                final fetched = await seriesFetcher.fetchAddonEpisodes!(
+                  addonId,
+                  season ?? seriesFetcher.season,
+                  episode ?? seriesFetcher.episode,
+                );
+                if (stale()) return null;
+                if (fetched != null) {
+                  (episodes ??= <Torrent>[]).addAll(fetched);
+                  if (fetched.any((t) => t.streamType == StreamType.torrent)) {
+                    magnetIds.add(addonId);
+                  }
+                }
+              }
+              if (episodes == null) return null;
+              if (episodes.isNotEmpty) {
+                currentStremioSources = SeriesSourceFetcher.mergeSources(
+                  currentStremioSources,
+                  episodes,
+                );
+              }
+              final wantPacks =
+                  !seriesFetcher.isMovie &&
+                  seriesFetcher.fetchAddonPacks != null;
+              return {
+                'stremioSources': serialized(),
+                // The ids the native side should send back in its 'packs'
+                // call; empty = no probe.
+                'packAddonIds': wantPacks ? magnetIds : const <String>[],
+              };
+            };
+      }
+
+      // In-player fetch of an episode that isn't in the current playlist
+      // (episode guide click / next-prev beyond the pack boundary): quick-play
+      // semantics without finishing the activity. Candidate ladder mirrors the
+      // Flutter player's _fetchAndPlayEpisode: existing sources (exact-episode
+      // singles, packs covering the season) → episode-targeted fetch → pack
+      // fetch. Candidates are pre-verified with a RAW resolve so a rejected
+      // pack never disturbs the lazy-stream resolver; only the winner goes
+      // through sourcePlaylistResolverForTv (which owns switch tokens and
+      // entry replacement).
+      Future<Map<String, dynamic>?> Function(int season, int episode)?
+      episodeFetchProviderForTv;
+      final resolvePlaylistForTv = sourcePlaylistResolverForTv;
+      if (seriesFetcher != null &&
+          !seriesFetcher.isMovie &&
+          resolvePlaylistForTv != null &&
+          resolveSourceToPlaylist != null &&
+          args.stremioTvChannels == null) {
+        bool packCoversSeason(Torrent t, int season) {
+          switch (t.coverageType) {
+            case 'completeSeries':
+              final start = t.startSeason;
+              final end = t.endSeason;
+              if (start == null && end == null) return true;
+              return season >= (start ?? 1) && season <= (end ?? season);
+            case 'multiSeasonPack':
+              final start = t.startSeason;
+              final end = t.endSeason;
+              return start != null &&
+                  end != null &&
+                  season >= start &&
+                  season <= end;
+            case 'seasonPack':
+              return t.seasonNumber == season;
+            default:
+              return false;
+          }
+        }
+
+        episodeFetchProviderForTv = (int season, int episode) async {
+          final generation = stremioSourcesGeneration;
+          bool stale() => generation != stremioSourcesGeneration;
+
+          // Raw pre-verification: does this candidate actually contain the
+          // target episode? (1-entry unparseable streams count — they get the
+          // target identity stamped on.)
+          Future<bool> candidateHasTarget(Torrent t) async {
+            List<PlaylistEntry>? entries;
+            try {
+              entries = await resolveSourceToPlaylist(t);
+            } catch (_) {
+              entries = null;
+            }
+            if (entries == null || entries.isEmpty) return false;
+            if (entries.length == 1) {
+              final info = SeriesParser.parseFilename(entries.first.title);
+              if (info.season == null || info.episode == null) return true;
+              return info.season == season && info.episode == episode;
+            }
+            final sp = SeriesPlaylist.fromPlaylistEntries(entries);
+            return sp.findOriginalIndexBySeasonEpisode(season, episode) >= 0;
+          }
+
+          Future<Map<String, dynamic>?> winWith(int i) async {
+            final items = await resolvePlaylistForTv(i);
+            if (stale() || items == null || items.length < 2) return null;
+            // items[0] is the '__meta__' map; stamp the target identity onto
+            // a lone unparseable stream so native lands on the right episode.
+            if (items.length == 2) {
+              final row = Map<String, dynamic>.from(items[1]);
+              if (row['season'] == null || row['episode'] == null) {
+                row['season'] = season;
+                row['episode'] = episode;
+                items[1] = row;
+              }
+            }
+            return {
+              'sourceIndex': i,
+              'items': items,
+              'stremioSources': currentStremioSources
+                  .map((t) => t.toJson())
+                  .toList(),
+            };
+          }
+
+          Future<Map<String, dynamic>?> tryRange(
+            int from,
+            int cap, {
+            bool packsOnly = false,
+          }) async {
+            var attempts = 0;
+            for (
+              var i = from;
+              i < currentStremioSources.length && attempts < cap;
+              i++
+            ) {
+              final t = currentStremioSources[i];
+              if (t.streamType == StreamType.externalUrl) continue;
+              if (packsOnly) {
+                if (t.streamType != StreamType.torrent) continue;
+                if (t.coverageType != null && !packCoversSeason(t, season)) {
+                  continue;
+                }
+              } else {
+                final info = SeriesParser.parseFilename(t.displayTitle);
+                final matches =
+                    info.season == season && info.episode == episode;
+                final covers =
+                    t.streamType == StreamType.torrent &&
+                    packCoversSeason(t, season);
+                if (!matches && !covers) continue;
+              }
+              attempts++;
+              if (!await candidateHasTarget(t)) {
+                if (stale()) return null;
+                continue;
+              }
+              if (stale()) return null;
+              final win = await winWith(i);
+              if (win != null || stale()) return win;
+            }
+            return null;
+          }
+
+          // 1. Existing sources.
+          var result = await tryRange(0, 4);
+          if (result != null || stale()) return result;
+
+          // 2. Episode-targeted fetch.
+          List<Torrent>? fetched;
+          try {
+            fetched = await seriesFetcher.fetch(
+              SeriesSourceFetcher.modeEpisodes,
+              season: season,
+              episode: episode,
+            );
+          } catch (_) {
+            fetched = null;
+          }
+          if (stale()) return null;
+          if (fetched != null && fetched.isNotEmpty) {
+            final from = currentStremioSources.length;
+            currentStremioSources = SeriesSourceFetcher.mergeSources(
+              currentStremioSources,
+              fetched,
+            );
+            result = await tryRange(from, 5);
+            if (result != null || stale()) return result;
+          }
+
+          // 3. Fresh pack search for that season.
+          List<Torrent>? packs;
+          try {
+            packs = await seriesFetcher.fetch(
+              SeriesSourceFetcher.modePacks,
+              season: season,
+              episode: episode,
+            );
+          } catch (_) {
+            packs = null;
+          }
+          if (stale()) return null;
+          if (packs != null && packs.isNotEmpty) {
+            final from = currentStremioSources.length;
+            currentStremioSources = SeriesSourceFetcher.mergeSources(
+              currentStremioSources,
+              packs,
+            );
+            result = await tryRange(from, 3, packsOnly: true);
+            if (result != null || stale()) return result;
+          }
+          return null;
+        };
+      }
+
       // Build Stremio TV channel switch wrapper that updates mutable sources holder
       Map<String, dynamic>? prepareStremioTvPlaybackResult(
         Map<String, dynamic>? playbackResult,
@@ -2178,6 +2443,9 @@ class VideoPlayerLauncher {
           currentStremioSources = newSourcesList
               .map((s) => Torrent.fromJson(Map<String, dynamic>.from(s as Map)))
               .toList();
+          // Wholesale replacement — invalidate every in-flight fetch so a
+          // late response can't merge the previous content's sources in.
+          stremioSourcesGeneration++;
         }
         if (newResolver != null) {
           currentStremioResolver = newResolver;
@@ -2230,6 +2498,26 @@ class VideoPlayerLauncher {
           payloadMap['seriesSourceTabs'] = true;
           payloadMap['seriesPacksFetched'] = seriesFetcher.packsFetched;
           payloadMap['seriesEpisodesFetched'] = seriesFetcher.episodesFetched;
+        }
+      }
+      // Every applicable addon, for the source browser's placeholder groups
+      // (zero-result addons stay visible with a Fetch row). Best-effort: a
+      // listing failure just means no placeholders this session.
+      if (addonSourcesProviderForTv != null) {
+        try {
+          final addons = await seriesFetcher!.listAddons?.call() ?? const [];
+          if (addons.isNotEmpty) {
+            payloadMap['sourceAddons'] = [
+              for (final addon in addons)
+                {
+                  'id': addon.id,
+                  'name': addon.name,
+                  'sourceKey': addon.sourceKey,
+                },
+            ];
+          }
+        } catch (e) {
+          debugPrint('VideoPlayerLauncher: addon listing failed: $e');
         }
       }
 
@@ -2301,6 +2589,8 @@ class VideoPlayerLauncher {
         onResolveStremioSource: stremioSourceResolverForTv,
         onResolveSourcePlaylist: sourcePlaylistResolverForTv,
         onRequestMoreSources: moreSourcesProviderForTv,
+        onRequestAddonSources: addonSourcesProviderForTv,
+        onRequestEpisodeFetch: episodeFetchProviderForTv,
         onRequestStremioTvGuideData: args.stremioTvGuideDataProvider,
         onRequestStremioTvChannelSwitch: channelSwitchForTv,
         onRequestStremioTvNext: stremioTvNextForTv,
@@ -2524,11 +2814,16 @@ class VideoPlayerLauncher {
       return;
     }
 
-    // Create SeriesPlaylist for TVMaze lookup
+    // Create SeriesPlaylist for TVMaze lookup. Single-entry launches used to
+    // be skipped entirely; with a catalog IMDb id they now run too, solely to
+    // fetch the show's FULL episode list for the native episode guide (their
+    // per-item decoration is skipped — a lone unparseable file would be
+    // misattributed to S1E1).
     final playlistEntries = entries.map((e) => e.entry).toList();
-    if (playlistEntries.length < 2) {
+    final singleEntryGuideOnly = playlistEntries.length < 2;
+    if (singleEntryGuideOnly && contentImdbId == null) {
       debugPrint(
-        'TVMazeAsync: SKIPPED - less than 2 entries (${playlistEntries.length})',
+        'TVMazeAsync: SKIPPED - less than 2 entries and no IMDb id',
       );
       return;
     }
@@ -2632,24 +2927,47 @@ class VideoPlayerLauncher {
           webDavPath: webDavPath,
         );
 
-        // Build metadata updates for each item
+        // Build metadata updates for each item. Skipped for single-entry
+        // guide-only runs: a lone unparseable file classifies as S1E1 and
+        // would be decorated with the wrong episode's info.
         final metadataUpdates = <Map<String, dynamic>>[];
         int episodesWithInfo = 0;
         int episodesWithoutInfo = 0;
-        for (final episode in seriesPlaylist.allEpisodes) {
-          if (episode.episodeInfo == null) {
-            episodesWithoutInfo++;
-            continue;
-          }
-          episodesWithInfo++;
+        if (!singleEntryGuideOnly) {
+          for (final episode in seriesPlaylist.allEpisodes) {
+            if (episode.episodeInfo == null) {
+              episodesWithoutInfo++;
+              continue;
+            }
+            episodesWithInfo++;
 
-          final info = episode.episodeInfo!;
-          metadataUpdates.add({
-            'originalIndex': episode.originalIndex,
-            'title': info.title,
-            'description': info.plot,
-            'artwork': info.poster,
-            'rating': info.rating,
+            final info = episode.episodeInfo!;
+            metadataUpdates.add({
+              'originalIndex': episode.originalIndex,
+              'title': info.title,
+              'description': info.plot,
+              'artwork': info.poster,
+              'rating': info.rating,
+            });
+          }
+        }
+
+        // The show's FULL episode list for the native episode guide (every
+        // episode, present in the pack or not).
+        final guideEpisodes = <Map<String, dynamic>>[];
+        for (final m in seriesPlaylist.fullTvmazeEpisodes) {
+          final season = m['season'] as int?;
+          final number = m['number'] as int?;
+          if (season == null || number == null) continue;
+          final info = EpisodeInfo.fromTVMaze(m);
+          guideEpisodes.add({
+            'season': season,
+            'episode': number,
+            if (info.title != null) 'title': info.title,
+            if (info.poster != null) 'artwork': info.poster,
+            if (info.plot != null) 'description': info.plot,
+            if (info.rating != null) 'rating': info.rating,
+            if (info.runtime != null) 'runtime': info.runtime,
           });
         }
 
@@ -2663,7 +2981,9 @@ class VideoPlayerLauncher {
           'TVMazeAsync: Discovered IMDB ID from TVMaze: $discoveredImdbId',
         );
 
-        if (metadataUpdates.isEmpty && discoveredImdbId == null) {
+        if (metadataUpdates.isEmpty &&
+            discoveredImdbId == null &&
+            guideEpisodes.isEmpty) {
           debugPrint(
             'TVMazeAsync: SKIPPED push - no metadata updates and no IMDB ID',
           );
@@ -2688,17 +3008,20 @@ class VideoPlayerLauncher {
           metadataUpdates,
           sessionId: sessionId,
           imdbId: discoveredImdbId,
+          guideEpisodes: guideEpisodes,
         );
 
         // Push metadata updates directly to native player (don't wait for request)
         // Include discovered IMDB ID for Stremio subtitle fetching
         debugPrint(
-          'TVMazeAsync: Pushing ${metadataUpdates.length} metadata updates to native player (imdbId=$discoveredImdbId)',
+          'TVMazeAsync: Pushing ${metadataUpdates.length} metadata updates + '
+          '${guideEpisodes.length} guide episodes to native player (imdbId=$discoveredImdbId)',
         );
         await AndroidTvPlayerBridge.updateEpisodeMetadata(
           metadataUpdates,
           sessionId: sessionId,
           imdbId: discoveredImdbId,
+          guideEpisodes: guideEpisodes,
         );
         debugPrint('TVMazeAsync: Metadata push complete');
       } catch (e, stack) {
@@ -3940,10 +4263,18 @@ class _AndroidTvPlaybackPayloadBuilder {
         );
       }
 
-      // Use TVMaze episode title if available, otherwise fallback to entry title
+      // Use TVMaze episode title if available, otherwise fallback to entry
+      // title. Catalog singles (Quick Play / Sources tap) never get TVMaze
+      // enrichment, so prefer the clean content title over the release name.
+      // Stremio TV is excluded: there entry.title is the current program
+      // title while contentTitle is the generic catalog name.
       final displayTitle = episodeInfo.episodeInfo?.title?.isNotEmpty == true
           ? episodeInfo.episodeInfo!.title!
-          : entry.title;
+          : (preparedEntries.length == 1 &&
+                    args.stremioTvChannels == null &&
+                    (args.contentTitle?.isNotEmpty ?? false)
+                ? args.contentTitle!
+                : entry.title);
 
       items.add(
         _AndroidTvPlaybackItem(

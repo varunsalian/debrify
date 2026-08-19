@@ -134,7 +134,9 @@ class DetailModel {
   // ── Actions ──────────────────────────────────────────────────────────────
   final bool showPrimary;
   final VoidCallback onPrimary;
-  final VoidCallback? onBrowse; // movie Sources
+  // Movie: the full browse/search source list. Series: the season-pack
+  // search (Showcase mounts it; other layouts still gate on isMovie).
+  final VoidCallback? onBrowse;
   final VoidCallback onTrailer;
   final VoidCallback? onSelectSource;
   final VoidCallback? onAppMenu;
@@ -161,7 +163,7 @@ class DetailModel {
   final VoidCallback? onTrackersSecondary;
 
   /// Open the title-level source manager. There is no per-source host API, so
-  /// a card in the Sources band and the "Find sources" tile both land here.
+  /// a card in the Sources band and the "Pin source" tile both land here.
   final VoidCallback? onManageSources;
   final void Function(StremioMeta)? onRecommendationTap;
 

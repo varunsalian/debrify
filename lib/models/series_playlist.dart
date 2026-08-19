@@ -244,6 +244,12 @@ class SeriesPlaylist {
   /// Show poster URL discovered during fetchEpisodeInfo
   String? showPosterUrl;
 
+  /// The show's FULL TVMaze episode list (all seasons), retained by
+  /// fetchEpisodeInfo / SeriesBrowser so the player's episode guide can list
+  /// every episode of the show — not just the ones present in the pack.
+  /// Raw TVMaze episode maps ('season', 'number', 'name', 'image', ...).
+  List<Map<String, dynamic>> fullTvmazeEpisodes = [];
+
   /// Per-item IMDB IDs for movie collections
   /// Key: index in allEpisodes, Value: IMDB ID
   /// Used when each item in a collection is a different movie
@@ -866,6 +872,10 @@ class SeriesPlaylist {
       tvmazeShowId = overrideShowId;
       try {
         allTVMazeEpisodes = await _getEpisodesByShowId(overrideShowId);
+        // Retain the show's FULL episode list: the player's episode guide
+        // renders every episode of the show (not just the pack's files) and
+        // uses this to offer absent episodes for fetching.
+        fullTvmazeEpisodes = allTVMazeEpisodes;
         debugPrint(
           'TVMaze: Fetched ${allTVMazeEpisodes.length} episodes upfront for show ID $overrideShowId',
         );

@@ -585,6 +585,110 @@ void main() {
     expect(await StorageService.getSelectedWebDavServerId(), isNull);
   });
 
+  test(
+    'a shared WebDAV connection does not block unrelated mutations',
+    () async {
+      final shared = await StorageService.upsertWebDavServer(
+        const WebDavConfig(
+          id: 'shared-editor-id',
+          name: 'Shared DAV',
+          baseUrl: 'https://shared-dav.invalid/files',
+          username: 'shared-user',
+          password: 'shared-password',
+        ),
+      );
+      await ConnectionResourceService(registry: registry, cipher: cipher).grant(
+        actor: await ProfileAuthorizationContext.capture(registry),
+        targetProfileId: memberId,
+        resourceId: shared.connectionResourceId!,
+        permissions: const <ResourcePermission>{ResourcePermission.use},
+      );
+
+      final unrelated = await StorageService.upsertWebDavServer(
+        const WebDavConfig(
+          id: 'unrelated-editor-id',
+          name: 'Private DAV',
+          baseUrl: 'https://private-dav.invalid/files',
+          username: 'private-user',
+          password: 'private-password',
+        ),
+      );
+      expect(await StorageService.getWebDavServers(), hasLength(2));
+
+      await StorageService.deleteWebDavServer(unrelated.id);
+      final remaining = await StorageService.getWebDavServers();
+      expect(remaining, hasLength(1));
+      expect(
+        remaining.single.connectionResourceId,
+        shared.connectionResourceId,
+      );
+      expect(
+        await registry.getGrant(memberId, shared.connectionResourceId!),
+        isNotNull,
+      );
+
+      await expectLater(
+        StorageService.deleteWebDavServer(shared.id),
+        throwsA(isA<StateError>()),
+      );
+      expect(await StorageService.getWebDavServers(), hasLength(1));
+    },
+  );
+
+  test('transfer models never retain connection-resource authority', () {
+    final webDav = WebDavConfig(
+      id: 'dav-id',
+      name: 'DAV',
+      baseUrl: 'https://dav.invalid',
+      username: 'user',
+      password: 'password',
+      connectionResourceId: 'sender-dav-resource',
+      connectionResourceRevision: 4,
+    );
+    final indexer = IndexerManagerConfig(
+      id: 'indexer-id',
+      name: 'Prowlarr',
+      type: IndexerManagerType.prowlarr,
+      baseUrl: 'https://prowlarr.invalid',
+      apiKey: 'api-key',
+      connectionResourceId: 'sender-indexer-resource',
+      connectionResourceRevision: 5,
+    );
+    final iptv = IptvPlaylist(
+      id: 'iptv-id',
+      name: 'IPTV',
+      url: 'https://iptv.invalid/list.m3u',
+      addedAt: DateTime.utc(2026, 8, 18),
+      connectionResourceId: 'sender-iptv-resource',
+      connectionResourceRevision: 6,
+    );
+
+    for (final json in <Map<String, dynamic>>[
+      webDav.toTransferJson(),
+      indexer.toTransferJson(),
+      iptv.toTransferJson(),
+    ]) {
+      expect(
+        json.keys.any((key) => key.startsWith('_connectionResource')),
+        isFalse,
+      );
+    }
+    expect(
+      WebDavConfig.fromTransferJson(webDav.toJson()).connectionResourceId,
+      isNull,
+    );
+    expect(
+      IndexerManagerConfig.fromTransferJson(
+        indexer.toJson(),
+      ).connectionResourceId,
+      isNull,
+    );
+    expect(
+      IptvPlaylist.fromTransferJson(iptv.toJson()).connectionResourceId,
+      isNull,
+    );
+  });
+
   test('indexer collection writes return current stable authority', () async {
     const input = IndexerManagerConfig(
       id: 'editor-temporary-id',

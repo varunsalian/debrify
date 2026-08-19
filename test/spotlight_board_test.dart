@@ -187,6 +187,164 @@ void main() {
     expect(sawLeft, isTrue);
   });
 
+  testWidgets('cells hide from geometric search — the LEFT fallback can '
+      'never land on another row instead of the sidebar', (tester) async {
+    // The shell's LEFT handler tries focusInDirection first and only opens
+    // the sidebar when that search fails. A scrolled neighbouring row keeps
+    // cached cells alive to the LEFT of column 0, so a traversable cell
+    // means LEFT-at-the-edge sometimes browsed instead of opening the rail.
+    final a = _meta('tt1', 'Alpha');
+    final b = _meta('tt2', 'Bravo');
+    await tester
+        .pumpWidget(host([a, b], [_section('Top', [a, b], nodes: rows[0])]));
+    await tester.pumpAndSettle();
+
+    rows[0][1].requestFocus();
+    await tester.pumpAndSettle();
+
+    expect(rows[0][1].skipTraversal, isTrue,
+        reason: 'cells must be reachable only by the board\'s explicit walk');
+    expect(rows[0][1].focusInDirection(TraversalDirection.left), isFalse,
+        reason: 'a geometric LEFT search must find nothing inside the board');
+    expect(rows[0][0].hasFocus, isFalse);
+  });
+
+  testWidgets('a title card wears its rating on the caption meta line',
+      (tester) async {
+    await tester.pumpWidget(host([_meta('tt1', 'Alpha')], [
+      SpotlightShelf(
+        title: 'Top',
+        nodes: rows[0],
+        items: [
+          SpotlightCard(title: 'Rated', rating: 8.06, onOpen: _noop),
+          // Zero means "no rating carried" (common on catalog list items) —
+          // an empty star would read as a zero score.
+          SpotlightCard(title: 'Unrated', rating: 0, onOpen: _noop),
+        ],
+      ),
+    ]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('★ 8.1'), findsOneWidget,
+        reason: 'one decimal, star-prefixed, on the caption meta line');
+    expect(find.textContaining('★ 0'), findsNothing);
+  });
+
+  testWidgets('the board is LAZY — off-screen shelves do not build at mount',
+      (tester) async {
+    // A Column of shelves inside the vertical list once defeated its
+    // laziness: every shelf built, decoded and uploaded textures on mount,
+    // the measured first-seconds burst on a Mali box.
+    final sections = [
+      for (var r = 0; r < 12; r++)
+        SpotlightShelf(
+          title: 'Row $r',
+          id: 'row-$r',
+          nodes: const [],
+          items: [
+            for (var c = 0; c < 2; c++)
+              SpotlightCard(title: 'R$r-C$c', onOpen: _noop),
+          ],
+        ),
+    ];
+    await tester.pumpWidget(host([_meta('tt1', 'Alpha')], sections));
+    await tester.pumpAndSettle();
+
+    expect(find.text('R0-C0'), findsOneWidget,
+        reason: 'the first shelf is on screen and must build');
+    expect(find.text('R11-C0'), findsNothing,
+        reason: 'a shelf far below the fold must not build at mount');
+  });
+
+  testWidgets('a front-inserted shelf REUSES the shelves below it',
+      (tester) async {
+    // Tracker rows stream in above the catalog rows. Identity keys mean the
+    // insert must not remount existing shelves (remount = scroll reset +
+    // full texture re-upload of every visible card).
+    //
+    // A tall viewport, or the insert legitimately pushes the catalog shelf
+    // past the lazy list's build window and there is no element to compare.
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final below = SpotlightShelf(
+      title: 'Catalog',
+      id: 'catalog-a',
+      nodes: rows[0],
+      items: [SpotlightCard(title: 'CardOnShelf', onOpen: _noop)],
+    );
+    await tester.pumpWidget(host([_meta('tt1', 'Alpha')], [below]));
+    await tester.pumpAndSettle();
+    final before = tester.element(find.text('CardOnShelf'));
+
+    final inserted = SpotlightShelf(
+      title: 'Continue Watching',
+      id: 'cw',
+      nodes: const [],
+      items: [SpotlightCard(title: 'Bravo', onOpen: _noop)],
+    );
+    await tester
+        .pumpWidget(host([_meta('tt1', 'Alpha')], [inserted, below]));
+    await tester.pumpAndSettle();
+    final after = tester.element(find.text('CardOnShelf'));
+
+    expect(identical(before, after), isTrue,
+        reason: 'the shelf below the insert must keep its element subtree');
+  });
+
+  testWidgets('DOWN reaches a row whose remembered cell is not built',
+      (tester) async {
+    // The intermittent dead-DOWN: the target row sits parked at a far
+    // horizontal offset, so the cell the board remembers for it is outside
+    // the row's build window — a detached FocusNode, and requestFocus on it
+    // is a silent no-op. The walk must land on the nearest BUILT cell.
+    final nodesA = _rowNodes(2);
+    final nodesB = _rowNodes(20);
+    addTearDown(() {
+      for (final n in [...nodesA, ...nodesB]) {
+        n.dispose();
+      }
+    });
+    Widget board() => host([_meta('tt1', 'Alpha')], [
+          SpotlightShelf(
+            title: 'A',
+            id: 'a',
+            nodes: nodesA,
+            items: [
+              for (var c = 0; c < 2; c++)
+                SpotlightCard(title: 'A-C$c', onOpen: _noop),
+            ],
+          ),
+          SpotlightShelf(
+            title: 'B',
+            id: 'b',
+            nodes: nodesB,
+            items: [
+              for (var c = 0; c < 20; c++)
+                SpotlightCard(title: 'B-C$c', onOpen: _noop),
+            ],
+          ),
+        ]);
+    await tester.pumpWidget(board());
+    await tester.pumpAndSettle();
+
+    nodesA[0].requestFocus();
+    await tester.pumpAndSettle();
+
+    // Park row B far to the right WITHOUT the board's bookkeeping knowing —
+    // a touch drag, exactly what a restored scroll offset also produces.
+    await tester.drag(find.text('B-C1'), const Offset(-1400, 0));
+    await tester.pumpAndSettle();
+    expect(nodesB[0].context?.mounted ?? false, isFalse,
+        reason: 'setup: the remembered column-0 cell must be UNBUILT');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+
+    expect(nodesB.any((n) => n.hasFocus), isTrue,
+        reason: 'DOWN must land somewhere in row B, never die silently');
+  });
+
   testWidgets('the reel NEVER advances on its own — only a deliberate move '
       'pages it', (tester) async {
     // This pins the removal of auto-advance (user call, every device): the
@@ -820,6 +978,74 @@ void main() {
         reason: 'the card must be its own height, not the viewport\'s');
     expect(box.width / box.height, closeTo(2 / 3, 0.005),
         reason: 'a poster is 2:3 — anything else means it was stretched');
+  });
+
+  testWidgets('a wide shelf uses the readable landscape rail width',
+      (tester) async {
+    final a = _meta('tt1', 'Alpha');
+    final b = _meta('tt2', 'Bravo');
+    await tester.pumpWidget(host([a], [
+      SpotlightShelf(
+        title: 'Top',
+        nodes: rows[0],
+        items: [
+          for (final item in [a, b])
+            SpotlightCard(
+              title: item.name,
+              shape: SpotlightCardShape.wide,
+              onOpen: _noop,
+            ),
+        ],
+      ),
+    ]));
+    await tester.pumpAndSettle();
+
+    final board = tester.getSize(find.byType(SpotlightBoard)).width;
+    final expectedWidth = board * (470 / 1920);
+    final cardHost = tester
+        .widgetList<ParallaxFocus>(find.byType(ParallaxFocus))
+        .firstWhere((p) => p.fixedScaleForeground != null);
+    final box = tester.getSize(find.byWidget(cardHost));
+
+    expect(box.width, closeTo(expectedWidth, 0.5));
+    expect(box.width / box.height, closeTo(16 / 9, 0.005));
+  });
+
+  testWidgets(
+      'a wideChannel shelf takes the FULL landscape card size — one rail, '
+      'logo contained, preview rect 16:9', (tester) async {
+    await tester.pumpWidget(host(
+      [_meta('tt1', 'Alpha')],
+      [
+        SpotlightShelf(
+          title: 'IPTV Favourites',
+          nodes: rows[0],
+          items: [
+            for (final name in ['One', 'Two'])
+              SpotlightCard(
+                title: name,
+                subtitle: 'LIVE',
+                shape: SpotlightCardShape.wideChannel,
+                onOpen: _noop,
+              ),
+          ],
+        ),
+      ],
+    ));
+    await tester.pumpAndSettle();
+
+    final board = tester.getSize(find.byType(SpotlightBoard)).width;
+    final expectedW = board * (470 / 1920);
+    final cardHost = tester
+        .widgetList<ParallaxFocus>(find.byType(ParallaxFocus))
+        .firstWhere((p) => p.fixedScaleForeground != null);
+    final box = tester.getSize(find.byWidget(cardHost));
+
+    expect(box.width, closeTo(expectedW, 0.5),
+        reason: 'a channel tile must match the landscape title card');
+    expect(box.width / box.height, closeTo(16 / 9, 0.005));
+    expect(SpotlightCardShape.wideChannel.fit, BoxFit.contain,
+        reason: 'the mark is contained — a cropped logo is a cut wordmark');
   });
 
   testWidgets('TV card titles use the crisp fixed-scale label treatment',

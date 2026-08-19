@@ -23,6 +23,15 @@ enum QuickPlayRanking { debrify, exactOrder, quality, smallest, readyFirst }
 
 enum QuickPlayPackPreference { widestFirst, seasonFirst, exactEpisodeOnly }
 
+bool _listEquals(List<String> a, List<String> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
 T _enumValue<T extends Enum>(List<T> values, Object? raw, T fallback) {
   final name = raw?.toString();
   for (final value in values) {
@@ -60,6 +69,13 @@ class QuickPlayRules {
   /// How long a successful-but-empty pack search is suppressed for a season.
   final int failedPackCacheHours;
 
+  /// User-arranged provider order for this tab — normalized keys
+  /// ('engine:<id>' / 'stremio:<name>'), see SourcePriority. EMPTY means the
+  /// user never customized it: ordering everywhere keeps the shipped behavior
+  /// (mixed seeders-relevance), which is why this must never default to a
+  /// materialized list.
+  final List<String> sourcePriority;
+
   const QuickPlayRules({
     required this.preset,
     required this.sourceMode,
@@ -76,6 +92,7 @@ class QuickPlayRules {
     required this.searchTimeoutSeconds,
     required this.addonTimeoutSeconds,
     required this.failedPackCacheHours,
+    this.sourcePriority = const [],
   });
 
   factory QuickPlayRules.debrifyDefault({required bool isMovie}) =>
@@ -95,6 +112,7 @@ class QuickPlayRules {
         searchTimeoutSeconds: 0,
         addonTimeoutSeconds: 15,
         failedPackCacheHours: 6,
+        sourcePriority: const [],
       );
 
   factory QuickPlayRules.forPreset(
@@ -158,6 +176,7 @@ class QuickPlayRules {
     int? searchTimeoutSeconds,
     int? addonTimeoutSeconds,
     int? failedPackCacheHours,
+    List<String>? sourcePriority,
   }) => QuickPlayRules(
     preset: preset ?? this.preset,
     sourceMode: sourceMode ?? this.sourceMode,
@@ -182,6 +201,7 @@ class QuickPlayRules {
     failedPackCacheHours: (failedPackCacheHours ?? this.failedPackCacheHours)
         .clamp(0, 168)
         .toInt(),
+    sourcePriority: sourcePriority ?? this.sourcePriority,
   );
 
   Map<String, dynamic> toJson() => {
@@ -200,6 +220,7 @@ class QuickPlayRules {
     'searchTimeoutSeconds': searchTimeoutSeconds,
     'addonTimeoutSeconds': addonTimeoutSeconds,
     'failedPackCacheHours': failedPackCacheHours,
+    if (sourcePriority.isNotEmpty) 'sourcePriority': sourcePriority,
   };
 
   factory QuickPlayRules.fromJson(
@@ -273,6 +294,11 @@ class QuickPlayRules {
         'failedPackCacheHours',
         fallback.failedPackCacheHours,
       ).clamp(0, 168).toInt(),
+      sourcePriority:
+          (json['sourcePriority'] as List?)
+              ?.whereType<String>()
+              .toList(growable: false) ??
+          const [],
     );
   }
 
@@ -294,7 +320,8 @@ class QuickPlayRules {
           other.preserveLegacyCombinedPackSearch &&
       searchTimeoutSeconds == other.searchTimeoutSeconds &&
       addonTimeoutSeconds == other.addonTimeoutSeconds &&
-      failedPackCacheHours == other.failedPackCacheHours;
+      failedPackCacheHours == other.failedPackCacheHours &&
+      _listEquals(sourcePriority, other.sourcePriority);
 
   @override
   int get hashCode => Object.hash(
@@ -313,5 +340,6 @@ class QuickPlayRules {
     searchTimeoutSeconds,
     addonTimeoutSeconds,
     failedPackCacheHours,
+    Object.hashAll(sourcePriority),
   );
 }

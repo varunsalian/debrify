@@ -200,6 +200,15 @@ class NativeProfileProjection {
     final id = addon['id']?.toString().trim();
     final rawName = addon['name']?.toString().trim();
     final host = Uri.tryParse(manifestUrl)?.host ?? '';
+    // Only URL-only restore records need native manifest hydration. A normal
+    // catalog/stream addon also has a manifest URL but is already complete;
+    // treating every non-subtitle addon as pending made Cinemeta, AutoStream,
+    // and other unrelated addons appear in the subtitle picker.
+    final hasStoredBaseUrl =
+        rawBaseUrl is String && rawBaseUrl.trim().isNotEmpty;
+    final resources = stringList(addon['resources'], resourceNames: true);
+    final needsManifestHydration =
+        manifestUrl.isNotEmpty && !hasStoredBaseUrl && resources.isEmpty;
     return <String, Object?>{
       'id': id?.isNotEmpty == true ? id! : manifestUrl,
       'name': rawName?.isNotEmpty == true
@@ -207,9 +216,10 @@ class NativeProfileProjection {
           : (host.isNotEmpty ? host : 'Stremio addon'),
       'manifest_url': manifestUrl,
       'base_url': baseUrl,
-      'resources': stringList(addon['resources'], resourceNames: true),
+      'resources': resources,
       'types': stringList(addon['types']),
       'enabled': addon['enabled'] is bool ? addon['enabled']! as bool : true,
+      'needs_manifest_hydration': needsManifestHydration,
     };
   }
 

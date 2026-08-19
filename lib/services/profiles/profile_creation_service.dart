@@ -23,6 +23,7 @@ class ProfileCreationService {
     'text_brightness',
     'tv_ui_scale_percent',
     'tv_home_style',
+    'home_card_orientation',
     'tv_sidebar_style',
     'desktop_sidebar_style',
     'discover_layout',

@@ -44,6 +44,8 @@ import 'pikpak_api_service.dart';
 import 'premiumize_service.dart';
 import 'profiles/profile_policy_guard.dart';
 import 'series_source_fetcher.dart';
+import 'source_priority.dart';
+import 'stremio_service.dart';
 import 'series_source_service.dart';
 import 'storage_service.dart';
 import 'stream_url_validator.dart';
@@ -183,6 +185,9 @@ class TorrentPlaybackService {
     // involved, so the advance goes bound-sources → addon-stream flow.
     if (torrent.streamType == StreamType.directUrl &&
         (torrent.directUrl?.isNotEmpty ?? false)) {
+      final fetcher = meta?.contentType == 'movie'
+          ? movieFetcherFor(meta: meta)
+          : seriesFetcherFor(meta: meta, episodesFetched: sources != null);
       await VideoPlayerLauncher.push(
         context,
         _playerArgs(
@@ -191,9 +196,11 @@ class TorrentPlaybackService {
           subtitle: torrent.source.isNotEmpty ? torrent.source : null,
           stremioSources: sources,
           stremioCurrentSourceIndex: sources != null ? sourceIndex : null,
-          resolveSourceToPlaylist: (sources != null && sources.length > 1)
+          resolveSourceToPlaylist:
+              ((sources != null && sources.length > 1) || fetcher != null)
               ? _lazyProviderResolver()
               : null,
+          seriesSourceFetcher: fetcher,
           meta: meta,
         ),
         onQuickPlayNextEpisode: _nextEpisodeHandlerFor(context, meta),
@@ -1017,6 +1024,7 @@ class TorrentPlaybackService {
       return;
     }
     final rules = await StorageService.getQuickPlayRules(isMovie: isMovie);
+    if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
     var activeRules = rules;
     if (!context.mounted) return;
 
@@ -1180,21 +1188,18 @@ class TorrentPlaybackService {
     // PikPak is excluded: it has no cache check, so each pack probe queues a
     // real (large) offline download to the user's account that can't be
     // cheaply cleaned up — pack-first there would be actively harmful.
-    if (!isMovie &&
-        season != null &&
-        episode != null &&
-        provider != 'pikpak' &&
-        !_recentlyNoPack(imdbId, season, provider, activeRules) &&
-        activeRules.preferSeriesPacks &&
-        activeRules.packPreference !=
-            QuickPlayPackPreference.exactEpisodeOnly) {
+    // The series pack route, shared by pack-FIRST (preferSeriesPacks on) and
+    // pack-FALLBACK (off, episode search found nothing). Returns true when a
+    // pack launched, false to continue, null when the flow must stop
+    // (cancelled / unmounted).
+    Future<bool?> tryPackRoute() async {
       // null = the SEARCH failed (transient network) — the episode search
-      // below still runs, and we DON'T poison the negative cache so the next
+      // still runs, and we DON'T poison the negative cache so the next
       // episode retries rather than deferring for the whole TTL.
       final packResult = await searchSeriesPackSources(
         imdbId: imdbId,
         label: label,
-        season: season,
+        season: season!,
         provider: provider,
         ladder: ladder,
         rules: activeRules,
@@ -1203,16 +1208,16 @@ class TorrentPlaybackService {
       );
       final searchOk = packResult != null;
       final packs = packResult ?? const <Torrent>[];
-      if (cancel.cancelled) return;
+      if (cancel.cancelled) return null;
       if (!context.mounted) {
         closeLoading();
-        return;
+        return null;
       }
       _applyLadderNote(overlay, ladder, packs);
-      if (cancel.cancelled) return;
+      if (cancel.cancelled) return null;
       if (!context.mounted) {
         closeLoading();
-        return;
+        return null;
       }
       if (packs.isNotEmpty) {
         overlay.setStage(PlayLoadStage.preparing);
@@ -1224,10 +1229,10 @@ class TorrentPlaybackService {
           rules: activeRules,
           isCancelled: () => cancel.cancelled,
         );
-        if (cancel.cancelled) return;
+        if (cancel.cancelled) return null;
         if (!context.mounted) {
           closeLoading();
-          return;
+          return null;
         }
         if (packResolved != null && packWinner != null) {
           overlay.setStage(PlayLoadStage.starting);
@@ -1249,7 +1254,7 @@ class TorrentPlaybackService {
             ),
             overlay: overlay,
           );
-          return;
+          return true;
         }
         // No pack was instantly playable — fall through to the episode search.
       }
@@ -1266,6 +1271,20 @@ class TorrentPlaybackService {
           Duration(hours: activeRules.failedPackCacheHours),
         );
       }
+      return false;
+    }
+
+    final packRouteAllowed =
+        !isMovie &&
+        season != null &&
+        episode != null &&
+        provider != 'pikpak' &&
+        !_recentlyNoPack(imdbId, season, provider, activeRules) &&
+        activeRules.packPreference != QuickPlayPackPreference.exactEpisodeOnly;
+
+    if (packRouteAllowed && activeRules.preferSeriesPacks) {
+      final packed = await tryPackRoute();
+      if (packed != false) return;
     }
 
     List<Torrent> torrents;
@@ -1294,6 +1313,13 @@ class TorrentPlaybackService {
       return;
     }
     if (torrents.isEmpty) {
+      // Episode-first route (Prefer season packs off): packs are the
+      // FALLBACK when the episode search comes up dry, so a show that only
+      // exists as packs still plays.
+      if (packRouteAllowed && !activeRules.preferSeriesPacks) {
+        final packed = await tryPackRoute();
+        if (packed != false) return;
+      }
       closeLoading();
       _snack(context, 'No sources found for "$label".');
       return;
@@ -1443,6 +1469,19 @@ class TorrentPlaybackService {
       out = indexed.map((e) => e.$2).toList();
     }
 
+    // Addon Priority: when the user arranged a provider order, it groups the
+    // list provider-first (stable inside each provider, so the ranking above
+    // survives within a group). An empty list — the default — changes
+    // nothing. Applied before the ladder so hard filter preferences stay
+    // primary.
+    if (rules.sourcePriority.isNotEmpty) {
+      out = SourcePriority.order(
+        out,
+        rules.sourcePriority,
+        aliases: _sourceAliases,
+      );
+    }
+
     if (ladder != null && ladder.isActive) {
       if (!rules.relaxFilters) {
         // Strict filtering removes non-matches but keeps the surviving addon
@@ -1455,6 +1494,39 @@ class TorrentPlaybackService {
       }
     }
     return out;
+  }
+
+  /// Indexer-manager engines stamp results with their display name; this maps
+  /// it back to the engine id for the Addon Priority list. The async flows
+  /// AWAIT [warmSourceAliases] before ordering (a sync getter alone would
+  /// leave the first playback after startup alias-less, silently ignoring an
+  /// indexer-manager row's position in the priority list).
+  static Map<String, String>? _cachedSourceAliases;
+  static Future<void>? _sourceAliasWarmup;
+
+  static Map<String, String> get _sourceAliases =>
+      _cachedSourceAliases ?? const {};
+
+  /// Resolves once the alias map is loaded. Single-flight, but NOT memoized
+  /// forever: each prioritized play re-reads (cheap — the engine registry is
+  /// cached and indexer configs are a prefs read), so adding or renaming an
+  /// indexer manager mid-session is picked up on the next play, not the next
+  /// app restart.
+  static Future<void> warmSourceAliases() {
+    final inFlight = _sourceAliasWarmup;
+    if (inFlight != null) return inFlight;
+    final run = SourcePriority.engineAliases()
+        .then((m) {
+          _cachedSourceAliases = m;
+        })
+        .catchError((_) {
+          _cachedSourceAliases ??= const <String, String>{};
+        })
+        .whenComplete(() {
+          _sourceAliasWarmup = null;
+        });
+    _sourceAliasWarmup = run;
+    return run;
   }
 
   /// Restores rule/filter ordering after `_cacheFirst` has stably partitioned
@@ -1885,6 +1957,7 @@ class TorrentPlaybackService {
         final prov = await effectiveProvider();
         if (prov == null) return null;
         final rules = await StorageService.getQuickPlayRules(isMovie: false);
+        if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
         final ladder = await loadLadder(includeSize: false, rules: rules);
         // This feeds the manual Sources drawer, not automatic selection. Keep
         // every candidate visible while retaining the user's ordering. Strict
@@ -1903,6 +1976,7 @@ class TorrentPlaybackService {
         final prov = await effectiveProvider();
         if (prov == null) return null;
         final rules = await StorageService.getQuickPlayRules(isMovie: false);
+        if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
         final ladder = await loadLadder(includeSize: false, rules: rules);
         try {
           final list = await searchCuratedSources(
@@ -1921,6 +1995,36 @@ class TorrentPlaybackService {
           );
         } catch (_) {
           // Engine search failed — null keeps the tab's "Load more" for retry.
+          return null;
+        }
+      },
+      listAddons: () async => [
+        for (final addon in await StremioService.instance
+            .applicableStreamingAddons(type: 'series', contentId: imdbId))
+          SourceAddonRef(addon.id, addon.name),
+      ],
+      fetchAddonEpisodes: (addonId, s, e) async {
+        try {
+          return await StremioService.instance.retryAddonStreams(
+            addonId: addonId,
+            type: 'series',
+            imdbId: imdbId,
+            season: s,
+            episode: e,
+          );
+        } catch (_) {
+          // Null = fetch failed; the sheet keeps the Fetch row for a retry.
+          return null;
+        }
+      },
+      fetchAddonPacks: (addonId, s) async {
+        try {
+          return await StremioService.instance.fetchAddonSeasonPacks(
+            addonId: addonId,
+            imdbId: imdbId,
+            season: s,
+          );
+        } catch (_) {
           return null;
         }
       },
@@ -1963,6 +2067,7 @@ class TorrentPlaybackService {
         if (prov == null) return null;
         // Size buckets are movie-meaningful — keep them (unlike series).
         final rules = await StorageService.getQuickPlayRules(isMovie: true);
+        if (rules.sourcePriority.isNotEmpty) await warmSourceAliases();
         final ladder = await loadLadder(rules: rules);
         try {
           final list = await searchCuratedSources(
@@ -1979,6 +2084,22 @@ class TorrentPlaybackService {
           );
         } catch (_) {
           // Engine search failed — null keeps "Load more" for retry.
+          return null;
+        }
+      },
+      listAddons: () async => [
+        for (final addon in await StremioService.instance
+            .applicableStreamingAddons(type: 'movie', contentId: imdbId))
+          SourceAddonRef(addon.id, addon.name),
+      ],
+      fetchAddonEpisodes: (addonId, _, __) async {
+        try {
+          return await StremioService.instance.retryAddonStreams(
+            addonId: addonId,
+            type: 'movie',
+            imdbId: imdbId,
+          );
+        } catch (_) {
           return null;
         }
       },
@@ -2557,6 +2678,9 @@ class TorrentPlaybackService {
       leechers: 0,
       completed: 0,
       scrapedDate: 0,
+      // Both players' source sheets group by this field; empty filed the
+      // binding under "Other sources". Both sheets label 'pinned' explicitly.
+      source: 'pinned',
       magnetUrl:
           'magnet:?xt=urn:btih:${s.torrentHash}&dn=${Uri.encodeComponent(s.torrentName)}',
       hasRealInfoHash: true,

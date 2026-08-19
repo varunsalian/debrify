@@ -163,7 +163,7 @@ class AppMigrationService {
 
     try {
       final stremioService = StremioService.instance;
-      final addons = await stremioService.getAddons();
+      final addons = await stremioService.getAddonsForManagement();
 
       // Check if Cinemeta is already installed (by manifest URL or ID)
       final hasCinemeta = addons.any(
@@ -203,7 +203,7 @@ class AppMigrationService {
 
     try {
       final stremioService = StremioService.instance;
-      final addons = await stremioService.getAddons();
+      final addons = await stremioService.getAddonsForManagement();
 
       // Check if OpenSubtitles is already installed (by ID pattern). The
       // official addon we seed ourselves is excluded: its presence doesn't
@@ -254,7 +254,7 @@ class AppMigrationService {
 
     try {
       final stremioService = StremioService.instance;
-      final addons = await stremioService.getAddons();
+      final addons = await stremioService.getAddonsForManagement();
 
       final hasOfficial = addons.any(
         (addon) =>
@@ -296,7 +296,7 @@ class AppMigrationService {
 
     try {
       final stremioService = StremioService.instance;
-      final addons = await stremioService.getAddons();
+      final addons = await stremioService.getAddonsForManagement();
 
       // Check if Watch Next is already installed (by manifest URL or ID)
       final hasWatchNext = addons.any(

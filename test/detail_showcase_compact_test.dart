@@ -380,7 +380,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.layers_rounded));
     expect(browsed, 1);
 
-    // And the band's labelled entry beside "Find sources".
+    // And the band's labelled entry beside "Pin source".
     await tester.drag(find.byType(DetailShowcase), const Offset(0, -900));
     await tester.pumpAndSettle();
     final browseCard = find.text('⌕  Browse all', skipOffstage: false);
@@ -391,17 +391,44 @@ void main() {
     expect(browsed, 2);
   });
 
-  testWidgets('a series mounts NO browse — the episode list is its picker',
+  testWidgets('a series mounts the browse under pack wording — it opens the '
+      'season-pack search, not "all sources"', (tester) async {
+    _surface(tester, _phone);
+    var browsed = 0;
+    await tester.pumpWidget(_host(
+      _model(onBrowse: () => browsed++),
+      dpad: false,
+      size: _phone,
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.layers_rounded), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.layers_rounded));
+    expect(browsed, 1);
+
+    await tester.drag(find.byType(DetailShowcase), const Offset(0, -900));
+    await tester.pumpAndSettle();
+    expect(find.text('⌕  Browse all', skipOffstage: false), findsNothing);
+    final packCard = find.text('⌕  Season packs', skipOffstage: false);
+    expect(packCard, findsOneWidget);
+    await tester.ensureVisible(packCard);
+    await tester.pumpAndSettle();
+    await tester.tap(packCard, warnIfMissed: false);
+    expect(browsed, 2);
+  });
+
+  testWidgets('a series whose host offers no pack search mounts NO browse',
       (tester) async {
     _surface(tester, _phone);
     await tester.pumpWidget(_host(
-      _model(onBrowse: () {}),
+      _model(),
       dpad: false,
       size: _phone,
     ));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.layers_rounded), findsNothing);
     expect(find.text('⌕  Browse all', skipOffstage: false), findsNothing);
+    expect(find.text('⌕  Season packs', skipOffstage: false), findsNothing);
   });
 
   testWidgets('the compact identity is centered with a MORE expander',

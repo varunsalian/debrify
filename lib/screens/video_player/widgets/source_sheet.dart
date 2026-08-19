@@ -70,16 +70,54 @@ class _SourceSheetState extends State<SourceSheet> {
   String? _errorMessage;
   String? _loadingMode;
 
+  /// Every applicable addon for this play — placeholder rail groups are built
+  /// from these, so an addon with zero results still shows (with a "Fetch
+  /// results" row) instead of being invisible.
+  List<SourceAddonRef> _allAddons = const [];
+
+  /// Group id → ALL addon ids sharing it. Group identity must stay the
+  /// name-derived sourceKey (fetched rows carry `stremio:<name>` and nothing
+  /// else), so two same-named addons share one group — the fetch then asks
+  /// every addon in it rather than silently dropping all but the first.
+  final Map<String, List<String>> _addonIdsByGroup = {};
+
+  /// Per-group fetch state: episode fetch in flight / lazy pack probe in
+  /// flight / last fetch failed (the group's Fetch row doubles as retry).
+  final Set<String> _fetchingGroups = {};
+  final Set<String> _packProbing = {};
+  final Set<String> _failedGroups = {};
+  final Set<String> _fetchedGroups = {};
+
   @override
   void initState() {
     super.initState();
     _rebuildGroups(landOnCurrent: true);
+    _loadAddonListing();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _keyboardFocusNode.requestFocus();
         _ensureFocusedVisible();
       }
     });
+  }
+
+  Future<void> _loadAddonListing() async {
+    final listing = widget.seriesFetcher?.listAddons;
+    if (listing == null || widget.seriesFetcher?.fetchAddonEpisodes == null) {
+      return;
+    }
+    try {
+      final addons = await listing();
+      if (!mounted || addons.isEmpty) return;
+      setState(() {
+        _allAddons = addons;
+        final selectedId = _groups.isEmpty ? 'all' : _groups[_selectedGroup].id;
+        final focusedOriginal = _focusedEntry?.originalIndex;
+        _rebuildGroups(selectedId: selectedId, focusedOriginal: focusedOriginal);
+      });
+    } catch (_) {
+      // No listing — the sheet simply shows only groups that have results.
+    }
   }
 
   @override
@@ -109,6 +147,8 @@ class _SourceSheetState extends State<SourceSheet> {
   String _groupLabel(Torrent torrent) {
     var source = torrent.source.trim();
     if (source.isEmpty) return 'Other sources';
+    // The title-level binding (torrent_playback_service._torrentFromSource).
+    if (source.toLowerCase() == 'pinned') return 'Pinned source';
     if (source.toLowerCase().startsWith('stremio:')) {
       source = source.substring('stremio:'.length);
     }
@@ -136,10 +176,23 @@ class _SourceSheetState extends State<SourceSheet> {
       (buckets[id] ??= <_SourceEntry>[]).add(entry);
       labels.putIfAbsent(id, () => _groupLabel(entry.torrent));
     }
+    // Placeholder groups for applicable addons with no results yet — the
+    // group id is the addon's sourceKey, so its fetched rows land in the
+    // same bucket the placeholder occupied. Same-named addons share one
+    // placeholder (the set guard), never two duplicate groups.
+    _addonIdsByGroup.clear();
+    for (final addon in _allAddons) {
+      (_addonIdsByGroup[addon.sourceKey] ??= <String>[]).add(addon.id);
+    }
+    final placeholderKeys = <String>{};
     _groups = <_AddonGroup>[
       _AddonGroup('all', 'All add-ons', all),
       for (final bucket in buckets.entries)
         _AddonGroup(bucket.key, labels[bucket.key]!, bucket.value),
+      for (final addon in _allAddons)
+        if (!buckets.containsKey(addon.sourceKey) &&
+            placeholderKeys.add(addon.sourceKey))
+          _AddonGroup(addon.sourceKey, addon.name, const <_SourceEntry>[]),
     ];
     final nextGroup = _groups.indexWhere((g) => g.id == selectedId);
     _selectedGroup = nextGroup < 0 ? 0 : nextGroup;
@@ -328,6 +381,99 @@ class _SourceSheetState extends State<SourceSheet> {
     });
   }
 
+  /// Whether the selected group is an empty addon group whose per-addon
+  /// fetch is available — the state that renders the "Fetch results" row.
+  bool get _groupFetchAvailable {
+    if (widget.seriesFetcher?.fetchAddonEpisodes == null) return false;
+    if (_groups.isEmpty) return false;
+    final group = _groups[_selectedGroup];
+    return group.entries.isEmpty && _addonIdsByGroup.containsKey(group.id);
+  }
+
+  /// Per-addon fetch: episode results first — they render the instant the
+  /// merge lands, direct links included — then, ONLY when they contained a
+  /// torrent magnet, the lazy season-pack probe (a direct-link-only addon
+  /// has no packs to find). A null fetch marks the group failed and keeps
+  /// the Fetch row up as the retry.
+  Future<void> _fetchAddonGroup() async {
+    final fetcher = widget.seriesFetcher;
+    final search = fetcher?.fetchAddonEpisodes;
+    if (fetcher == null || search == null || _groups.isEmpty) return;
+    final group = _groups[_selectedGroup];
+    final addonIds = _addonIdsByGroup[group.id];
+    if (addonIds == null ||
+        addonIds.isEmpty ||
+        _fetchingGroups.contains(group.id)) {
+      return;
+    }
+    setState(() {
+      _fetchingGroups.add(group.id);
+      _failedGroups.remove(group.id);
+      _errorMessage = null;
+    });
+    final s = widget.currentSeason ?? fetcher.season;
+    final e = widget.currentEpisode ?? fetcher.episode;
+    // Every addon sharing this group's name. Failed only when ALL failed —
+    // a partial success is results the user asked for. Track which ids
+    // returned magnets: only THOSE earn the pack probe (a direct-only or
+    // empty sibling has no packs to find).
+    List<Torrent>? episodes;
+    final magnetIds = <String>[];
+    for (final addonId in addonIds) {
+      final fetched = await search(addonId, s, e);
+      if (fetched != null) {
+        (episodes ??= <Torrent>[]).addAll(fetched);
+        if (fetched.any((t) => t.streamType == StreamType.torrent)) {
+          magnetIds.add(addonId);
+        }
+      }
+    }
+    if (!mounted) return;
+    if (episodes == null) {
+      setState(() {
+        _fetchingGroups.remove(group.id);
+        _failedGroups.add(group.id);
+      });
+      return;
+    }
+    setState(() {
+      _fetchingGroups.remove(group.id);
+      _fetchedGroups.add(group.id);
+    });
+    var afterEpisodes = widget.sources;
+    if (episodes.isNotEmpty) {
+      afterEpisodes = SeriesSourceFetcher.mergeSources(
+        widget.sources,
+        episodes,
+      );
+      widget.onSourcesMerged?.call(afterEpisodes);
+    }
+    final packSearch = fetcher.fetchAddonPacks;
+    if (fetcher.isMovie || packSearch == null || magnetIds.isEmpty) return;
+    setState(() => _packProbing.add(group.id));
+    List<Torrent>? packs;
+    for (final addonId in magnetIds) {
+      final fetched = await packSearch(addonId, s);
+      if (fetched != null) (packs ??= <Torrent>[]).addAll(fetched);
+    }
+    if (!mounted) return;
+    setState(() => _packProbing.remove(group.id));
+    if (packs != null && packs.isNotEmpty) {
+      // widget.sources only adopts the episode merge after the parent's
+      // rebuild, and a fast pack probe can win that race (another merge —
+      // a load-more, a second addon fetch — can also land in between).
+      // Fold the episode result in again before appending packs: merge is
+      // append-only and dedupes, so whichever list is fresher survives
+      // intact and nothing is clobbered.
+      widget.onSourcesMerged?.call(
+        SeriesSourceFetcher.mergeSources(
+          SeriesSourceFetcher.mergeSources(widget.sources, afterEpisodes),
+          packs,
+        ),
+      );
+    }
+  }
+
   void _handleKey(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return;
     if (event.logicalKey == LogicalKeyboardKey.escape ||
@@ -390,7 +536,12 @@ class _SourceSheetState extends State<SourceSheet> {
         _loadMore();
       } else {
         final entry = _focusedEntry;
-        if (entry != null) _selectSource(entry);
+        if (entry != null) {
+          _selectSource(entry);
+        } else if (_groupFetchAvailable) {
+          // Empty addon group: the sole focusable row is "Fetch results".
+          _fetchAddonGroup();
+        }
       }
     }
   }
@@ -481,6 +632,7 @@ class _SourceSheetState extends State<SourceSheet> {
                 child: _AddonRailRow(
                   label: group.label,
                   count: group.entries.length,
+                  failed: _failedGroups.contains(group.id),
                   selected: selected,
                   focused: focused,
                   onTap: () {
@@ -527,16 +679,36 @@ class _SourceSheetState extends State<SourceSheet> {
             onTap: _loadMore,
           ),
         ],
+        if (_groups.isNotEmpty &&
+            _packProbing.contains(_groups[_selectedGroup].id)) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const SizedBox(
+                width: 11,
+                height: 11,
+                child: CircularProgressIndicator(strokeWidth: 1.6),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Looking for season packs from this add-on…',
+                style: _mutedStyle,
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 14),
         if (_errorMessage != null) _ErrorBanner(message: _errorMessage!),
         Expanded(
           child: _visibleEntries.isEmpty
-              ? Center(
-                  child: Text(
-                    'No sources from this add-on',
-                    style: _mutedStyle,
-                  ),
-                )
+              ? (_groupFetchAvailable
+                    ? _buildGroupFetch()
+                    : Center(
+                        child: Text(
+                          'No sources from this add-on',
+                          style: _mutedStyle,
+                        ),
+                      ))
               : ListView.builder(
                   controller: _sourceScrollController,
                   itemCount: _visibleEntries.length,
@@ -570,6 +742,39 @@ class _SourceSheetState extends State<SourceSheet> {
       ],
     ),
   );
+
+  /// The empty addon group's body: one "Fetch results" row (also the retry
+  /// after a failure or an empty fetch) plus a one-line explanation.
+  Widget _buildGroupFetch() {
+    final group = _groups[_selectedGroup];
+    final fetching = _fetchingGroups.contains(group.id);
+    final failed = _failedGroups.contains(group.id);
+    final fetched = _fetchedGroups.contains(group.id);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _LoadMoreRow(
+          label: fetching
+              ? 'Fetching episode results…'
+              : failed
+              ? 'Fetch failed — try again'
+              : 'Fetch results',
+          focused: _focusZone == _FocusZone.sources && _focusedSource >= 0,
+          enabled: !fetching,
+          onTap: _fetchAddonGroup,
+        ),
+        const SizedBox(height: 10),
+        Text(
+          failed
+              ? "This add-on couldn't be reached."
+              : fetched
+              ? 'This add-on returned nothing for this episode.'
+              : "This add-on hasn't been asked yet for this episode.",
+          style: _mutedStyle,
+        ),
+      ],
+    );
+  }
 
   Widget _sectionLabel(String label) => Text(
     label.toUpperCase(),
@@ -620,12 +825,14 @@ class _SourceSheetState extends State<SourceSheet> {
 class _AddonRailRow extends StatelessWidget {
   final String label;
   final int count;
+  final bool failed;
   final bool selected;
   final bool focused;
   final VoidCallback onTap;
   const _AddonRailRow({
     required this.label,
     required this.count,
+    this.failed = false,
     required this.selected,
     required this.focused,
     required this.onTap,
@@ -687,12 +894,15 @@ class _AddonRailRow extends StatelessWidget {
               ),
             ),
             Text(
-              '$count',
+              failed && count == 0 ? '!' : '$count',
               style: TextStyle(
-                color: inverse
+                color: failed && count == 0
+                    ? const Color(0xFFE57373)
+                    : inverse
                     ? Colors.black.withValues(alpha: .55)
                     : Colors.white.withValues(alpha: .42),
                 fontSize: 11,
+                fontWeight: failed && count == 0 ? FontWeight.w800 : null,
               ),
             ),
           ],

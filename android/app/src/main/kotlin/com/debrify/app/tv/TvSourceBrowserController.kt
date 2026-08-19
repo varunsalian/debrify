@@ -44,6 +44,20 @@ class TvSourceBrowserController(
         fun requestLoadMore(mode: String)
         fun onSourceSelected(index: Int)
         fun onHidden()
+
+        /** Applicable addons with no entries yet, as (groupId, label) — shown
+         * as zero-count rail groups so a silent addon stays visible. */
+        fun placeholderGroups(): List<Pair<String, String>> = emptyList()
+
+        /** Per-addon fetch state for an EMPTY group: null = no fetch for this
+         * group, else "idle" / "fetching" / "failed" / "fetched" (fetched but
+         * still empty = retryable). */
+        fun groupFetchState(groupId: String): String? = null
+
+        /** True while the lazy season-pack probe for this group runs. */
+        fun isGroupProbing(groupId: String): Boolean = false
+
+        fun requestGroupFetch(groupId: String) {}
     }
 
     private data class Group(val id: String, val label: String, val entries: List<TvSourceBrowserEntry>)
@@ -145,7 +159,17 @@ class TvSourceBrowserController(
         if (zone == Zone.RAIL) { zone = Zone.RESULTS; render(); return }
         if (selectedResult < 0) {
             callbacks.loadMoreMode()?.let { callbacks.requestLoadMore(it) }
-        } else visible().getOrNull(selectedResult)?.let { callbacks.onSourceSelected(it.index) }
+            return
+        }
+        val entry = visible().getOrNull(selectedResult)
+        if (entry != null) {
+            callbacks.onSourceSelected(entry.index)
+            return
+        }
+        // Empty addon group: the sole row is "Fetch results".
+        val groupId = groups.getOrNull(selectedGroup)?.id ?: return
+        val state = callbacks.groupFetchState(groupId) ?: return
+        if (state != "fetching") callbacks.requestGroupFetch(groupId)
     }
 
     private fun rebuild(landOnCurrent: Boolean = false, selectedId: String? = null, focusedIndex: Int? = null) {
@@ -161,6 +185,11 @@ class TvSourceBrowserController(
         groups = buildList {
             add(Group("all", "All add-ons", all))
             lists.forEach { (id, entries) -> add(Group(id, labels[id] ?: "Other sources", entries)) }
+            // Applicable addons with nothing yet — same group id their fetched
+            // rows will use, so the placeholder becomes the real group.
+            callbacks.placeholderGroups().forEach { (id, label) ->
+                if (!lists.containsKey(id)) add(Group(id, label, emptyList()))
+            }
         }
         selectedGroup = groups.indexOfFirst { it.id == selectedId }.let { if (it < 0) 0 else it }
         val target = focusedIndex ?: if (landOnCurrent) callbacks.currentIndex() else null
@@ -173,6 +202,8 @@ class TvSourceBrowserController(
 
     private fun sourceLabel(raw: String): String {
         if (raw.isEmpty()) return "Other sources"
+        // The title-level binding (Dart stamps 'pinned' on bound plays).
+        if (raw.equals("pinned", ignoreCase = true)) return "Pinned source"
         val label = if (raw.startsWith("stremio:", ignoreCase = true)) raw.substring(8) else raw
         return label.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
@@ -182,7 +213,9 @@ class TvSourceBrowserController(
         groups.forEachIndexed { i, group ->
             val active = zone == Zone.RAIL && i == selectedGroup
             val selected = i == selectedGroup
-            rail.addView(row(group.label, "${group.entries.size}", active, selected) {
+            val failed = group.entries.isEmpty() &&
+                callbacks.groupFetchState(group.id) == "failed"
+            rail.addView(row(group.label, if (failed) "!" else "${group.entries.size}", active, selected) {
                 selectedGroup = i
                 selectedResult = visible().indexOfFirst { it.index == callbacks.currentIndex() }
                     .let { if (it < 0) 0 else it }
@@ -197,9 +230,12 @@ class TvSourceBrowserController(
 
     private fun renderResults() {
         val entries = visible()
+        val groupId = groups.getOrNull(selectedGroup)?.id
         header.text = (groups.getOrNull(selectedGroup)?.label ?: "All add-ons").uppercase()
         count.text = "${entries.size} source${if (entries.size == 1) "" else "s"}"
-        context.text = transientError ?: contextLabel(entries)
+        val probing = groupId != null && callbacks.isGroupProbing(groupId)
+        context.text = transientError
+            ?: if (probing) "Looking for season packs from this add-on…" else contextLabel(entries)
         context.setTextColor(if (transientError == null) 0x8CFFFFFF.toInt() else 0xFFFF7A85.toInt())
         val mode = callbacks.loadMoreMode()
         loadMore.visibility = if (mode == null) View.GONE else View.VISIBLE
@@ -209,6 +245,22 @@ class TvSourceBrowserController(
             loadMore.setTextColor(if (zone == Zone.RESULTS && selectedResult < 0) Color.BLACK else 0xD9FFFFFF.toInt())
         }
         results.removeAllViews()
+        // Empty addon group: one "Fetch results" row (also the retry after a
+        // failure or an empty fetch).
+        val fetchState = if (entries.isEmpty() && groupId != null) {
+            callbacks.groupFetchState(groupId)
+        } else null
+        if (fetchState != null && groupId != null) {
+            val active = zone == Zone.RESULTS && selectedResult >= 0
+            val label = when (fetchState) {
+                "fetching" -> "Fetching episode results…"
+                "failed" -> "Fetch failed — try again"
+                else -> "Fetch results  ›"
+            }
+            results.addView(fetchRow(label, active, fetchState != "fetching") {
+                callbacks.requestGroupFetch(groupId)
+            })
+        }
         entries.forEachIndexed { i, entry ->
             results.addView(sourceRow(entry, zone == Zone.RESULTS && i == selectedResult, entry.index == callbacks.currentIndex()) {
                 selectedResult = i
@@ -289,6 +341,17 @@ class TvSourceBrowserController(
         tags.forEach { tag -> addView(tagView(tag, active)) }
         if (current) addView(TextView(activity).apply { text = "▮▮▮"; setTextColor(if (active) 0xFFAB2733.toInt() else 0xFFE23D4C.toInt()); textSize = 11f; setPadding(dp(14), 0, 0, 0) })
         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(58)).apply { bottomMargin = dp(5) }
+    }
+
+    private fun fetchRow(label: String, active: Boolean, enabled: Boolean, click: () -> Unit): View = TextView(activity).apply {
+        text = label
+        textSize = 14f
+        setTypeface(typeface, 1)
+        setTextColor(if (active) Color.BLACK else 0xD9FFFFFF.toInt())
+        setPadding(dp(18), dp(14), dp(18), dp(14))
+        background = bg(active, false)
+        if (enabled) setOnClickListener { click() }
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(5) }
     }
 
     private fun tagView(tag: String, inverse: Boolean): TextView = TextView(activity).apply { text = tag; textSize = 10f; setTextColor(if (inverse) 0x99000000.toInt() else 0xAFFFFFFF.toInt()); setPadding(dp(6), dp(3), dp(6), dp(3)); background = GradientDrawable().apply { cornerRadius = dp(5).toFloat(); setColor(if (inverse) 0x12000000 else 0x12FFFFFF) }; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(6) } }

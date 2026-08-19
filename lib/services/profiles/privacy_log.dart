@@ -7,7 +7,10 @@ import 'package:flutter/foundation.dart';
 abstract final class PrivacyLog {
   static bool _installed = false;
 
-  @visibleForTesting
+  /// Public because diagnostics no longer only reach [debugPrint]: the
+  /// startup-failure screen shows the caught error to a user who has no way
+  /// to produce a log, and that text must pass the same filter as the
+  /// console does.
   static String redact(String message) {
     var result = message;
     result = result.replaceAll(

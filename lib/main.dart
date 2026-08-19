@@ -148,11 +148,57 @@ Future<void> _capImageCache() async {
 Future<void> main(List<String> launchArguments) async {
   try {
     await _mainUnchecked(launchArguments);
-  } catch (error) {
+  } catch (error, stackTrace) {
     WidgetsFlutterBinding.ensureInitialized();
     debugPrint('Application bootstrap failed (${error.runtimeType})');
-    runApp(const _StartupFailureApp());
+    debugPrint('$stackTrace');
+    // Describing the failure must never become a second failure: an
+    // exception here would leave runApp uncalled and the user staring at a
+    // blank window, which is strictly worse than the screen this block
+    // exists to show. The screen renders with or without the detail.
+    String? detail;
+    try {
+      detail = _describeStartupFailure(error, stackTrace);
+    } catch (_) {
+      detail = null;
+    }
+    runApp(_StartupFailureApp(detail: detail));
   }
+}
+
+/// One bounded, redacted line naming what actually failed, for
+/// [_StartupFailureApp].
+///
+/// A user who cannot produce a log can still photograph a screen — the same
+/// reasoning that put [ProfileBootstrap.legacyReason] on the Profiles row.
+/// Without this the screen says only "could not start safely" and the console
+/// prints a bare runtimeType, so a desktop report (issue #35) carries nothing
+/// to act on: every startup failure looks identical.
+///
+/// The first stack frame usually names the failing subsystem, which is the
+/// difference between "a migration threw" and knowing WHICH one. Redacted
+/// through [PrivacyLog] because this text is meant to be shared, and bounded
+/// because a photographed screen cannot be scrolled.
+String _describeStartupFailure(Object error, StackTrace stackTrace) {
+  String clamp(String value, int max) =>
+      value.length <= max ? value : '${value.substring(0, max - 1)}…';
+  // Truncate BEFORE redacting. A sealed-payload or HTTP-body error can carry
+  // megabytes, and [PrivacyLog.redact] runs several regexes across the whole
+  // string before applying its own cap — on the one code path that must stay
+  // fast and allocation-light, because it is already handling a crash.
+  final message = PrivacyLog.redact(
+    clamp(error.toString(), 2000).replaceAll('\n', ' '),
+  );
+  final described = message.startsWith('${error.runtimeType}')
+      ? message
+      : '${error.runtimeType}: $message';
+  final frame = stackTrace
+      .toString()
+      .split('\n')
+      .firstWhere((line) => line.trim().isNotEmpty, orElse: () => '')
+      .trim();
+  if (frame.isEmpty) return clamp(described, 300);
+  return '${clamp(described, 300)}\n${clamp(PrivacyLog.redact(frame), 160)}';
 }
 
 Future<void> _mainUnchecked(List<String> launchArguments) async {
@@ -294,22 +340,51 @@ Future<void> _mainUnchecked(List<String> launchArguments) async {
 }
 
 class _StartupFailureApp extends StatelessWidget {
-  const _StartupFailureApp();
+  const _StartupFailureApp({this.detail});
+
+  /// What failed, from [_describeStartupFailure]; null only if the failure
+  /// somehow produced no describable error.
+  final String? detail;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
     themeMode: ThemeMode.dark,
     darkTheme: ThemeData.dark(useMaterial3: true),
-    home: const Scaffold(
+    home: Scaffold(
       body: SafeArea(
         child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'Debrify could not start safely. Close the app and try again. '
-              'If this continues, restart the device before changing any data.',
-              textAlign: TextAlign.center,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Debrify could not start safely. Close the app and try again. '
+                  'If this continues, restart the device before changing any data.',
+                  textAlign: TextAlign.center,
+                ),
+                if (detail != null) ...[
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Please share this with support:',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.white54),
+                  ),
+                  const SizedBox(height: 8),
+                  // Selectable so a desktop reporter can paste it rather than
+                  // retype a photographed stack frame.
+                  SelectableText(
+                    detail!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontFamily: 'monospace',
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
@@ -351,8 +426,9 @@ class _MigrationUpdateScreen extends StatelessWidget {
                     height: 34,
                     child: CircularProgressIndicator(
                       strokeWidth: 3,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF6366F1),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 30),
@@ -395,6 +471,33 @@ Future<void> _terminateAfterDeviceReset() async {
   await SystemNavigator.pop();
 }
 
+/// Run a startup step that must never stop the app from starting.
+///
+/// Everything past [ProfileBootstrap] is warms and one-time migrations:
+/// convenience work whose honest worst case is a stale first frame, or a
+/// migration that simply retries on the next launch. Until this existed a
+/// single throw from any of them reached [main]'s catch and replaced the
+/// entire app with [_StartupFailureApp] — so one odd legacy row could lock a
+/// user out of Debrify completely (issue #35, a 0.7.0-era install that could
+/// not open 0.8.3 at all). Failing these is recoverable; refusing to start is
+/// not.
+///
+/// The label names the step, so a failure is identifiable from the log alone
+/// even when the reporter cannot attach a debugger. Steps that must be
+/// atomic own that inside themselves: each one below either completes and
+/// records its own generation marker, or writes nothing and runs again.
+Future<void> _bestEffortStartupStep(
+  String step,
+  Future<void> Function() run,
+) async {
+  try {
+    await run();
+  } catch (error, stackTrace) {
+    debugPrint('main: startup step "$step" failed (${error.runtimeType})');
+    debugPrint('$stackTrace');
+  }
+}
+
 Future<void> _continueApplicationStartup() async {
   // This common path is also entered after registry recovery and interactive
   // Linux vault unlock; both must receive the same native lock authority as a
@@ -418,27 +521,41 @@ Future<void> _continueApplicationStartup() async {
   // for every pref the user never wrote (see migrateDefaultsGeneration).
   // MUST precede the brightness/theme warms below — they read migrated keys
   // for the very first frame.
-  await StorageService.migrateDefaultsGeneration();
+  await _bestEffortStartupStep(
+    'defaults-generation-migration',
+    StorageService.migrateDefaultsGeneration,
+  );
   // Adopt the configurable local watched thresholds for playback recorded by
   // older builds. The generation marker is profile-scoped, so every profile
-  // migrates once when it next becomes active.
-  await StorageService.migrateExistingPlaybackCompletionThresholds();
+  // migrates once when it next becomes active. Best-effort because it parses
+  // playback state written by builds as old as 0.7.0: an entry whose shape
+  // drifted must cost the user a watched badge, not the whole app.
+  await _bestEffortStartupStep(
+    'playback-completion-migration',
+    StorageService.migrateExistingPlaybackCompletionThresholds,
+  );
   // Warm the layout prefs the shell reads through field initializers —
   // without this the first frame paints canvas/ghost/rail and then snaps
-  // to the stored (possibly just-migrated) look.
-  await StorageService.getTvHomeStyle();
-  await StorageService.getTvSidebarStyle();
-  await StorageService.getDesktopSidebarStyle();
-  // Debrify TV reads its mirror synchronously on first build; warmed here,
-  // AFTER the migration, so frame one draws what generation 3 just wrote.
-  await StorageService.getDebrifyTvStyle();
+  // to the stored (possibly just-migrated) look. A warm that fails costs
+  // that one snap; it must not cost the launch.
+  await _bestEffortStartupStep('layout-pref-warms', () async {
+    await StorageService.getTvHomeStyle();
+    await StorageService.getTvSidebarStyle();
+    await StorageService.getDesktopSidebarStyle();
+    // Debrify TV reads its mirror synchronously on first build; warmed here,
+    // AFTER the migration, so frame one draws what generation 3 just wrote.
+    await StorageService.getDebrifyTvStyle();
+  });
   // Warms the Appearance → Text Brightness preset: the root theme is built
   // synchronously in DebrifyApp.build, so the stored choice must be readable
   // before the first frame or text would flash bright and then dim.
-  await TextBrightnessController.warm();
+  await _bestEffortStartupStep(
+    'text-brightness-warm',
+    TextBrightnessController.warm,
+  );
   // Warms the app theme AFTER the preset (it is an input), for the same
   // reason: the controller's memoized ThemeData is read in the first build.
-  await AppThemeController.warm();
+  await _bestEffortStartupStep('app-theme-warm', AppThemeController.warm);
   // From here the system-bar owner is the authority — it re-applies on every
   // active-surface or theme change (the _initOrientation call below remains
   // the pre-warm default and matches the legacy style anyway).
@@ -1577,8 +1694,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _profilePolicy = profile;
       final visible = _computeVisibleNavIndices();
       if (!visible.contains(_selectedIndex)) {
-        _selectedIndex =
-            visible.contains(MainTab.home) ? MainTab.home : visible.first;
+        _selectedIndex = visible.contains(MainTab.home)
+            ? MainTab.home
+            : visible.first;
       }
     });
   }
@@ -3341,7 +3459,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                             // content (= left edge) focuses the rail.
                             child: Actions(
                               actions: _tvContentActions,
-                              child: _buildAnimatedPage(),
+                              // Own layer: without this, every frame of the
+                              // sidebar's expand tween (and the scrim fade)
+                              // re-recorded and re-rastered the whole content
+                              // page behind it — measured on the Mi Box as
+                              // ~100ms frames over Home vs ~25ms over a light
+                              // tab, i.e. the drawer's cost WAS the content's.
+                              // Boundaried, the tween re-rasters only itself
+                              // and the page composites from its cached layer.
+                              child: RepaintBoundary(
+                                child: _buildAnimatedPage(),
+                              ),
                             ),
                           ),
                         ),
@@ -3401,36 +3529,42 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                     child: kid,
                                   ),
                                 ),
-                            child: TvSidebarNav(
-                              key: _tvSidebarKey,
-                              navStyle: _tvSidebarStyle,
-                              currentIndex: tvSelected == -1 ? 0 : tvSelected,
-                              items: [
-                                for (final index in tvIndices)
-                                  TvNavItem(
-                                    _icons[index],
-                                    _titles[index],
-                                    section: _navSectionForIndex(index),
-                                  ),
-                              ],
-                              onTap: (relativeIndex) {
-                                final actualIndex = tvIndices[relativeIndex];
-                                _onItemTapped(actualIndex);
-                                // Focus is handled by sidebar via MainPageBridge
-                              },
-                              onFocusContent: () {
-                                // Fallback for screens without registered handler
-                                FocusScope.of(context).nextFocus();
-                              },
-                              onExpandedChanged: (expanded) {
-                                // No setState — see _tvSidebarExpanded's comment.
-                                if (mounted) {
-                                  _tvSidebarExpanded.value = expanded;
-                                  MainPageBridge.notifyTvSidebarFocusChanged(
-                                    expanded,
-                                  );
-                                }
-                              },
+                            // The rail's half of the same isolation: its
+                            // expanding panel repaints inside this boundary
+                            // alone instead of dirtying the shared layer it
+                            // used to sit on with the page.
+                            child: RepaintBoundary(
+                              child: TvSidebarNav(
+                                key: _tvSidebarKey,
+                                navStyle: _tvSidebarStyle,
+                                currentIndex: tvSelected == -1 ? 0 : tvSelected,
+                                items: [
+                                  for (final index in tvIndices)
+                                    TvNavItem(
+                                      _icons[index],
+                                      _titles[index],
+                                      section: _navSectionForIndex(index),
+                                    ),
+                                ],
+                                onTap: (relativeIndex) {
+                                  final actualIndex = tvIndices[relativeIndex];
+                                  _onItemTapped(actualIndex);
+                                  // Focus is handled by sidebar via MainPageBridge
+                                },
+                                onFocusContent: () {
+                                  // Fallback for screens without registered handler
+                                  FocusScope.of(context).nextFocus();
+                                },
+                                onExpandedChanged: (expanded) {
+                                  // No setState — see _tvSidebarExpanded's comment.
+                                  if (mounted) {
+                                    _tvSidebarExpanded.value = expanded;
+                                    MainPageBridge.notifyTvSidebarFocusChanged(
+                                      expanded,
+                                    );
+                                  }
+                                },
+                              ),
                             ),
                           ),
                         ),

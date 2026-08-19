@@ -177,6 +177,74 @@ void main() {
     );
   });
 
+  test('revision drift tolerance survives a bump but not revocation', () async {
+    const resourceId = 'resource-drift';
+    await registry.insertResource(
+      resource: ConnectionResource(
+        id: resourceId,
+        type: ConnectionResourceType.iptvM3u,
+        label: 'IPTV source',
+        ownerProfileId: adminId,
+        publicConfig: const <String, dynamic>{},
+        authorizationRevision: 1,
+        enabled: true,
+      ),
+      sealedSecretPayload: 'sealed-v1',
+      secretPayloadVersion: 1,
+      ownerPermissions: ResourcePermission.values.fold<int>(
+        0,
+        (mask, permission) => mask | permission.bit,
+      ),
+    );
+    final authorization = (await DeviceJobStore.authorize(
+      ProfileFeature.recordings,
+    ))!;
+
+    // Any collection save bumps every retained resource — the stored job
+    // revision goes stale without anything about THIS resource changing.
+    await registry.updateResourceSecret(
+      resourceId: resourceId,
+      sealedSecretPayload: 'sealed-v2',
+      secretPayloadVersion: 1,
+    );
+
+    Future<bool> validate({bool drift = false}) =>
+        DeviceJobStore.validateAuthorization(
+          profileId: adminId,
+          profileAuthorizationRevision:
+              authorization.profileAuthorizationRevision,
+          feature: ProfileFeature.recordings,
+          resourceId: resourceId,
+          resourceAuthorizationRevision: 1,
+          allowRevisionDrift: drift,
+        );
+
+    expect(await validate(), isFalse, reason: 'strict stays strict');
+    expect(await validate(drift: true), isTrue,
+        reason: 'a replayed job outlives an unrelated collection save');
+
+    // Drift never bypasses the live gates: an unbound record and a deleted
+    // resource still refuse.
+    expect(
+      await DeviceJobStore.validateAuthorization(
+        profileId: adminId,
+        profileAuthorizationRevision:
+            authorization.profileAuthorizationRevision,
+        feature: ProfileFeature.recordings,
+        resourceId: resourceId,
+        resourceAuthorizationRevision: null,
+        allowRevisionDrift: true,
+      ),
+      isFalse,
+    );
+    await registry.deleteOwnedResource(
+      resourceId: resourceId,
+      ownerProfileId: adminId,
+      revokeBorrowers: true,
+    );
+    expect(await validate(drift: true), isFalse);
+  });
+
   test('use-only resource grant cannot authorize downloads', () async {
     const resourceId = 'resource-use-only';
     await registry.insertResource(

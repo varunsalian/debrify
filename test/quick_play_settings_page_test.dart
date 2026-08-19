@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,219 +20,136 @@ void main() {
         ),
       ),
     );
-    // _load intentionally awaits three independent preference reads. Pump
-    // their microtask turns even when no frame has been scheduled yet.
-    for (var i = 0; i < 5; i++) {
+    // _load awaits several independent preference/service reads. Pump their
+    // microtask turns even when no frame has been scheduled yet.
+    for (var i = 0; i < 8; i++) {
       await tester.pump();
     }
     await tester.pumpAndSettle();
   }
 
-  testWidgets('default profile explains the shipped movie behavior', (
+  testWidgets('shows tabs, the torrent switch, and the priority section', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
     await pumpPage(tester);
-    expect(find.text('Debrify default'), findsWidgets);
-    expect(find.text('Torrent engines'), findsOneWidget);
-    expect(find.text('Addon fallback'), findsOneWidget);
-    expect(find.textContaining('today\'s shipped behavior'), findsOneWidget);
+
+    expect(find.text('Movies'), findsOneWidget);
+    expect(find.text('Series'), findsOneWidget);
+    expect(find.text('Prefer torrents'), findsOneWidget);
+    expect(find.text('Addon priority'), findsOneWidget);
+    // Movies tab never shows the packs switch.
+    expect(find.text('Prefer season packs'), findsNothing);
+    // The old preset cards are gone.
+    expect(find.text('Debrify default'), findsNothing);
+    expect(find.text('Follow addon order'), findsNothing);
   });
 
-  testWidgets('movie and series tabs expose visibly different default routes', (
+  testWidgets('series tab adds the season packs switch, default on', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
     await pumpPage(tester);
-    await tester.tap(find.byKey(const ValueKey('quick-play-tab-series')));
+
+    await tester.tap(find.text('Series'));
     await tester.pumpAndSettle();
-    expect(find.text('Series pack'), findsOneWidget);
-    expect(find.text('Exact episode'), findsOneWidget);
-    expect(find.text('Prefer a reusable pack'), findsOneWidget);
+    expect(find.text('Prefer season packs'), findsOneWidget);
+
+    final rules = await StorageService.getQuickPlayRules(isMovie: false);
+    expect(rules.preferSeriesPacks, isTrue);
   });
 
-  testWidgets('every migrated retry count has a visible selection', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({
-      'quick_play_try_multiple_torrents': true,
-      'quick_play_max_retries': 4,
-    });
-    await pumpPage(tester);
-    expect(find.text('Try up to 4'), findsWidgets);
-  });
-
-  testWidgets('PikPak hides controls that playback cannot honor', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({
-      'default_torrent_provider_v1': 'pikpak',
-    });
-    await pumpPage(tester);
-    expect(find.text('If a result fails'), findsNothing);
-    expect(find.textContaining('Those controls are hidden'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('quick-play-tab-series')));
-    await tester.pumpAndSettle();
-    expect(find.text('Prefer a reusable pack'), findsNothing);
-
-    final advanced = find.text('Advanced control');
-    await tester.ensureVisible(advanced);
-    await tester.tap(advanced);
-    await tester.pumpAndSettle();
-    expect(find.text('Pack preference'), findsNothing);
-    expect(find.text('Remember a failed pack search'), findsNothing);
-  });
-
-  testWidgets('re-enabling packs preserves the chosen pack order', (
+  testWidgets('prefer torrents off persists the addon-first source mode', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
+    await pumpPage(tester);
+
+    await tester.tap(find.text('Prefer torrents'));
+    await tester.pumpAndSettle();
+
+    final movie = await StorageService.getQuickPlayRules(isMovie: true);
+    expect(movie.sourceMode, QuickPlaySourceMode.addonsThenTorrents);
+    // Series tab untouched.
+    final show = await StorageService.getQuickPlayRules(isMovie: false);
+    expect(show.sourceMode, QuickPlaySourceMode.torrentsThenAddons);
+
+    // Toggling back restores the exact shipped default (not a custom copy).
+    await tester.tap(find.text('Prefer torrents'));
+    await tester.pumpAndSettle();
+    final restored = await StorageService.getQuickPlayRules(isMovie: true);
+    expect(restored.matchesDebrifyDefault(isMovie: true), isTrue);
+  });
+
+  testWidgets('series pack switch off persists and clears exact-only trap', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    // A legacy profile stuck on exactEpisodeOnly must not defeat the switch.
     await StorageService.setQuickPlayRules(
       QuickPlayRules.debrifyDefault(isMovie: false).copyWith(
         preset: QuickPlayPreset.custom,
-        packPreference: QuickPlayPackPreference.seasonFirst,
+        preferSeriesPacks: false,
+        packPreference: QuickPlayPackPreference.exactEpisodeOnly,
       ),
       isMovie: false,
     );
     await pumpPage(tester);
-    await tester.tap(find.byKey(const ValueKey('quick-play-tab-series')));
+
+    await tester.tap(find.text('Series'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Prefer season packs'));
     await tester.pumpAndSettle();
 
-    final packToggle = find.text('Prefer a reusable pack');
-    await tester.ensureVisible(packToggle);
-    await tester.pumpAndSettle();
-    await tester.tap(packToggle);
-    await tester.pumpAndSettle();
-    var saved = await StorageService.getQuickPlayRules(isMovie: false);
-    expect(saved.preferSeriesPacks, isFalse);
-    expect(saved.packPreference, QuickPlayPackPreference.seasonFirst);
-
-    await tester.ensureVisible(packToggle);
-    await tester.pumpAndSettle();
-    await tester.tap(packToggle);
-    await tester.pumpAndSettle();
-    saved = await StorageService.getQuickPlayRules(isMovie: false);
-    expect(saved.preferSeriesPacks, isTrue);
-    expect(saved.packPreference, QuickPlayPackPreference.seasonFirst);
+    final rules = await StorageService.getQuickPlayRules(isMovie: false);
+    expect(rules.preferSeriesPacks, isTrue);
+    expect(rules.packPreference, isNot(QuickPlayPackPreference.exactEpisodeOnly));
   });
 
-  testWidgets('series advanced source order names the compatibility route', (
+  testWidgets('legacy advanced knobs are gone from the UI but still load', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
-    await pumpPage(tester);
-    await tester.tap(find.byKey(const ValueKey('quick-play-tab-series')));
-    await tester.pumpAndSettle();
-    final advanced = find.text('Advanced control');
-    await tester.ensureVisible(advanced);
-    await tester.pumpAndSettle();
-    await tester.tap(advanced);
-    await tester.pumpAndSettle();
-    expect(find.text('Today\'s series route'), findsOneWidget);
-    expect(
-      find.textContaining('packs search both; episodes use addon fallback'),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('DPAD traverses tabs, presets, then the first useful setting', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({});
-    await pumpPage(tester);
-
-    final movieTabInk = tester.widget<InkWell>(
-      find.descendant(
-        of: find.byKey(const ValueKey('quick-play-tab-movie')),
-        matching: find.byType(InkWell),
+    await StorageService.setQuickPlayRules(
+      QuickPlayRules.debrifyDefault(isMovie: true).copyWith(
+        preset: QuickPlayPreset.custom,
+        maxAttempts: 2,
+        ranking: QuickPlayRanking.smallest,
       ),
+      isMovie: true,
     );
-    movieTabInk.focusNode!.requestFocus();
-    await tester.pump();
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'quick-play-preset-0',
-    );
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump();
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'quick-play-preset-1',
-    );
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'quick-play-filters',
-    );
-  });
-
-  testWidgets('compact phone layout has no render overflow', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await pumpPage(tester);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('DPAD follows the one-column preset geometry', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
     await pumpPage(tester);
 
-    final movieTabInk = tester.widget<InkWell>(
-      find.descendant(
-        of: find.byKey(const ValueKey('quick-play-tab-movie')),
-        matching: find.byType(InkWell),
+    // No advanced section, no ranking/attempt controls anywhere.
+    expect(find.text('Advanced control'), findsNothing);
+    expect(find.textContaining('Try up to'), findsNothing);
+
+    // The stored customization survives an unrelated edit untouched.
+    await tester.tap(find.text('Prefer torrents'));
+    await tester.pumpAndSettle();
+    final rules = await StorageService.getQuickPlayRules(isMovie: true);
+    expect(rules.maxAttempts, 2);
+    expect(rules.ranking, QuickPlayRanking.smallest);
+    expect(rules.sourceMode, QuickPlaySourceMode.addonsThenTorrents);
+  });
+
+  testWidgets('restore defaults resets both tabs', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await StorageService.setQuickPlayRules(
+      QuickPlayRules.debrifyDefault(isMovie: true).copyWith(
+        preset: QuickPlayPreset.custom,
+        sourceMode: QuickPlaySourceMode.addonsThenTorrents,
+        sourcePriority: const ['engine:a', 'stremio:b'],
       ),
+      isMovie: true,
     );
-    movieTabInk.focusNode!.requestFocus();
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'quick-play-preset-1',
-    );
-  });
-
-  testWidgets('DPAD follows the two-column preset geometry', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(600, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
     await pumpPage(tester);
 
-    final movieTabInk = tester.widget<InkWell>(
-      find.descendant(
-        of: find.byKey(const ValueKey('quick-play-tab-movie')),
-        matching: find.byType(InkWell),
-      ),
-    );
-    movieTabInk.focusNode!.requestFocus();
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
+    await tester.tap(find.text('Restore defaults'));
+    await tester.pumpAndSettle();
 
-    expect(
-      FocusManager.instance.primaryFocus?.debugLabel,
-      'quick-play-preset-3',
-    );
+    final movie = await StorageService.getQuickPlayRules(isMovie: true);
+    expect(movie.matchesDebrifyDefault(isMovie: true), isTrue);
+    expect(movie.sourcePriority, isEmpty);
   });
 }

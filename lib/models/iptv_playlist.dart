@@ -101,6 +101,18 @@ class IptvPlaylist {
     if (credentialsRedacted) '_connectionResourceCredentialsRedacted': true,
   };
 
+  Map<String, dynamic> toTransferJson() => {
+    'id': id,
+    'name': name,
+    'url': url,
+    if (content != null) 'content': content,
+    if (serverUrl != null) 'serverUrl': serverUrl,
+    if (username != null) 'username': username,
+    if (password != null) 'password': password,
+    if (epgUrl != null) 'epgUrl': epgUrl,
+    'addedAt': addedAt.toIso8601String(),
+  };
+
   factory IptvPlaylist.fromJson(Map<String, dynamic> json) => IptvPlaylist(
     id: json['id'] as String,
     name: json['name'] as String,
@@ -118,6 +130,13 @@ class IptvPlaylist {
     credentialsRedacted:
         json['_connectionResourceCredentialsRedacted'] as bool? ?? false,
   );
+
+  factory IptvPlaylist.fromTransferJson(Map<String, dynamic> json) =>
+      IptvPlaylist.fromJson(<String, dynamic>{
+        for (final entry in json.entries)
+          if (!entry.key.startsWith('_connectionResource'))
+            entry.key: entry.value,
+      });
 
   @override
   bool operator ==(Object other) =>

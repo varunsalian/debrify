@@ -2601,8 +2601,10 @@ class MainActivity : FlutterActivity() {
         @Suppress("UNCHECKED_CAST")
         val updates = args["updates"] as? List<Map<String, Any?>> ?: emptyList()
         val imdbId = args["imdbId"] as? String
+        @Suppress("UNCHECKED_CAST")
+        val guideEpisodes = args["guideEpisodes"] as? List<Map<String, Any?>> ?: emptyList()
 
-        if (updates.isEmpty() && imdbId.isNullOrEmpty()) {
+        if (updates.isEmpty() && imdbId.isNullOrEmpty() && guideEpisodes.isEmpty()) {
             android.util.Log.e("TVMazeUpdate", "MainActivity: updates is empty and no imdbId")
             result.error("bad_args", "updates or imdbId is required", null)
             return
@@ -2620,6 +2622,10 @@ class MainActivity : FlutterActivity() {
                 if (!imdbId.isNullOrEmpty()) {
                     putExtra("imdbId", imdbId)
                     android.util.Log.d("TVMazeUpdate", "MainActivity: Including imdbId=$imdbId")
+                }
+                // Full-show episode guide for the player's episode browser
+                if (guideEpisodes.isNotEmpty()) {
+                    putExtra("guideEpisodes", listToJson(guideEpisodes).toString())
                 }
             }
             sendBroadcast(intent)

@@ -164,7 +164,10 @@ class _AddonHubScreenState extends State<AddonHubScreen> {
   Future<void> _loadInstalled() async {
     if (mounted) setState(() => _installedLoading = true);
     try {
-      final addons = await _stremio.getAddons();
+      // This is the management inventory. It must include disabled addons so
+      // they remain visible and can be enabled again; the normal read path
+      // intentionally excludes profile-locally disabled rows for playback.
+      final addons = await _stremio.getAddons(forSettings: true);
       if (mounted) {
         setState(() {
           _installed = addons;
