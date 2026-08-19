@@ -14514,7 +14514,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             object : io.flutter.plugin.common.MethodChannel.Result {
                 override fun success(result: Any?) {
                     runOnUiThread {
-                        applyAddonEpisodeSources(groupId, addonIds, result as? Map<*, *>, curItem?.season)
+                        applyAddonEpisodeSources(groupId, result as? Map<*, *>, curItem?.season)
                     }
                 }
 
@@ -14529,14 +14529,17 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         )
     }
 
-    private fun applyAddonEpisodeSources(groupId: String, addonIds: List<String>, map: Map<*, *>?, season: Int?) {
+    private fun applyAddonEpisodeSources(groupId: String, map: Map<*, *>?, season: Int?) {
         if (map == null) {
             failAddonFetch(groupId)
             return
         }
         addonFetchState[groupId] = "fetched"
         adoptSourceList(map)
-        if (map["probePacks"] != true) {
+        // Only the ids whose own episode results carried a magnet get the
+        // pack probe — the response names them; empty = nothing to probe.
+        val packIds = (map["packAddonIds"] as? List<*>)?.filterIsInstance<String>().orEmpty()
+        if (packIds.isEmpty()) {
             sourceBrowser?.render()
             return
         }
@@ -14550,7 +14553,7 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         }
         channel.invokeMethod(
             "requestAddonTorrentSources",
-            hashMapOf<String, Any?>("addonIds" to addonIds, "mode" to "packs", "season" to season),
+            hashMapOf<String, Any?>("addonIds" to packIds, "mode" to "packs", "season" to season),
             object : io.flutter.plugin.common.MethodChannel.Result {
                 override fun success(result: Any?) {
                     runOnUiThread {

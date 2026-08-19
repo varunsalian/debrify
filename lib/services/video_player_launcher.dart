@@ -2217,7 +2217,10 @@ class VideoPlayerLauncher {
               }
               // Every addon sharing the group's name; failed only when ALL
               // failed — a partial success is results the user asked for.
+              // Only ids whose OWN results carried a magnet earn the pack
+              // probe: a direct-only or empty sibling has no packs to find.
               List<Torrent>? episodes;
+              final magnetIds = <String>[];
               for (final addonId in addonIds) {
                 final fetched = await seriesFetcher.fetchAddonEpisodes!(
                   addonId,
@@ -2227,6 +2230,9 @@ class VideoPlayerLauncher {
                 if (stale()) return null;
                 if (fetched != null) {
                   (episodes ??= <Torrent>[]).addAll(fetched);
+                  if (fetched.any((t) => t.streamType == StreamType.torrent)) {
+                    magnetIds.add(addonId);
+                  }
                 }
               }
               if (episodes == null) return null;
@@ -2236,13 +2242,14 @@ class VideoPlayerLauncher {
                   episodes,
                 );
               }
-              final probePacks =
+              final wantPacks =
                   !seriesFetcher.isMovie &&
-                  seriesFetcher.fetchAddonPacks != null &&
-                  episodes.any((t) => t.streamType == StreamType.torrent);
+                  seriesFetcher.fetchAddonPacks != null;
               return {
                 'stremioSources': serialized(),
-                'probePacks': probePacks,
+                // The ids the native side should send back in its 'packs'
+                // call; empty = no probe.
+                'packAddonIds': wantPacks ? magnetIds : const <String>[],
               };
             };
       }

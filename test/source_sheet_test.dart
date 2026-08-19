@@ -328,6 +328,7 @@ void main() {
     'same-named addons share ONE group and Fetch asks every one of them',
     (tester) async {
       final fetchedIds = <String>[];
+      final probedIds = <String>[];
       final fetcher = SeriesSourceFetcher(
         season: 1,
         episode: 2,
@@ -341,6 +342,7 @@ void main() {
         ],
         fetchAddonEpisodes: (addonId, _, _) async {
           fetchedIds.add(addonId);
+          // A carries a magnet; B is direct-only — only A may be probed.
           return addonId == 'comet-b'
               ? [
                   _source(
@@ -350,7 +352,17 @@ void main() {
                     hash: '',
                   ),
                 ]
-              : <Torrent>[];
+              : [
+                  _source(
+                    name: 'Comet A S01E02',
+                    source: 'stremio:comet',
+                    hash: 'd' * 40,
+                  ),
+                ];
+        },
+        fetchAddonPacks: (addonId, _) async {
+          probedIds.add(addonId);
+          return <Torrent>[];
         },
       );
       await tester.pumpWidget(
@@ -372,6 +384,14 @@ void main() {
 
       expect(fetchedIds, ['comet-a', 'comet-b']);
       expect(find.text('Comet B direct'), findsOneWidget);
+      expect(find.text('Comet A S01E02'), findsOneWidget);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        probedIds,
+        ['comet-a'],
+        reason: 'only the magnet-bearing id earns the pack probe',
+      );
     },
   );
 

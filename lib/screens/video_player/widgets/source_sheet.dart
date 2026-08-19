@@ -414,11 +414,19 @@ class _SourceSheetState extends State<SourceSheet> {
     final s = widget.currentSeason ?? fetcher.season;
     final e = widget.currentEpisode ?? fetcher.episode;
     // Every addon sharing this group's name. Failed only when ALL failed —
-    // a partial success is results the user asked for.
+    // a partial success is results the user asked for. Track which ids
+    // returned magnets: only THOSE earn the pack probe (a direct-only or
+    // empty sibling has no packs to find).
     List<Torrent>? episodes;
+    final magnetIds = <String>[];
     for (final addonId in addonIds) {
       final fetched = await search(addonId, s, e);
-      if (fetched != null) (episodes ??= <Torrent>[]).addAll(fetched);
+      if (fetched != null) {
+        (episodes ??= <Torrent>[]).addAll(fetched);
+        if (fetched.any((t) => t.streamType == StreamType.torrent)) {
+          magnetIds.add(addonId);
+        }
+      }
     }
     if (!mounted) return;
     if (episodes == null) {
@@ -441,13 +449,10 @@ class _SourceSheetState extends State<SourceSheet> {
       widget.onSourcesMerged?.call(afterEpisodes);
     }
     final packSearch = fetcher.fetchAddonPacks;
-    final hasMagnet = episodes.any(
-      (t) => t.streamType == StreamType.torrent,
-    );
-    if (fetcher.isMovie || packSearch == null || !hasMagnet) return;
+    if (fetcher.isMovie || packSearch == null || magnetIds.isEmpty) return;
     setState(() => _packProbing.add(group.id));
     List<Torrent>? packs;
-    for (final addonId in addonIds) {
+    for (final addonId in magnetIds) {
       final fetched = await packSearch(addonId, s);
       if (fetched != null) (packs ??= <Torrent>[]).addAll(fetched);
     }

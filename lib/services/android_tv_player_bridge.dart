@@ -77,9 +77,9 @@ class AndroidTvPlayerBridge {
   _moreSourcesProvider;
   // Per-addon fetch for the source browser's placeholder groups: mode
   // 'episodes' fetches + merges the group's addons' episode results (a group
-  // can hold several same-named addons) and reports whether they carried
-  // torrent magnets (probePacks); mode 'packs' runs the lazy season-pack
-  // probe as a follow-up call.
+  // can hold several same-named addons) and names which ids returned torrent
+  // magnets (packAddonIds); mode 'packs' runs the lazy season-pack probe for
+  // exactly those ids as a follow-up call.
   static Future<Map<String, dynamic>?> Function(
     List<String> addonIds,
     String mode, {
