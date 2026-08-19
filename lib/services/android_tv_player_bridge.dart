@@ -75,6 +75,17 @@ class AndroidTvPlayerBridge {
     int? episode,
   })?
   _moreSourcesProvider;
+  // Per-addon fetch for the source browser's placeholder groups: mode
+  // 'episodes' fetches + merges one addon's episode results and reports
+  // whether they carried torrent magnets (probePacks); mode 'packs' runs the
+  // lazy season-pack probe as a follow-up call.
+  static Future<Map<String, dynamic>?> Function(
+    String addonId,
+    String mode, {
+    int? season,
+    int? episode,
+  })?
+  _addonSourcesProvider;
   static Future<Map<String, dynamic>?> Function(List<String>)?
   _stremioTvGuideDataProvider;
   static Future<Map<String, dynamic>?> Function(String)?
@@ -540,6 +551,41 @@ class AndroidTvPlayerBridge {
               message: e.toString(),
             );
           }
+        case 'requestAddonTorrentSources':
+          // Per-addon fetch from the source browser. A null/failed episode
+          // fetch throws so the native Fetch row flips to its failed/retry
+          // state; the pack mode is best-effort and returns the current list.
+          final addonProvider = _addonSourcesProvider;
+          if (addonProvider == null) return null;
+          final addonArgs = call.arguments;
+          if (addonArgs is! Map) return null;
+          final addonId = addonArgs['addonId'] as String?;
+          final addonMode = addonArgs['mode'] as String?;
+          if (addonId == null || addonId.isEmpty || addonMode == null) {
+            return null;
+          }
+          try {
+            final result = await addonProvider(
+              addonId,
+              addonMode,
+              season: addonArgs['season'] as int?,
+              episode: addonArgs['episode'] as int?,
+            );
+            if (result == null) {
+              throw PlatformException(
+                code: 'addon_fetch_failed',
+                message: 'Addon fetch failed',
+              );
+            }
+            return result;
+          } on PlatformException {
+            rethrow;
+          } catch (e) {
+            throw PlatformException(
+              code: 'addon_fetch_failed',
+              message: e.toString(),
+            );
+          }
         case 'torrentPlaybackFinished':
           _lastPlaybackHeartbeat =
               null; // reset so the next watch isn't throttled
@@ -551,6 +597,7 @@ class AndroidTvPlayerBridge {
           _stremioSourceResolver = null;
           _sourcePlaylistResolver = null;
           _moreSourcesProvider = null;
+          _addonSourcesProvider = null;
           _stremioTvGuideDataProvider = null;
           _stremioTvChannelSwitchProvider = null;
           _stremioTvNextProvider = null;
@@ -1261,6 +1308,13 @@ class AndroidTvPlayerBridge {
     Future<List<Map<String, dynamic>>?> Function(int)? onResolveSourcePlaylist,
     Future<Map<String, dynamic>?> Function(String, {int? season, int? episode})?
     onRequestMoreSources,
+    Future<Map<String, dynamic>?> Function(
+      String addonId,
+      String mode, {
+      int? season,
+      int? episode,
+    })?
+    onRequestAddonSources,
     Future<Map<String, dynamic>?> Function(List<String>)?
     onRequestStremioTvGuideData,
     Future<Map<String, dynamic>?> Function(String)?
@@ -1284,6 +1338,7 @@ class AndroidTvPlayerBridge {
     _stremioSourceResolver = onResolveStremioSource;
     _sourcePlaylistResolver = onResolveSourcePlaylist;
     _moreSourcesProvider = onRequestMoreSources;
+    _addonSourcesProvider = onRequestAddonSources;
     _stremioTvGuideDataProvider = onRequestStremioTvGuideData;
     _stremioTvChannelSwitchProvider = onRequestStremioTvChannelSwitch;
     _stremioTvNextProvider = onRequestStremioTvNext;
@@ -1343,6 +1398,7 @@ class AndroidTvPlayerBridge {
     _stremioSourceResolver = null;
     _sourcePlaylistResolver = null;
     _moreSourcesProvider = null;
+    _addonSourcesProvider = null;
     _stremioTvGuideDataProvider = null;
     _stremioTvChannelSwitchProvider = null;
     _stremioTvNextProvider = null;

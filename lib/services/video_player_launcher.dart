@@ -2163,6 +2163,62 @@ class VideoPlayerLauncher {
             };
       }
 
+      // Per-addon fetch for the source browser's placeholder groups.
+      // 'episodes' fetches one addon's episode results, merges them
+      // append-only, and reports whether they carried a torrent magnet
+      // (probePacks) — the native side then makes the SECOND, lazy call with
+      // 'packs'. Null (fetch failed) keeps the native Fetch row as a retry.
+      Future<Map<String, dynamic>?> Function(
+        String addonId,
+        String mode, {
+        int? season,
+        int? episode,
+      })?
+      addonSourcesProviderForTv;
+      if (seriesFetcher != null && seriesFetcher.fetchAddonEpisodes != null) {
+        addonSourcesProviderForTv =
+            (String addonId, String mode, {int? season, int? episode}) async {
+              List<Map<String, dynamic>> serialized() => currentStremioSources
+                  .map((t) => t.toJson())
+                  .toList();
+              if (mode == 'packs') {
+                final packs = await seriesFetcher.fetchAddonPacks?.call(
+                  addonId,
+                  season ?? seriesFetcher.season,
+                );
+                if (packs != null && packs.isNotEmpty) {
+                  currentStremioSources = SeriesSourceFetcher.mergeSources(
+                    currentStremioSources,
+                    packs,
+                  );
+                }
+                // Best-effort: a failed probe still answers with the current
+                // list so the native probing note simply clears.
+                return {'stremioSources': serialized()};
+              }
+              final episodes = await seriesFetcher.fetchAddonEpisodes!(
+                addonId,
+                season ?? seriesFetcher.season,
+                episode ?? seriesFetcher.episode,
+              );
+              if (episodes == null) return null;
+              if (episodes.isNotEmpty) {
+                currentStremioSources = SeriesSourceFetcher.mergeSources(
+                  currentStremioSources,
+                  episodes,
+                );
+              }
+              final probePacks =
+                  !seriesFetcher.isMovie &&
+                  seriesFetcher.fetchAddonPacks != null &&
+                  episodes.any((t) => t.streamType == StreamType.torrent);
+              return {
+                'stremioSources': serialized(),
+                'probePacks': probePacks,
+              };
+            };
+      }
+
       // Build Stremio TV channel switch wrapper that updates mutable sources holder
       Map<String, dynamic>? prepareStremioTvPlaybackResult(
         Map<String, dynamic>? playbackResult,
@@ -2230,6 +2286,26 @@ class VideoPlayerLauncher {
           payloadMap['seriesSourceTabs'] = true;
           payloadMap['seriesPacksFetched'] = seriesFetcher.packsFetched;
           payloadMap['seriesEpisodesFetched'] = seriesFetcher.episodesFetched;
+        }
+      }
+      // Every applicable addon, for the source browser's placeholder groups
+      // (zero-result addons stay visible with a Fetch row). Best-effort: a
+      // listing failure just means no placeholders this session.
+      if (addonSourcesProviderForTv != null) {
+        try {
+          final addons = await seriesFetcher!.listAddons?.call() ?? const [];
+          if (addons.isNotEmpty) {
+            payloadMap['sourceAddons'] = [
+              for (final addon in addons)
+                {
+                  'id': addon.id,
+                  'name': addon.name,
+                  'sourceKey': addon.sourceKey,
+                },
+            ];
+          }
+        } catch (e) {
+          debugPrint('VideoPlayerLauncher: addon listing failed: $e');
         }
       }
 
@@ -2301,6 +2377,7 @@ class VideoPlayerLauncher {
         onResolveStremioSource: stremioSourceResolverForTv,
         onResolveSourcePlaylist: sourcePlaylistResolverForTv,
         onRequestMoreSources: moreSourcesProviderForTv,
+        onRequestAddonSources: addonSourcesProviderForTv,
         onRequestStremioTvGuideData: args.stremioTvGuideDataProvider,
         onRequestStremioTvChannelSwitch: channelSwitchForTv,
         onRequestStremioTvNext: stremioTvNextForTv,

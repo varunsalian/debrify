@@ -996,6 +996,15 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
     private var movieSourcesFetched = true
     private var moreSourcesLoadingMode: String? = null // in-flight "Load more" tab
 
+    // Per-addon fetch: every applicable addon rides the payload so the source
+    // browser can show zero-result addons as placeholder groups with a
+    // "Fetch results" row. State is keyed by the addon's sourceKey (= its
+    // browser group id): "fetching" / "failed" / "fetched".
+    data class TvSourceAddon(val id: String, val name: String, val sourceKey: String)
+    private var sourceAddons: List<TvSourceAddon> = emptyList()
+    private val addonFetchState = mutableMapOf<String, String>()
+    private val addonPackProbing = mutableSetOf<String>()
+
     // Stremio TV Guide state
     private var isStremioTvMode = false
     private var stremioTvChannels = mutableListOf<StremioTvGuideChannel>()
@@ -1962,6 +1971,21 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
 
                     override fun requestLoadMore(mode: String) {
                         requestMoreTorrentSources(mode)
+                    }
+
+                    override fun placeholderGroups(): List<Pair<String, String>> =
+                        sourceAddons.map { it.sourceKey to it.name }
+
+                    override fun groupFetchState(groupId: String): String? {
+                        if (sourceAddons.none { it.sourceKey == groupId }) return null
+                        return addonFetchState[groupId] ?: "idle"
+                    }
+
+                    override fun isGroupProbing(groupId: String): Boolean =
+                        addonPackProbing.contains(groupId)
+
+                    override fun requestGroupFetch(groupId: String) {
+                        requestAddonTorrentSources(groupId)
                     }
 
                     override fun onSourceSelected(index: Int) {
@@ -14461,6 +14485,116 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         sourceBrowser?.render()
     }
 
+    /** Per-addon fetch from the source browser: episode results first — the
+     * response merges them into the list AND says whether they carried
+     * torrent magnets (probePacks). Only then does the lazy season-pack probe
+     * run as a SECOND call, so direct links render the moment they arrive. */
+    private fun requestAddonTorrentSources(groupId: String) {
+        val addon = sourceAddons.firstOrNull { it.sourceKey == groupId } ?: return
+        if (addonFetchState[groupId] == "fetching") return
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        if (channel == null) {
+            sourceBrowser?.showError("Couldn't fetch — try again")
+            return
+        }
+        addonFetchState[groupId] = "fetching"
+        sourceBrowser?.render()
+        val curItem = payload?.items?.getOrNull(currentIndex)
+        channel.invokeMethod(
+            "requestAddonTorrentSources",
+            hashMapOf<String, Any?>(
+                "addonId" to addon.id,
+                "mode" to "episodes",
+                "season" to curItem?.season,
+                "episode" to curItem?.episode,
+            ),
+            object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    runOnUiThread {
+                        applyAddonEpisodeSources(groupId, addon.id, result as? Map<*, *>, curItem?.season)
+                    }
+                }
+
+                override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                    runOnUiThread { failAddonFetch(groupId) }
+                }
+
+                override fun notImplemented() {
+                    runOnUiThread { failAddonFetch(groupId) }
+                }
+            }
+        )
+    }
+
+    private fun applyAddonEpisodeSources(groupId: String, addonId: String, map: Map<*, *>?, season: Int?) {
+        if (map == null) {
+            failAddonFetch(groupId)
+            return
+        }
+        addonFetchState[groupId] = "fetched"
+        adoptSourceList(map)
+        if (map["probePacks"] != true) {
+            sourceBrowser?.render()
+            return
+        }
+        addonPackProbing.add(groupId)
+        sourceBrowser?.render()
+        val channel = MainActivity.getAndroidTvPlayerChannel()
+        if (channel == null) {
+            addonPackProbing.remove(groupId)
+            sourceBrowser?.render()
+            return
+        }
+        channel.invokeMethod(
+            "requestAddonTorrentSources",
+            hashMapOf<String, Any?>("addonId" to addonId, "mode" to "packs", "season" to season),
+            object : io.flutter.plugin.common.MethodChannel.Result {
+                override fun success(result: Any?) {
+                    runOnUiThread {
+                        addonPackProbing.remove(groupId)
+                        adoptSourceList(result as? Map<*, *>)
+                        sourceBrowser?.render()
+                    }
+                }
+
+                override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                    runOnUiThread {
+                        addonPackProbing.remove(groupId)
+                        sourceBrowser?.render()
+                    }
+                }
+
+                override fun notImplemented() {
+                    runOnUiThread {
+                        addonPackProbing.remove(groupId)
+                        sourceBrowser?.render()
+                    }
+                }
+            }
+        )
+    }
+
+    private fun failAddonFetch(groupId: String) {
+        addonFetchState[groupId] = "failed"
+        sourceBrowser?.render()
+    }
+
+    /** Adopt a full replacement source list from a per-addon fetch response —
+     * the same append-only swap [applyMoreTorrentSources] performs. */
+    private fun adoptSourceList(map: Map<*, *>?) {
+        val newSources = (map?.get("stremioSources") as? List<*>) ?: return
+        if (newSources.isEmpty()) return
+        stremioSources.clear()
+        for ((idx, src) in newSources.withIndex()) {
+            val srcMap = src as? Map<*, *> ?: continue
+            stremioSources.add(StremioSource.fromMap(srcMap, idx))
+        }
+        currentStremioSourceIndex = currentStremioSourceIndex
+            .coerceIn(0, stremioSources.lastIndex.coerceAtLeast(0))
+        updateStremioQualityBadge()
+        unifiedMenu?.render()
+    }
+
     private fun failMoreTorrentSources(alreadyCleared: Boolean = false) {
         if (!alreadyCleared) moreSourcesLoadingMode = null
         if (sourceBrowser?.isVisible == true) {
@@ -14879,6 +15013,22 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
             movieMoreSources = obj.optBoolean("movieMoreSources", false)
             movieSourcesFetched = obj.optBoolean("movieSourcesFetched", true)
             moreSourcesLoadingMode = null
+            // Per-addon placeholder groups. Parsed unconditionally so a
+            // relaunch/next-episode payload can never inherit stale addons.
+            sourceAddons = obj.optJSONArray("sourceAddons")?.let { arr ->
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val a = arr.optJSONObject(i) ?: continue
+                        val id = a.optString("id")
+                        val key = a.optString("sourceKey")
+                        if (id.isNotEmpty() && key.isNotEmpty()) {
+                            add(TvSourceAddon(id, a.optString("name", id), key))
+                        }
+                    }
+                }
+            } ?: emptyList()
+            addonFetchState.clear()
+            addonPackProbing.clear()
             locallyCompletedItemIndices.clear()
 
             android.util.Log.d("AndroidTvPlayer", "parsePayload - startIndex: $startIndex, items: ${items.size}, nextMap: ${nextEpisodeMap.size}, prevMap: ${prevEpisodeMap.size}, collectionGroups: ${collectionGroups?.size ?: 0}, imdbId: $imdbId, startAtPercent: $startAtPercent")
