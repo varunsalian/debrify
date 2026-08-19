@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/theme/app_motion.dart';
 import 'package:debrify/theme/app_shape.dart';
 import 'package:debrify/theme/app_theme.dart';
-import 'package:debrify/theme/app_type.dart';
 import 'package:debrify/widgets/detail/theme/detail_theme.dart';
 import 'package:debrify/widgets/detail/theme/detail_themes.dart';
 

@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:debrify/models/stremio_addon.dart';
 import 'package:debrify/services/imdb_enrichment_service.dart';
 import 'package:debrify/services/imdb_parents_guide_service.dart';
-import 'package:debrify/services/series_source_service.dart';
 import 'package:debrify/services/trakt/trakt_episode_model.dart';
 import 'package:debrify/theme/app_motion.dart';
 import 'package:debrify/theme/app_theme.dart';
