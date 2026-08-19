@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 
 import '../services/analytics_service.dart';
 import '../services/download_service.dart';
-import '../theme/app_surfaces.dart';
 import '../theme/app_theme_scope.dart';
 import '../services/storage_service.dart';
 import '../services/android_native_downloader.dart';
@@ -1944,7 +1943,7 @@ class _TorrentGroupCard extends StatelessWidget {
           icon: Icons.error_outline_rounded,
           label: '${group.failedFiles + group.notFoundFiles} issues',
           foreground: theme.colorScheme.error,
-          background: theme.colorScheme.error.withOpacity(0.12),
+          background: theme.colorScheme.error.withValues(alpha: 0.12),
         ),
       );
     }
@@ -1954,7 +1953,7 @@ class _TorrentGroupCard extends StatelessWidget {
           icon: Icons.folder_off_rounded,
           label: 'Move failed',
           foreground: theme.colorScheme.error,
-          background: theme.colorScheme.error.withOpacity(0.12),
+          background: theme.colorScheme.error.withValues(alpha: 0.12),
         ),
       );
     }
@@ -2013,7 +2012,7 @@ class _TorrentGroupCard extends StatelessWidget {
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: stateColor.withOpacity(0.12),
+                    color: stateColor.withValues(alpha: 0.12),
                     borderRadius: app.shape.br(14),
                   ),
                   padding: const EdgeInsets.all(12),
@@ -2094,7 +2093,7 @@ class _TorrentGroupCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: group.progress.isNaN ? 0 : group.progress.clamp(0.0, 1.0),
                 minHeight: 8,
-                backgroundColor: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+                backgroundColor: theme.colorScheme.surfaceVariant.withValues(alpha: 0.3),
                 valueColor: AlwaysStoppedAnimation(stateColor),
               ),
             ),
@@ -2155,7 +2154,7 @@ class _InfoChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final Color fg = foreground ?? theme.colorScheme.onSurfaceVariant;
-    final Color bg = background ?? theme.colorScheme.surfaceVariant.withOpacity(0.4);
+    final Color bg = background ?? theme.colorScheme.surfaceVariant.withValues(alpha: 0.4);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(

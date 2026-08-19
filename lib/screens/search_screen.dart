@@ -1,4 +1,3 @@
-import '../theme/app_surfaces.dart';
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui show ImageFilter;
@@ -5839,8 +5838,9 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       _spotlightHeroSection?.items.take(8).toList() ?? const [];
 
   void _publishTopShelfSpotlight() {
-    if (!PlatformUtil.isTvOS || widget.searchMode || widget.discoverMode)
+    if (!PlatformUtil.isTvOS || widget.searchMode || widget.discoverMode) {
       return;
+    }
     unawaited(
       TvosTopShelfService.instance.publishSpotlight(
         _spotlightHero,
@@ -7968,7 +7968,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // RIGHT always advances while a cell exists — wrapping onto the next
     // grid line, the way a wall of posters reads. Stopping at the visual row
     // end would strand every cell past it behind DOWN alone.
-    final onRight = () {
+    void onRight() {
       prefetch();
       if (col + 1 < nodes.length) {
         focusAt(col + 1);
@@ -7977,7 +7977,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // completes when the cells land.
         _deferStageRight(railKey, col);
       }
-    };
+    }
     final onUp = col - perRow >= 0
         ? () {
             if (_stageHoldSwallow(LogicalKeyboardKey.arrowUp)) return;
@@ -7990,7 +7990,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     // DOWN steps a whole line, and at the LAST line always leaves for the
     // next rail (prefetching on the way out, so coming back finds more).
     // Consuming DOWN to paginate would trap the user inside a long catalog.
-    final onDown = () {
+    Null onDown() {
       if (_stageHoldSwallow(LogicalKeyboardKey.arrowDown)) return;
       if (col + perRow < count) {
         prefetch();
@@ -7999,15 +7999,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       }
       prefetch();
       _stageSwitchRail(1);
-    };
+    }
     // A catalog keeps paging for as long as it has more, so the last grid
     // line is a moving target and DOWN alone can never reliably reach the
     // next rail. HOLDING the key changes rail from anywhere in the grid.
-    final onUpHold = () => _stageHoldJump(LogicalKeyboardKey.arrowUp, () {
+    void onUpHold() => _stageHoldJump(LogicalKeyboardKey.arrowUp, () {
       _stageSwitchRail(-1);
       return true;
     });
-    final onDownHold = () => _stageHoldJump(LogicalKeyboardKey.arrowDown, () {
+    void onDownHold() => _stageHoldJump(LogicalKeyboardKey.arrowDown, () {
       _stageSwitchRail(1);
       return true;
     });

@@ -34,7 +34,6 @@ import '../services/debrify_tv_cache_service.dart';
 import '../services/debrify_tv_repository.dart';
 import '../models/premiumize_file.dart';
 import '../services/premiumize_service.dart';
-import '../models/alldebrid_file.dart';
 import '../services/alldebrid_service.dart';
 import '../services/torbox_service.dart';
 import '../services/torrent_service.dart';
@@ -2218,12 +2217,12 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
         },
       );
     } finally {
-      final disposer = () {
+      void disposer() {
         channelNameFocus?.dispose();
         channelKeywordFocus?.dispose();
         nameController.dispose();
         keywordInputController.dispose();
-      };
+      }
 
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) => disposer());
@@ -3317,7 +3316,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.7),
+      barrierColor: Colors.black.withValues(alpha: 0.7),
       builder: (ctx) {
         return PopScope(
           canPop: false,
@@ -3559,7 +3558,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.7),
+      barrierColor: Colors.black.withValues(alpha: 0.7),
       builder: (dialogContext) {
         return PopScope(
           canPop: false,
@@ -4241,10 +4240,10 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
+                          color: Colors.blue.withValues(alpha: 0.1),
                           borderRadius: app.shape.br(6),
                           border: Border.all(
-                            color: Colors.blue.withOpacity(0.2),
+                            color: Colors.blue.withValues(alpha: 0.2),
                           ),
                         ),
                         child: Column(
@@ -7593,7 +7592,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final capturedThemes = captureAppThemes(context);
       showGeneralDialog(
         context: context,
-        barrierColor: Colors.black.withOpacity(0.6),
+        barrierColor: Colors.black.withValues(alpha: 0.6),
         barrierDismissible: false,
         transitionDuration: const Duration(milliseconds: 260),
         pageBuilder: (ctx, _, __) {
@@ -7641,7 +7640,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
       final capturedThemes = captureAppThemes(context);
       showGeneralDialog(
         context: context,
-        barrierColor: Colors.black.withOpacity(0.6),
+        barrierColor: Colors.black.withValues(alpha: 0.6),
         barrierDismissible: false,
         transitionDuration: const Duration(milliseconds: 260),
         pageBuilder: (ctx, _, __) {
@@ -10573,7 +10572,7 @@ class _DebrifyTVScreenState extends State<DebrifyTVScreen> {
               ? info.title!.trim()
               : fallback);
     if (season != null && episode != null) {
-      return 'S${season}E${episode} · $descriptor';
+      return 'S${season}E$episode · $descriptor';
     }
     return fallback;
   }

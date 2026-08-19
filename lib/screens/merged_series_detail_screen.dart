@@ -30,7 +30,6 @@ import '../widgets/detail/detail_model.dart';
 import '../theme/app_theme_scope.dart';
 import '../theme/artwork_accent.dart';
 import '../widgets/detail/theme/detail_theme.dart';
-import '../widgets/detail/theme/detail_themes.dart';
 import '../widgets/hero_trailer_backdrop.dart';
 import '../widgets/episodes_panel.dart';
 import '../widgets/horizontal_mouse_wheel.dart';

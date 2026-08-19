@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import '../services/analytics_service.dart';
 import '../services/storage_service.dart';
 import '../services/main_page_bridge.dart';
-import '../theme/app_surfaces.dart';
 import '../theme/app_theme_scope.dart';
 import '../services/playlist_player_service.dart';
 import '../widgets/adaptive_playlist_section.dart';
@@ -628,8 +627,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                           suffixIcon: ValueListenableBuilder<TextEditingValue>(
                             valueListenable: _searchController,
                             builder: (context, value, _) {
-                              if (value.text.isEmpty)
+                              if (value.text.isEmpty) {
                                 return const SizedBox.shrink();
+                              }
                               return IconButton(
                                 icon: Icon(
                                   Icons.close_rounded,
