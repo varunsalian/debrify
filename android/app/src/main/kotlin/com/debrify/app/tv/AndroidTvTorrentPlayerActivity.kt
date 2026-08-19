@@ -7338,9 +7338,13 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
         val resource = recordingResourceFor(entry)
         val owner = com.debrify.app.profiles.ProfilePreferenceProjection
             .activeJobContext(this)
+        // Drift-tolerant: the channel's resource revision rode in with the
+        // launch payload and a sources edit since then bumped every revision.
+        // The live grant/feature checks still refuse real revocation.
         if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
                 this, owner.profileId, owner.authorizationRevision, "recordings",
                 resource?.connectionResourceId, resource?.connectionResourceRevision,
+                allowRevisionDrift = true,
             )
         ) {
             Toast.makeText(this, "Recording is disabled for this profile", Toast.LENGTH_SHORT).show()
@@ -7448,9 +7452,12 @@ class AndroidTvTorrentPlayerActivity : AppCompatActivity() {
                 val owner = com.debrify.app.profiles.ProfilePreferenceProjection
                     .activeJobContext(this)
                 val resource = recordingResourceFor(entry)
+                // Drift-tolerant: the payload's resource revision predates any
+                // sources edit made since launch — see the projection's note.
                 if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
                         this, owner.profileId, owner.authorizationRevision, "recordings",
                         resource?.connectionResourceId, resource?.connectionResourceRevision,
+                        allowRevisionDrift = true,
                     )
                 ) {
                     Toast.makeText(this, "Recording is disabled for this profile", Toast.LENGTH_SHORT).show()

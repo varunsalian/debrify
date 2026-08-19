@@ -433,9 +433,13 @@ class LiveRecordingService : Service() {
 		val connectionResourceId = intent.getStringExtra(EXTRA_CONNECTION_RESOURCE_ID)
 		val resourceAuthRevision = if (intent.hasExtra(EXTRA_RESOURCE_AUTH_REVISION))
 			intent.getLongExtra(EXTRA_RESOURCE_AUTH_REVISION, 1L) else null
+		// Drift-tolerant: a scheduled start replays revisions stamped when the
+		// schedule was created, and any sources save since then bumped them —
+		// see the projection's drift note. Live grant checks still refuse.
 		if (!com.debrify.app.profiles.ProfilePreferenceProjection.jobAuthorizationValid(
 				this, ownerProfileId, profileAuthRevision, "recordings",
 				connectionResourceId, resourceAuthRevision,
+				allowRevisionDrift = true,
 			)
 		) {
 			RecordingRegistry.resolvePendingStart(url, taskId)
@@ -508,6 +512,10 @@ class LiveRecordingService : Service() {
 			"recordings",
 			state.connectionResourceId,
 			state.resourceAuthorizationRevision,
+			// Re-checked for the whole capture against start-time revisions —
+			// strict equality would kill a running recording over an unrelated
+			// sources edit. See the projection's drift note.
+			allowRevisionDrift = true,
 		)
 
 	// ---- Capture ------------------------------------------------------------

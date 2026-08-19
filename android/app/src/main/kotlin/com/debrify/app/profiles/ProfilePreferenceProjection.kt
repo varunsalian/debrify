@@ -63,16 +63,19 @@ object ProfilePreferenceProjection {
     }
 
     @JvmStatic
+    @JvmOverloads
     fun authorizationValid(
         context: Context,
         profileId: String,
         revision: Long,
         requiredFeature: String,
+        allowRevisionDrift: Boolean = false,
     ): Boolean {
         val root = root(context)
             ?: return !committed(context) && profileId == "legacy-admin-v1"
         val auth = root.optJSONObject("authorization")?.optJSONObject(profileId) ?: return false
-        if (!auth.optBoolean("enabled", false) || auth.optLong("revision", -1L) != revision) return false
+        if (!auth.optBoolean("enabled", false)) return false
+        if (!allowRevisionDrift && auth.optLong("revision", -1L) != revision) return false
         val features = auth.optJSONArray("features") ?: return false
         for (index in 0 until features.length()) {
             if (features.optString(index) == requiredFeature) return true
@@ -81,9 +84,20 @@ object ProfilePreferenceProjection {
     }
 
     /** Full durable-job authority. A job that names a connection resource is
-     * valid only while that exact grant/revision remains in the atomically
-     * published projection. */
+     * valid only while that grant remains in the atomically published
+     * projection.
+     *
+     * [allowRevisionDrift] is for jobs REPLAYED from durable stores (a queued
+     * download's state, a recording schedule fired by an alarm). Every
+     * connection-collection save bumps every retained resource's revision AND
+     * the owner profile's, so revisions stamped into such a job go stale on
+     * any unrelated source edit — strict equality there silently killed every
+     * pending job. With drift the stored revisions are provenance only; the
+     * live projection gates (profile enabled + feature, resource granted with
+     * the required permission) still refuse real revocation. Callers checking
+     * values they JUST captured keep the default. */
     @JvmStatic
+    @JvmOverloads
     fun jobAuthorizationValid(
         context: Context,
         profileId: String,
@@ -92,8 +106,9 @@ object ProfilePreferenceProjection {
         resourceId: String?,
         resourceRevision: Long?,
         requiredResourcePermission: Int = 2,
+        allowRevisionDrift: Boolean = false,
     ): Boolean {
-        if (!authorizationValid(context, profileId, revision, requiredFeature)) return false
+        if (!authorizationValid(context, profileId, revision, requiredFeature, allowRevisionDrift)) return false
         if (resourceId == null) return resourceRevision == null
         if (resourceRevision == null) return false
         val auth = root(context)
@@ -102,8 +117,8 @@ object ProfilePreferenceProjection {
             ?: return false
         val resources = auth.optJSONObject("resources") ?: return false
         val authority = resources.optJSONObject(resourceId) ?: return false
-        return authority.optLong("revision", -1L) == resourceRevision &&
-            (authority.optInt("permissions", 0) and requiredResourcePermission) == requiredResourcePermission
+        if (!allowRevisionDrift && authority.optLong("revision", -1L) != resourceRevision) return false
+        return (authority.optInt("permissions", 0) and requiredResourcePermission) == requiredResourcePermission
     }
 
     @JvmStatic

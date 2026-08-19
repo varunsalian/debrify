@@ -413,6 +413,8 @@ class MediaStoreDownloadService : Service() {
 			if (state.taskId.startsWith("update-")) "appUpdates" else "downloads",
 			state.connectionResourceId,
 			state.resourceAuthorizationRevision,
+			// Replayed durable state — see the drift note on the projection.
+			allowRevisionDrift = true,
 		)
 
 	// The ONLY place a task may reach a terminal state. Clears/deletes the
