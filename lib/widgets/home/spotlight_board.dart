@@ -29,6 +29,10 @@ import '../../utils/wide_touch_scale.dart';
 class SpotlightCard {
   /// Poster, channel logo, or a user override. Null draws the placeholder.
   final String? image;
+
+  /// Used when [image] fails to load. Landscape title cards point this at the
+  /// portrait poster because synchronously-derived MetaHub backdrops can 404.
+  final String? fallbackImage;
   final String title;
 
   /// Item count, "LIVE", a genre — whatever this KIND of thing is identified
@@ -57,6 +61,7 @@ class SpotlightCard {
     required this.title,
     required this.onOpen,
     this.image,
+    this.fallbackImage,
     this.subtitle,
     this.progress,
     this.onOptions,
@@ -353,6 +358,16 @@ class _M {
         _Tier.wide => w * (260 / 1920),
       };
   double get posterH => poster * (390 / 260);
+  /// Landscape title-card width. Sized so a 16:9 card keeps roughly
+  /// two-thirds of the poster row's height — at the poster's own width a
+  /// wide card is barely half as tall and the whole rail reads shrunken.
+  /// TV shows ~3.4 cards per band, tablet ~2.6, phone ~1.7 with a peek
+  /// (user-tuned 2026-08: the first pass a step smaller read too timid).
+  double get wideCardW => switch (tier) {
+        _Tier.compact => w * 0.50,
+        _Tier.mid => w * 0.33,
+        _Tier.wide => w * (470 / 1920),
+      };
   double get gap => switch (tier) {
         _Tier.compact => w * 0.034,
         _Tier.mid => w * 0.026,
@@ -381,10 +396,12 @@ class _M {
   ///
   /// Zero on compact: nothing there ever focuses or hovers, so the lift
   /// never fires and the reservation would just be dead air between rows.
-  double get liftUp => compact ? 0 : posterH * 0.05 + 7;
+  double liftUpFor(double cardHeight) =>
+      compact ? 0 : cardHeight * 0.05 + 7;
 
   /// Downward the rise works in our favour, so only the growth is reserved.
-  double get liftDown => compact ? 0 : posterH * 0.05;
+  double liftDownFor(double cardHeight) =>
+      compact ? 0 : cardHeight * 0.05;
   double get title => compact ? 19.0 : w * (26 / 1920);
   double get caption => compact ? 12.0 : w * (21 / 1920);
 
@@ -1819,6 +1836,17 @@ class SpotlightBoardState extends State<SpotlightBoard> {
   Widget _shelf(int i, _M m) {
     final section = widget.sections[i];
     final nodes = section.nodes;
+    // Wide title cards use their own rail width. Keeping the portrait card's
+    // width makes a 16:9 tile too short to read, while keeping its height makes
+    // it enormous and leaves only two titles on a TV row. Non-title shelves
+    // (square channel marks and portrait playlist containers) retain their
+    // native geometry.
+    final uniformlyWide =
+        section.items.isNotEmpty &&
+        section.items.every((item) => item.shape == SpotlightCardShape.wide);
+    final cardHeight = uniformlyWide
+        ? m.wideCardW / SpotlightCardShape.wide.aspect
+        : m.posterH;
     // Caption-free rows off TV (see [SpotlightShelf.captions]); TV keeps its
     // overlay captions everywhere — a non-TV presentation choice only.
     final captions = widget.dpad || section.captions;
@@ -1848,14 +1876,17 @@ class SpotlightBoardState extends State<SpotlightBoard> {
           // so every card was stretched to `posterH * 1.10 + 24` while its
           // width was still computed from `posterH`. A 2:3 poster drew at
           // 0.53:1. No amount of re-deriving the ratio could have fixed it.
-          padding: EdgeInsets.only(top: m.liftUp, bottom: m.liftDown),
+          padding: EdgeInsets.only(
+            top: m.liftUpFor(cardHeight),
+            bottom: m.liftDownFor(cardHeight),
+          ),
           child: SizedBox(
             // The viewport IS the card now, so the tight cross-axis constraint
             // hands each card exactly the height it asked for. On compact the
             // caption strip below the art is part of the card, and the
             // viewport grows by exactly that strip — the art box itself stays
-            // posterH, so the ratio guard still holds.
-            height: m.posterH + (captions ? m.captionBlock : 0),
+            // at [cardHeight], so the ratio guard still holds.
+            height: cardHeight + (captions ? m.captionBlock : 0),
             child: ListView.separated(
               // The lift paints into the padding above and below rather than
               // being sliced off at the viewport edge.
@@ -1870,7 +1901,7 @@ class SpotlightBoardState extends State<SpotlightBoard> {
                 // Every shape shares the ROW's height and takes the width its
                 // aspect implies, so a shelf that mixes posters and channel
                 // tiles sits on one baseline instead of stepping up and down.
-                height: m.posterH,
+                height: cardHeight,
                 caption: m.caption,
                 radius: m.radius,
                 captionBelow: m.compact && captions,
@@ -2191,6 +2222,7 @@ class _CardState extends State<_Card> {
     final c = widget.card;
     final w = widget.height * c.shape.aspect;
     final url = c.image;
+    final fallbackUrl = c.fallbackImage;
     final contained = c.shape.fit == BoxFit.contain;
     final hasSubtitle = (c.subtitle ?? '').isNotEmpty;
     final preview = c.previewBuilder;
@@ -2295,7 +2327,10 @@ class _CardState extends State<_Card> {
                     imageUrl: url,
                     fit: c.shape.fit,
                     cacheManager: DebrifyImageCache.manager,
-                    memCacheWidth: 400,
+                    // A wide card renders about twice a poster's width, and a
+                    // backdrop decoded at poster resolution shows soft.
+                    memCacheWidth:
+                        c.shape == SpotlightCardShape.wide ? 800 : 400,
                     // Android TV pops, no fade. The package defaults are a
                     // 500ms image fade over a 1000ms placeholder fade —
                     // fine for one image, but a board entry lands 20-30
@@ -2312,7 +2347,22 @@ class _CardState extends State<_Card> {
                         ? Duration.zero
                         : const Duration(milliseconds: 1000),
                     placeholder: (_, __) => const SizedBox.shrink(),
-                    errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                    errorWidget: (_, __, ___) =>
+                        fallbackUrl != null &&
+                            fallbackUrl.isNotEmpty &&
+                            fallbackUrl != url
+                        ? CachedNetworkImage(
+                            imageUrl: fallbackUrl,
+                            fit: c.shape.fit,
+                            cacheManager: DebrifyImageCache.manager,
+                            memCacheWidth:
+                                c.shape == SpotlightCardShape.wide ? 800 : 400,
+                            fadeInDuration: Duration.zero,
+                            placeholder: (_, __) => const SizedBox.shrink(),
+                            errorWidget: (_, __, ___) =>
+                                const SizedBox.shrink(),
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 ),
               if (preview != null && previewActive)

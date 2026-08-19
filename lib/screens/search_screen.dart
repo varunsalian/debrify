@@ -1447,6 +1447,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // and without this load the off-TV field would sit on its 'canvas'
       // initial forever (resolved to classic) whatever was chosen.
       unawaited(_loadTvHomeStyle());
+      unawaited(_loadHomeCardOrientation());
       MainPageBridge.tvHomeStyleChanged = _onTvHomeStyleChanged;
       if (widget.isTelevision) {
         MainPageBridge.tvHeroArtworkQualityChanged =
@@ -1988,6 +1989,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// settings.
   Future<void> _reloadForHomeSettings() async {
     if (!mounted) return;
+    final orientation = await StorageService.getHomeCardOrientation();
+    if (!mounted) return;
+    if (orientation != _homeCardOrientation) {
+      setState(() => _homeCardOrientation = orientation);
+    }
     // Off-TV the hero-trailer prefs ride this same signal — Settings is a
     // pushed route here, so nothing else tells a surviving Home about them.
     if (!widget.isTelevision) {
@@ -5042,6 +5048,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// boot there, and resolves to classic off-TV.
   String _tvHomeStyle = StorageService.tvHomeStyleCached;
 
+  HomeCardOrientation _homeCardOrientation =
+      HomeCardOrientation.portrait;
+
+  bool get _homeLandscapeCards =>
+      _homeCardOrientation == HomeCardOrientation.landscape;
+
   bool get _homeBoardMode =>
       widget.isTelevision && !widget.searchMode && !widget.discoverMode;
 
@@ -5303,6 +5315,12 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final style = await StorageService.getTvHomeStyle();
     if (!mounted || style == _tvHomeStyle) return;
     _applyStageTransition(style);
+  }
+
+  Future<void> _loadHomeCardOrientation() async {
+    final orientation = await StorageService.getHomeCardOrientation();
+    if (!mounted || orientation == _homeCardOrientation) return;
+    setState(() => _homeCardOrientation = orientation);
   }
 
   /// Settings picker fired: tear down live players BEFORE the relayout, so
@@ -5840,17 +5858,23 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Already nullable on the row itself — a tracker row with no grid
         // behind it hands over null and simply draws no chevron.
         onSeeAll: row.onSeeAll,
-        // Caption-free like the catalog rows. The mock kept CW captions for
-        // the INFORMATIVE case ("48 min left") — but the card model only has
-        // the title, and a title caption under one row on a board where no
-        // other row has any read as the odd one out, not as information
-        // (user call, 2026-08-16). The progress bar stays CW's signal.
-        captions: false,
+        // Caption-free like the catalog rows in PORTRAIT. The mock kept CW
+        // captions for the INFORMATIVE case ("48 min left") — but the card
+        // model only has the title, and a title caption under one row on a
+        // board where no other row has any read as the odd one out, not as
+        // information (user call, 2026-08-16). The progress bar stays CW's
+        // signal. LANDSCAPE flips the premise: a backdrop rarely carries its
+        // title the way poster art does, so the caption becomes the label.
+        captions: _homeLandscapeCards,
         items: [
           for (final m in row.items)
             SpotlightCard(
-              image: m.poster,
+              image: _homeLandscapeCards ? _wideArtUrl(m) : m.poster,
+              fallbackImage: _homeLandscapeCards ? m.poster : null,
               title: m.name,
+              shape: _homeLandscapeCards
+                  ? SpotlightCardShape.wide
+                  : SpotlightCardShape.poster,
               watchedImdbId: m.type == 'movie' || m.type == 'series'
                   ? (m.effectiveImdbId ?? m.id)
                   : null,
@@ -5874,15 +5898,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       // including the tracker-list rows, which _openCatalogSeeAll routes to
       // their own browser rather than the catalog pager.
       onSeeAll: () => _openCatalogSeeAll(_sections[i]),
-      // Catalog cards go caption-free off TV — the art is the label; a
-      // caption repeating the poster's own title was the reference's one
-      // piece of noise we added ourselves.
-      captions: false,
+      // Catalog cards go caption-free off TV in PORTRAIT — the art is the
+      // label; a caption repeating the poster's own title was the
+      // reference's one piece of noise we added ourselves. That rationale
+      // inverts for LANDSCAPE, where the backdrop is a textless still and
+      // the caption is the only identity the card has.
+      captions: _homeLandscapeCards,
       items: [
         for (final m in _sections[i].items)
           SpotlightCard(
-            image: m.poster,
+            image: _homeLandscapeCards ? _wideArtUrl(m) : m.poster,
+            fallbackImage: _homeLandscapeCards ? m.poster : null,
             title: m.name,
+            shape: _homeLandscapeCards
+                ? SpotlightCardShape.wide
+                : SpotlightCardShape.poster,
             watchedImdbId: m.type == 'movie' || m.type == 'series'
                 ? (m.effectiveImdbId ?? m.id)
                 : null,
@@ -5933,17 +5963,24 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         return SpotlightShelf(
           title: isMovies ? 'Watchlist Movies' : 'Watchlist Series',
           nodes: nodes,
-          // Same rule as the catalog rows off TV: pure poster cards. The
-          // subtitle stays on the card because TV still renders overlay
-          // captions (this flag is non-TV only) — dropping it here would
-          // have changed TV cards too.
-          captions: false,
+          // Same rule as the catalog rows off TV: pure poster cards in
+          // portrait, captions back for landscape backdrops. The subtitle
+          // stays on the card because TV still renders overlay captions
+          // (this flag is non-TV only) — dropping it here would have
+          // changed TV cards too.
+          captions: _homeLandscapeCards,
           items: [
             for (final item in items)
               SpotlightCard(
-                image: item.poster,
+                image: _homeLandscapeCards
+                    ? _wideArtUrl(item)
+                    : item.poster,
+                fallbackImage: _homeLandscapeCards ? item.poster : null,
                 title: item.name,
                 subtitle: isMovies ? 'MOVIE' : 'SERIES',
+                shape: _homeLandscapeCards
+                    ? SpotlightCardShape.wide
+                    : SpotlightCardShape.poster,
                 watchedImdbId: item.effectiveImdbId ?? item.id,
                 watchedContentType: item.type,
                 onOpen: () => _openMyWatchlistItem(item),
@@ -6006,14 +6043,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
           items: [
             for (final ch in _stvFavChannels)
               SpotlightCard(
-                image: _stvFavArt(ch),
+                image: _stvFavArt(
+                  ch,
+                  landscape: _homeLandscapeCards,
+                ),
+                fallbackImage: _homeLandscapeCards
+                    ? _stvNowPlaying(ch)?.item.poster
+                    : null,
                 title: ch.displayName,
                 subtitle: 'STREMIO TV',
-                // Poster, not channel: the art is the now-playing TITLE's
-                // 2:3 poster (same as the classic/canvas rails), not a
-                // square logo mark — the channel shape would letterbox it
-                // on a plate.
-                shape: SpotlightCardShape.poster,
+                // Title art, not a channel logo: follow the user's Spotlight
+                // title-card orientation instead of containing it as a square
+                // station mark.
+                shape: _homeLandscapeCards
+                    ? SpotlightCardShape.wide
+                    : SpotlightCardShape.poster,
                 onOpen: () => _playStremioTvChannel(ch),
               ),
           ],
@@ -6022,12 +6066,17 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   }
 
   /// A Stremio TV favourite's card art: the channel's rotating now-playing
-  /// poster — the same resolution the classic and Canvas rails use, poster
-  /// first with the landscape background as fallback. Null (placeholder)
-  /// until the channel's items load.
-  String? _stvFavArt(StremioTvChannel ch) {
+  /// poster — the same resolution the classic and Canvas rails use. Spotlight
+  /// landscape mode instead chooses the title's best wide art. Null
+  /// (placeholder) until the channel's items load.
+  String? _stvFavArt(
+    StremioTvChannel ch, {
+    bool landscape = false,
+  }) {
     final item = _stvNowPlaying(ch)?.item;
-    return _firstNonEmpty(item?.poster, item?.background);
+    if (item == null) return null;
+    if (landscape) return _wideArtUrl(item);
+    return _firstNonEmpty(item.poster, item.background);
   }
 
   Widget _buildSpotlightBoard() {
@@ -6438,7 +6487,11 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       builder: (context, cons) {
         final boardH = cons.maxHeight;
         final double cardH = (boardH * 0.30).clamp(150.0, 220.0);
-        final cardW = cardH * 2 / 3;
+        // Title cards follow the Home Cards orientation (full shelf height
+        // either way — the same grammar as Promenade's strip); favourites
+        // keep their portrait cell whatever the setting says.
+        final cardW = cardH * _titleCardAspect;
+        final favCardW = cardH * 2 / 3;
         // ONE height for the whole bottom column, measured bottom-up, so the
         // identity block above can reserve exactly what the tabs and shelf
         // actually occupy — at any text scale, and whatever the shelf box
@@ -6615,7 +6668,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                     // isn't clipped at the viewport's top edge.
                                     child: Center(
                                       child: SizedBox(
-                                        width: cardW,
+                                        width: favCardW,
                                         child: _canvasFavCell(
                                           rail.favKind!,
                                           railKey,
@@ -6656,6 +6709,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                                             // Canvas focus grammar: white ring (the
                                             // violet stays with classic chrome).
                                             ringColor: Colors.white,
+                                            aspectRatio: _titleCardAspect,
+                                            artUrl: _titleArtUrl(item),
                                             progress: rail.cw?.progressOf(item),
                                             episodeLabel: rail.cw?.episodeOf(
                                               item,
@@ -6791,7 +6846,18 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// kinds FILL it differently rather than one wasting the other's space: a
   /// catalog poster is the full box, a favourite's poster is the box minus its
   /// caption band, so both end exactly on the box's bottom edge.
-  double _stagePosterW(double boxH) => boxH * 2 / 3;
+  /// TITLE cards follow the Home Cards orientation setting; everything else
+  /// (favourites, channels, playlists) keeps its own fixed shape.
+  double get _titleCardAspect =>
+      _homeLandscapeCards ? 16 / 9 : 2 / 3;
+
+  /// The art for a title card under the current orientation. Null keeps the
+  /// cell's own default (the 2:3 poster) — only landscape needs a derived
+  /// wide still.
+  String? _titleArtUrl(StremioMeta item) =>
+      _homeLandscapeCards ? _wideArtUrl(item) : null;
+
+  double _stagePosterW(double boxH) => boxH * _titleCardAspect;
 
   double _stageFavW(BuildContext context, double boxH) {
     // Poster + caption must equal the box EXACTLY. A width floor here would
@@ -7573,6 +7639,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                             rowNodes: nodes,
                             hasBoundSource: _isBound(items[col]),
                             ringColor: Colors.white,
+                            aspectRatio: _titleCardAspect,
+                            artUrl: _titleArtUrl(items[col]),
                             progress: rail.cw?.progressOf(items[col]),
                             episodeLabel: rail.cw?.episodeOf(items[col]),
                             onQuickPlay: rail.cw != null || _pikpakOnly
@@ -7648,16 +7716,21 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
         // Never negative: a board narrower than its own padding would make
         // every derived width negative and trip a layout assertion.
         final gridW = max(1.0, boardW - _kMosaicPadX * 2);
-        // Aim for a poster about a third of the board's height, then take
-        // whatever whole number of columns actually FITS — as few as one.
-        final targetW = max(1.0, (boardH * 0.30) * 2 / 3);
+        // A grid only ever shows ONE rail, and a rail is homogeneous — so
+        // the whole wall takes one shape: favourites are always portrait,
+        // title cells follow the Home Cards orientation.
+        final cellAspect = favRail ? 2 / 3 : _titleCardAspect;
+        // Aim for a cell about a third of the board's height — landscape a
+        // little shorter, or three backdrops swallow the whole wall — then
+        // take whatever whole number of columns actually FITS, as few as one.
+        final targetH = boardH * (cellAspect > 1 ? 0.24 : 0.30);
+        final targetW = max(1.0, targetH * cellAspect);
         final perRow = (gridW / (targetW + _kMosaicGap)).floor().clamp(1, 8);
         final cellW = max(1.0, (gridW - (perRow - 1) * _kMosaicGap) / perRow);
-        // A grid only ever shows ONE rail, and a rail is homogeneous — so the
-        // extent is exactly what that kind needs: a poster, plus the caption
-        // band only when the cells actually carry one.
+        // The extent is exactly what this rail's kind needs: the art box,
+        // plus the caption band only when the cells actually carry one.
         final extent =
-            cellW * 3 / 2 + (favRail ? _artPosterCaptionBand(context) : 0);
+            cellW / cellAspect + (favRail ? _artPosterCaptionBand(context) : 0);
 
         return Stack(
           fit: StackFit.expand,
@@ -7933,13 +8006,15 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     }
     final item = items[col];
     return SizedBox(
-      height: cellW * 3 / 2,
+      height: cellW / _titleCardAspect,
       child: _BoardCell(
         item: item,
         isTelevision: true,
         focusNode: nodes[col],
         column: col,
         rowNodes: nodes,
+        aspectRatio: _titleCardAspect,
+        artUrl: _titleArtUrl(item),
         hasBoundSource: _isBound(item),
         ringColor: Colors.white,
         progress: rail.cw?.progressOf(item),
@@ -8362,6 +8437,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
       rowNodes: nodes,
       hasBoundSource: _isBound(item),
       ringColor: Colors.white,
+      aspectRatio: _titleCardAspect,
+      artUrl: _titleArtUrl(item),
       progress: rail.cw?.progressOf(item),
       episodeLabel: rail.cw?.episodeOf(item),
       onQuickPlay: rail.cw != null || _pikpakOnly
@@ -14456,6 +14533,20 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     return (MediaQuery.of(context).size.height * 0.17).clamp(92.0, 140.0);
   }
 
+  /// TITLE-card size for a classic board rail under the Home Cards
+  /// orientation. Landscape keeps Spotlight's proportions — about 1.6× the
+  /// poster's width, which lands the row at ~60% of the poster row's height —
+  /// so backdrops stay readable without a full-poster-height slab of 16:9.
+  /// Favourites/channel/playlist cells ignore this and stay on
+  /// [_railPosterW]'s portrait geometry.
+  double _railTitleCardW(BuildContext context) {
+    final posterW = _railPosterW(context);
+    return _homeLandscapeCards ? posterW * 1.6 : posterW;
+  }
+
+  double _railTitleCardH(BuildContext context) =>
+      _railTitleCardW(context) / _titleCardAspect;
+
   /// TV hero band budget — Concept-5 geometry (tv_home_mockup): the hero owns
   /// ~60% of the board; below it exactly ONE titleless card row fits, plus a
   /// ~24px peek of the NEXT row's header — the "there's more" cue. Budgeted
@@ -14463,7 +14554,7 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// (inline captions) clips at the fold rather than shrinking the hero for
   /// everyone. The Search tab keeps its compact strip via the clamp.
   double _tvHeroBudget(double boardH) {
-    final catalogRowH = _railPosterW(context) * 3 / 2 + 14;
+    final catalogRowH = _railTitleCardH(context) + 14;
     return (boardH - _railHeaderH - catalogRowH - 24).clamp(
       150.0,
       widget.searchMode ? 180.0 : 440.0,
@@ -16103,11 +16194,10 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
     final nodes = _rowNodes[rowIndex];
     final tv = widget.isTelevision;
     // Bigger, roomier posters on desktop (Stremio-scale); smaller on phones.
-    final posterW = _railPosterW(context);
-    final posterH = posterW * 3 / 2;
-    // Titleless cells (Stremio-style) — just the 2:3 poster + a little headroom
-    // for the hover/focus lift.
-    final cellH = posterH;
+    // Titleless cells (Stremio-style) — just the art box + a little headroom
+    // for the hover/focus lift. The box follows the Home Cards orientation.
+    final posterW = _railTitleCardW(context);
+    final cellH = _railTitleCardH(context);
     final rowH = cellH + 14;
 
     return Column(
@@ -16206,6 +16296,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                             column: col,
                             rowNodes: nodes,
                             hasBoundSource: _isBound(item),
+                            aspectRatio: _titleCardAspect,
+                            artUrl: _titleArtUrl(item),
                             onQuickPlay: _pikpakOnly
                                 ? null
                                 : () => _sectionQuickPlay(section, item),
@@ -16255,9 +16347,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// navigation resolves [homeRowId] against the live global order.
   Widget _buildContinueWatchingRow(_CwRow row, int cwIndex, String homeRowId) {
     final tv = widget.isTelevision;
-    final posterW = _railPosterW(context);
-    final posterH = posterW * 3 / 2;
-    final cellH = posterH;
+    final posterW = _railTitleCardW(context);
+    final cellH = _railTitleCardH(context);
     final rowH = cellH + 14;
     final items = row.items;
     final nodes = row.nodes;
@@ -16299,6 +16390,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
                           column: col,
                           rowNodes: nodes,
                           hasBoundSource: _isBound(item),
+                          aspectRatio: _titleCardAspect,
+                          artUrl: _titleArtUrl(item),
                           progress: row.progressOf(item),
                           episodeLabel: row.episodeOf(item),
                           // Long-press / hold-OK opens the Play + Remove menu
@@ -16329,8 +16422,8 @@ class _SearchScreenState extends State<SearchScreen> with RouteAware {
   /// replaces it there's zero layout shift. Purely decorative: no focus nodes,
   /// so the DPAD skips over it entirely. [idx] is 0 (Movies) or 1 (Shows).
   Widget _buildTraktSkeletonRow(int idx) {
-    final posterW = _railPosterW(context);
-    final cellH = posterW * 3 / 2;
+    final posterW = _railTitleCardW(context);
+    final cellH = _railTitleCardH(context);
     final rowH = cellH + 14;
     return _TraktSkeletonRow(
       header: _railHeader(
@@ -20765,10 +20858,69 @@ class _StremioCardState extends State<_StremioCard>
           fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
           fadeOutDuration: HomeTheme.imageFadeOut(widget.isTelevision),
           placeholder: (_, __) => _placeholder(item.name),
-          errorWidget: (_, __, ___) => _placeholder(item.name),
+          // A derived wide still (MetaHub) can 404 where the poster exists —
+          // cover-crop the poster into the wide cell before giving up on art.
+          errorWidget: (_, __, ___) =>
+              poster != item.poster &&
+                  item.poster != null &&
+                  item.poster!.isNotEmpty
+              ? CachedNetworkImage(
+                  imageUrl: item.poster!,
+                  fit: BoxFit.cover,
+                  memCacheWidth: widget.isTelevision ? 320 : 480,
+                  fadeInDuration: HomeTheme.imageFadeIn(widget.isTelevision),
+                  fadeOutDuration: HomeTheme.imageFadeOut(widget.isTelevision),
+                  placeholder: (_, __) => _placeholder(item.name),
+                  errorWidget: (_, __, ___) => _placeholder(item.name),
+                )
+              : _placeholder(item.name),
         )
       else
         _placeholder(item.name),
+      // A landscape still rarely carries its title the way poster art does,
+      // and off TV there is no hero identity revealing the focused card —
+      // so a wide TOUCH card labels itself. TV keeps clean cards: browsing
+      // there puts every focused title's name in the hero (Promenade
+      // grammar). Sits under the badges; the scrim keeps them readable too.
+      if (wide && !widget.isTelevision) ...[
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: IgnorePointer(
+            child: Container(
+              height: 52,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x00000000), Color(0xB8000000)],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 8,
+          right: 8,
+          // Clear the CW episode badge and progress bar, which own the
+          // bottom edge when present.
+          bottom: (widget.episodeLabel != null ? 22.0 : 0.0) +
+              (widget.progress != null ? 11.0 : 8.0),
+          child: Text(
+            item.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: app.onGlass,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.1,
+              shadows: const [Shadow(color: Colors.black, blurRadius: 4)],
+            ),
+          ),
+        ),
+      ],
       if (supportsWatched)
         Positioned(
           top: 7,

@@ -32,6 +32,12 @@ import '../utils/platform_util.dart';
 /// a muted Home hero should not mute a detail page you opened deliberately.
 enum AmbientTrailerSurface { homeHero, detail }
 
+/// Artwork orientation for TITLE cards on the Home layouts: portrait 2:3
+/// posters or landscape 16:9 backdrops. Favourites, channel, and playlist
+/// rows keep their own geometry — a station logo or folder is not a title.
+/// Promenade is landscape by design and ignores the portrait setting.
+enum HomeCardOrientation { portrait, landscape }
+
 /// How the Android TV UI is rastered — see
 /// [StorageService.getTvRenderQuality]. Three states, not a switch: the
 /// automatic branch is the ABSENCE of the stored pref, because that absence is
@@ -264,6 +270,8 @@ class StorageService {
       'home_continue_watching_enabled';
   static const String _homeFavoritesOpenFolderKey =
       'home_favorites_open_folder';
+  static const String _homeCardOrientationKey =
+      'home_card_orientation';
   static const String _supportRemoteConfigCacheKey =
       'support_remote_config_cache_v1';
   static const String _dismissedDonationCampaignIdsKey =
@@ -5338,6 +5346,20 @@ class StorageService {
     await prefs.setString(_homeFavoritesOpenFolderKey, value);
   }
 
+  static Future<HomeCardOrientation> getHomeCardOrientation() async {
+    final prefs = await ProfilePreferences.instance();
+    return prefs.getString(_homeCardOrientationKey) == 'landscape'
+        ? HomeCardOrientation.landscape
+        : HomeCardOrientation.portrait;
+  }
+
+  static Future<void> setHomeCardOrientation(
+    HomeCardOrientation orientation,
+  ) async {
+    final prefs = await ProfilePreferences.instance();
+    await prefs.setString(_homeCardOrientationKey, orientation.name);
+  }
+
   static Future<void> clearAllHomePageSettings() async {
     final prefs = await ProfilePreferences.instance();
     await prefs.remove(_homeDefaultSourceTypeKey);
@@ -5346,6 +5368,7 @@ class StorageService {
     await prefs.remove(_homeHideProviderCardsKey);
     await prefs.remove(_homeContinueWatchingEnabledKey);
     await prefs.remove(_homeFavoritesOpenFolderKey);
+    await prefs.remove(_homeCardOrientationKey);
   }
 
   // Reddit Settings

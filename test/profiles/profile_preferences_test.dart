@@ -1,7 +1,10 @@
 import 'package:debrify/services/profiles/profile_preference_budget.dart';
+import 'package:debrify/services/profiles/profile_creation_service.dart';
 import 'package:debrify/services/profiles/profile_preferences.dart';
 import 'package:debrify/services/profiles/profile_runtime.dart';
 import 'package:debrify/services/profiles/profile_scope.dart';
+import 'package:debrify/services/profiles/sanitized_profile_preferences.dart';
+import 'package:debrify/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -48,6 +51,57 @@ void main() {
     expect(prefs.getString('legacy'), 'kept');
     await prefs.setBool('enabled', true);
     expect((await SharedPreferences.getInstance()).getBool('enabled'), isTrue);
+  });
+
+  test('Home card orientation is isolated per profile', () async {
+    ProfileRuntime.initializeCommitted(
+      ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 1),
+    );
+
+    expect(
+      await StorageService.getHomeCardOrientation(),
+      HomeCardOrientation.portrait,
+    );
+    await StorageService.setHomeCardOrientation(
+      HomeCardOrientation.landscape,
+    );
+
+    ProfileRuntime.publish(
+      ProfileScope(profileId: 'two', dataGeneration: 1, sessionEpoch: 2),
+    );
+    expect(
+      await StorageService.getHomeCardOrientation(),
+      HomeCardOrientation.portrait,
+    );
+
+    ProfileRuntime.publish(
+      ProfileScope(profileId: 'one', dataGeneration: 1, sessionEpoch: 3),
+    );
+    expect(
+      await StorageService.getHomeCardOrientation(),
+      HomeCardOrientation.landscape,
+    );
+  });
+
+  test('Home card orientation transfers as a reviewed preference', () {
+    expect(
+      ProfileCreationService.copyablePreferenceKeys,
+      contains('home_card_orientation'),
+    );
+    expect(
+      SanitizedProfilePreferences.allowsEntry(
+        'home_card_orientation',
+        'landscape',
+      ),
+      isTrue,
+    );
+    expect(
+      SanitizedProfilePreferences.allowsEntry(
+        'home_card_orientation',
+        'square',
+      ),
+      isFalse,
+    );
   });
 
   test('device preference allowlist rejects arbitrary state', () async {

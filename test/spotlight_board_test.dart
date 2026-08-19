@@ -822,6 +822,37 @@ void main() {
         reason: 'a poster is 2:3 — anything else means it was stretched');
   });
 
+  testWidgets('a wide shelf uses the readable landscape rail width',
+      (tester) async {
+    final a = _meta('tt1', 'Alpha');
+    final b = _meta('tt2', 'Bravo');
+    await tester.pumpWidget(host([a], [
+      SpotlightShelf(
+        title: 'Top',
+        nodes: rows[0],
+        items: [
+          for (final item in [a, b])
+            SpotlightCard(
+              title: item.name,
+              shape: SpotlightCardShape.wide,
+              onOpen: _noop,
+            ),
+        ],
+      ),
+    ]));
+    await tester.pumpAndSettle();
+
+    final board = tester.getSize(find.byType(SpotlightBoard)).width;
+    final expectedWidth = board * (470 / 1920);
+    final cardHost = tester
+        .widgetList<ParallaxFocus>(find.byType(ParallaxFocus))
+        .firstWhere((p) => p.fixedScaleForeground != null);
+    final box = tester.getSize(find.byWidget(cardHost));
+
+    expect(box.width, closeTo(expectedWidth, 0.5));
+    expect(box.width / box.height, closeTo(16 / 9, 0.005));
+  });
+
   testWidgets('TV card titles use the crisp fixed-scale label treatment',
       (tester) async {
     final a = _meta('tt1', 'Alpha');

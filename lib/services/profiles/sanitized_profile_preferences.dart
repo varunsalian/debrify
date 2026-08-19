@@ -54,6 +54,9 @@ abstract final class SanitizedProfilePreferences {
             const <String>{'bright', 'soft', 'dim'}.contains(value);
       case 'tv_home_style':
         return value is String && _tvHomeStyles.contains(value);
+      case 'home_card_orientation':
+        return value is String &&
+            const <String>{'portrait', 'landscape'}.contains(value);
       case 'tv_sidebar_style':
         return value is String && _tvSidebarStyles.contains(value);
       case 'desktop_sidebar_style':
