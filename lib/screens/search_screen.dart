@@ -41,6 +41,7 @@ import '../services/stremio_iptv_service.dart';
 import '../services/stremio_service.dart';
 import '../services/next_episode_service.dart';
 import '../services/local_series_completion_service.dart';
+import '../services/source_priority.dart';
 import '../services/storage_service.dart';
 import '../services/tv_hero_artwork_quality_controller.dart';
 import '../services/tvos_top_shelf_service.dart';
@@ -21922,6 +21923,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
 
   bool get _stripVisible => _redesign && !_keywordMode && _addonStatuses.isNotEmpty;
 
+  /// The user's Quick Play "Addon Priority" order for this tab (empty =
+  /// never customized = keep the shipped seeders/relevance ordering). Also
+  /// orders the source pills and the addon status strip.
+  List<String> _sourcePriority = const [];
+  Map<String, String> _sourceAliases = const {};
+
   // --- cached-availability badges (redesign only): checked async after results
   // arrive, only for TorBox / Premiumize when their cache-check pref is on and
   // the provider is configured. Maps: infohash(lowercased) -> isCached. ---
@@ -22011,8 +22018,25 @@ class _SourcesScreenState extends State<_SourcesScreen> {
     // highlight tracks — Focus alone doesn't guarantee a parent rebuild.
     _filterFocus.addListener(_onFilterFocusChanged);
     _loadCacheConfig();
+    _loadSourcePriority();
     _load();
     if (_seasonChipVisible) unawaited(_loadSeasons());
+  }
+
+  Future<void> _loadSourcePriority() async {
+    try {
+      final rules = await StorageService.getQuickPlayRules(
+        isMovie: !widget.selection.isSeries,
+      );
+      final aliases = await SourcePriority.engineAliases();
+      if (!mounted) return;
+      if (rules.sourcePriority.isEmpty && aliases.isEmpty) return;
+      setState(() {
+        _sourcePriority = rules.sourcePriority;
+        _sourceAliases = aliases;
+      });
+      _rebuildVisible();
+    } catch (_) {}
   }
 
   /// Fetch the show's season numbers from the first meta-capable addon for the
@@ -22280,8 +22304,12 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       if (!mounted || token != _searchToken) return;
       _searching = false;
       // Keyword search runs engines only — no addon statuses to show.
-      _addonStatuses =
-          res['addonStatuses'] as List<AddonSearchStatus>? ?? const [];
+      // The strip follows the user's Addon Priority order when one is set.
+      _addonStatuses = SourcePriority.orderBy(
+        res['addonStatuses'] as List<AddonSearchStatus>? ?? const [],
+        (status) => status.sourceKey,
+        _sourcePriority,
+      );
       _presentStreaming((res['torrents'] as List).cast<Torrent>(), token);
       _finishSearch(token);
     } catch (e) {
@@ -23167,6 +23195,15 @@ class _SourcesScreenState extends State<_SourcesScreen> {
         ? _filters.copyWith(sizes: const <SizeBucket>{})
         : _filters;
     list = TorrentFilterMatcher.apply(list, effectiveFilters);
+    if (_sortBy == 'relevance') {
+      // Relevance keeps the incoming curated order — grouped by the user's
+      // Addon Priority when one is set (no-op otherwise).
+      list = SourcePriority.order(
+        list,
+        _sourcePriority,
+        aliases: _sourceAliases,
+      );
+    }
     if (_sortBy != 'relevance') {
       list = List<Torrent>.from(list);
       int cmp(Torrent a, Torrent b) {
@@ -23238,7 +23275,11 @@ class _SourcesScreenState extends State<_SourcesScreen> {
       for (final t in _torrents)
         if (t.source.isNotEmpty) t.source,
     };
-    final sorted = sources.toList()..sort();
+    final sorted = SourcePriority.orderBy(
+      sources.toList()..sort(),
+      (source) => SourcePriority.keyForSource(source, aliases: _sourceAliases),
+      _sourcePriority,
+    );
 
     Widget pill(String label, bool on, VoidCallback onTap) => Padding(
       padding: const EdgeInsets.only(right: 6),
