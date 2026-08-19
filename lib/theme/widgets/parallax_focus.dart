@@ -73,6 +73,12 @@ abstract final class ParallaxTravel {
     _at = now;
   }
 
+  /// Non-consuming peek at the cadence: whether the move in flight is part
+  /// of a rapid run. BOTH cards of a step read this — the one gaining focus
+  /// and the one losing it — so it must not consume the pending note the
+  /// way [take] does.
+  static bool get isRapid => _rapidNow && (clock() - _at) < _stale;
+
   /// The pending arrival, consumed by the card that gains focus.
   ///
   /// Returns `Offset.zero` when the move did not come from a directional key,
@@ -333,12 +339,34 @@ class _ParallaxBodyState extends State<_ParallaxBody>
     // mid-spring. A short ease-out reaches the same endpoint in about a
     // tenth of the frames and reads crisper under DPAD repeat. Same
     // policy family as the lite body below.
-    if (PlatformUtil.isAndroidTvCached && !widget.richTv) {
-      _c.animateTo(
-        target,
-        duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOutCubic,
-      );
+    //
+    // Rich subtrees hybridize on Android TV: DURING a rapid run both cards
+    // of every step drop to this same lite pipeline — the tilt's perspective
+    // re-raster and the glare's saveLayer, ×2 cards ×every repeat frame,
+    // measured ~44ms of raster per janky frame on the Mi Box, for motion
+    // nobody can see at repeat speed. The full spring returns on the settle
+    // step, and the arriving card swaps its paint back to rich once the
+    // short ease-out lands (a static highlight appearing at rest, not a
+    // mid-motion style change).
+    final lite = PlatformUtil.isAndroidTvCached &&
+        (!widget.richTv || ParallaxTravel.isRapid);
+    if (lite != _lite) setState(() => _lite = lite);
+    if (lite) {
+      _c
+          .animateTo(
+            target,
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+          )
+          .whenCompleteOrCancel(() {
+        if (mounted &&
+            widget.richTv &&
+            widget.focused &&
+            _lite &&
+            !_c.isAnimating) {
+          setState(() => _lite = false);
+        }
+      });
       return;
     }
 
@@ -362,6 +390,11 @@ class _ParallaxBodyState extends State<_ParallaxBody>
   }
 
   bool _reduceMotion = false;
+
+  /// Whether the CURRENT move runs the lite pipeline on a rich-TV subtree
+  /// (rapid-travel hybrid — see [_drive]). Paint follows the same flag so
+  /// the animation style and the body style can never disagree mid-flight.
+  bool _lite = false;
 
   @override
   void didChangeDependencies() {
@@ -420,7 +453,7 @@ class _ParallaxBodyState extends State<_ParallaxBody>
           // keep the full effect below — as does any subtree inside a
           // [ParallaxRichScope] (the detail page), which is why [richTv] skips
           // this branch.
-          if (PlatformUtil.isAndroidTvCached && !widget.richTv) {
+          if (PlatformUtil.isAndroidTvCached && (!widget.richTv || _lite)) {
             return Transform(
               alignment: Alignment.center,
               transform: Matrix4.identity()

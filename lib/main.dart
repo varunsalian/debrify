@@ -426,8 +426,9 @@ class _MigrationUpdateScreen extends StatelessWidget {
                     height: 34,
                     child: CircularProgressIndicator(
                       strokeWidth: 3,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFF6366F1),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 30),
@@ -1693,8 +1694,9 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
       _profilePolicy = profile;
       final visible = _computeVisibleNavIndices();
       if (!visible.contains(_selectedIndex)) {
-        _selectedIndex =
-            visible.contains(MainTab.home) ? MainTab.home : visible.first;
+        _selectedIndex = visible.contains(MainTab.home)
+            ? MainTab.home
+            : visible.first;
       }
     });
   }
@@ -3457,7 +3459,17 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                             // content (= left edge) focuses the rail.
                             child: Actions(
                               actions: _tvContentActions,
-                              child: _buildAnimatedPage(),
+                              // Own layer: without this, every frame of the
+                              // sidebar's expand tween (and the scrim fade)
+                              // re-recorded and re-rastered the whole content
+                              // page behind it — measured on the Mi Box as
+                              // ~100ms frames over Home vs ~25ms over a light
+                              // tab, i.e. the drawer's cost WAS the content's.
+                              // Boundaried, the tween re-rasters only itself
+                              // and the page composites from its cached layer.
+                              child: RepaintBoundary(
+                                child: _buildAnimatedPage(),
+                              ),
                             ),
                           ),
                         ),
@@ -3517,36 +3529,42 @@ class _MainPageState extends State<MainPage> with TickerProviderStateMixin {
                                     child: kid,
                                   ),
                                 ),
-                            child: TvSidebarNav(
-                              key: _tvSidebarKey,
-                              navStyle: _tvSidebarStyle,
-                              currentIndex: tvSelected == -1 ? 0 : tvSelected,
-                              items: [
-                                for (final index in tvIndices)
-                                  TvNavItem(
-                                    _icons[index],
-                                    _titles[index],
-                                    section: _navSectionForIndex(index),
-                                  ),
-                              ],
-                              onTap: (relativeIndex) {
-                                final actualIndex = tvIndices[relativeIndex];
-                                _onItemTapped(actualIndex);
-                                // Focus is handled by sidebar via MainPageBridge
-                              },
-                              onFocusContent: () {
-                                // Fallback for screens without registered handler
-                                FocusScope.of(context).nextFocus();
-                              },
-                              onExpandedChanged: (expanded) {
-                                // No setState — see _tvSidebarExpanded's comment.
-                                if (mounted) {
-                                  _tvSidebarExpanded.value = expanded;
-                                  MainPageBridge.notifyTvSidebarFocusChanged(
-                                    expanded,
-                                  );
-                                }
-                              },
+                            // The rail's half of the same isolation: its
+                            // expanding panel repaints inside this boundary
+                            // alone instead of dirtying the shared layer it
+                            // used to sit on with the page.
+                            child: RepaintBoundary(
+                              child: TvSidebarNav(
+                                key: _tvSidebarKey,
+                                navStyle: _tvSidebarStyle,
+                                currentIndex: tvSelected == -1 ? 0 : tvSelected,
+                                items: [
+                                  for (final index in tvIndices)
+                                    TvNavItem(
+                                      _icons[index],
+                                      _titles[index],
+                                      section: _navSectionForIndex(index),
+                                    ),
+                                ],
+                                onTap: (relativeIndex) {
+                                  final actualIndex = tvIndices[relativeIndex];
+                                  _onItemTapped(actualIndex);
+                                  // Focus is handled by sidebar via MainPageBridge
+                                },
+                                onFocusContent: () {
+                                  // Fallback for screens without registered handler
+                                  FocusScope.of(context).nextFocus();
+                                },
+                                onExpandedChanged: (expanded) {
+                                  // No setState — see _tvSidebarExpanded's comment.
+                                  if (mounted) {
+                                    _tvSidebarExpanded.value = expanded;
+                                    MainPageBridge.notifyTvSidebarFocusChanged(
+                                      expanded,
+                                    );
+                                  }
+                                },
+                              ),
                             ),
                           ),
                         ),
